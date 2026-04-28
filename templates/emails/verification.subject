@@ -1,0 +1,1 @@
+[{{ branding.server_name }}] Your email verification code: {{ authentication_code.code }}

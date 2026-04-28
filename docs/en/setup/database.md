@@ -1,0 +1,75 @@
+# Database configuration
+
+The service uses a [PostgreSQL](https://www.postgresql.org/) database to store all of its state.
+Although it may be possible to run with earlier versions, it is recommended to use **PostgreSQL 13** or later.
+Connection to the database is configured in the [`database`](../reference/configuration.md#database) section of the configuration file.
+
+## A warning about database pooling software
+
+Pasion must not be connected to a database pooler (such as pgBouncer or pgCat) when it is configured in transaction pooling mode.
+This is because Pasion uses advisory locks, which are not compatible with transaction pooling.
+
+You should instead configure such poolers in session pooling mode.
+
+## Set up a database
+
+You will need to create a dedicated PostgreSQL database for the service.
+The database can run on the same server as the service, or on a dedicated host.
+The recommended setup for this database is to create a dedicated role and database for the service.
+
+Assuming your PostgreSQL database user is called `postgres`, first authenticate as the database user with:
+
+```sh
+su - postgres
+# Or, if your system uses sudo to get administrative rights
+sudo -u postgres bash
+```
+
+Then, create a postgres user and a database with:
+
+```sh
+# this will prompt for a password for the new user
+createuser --pwprompt coauth
+createdb --owner=coauth coauth
+```
+
+The above will create a user called `coauth` with a password of your choice, and a database called `coauth` owned by the `coauth` user.
+
+## Service configuration
+
+Once the database is created, the service needs to be configured to connect to it.
+Edit the [`database`](../reference/configuration.md#database) section of the configuration file to match the database just created:
+
+```yaml
+database:
+  # Full connection string as per
+  # https://www.postgresql.org/docs/13/libpq-connect.html#id-1.7.3.8.3.6
+  uri: postgres://<user>:<password>@<host>/<database>
+
+  # -- OR --
+  # Separate parameters
+  host: <host>
+  port: 5432
+  username: <user>
+  password: <password>
+  database: <database>
+```
+
+## Database migrations
+
+The service manages the database schema with embedded migrations.
+Those migrations are run automatically when the service starts, but it is also possible to run them manually.
+This is done using the [`database migrate`](../reference/cli/database.md#database-migrate) command:
+
+```sh
+coauth database migrate
+```
+
+## Next steps
+
+Once the database is up, the remaining steps are to:
+
+ - [Set up the connection to the homeserver (recommended)](./homeserver.md)
+ - [Setup email sending (optional)](../reference/configuration.md#email)
+ - [Configure a reverse proxy (optional)](./reverse-proxy.md)
+ - [Run the service](./running.md)

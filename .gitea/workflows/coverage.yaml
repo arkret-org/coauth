@@ -1,0 +1,72 @@
+name: Gitea Test Coverage Reports
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: gitea-coverage-${{ gitea.ref }}
+  cancel-in-progress: false
+
+jobs:
+  rust:
+    name: Gather Rust coverage data
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: docker.io/library/postgres:15.3
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust with llvm-tools
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Set up grcov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: grcov
+
+      - name: Execute tests with coverage instrumentation
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost/postgres
+          LLVM_PROFILE_FILE: "cargo-test-%p-%m.profraw"
+          RUSTFLAGS: "-Cinstrument-coverage --cfg tokio_unstable"
+        run: cargo test --no-fail-fast --workspace
+
+      - name: Produce grcov lcov report
+        run: |
+          mkdir -p target/coverage
+          grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o target/coverage/tests.lcov
+
+      - name: Submit Rust coverage to Codecov
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v5.5.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: target/coverage/*.lcov
+          flags: unit

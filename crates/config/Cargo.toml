@@ -1,0 +1,58 @@
+[package]
+name = "coauth-config"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Configuration framework
+figment.workspace = true
+schemars.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+
+# Core utilities
+anyhow.workspace = true
+camino.workspace = true
+chrono.workspace = true
+hex.workspace = true
+indoc.workspace = true
+tracing.workspace = true
+ulid.workspace = true
+url.workspace = true
+
+# Network & security
+ipnetwork.workspace = true
+lettre.workspace = true
+pem-rfc7468.workspace = true
+rustls-pki-types.workspace = true
+
+# Async & randomness
+futures-util.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+rand_core.workspace = true
+tokio.workspace = true
+
+# Pasion workspace crates
+coauth-iana.workspace = true
+coauth-jose.workspace = true
+coauth-keystore.workspace = true
+
+[features]
+docker = []
+dist = []
+
+[[bin]]
+name = "schema"
+doc = false

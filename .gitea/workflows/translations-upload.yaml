@@ -1,0 +1,37 @@
+name: Gitea Push Translations to Localazy
+
+on:
+  push:
+    branches:
+      - main
+      - release/v**
+
+jobs:
+  push-translations:
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Node environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Localazy CLI
+        run: npm install -g @localazy/cli
+
+      - name: Derive Localazy branch identifier
+        id: localazy-branch
+        run: |
+          echo "name=${{ gitea.ref_name }}" | sed 's#^name=release/#name=#' >> "$GITHUB_OUTPUT"
+
+      - name: Push source strings to Localazy
+        env:
+          BRANCH: ${{ steps.localazy-branch.outputs.name }}
+          LOCALAZY_WRITE_KEY: ${{ secrets.LOCALAZY_WRITE_KEY }}
+        run: localazy upload -w "$LOCALAZY_WRITE_KEY" -b "$BRANCH"

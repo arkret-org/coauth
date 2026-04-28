@@ -1,0 +1,100 @@
+# cargo-deny configuration for Pasion
+# See https://embarkstudios.github.io/cargo-deny/
+
+# ── Target platforms ─────────────────────────────────────────────────────────
+
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "aarch64-unknown-linux-gnu" },
+    { triple = "x86_64-apple-darwin" },
+    { triple = "aarch64-apple-darwin" },
+]
+
+# ── Security advisories ─────────────────────────────────────────────────────
+
+[advisories]
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    # RSA key extraction "Marvin Attack" (PKCS#1 v1.5 encryption only,
+    # which we do not use).
+    "RUSTSEC-2023-0071",
+]
+
+# ── Allowed licenses ────────────────────────────────────────────────────────
+
+[licenses]
+version = 2
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "LicenseRef-Element-Commercial",
+    "MIT",
+    "MPL-2.0",
+    "OpenSSL",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+# ring's license is a bit unusual, so we need to clarify it
+[[licenses.clarify]]
+name = "ring"
+version = "*"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# ── Banned crates ───────────────────────────────────────────────────────────
+
+[bans]
+deny = [
+    # We should never depend on openssl — use rustls instead
+    { name = "openssl" },
+    { name = "openssl-sys" },
+    { name = "native-tls" },
+]
+
+# Track and minimize duplicate crate versions
+multiple-versions = "deny"
+
+skip = [
+    # zxcvbn depends on the old itertools version
+    { name = "itertools", version = "0.13.0" },
+    # Several crates still pull in an older hashbrown
+    { name = "hashbrown", version = "0.14.5" },
+    # Some crates still use thiserror 1.x
+    { name = "thiserror", version = "1.0.69" },
+    { name = "thiserror-impl", version = "1.0.69" },
+    # Some proc-macro crates use the old heck version
+    { name = "heck", version = "0.4.1" },
+    # pad depends on an older unicode-width
+    { name = "unicode-width", version = "0.1.14" },
+    # cron depends on an older winnow:
+    # https://github.com/zslayton/cron/pull/137
+    { name = "winnow", version = "0.6.20" },
+    # Still mainly using rand 0.8
+    { name = "rand", version = "0.8.5" },
+    { name = "rand_chacha", version = "0.3.1" },
+    { name = "rand_core", version = "0.6.4" },
+    { name = "getrandom", version = "0.2.15" },
+]
+
+skip-tree = []
+
+# Ensure the `oldtime` feature of chrono is never enabled
+[[bans.features]]
+name = "chrono"
+deny = ["oldtime"]
+
+# ── Sources ─────────────────────────────────────────────────────────────────
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -1,0 +1,357 @@
+name: Gitea Build Pipeline
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "release/**"
+    tags:
+      - "v*"
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: gitea-build-${{ gitea.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compute-version:
+    name: Derive version from git tags
+    runs-on: ubuntu-24.04-arm64
+
+    permissions:
+      contents: read
+
+    outputs:
+      describe: ${{ steps.version-info.outputs.describe }}
+      timestamp: ${{ steps.version-info.outputs.timestamp }}
+
+    steps:
+      - name: Fetch repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version and commit timestamp
+        id: version-info
+        run: |
+          echo "describe=$(git describe --tags --match 'v*.*.*' --always)" >> "$GITHUB_OUTPUT"
+          echo "timestamp=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
+
+  prepare-image-build:
+    name: Resolve image names and tags
+    runs-on: ubuntu-24.04-arm64
+
+    permissions:
+      contents: read
+
+    outputs:
+      images: ${{ steps.image.outputs.images }}
+      push: ${{ steps.image.outputs.push_images }}
+      use_gitea_registry: ${{ steps.image.outputs.use_gitea_registry }}
+      gitea_registry: ${{ steps.image.outputs.gitea_registry }}
+      gitea_registry_user: ${{ steps.image.outputs.gitea_registry_user }}
+      use_dockerhub: ${{ steps.image.outputs.use_dockerhub }}
+      enabled_arches: ${{ steps.arches.outputs.enabled_arches }}
+      regular_suffixes: ${{ steps.tags.outputs.regular_suffixes }}
+
+    steps:
+      - name: Resolve image names
+        id: image
+        shell: bash
+        env:
+          REPOSITORY: ${{ gitea.repository }}
+          SERVER_URL: ${{ gitea.server_url }}
+          EVENT_NAME: ${{ gitea.event_name }}
+          REGISTRY_USER: ${{ vars.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          DOCKERHUB_USER: ${{ vars.DOCKERHUB_USER }}
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+        run: |
+          set -euo pipefail
+
+          repo_name="${REPOSITORY#*/}"
+          registry_host="${SERVER_URL#http://}"
+          registry_host="${registry_host#https://}"
+          registry_host="${registry_host%%/*}"
+          gitea_image="$registry_host/$REPOSITORY"
+          use_gitea_registry="false"
+          use_dockerhub="false"
+
+          images=()
+
+          if [ -n "${REGISTRY_USER:-}" ] && [ -n "${REGISTRY_TOKEN:-}" ]; then
+            use_gitea_registry="true"
+            images+=("$gitea_image")
+          fi
+
+          if [ -n "${DOCKERHUB_USER:-}" ]; then
+            dockerhub_namespace="${DOCKERHUB_NAMESPACE:-$DOCKERHUB_USER}"
+            dockerhub_image="$dockerhub_namespace/$repo_name"
+            use_dockerhub="true"
+            images+=("$dockerhub_image")
+          else
+            dockerhub_image=""
+          fi
+
+          if [ "${#images[@]}" -eq 0 ]; then
+            images=("local/$repo_name")
+            push_images="false"
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            push_images="false"
+          else
+            push_images="true"
+          fi
+
+          {
+            echo "gitea_registry=$registry_host"
+            echo "gitea_registry_user=${REGISTRY_USER:-}"
+            echo "gitea_image=$gitea_image"
+            echo "use_gitea_registry=$use_gitea_registry"
+            echo "use_dockerhub=$use_dockerhub"
+            echo "dockerhub_image=$dockerhub_image"
+            echo "push_images=$push_images"
+            echo "images<<EOF"
+            printf "%s\n" "${images[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Compute Docker tag suffixes
+        id: tags
+        shell: bash
+        env:
+          GITEA_SHA: ${{ gitea.sha }}
+        run: |
+          set -euo pipefail
+
+          ref_name="${{ gitea.ref_name }}"
+          ref_type="${{ gitea.ref_type }}"
+          short_sha="${GITEA_SHA:0:12}"
+          safe_ref="${ref_name//\//-}"
+
+          regular_suffixes=("sha-${short_sha}")
+
+          if [ "$ref_type" = "branch" ]; then
+            regular_suffixes+=("$safe_ref")
+
+            if [ "$safe_ref" = "main" ]; then
+              regular_suffixes+=("latest")
+            fi
+          fi
+
+          if [ "$ref_type" = "tag" ] && [[ "$ref_name" == v* ]]; then
+            version="${ref_name#v}"
+            regular_suffixes+=("$version")
+
+            if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              major="${BASH_REMATCH[1]}"
+              minor="${BASH_REMATCH[2]}"
+              regular_suffixes+=("${major}.${minor}" "${major}" "latest")
+            fi
+          fi
+
+          {
+            echo "regular_suffixes<<EOF"
+            printf "%s\n" "${regular_suffixes[@]}" | awk '!seen[$0]++'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve enabled image architectures
+        id: arches
+        shell: bash
+        run: |
+          {
+            echo "enabled_arches<<EOF"
+            echo "arm64"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build-image-arch:
+    name: Build Docker images (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs:
+      - compute-version
+      - prepare-image-build
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Temporarily disable amd64 image builds in Gitea Actions.
+          - arch: arm64
+            runner: ubuntu-24.04-arm64
+
+    permissions:
+      contents: read
+
+    env:
+      VERGEN_GIT_DESCRIBE: ${{ needs.compute-version.outputs.describe }}
+      SOURCE_DATE_EPOCH: ${{ needs.compute-version.outputs.timestamp }}
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Gitea registry
+        if: needs.prepare-image-build.outputs.use_gitea_registry == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ needs.prepare-image-build.outputs.gitea_registry }}
+          username: ${{ needs.prepare-image-build.outputs.gitea_registry_user }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: needs.prepare-image-build.outputs.push == 'true' && needs.prepare-image-build.outputs.use_dockerhub == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute per-architecture staging tags
+        id: arch-tags
+        shell: bash
+        env:
+          IMAGES: ${{ needs.prepare-image-build.outputs.images }}
+          FINAL_SUFFIXES: ${{ needs.prepare-image-build.outputs.regular_suffixes }}
+        run: |
+          set -euo pipefail
+
+          release_tags=()
+          publish_tags=()
+
+          while IFS= read -r image; do
+            [ -n "$image" ] || continue
+            while IFS= read -r suffix; do
+              [ -n "$suffix" ] || continue
+              release_tags+=("${image}:${suffix}-${{ matrix.arch }}")
+              publish_tags+=("${image}:${suffix}-${{ matrix.arch }}")
+              publish_tags+=("${image}:${suffix}")
+            done <<< "$FINAL_SUFFIXES"
+          done <<< "$IMAGES"
+
+          {
+            echo "release<<EOF"
+            printf "%s\n" "${release_tags[@]}" | awk '!seen[$0]++'
+            echo "EOF"
+            echo "publish<<EOF"
+            printf "%s\n" "${publish_tags[@]}" | awk '!seen[$0]++'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build release image for ${{ matrix.arch }}
+        shell: bash
+        env:
+          PUBLISH_TAGS: ${{ steps.arch-tags.outputs.publish }}
+        run: |
+          set -euo pipefail
+
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            tag_args+=("-t" "$tag")
+          done <<< "$PUBLISH_TAGS"
+
+          if [ "${#tag_args[@]}" -eq 0 ]; then
+            echo "No release image tags were produced" >&2
+            exit 1
+          fi
+
+          docker build \
+            --pull \
+            "${tag_args[@]}" \
+            --build-arg "VERGEN_GIT_DESCRIBE=${{ needs.compute-version.outputs.describe }}" \
+            -f Dockerfile \
+            .
+
+      - name: Push release image tags for ${{ matrix.arch }}
+        if: needs.prepare-image-build.outputs.push == 'true'
+        shell: bash
+        env:
+          PUBLISH_TAGS: ${{ steps.arch-tags.outputs.publish }}
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            docker push "$tag"
+          done <<< "$PUBLISH_TAGS"
+
+      - name: Smoke test pushed release image for ${{ matrix.arch }}
+        if: needs.prepare-image-build.outputs.push == 'true'
+        shell: bash
+        env:
+          RELEASE_TAGS: ${{ steps.arch-tags.outputs.release }}
+        run: |
+          set -euo pipefail
+
+          image="$(printf '%s\n' "$RELEASE_TAGS" | sed '/^$/d' | head -n1)"
+          if [ -z "$image" ]; then
+            echo "No release image tag was produced" >&2
+            exit 1
+          fi
+
+          docker pull "$image"
+          docker run --rm "$image" --version
+
+      - name: Smoke test local release image for ${{ matrix.arch }}
+        if: needs.prepare-image-build.outputs.push != 'true'
+        shell: bash
+        env:
+          RELEASE_TAGS: ${{ steps.arch-tags.outputs.release }}
+        run: |
+          set -euo pipefail
+
+          image="$(printf '%s\n' "$RELEASE_TAGS" | sed '/^$/d' | head -n1)"
+          if [ -z "$image" ]; then
+            echo "No release image tag was produced" >&2
+            exit 1
+          fi
+
+          docker run --rm "$image" --version
+
+  summarize-published-images:
+    name: Summarize published images
+    runs-on: ubuntu-24.04-arm64
+    needs:
+      - prepare-image-build
+      - build-image-arch
+    if: needs.prepare-image-build.outputs.push == 'true'
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Summarize image result
+        shell: bash
+        env:
+          ENABLED_ARCHES: ${{ needs.prepare-image-build.outputs.enabled_arches }}
+          IMAGES: ${{ needs.prepare-image-build.outputs.images }}
+        run: |
+          echo "Published release images for architectures:"
+          printf '%s\n' "$ENABLED_ARCHES" | sed '/^$/d; s/^/  - /'
+          echo "Published image repositories:"
+          printf '%s\n' "$IMAGES" | sed '/^$/d; s/^/  - /'
+
+  summarize-image-build:
+    name: Summarize local image build
+    runs-on: ubuntu-24.04-arm64
+    needs:
+      - prepare-image-build
+      - build-image-arch
+    if: needs.prepare-image-build.outputs.push != 'true'
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Summarize image result
+        shell: bash
+        env:
+          ENABLED_ARCHES: ${{ needs.prepare-image-build.outputs.enabled_arches }}
+        run: |
+          echo "Built local release images for architectures:"
+          printf '%s\n' "$ENABLED_ARCHES" | sed '/^$/d; s/^/  - /'
+          echo "Set REGISTRY_USER / REGISTRY_TOKEN and optionally DOCKERHUB_USER / DOCKERHUB_TOKEN to push release image tags."

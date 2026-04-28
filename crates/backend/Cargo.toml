@@ -1,0 +1,134 @@
+[package]
+name = "coauth-backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+crc.workspace = true
+deadpool.workspace = true
+futures-util.workspace = true
+headers.workspace = true
+http.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+ipnetwork.workspace = true
+listenfd.workspace = true
+pin-project-lite.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+rand_core.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+socket2.workspace = true
+diesel.workspace = true
+diesel-async.workspace = true
+diesel_migrations.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tokio-util.workspace = true
+tower-service.workspace = true
+salvo.workspace = true
+url.workspace = true
+zeroize.workspace = true
+
+tracing.workspace = true
+tracing-opentelemetry.workspace = true
+opentelemetry.workspace = true
+opentelemetry-http.workspace = true
+opentelemetry-instrumentation-process.workspace = true
+opentelemetry-instrumentation-tokio.workspace = true
+opentelemetry-jaeger-propagator.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry-prometheus-text-exporter.workspace = true
+opentelemetry-resource-detectors.workspace = true
+opentelemetry-semantic-conventions.workspace = true
+opentelemetry-stdout.workspace = true
+opentelemetry_sdk.workspace = true
+sentry.workspace = true
+sentry-tracing.workspace = true
+
+coauth-config.workspace = true
+coauth-data.workspace = true
+coauth-messaging.workspace = true
+coauth-i18n.workspace = true
+coauth-iana.workspace = true
+coauth-jose.workspace = true
+coauth-keystore.workspace = true
+coauth-matrix.workspace = true
+coauth-matrix-palpo.workspace = true
+coauth-policy.workspace = true
+coauth-tasks.workspace = true
+coauth-templates.workspace = true
+oauth2-types.workspace = true
+
+argon2.workspace = true
+async-trait.workspace = true
+base64ct.workspace = true
+bcrypt.workspace = true
+camino.workspace = true
+cookie.workspace = true
+der.workspace = true
+elliptic-curve.workspace = true
+form_urlencoded.workspace = true
+hex.workspace = true
+icu_locid.workspace = true
+icu_normalizer.workspace = true
+indexmap.workspace = true
+language-tags.workspace = true
+lettre.workspace = true
+mime.workspace = true
+opendal.workspace = true
+minijinja.workspace = true
+minijinja-contrib.workspace = true
+p256.workspace = true
+pbkdf2.workspace = true
+pkcs8.workspace = true
+psl.workspace = true
+rsa.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_urlencoded.workspace = true
+serde_with.workspace = true
+data-encoding.workspace = true
+hmac.workspace = true
+sha1 = { workspace = true, features = ["oid"] }
+sha2.workspace = true
+time = "0.3"
+tokio-postgres.workspace = true
+ulid.workspace = true
+uuid.workspace = true
+woothee.workspace = true
+x509-cert = "0.2.5"
+zxcvbn.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+sd-notify.workspace = true
+
+[dev-dependencies]
+cookie_store.workspace = true
+insta.workspace = true
+tokio-test.workspace = true
+tracing-subscriber.workspace = true
+wiremock.workspace = true
+
+[build-dependencies]
+anyhow.workspace = true
+vergen-gitcl.workspace = true
+
+[features]
+# Policy engine backends
+cedar = ["coauth-policy/cedar"]
+remote = ["coauth-policy/remote"]

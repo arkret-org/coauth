@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS notification_deliveries_provider_message_lookup;

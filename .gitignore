@@ -1,0 +1,20 @@
+# Rust
+target
+
+# Frontend build output
+dist
+
+# Editors
+.idea
+.nova
+
+# OS garbage
+.DS_Store
+
+.claude
+_*.*
+.cladue
+config.dev.yaml
+*.log
+.sqlx
+*.py

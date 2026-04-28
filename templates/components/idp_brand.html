@@ -1,0 +1,31 @@
+{#
+Copyright 2025 Taidge contributors
+SPDX-License-Identifier: Apache-2.0
+
+Identity-provider badges used on the upstream login buttons.
+These are intentionally simple monograms instead of copied vendor artwork.
+-#}
+
+{% macro badge(label, background, foreground, class="", accent=none, size="10") -%}
+    <svg class="{{ class }}" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+        <rect x="1.5" y="1.5" width="21" height="21" rx="7" fill="{{ background }}"/>
+        {% if accent %}
+            <circle cx="18.5" cy="5.5" r="3" fill="{{ accent }}" opacity="0.9"/>
+        {% endif %}
+        <text x="12" y="13.2" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="{{ size }}" font-weight="700" fill="{{ foreground }}">{{ label }}</text>
+    </svg>
+{%- endmacro %}
+
+{% macro logo(brand, class="") -%}
+    {% set palette = {
+        "google": {"label": "G", "bg": "#EEF4FF", "fg": "#1A73E8", "accent": "#34A853", "size": "11"},
+        "gitlab": {"label": "GL", "bg": "#FFF1EA", "fg": "#E24329", "accent": "#FC6D26", "size": "8.5"},
+        "twitter": {"label": "X", "bg": "#0F172A", "fg": "#F8FAFC", "accent": "#38BDF8", "size": "11"},
+        "github": {"label": "GH", "bg": "#111827", "fg": "#F9FAFB", "accent": "#6B7280", "size": "8.5"},
+        "facebook": {"label": "f", "bg": "#EAF2FF", "fg": "#1877F2", "accent": "#93C5FD", "size": "14"},
+        "apple": {"label": "A", "bg": "#111111", "fg": "#FAFAFA", "accent": "#9CA3AF", "size": "11"},
+        "discord": {"label": "D", "bg": "#EEF2FF", "fg": "#5865F2", "accent": "#C7D2FE", "size": "11"}
+    } %}
+    {% set icon = palette[brand] if brand in palette else {"label": "ID", "bg": "#F3F4F6", "fg": "#111827", "accent": "#D1D5DB", "size": "8.5"} %}
+    {{- badge(icon.label, icon.bg, icon.fg, class, icon.accent, icon.size) -}}
+{% endmacro %}

@@ -1,0 +1,48 @@
+use signature::SignatureEncoding as _;
+
+#[derive(Debug, Clone)]
+pub struct Signature {
+    bytes: Box<[u8]>,
+}
+
+impl From<Signature> for Box<[u8]> {
+    fn from(val: Signature) -> Self {
+        val.bytes
+    }
+}
+
+impl<'a> From<&'a [u8]> for Signature {
+    fn from(value: &'a [u8]) -> Self {
+        Self {
+            bytes: value.into(),
+        }
+    }
+}
+
+impl signature::SignatureEncoding for Signature {
+    type Repr = Box<[u8]>;
+}
+
+impl Signature {
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes: bytes.into(),
+        }
+    }
+
+    pub fn from_signature<S>(signature: &S) -> Self
+    where
+        S: signature::SignatureEncoding,
+    {
+        Self {
+            bytes: signature.to_vec().into(),
+        }
+    }
+
+    pub fn to_signature<S>(&self) -> Result<S, signature::Error>
+    where
+        S: signature::SignatureEncoding,
+    {
+        S::try_from(&self.to_bytes()).map_err(|_| signature::Error::default())
+    }
+}

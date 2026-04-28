@@ -1,0 +1,16 @@
+{%- set _ = translator(lang) -%}
+
+{%- set ua = raw_user_agent | parse_user_agent() -%}
+{%- set app_name = client.client_name if client.client_name else client.client_id -%}
+
+{%- if ua.model -%}
+  {%- set surface = ua.model -%}
+{%- elif ua.name and ua.os -%}
+  {%- set surface = _("coauth.device_display_name.name_for_platform", name=ua.name, platform=ua.os) -%}
+{%- elif ua.name -%}
+  {%- set surface = ua.name -%}
+{%- else -%}
+  {%- set surface = _("coauth.device_display_name.unknown_device") -%}
+{%- endif -%}
+
+{{- _("coauth.device_display_name.client_on_device", client_name=app_name, device_name=surface) -}}

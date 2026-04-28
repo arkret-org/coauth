@@ -1,0 +1,11 @@
+target/
+dist/
+crates/*/target
+crates/*/node_modules
+docs/
+.devcontainer/
+.github/
+.gitignore
+Dockerfile
+.dockerignore
+docker-bake.hcl

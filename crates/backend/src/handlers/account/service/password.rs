@@ -1,0 +1,185 @@
+//! Service functions for password management.
+//!
+//! These functions encapsulate the business logic for changing a user's
+//! password while already authenticated. Recovery-session orchestration lives
+//! in [`crate::handlers::account::service::recovery`].
+
+use anyhow::Error as AnyhowError;
+use coauth_data::{
+    BoxRepository, Clock, RepositoryAccess, RepositoryError, User,
+    user::{UserPasswordRepository, UserRepository},
+};
+use rand_chacha::rand_core::CryptoRngCore;
+use thiserror::Error;
+use zeroize::Zeroizing;
+
+use crate::handlers::passwords::PasswordManager;
+
+// ── Change password ───────────────────────────────────────────
+
+#[derive(Debug, Error)]
+pub enum ChangePasswordError {
+    #[error("password manager is disabled")]
+    PasswordDisabled,
+
+    #[error("new password is too weak")]
+    PasswordTooWeak,
+
+    #[error("user not found")]
+    UserNotFound,
+
+    #[error("password changes are not allowed")]
+    PasswordChangesDisabled,
+
+    #[error("no current password set")]
+    NoCurrentPassword,
+
+    #[error("current password is required")]
+    CurrentPasswordRequired,
+
+    #[error("current password is incorrect")]
+    WrongPassword,
+
+    #[error(transparent)]
+    Password(AnyhowError),
+
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+}
+
+#[derive(Debug, Error)]
+pub enum VerifyPasswordIfNeededError {
+    #[error(transparent)]
+    Password(AnyhowError),
+
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+}
+
+/// Change the password for an existing user.
+///
+/// When `is_admin` is `false`, the `current_password` must be provided and
+/// verified against the stored hash. Admins can set a new password without
+/// knowing the current one.
+///
+/// The caller is responsible for verifying ownership (is_owner_or_admin)
+/// before calling this function.
+pub async fn change_password(
+    mut repo: BoxRepository,
+    rng: &mut (dyn CryptoRngCore + Send),
+    clock: &dyn Clock,
+    password_manager: &PasswordManager,
+    user_id: ulid::Ulid,
+    current_password: Option<Zeroizing<String>>,
+    new_password: Zeroizing<String>,
+    is_admin: bool,
+    password_change_allowed: bool,
+) -> Result<(), ChangePasswordError> {
+    if new_password.is_empty() {
+        return Err(ChangePasswordError::PasswordTooWeak);
+    }
+
+    if !password_manager.is_enabled() {
+        return Err(ChangePasswordError::PasswordDisabled);
+    }
+
+    if !password_manager
+        .is_password_complex_enough(&new_password)
+        .map_err(|e| ChangePasswordError::Password(e.into()))?
+    {
+        return Err(ChangePasswordError::PasswordTooWeak);
+    }
+
+    let user = repo
+        .user()
+        .lookup(user_id)
+        .await?
+        .ok_or(ChangePasswordError::UserNotFound)?;
+
+    if !is_admin {
+        if !password_change_allowed {
+            return Err(ChangePasswordError::PasswordChangesDisabled);
+        }
+
+        let active_password = repo
+            .user_password()
+            .active(&user)
+            .await?
+            .ok_or(ChangePasswordError::NoCurrentPassword)?;
+
+        let current = current_password.ok_or(ChangePasswordError::CurrentPasswordRequired)?;
+
+        if !password_manager
+            .verify(
+                active_password.version,
+                current,
+                active_password.hashed_password,
+            )
+            .await
+            .map_err(ChangePasswordError::Password)?
+            .is_success()
+        {
+            return Err(ChangePasswordError::WrongPassword);
+        }
+    }
+
+    let (version, hash) = password_manager
+        .hash(make_rng_from(rng), new_password)
+        .await
+        .map_err(ChangePasswordError::Password)?;
+
+    repo.user_password()
+        .add(rng, clock, &user, version, hash, None)
+        .await?;
+
+    repo.save().await?;
+
+    Ok(())
+}
+
+pub async fn verify_password_if_needed(
+    is_admin: bool,
+    password_login_enabled: bool,
+    password_manager: &PasswordManager,
+    password: Option<String>,
+    user: &User,
+    repo: &mut BoxRepository,
+) -> Result<bool, VerifyPasswordIfNeededError> {
+    if is_admin {
+        return Ok(true);
+    }
+
+    if !password_login_enabled {
+        return Ok(true);
+    }
+
+    let user_password = repo.user_password().active(user).await?;
+
+    let Some(user_password) = user_password else {
+        return Ok(true);
+    };
+
+    let Some(password) = password else {
+        return Ok(false);
+    };
+
+    let password = Zeroizing::new(password);
+
+    let res = password_manager
+        .verify(
+            user_password.version,
+            password,
+            user_password.hashed_password,
+        )
+        .await
+        .map_err(VerifyPasswordIfNeededError::Password)?;
+
+    Ok(res.is_success())
+}
+
+/// Create a new RNG from the provided one, suitable for `PasswordManager::hash`
+/// which requires `CryptoRng + RngCore + Send`.
+fn make_rng_from(rng: &mut (dyn CryptoRngCore + Send)) -> rand_chacha::ChaChaRng {
+    use rand_chacha::rand_core::SeedableRng;
+    rand_chacha::ChaChaRng::from_rng(rng).expect("seeding ChaChaRng should not fail")
+}

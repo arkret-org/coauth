@@ -1,0 +1,28 @@
+[application]
+name = "coauth-frontend"
+default_platform = "web"
+
+[web.app]
+title = "Pasion"
+
+[web.resource]
+style = ["assets/main.css"]
+
+[web.resource.dev]
+style = ["assets/main.css"]
+
+[web.watcher]
+reload_html = true
+watch_path = ["src", "assets"]
+
+[server]
+port = 8182
+
+[[web.proxy]]
+backend = "http://localhost:7080/api"
+
+[[web.proxy]]
+backend = "http://localhost:7080/upstream"
+
+[[web.proxy]]
+backend = "http://localhost:7080/authorize"

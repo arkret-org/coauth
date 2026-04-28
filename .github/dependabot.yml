@@ -1,0 +1,51 @@
+---
+version: 2
+
+updates:
+  # GitHub Actions dependency updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    labels:
+      - "Z-Deps-CI"
+      - "A-Dependencies"
+
+  # Rust (Cargo) dependency updates
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    labels:
+      - "Z-Deps-Backend"
+      - "A-Dependencies"
+    groups:
+      icu:
+        patterns:
+          - "icu"
+          - "icu_*"
+      tracing:
+        patterns:
+          - "tracing-*"
+        exclude-patterns:
+          - "tracing-opentelemetry"
+      opentelemetry:
+        patterns:
+          - "opentelemetry"
+          - "opentelemetry_sdk"
+          - "opentelemetry-*"
+          - "tracing-opentelemetry"
+      sentry:
+        patterns:
+          - "sentry"
+          - "sentry-*"
+      salvo:
+        patterns:
+          - "salvo"
+          - "salvo-*"
+          - "salvo_*"
+      diesel:
+        patterns:
+          - "diesel"
+          - "diesel-*"
+          - "diesel_*"

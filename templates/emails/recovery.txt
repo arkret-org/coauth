@@ -1,0 +1,8 @@
+{%- set _ = translator(lang) -%}
+{{ _("coauth.emails.recovery.headline", server_name=branding.server_name) }}
+
+{{ _("coauth.emails.recovery.copy_link") }}
+
+    {{ recovery_link }}
+
+{{ _("coauth.emails.recovery.you_can_ignore") }}

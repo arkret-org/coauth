@@ -1,0 +1,68 @@
+name: Documentation Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-docs:
+    name: Generate documentation site
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Set up mdbook
+        uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook
+
+      - name: Generate documentation output
+        run: mdbook build
+
+      - name: Adjust file permissions for deployment
+        run: |
+          chmod -c -R +rX "target/book/" | while read line; do
+            echo "::warning title=Invalid file permissions automatically fixed::$line"
+          done
+
+      - name: Store pages artifact
+        uses: actions/upload-pages-artifact@v4.0.0
+        with:
+          path: target/book/
+
+  publish-docs:
+    name: Publish to GitHub Pages
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
+    needs: compile-docs
+
+    permissions:
+      id-token: write
+      pages: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.pages-deploy.outputs.page_url }}
+
+    steps:
+      - name: Publish pages
+        id: pages-deploy
+        uses: actions/deploy-pages@v4.0.5

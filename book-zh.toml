@@ -1,0 +1,19 @@
+[book]
+title = "Pasion 文档"
+authors = ["chris@sonc.ai"]
+language = "zh"
+
+src = "docs/zh"
+
+[build]
+build-dir = "target/book-zh"
+
+[output.html]
+# The URL visitors will be directed to when they try to edit a page
+edit-url-template = "https://github.com/taidge/coauth/edit/main/{path}"
+
+# The source code URL of the repository
+git-repository-url = "https://github.com/taidge/coauth"
+
+# The path that the docs are hosted on
+site-url = "/coauth/zh/"

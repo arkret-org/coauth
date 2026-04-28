@@ -1,0 +1,3900 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RootConfig",
+  "description": "Top-level application configuration encompassing all sections",
+  "type": "object",
+  "properties": {
+    "clients": {
+      "description": "List of OAuth 2.0/OIDC clients config",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ClientsConfig"
+        }
+      ]
+    },
+    "http": {
+      "description": "Configuration of the HTTP server",
+      "default": {
+        "listeners": [
+          {
+            "name": "web",
+            "resources": [
+              {
+                "name": "discovery"
+              },
+              {
+                "name": "human"
+              },
+              {
+                "name": "oauth"
+              },
+              {
+                "name": "compat"
+              },
+              {
+                "name": "restapi"
+              },
+              {
+                "name": "assets"
+              }
+            ],
+            "binds": [
+              {
+                "address": "[::]:7080"
+              }
+            ],
+            "proxy_protocol": false
+          },
+          {
+            "name": "internal",
+            "resources": [
+              {
+                "name": "health"
+              }
+            ],
+            "binds": [
+              {
+                "host": "localhost",
+                "port": 8091
+              }
+            ],
+            "proxy_protocol": false
+          }
+        ],
+        "trusted_proxies": [
+          "192.168.0.0/16",
+          "172.16.0.0/12",
+          "10.0.0.0/10",
+          "127.0.0.1/8",
+          "fd00::/8",
+          "::1/128"
+        ],
+        "public_base": "http://[::]:7080/",
+        "issuer": "http://[::]:7080/"
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/HttpConfig"
+        }
+      ]
+    },
+    "database": {
+      "description": "Database connection configuration",
+      "default": {
+        "uri": "postgresql://",
+        "max_connections": 10,
+        "min_connections": 0,
+        "connect_timeout": 30,
+        "idle_timeout": 600,
+        "max_lifetime": 1800
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/DatabaseConfig"
+        }
+      ]
+    },
+    "telemetry": {
+      "description": "Configuration related to sending monitoring data",
+      "allOf": [
+        {
+          "$ref": "#/definitions/TelemetryConfig"
+        }
+      ]
+    },
+    "templates": {
+      "description": "Configuration related to templates",
+      "allOf": [
+        {
+          "$ref": "#/definitions/TemplatesConfig"
+        }
+      ]
+    },
+    "email": {
+      "description": "Configuration related to sending emails",
+      "default": {
+        "from": "\"Authentication Service\" <root@localhost>",
+        "reply_to": "\"Authentication Service\" <root@localhost>",
+        "provider": {
+          "type": "blackhole"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/EmailConfig"
+        }
+      ]
+    },
+    "sms": {
+      "description": "Configuration related to sending SMS messages",
+      "allOf": [
+        {
+          "$ref": "#/definitions/SmsConfig"
+        }
+      ]
+    },
+    "secrets": {
+      "description": "Application secrets",
+      "allOf": [
+        {
+          "$ref": "#/definitions/SecretsConfig"
+        }
+      ]
+    },
+    "passwords": {
+      "description": "Configuration related to user passwords",
+      "default": {
+        "enabled": true,
+        "schemes": [
+          {
+            "version": 1,
+            "algorithm": "argon2id"
+          }
+        ],
+        "minimum_complexity": 3
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/PasswordsConfig"
+        }
+      ]
+    },
+    "matrix": {
+      "description": "Configuration related to the homeserver",
+      "allOf": [
+        {
+          "$ref": "#/definitions/MatrixConfig"
+        }
+      ]
+    },
+    "policy": {
+      "description": "Configuration related to the policy engine",
+      "allOf": [
+        {
+          "$ref": "#/definitions/PolicyConfig"
+        }
+      ]
+    },
+    "rate_limiting": {
+      "description": "Configuration related to limiting the rate of user actions to prevent\nabuse",
+      "allOf": [
+        {
+          "$ref": "#/definitions/RateLimitingConfig"
+        }
+      ]
+    },
+    "upstream_oauth2": {
+      "description": "Configuration related to upstream OAuth providers",
+      "allOf": [
+        {
+          "$ref": "#/definitions/UpstreamOAuth2Config"
+        }
+      ]
+    },
+    "branding": {
+      "description": "Configuration section for tweaking the branding of the service",
+      "allOf": [
+        {
+          "$ref": "#/definitions/BrandingConfig"
+        }
+      ]
+    },
+    "captcha": {
+      "description": "Configuration section to setup CAPTCHA protection on a few operations",
+      "allOf": [
+        {
+          "$ref": "#/definitions/CaptchaConfig"
+        }
+      ]
+    },
+    "account": {
+      "description": "Configuration section to configure features related to account\nmanagement",
+      "allOf": [
+        {
+          "$ref": "#/definitions/AccountConfig"
+        }
+      ]
+    },
+    "experimental": {
+      "description": "Experimental configuration options",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ExperimentalConfig"
+        }
+      ]
+    },
+    "storage": {
+      "description": "Configuration for file/media storage backend",
+      "allOf": [
+        {
+          "$ref": "#/definitions/StorageConfig"
+        }
+      ]
+    }
+  },
+  "required": [
+    "secrets",
+    "matrix"
+  ],
+  "definitions": {
+    "ClientsConfig": {
+      "description": "Wrapper around a list of statically-configured OAuth 2.0 clients",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ClientConfig"
+      }
+    },
+    "ClientConfig": {
+      "description": "Represents the configuration of a single statically-registered OAuth 2.0\nclient",
+      "type": "object",
+      "properties": {
+        "client_id": {
+          "description": "A ULID as per https://github.com/ulid/spec",
+          "type": "string",
+          "pattern": "^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+        },
+        "client_auth_method": {
+          "description": "Token endpoint authentication method for this client",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ClientAuthMethodConfig"
+            }
+          ]
+        },
+        "client_name": {
+          "description": "Name of the `OAuth2` client",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "client_secret_file": {
+          "description": "Path to the file containing the client secret. The client secret is used\nby the `client_secret_basic`, `client_secret_post` and\n`client_secret_jwt` authentication methods.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "client_secret": {
+          "description": "Alternative to `client_secret_file`: Reads the client secret directly\nfrom the config.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jwks": {
+          "description": "The JSON Web Key Set (JWKS) used by the `private_key_jwt` authentication\nmethod. Mutually exclusive with `jwks_uri`",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsonWebKeySet"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jwks_uri": {
+          "description": "The URL of the JSON Web Key Set (JWKS) used by the `private_key_jwt`\nauthentication method. Mutually exclusive with `jwks`",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "redirect_uris": {
+          "description": "Allowed redirect URIs for authorization responses",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "required": [
+        "client_id",
+        "client_auth_method"
+      ]
+    },
+    "ClientAuthMethodConfig": {
+      "description": "Supported token endpoint authentication methods for configured clients",
+      "oneOf": [
+        {
+          "description": "`none`: No authentication",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "`client_secret_basic`: `client_id` and `client_secret` used as basic\nauthorization credentials",
+          "type": "string",
+          "const": "client_secret_basic"
+        },
+        {
+          "description": "`client_secret_post`: `client_id` and `client_secret` sent in the\nrequest body",
+          "type": "string",
+          "const": "client_secret_post"
+        },
+        {
+          "description": "`client_secret_basic`: a `client_assertion` sent in the request body and\nsigned using the `client_secret`",
+          "type": "string",
+          "const": "client_secret_jwt"
+        },
+        {
+          "description": "`client_secret_basic`: a `client_assertion` sent in the request body and\nsigned by an asymmetric key",
+          "type": "string",
+          "const": "private_key_jwt"
+        }
+      ]
+    },
+    "JsonWebKeySet": {
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonWebKey"
+          }
+        }
+      },
+      "required": [
+        "keys"
+      ]
+    },
+    "JsonWebKey": {
+      "description": "Tagged union of public parameters for all supported JWK key types.\nThe `kty` field in the serialized form determines which variant is used.",
+      "type": "object",
+      "properties": {
+        "use": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsonWebKeyUse"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key_ops": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/JsonWebKeyOperation"
+          }
+        },
+        "alg": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsonWebSignatureAlg"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "x5u": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "x5c": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "x5t": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "x5t#S256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "description": "RSA key parameters",
+          "type": "object",
+          "properties": {
+            "kty": {
+              "type": "string",
+              "const": "RSA"
+            }
+          },
+          "required": [
+            "kty"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/RsaPublicParameters"
+            }
+          ]
+        },
+        {
+          "description": "Elliptic Curve key parameters",
+          "type": "object",
+          "properties": {
+            "kty": {
+              "type": "string",
+              "const": "EC"
+            }
+          },
+          "required": [
+            "kty"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/EcPublicParameters"
+            }
+          ]
+        },
+        {
+          "description": "Octet Key Pair parameters",
+          "type": "object",
+          "properties": {
+            "kty": {
+              "type": "string",
+              "const": "OKP"
+            }
+          },
+          "required": [
+            "kty"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/OkpPublicParameters"
+            }
+          ]
+        }
+      ]
+    },
+    "RsaPublicParameters": {
+      "description": "Public parameters for an RSA key (modulus `n` and exponent `e`).",
+      "type": "object",
+      "properties": {
+        "n": {
+          "description": "RSA modulus",
+          "type": "string"
+        },
+        "e": {
+          "description": "RSA public exponent",
+          "type": "string"
+        }
+      },
+      "required": [
+        "n",
+        "e"
+      ]
+    },
+    "JsonWebKeyEcEllipticCurve": {
+      "description": "IANA registry: JsonWebKeyEcEllipticCurve",
+      "anyOf": [
+        {
+          "const": "P-256"
+        },
+        {
+          "const": "P-384"
+        },
+        {
+          "const": "P-521"
+        },
+        {
+          "const": "secp256k1"
+        }
+      ]
+    },
+    "EcPublicParameters": {
+      "description": "Public parameters for an Elliptic Curve key, consisting of the\ncurve identifier and the affine coordinates (`x`, `y`).",
+      "type": "object",
+      "properties": {
+        "crv": {
+          "description": "The named curve this key belongs to",
+          "allOf": [
+            {
+              "$ref": "#/definitions/JsonWebKeyEcEllipticCurve"
+            }
+          ]
+        },
+        "x": {
+          "description": "X coordinate of the public point",
+          "type": "string"
+        },
+        "y": {
+          "description": "Y coordinate of the public point",
+          "type": "string"
+        }
+      },
+      "required": [
+        "crv",
+        "x",
+        "y"
+      ]
+    },
+    "JsonWebKeyOkpEllipticCurve": {
+      "description": "IANA registry: JsonWebKeyOkpEllipticCurve",
+      "anyOf": [
+        {
+          "const": "Ed25519"
+        },
+        {
+          "const": "Ed448"
+        },
+        {
+          "const": "X25519"
+        },
+        {
+          "const": "X448"
+        }
+      ]
+    },
+    "OkpPublicParameters": {
+      "description": "Public parameters for an Octet Key Pair (OKP) key, such as\nEd25519 or X25519.",
+      "type": "object",
+      "properties": {
+        "crv": {
+          "description": "The named curve for this OKP key",
+          "allOf": [
+            {
+              "$ref": "#/definitions/JsonWebKeyOkpEllipticCurve"
+            }
+          ]
+        },
+        "x": {
+          "description": "The public key value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "crv",
+        "x"
+      ]
+    },
+    "JsonWebKeyUse": {
+      "description": "IANA registry: JsonWebKeyUse",
+      "anyOf": [
+        {
+          "const": "sig"
+        },
+        {
+          "const": "enc"
+        }
+      ]
+    },
+    "JsonWebKeyOperation": {
+      "description": "IANA registry: JsonWebKeyOperation",
+      "anyOf": [
+        {
+          "const": "sign"
+        },
+        {
+          "const": "verify"
+        },
+        {
+          "const": "encrypt"
+        },
+        {
+          "const": "decrypt"
+        },
+        {
+          "const": "wrapKey"
+        },
+        {
+          "const": "unwrapKey"
+        },
+        {
+          "const": "deriveKey"
+        },
+        {
+          "const": "deriveBits"
+        }
+      ]
+    },
+    "JsonWebSignatureAlg": {
+      "description": "IANA registry: JsonWebSignatureAlg",
+      "anyOf": [
+        {
+          "const": "HS256"
+        },
+        {
+          "const": "HS384"
+        },
+        {
+          "const": "HS512"
+        },
+        {
+          "const": "RS256"
+        },
+        {
+          "const": "RS384"
+        },
+        {
+          "const": "RS512"
+        },
+        {
+          "const": "ES256"
+        },
+        {
+          "const": "ES384"
+        },
+        {
+          "const": "ES512"
+        },
+        {
+          "const": "PS256"
+        },
+        {
+          "const": "PS384"
+        },
+        {
+          "const": "PS512"
+        },
+        {
+          "const": "none"
+        },
+        {
+          "const": "EdDSA"
+        },
+        {
+          "const": "ES256K"
+        },
+        {
+          "const": "Ed25519"
+        },
+        {
+          "const": "Ed448"
+        }
+      ]
+    },
+    "HttpConfig": {
+      "description": "Web server and reverse-proxy integration",
+      "type": "object",
+      "properties": {
+        "listeners": {
+          "description": "Ordered list of listeners to start",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ListenerConfig"
+          },
+          "default": []
+        },
+        "trusted_proxies": {
+          "description": "CIDR ranges of reverse proxies trusted to set `X-Forwarded-For`",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "ip"
+          },
+          "default": [
+            "192.168.0.0/16",
+            "172.16.0.0/12",
+            "10.0.0.0/10",
+            "127.0.0.1/8",
+            "fd00::/8",
+            "::1/128"
+          ]
+        },
+        "public_base": {
+          "description": "Externally reachable base URL of the authentication service",
+          "type": "string",
+          "format": "uri"
+        },
+        "issuer": {
+          "description": "OIDC issuer identifier. Falls back to `public_base` when omitted.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        }
+      },
+      "required": [
+        "public_base"
+      ]
+    },
+    "ListenerConfig": {
+      "description": "A named HTTP listener with its resource set and bind points",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Human-readable label (appears in traces and metric tags)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resources": {
+          "description": "Endpoint groups exposed on this listener",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Resource"
+          }
+        },
+        "prefix": {
+          "description": "Optional URL prefix for all resources on this listener",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "binds": {
+          "description": "Network addresses / sockets this listener binds to",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BindConfig"
+          }
+        },
+        "proxy_protocol": {
+          "description": "Enable HAProxy PROXY protocol v1 on accepted connections",
+          "type": "boolean",
+          "default": false
+        },
+        "tls": {
+          "description": "TLS termination settings (omit for plain HTTP)",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TlsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "resources",
+        "binds"
+      ]
+    },
+    "Resource": {
+      "description": "A mountable HTTP resource (endpoint group)",
+      "oneOf": [
+        {
+          "description": "Liveness / readiness probe (`/health`)",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "health"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "Prometheus metrics scrape endpoint (`/metrics`)",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "prometheus"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "OpenID Connect discovery documents",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "discovery"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "Browser-facing HTML pages",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "human"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "REST API consumed by the frontend",
+          "type": "object",
+          "properties": {
+            "playground": {
+              "description": "Deprecated -- no longer used",
+              "type": "boolean"
+            },
+            "undocumented_oauth2_access": {
+              "description": "Deprecated -- no longer used",
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "const": "restapi"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "OAuth 2.0 / OIDC protocol endpoints",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "oauth"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "Matrix compatibility layer",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "compat"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "Static frontend assets",
+          "type": "object",
+          "properties": {
+            "path": {
+              "description": "Directory from which to serve files",
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "const": "assets"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "Administrative REST API (`/api/admin/v1`)",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "adminapi"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "description": "Debug handler exposing upstream connection metadata",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "connection-info"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      ]
+    },
+    "BindConfig": {
+      "description": "How a listener should bind to the network",
+      "anyOf": [
+        {
+          "description": "Bind to host + port (host defaults to all interfaces)",
+          "type": "object",
+          "properties": {
+            "host": {
+              "description": "Optional hostname to restrict listening on",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "port": {
+              "description": "TCP port number",
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "required": [
+            "port"
+          ]
+        },
+        {
+          "description": "Bind to a complete address string",
+          "type": "object",
+          "properties": {
+            "address": {
+              "description": "Socket address, e.g. `[::]:7080` or `127.0.0.1:7080`",
+              "type": "string",
+              "examples": [
+                "[::1]:7080",
+                "[::]:7080",
+                "127.0.0.1:7080",
+                "0.0.0.0:7080"
+              ]
+            }
+          },
+          "required": [
+            "address"
+          ]
+        },
+        {
+          "description": "Bind to a UNIX domain socket path",
+          "type": "object",
+          "properties": {
+            "socket": {
+              "description": "Filesystem path for the socket",
+              "type": "string"
+            }
+          },
+          "required": [
+            "socket"
+          ]
+        },
+        {
+          "description": "Inherit a file descriptor from the parent process (e.g. systemd socket\nactivation). The fd index is offset by 3 (stdin/stdout/stderr).",
+          "type": "object",
+          "properties": {
+            "fd": {
+              "description": "Logical fd index (0 = actual fd 3)",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0,
+              "default": 0
+            },
+            "kind": {
+              "description": "Whether the inherited socket is TCP or UNIX",
+              "default": "tcp",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/UnixOrTcp"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "UnixOrTcp": {
+      "description": "Protocol family for a listening socket",
+      "oneOf": [
+        {
+          "description": "UNIX domain socket",
+          "type": "string",
+          "const": "unix"
+        },
+        {
+          "description": "TCP/IP socket",
+          "type": "string",
+          "const": "tcp"
+        }
+      ]
+    },
+    "TlsConfig": {
+      "description": "TLS termination settings for a listener",
+      "type": "object",
+      "properties": {
+        "certificate": {
+          "description": "PEM certificate chain (inline). Mutually exclusive with\n`certificate_file`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "certificate_file": {
+          "description": "Path to a PEM certificate chain. Mutually exclusive with `certificate`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "PEM private key (inline). Mutually exclusive with `key_file`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key_file": {
+          "description": "Path to PEM/DER private key. Mutually exclusive with `key`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password": {
+          "description": "Passphrase for an encrypted private key (inline). Mutually exclusive\nwith `password_file`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password_file": {
+          "description": "Path to key passphrase file. Mutually exclusive with `password`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "DatabaseConfig": {
+      "description": "PostgreSQL connection and pool settings",
+      "type": "object",
+      "properties": {
+        "uri": {
+          "description": "Full connection URI. Mutually exclusive with `host`/`port`/`socket`/\n`username`/`password`/`database`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri",
+          "default": "postgresql://"
+        },
+        "host": {
+          "description": "Server hostname (not allowed when `uri` is set)",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Hostname"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "port": {
+          "description": "Server port (not allowed when `uri` is set)",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "socket": {
+          "description": "UNIX socket directory (not allowed when `uri` is set)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "username": {
+          "description": "PostgreSQL role (not allowed when `uri` is set)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password": {
+          "description": "Role password (not allowed when `uri` is set)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "database": {
+          "description": "Target database name (not allowed when `uri` is set)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ssl_mode": {
+          "description": "Wire-encryption policy",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PgSslMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ssl_ca": {
+          "description": "PEM root CA certificate (inline). Mutually exclusive with `ssl_ca_file`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ssl_ca_file": {
+          "description": "Path to root CA certificate. Mutually exclusive with `ssl_ca`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ssl_certificate": {
+          "description": "PEM client certificate (inline). Mutually exclusive with\n`ssl_certificate_file`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ssl_certificate_file": {
+          "description": "Path to client certificate. Mutually exclusive with `ssl_certificate`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ssl_key": {
+          "description": "PEM client key (inline). Mutually exclusive with `ssl_key_file`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ssl_key_file": {
+          "description": "Path to client key. Mutually exclusive with `ssl_key`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_connections": {
+          "description": "Upper bound on pool connections",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1,
+          "default": 10
+        },
+        "min_connections": {
+          "description": "Lower bound on pool connections (kept warm)",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0,
+          "default": 0
+        },
+        "connect_timeout": {
+          "description": "Per-connection establishment timeout (seconds)",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 30
+        },
+        "idle_timeout": {
+          "description": "Recycle idle connections after this many seconds",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": 600
+        },
+        "max_lifetime": {
+          "description": "Hard upper bound on connection age (seconds)",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 1800
+        }
+      }
+    },
+    "Hostname": {
+      "type": "string",
+      "format": "hostname"
+    },
+    "PgSslMode": {
+      "description": "PostgreSQL wire-encryption behaviour",
+      "oneOf": [
+        {
+          "description": "Never attempt SSL",
+          "type": "string",
+          "const": "disable"
+        },
+        {
+          "description": "Try plaintext first, fall back to SSL",
+          "type": "string",
+          "const": "allow"
+        },
+        {
+          "description": "Try SSL first, fall back to plaintext",
+          "type": "string",
+          "const": "prefer"
+        },
+        {
+          "description": "Require SSL; optionally verify the CA when a root cert is present",
+          "type": "string",
+          "const": "require"
+        },
+        {
+          "description": "Require SSL and verify the server certificate against the CA",
+          "type": "string",
+          "const": "verify-ca"
+        },
+        {
+          "description": "Require SSL, verify CA, and confirm the hostname matches the cert",
+          "type": "string",
+          "const": "verify-full"
+        }
+      ]
+    },
+    "TelemetryConfig": {
+      "description": "Observability and monitoring knobs",
+      "type": "object",
+      "properties": {
+        "tracing": {
+          "description": "Distributed tracing settings",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TracingConfig"
+            }
+          ]
+        },
+        "metrics": {
+          "description": "Runtime metrics settings",
+          "allOf": [
+            {
+              "$ref": "#/definitions/MetricsConfig"
+            }
+          ]
+        },
+        "sentry": {
+          "description": "Sentry error-reporting settings",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SentryConfig"
+            }
+          ]
+        }
+      }
+    },
+    "TracingConfig": {
+      "description": "Settings for distributed trace collection",
+      "type": "object",
+      "properties": {
+        "exporter": {
+          "description": "Where to send trace data",
+          "default": "none",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TracingExporterKind"
+            }
+          ]
+        },
+        "endpoint": {
+          "description": "OTLP/HTTP collector URL",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri",
+          "default": "https://localhost:4318"
+        },
+        "propagators": {
+          "description": "Propagation formats attached to outgoing / parsed from incoming requests",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Propagator"
+          },
+          "default": []
+        },
+        "sample_rate": {
+          "description": "Fraction of traces to keep (0.0 -- 1.0). Defaults to `1.0`.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "examples": [
+            0.5
+          ],
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
+    "TracingExporterKind": {
+      "description": "Destination for distributed trace spans",
+      "oneOf": [
+        {
+          "description": "Disable trace export",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "Write traces to stdout (debugging only)",
+          "type": "string",
+          "const": "stdout"
+        },
+        {
+          "description": "Ship traces via OTLP/HTTP",
+          "type": "string",
+          "const": "otlp"
+        }
+      ]
+    },
+    "Propagator": {
+      "description": "Trace-context propagation format for distributed tracing",
+      "oneOf": [
+        {
+          "description": "W3C Trace Context specification",
+          "type": "string",
+          "const": "tracecontext"
+        },
+        {
+          "description": "W3C Baggage specification",
+          "type": "string",
+          "const": "baggage"
+        },
+        {
+          "description": "Jaeger-native propagation headers",
+          "type": "string",
+          "const": "jaeger"
+        }
+      ]
+    },
+    "MetricsConfig": {
+      "description": "Settings for runtime metric collection",
+      "type": "object",
+      "properties": {
+        "exporter": {
+          "description": "Where to send metric data",
+          "default": "none",
+          "allOf": [
+            {
+              "$ref": "#/definitions/MetricsExporterKind"
+            }
+          ]
+        },
+        "endpoint": {
+          "description": "OTLP/HTTP collector URL",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri",
+          "default": "https://localhost:4318"
+        }
+      }
+    },
+    "MetricsExporterKind": {
+      "description": "Destination for runtime metrics",
+      "oneOf": [
+        {
+          "description": "Disable metric export",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "Dump metrics to stdout (debugging only)",
+          "type": "string",
+          "const": "stdout"
+        },
+        {
+          "description": "Ship metrics via OTLP/HTTP",
+          "type": "string",
+          "const": "otlp"
+        },
+        {
+          "description": "Expose a Prometheus scrape endpoint (requires a `prometheus` HTTP\nresource)",
+          "type": "string",
+          "const": "prometheus"
+        }
+      ]
+    },
+    "SentryConfig": {
+      "description": "Sentry error-tracking integration",
+      "type": "object",
+      "properties": {
+        "dsn": {
+          "description": "Sentry Data Source Name (DSN)",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri",
+          "examples": [
+            "https://public@host:port/1"
+          ]
+        },
+        "environment": {
+          "description": "Sentry environment tag (defaults to `production`)",
+          "type": [
+            "string",
+            "null"
+          ],
+          "examples": [
+            "production"
+          ]
+        },
+        "sample_rate": {
+          "description": "Fraction of events forwarded to Sentry (0.0 -- 1.0). Default: `1.0`.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "examples": [
+            0.5
+          ],
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "traces_sample_rate": {
+          "description": "Fraction of tracing transactions sent to Sentry (0.0 -- 1.0). Default:\n`0.0`.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "examples": [
+            0.5
+          ],
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
+    "TemplatesConfig": {
+      "description": "Configuration related to templates",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Path to the folder which holds the templates",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "translations_path": {
+          "description": "Path to the translations",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default_locale": {
+          "description": "Default locale used as the last-resort fallback when the requested\nlocale's ICU fallback chain is exhausted.\n\nDefaults to `\"en\"` when unset.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "EmailConfig": {
+      "description": "Outbound email delivery settings",
+      "type": "object",
+      "properties": {
+        "from": {
+          "description": "Envelope From / sender address",
+          "type": "string",
+          "default": "\"Authentication Service\" <root@localhost>"
+        },
+        "reply_to": {
+          "description": "Reply-To header value",
+          "type": "string",
+          "default": "\"Authentication Service\" <root@localhost>"
+        },
+        "provider": {
+          "description": "Active email delivery provider",
+          "default": {
+            "type": "blackhole"
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/EmailProviderConfig"
+            }
+          ]
+        }
+      }
+    },
+    "EmailProviderConfig": {
+      "description": "Which provider delivers outbound emails",
+      "oneOf": [
+        {
+          "description": "Silently discard all emails (useful for development)",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "blackhole"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Relay through an SMTP server",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "smtp"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/SmtpEmailProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Pipe through the local `sendmail` binary",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "sendmail"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/SendmailEmailProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Submit email payloads to a generic HTTP endpoint",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "http_webhook"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/HttpWebhookEmailProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Submit email payloads to Paloud's internal notification API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "paloud_internal"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/PaloudInternalEmailProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Deliver through the Resend email API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "resend"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/ResendEmailProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Deliver through the SendGrid email API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "sendgrid"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/SendgridEmailProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Deliver through Twilio SendGrid",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twilio"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/TwilioEmailProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Deliver through the Brevo transactional email API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "brevo"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/BrevoEmailProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Deliver through the AWS SES v2 email API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "aws_ses"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/AwsSesEmailProviderConfig"
+            }
+          ]
+        }
+      ]
+    },
+    "EmailSmtpMode": {
+      "description": "Wire encryption mode for the SMTP relay",
+      "oneOf": [
+        {
+          "description": "Unencrypted connection",
+          "type": "string",
+          "const": "plain"
+        },
+        {
+          "description": "Opportunistic upgrade (`STARTTLS`)",
+          "type": "string",
+          "const": "starttls"
+        },
+        {
+          "description": "Implicit TLS from the start",
+          "type": "string",
+          "const": "tls"
+        }
+      ]
+    },
+    "SmtpEmailProviderConfig": {
+      "description": "SMTP relay delivery settings",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "SMTP connection encryption mode",
+          "allOf": [
+            {
+              "$ref": "#/definitions/EmailSmtpMode"
+            }
+          ]
+        },
+        "hostname": {
+          "description": "SMTP relay hostname",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Hostname"
+            }
+          ]
+        },
+        "port": {
+          "description": "SMTP relay port (defaults: 25 plain, 465 TLS, 587 STARTTLS)",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "username": {
+          "description": "SMTP authentication username (must accompany `password`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password": {
+          "description": "SMTP authentication password (must accompany `username`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "hostname"
+      ]
+    },
+    "SendmailEmailProviderConfig": {
+      "description": "Sendmail delivery settings",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "Path to the sendmail-compatible binary",
+          "type": "string",
+          "default": "sendmail"
+        }
+      }
+    },
+    "HttpWebhookEmailProviderConfig": {
+      "description": "Generic HTTP email API delivery settings",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "API endpoint accepting outbound email requests",
+          "type": "string"
+        },
+        "api_key": {
+          "description": "Optional bearer token sent as `Authorization: Bearer ...`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "headers": {
+          "description": "Static headers to attach to every outbound request",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "PaloudInternalEmailProviderConfig": {
+      "description": "Paloud internal notification email delivery settings",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Fully qualified Paloud internal email dispatch endpoint",
+          "type": "string"
+        },
+        "key_id": {
+          "description": "Shared key identifier sent in `X-Paloud-Key-Id`",
+          "type": "string"
+        },
+        "secret": {
+          "description": "Shared secret used to sign the request with `HMAC-SHA256`",
+          "type": "string"
+        },
+        "workspace": {
+          "description": "Optional workspace UUID or subdomain used for provider routing",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "url",
+        "key_id",
+        "secret"
+      ]
+    },
+    "ResendWebhookConfig": {
+      "description": "Resend webhook verification settings",
+      "type": "object",
+      "properties": {
+        "signing_secret": {
+          "description": "Svix/Resend webhook signing secret",
+          "type": "string"
+        },
+        "max_age_seconds": {
+          "description": "Maximum accepted age for signed webhook timestamps",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 300
+        }
+      },
+      "required": [
+        "signing_secret"
+      ]
+    },
+    "ResendEmailProviderConfig": {
+      "description": "Resend email API delivery settings",
+      "type": "object",
+      "properties": {
+        "api_key": {
+          "description": "Resend API key",
+          "type": "string"
+        },
+        "base_url": {
+          "description": "Base URL for the Resend API",
+          "type": "string",
+          "default": "https://api.resend.com"
+        },
+        "webhook": {
+          "description": "Optional webhook verification settings for asynchronous delivery events",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResendWebhookConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "api_key"
+      ]
+    },
+    "SendgridWebhookConfig": {
+      "description": "SendGrid event webhook verification settings",
+      "type": "object",
+      "properties": {
+        "public_key_pem": {
+          "description": "PEM-encoded public key used to verify signed event webhooks",
+          "type": "string"
+        }
+      },
+      "required": [
+        "public_key_pem"
+      ]
+    },
+    "SendgridEmailProviderConfig": {
+      "description": "SendGrid email API delivery settings",
+      "type": "object",
+      "properties": {
+        "api_key": {
+          "description": "SendGrid API key",
+          "type": "string"
+        },
+        "base_url": {
+          "description": "Base URL for the SendGrid API",
+          "type": "string",
+          "default": "https://api.sendgrid.com"
+        },
+        "webhook": {
+          "description": "Optional webhook verification settings for asynchronous delivery events",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SendgridWebhookConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "api_key"
+      ]
+    },
+    "TwilioEmailProviderConfig": {
+      "description": "Twilio email API delivery settings.\n\nTwilio email delivery is implemented via Twilio SendGrid's mail send API.",
+      "type": "object",
+      "properties": {
+        "api_key": {
+          "description": "Twilio SendGrid API key",
+          "type": "string"
+        },
+        "base_url": {
+          "description": "Base URL for the Twilio SendGrid API",
+          "type": "string",
+          "default": "https://api.sendgrid.com"
+        },
+        "webhook": {
+          "description": "Optional webhook verification settings for asynchronous delivery events",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SendgridWebhookConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "api_key"
+      ]
+    },
+    "BrevoWebhookConfig": {
+      "description": "Brevo webhook request validation settings",
+      "type": "object",
+      "properties": {
+        "headers": {
+          "description": "Expected static headers attached by Brevo when invoking the webhook URL",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "BrevoEmailProviderConfig": {
+      "description": "Brevo transactional email API delivery settings",
+      "type": "object",
+      "properties": {
+        "api_key": {
+          "description": "Brevo API key",
+          "type": "string"
+        },
+        "base_url": {
+          "description": "Base URL for the Brevo API",
+          "type": "string",
+          "default": "https://api.brevo.com"
+        },
+        "webhook": {
+          "description": "Optional webhook validation settings for asynchronous delivery events",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BrevoWebhookConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "api_key"
+      ]
+    },
+    "AwsSesWebhookConfig": {
+      "description": "AWS SES feedback ingestion settings delivered through SNS",
+      "type": "object",
+      "properties": {
+        "topic_arn": {
+          "description": "SNS topic ARN allowed to post SES delivery feedback to this endpoint",
+          "type": "string"
+        },
+        "auto_confirm_subscription": {
+          "description": "Automatically confirm `SubscriptionConfirmation` callbacks",
+          "type": "boolean",
+          "default": false
+        },
+        "allowed_signing_cert_url_prefixes": {
+          "description": "Allowed HTTPS prefixes for `SigningCertURL`",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "https://sns.",
+            "https://sns-"
+          ]
+        }
+      },
+      "required": [
+        "topic_arn"
+      ]
+    },
+    "AwsSesEmailProviderConfig": {
+      "description": "AWS SES API delivery settings",
+      "type": "object",
+      "properties": {
+        "region": {
+          "description": "AWS region that hosts the SES API endpoint",
+          "type": "string"
+        },
+        "access_key_id": {
+          "description": "AWS access key ID",
+          "type": "string"
+        },
+        "secret_access_key": {
+          "description": "AWS secret access key",
+          "type": "string"
+        },
+        "session_token": {
+          "description": "Optional AWS session token for temporary credentials",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endpoint": {
+          "description": "Optional SES endpoint override, useful for proxies or AWS partitions",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configuration_set_name": {
+          "description": "Optional SES configuration set name applied to every message",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "webhook": {
+          "description": "Optional webhook settings for SNS-delivered delivery feedback",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AwsSesWebhookConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "region",
+        "access_key_id",
+        "secret_access_key"
+      ]
+    },
+    "SmsConfig": {
+      "description": "Configuration related to sending SMS messages",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "description": "Active SMS delivery provider",
+          "default": {
+            "type": "blackhole"
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/SmsProviderConfig"
+            }
+          ]
+        }
+      }
+    },
+    "SmsProviderConfig": {
+      "description": "Which provider delivers outbound SMS messages",
+      "oneOf": [
+        {
+          "description": "Silently discard all SMS messages (useful for development)",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "blackhole"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Deliver through Twilio",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "twilio"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/TwilioSmsProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Submit SMS payloads to a generic HTTP endpoint",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "http_webhook"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/HttpWebhookSmsProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Deliver through Aliyun SMS",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "aliyun_sms"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/AliyunSmsProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Deliver through Tencent Cloud SMS",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tencent_cloud_sms"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/TencentCloudSmsProviderConfig"
+            }
+          ]
+        },
+        {
+          "description": "Submit SMS payloads to Paloud's internal notification API",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "paloud_internal"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/PaloudInternalSmsProviderConfig"
+            }
+          ]
+        }
+      ]
+    },
+    "TwilioSmsProviderConfig": {
+      "description": "Twilio SMS delivery settings",
+      "type": "object",
+      "properties": {
+        "account_sid": {
+          "description": "Twilio account SID",
+          "type": "string"
+        },
+        "auth_token": {
+          "description": "Twilio auth token",
+          "type": "string"
+        },
+        "from_number": {
+          "description": "Phone number to send SMS from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account_sid",
+        "auth_token",
+        "from_number"
+      ]
+    },
+    "HttpWebhookSmsProviderConfig": {
+      "description": "Generic HTTP SMS API delivery settings",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "API endpoint accepting outbound SMS requests",
+          "type": "string"
+        },
+        "api_key": {
+          "description": "Optional bearer token sent as `Authorization: Bearer ...`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from_number": {
+          "description": "Phone number to send SMS from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "from_number"
+      ]
+    },
+    "AliyunSmsProviderConfig": {
+      "description": "Aliyun SMS delivery settings",
+      "type": "object",
+      "properties": {
+        "access_key_id": {
+          "description": "Aliyun access key ID",
+          "type": "string"
+        },
+        "access_key_secret": {
+          "description": "Aliyun access key secret",
+          "type": "string"
+        },
+        "sign_name": {
+          "description": "Aliyun sign name (签名)",
+          "type": "string"
+        },
+        "template_code": {
+          "description": "Aliyun template code (模板编号)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "access_key_id",
+        "access_key_secret",
+        "sign_name",
+        "template_code"
+      ]
+    },
+    "TencentCloudSmsProviderConfig": {
+      "description": "Tencent Cloud SMS delivery settings",
+      "type": "object",
+      "properties": {
+        "secret_id": {
+          "description": "Tencent Cloud secret ID",
+          "type": "string"
+        },
+        "secret_key": {
+          "description": "Tencent Cloud secret key",
+          "type": "string"
+        },
+        "sdk_app_id": {
+          "description": "Tencent Cloud SDK app ID",
+          "type": "string"
+        },
+        "sign_name": {
+          "description": "Tencent Cloud sign name (签名)",
+          "type": "string"
+        },
+        "template_id": {
+          "description": "Tencent Cloud template ID (模板 ID)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "secret_id",
+        "secret_key",
+        "sdk_app_id",
+        "sign_name",
+        "template_id"
+      ]
+    },
+    "PaloudInternalSmsProviderConfig": {
+      "description": "Paloud internal notification SMS delivery settings",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Fully qualified Paloud internal SMS dispatch endpoint",
+          "type": "string"
+        },
+        "key_id": {
+          "description": "Shared key identifier sent in `X-Paloud-Key-Id`",
+          "type": "string"
+        },
+        "secret": {
+          "description": "Shared secret used to sign the request with `HMAC-SHA256`",
+          "type": "string"
+        },
+        "workspace": {
+          "description": "Optional workspace UUID or subdomain used for provider routing",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "url",
+        "key_id",
+        "secret"
+      ]
+    },
+    "SecretsConfig": {
+      "description": "Aggregates all cryptographic material: signing keys, encryption keys,\nand optional key directories",
+      "type": "object",
+      "properties": {
+        "encryption_file": {
+          "description": "File containing the hex-encoded encryption key for secure cookies.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "encryption": {
+          "description": "Hex-encoded encryption key for secure cookies (64 hex characters = 32\nbytes).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "examples": [
+            "0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff"
+          ],
+          "pattern": "[0-9a-fA-F]{64}"
+        },
+        "keys": {
+          "description": "List of private keys to use for signing and encrypting payloads.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/KeyConfig"
+          }
+        },
+        "keys_dir": {
+          "description": "Directory of private keys to use for signing and encrypting payloads.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "KeyConfig": {
+      "description": "A single signing/encryption key entry, optionally protected by a password",
+      "type": "object",
+      "properties": {
+        "kid": {
+          "description": "The key ID (`kid`) as used in JWK headers.\n\nWhen omitted, the kid is derived as the key's RFC 7638 JWK Thumbprint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "PasswordsConfig": {
+      "description": "Password authentication and hashing behaviour",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Master switch for password-based login",
+          "type": "boolean",
+          "default": true
+        },
+        "schemes": {
+          "description": "Ordered list of hashing schemes (newest version wins for new passwords)",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HashingScheme"
+          },
+          "default": [
+            {
+              "version": 1,
+              "algorithm": "argon2id"
+            }
+          ]
+        },
+        "minimum_complexity": {
+          "description": "Minimum zxcvbn complexity score (0-4):\n  0 = <100 guesses, 1 = <10k, 2 = <1M, 3 = <100M, 4 = beyond",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 3
+        }
+      }
+    },
+    "HashingScheme": {
+      "description": "A versioned set of parameters that controls how passwords are hashed",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "Monotonic version tag -- the highest version is used for new passwords",
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "algorithm": {
+          "description": "Which hashing algorithm to apply",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Algorithm"
+            }
+          ]
+        },
+        "unicode_normalization": {
+          "description": "Apply NFKC normalization before hashing. Normally `false`; enable when\nmigrating password hashes from Palpo which performs this normalization.",
+          "type": "boolean"
+        },
+        "cost": {
+          "description": "bcrypt work-factor (only relevant for bcrypt)",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": 12
+        },
+        "secret": {
+          "description": "Pepper secret mixed into the hash -- makes brute-force harder after a\ndatabase leak",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secret_file": {
+          "description": "Like `secret` but read from an external file",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "algorithm"
+      ]
+    },
+    "Algorithm": {
+      "description": "Supported password hashing algorithms",
+      "oneOf": [
+        {
+          "description": "bcrypt adaptive hashing",
+          "type": "string",
+          "const": "bcrypt"
+        },
+        {
+          "description": "argon2id (memory-hard)",
+          "type": "string",
+          "const": "argon2id"
+        },
+        {
+          "description": "PBKDF2 key derivation",
+          "type": "string",
+          "const": "pbkdf2"
+        }
+      ]
+    },
+    "MatrixConfig": {
+      "description": "Connection details for the Matrix homeserver",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Which homeserver variant is running",
+          "default": "palpo",
+          "allOf": [
+            {
+              "$ref": "#/definitions/HomeserverKind"
+            }
+          ]
+        },
+        "homeserver": {
+          "description": "The Matrix server name (e.g. `matrix.example.com:8448`)",
+          "type": "string",
+          "default": "localhost:8008"
+        },
+        "secret_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secret": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endpoint": {
+          "description": "Base URL of the homeserver's client-server API",
+          "type": "string",
+          "format": "uri",
+          "default": "http://localhost:8008/"
+        }
+      }
+    },
+    "HomeserverKind": {
+      "description": "Variant of the Matrix homeserver backing this deployment",
+      "oneOf": [
+        {
+          "description": "Full read-write integration with Palpo",
+          "type": "string",
+          "const": "palpo"
+        },
+        {
+          "description": "Read-only mode against Palpo (safe for rolling-out evaluations)",
+          "type": "string",
+          "const": "palpo_read_only"
+        },
+        {
+          "description": "Palpo using the newer (modern) admin API surface",
+          "type": "string",
+          "const": "palpo_modern"
+        }
+      ]
+    },
+    "PolicyConfig": {
+      "description": "Policy engine configuration.\n\nSupports multiple backends: Cedar (default) and Remote HTTP.",
+      "type": "object",
+      "properties": {
+        "engine": {
+          "description": "The policy engine to use.\n\nDefaults to `cedar`. Other option: `remote`.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/PolicyEngine"
+            }
+          ]
+        },
+        "cedar_policy_file": {
+          "description": "Path to the Cedar policy file (used when engine is `cedar`).\n\nThe file should contain Cedar policy statements.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote_endpoint": {
+          "description": "Base URL of the remote policy service (used when engine is `remote`).\n\nThe service must implement the evaluation HTTP protocol:\n`POST {base_url}/evaluate/{policy_type}`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audit_logging": {
+          "description": "Whether to enable audit logging for policy evaluations.\n\nWhen enabled, every policy evaluation will be logged with the action\ntype, result (violation count or error), and evaluation duration.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "PolicyEngine": {
+      "description": "The policy engine backend to use for policy evaluation.",
+      "oneOf": [
+        {
+          "description": "Amazon Cedar policy backend.\n\nUses Cedar policies evaluated natively in Rust.\nRequires the `cedar` feature to be enabled.",
+          "type": "string",
+          "const": "cedar"
+        },
+        {
+          "description": "Remote HTTP policy backend.\n\nDelegates policy evaluation to an external HTTP service.\nRequires the `remote` feature to be enabled.",
+          "type": "string",
+          "const": "remote"
+        }
+      ]
+    },
+    "RateLimitingConfig": {
+      "description": "Configuration related to sending emails",
+      "type": "object",
+      "properties": {
+        "account_recovery": {
+          "description": "Account Recovery-specific rate limits",
+          "default": {
+            "per_ip": {
+              "burst": 3,
+              "per_second": 0.0008333333333333334
+            },
+            "per_address": {
+              "burst": 3,
+              "per_second": 0.0002777777777777778
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/AccountRecoveryRateLimitingConfig"
+            }
+          ]
+        },
+        "login": {
+          "description": "Login-specific rate limits",
+          "default": {
+            "per_ip": {
+              "burst": 3,
+              "per_second": 0.05
+            },
+            "per_account": {
+              "burst": 1800,
+              "per_second": 0.5
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/LoginRateLimitingConfig"
+            }
+          ]
+        },
+        "registration": {
+          "description": "Controls how many registrations attempts are permitted\nbased on source address.",
+          "default": {
+            "burst": 3,
+            "per_second": 0.0008333333333333334
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "email_authentication": {
+          "description": "Email authentication-specific rate limits",
+          "default": {
+            "per_ip": {
+              "burst": 5,
+              "per_second": 0.016666666666666666
+            },
+            "per_address": {
+              "burst": 3,
+              "per_second": 0.0002777777777777778
+            },
+            "emails_per_session": {
+              "burst": 2,
+              "per_second": 0.0033333333333333335
+            },
+            "attempt_per_session": {
+              "burst": 10,
+              "per_second": 0.016666666666666666
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/EmailauthenticationRateLimitingConfig"
+            }
+          ]
+        },
+        "phone_authentication": {
+          "description": "Phone authentication-specific rate limits",
+          "default": {
+            "per_ip": {
+              "burst": 5,
+              "per_second": 0.016666666666666666
+            },
+            "per_phone": {
+              "burst": 3,
+              "per_second": 0.0002777777777777778
+            },
+            "sms_per_session": {
+              "burst": 2,
+              "per_second": 0.0033333333333333335
+            },
+            "attempt_per_session": {
+              "burst": 10,
+              "per_second": 0.016666666666666666
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/PhoneAuthenticationRateLimitingConfig"
+            }
+          ]
+        }
+      }
+    },
+    "AccountRecoveryRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Controls how many account recovery attempts are permitted\nbased on source IP address.\nThis can protect against causing e-mail spam to many targets.\n\nNote: this limit also applies to re-sends.",
+          "default": {
+            "burst": 3,
+            "per_second": 0.0008333333333333334
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_address": {
+          "description": "Controls how many account recovery attempts are permitted\nbased on the e-mail address entered into the recovery form.\nThis can protect against causing e-mail spam to one target.\n\nNote: this limit also applies to re-sends.",
+          "default": {
+            "burst": 3,
+            "per_second": 0.0002777777777777778
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "RateLimiterConfiguration": {
+      "description": "Configuration for a single rate limiter, specifying burst allowance and\nreplenishment rate.",
+      "type": "object",
+      "properties": {
+        "burst": {
+          "description": "A one-off burst of actions that the user can perform\nin one go without waiting.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1
+        },
+        "per_second": {
+          "description": "How quickly the allowance replenishes, in number of actions per second.\nCan be fractional to replenish slower.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "burst",
+        "per_second"
+      ]
+    },
+    "LoginRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Controls how many login attempts are permitted\nbased on source IP address.\nThis can protect against brute force login attempts.\n\nNote: this limit also applies to password checks when a user attempts to\nchange their own password.",
+          "default": {
+            "burst": 3,
+            "per_second": 0.05
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_account": {
+          "description": "Controls how many login attempts are permitted\nbased on the account that is being attempted to be logged into.\nThis can protect against a distributed brute force attack\nbut should be set high enough to prevent someone's account being\ncasually locked out.\n\nNote: this limit also applies to password checks when a user attempts to\nchange their own password.",
+          "default": {
+            "burst": 1800,
+            "per_second": 0.5
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "EmailauthenticationRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Controls how many email authentication attempts are permitted\nbased on the source IP address.\nThis can protect against causing e-mail spam to many targets.",
+          "default": {
+            "burst": 5,
+            "per_second": 0.016666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_address": {
+          "description": "Controls how many email authentication attempts are permitted\nbased on the e-mail address entered into the authentication form.\nThis can protect against causing e-mail spam to one target.\n\nNote: this limit also applies to re-sends.",
+          "default": {
+            "burst": 3,
+            "per_second": 0.0002777777777777778
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "emails_per_session": {
+          "description": "Controls how many authentication emails are permitted to be sent per\nauthentication session. This ensures not too many authentication codes\nare created for the same authentication session.",
+          "default": {
+            "burst": 2,
+            "per_second": 0.0033333333333333335
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "attempt_per_session": {
+          "description": "Controls how many code authentication attempts are permitted per\nauthentication session. This can protect against brute-forcing the\ncode.",
+          "default": {
+            "burst": 10,
+            "per_second": 0.016666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "PhoneAuthenticationRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Controls how many phone authentication attempts are permitted\nbased on the source IP address.\nThis can protect against causing SMS spam to many targets.",
+          "default": {
+            "burst": 5,
+            "per_second": 0.016666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_phone": {
+          "description": "Controls how many phone authentication attempts are permitted\nbased on the phone number entered into the authentication form.\nThis can protect against causing SMS spam to one target.\n\nNote: this limit also applies to re-sends.",
+          "default": {
+            "burst": 3,
+            "per_second": 0.0002777777777777778
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "sms_per_session": {
+          "description": "Controls how many authentication SMS messages are permitted to be sent\nper authentication session. This ensures not too many verification\ncodes are created for the same phone authentication session.",
+          "default": {
+            "burst": 2,
+            "per_second": 0.0033333333333333335
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "attempt_per_session": {
+          "description": "Controls how many code authentication attempts are permitted per\nauthentication session. This can protect against brute-forcing the\ncode.",
+          "default": {
+            "burst": 10,
+            "per_second": 0.016666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "UpstreamOAuth2Config": {
+      "description": "Holds the list of upstream OAuth 2.0 identity providers",
+      "type": "object",
+      "properties": {
+        "providers": {
+          "description": "List of OAuth 2.0 providers",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Provider"
+          }
+        }
+      },
+      "required": [
+        "providers"
+      ]
+    },
+    "Provider": {
+      "description": "Full configuration for a single upstream OAuth 2.0 / OIDC provider",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Whether this provider is enabled.\n\nDefaults to `true`",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "A ULID as per https://github.com/ulid/spec",
+          "type": "string",
+          "pattern": "^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+        },
+        "palpo_idp_id": {
+          "description": "The ID of the provider that was used by Palpo.\nIn order to perform a Palpo migration migration, this must be specified.\n\n## For providers that used OAuth 2.0 or OpenID Connect in Palpo\n\n### For `oidc_providers`:\nThis should be specified as `oidc-` followed by the ID that was\nconfigured as `idp_id` in one of the `oidc_providers` in the Palpo\nconfiguration.\nFor example, if Palpo's configuration contained `idp_id: wombat` for\nthis provider, then specify `oidc-wombat` here.\n\n### For `oidc_config` (legacy):\nSpecify `oidc` here.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issuer": {
+          "description": "The OIDC issuer URL\n\nThis is required if OIDC discovery is enabled (which is the default)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "human_name": {
+          "description": "A human-readable name for the provider, that will be shown to users",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "brand_name": {
+          "description": "A brand identifier used to customise the UI, e.g. `apple`, `google`,\n`github`, etc.\n\nValues supported by the default template are:\n\n - `apple`\n - `google`\n - `facebook`\n - `github`\n - `gitlab`\n - `twitter`\n - `discord`\n - `qq`\n - `feishu`\n - `lark`\n - `dingtalk`\n - `wechat`\n - `wecom`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "client_id": {
+          "description": "The client ID to use when authenticating with the provider",
+          "type": "string"
+        },
+        "client_secret_file": {
+          "description": "Path to the file containing the client secret. The client secret is used\nby the `client_secret_basic`, `client_secret_post` and\n`client_secret_jwt` authentication methods.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "client_secret": {
+          "description": "Alternative to `client_secret_file`: Reads the client secret directly\nfrom the config.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_endpoint_auth_method": {
+          "description": "The method to authenticate the client with the provider",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TokenAuthMethod"
+            }
+          ]
+        },
+        "sign_in_with_apple": {
+          "description": "Additional parameters for the `sign_in_with_apple` method",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SignInWithApple"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "token_endpoint_auth_signing_alg": {
+          "description": "The JWS algorithm to use when authenticating the client with the\nprovider\n\nUsed by the `client_secret_jwt` and `private_key_jwt` methods",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsonWebSignatureAlg"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id_token_signed_response_alg": {
+          "description": "Expected signature for the JWT payload returned by the token\nauthentication endpoint.\n\nDefaults to `RS256`.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/JsonWebSignatureAlg"
+            }
+          ]
+        },
+        "scope": {
+          "description": "The scopes to request from the provider\n\nDefaults to `openid`.",
+          "type": "string"
+        },
+        "discovery_mode": {
+          "description": "How to discover the provider's configuration\n\nDefaults to `oidc`, which uses OIDC discovery with strict metadata\nverification",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DiscoveryMode"
+            }
+          ]
+        },
+        "pkce_method": {
+          "description": "Whether to use proof key for code exchange (PKCE) when requesting and\nexchanging the token.\n\nDefaults to `auto`, which uses PKCE if the provider supports it.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/PkceMethod"
+            }
+          ]
+        },
+        "fetch_userinfo": {
+          "description": "Whether to fetch the user profile from the userinfo endpoint,\nor to rely on the data returned in the `id_token` from the\n`token_endpoint`.\n\nDefaults to `false`.",
+          "type": "boolean",
+          "default": false
+        },
+        "userinfo_signed_response_alg": {
+          "description": "Expected signature for the JWT payload returned by the userinfo\nendpoint.\n\nIf not specified, the response is expected to be an unsigned JSON\npayload.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsonWebSignatureAlg"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "authorization_endpoint": {
+          "description": "The URL to use for the provider's authorization endpoint\n\nDefaults to the `authorization_endpoint` provided through discovery",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "userinfo_endpoint": {
+          "description": "The URL to use for the provider's userinfo endpoint\n\nDefaults to the `userinfo_endpoint` provided through discovery",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "token_endpoint": {
+          "description": "The URL to use for the provider's token endpoint\n\nDefaults to the `token_endpoint` provided through discovery",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "jwks_uri": {
+          "description": "The URL to use for getting the provider's public keys\n\nDefaults to the `jwks_uri` provided through discovery",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "response_mode": {
+          "description": "The response mode we ask the provider to use for the callback",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResponseMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "claims_imports": {
+          "description": "How claims should be imported from the `id_token` provided by the\nprovider",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ClaimsImports"
+            }
+          ]
+        },
+        "additional_authorization_parameters": {
+          "description": "Additional parameters to include in the authorization request\n\nOrders of the keys are not preserved.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "forward_login_hint": {
+          "description": "Whether the `login_hint` should be forwarded to the provider in the\nauthorization request.\n\nDefaults to `false`.",
+          "type": "boolean",
+          "default": false
+        },
+        "on_backchannel_logout": {
+          "description": "What to do when receiving an OIDC Backchannel logout request.\n\nDefaults to `do_nothing`.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/OnBackchannelLogout"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "client_id",
+        "token_endpoint_auth_method"
+      ]
+    },
+    "TokenAuthMethod": {
+      "description": "Supported authentication methods for the upstream token endpoint",
+      "oneOf": [
+        {
+          "description": "`none`: No client authentication",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "`client_secret_basic`: HTTP Basic auth with client_id and client_secret",
+          "type": "string",
+          "const": "client_secret_basic"
+        },
+        {
+          "description": "`client_secret_post`: client_id and client_secret in the POST body",
+          "type": "string",
+          "const": "client_secret_post"
+        },
+        {
+          "description": "`client_secret_jwt`: signed client_assertion using the client_secret",
+          "type": "string",
+          "const": "client_secret_jwt"
+        },
+        {
+          "description": "`private_key_jwt`: signed client_assertion using an asymmetric key",
+          "type": "string",
+          "const": "private_key_jwt"
+        },
+        {
+          "description": "`sign_in_with_apple`: Apple-specific authentication flow",
+          "type": "string",
+          "const": "sign_in_with_apple"
+        },
+        {
+          "description": "`qq_connect`: QQ Connect OAuth2 flow",
+          "type": "string",
+          "const": "q_q_connect"
+        },
+        {
+          "description": "`feishu`: Feishu (Lark China) OAuth2 flow",
+          "type": "string",
+          "const": "feishu"
+        },
+        {
+          "description": "`lark`: Lark (international Feishu) OAuth2 flow",
+          "type": "string",
+          "const": "lark"
+        },
+        {
+          "description": "`dingtalk`: DingTalk OAuth2 flow",
+          "type": "string",
+          "const": "ding_talk"
+        },
+        {
+          "description": "`wechat`: WeChat Open Platform OAuth2 flow",
+          "type": "string",
+          "const": "we_chat"
+        },
+        {
+          "description": "`wecom`: WeCom (Enterprise WeChat) OAuth2 flow",
+          "type": "string",
+          "const": "we_com"
+        }
+      ]
+    },
+    "SignInWithApple": {
+      "description": "Additional parameters required for Apple's authentication flow",
+      "type": "object",
+      "properties": {
+        "private_key_file": {
+          "description": "The private key file used to sign the `id_token`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "private_key": {
+          "description": "The private key used to sign the `id_token`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "team_id": {
+          "description": "The Team ID of the Apple Developer Portal",
+          "type": "string"
+        },
+        "key_id": {
+          "description": "The key ID of the Apple Developer Portal",
+          "type": "string"
+        }
+      },
+      "required": [
+        "team_id",
+        "key_id"
+      ]
+    },
+    "DiscoveryMode": {
+      "description": "Determines how the provider's endpoints and metadata are discovered",
+      "oneOf": [
+        {
+          "description": "Use OIDC discovery with strict metadata verification",
+          "type": "string",
+          "const": "oidc"
+        },
+        {
+          "description": "Use OIDC discovery with relaxed metadata verification",
+          "type": "string",
+          "const": "insecure"
+        },
+        {
+          "description": "Use a static configuration (no discovery)",
+          "type": "string",
+          "const": "disabled"
+        }
+      ]
+    },
+    "PkceMethod": {
+      "description": "Controls whether Proof Key for Code Exchange is used during the\nauthorization code flow",
+      "oneOf": [
+        {
+          "description": "Use PKCE if the provider supports it.\n\nFalls back to no PKCE when provider discovery is disabled.",
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "description": "Always use PKCE with the S256 challenge method",
+          "type": "string",
+          "const": "always"
+        },
+        {
+          "description": "Never use PKCE",
+          "type": "string",
+          "const": "never"
+        }
+      ]
+    },
+    "ResponseMode": {
+      "description": "Specifies how the authorization server delivers the response back to\nthe relying party",
+      "oneOf": [
+        {
+          "description": "The provider sends the response as URL query parameters",
+          "type": "string",
+          "const": "query"
+        },
+        {
+          "description": "The provider sends the response via an HTML form POST\n\nSee <https://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html>",
+          "type": "string",
+          "const": "form_post"
+        }
+      ]
+    },
+    "ClaimsImports": {
+      "description": "Governs how user attributes are imported from the upstream provider",
+      "type": "object",
+      "properties": {
+        "subject": {
+          "description": "How to determine the subject of the user",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SubjectImportPreference"
+            }
+          ]
+        },
+        "skip_confirmation": {
+          "description": "When `true`, the interactive confirmation screen is skipped.\nRequires `localpart.action` to be `require` and other attribute\nactions to be `ignore`, `force`, or `require`.",
+          "type": "boolean"
+        },
+        "localpart": {
+          "description": "Import the localpart of the MXID",
+          "allOf": [
+            {
+              "$ref": "#/definitions/LocalpartImportPreference"
+            }
+          ]
+        },
+        "displayname": {
+          "description": "Import the displayname of the user",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DisplaynameImportPreference"
+            }
+          ]
+        },
+        "email": {
+          "description": "Import the email address of the user",
+          "allOf": [
+            {
+              "$ref": "#/definitions/EmailImportPreference"
+            }
+          ]
+        },
+        "avatar": {
+          "description": "Import the avatar URL of the user",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AvatarImportPreference"
+            }
+          ]
+        },
+        "account_name": {
+          "description": "Set a human-readable name for the upstream account for display purposes",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AccountNameImportPreference"
+            }
+          ]
+        }
+      }
+    },
+    "SubjectImportPreference": {
+      "description": "Controls how the subject identifier is derived from upstream claims",
+      "type": "object",
+      "properties": {
+        "template": {
+          "description": "A Jinja2 template for the subject attribute.\n\nDefaults to `{{ user.sub }}` when omitted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "LocalpartImportPreference": {
+      "description": "Controls how the MXID localpart is imported from upstream claims",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "How to handle the localpart attribute",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ImportAction"
+            }
+          ]
+        },
+        "template": {
+          "description": "A Jinja2 template for the localpart attribute.\n\nDefaults to `{{ user.preferred_username }}` when omitted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "on_conflict": {
+          "description": "How to handle conflicts on the localpart claim",
+          "allOf": [
+            {
+              "$ref": "#/definitions/OnConflict"
+            }
+          ]
+        }
+      }
+    },
+    "ImportAction": {
+      "description": "Controls how a single upstream claim is handled during account linking",
+      "oneOf": [
+        {
+          "description": "Ignore the claim entirely",
+          "type": "string",
+          "const": "ignore"
+        },
+        {
+          "description": "Pre-fill the claim value but let the user modify it",
+          "type": "string",
+          "const": "suggest"
+        },
+        {
+          "description": "Overwrite the local value unconditionally (skip if missing)",
+          "type": "string",
+          "const": "force"
+        },
+        {
+          "description": "Overwrite the local value unconditionally (fail if missing)",
+          "type": "string",
+          "const": "require"
+        }
+      ]
+    },
+    "OnConflict": {
+      "description": "Determines what happens when an upstream identity matches an existing\nlocal account",
+      "oneOf": [
+        {
+          "description": "Reject the upstream login when a conflict is detected",
+          "type": "string",
+          "const": "fail"
+        },
+        {
+          "description": "Link the upstream identity unconditionally, even if another link exists",
+          "type": "string",
+          "const": "add"
+        },
+        {
+          "description": "Remove any prior upstream identity link and create a new one",
+          "type": "string",
+          "const": "replace"
+        },
+        {
+          "description": "Link only when no prior link for this provider exists on the user",
+          "type": "string",
+          "const": "set"
+        }
+      ]
+    },
+    "DisplaynameImportPreference": {
+      "description": "Controls how the display name attribute is imported from upstream claims",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "How to handle the displayname attribute",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ImportAction"
+            }
+          ]
+        },
+        "template": {
+          "description": "A Jinja2 template for the displayname attribute.\n\nDefaults to `{{ user.name }}` when omitted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "EmailImportPreference": {
+      "description": "Controls how the email address attribute is imported from upstream claims",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "How to handle the email claim",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ImportAction"
+            }
+          ]
+        },
+        "template": {
+          "description": "A Jinja2 template for the email address attribute.\n\nDefaults to `{{ user.email }}` when omitted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "AvatarImportPreference": {
+      "description": "Controls how the avatar URL attribute is imported from upstream claims",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "How to handle the avatar attribute",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ImportAction"
+            }
+          ]
+        },
+        "template": {
+          "description": "A Jinja2 template for the avatar URL attribute.\n\nDefaults to `{{ user.picture }}` when omitted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "AccountNameImportPreference": {
+      "description": "Controls how the upstream account display name is derived",
+      "type": "object",
+      "properties": {
+        "template": {
+          "description": "A Jinja2 template for the account name (used for display only).\n\nWhen omitted the account name is not imported.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "OnBackchannelLogout": {
+      "description": "Determines the server's response to an OIDC Backchannel logout\nnotification",
+      "oneOf": [
+        {
+          "description": "Take no action",
+          "type": "string",
+          "const": "do_nothing"
+        },
+        {
+          "description": "Only log out the Pasion 'browser session' started by this OIDC session",
+          "type": "string",
+          "const": "logout_browser_only"
+        },
+        {
+          "description": "Log out all sessions started by this OIDC session, including Pasion\n'browser sessions' and client sessions",
+          "type": "string",
+          "const": "logout_all"
+        }
+      ]
+    },
+    "BrandingConfig": {
+      "description": "Configuration section for tweaking the branding of the service",
+      "type": "object",
+      "properties": {
+        "service_name": {
+          "description": "A human-readable name. Defaults to the server's address.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "policy_uri": {
+          "description": "Link to a privacy policy, displayed in the footer of web pages and\nemails. It is also advertised to clients through the `op_policy_uri`\nOIDC provider metadata.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "tos_uri": {
+          "description": "Link to a terms of service document, displayed in the footer of web\npages and emails. It is also advertised to clients through the\n`op_tos_uri` OIDC provider metadata.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "imprint": {
+          "description": "Legal imprint, displayed in the footer in the footer of web pages and\nemails.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logo_uri": {
+          "description": "Logo displayed in some web pages.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        }
+      }
+    },
+    "CaptchaConfig": {
+      "description": "Controls CAPTCHA-based bot protection for sensitive operations",
+      "type": "object",
+      "properties": {
+        "service": {
+          "description": "The CAPTCHA provider to use, if any",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CaptchaServiceKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "site_key": {
+          "description": "Public-facing site key provided by the CAPTCHA service",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secret_key": {
+          "description": "Server-side secret key for verifying CAPTCHA responses",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CaptchaServiceKind": {
+      "description": "Supported CAPTCHA provider services",
+      "oneOf": [
+        {
+          "description": "Google reCAPTCHA v2",
+          "type": "string",
+          "const": "recaptcha_v2"
+        },
+        {
+          "description": "Cloudflare Turnstile verification",
+          "type": "string",
+          "const": "cloudflare_turnstile"
+        },
+        {
+          "description": "``HCaptcha`` verification service",
+          "type": "string",
+          "const": "hcaptcha"
+        }
+      ]
+    },
+    "AccountConfig": {
+      "description": "Knobs for user-facing account management features",
+      "type": "object",
+      "properties": {
+        "email_change_allowed": {
+          "description": "Whether users can update their own email address (default: `true`)",
+          "type": "boolean"
+        },
+        "displayname_change_allowed": {
+          "description": "Whether users can update their display name (default: `true`).\nKeep in sync with the homeserver policy.",
+          "type": "boolean"
+        },
+        "password_registration_enabled": {
+          "description": "Enable self-service password-based registration (default: `false`).\nIgnored when password login is disabled entirely.",
+          "type": "boolean"
+        },
+        "password_registration_contact_required": {
+          "description": "Require at least one verified contact method for password-based\nregistrations (default: `true`). Has no effect when registration is off.",
+          "type": "boolean"
+        },
+        "password_change_allowed": {
+          "description": "Allow users to change their password (default: `true`). Irrelevant when\npassword login is disabled.",
+          "type": "boolean"
+        },
+        "password_recovery_enabled": {
+          "description": "Permit email-based password recovery (default: `false`). Irrelevant when\npassword login is disabled.",
+          "type": "boolean"
+        },
+        "account_deactivation_allowed": {
+          "description": "Allow users to deactivate (delete) their own account (default: `true`)",
+          "type": "boolean"
+        },
+        "login_with_email_allowed": {
+          "description": "Permit logging in via email address rather than username\n(default: `false`). Irrelevant when password login is disabled.",
+          "type": "boolean"
+        },
+        "admin_portal_url": {
+          "description": "Optional URL of the external admin portal.\n\nWhen set, users with administrative access will see a link to the\nportal in the account UI.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "registration_token_required": {
+          "description": "Require a registration token for new password-based accounts\n(default: `false`). Has no effect when registration is off.",
+          "type": "boolean"
+        },
+        "bootstrap_admin_token": {
+          "description": "Optional bootstrap token that allows one registration to claim the\nfirst administrator role while no admin users exist.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ExperimentalConfig": {
+      "description": "Experimental feature flags -- change at your own risk",
+      "type": "object",
+      "properties": {
+        "access_token_ttl": {
+          "description": "Lifetime of access tokens (seconds). Default: 300 (5 min).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 60,
+          "maximum": 86400
+        },
+        "inactive_session_expiration": {
+          "description": "Opt-in automatic expiration of sessions that have been idle",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/InactiveSessionExpirationConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plan_management_iframe_uri": {
+          "description": "URI for an embeddable plan-management interface (forwarded to the\nclient verbatim without validation)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_limit": {
+          "description": "Limit the total number of concurrent application sessions per user",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SessionLimitConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "InactiveSessionExpirationConfig": {
+      "description": "Tuning options for automatic expiration of idle sessions",
+      "type": "object",
+      "properties": {
+        "ttl": {
+          "description": "Duration (in seconds) after which an idle session is terminated",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 600,
+          "maximum": 7776000
+        },
+        "expire_oauth_sessions": {
+          "description": "Apply the inactivity timeout to OAuth 2.0 sessions",
+          "type": "boolean",
+          "default": true
+        },
+        "expire_user_sessions": {
+          "description": "Apply the inactivity timeout to browser (user) sessions",
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": [
+        "ttl"
+      ]
+    },
+    "SessionLimitConfig": {
+      "description": "Hard and soft caps on the number of active sessions per user",
+      "type": "object",
+      "properties": {
+        "soft_limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 1
+        },
+        "hard_limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "soft_limit",
+        "hard_limit"
+      ]
+    },
+    "StorageConfig": {
+      "description": "Storage backend configuration.\n\nSupports local filesystem or S3-compatible object storage.\n\n```yaml\nstorage:\n  backend: fs\n  root: ./data/media\n```\n\nor:\n\n```yaml\nstorage:\n  backend: s3\n  bucket: my-bucket\n  region: us-east-1\n  endpoint: https://account.r2.cloudflarestorage.com\n```",
+      "oneOf": [
+        {
+          "description": "Local filesystem storage.",
+          "type": "object",
+          "properties": {
+            "root": {
+              "description": "Root directory for stored files.",
+              "type": "string",
+              "default": "./data/media"
+            },
+            "backend": {
+              "type": "string",
+              "const": "fs"
+            }
+          },
+          "required": [
+            "backend"
+          ]
+        },
+        {
+          "description": "S3-compatible object storage (AWS S3, Cloudflare R2, MinIO, etc.).",
+          "type": "object",
+          "properties": {
+            "bucket": {
+              "description": "S3 bucket name.",
+              "type": "string"
+            },
+            "region": {
+              "description": "S3 region.",
+              "type": "string",
+              "default": "us-east-1"
+            },
+            "endpoint": {
+              "description": "S3 endpoint URL. Required for non-AWS services.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "access_key_id": {
+              "description": "S3 access key ID.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "secret_access_key": {
+              "description": "S3 secret access key.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prefix": {
+              "description": "Object key prefix.",
+              "type": "string",
+              "default": "media/"
+            },
+            "path_style": {
+              "description": "Enable path-style access (required for MinIO).",
+              "type": "boolean",
+              "default": false
+            },
+            "redirect": {
+              "description": "Redirect downloads to presigned S3 URLs.",
+              "type": "boolean",
+              "default": true
+            },
+            "presign_expiry": {
+              "description": "Presigned URL expiry in seconds.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0,
+              "default": 300
+            },
+            "backend": {
+              "type": "string",
+              "const": "s3"
+            }
+          },
+          "required": [
+            "backend",
+            "bucket"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,329 @@
+use dioxus::prelude::*;
+use js_sys::Reflect;
+use web_sys::wasm_bindgen::JsValue;
+
+use crate::{
+    api::types::{LoginResponse, ProvidersResponse},
+    components::{layout::Layout, loading::LoadingSpinner},
+    pages::Route,
+};
+
+const PRESERVED_LOGIN_QUERY_PROPERTY: &str = "__coauth_login_query";
+
+fn preserved_login_query() -> Option<String> {
+    let window = web_sys::window()?;
+    Reflect::get(
+        window.as_ref(),
+        &JsValue::from_str(PRESERVED_LOGIN_QUERY_PROPERTY),
+    )
+    .ok()?
+    .as_string()
+}
+
+pub(crate) fn preserve_login_query() {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+
+    let Ok(pathname) = window.location().pathname() else {
+        return;
+    };
+    let Ok(search) = window.location().search() else {
+        return;
+    };
+
+    if pathname == "/login" && !search.is_empty() {
+        let _ = Reflect::set(
+            window.as_ref(),
+            &JsValue::from_str(PRESERVED_LOGIN_QUERY_PROPERTY),
+            &JsValue::from_str(&search),
+        );
+    }
+}
+
+/// Read a query parameter from the current URL.
+fn get_query_param(name: &str) -> Option<String> {
+    let window = web_sys::window()?;
+
+    if let Ok(search) = window.location().search()
+        && !search.is_empty()
+        && let Ok(params) = web_sys::UrlSearchParams::new_with_str(&search)
+        && let Some(value) = params.get(name)
+    {
+        return Some(value);
+    }
+
+    let search = preserved_login_query()?;
+    let params = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
+    params.get(name)
+}
+
+/// Return the current page's query string (without leading `?`), falling
+/// back to the preserved one if Dioxus has already rewritten the URL.
+fn current_query_string() -> String {
+    if let Some(window) = web_sys::window()
+        && let Ok(search) = window.location().search()
+        && !search.is_empty()
+    {
+        return search.trim_start_matches('?').to_string();
+    }
+
+    preserved_login_query()
+        .map(|s| s.trim_start_matches('?').to_string())
+        .unwrap_or_default()
+}
+
+fn clear_preserved_login_query() {
+    if let Some(window) = web_sys::window() {
+        let _ = Reflect::delete_property(
+            window.as_ref(),
+            &JsValue::from_str(PRESERVED_LOGIN_QUERY_PROPERTY),
+        );
+    }
+}
+
+#[component]
+pub fn Login() -> Element {
+    let providers_data = use_resource(|| async {
+        crate::api::api_get::<ProvidersResponse>("/auth/providers").await
+    });
+    let binding = providers_data.read();
+
+    match &*binding {
+        Some(Ok(data)) => rsx! {
+            Layout {
+                LoginForm {
+                    providers: data.clone(),
+                }
+            }
+        },
+        Some(Err(e)) => rsx! {
+            Layout {
+                LoginFormBasic { error_msg: Some(e.clone()) }
+            }
+        },
+        None => rsx! {
+            Layout {
+                LoginFormBasic { error_msg: None }
+            }
+        },
+    }
+}
+
+#[component]
+fn LoginFormBasic(error_msg: Option<String>) -> Element {
+    rsx! {
+        LoginForm {
+            providers: ProvidersResponse {
+                providers: vec![],
+                password_login_enabled: true,
+                password_registration_enabled: false,
+                account_recovery_allowed: true,
+            },
+        }
+    }
+}
+
+#[component]
+fn LoginForm(providers: ProvidersResponse) -> Element {
+    let mut username = use_signal(String::new);
+    let mut password = use_signal(String::new);
+    let mut submitting = use_signal(|| false);
+    let mut error = use_signal(|| None::<String>);
+    let nav = navigator();
+    let has_providers = !providers.providers.is_empty();
+    let password_enabled = providers.password_login_enabled;
+    let registration_enabled = providers.password_registration_enabled;
+    let recovery_enabled = providers.account_recovery_allowed;
+
+    rsx! {
+        div { class: "login-page",
+            div { class: "login-container",
+                h1 { class: "heading-md login-title", "Sign in" }
+
+                if let Some(ref err) = *error.read() {
+                    div { class: "alert alert-critical",
+                        p { "{err}" }
+                    }
+                }
+
+                if password_enabled {
+                    form {
+                        class: "form-root",
+                        onsubmit: move |e| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                            let user = username.to_string();
+                            let pass = password.to_string();
+
+                            if user.is_empty() || pass.is_empty() {
+                                error.set(Some("Please enter your username and password.".to_string()));
+                                return;
+                            }
+
+                            submitting.set(true);
+                            error.set(None);
+                            let nav = nav.clone();
+
+                            spawn(async move {
+                                let result = crate::api::api_post::<LoginResponse>(
+                                    "/auth/login",
+                                    serde_json::json!({
+                                        "username": user,
+                                        "password": pass,
+                                    }),
+                                ).await;
+                                submitting.set(false);
+                                match result {
+                                    Ok(resp) if resp.status == "success" => {
+                                        let continuation =
+                                            get_query_param("kind").zip(get_query_param("id"));
+                                        clear_preserved_login_query();
+
+                                        // Check if this login is part of an OAuth authorization flow
+                                        if let Some((kind, id)) = continuation {
+                                            if kind == "continue_authorization_grant" {
+                                                nav.push(Route::Consent { grant_id: id });
+                                            } else {
+                                                nav.push(Route::AccountOverview {});
+                                            }
+                                        } else {
+                                            nav.push(Route::AccountOverview {});
+                                        }
+                                    }
+                                    Ok(resp) => {
+                                        let msg = match resp.error.as_deref() {
+                                            Some("invalid_credentials") => "Invalid username or password.",
+                                            Some("rate_limited") => "Too many attempts. Please try again later.",
+                                            Some("account_deactivated") => "This account has been deactivated.",
+                                            Some("account_locked") => "This account has been locked.",
+                                            Some("password_login_disabled") => "Password login is not available.",
+                                            Some(other) => other,
+                                            None => "Login failed.",
+                                        };
+                                        error.set(Some(msg.to_string()));
+                                    }
+                                    Err(e) => {
+                                        error.set(Some(e));
+                                    }
+                                }
+                            });
+                        },
+
+                        div { class: "form-field",
+                            label { class: "form-label", "Username" }
+                            input {
+                                class: "form-input",
+                                r#type: "text",
+                                autocomplete: "username",
+                                required: true,
+                                placeholder: "Username or email",
+                                value: "{username}",
+                                oninput: move |e| username.set(e.value()),
+                            }
+                        }
+
+                        div { class: "form-field",
+                            label { class: "form-label", "Password" }
+                            input {
+                                class: "form-input",
+                                r#type: "password",
+                                autocomplete: "current-password",
+                                required: true,
+                                placeholder: "Password",
+                                value: "{password}",
+                                oninput: move |e| password.set(e.value()),
+                            }
+                        }
+
+                        button {
+                            class: "btn btn-primary btn-block",
+                            r#type: "submit",
+                            disabled: submitting(),
+                            if submitting() {
+                                LoadingSpinner { inline: true }
+                            }
+                            "Sign in"
+                        }
+                    }
+
+                    if recovery_enabled {
+                        div { class: "login-links",
+                            Link { class: "link", to: Route::RecoveryStart {},
+                                "Forgot password?"
+                            }
+                        }
+                    }
+                }
+
+                if has_providers && password_enabled {
+                    div { class: "login-divider",
+                        span { "or" }
+                    }
+                }
+
+                if has_providers {
+                    div { class: "login-providers",
+                        for provider in providers.providers.iter() {
+                            {
+                                // Propagate the current page's query string (e.g.
+                                // ?kind=continue_authorization_grant&id=...) to the
+                                // upstream authorize URL so that after the upstream
+                                // flow completes, coauth can continue the original
+                                // OAuth grant and redirect back to the originating
+                                // client.
+                                let query = current_query_string();
+                                let href = if query.is_empty() {
+                                    provider.authorize_url.clone()
+                                } else {
+                                    format!("{}?{}", provider.authorize_url, query)
+                                };
+                                rsx! {
+                                    a {
+                                        class: "btn btn-secondary btn-block",
+                                        href: "{href}",
+                                        {provider.human_name.clone().unwrap_or_else(|| format!("Sign in with {}", provider.id))}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !password_enabled && !has_providers {
+                    div { class: "alert alert-warning",
+                        p { "No login methods are currently available." }
+                    }
+                }
+
+                if registration_enabled {
+                    div { class: "login-register",
+                        span { "Don't have an account? " }
+                        Link {
+                            class: "link",
+                            to: Route::Register {},
+                            onclick: move |_| {
+                                // Carry forward any OAuth continuation so the
+                                // registration finish step can redirect to
+                                // the consent page instead of the account
+                                // overview.
+                                let continuation =
+                                    get_query_param("kind").zip(get_query_param("id"));
+                                if let Some((kind, id)) = continuation {
+                                    #[cfg(target_arch = "wasm32")]
+                                    if let Some(storage) = web_sys::window()
+                                        .and_then(|w| w.session_storage().ok().flatten())
+                                    {
+                                        let _ = storage.set_item("post_auth_kind", &kind);
+                                        let _ = storage.set_item("post_auth_id", &id);
+                                    }
+                                }
+                            },
+                            "Create account"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

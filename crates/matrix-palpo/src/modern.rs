@@ -1,0 +1,589 @@
+use std::collections::HashSet;
+
+use anyhow::Context as _;
+use http::{Method, StatusCode};
+use coauth_matrix::{
+    ConnectorCapabilities, ConnectorProvider, HomeserverAdmin, MatrixUser, ProvisionRequest,
+};
+use serde::{Deserialize, Serialize};
+use tracing::debug;
+use url::Url;
+
+use crate::error::{M_EXCLUSIVE, M_INVALID_USERNAME, M_USER_IN_USE, PalpoResponseExt as _};
+
+const PALPO_MAS_API_PREFIX: &str = "_palpo/mas/";
+
+#[derive(Clone)]
+pub struct PalpoAdmin {
+    homeserver: String,
+    endpoint: Url,
+    access_token: String,
+    http_client: reqwest::Client,
+}
+
+impl PalpoAdmin {
+    #[must_use]
+    pub fn new(
+        homeserver: String,
+        endpoint: Url,
+        access_token: String,
+        http_client: reqwest::Client,
+    ) -> Self {
+        Self {
+            homeserver,
+            endpoint,
+            access_token,
+            http_client,
+        }
+    }
+
+    fn builder(&self, method: Method, url: &str) -> reqwest::RequestBuilder {
+        self.http_client
+            .request(
+                method,
+                self.endpoint
+                    .join(url)
+                    .map(String::from)
+                    .unwrap_or_default(),
+            )
+            .bearer_auth(&self.access_token)
+    }
+
+    fn post(&self, url: &str) -> reqwest::RequestBuilder {
+        self.builder(Method::POST, url)
+    }
+
+    fn mas_post(&self, url: &str) -> reqwest::RequestBuilder {
+        self.post(&format!("{PALPO_MAS_API_PREFIX}{url}"))
+    }
+
+    fn get(&self, url: &str) -> reqwest::RequestBuilder {
+        self.builder(Method::GET, url)
+    }
+}
+
+#[async_trait::async_trait]
+impl HomeserverAdmin for PalpoAdmin {
+    fn homeserver(&self) -> &str {
+        &self.homeserver
+    }
+
+    #[tracing::instrument(name = "homeserver.verify_token", skip_all, err(Debug))]
+    async fn verify_token(&self, token: &str) -> Result<bool, anyhow::Error> {
+        Ok(self.access_token == token)
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.query_user",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+        ),
+        err(Debug),
+    )]
+    async fn query_user(&self, localpart: &str) -> Result<MatrixUser, anyhow::Error> {
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct Response {
+            user_id: String,
+            display_name: Option<String>,
+            avatar_url: Option<String>,
+            is_suspended: bool,
+            is_deactivated: bool,
+        }
+
+        let encoded_localpart = urlencoding::encode(localpart);
+        let url = format!("{PALPO_MAS_API_PREFIX}query_user?localpart={encoded_localpart}");
+        let response = self
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to query user from Palpo")?;
+
+        let response = response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while querying user from Palpo")?;
+
+        let body: Response = response
+            .json()
+            .await
+            .context("Failed to deserialize response while querying user from Palpo")?;
+
+        Ok(MatrixUser {
+            displayname: body.display_name,
+            avatar_url: body.avatar_url,
+            deactivated: body.is_deactivated,
+        })
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.provision_user",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = request.localpart(),
+        ),
+        err(Debug),
+    )]
+    async fn provision_user(&self, request: &ProvisionRequest) -> Result<bool, anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            set_displayname: Option<String>,
+            #[serde(skip_serializing_if = "std::ops::Not::not")]
+            unset_displayname: bool,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            set_avatar_url: Option<String>,
+            #[serde(skip_serializing_if = "std::ops::Not::not")]
+            unset_avatar_url: bool,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            set_emails: Option<Vec<String>>,
+            #[serde(skip_serializing_if = "std::ops::Not::not")]
+            unset_emails: bool,
+            #[serde(skip_serializing_if = "std::ops::Not::not")]
+            admin: bool,
+        }
+
+        let mut body = Request {
+            localpart: request.localpart(),
+            set_displayname: None,
+            unset_displayname: false,
+            set_avatar_url: None,
+            unset_avatar_url: false,
+            set_emails: None,
+            unset_emails: false,
+            admin: request.is_admin(),
+        };
+
+        request.on_displayname(|displayname| match displayname {
+            Some(name) => body.set_displayname = Some(name.to_owned()),
+            None => body.unset_displayname = true,
+        });
+
+        request.on_avatar_url(|avatar_url| match avatar_url {
+            Some(url) => body.set_avatar_url = Some(url.to_owned()),
+            None => body.unset_avatar_url = true,
+        });
+
+        request.on_emails(|emails| match emails {
+            Some(emails) => body.set_emails = Some(emails.to_owned()),
+            None => body.unset_emails = true,
+        });
+
+        let response = self
+            .mas_post("provision_user")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to provision user in Palpo")?;
+
+        let response = response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while provisioning user in Palpo")?;
+
+        match response.status() {
+            StatusCode::CREATED => Ok(true),
+            StatusCode::OK => Ok(false),
+            code => {
+                anyhow::bail!("Unexpected HTTP code while provisioning user in Palpo: {code}")
+            }
+        }
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.is_localpart_available",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+        ),
+        err(Debug),
+    )]
+    async fn is_localpart_available(&self, localpart: &str) -> Result<bool, anyhow::Error> {
+        // Palpo will give us an error if the localpart is not ASCII, so we bail out
+        // early
+        if !localpart.is_ascii() {
+            return Ok(false);
+        }
+
+        let encoded_localpart = urlencoding::encode(localpart);
+        let url =
+            format!("{PALPO_MAS_API_PREFIX}is_localpart_available?localpart={encoded_localpart}");
+        let response = self
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to check localpart availability from Palpo")?;
+
+        match response.error_for_palpo_error().await {
+            Ok(_resp) => Ok(true),
+            Err(err)
+                if err.errcode() == Some(M_INVALID_USERNAME)
+                    || err.errcode() == Some(M_USER_IN_USE)
+                    || err.errcode() == Some(M_EXCLUSIVE) =>
+            {
+                debug!(
+                    error = &err as &dyn std::error::Error,
+                    "Localpart is not available"
+                );
+                Ok(false)
+            }
+
+            Err(err) => Err(err).context("Failed to query localpart availability from Palpo"),
+        }
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.upsert_device",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+            matrix.device_id = device_id,
+        ),
+        err(Debug),
+    )]
+    async fn upsert_device(
+        &self,
+        localpart: &str,
+        device_id: &str,
+        initial_display_name: Option<&str>,
+    ) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+            device_id: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            display_name: Option<&'a str>,
+        }
+
+        let body = Request {
+            localpart,
+            device_id,
+            display_name: initial_display_name,
+        };
+
+        let response = self
+            .mas_post("upsert_device")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to create device in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while creating device in Palpo")?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.update_device_display_name",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+            matrix.device_id = device_id,
+        ),
+        err(Debug),
+    )]
+    async fn update_device_display_name(
+        &self,
+        localpart: &str,
+        device_id: &str,
+        display_name: &str,
+    ) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+            device_id: &'a str,
+            display_name: &'a str,
+        }
+
+        let body = Request {
+            localpart,
+            device_id,
+            display_name,
+        };
+
+        let response = self
+            .mas_post("update_device_display_name")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to update device display name in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while updating device display name in Palpo")?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.delete_device",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+            matrix.device_id = device_id,
+        ),
+        err(Debug),
+    )]
+    async fn delete_device(&self, localpart: &str, device_id: &str) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+            device_id: &'a str,
+        }
+
+        let body = Request {
+            localpart,
+            device_id,
+        };
+
+        let response = self
+            .mas_post("delete_device")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to delete device in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while deleting device in Palpo")?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.sync_devices",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+            matrix.device_count = devices.len(),
+        ),
+        err(Debug),
+    )]
+    async fn sync_devices(
+        &self,
+        localpart: &str,
+        devices: HashSet<String>,
+    ) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+            devices: HashSet<String>,
+        }
+
+        let body = Request { localpart, devices };
+
+        let response = self
+            .mas_post("sync_devices")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to sync devices in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while syncing devices in Palpo")?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.delete_user",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+            matrix.erase = erase,
+        ),
+        err(Debug),
+    )]
+    async fn delete_user(&self, localpart: &str, erase: bool) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+            erase: bool,
+        }
+
+        let body = Request { localpart, erase };
+
+        let response = self
+            .mas_post("delete_user")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to delete user in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while deleting user in Palpo")?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.reactivate_user",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+        ),
+        err(Debug),
+    )]
+    async fn reactivate_user(&self, localpart: &str) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+        }
+
+        let body = Request { localpart };
+
+        let response = self
+            .mas_post("reactivate_user")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to reactivate user in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while reactivating user in Palpo")?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.set_displayname",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+        ),
+        err(Debug),
+    )]
+    async fn set_displayname(
+        &self,
+        localpart: &str,
+        displayname: &str,
+    ) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+            displayname: &'a str,
+        }
+
+        let body = Request {
+            localpart,
+            displayname,
+        };
+
+        let response = self
+            .mas_post("set_displayname")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to set displayname in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while setting displayname in Palpo")?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.unset_displayname",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+        ),
+        err(Debug),
+    )]
+    async fn unset_displayname(&self, localpart: &str) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+        }
+
+        let body = Request { localpart };
+
+        let response = self
+            .mas_post("unset_displayname")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to unset displayname in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while unsetting displayname in Palpo")?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "homeserver.allow_cross_signing_reset",
+        skip_all,
+        fields(
+            matrix.homeserver = self.homeserver,
+            matrix.localpart = localpart,
+        ),
+        err(Debug),
+    )]
+    async fn allow_cross_signing_reset(&self, localpart: &str) -> Result<(), anyhow::Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            localpart: &'a str,
+        }
+
+        let body = Request { localpart };
+
+        let response = self
+            .mas_post("allow_cross_signing_reset")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to allow cross-signing reset in Palpo")?;
+
+        response
+            .error_for_palpo_error()
+            .await
+            .context("Unexpected HTTP response while allowing cross-signing reset in Palpo")?;
+
+        Ok(())
+    }
+}
+
+impl ConnectorProvider for PalpoAdmin {
+    fn provider_name(&self) -> &str {
+        "palpo"
+    }
+
+    fn capabilities(&self) -> ConnectorCapabilities {
+        ConnectorCapabilities {
+            can_provision_users: true,
+            can_delete_users: true,
+            can_manage_devices: true,
+            can_set_displayname: true,
+            can_cross_signing_reset: true,
+        }
+    }
+}

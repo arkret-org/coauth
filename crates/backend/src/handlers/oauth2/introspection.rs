@@ -1,0 +1,265 @@
+use std::sync::{Arc, LazyLock};
+
+use oauth2_types::{
+    errors::{ClientError, ClientErrorCode},
+    requests::{IntrospectionRequest, IntrospectionResponse},
+};
+use opentelemetry::{Key, KeyValue, metrics::Counter};
+use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock};
+use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
+use coauth_keystore::Encrypter;
+use coauth_matrix::HomeserverAdmin;
+use salvo::{Extractible, prelude::*};
+use thiserror::Error;
+use ulid::Ulid;
+
+use super::introspection_service;
+use crate::{
+    handlers::{ActivityTracker, METER},
+    salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError},
+};
+
+static INTROSPECTION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
+    METER
+        .u64_counter("coauth.oauth2.introspection_request")
+        .with_description("Number of OAuth 2.0 introspection requests")
+        .with_unit("{request}")
+        .build()
+});
+
+const KIND: Key = Key::from_static_str("kind");
+const ACTIVE: Key = Key::from_static_str("active");
+
+#[derive(Debug, Error)]
+pub enum RouteError {
+    /// An internal error occurred.
+    #[error(transparent)]
+    Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
+
+    /// The client could not be found.
+    #[error("could not find client")]
+    ClientNotFound,
+
+    /// The client is not allowed to introspect.
+    #[error("client {0} is not allowed to introspect")]
+    NotAllowed(Ulid),
+
+    /// An error from the introspection service indicating the token is
+    /// inactive (unknown, invalid, expired, etc.).
+    #[error(transparent)]
+    Inactive(#[from] introspection_service::IntrospectionError),
+
+    #[error("bad request")]
+    BadRequest,
+
+    #[error("failed to verify token")]
+    FailedToVerifyToken(#[source] anyhow::Error),
+
+    #[error(transparent)]
+    ClientCredentialsVerification(#[from] CredentialsVerificationError),
+
+    #[error("bearer token presented is invalid")]
+    InvalidBearerToken,
+}
+
+const INACTIVE: IntrospectionResponse = IntrospectionResponse {
+    active: false,
+    scope: None,
+    client_id: None,
+    username: None,
+    token_type: None,
+    exp: None,
+    expires_in: None,
+    iat: None,
+    nbf: None,
+    sub: None,
+    aud: None,
+    iss: None,
+    jti: None,
+    device_id: None,
+};
+
+impl Scribe for RouteError {
+    fn render(self, res: &mut Response) {
+        let event_id = sentry::capture_error(&self);
+
+        match self {
+            e @ (Self::Internal(_) | Self::FailedToVerifyToken(_)) => {
+                res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+                res.render(Json(
+                    ClientError::from(ClientErrorCode::ServerError).with_description(e.to_string()),
+                ));
+            }
+            Self::ClientNotFound => {
+                res.status_code(StatusCode::UNAUTHORIZED);
+                res.render(Json(ClientError::from(ClientErrorCode::InvalidClient)));
+            }
+            Self::ClientCredentialsVerification(e) => {
+                res.status_code(StatusCode::UNAUTHORIZED);
+                res.render(Json(
+                    ClientError::from(ClientErrorCode::InvalidClient)
+                        .with_description(e.to_string()),
+                ));
+            }
+            e @ Self::InvalidBearerToken => {
+                res.status_code(StatusCode::UNAUTHORIZED);
+                res.render(Json(
+                    ClientError::from(ClientErrorCode::AccessDenied)
+                        .with_description(e.to_string()),
+                ));
+            }
+
+            Self::Inactive(ref inner) => {
+                // Map service-level errors that indicate repo/load failures to
+                // 500; everything else means the token is simply inactive.
+                use introspection_service::IntrospectionError;
+                match inner {
+                    IntrospectionError::Repository(_)
+                    | IntrospectionError::CantLoadOAuthSession(_)
+                    | IntrospectionError::CantLoadPersonalSession(_)
+                    | IntrospectionError::CantLoadUser(_)
+                    | IntrospectionError::CantLoadOAuth2Client(_) => {
+                        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+                        res.render(Json(
+                            ClientError::from(ClientErrorCode::ServerError)
+                                .with_description(self.to_string()),
+                        ));
+                    }
+                    _ => {
+                        INTROSPECTION_COUNTER.add(1, &[KeyValue::new(ACTIVE.clone(), false)]);
+                        res.render(Json(INACTIVE));
+                    }
+                }
+            }
+
+            Self::NotAllowed(_) => {
+                res.status_code(StatusCode::UNAUTHORIZED);
+                res.render(Json(ClientError::from(ClientErrorCode::AccessDenied)));
+            }
+
+            Self::BadRequest => {
+                res.status_code(StatusCode::BAD_REQUEST);
+                res.render(Json(ClientError::from(ClientErrorCode::InvalidRequest)));
+            }
+        }
+
+        let sentry_event_id = crate::salvo_utils::sentry::SentryEventID::from(event_id);
+        sentry_event_id.write_to_response(res);
+    }
+}
+
+impl_from_error_for_route!(coauth_data::RepositoryError);
+impl_from_error_for_route!(crate::salvo_utils::client_authorization::ClientAuthorizationError);
+
+#[handler]
+#[tracing::instrument(name = "handlers.oauth2.introspection.post", skip_all)]
+pub async fn post(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    match handle_post(req, depot).await {
+        Ok(reply) => {
+            res.render(Json(reply));
+        }
+        Err(e) => e.render(res),
+    }
+}
+
+async fn handle_post(
+    req: &mut Request,
+    depot: &mut Depot,
+) -> Result<IntrospectionResponse, RouteError> {
+    let ClientAuthorization { credentials, form } =
+        ClientAuthorization::<IntrospectionRequest>::extract(req, depot).await?;
+
+    let http_client = depot
+        .get::<reqwest::Client>("http_client")
+        .expect("reqwest::Client not found in depot");
+    let encrypter = depot
+        .get::<Encrypter>("encrypter")
+        .expect("Encrypter not found in depot");
+    let homeserver = depot
+        .get::<Arc<dyn HomeserverAdmin>>("homeserver_admin")
+        .expect("HomeserverAdmin not found in depot");
+    let repo_factory = depot
+        .get::<BoxRepositoryFactory>("box_repository_factory")
+        .expect("BoxRepositoryFactory not found in depot");
+    let activity_tracker = depot
+        .get::<ActivityTracker>("activity_tracker")
+        .expect("ActivityTracker not found in depot");
+
+    let clock: BoxClock = Box::new(SystemClock::default());
+
+    let mut repo: BoxRepository = repo_factory.create().await?;
+
+    if let Some(token) = credentials.bearer_token() {
+        // If the client presented a bearer token, we check with the homeserver
+        // configuration if it is allowed to use the introspection endpoint
+        if !homeserver
+            .verify_token(token)
+            .await
+            .map_err(RouteError::FailedToVerifyToken)?
+        {
+            return Err(RouteError::InvalidBearerToken);
+        }
+    } else {
+        // Otherwise, it presented regular client credentials, so we verify them
+        let client = credentials
+            .fetch(&mut repo)
+            .await?
+            .ok_or(RouteError::ClientNotFound)?;
+
+        // Only confidential clients are allowed to introspect
+        let method = match &client.token_endpoint_auth_method {
+            None | Some(OAuthClientAuthenticationMethod::None) => {
+                return Err(RouteError::NotAllowed(client.id));
+            }
+            Some(c) => c,
+        };
+
+        credentials
+            .verify(http_client, encrypter, method, &client)
+            .await?;
+    }
+
+    let Some(form) = form else {
+        return Err(RouteError::BadRequest);
+    };
+
+    // Delegate the actual token lookup and validation to the service layer.
+    let reply = introspection_service::introspect_token(
+        &mut repo,
+        &*clock,
+        activity_tracker,
+        &form.token,
+        form.token_type_hint,
+    )
+    .await?;
+
+    // Record the counter for the active introspection result.
+    let kind_value = match reply.token_type {
+        Some(OAuthTokenTypeHint::RefreshToken) => "oauth2_refresh_token",
+        Some(OAuthTokenTypeHint::AccessToken) => "oauth2_access_token",
+        _ => "unknown",
+    };
+    // Distinguish personal access tokens by checking if there is no jti
+    // (personal tokens don't have one in the current implementation).
+    // This matches the original handler's counter labelling.
+    let kind_value = if reply.jti.is_none()
+        && matches!(reply.token_type, Some(OAuthTokenTypeHint::AccessToken))
+    {
+        "personal_access_token"
+    } else {
+        kind_value
+    };
+    INTROSPECTION_COUNTER.add(
+        1,
+        &[KeyValue::new(KIND, kind_value), KeyValue::new(ACTIVE, true)],
+    );
+
+    repo.save().await?;
+
+    Ok(reply)
+}
+
+#[cfg(test)]
+mod tests {
+    // Tests would need to be updated for Salvo's test utilities
+}

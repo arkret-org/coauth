@@ -1,0 +1,20 @@
+# Default registration flow definition.
+#
+# This flow collects basic user information and then verifies the user's
+# email address before completing registration.
+
+slug: default-registration
+title: Default Registration
+designation: registration
+
+stages:
+  - type: user_write
+    order: 10
+    create_users_as_inactive: false
+
+  - type: email_verification
+    order: 20
+    purpose: registration
+    template_key: verification
+    code_expiry_seconds: 300
+    max_attempts: 5

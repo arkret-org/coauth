@@ -1,0 +1,323 @@
+name: Build and Release Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - "release/**"
+    tags:
+      - "v*"
+
+  # Trigger on pull request label changes; only runs when 'Z-Build-Workflow' label is present
+  pull_request:
+    types: [labeled]
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_TERM_COLOR: always
+  RUSTC_WRAPPER: "sccache"
+  SCCACHE_GHA_ENABLED: "true"
+  IMAGE: ghcr.io/palpo-im/coauth
+  BUILDCACHE: ghcr.io/palpo-im/coauth/buildcache
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -- Version computation --
+
+  compute-version:
+    name: Derive version from git tags
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' || github.event.label.name == 'Z-Build-Workflow'
+
+    permissions:
+      contents: read
+
+    outputs:
+      describe: ${{ steps.version-info.outputs.describe }}
+      timestamp: ${{ steps.version-info.outputs.timestamp }}
+
+    steps:
+      - name: Fetch repository with full history
+        uses: actions/checkout@v6
+        with:
+          # Full clone required for accurate git describe output
+          fetch-depth: 0
+
+      - name: Extract version and commit timestamp
+        id: version-info
+        run: |
+          echo "describe=$(git describe --tags --match 'v*.*.*' --always)" >> $GITHUB_OUTPUT
+          echo "timestamp=$(git log -1 --format=%ct)" >> $GITHUB_OUTPUT
+
+  # -- Container image --
+
+  prepare-image-build:
+    name: Resolve container image tags
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' || github.event.label.name == 'Z-Build-Workflow'
+
+    outputs:
+      regular_suffixes: ${{ steps.tags.outputs.regular_suffixes }}
+      source_suffix: ${{ steps.tags.outputs.source_suffix }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Compute Docker tag suffixes
+        id: tags
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          ref_name="${{ github.ref_name }}"
+          ref_type="${{ github.ref_type }}"
+          short_sha="${GITHUB_SHA:0:12}"
+          safe_ref="${ref_name//\//-}"
+
+          regular_suffixes=("sha-${short_sha}")
+
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_NUMBER:-}" ]; then
+            regular_suffixes+=("pr-${PR_NUMBER}")
+          else
+            if [ "$ref_type" = "branch" ]; then
+              regular_suffixes+=("$safe_ref")
+
+              if [ "$safe_ref" = "main" ]; then
+                regular_suffixes+=("latest")
+              fi
+            fi
+
+            if [ "$ref_type" = "tag" ] && [[ "$ref_name" == v* ]]; then
+              version="${ref_name#v}"
+              regular_suffixes+=("$version")
+
+              if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+                major="${BASH_REMATCH[1]}"
+                minor="${BASH_REMATCH[2]}"
+                regular_suffixes+=("${major}.${minor}" "${major}" "latest")
+              fi
+            fi
+          fi
+
+          {
+            echo "regular_suffixes<<EOF"
+            printf "%s\n" "${regular_suffixes[@]}" | awk '!seen[$0]++'
+            echo "EOF"
+            echo "source_suffix=sha-${short_sha}"
+          } >> "$GITHUB_OUTPUT"
+
+  build-image-arch:
+    name: Build and publish container image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    if: github.event_name == 'push' || github.event.label.name == 'Z-Build-Workflow'
+    needs:
+      - compute-version
+      - prepare-image-build
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+
+    env:
+      VERGEN_GIT_DESCRIBE: ${{ needs.compute-version.outputs.describe }}
+      SOURCE_DATE_EPOCH: ${{ needs.compute-version.outputs.timestamp }}
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v6
+
+      - name: Configure Docker Buildx
+        uses: docker/setup-buildx-action@v3.11.1
+        with:
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+
+      - name: Authenticate with GitHub Container Registry
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute per-architecture tags
+        id: arch-tags
+        env:
+          FINAL_SUFFIXES: ${{ needs.prepare-image-build.outputs.regular_suffixes }}
+        run: |
+          set -euo pipefail
+
+          release_tags=()
+
+          while IFS= read -r suffix; do
+            [ -n "$suffix" ] || continue
+            release_tags+=("${IMAGE}:${suffix}-${{ matrix.arch }}")
+          done <<< "$FINAL_SUFFIXES"
+
+          {
+            echo "release<<EOF"
+            printf "%s\n" "${release_tags[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build release image for ${{ matrix.arch }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.platform }}
+          pull: true
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            VERGEN_GIT_DESCRIBE=${{ needs.compute-version.outputs.describe }}
+          tags: ${{ steps.arch-tags.outputs.release }}
+          cache-from: type=registry,ref=${{ env.BUILDCACHE }}:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.BUILDCACHE }}:buildcache-${{ matrix.arch }},mode=max
+
+      - name: Smoke test release image for ${{ matrix.arch }}
+        shell: bash
+        env:
+          RELEASE_TAGS: ${{ steps.arch-tags.outputs.release }}
+        run: |
+          set -euo pipefail
+
+          image="$(printf '%s\n' "$RELEASE_TAGS" | sed '/^$/d' | head -n1)"
+          if [ -z "$image" ]; then
+            echo "No release image tag was produced" >&2
+            exit 1
+          fi
+
+          docker pull "$image"
+          docker run --rm "$image" --version
+
+  build-image:
+    name: Publish container image manifests
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' || github.event.label.name == 'Z-Build-Workflow'
+    needs:
+      - prepare-image-build
+      - build-image-arch
+
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+      tags_text: ${{ steps.publish.outputs.tags_text }}
+
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+
+    steps:
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@v4.0.0
+
+      - name: Configure Docker Buildx
+        uses: docker/setup-buildx-action@v3.11.1
+        with:
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+
+      - name: Authenticate with GitHub Container Registry
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish release multi-arch manifests
+        id: publish
+        env:
+          FINAL_SUFFIXES: ${{ needs.prepare-image-build.outputs.regular_suffixes }}
+          SOURCE_SUFFIX: ${{ needs.prepare-image-build.outputs.source_suffix }}
+        run: |
+          set -euo pipefail
+
+          args=()
+          while IFS= read -r suffix; do
+            [ -n "$suffix" ] || continue
+            args+=("-t" "${IMAGE}:${suffix}")
+          done <<< "$FINAL_SUFFIXES"
+
+          docker buildx imagetools create \
+            "${args[@]}" \
+            "${IMAGE}:${SOURCE_SUFFIX}-amd64" \
+            "${IMAGE}:${SOURCE_SUFFIX}-arm64"
+
+          digest="$(docker buildx imagetools inspect "${IMAGE}:${SOURCE_SUFFIX}" | awk '/Digest:/ { print $2; exit }')"
+          if [ -z "$digest" ]; then
+            echo "Failed to determine manifest digest for ${IMAGE}:${SOURCE_SUFFIX}" >&2
+            exit 1
+          fi
+
+          {
+            echo "digest=$digest"
+            echo "tags_text<<EOF"
+            while IFS= read -r suffix; do
+              [ -n "$suffix" ] || continue
+              echo "${IMAGE}:${suffix}"
+            done <<< "$FINAL_SUFFIXES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Cosign the published image
+        if: |
+          github.event_name != 'pull_request'
+          && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
+
+        env:
+          REGULAR_DIGEST: ${{ steps.publish.outputs.digest }}
+
+        run: |-
+          cosign sign --yes \
+            "$IMAGE@$REGULAR_DIGEST"
+
+  # -- Tagged release --
+
+  release:
+    name: Publish tagged release
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - build-image
+
+    steps:
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          draft: true
+          generate_release_notes: true
+          body: |
+            ### Docker image
+
+            Release image:
+
+            - Digest:
+              ```
+              ${{ env.IMAGE }}@${{ needs.build-image.outputs.digest }}
+              ```
+            - Tags:
+              ```
+              ${{ needs.build-image.outputs.tags_text }}
+              ```

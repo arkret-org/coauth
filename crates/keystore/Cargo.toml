@@ -1,0 +1,51 @@
+[package]
+name = "coauth-keystore"
+description = "Secret key storage and management for Pasion"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Cryptographic primitives
+aead.workspace = true
+chacha20poly1305.workspace = true
+ed25519-dalek.workspace = true
+elliptic-curve.workspace = true
+generic-array.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+rsa.workspace = true
+
+# Elliptic curves
+k256.workspace = true
+p256.workspace = true
+p384.workspace = true
+p521.workspace = true
+sec1.workspace = true
+
+# Key encoding formats
+base64ct.workspace = true
+const-oid.workspace = true
+der.workspace = true
+pem-rfc7468.workspace = true
+pkcs1.workspace = true
+pkcs8.workspace = true
+spki.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Workspace crates
+coauth-iana.workspace = true
+coauth-jose.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+rand_chacha.workspace = true

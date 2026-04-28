@@ -1,0 +1,36 @@
+{#
+Copyright 2025 Taidge contributors
+SPDX-License-Identifier: Apache-2.0
+
+OAuth 2.0 Form Post Response Mode (RFC 9126 / OpenID Connect).
+Auto-submits parameters back to the client's redirect URI via POST.
+-#}
+{% set _ = translator(lang) %}
+
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ _("common.loading") }}</title>
+  </head>
+  <body>
+    <form
+      method="post"
+      {% if redirect_uri is not none %}action="{{ redirect_uri }}"{% endif %}
+    >
+      {% for key, value in params|items %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}" />
+      {% endfor %}
+
+      <noscript>
+        <p>{{ _("common.loading") }}</p>
+        <button type="submit">{{ _("action.continue") }}</button>
+      </noscript>
+    </form>
+
+    <script>
+      setTimeout(function () { document.forms[0].submit(); }, 0);
+    </script>
+  </body>
+</html>

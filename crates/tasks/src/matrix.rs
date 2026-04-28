@@ -1,0 +1,282 @@
+// Copyright 2025 Taidge contributors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+//! Background jobs for Matrix homeserver integration:
+//! user provisioning, device synchronization, and legacy device jobs.
+
+use std::collections::HashSet;
+
+use anyhow::Context;
+use async_trait::async_trait;
+use coauth_data::{
+    Pagination, RepositoryAccess,
+    oauth2::OAuth2SessionFilter,
+    personal::PersonalSessionFilter,
+    queue::{
+        DeleteDeviceJob, ProvisionDeviceJob, ProvisionUserJob, QueueJobRepositoryExt as _,
+        SyncDevicesJob,
+    },
+    user::{UserEmailRepository, UserRepository},
+};
+use coauth_matrix::ProvisionRequest;
+use tracing::info;
+
+use crate::{
+    State,
+    new_queue::{JobContext, JobError, RunnableJob},
+};
+
+// ── Provision user ───────────────────────────────────────────────────
+
+/// Provisions (creates or updates) a user on the Matrix homeserver via
+/// the admin API, then schedules a device sync.
+#[async_trait]
+impl RunnableJob for ProvisionUserJob {
+    #[tracing::instrument(
+        name = "job.provision_user",
+        fields(user.id = %self.user_id()),
+        skip_all,
+    )]
+    async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
+        let matrix = state.matrix_connection();
+        let mut repo = state.repository().await.map_err(JobError::retry)?;
+        let mut rng = state.rng();
+        let clock = state.clock();
+
+        let user = repo
+            .user()
+            .lookup(self.user_id())
+            .await
+            .map_err(JobError::retry)?
+            .context("user not found")
+            .map_err(JobError::fail)?;
+
+        // Collect verified email addresses
+        let emails: Vec<String> = repo
+            .user_email()
+            .all(&user)
+            .await
+            .map_err(JobError::retry)?
+            .into_iter()
+            .map(|e| e.email)
+            .collect();
+
+        let mut req =
+            ProvisionRequest::new(user.username.clone(), user.sub.clone()).set_emails(emails);
+
+        if let Some(name) = self.display_name_to_set() {
+            req = req.set_displayname(name.to_owned());
+        }
+
+        if let Some(avatar_url) = self.avatar_url_to_set() {
+            req = req.set_avatar_url(avatar_url.to_owned());
+        }
+
+        if self.is_admin() {
+            req = req.set_admin();
+        }
+
+        let created = matrix.provision_user(&req).await.map_err(JobError::retry)?;
+
+        let mxid = matrix.mxid(&user.username);
+        if created {
+            info!(%user.id, %mxid, "user created on homeserver");
+        } else {
+            info!(%user.id, %mxid, "user updated on homeserver");
+        }
+
+        // Follow up with a device sync
+        repo.queue_job()
+            .schedule_job(&mut rng, clock, SyncDevicesJob::new(&user))
+            .await
+            .map_err(JobError::retry)?;
+
+        repo.save().await.map_err(JobError::retry)?;
+        Ok(())
+    }
+}
+
+// ── Legacy device jobs (deprecated — delegate to SyncDevicesJob) ─────
+
+/// Deprecated: now just triggers a full device sync.
+#[async_trait]
+impl RunnableJob for ProvisionDeviceJob {
+    #[tracing::instrument(
+        name = "job.provision_device",
+        fields(user.id = %self.user_id(), device.id = %self.device_id()),
+        skip_all,
+    )]
+    async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
+        schedule_device_sync(state, self.user_id()).await
+    }
+}
+
+/// Deprecated: now just triggers a full device sync.
+#[async_trait]
+impl RunnableJob for DeleteDeviceJob {
+    #[tracing::instrument(
+        name = "job.delete_device",
+        fields(user.id = %self.user_id(), device.id = %self.device_id()),
+        skip_all,
+    )]
+    async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
+        schedule_device_sync(state, self.user_id()).await
+    }
+}
+
+/// Shared helper for the two deprecated device jobs.
+async fn schedule_device_sync(state: &State, user_id: ulid::Ulid) -> Result<(), JobError> {
+    let mut repo = state.repository().await.map_err(JobError::retry)?;
+    let mut rng = state.rng();
+    let clock = state.clock();
+
+    let user = repo
+        .user()
+        .lookup(user_id)
+        .await
+        .map_err(JobError::retry)?
+        .context("user not found")
+        .map_err(JobError::fail)?;
+
+    repo.queue_job()
+        .schedule_job(&mut rng, clock, SyncDevicesJob::new(&user))
+        .await
+        .map_err(JobError::retry)?;
+
+    Ok(())
+}
+
+// ── Sync devices ─────────────────────────────────────────────────────
+
+/// Collects every active device ID from OAuth 2.0 and personal sessions,
+/// then pushes the canonical set to the homeserver.
+#[async_trait]
+impl RunnableJob for SyncDevicesJob {
+    #[tracing::instrument(
+        name = "job.sync_devices",
+        fields(user.id = %self.user_id()),
+        skip_all,
+    )]
+    async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
+        let matrix = state.matrix_connection();
+        let mut repo = state.repository().await.map_err(JobError::retry)?;
+
+        let user = repo
+            .user()
+            .lookup(self.user_id())
+            .await
+            .map_err(JobError::retry)?
+            .context("user not found")
+            .map_err(JobError::fail)?;
+
+        // Acquire an advisory lock so concurrent syncs don't race.
+        repo.user()
+            .acquire_lock_for_sync(&user)
+            .await
+            .map_err(JobError::retry)?;
+
+        let mut devices = HashSet::new();
+
+        // ── Gather device IDs from OAuth 2.0 sessions ────────────────
+        collect_devices_from_oauth2(&mut repo, &user, &mut devices).await?;
+
+        // ── Gather device IDs from personal sessions ─────────────────
+        collect_devices_from_personal(&mut repo, &user, &mut devices).await?;
+
+        // ── Push the full set to the homeserver ──────────────────────
+        matrix
+            .sync_devices(&user.username, devices)
+            .await
+            .map_err(JobError::retry)?;
+
+        // Release the advisory lock by saving the connection.
+        repo.save().await.map_err(JobError::retry)?;
+        Ok(())
+    }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+/// Stable and unstable Matrix device-scope prefixes.
+const DEVICE_SCOPE_PREFIXES: &[&str] = &[
+    "urn:matrix:client:device:",
+    "urn:matrix:org.matrix.msc2967.client:device:",
+];
+
+/// Extract a device ID from a scope token if it has a known device prefix.
+fn extract_device_id(token: &oauth2_types::scope::ScopeToken) -> Option<&str> {
+    let s = token.as_str();
+    DEVICE_SCOPE_PREFIXES
+        .iter()
+        .find_map(|prefix| s.strip_prefix(prefix))
+}
+
+/// Paginate through all active OAuth 2.0 sessions and collect device IDs.
+async fn collect_devices_from_oauth2(
+    repo: &mut impl RepositoryAccess,
+    user: &coauth_data::User,
+    devices: &mut HashSet<String>,
+) -> Result<(), JobError> {
+    let mut cursor = Pagination::first(5000);
+    loop {
+        let page = repo
+            .oauth2_session()
+            .list(
+                OAuth2SessionFilter::new().for_user(user).active_only(),
+                cursor,
+            )
+            .await
+            .map_err(JobError::retry)?;
+
+        for edge in &page.edges {
+            for scope_token in &*edge.node.scope {
+                if let Some(id) = extract_device_id(scope_token) {
+                    devices.insert(id.to_owned());
+                }
+            }
+            cursor = cursor.after(edge.cursor);
+        }
+
+        if !page.has_next_page {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Paginate through all active personal sessions and collect device IDs.
+async fn collect_devices_from_personal(
+    repo: &mut impl RepositoryAccess,
+    user: &coauth_data::User,
+    devices: &mut HashSet<String>,
+) -> Result<(), JobError> {
+    let mut cursor = Pagination::first(5000);
+    loop {
+        let page = repo
+            .personal_session()
+            .list(
+                PersonalSessionFilter::new()
+                    .for_actor_user(user)
+                    .active_only(),
+                cursor,
+            )
+            .await
+            .map_err(JobError::retry)?;
+
+        for edge in &page.edges {
+            let (session, _) = &edge.node;
+            for scope_token in &*session.scope {
+                if let Some(id) = extract_device_id(scope_token) {
+                    devices.insert(id.to_owned());
+                }
+            }
+            cursor = cursor.after(edge.cursor);
+        }
+
+        if !page.has_next_page {
+            break;
+        }
+    }
+    Ok(())
+}

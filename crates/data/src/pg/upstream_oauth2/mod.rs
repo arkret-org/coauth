@@ -1,0 +1,769 @@
+//! A module containing the PostgreSQL implementation of the repositories
+//! related to the upstream OAuth 2.0 providers
+
+mod link;
+mod provider;
+mod session;
+
+pub use self::{
+    link::PgUpstreamOAuthLinkRepository, provider::PgUpstreamOAuthProviderRepository,
+    session::PgUpstreamOAuthSessionRepository,
+};
+
+#[cfg(test)]
+mod tests {
+    use chrono::Duration;
+    use oauth2_types::scope::{OPENID, Scope};
+    use coauth_data::{
+        Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
+        RepositoryTransaction as _, UpstreamOAuthLinkPatch, UpstreamOAuthProviderClaimsImports,
+        UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderTokenAuthMethod,
+        clock::MockClock,
+        upstream_oauth2::{
+            UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderFilter,
+            UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
+            UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository,
+        },
+        user::UserRepository,
+    };
+    use coauth_iana::jose::JsonWebSignatureAlg;
+    use rand_core::SeedableRng;
+
+    use crate::PgRepositoryFactory;
+
+    #[tokio::test]
+    async fn test_repository() {
+        let pool = crate::test_utils::setup_test_pool().await;
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        let clock = MockClock::default();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+
+        // The provider list should be empty at the start
+        let all_providers = repo.upstream_oauth_provider().all_enabled().await.unwrap();
+        assert!(all_providers.is_empty());
+
+        // Let's add a provider
+        let provider = repo
+            .upstream_oauth_provider()
+            .add(
+                &mut rng,
+                &clock,
+                UpstreamOAuthProviderParams {
+                    issuer: Some("https://example.com/".to_owned()),
+                    human_name: None,
+                    brand_name: None,
+                    scope: Scope::from_iter([OPENID]),
+                    token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
+                    id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
+                    fetch_userinfo: false,
+                    userinfo_signed_response_alg: None,
+                    token_endpoint_signing_alg: None,
+                    client_id: "client-id".to_owned(),
+                    encrypted_client_secret: None,
+                    claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+                    token_endpoint_override: None,
+                    authorization_endpoint_override: None,
+                    userinfo_endpoint_override: None,
+                    jwks_uri_override: None,
+                    discovery_mode: coauth_data::UpstreamOAuthProviderDiscoveryMode::Oidc,
+                    pkce_mode: coauth_data::UpstreamOAuthProviderPkceMode::Auto,
+                    response_mode: None,
+                    additional_authorization_parameters: Vec::new(),
+                    forward_login_hint: false,
+                    ui_order: 0,
+                    on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+                    source: coauth_data::UpstreamOAuthProviderSource::Config,
+                },
+            )
+            .await
+            .unwrap();
+
+        // Look it up in the database
+        let provider = repo
+            .upstream_oauth_provider()
+            .lookup(provider.id)
+            .await
+            .unwrap()
+            .expect("provider to be found in the database");
+        assert_eq!(provider.issuer.as_deref(), Some("https://example.com/"));
+        assert_eq!(provider.client_id, "client-id");
+
+        // It should be in the list of all providers
+        let providers = repo.upstream_oauth_provider().all_enabled().await.unwrap();
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].issuer.as_deref(), Some("https://example.com/"));
+        assert_eq!(providers[0].client_id, "client-id");
+
+        // Start a session
+        let session = repo
+            .upstream_oauth_session()
+            .add(
+                &mut rng,
+                &clock,
+                &provider,
+                "some-state".to_owned(),
+                None,
+                Some("some-nonce".to_owned()),
+            )
+            .await
+            .unwrap();
+
+        // Look it up in the database
+        let session = repo
+            .upstream_oauth_session()
+            .lookup(session.id)
+            .await
+            .unwrap()
+            .expect("session to be found in the database");
+        assert_eq!(session.provider_id, provider.id);
+        assert_eq!(session.link_id(), None);
+        assert!(session.is_pending());
+        assert!(!session.is_completed());
+        assert!(!session.is_consumed());
+
+        // Create a link
+        let link = repo
+            .upstream_oauth_link()
+            .add(&mut rng, &clock, &provider, "a-subject".to_owned(), None)
+            .await
+            .unwrap();
+
+        // We can look it up by its ID
+        repo.upstream_oauth_link()
+            .lookup(link.id)
+            .await
+            .unwrap()
+            .expect("link to be found in database");
+
+        // or by its subject
+        let link = repo
+            .upstream_oauth_link()
+            .find_by_subject(&provider, "a-subject")
+            .await
+            .unwrap()
+            .expect("link to be found in database");
+        assert_eq!(link.subject, "a-subject");
+        assert_eq!(link.provider_id, provider.id);
+
+        let session = repo
+            .upstream_oauth_session()
+            .complete_with_link(&clock, session, &link, None, None, None, None)
+            .await
+            .unwrap();
+        // Reload the session
+        let session = repo
+            .upstream_oauth_session()
+            .lookup(session.id)
+            .await
+            .unwrap()
+            .expect("session to be found in the database");
+        assert!(session.is_completed());
+        assert!(!session.is_consumed());
+        assert_eq!(session.link_id(), Some(link.id));
+
+        // We need to create a user and start a browser session to consume the session
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, "john".to_owned())
+            .await
+            .unwrap();
+        let browser_session = repo
+            .browser_session()
+            .add(&mut rng, &clock, &user, None)
+            .await
+            .unwrap();
+
+        let session = repo
+            .upstream_oauth_session()
+            .consume(&clock, session, &browser_session)
+            .await
+            .unwrap();
+
+        // Reload the session
+        let session = repo
+            .upstream_oauth_session()
+            .lookup(session.id)
+            .await
+            .unwrap()
+            .expect("session to be found in the database");
+        assert!(session.is_consumed());
+        repo.upstream_oauth_link()
+            .associate_to_user(&link, &user)
+            .await
+            .unwrap();
+
+        // XXX: we should also try other combinations of the filter
+        let filter = UpstreamOAuthLinkFilter::new()
+            .for_user(&user)
+            .for_provider(&provider)
+            .for_subject("a-subject")
+            .enabled_providers_only();
+
+        let links = repo
+            .upstream_oauth_link()
+            .list(filter, Pagination::first(10))
+            .await
+            .unwrap();
+        assert!(!links.has_previous_page);
+        assert!(!links.has_next_page);
+        assert_eq!(links.edges.len(), 1);
+        assert_eq!(links.edges[0].node.id, link.id);
+        assert_eq!(links.edges[0].node.user_id, Some(user.id));
+
+        assert_eq!(repo.upstream_oauth_link().count(filter).await.unwrap(), 1);
+
+        // There should be exactly one enabled provider
+        assert_eq!(
+            repo.upstream_oauth_provider()
+                .count(UpstreamOAuthProviderFilter::new())
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            repo.upstream_oauth_provider()
+                .count(UpstreamOAuthProviderFilter::new().enabled_only())
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            repo.upstream_oauth_provider()
+                .count(UpstreamOAuthProviderFilter::new().disabled_only())
+                .await
+                .unwrap(),
+            0
+        );
+
+        // Disable the provider
+        repo.upstream_oauth_provider()
+            .disable(&clock, provider.clone())
+            .await
+            .unwrap();
+
+        // There should be exactly one disabled provider
+        assert_eq!(
+            repo.upstream_oauth_provider()
+                .count(UpstreamOAuthProviderFilter::new())
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            repo.upstream_oauth_provider()
+                .count(UpstreamOAuthProviderFilter::new().enabled_only())
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            repo.upstream_oauth_provider()
+                .count(UpstreamOAuthProviderFilter::new().disabled_only())
+                .await
+                .unwrap(),
+            1
+        );
+
+        // Test listing and counting sessions
+        let session_filter = UpstreamOAuthSessionFilter::new().for_provider(&provider);
+
+        // Count the sessions for the provider
+        let session_count = repo
+            .upstream_oauth_session()
+            .count(session_filter)
+            .await
+            .unwrap();
+        assert_eq!(session_count, 1);
+
+        // List the sessions for the provider
+        let session_page = repo
+            .upstream_oauth_session()
+            .list(session_filter, Pagination::first(10))
+            .await
+            .unwrap();
+
+        assert_eq!(session_page.edges.len(), 1);
+        assert_eq!(session_page.edges[0].node.id, session.id);
+        assert!(!session_page.has_next_page);
+        assert!(!session_page.has_previous_page);
+
+        // Try deleting the provider
+        repo.upstream_oauth_provider()
+            .delete(provider)
+            .await
+            .unwrap();
+        assert_eq!(
+            repo.upstream_oauth_provider()
+                .count(UpstreamOAuthProviderFilter::new())
+                .await
+                .unwrap(),
+            0
+        );
+    }
+
+    /// Test that the pagination works as expected in the upstream OAuth
+    /// provider repository
+    #[tokio::test]
+    async fn test_provider_repository_pagination() {
+        let pool = crate::test_utils::setup_test_pool().await;
+        let scope = Scope::from_iter([OPENID]);
+
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        let clock = MockClock::default();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+
+        let filter = UpstreamOAuthProviderFilter::new();
+
+        // Count the number of providers before we start
+        assert_eq!(
+            repo.upstream_oauth_provider().count(filter).await.unwrap(),
+            0
+        );
+
+        let mut ids = Vec::with_capacity(20);
+        // Create 20 providers
+        for idx in 0..20 {
+            let client_id = format!("client-{idx}");
+            let provider = repo
+                .upstream_oauth_provider()
+                .add(
+                    &mut rng,
+                    &clock,
+                    UpstreamOAuthProviderParams {
+                        issuer: None,
+                        human_name: None,
+                        brand_name: None,
+                        scope: scope.clone(),
+                        token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
+                        fetch_userinfo: false,
+                        userinfo_signed_response_alg: None,
+                        token_endpoint_signing_alg: None,
+                        id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
+                        client_id,
+                        encrypted_client_secret: None,
+                        claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+                        token_endpoint_override: None,
+                        authorization_endpoint_override: None,
+                        userinfo_endpoint_override: None,
+                        jwks_uri_override: None,
+                        discovery_mode: coauth_data::UpstreamOAuthProviderDiscoveryMode::Oidc,
+                        pkce_mode: coauth_data::UpstreamOAuthProviderPkceMode::Auto,
+                        response_mode: None,
+                        additional_authorization_parameters: Vec::new(),
+                        forward_login_hint: false,
+                        ui_order: 0,
+                        on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+                        source: coauth_data::UpstreamOAuthProviderSource::Config,
+                    },
+                )
+                .await
+                .unwrap();
+            ids.push(provider.id);
+            clock.advance(Duration::microseconds(10 * 1000 * 1000));
+        }
+
+        // Now we have 20 providers
+        assert_eq!(
+            repo.upstream_oauth_provider().count(filter).await.unwrap(),
+            20
+        );
+
+        // Lookup the first 10 items
+        let page = repo
+            .upstream_oauth_provider()
+            .list(filter, Pagination::first(10))
+            .await
+            .unwrap();
+
+        // It returned the first 10 items
+        assert!(page.has_next_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|p| p.node.id).collect();
+        assert_eq!(&edge_ids, &ids[..10]);
+
+        // Getting the same page with the "enabled only" filter should return the same
+        // results
+        let other_page = repo
+            .upstream_oauth_provider()
+            .list(filter.enabled_only(), Pagination::first(10))
+            .await
+            .unwrap();
+
+        assert_eq!(page, other_page);
+
+        // Lookup the next 10 items
+        let page = repo
+            .upstream_oauth_provider()
+            .list(filter, Pagination::first(10).after(ids[9]))
+            .await
+            .unwrap();
+
+        // It returned the next 10 items
+        assert!(!page.has_next_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|p| p.node.id).collect();
+        assert_eq!(&edge_ids, &ids[10..]);
+
+        // Lookup the last 10 items
+        let page = repo
+            .upstream_oauth_provider()
+            .list(filter, Pagination::last(10))
+            .await
+            .unwrap();
+
+        // It returned the last 10 items
+        assert!(page.has_previous_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|p| p.node.id).collect();
+        assert_eq!(&edge_ids, &ids[10..]);
+
+        // Lookup the previous 10 items
+        let page = repo
+            .upstream_oauth_provider()
+            .list(filter, Pagination::last(10).before(ids[10]))
+            .await
+            .unwrap();
+
+        // It returned the previous 10 items
+        assert!(!page.has_previous_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|p| p.node.id).collect();
+        assert_eq!(&edge_ids, &ids[..10]);
+
+        // Lookup 10 items between two IDs
+        let page = repo
+            .upstream_oauth_provider()
+            .list(filter, Pagination::first(10).after(ids[5]).before(ids[8]))
+            .await
+            .unwrap();
+
+        // It returned the items in between
+        assert!(!page.has_next_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|p| p.node.id).collect();
+        assert_eq!(&edge_ids, &ids[6..8]);
+
+        // There should not be any disabled providers
+        assert!(
+            repo.upstream_oauth_provider()
+                .list(
+                    UpstreamOAuthProviderFilter::new().disabled_only(),
+                    Pagination::first(1)
+                )
+                .await
+                .unwrap()
+                .edges
+                .is_empty()
+        );
+    }
+
+    /// Test that the pagination works as expected in the upstream OAuth
+    /// session repository
+    #[tokio::test]
+    async fn test_session_repository_pagination() {
+        let pool = crate::test_utils::setup_test_pool().await;
+        let scope = Scope::from_iter([OPENID]);
+
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        let clock = MockClock::default();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+
+        // Create a provider
+        let provider = repo
+            .upstream_oauth_provider()
+            .add(
+                &mut rng,
+                &clock,
+                UpstreamOAuthProviderParams {
+                    issuer: Some("https://example.com/".to_owned()),
+                    human_name: None,
+                    brand_name: None,
+                    scope,
+                    token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
+                    id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
+                    fetch_userinfo: false,
+                    userinfo_signed_response_alg: None,
+                    token_endpoint_signing_alg: None,
+                    client_id: "client-id".to_owned(),
+                    encrypted_client_secret: None,
+                    claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+                    token_endpoint_override: None,
+                    authorization_endpoint_override: None,
+                    userinfo_endpoint_override: None,
+                    jwks_uri_override: None,
+                    discovery_mode: coauth_data::UpstreamOAuthProviderDiscoveryMode::Oidc,
+                    pkce_mode: coauth_data::UpstreamOAuthProviderPkceMode::Auto,
+                    response_mode: None,
+                    additional_authorization_parameters: Vec::new(),
+                    forward_login_hint: false,
+                    ui_order: 0,
+                    on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+                    source: coauth_data::UpstreamOAuthProviderSource::Config,
+                },
+            )
+            .await
+            .unwrap();
+
+        let filter = UpstreamOAuthSessionFilter::new().for_provider(&provider);
+
+        // Count the number of sessions before we start
+        assert_eq!(
+            repo.upstream_oauth_session().count(filter).await.unwrap(),
+            0
+        );
+
+        let mut links = Vec::with_capacity(3);
+        for subject in ["alice", "bob", "charlie"] {
+            let link = repo
+                .upstream_oauth_link()
+                .add(&mut rng, &clock, &provider, subject.to_owned(), None)
+                .await
+                .unwrap();
+            links.push(link);
+        }
+
+        let mut ids = Vec::with_capacity(20);
+        let sids = ["one", "two"].into_iter().cycle();
+        // Create 20 sessions
+        for (idx, (link, sid)) in links.iter().cycle().zip(sids).enumerate().take(20) {
+            let state = format!("state-{idx}");
+            let session = repo
+                .upstream_oauth_session()
+                .add(&mut rng, &clock, &provider, state, None, None)
+                .await
+                .unwrap();
+            let id_token_claims = serde_json::json!({
+                "sub": link.subject,
+                "sid": sid,
+                "aud": provider.client_id,
+                "iss": "https://example.com/",
+            });
+            let session = repo
+                .upstream_oauth_session()
+                .complete_with_link(
+                    &clock,
+                    session,
+                    link,
+                    None,
+                    Some(id_token_claims),
+                    None,
+                    None,
+                )
+                .await
+                .unwrap();
+            ids.push(session.id);
+            clock.advance(Duration::microseconds(10 * 1000 * 1000));
+        }
+
+        // Now we have 20 sessions
+        assert_eq!(
+            repo.upstream_oauth_session().count(filter).await.unwrap(),
+            20
+        );
+
+        // Lookup the first 10 items
+        let page = repo
+            .upstream_oauth_session()
+            .list(filter, Pagination::first(10))
+            .await
+            .unwrap();
+
+        // It returned the first 10 items
+        assert!(page.has_next_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|s| s.node.id).collect();
+        assert_eq!(&edge_ids, &ids[..10]);
+
+        // Lookup the next 10 items
+        let page = repo
+            .upstream_oauth_session()
+            .list(filter, Pagination::first(10).after(ids[9]))
+            .await
+            .unwrap();
+
+        // It returned the next 10 items
+        assert!(!page.has_next_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|s| s.node.id).collect();
+        assert_eq!(&edge_ids, &ids[10..]);
+
+        // Lookup the last 10 items
+        let page = repo
+            .upstream_oauth_session()
+            .list(filter, Pagination::last(10))
+            .await
+            .unwrap();
+
+        // It returned the last 10 items
+        assert!(page.has_previous_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|s| s.node.id).collect();
+        assert_eq!(&edge_ids, &ids[10..]);
+
+        // Lookup the previous 10 items
+        let page = repo
+            .upstream_oauth_session()
+            .list(filter, Pagination::last(10).before(ids[10]))
+            .await
+            .unwrap();
+
+        // It returned the previous 10 items
+        assert!(!page.has_previous_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|s| s.node.id).collect();
+        assert_eq!(&edge_ids, &ids[..10]);
+
+        // Lookup 5 items between two IDs
+        let page = repo
+            .upstream_oauth_session()
+            .list(filter, Pagination::first(10).after(ids[5]).before(ids[11]))
+            .await
+            .unwrap();
+
+        // It returned the items in between
+        assert!(!page.has_next_page);
+        let edge_ids: Vec<_> = page.edges.iter().map(|s| s.node.id).collect();
+        assert_eq!(&edge_ids, &ids[6..11]);
+
+        // Check the sub/sid filters
+        assert_eq!(
+            repo.upstream_oauth_session()
+                .count(filter.with_sub_claim("alice").with_sid_claim("one"))
+                .await
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            repo.upstream_oauth_session()
+                .count(filter.with_sub_claim("bob").with_sid_claim("two"))
+                .await
+                .unwrap(),
+            4
+        );
+
+        let page = repo
+            .upstream_oauth_session()
+            .list(
+                filter.with_sub_claim("alice").with_sid_claim("one"),
+                Pagination::first(10),
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.edges.len(), 4);
+        for edge in page.edges {
+            assert_eq!(
+                edge.node
+                    .id_token_claims()
+                    .unwrap()
+                    .get("sub")
+                    .unwrap()
+                    .as_str(),
+                Some("alice")
+            );
+            assert_eq!(
+                edge.node
+                    .id_token_claims()
+                    .unwrap()
+                    .get("sid")
+                    .unwrap()
+                    .as_str(),
+                Some("one")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_upstream_oauth_link_patch_updates_fields() {
+        let pool = crate::test_utils::setup_test_pool().await;
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        let clock = MockClock::default();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, "alice".to_owned())
+            .await
+            .unwrap();
+        let provider = repo
+            .upstream_oauth_provider()
+            .add(
+                &mut rng,
+                &clock,
+                UpstreamOAuthProviderParams {
+                    issuer: Some("https://example.com/".to_owned()),
+                    human_name: Some("Example".to_owned()),
+                    brand_name: Some("Example".to_owned()),
+                    scope: Scope::from_iter([OPENID]),
+                    token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
+                    token_endpoint_signing_alg: None,
+                    id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
+                    fetch_userinfo: false,
+                    userinfo_signed_response_alg: None,
+                    client_id: "client".to_owned(),
+                    encrypted_client_secret: None,
+                    claims_imports: UpstreamOAuthProviderClaimsImports::default(),
+                    discovery_mode: Default::default(),
+                    pkce_mode: Default::default(),
+                    response_mode: None,
+                    authorization_endpoint_override: None,
+                    token_endpoint_override: None,
+                    userinfo_endpoint_override: None,
+                    jwks_uri_override: None,
+                    additional_authorization_parameters: Vec::new(),
+                    forward_login_hint: false,
+                    ui_order: 0,
+                    on_backchannel_logout: UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+                    source: coauth_data::UpstreamOAuthProviderSource::Config,
+                },
+            )
+            .await
+            .unwrap();
+        let link = repo
+            .upstream_oauth_link()
+            .add(
+                &mut rng,
+                &clock,
+                &provider,
+                "subject1".to_owned(),
+                Some("Alice".to_owned()),
+            )
+            .await
+            .unwrap();
+
+        clock.advance(Duration::seconds(5));
+
+        let updated = repo
+            .upstream_oauth_link()
+            .patch(
+                &clock,
+                link,
+                UpstreamOAuthLinkPatch {
+                    user_id: Some(Some(user.id)),
+                    subject: Some("subject2".to_owned()),
+                    human_account_name: Some(Some("Alice Updated".to_owned())),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(updated.user_id, Some(user.id));
+        assert_eq!(updated.subject, "subject2");
+        assert_eq!(updated.human_account_name.as_deref(), Some("Alice Updated"));
+
+        let reloaded = repo
+            .upstream_oauth_link()
+            .lookup(updated.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(reloaded.user_id, Some(user.id));
+        assert_eq!(reloaded.subject, "subject2");
+        assert_eq!(
+            reloaded.human_account_name.as_deref(),
+            Some("Alice Updated")
+        );
+    }
+}

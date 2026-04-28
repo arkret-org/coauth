@@ -1,0 +1,278 @@
+//! Policy evaluation abstraction layer.
+//!
+//! This crate provides a unified interface for policy evaluation that supports
+//! multiple backends:
+//!
+//! - **Cedar** (feature `cedar`): Amazon Cedar policies evaluated natively in
+//!   Rust, offering a simpler policy language with high performance.
+//! - **Remote HTTP** (feature `remote`): Delegates policy evaluation to an
+//!   external HTTP service, enabling any language or runtime for policy logic.
+//!
+//! ## Architecture
+//!
+//! The abstraction is based on two core traits defined in [`provider`]:
+//!
+//! - [`PolicyProviderFactory`](provider::PolicyProviderFactory): Creates
+//!   evaluator instances and manages dynamic data.
+//! - [`PolicyEvaluator`](provider::PolicyEvaluator): Evaluates individual
+//!   policy checks (registration, email, authorization, etc.).
+//!
+//! [`PolicyFactory`] and [`Policy`] are the public-facing types that wrap
+//! these traits, preserving backward compatibility with existing handler code.
+
+pub mod audit;
+pub mod model;
+pub mod provider;
+
+#[cfg(feature = "cedar")]
+pub mod cedar;
+#[cfg(feature = "remote")]
+pub mod remote;
+
+use thiserror::Error;
+
+pub use self::{
+    model::{
+        AuthorizationGrantInput, ClientRegistrationInput, Code as ViolationCode, EmailInput,
+        EvaluationResult, GrantType, RegisterInput, RegistrationMethod, Requester, Violation,
+    },
+    provider::{PolicyEvaluator, PolicyProviderFactory},
+};
+
+// ---------------------------------------------------------------------------
+// Error types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Error)]
+pub enum LoadError {
+    #[error("failed to read module")]
+    Read(#[from] tokio::io::Error),
+
+    #[error("failed to create policy engine")]
+    Engine(#[source] anyhow::Error),
+
+    #[error("module compilation task crashed")]
+    CompilationTask(#[from] tokio::task::JoinError),
+
+    #[error("failed to compile policy module")]
+    Compilation(#[source] anyhow::Error),
+
+    #[error("invalid policy data")]
+    InvalidData(#[source] anyhow::Error),
+
+    #[error("failed to instantiate a test instance")]
+    Instantiate(#[source] InstantiateError),
+}
+
+impl LoadError {
+    /// Creates an example of an invalid data error, used for API response
+    /// documentation
+    #[doc(hidden)]
+    #[must_use]
+    pub fn invalid_data_example() -> Self {
+        Self::InvalidData(anyhow::Error::msg("Failed to merge policy data objects"))
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum InstantiateError {
+    #[error("failed to create policy runtime")]
+    Runtime(#[source] anyhow::Error),
+
+    #[error("missing entrypoint {entrypoint}")]
+    MissingEntrypoint { entrypoint: String },
+
+    #[error("failed to load policy data")]
+    LoadData(#[source] anyhow::Error),
+}
+
+#[derive(Debug, Error)]
+#[error("failed to evaluate policy")]
+pub enum EvaluationError {
+    Serialization(#[from] serde_json::Error),
+    Evaluation(#[from] anyhow::Error),
+}
+
+// ---------------------------------------------------------------------------
+// PolicyFactory - the main public-facing factory
+// ---------------------------------------------------------------------------
+
+/// Factory for creating [`Policy`] instances.
+///
+/// Wraps a [`PolicyProviderFactory`] implementation, allowing different
+/// backends to be used transparently. The backend is selected at construction
+/// time via one of the `load_*` methods.
+pub struct PolicyFactory {
+    inner: Box<dyn PolicyProviderFactory>,
+}
+
+impl PolicyFactory {
+    /// Load Cedar policies from a source string.
+    ///
+    /// Requires the `cedar` feature to be enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if Cedar is not compiled in or policies can't be
+    /// parsed.
+    #[cfg(feature = "cedar")]
+    pub fn load_cedar(policy_src: &str) -> Result<Self, LoadError> {
+        let factory = cedar::CedarProviderFactory::new(policy_src)?;
+        Ok(Self {
+            inner: Box::new(factory),
+        })
+    }
+
+    /// Load Cedar policies from a file.
+    ///
+    /// Requires the `cedar` feature to be enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if Cedar is not compiled in, the file can't be read,
+    /// or policies can't be parsed.
+    #[cfg(feature = "cedar")]
+    pub async fn load_cedar_from_file(path: &str) -> Result<Self, LoadError> {
+        let factory = cedar::CedarProviderFactory::from_file(path).await?;
+        Ok(Self {
+            inner: Box::new(factory),
+        })
+    }
+
+    /// Create a policy factory backed by a remote HTTP service.
+    ///
+    /// Requires the `remote` feature to be enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Remote engine is not compiled in.
+    #[cfg(feature = "remote")]
+    pub fn load_remote(base_url: String, client: reqwest::Client) -> Result<Self, LoadError> {
+        let factory = remote::RemoteProviderFactory::new(base_url, client);
+        Ok(Self {
+            inner: Box::new(factory),
+        })
+    }
+
+    /// Create a policy factory from an arbitrary [`PolicyProviderFactory`]
+    /// implementation.
+    ///
+    /// This allows users to plug in custom policy backends.
+    pub fn from_provider(provider: Box<dyn PolicyProviderFactory>) -> Self {
+        Self { inner: provider }
+    }
+
+    /// Set the dynamic data for the policy.
+    ///
+    /// Returns `true` if the data was updated, `false` if the version
+    /// was already up-to-date.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data can't be applied or the policy can't be
+    /// instantiated with the new data.
+    pub async fn set_dynamic_data(
+        &self,
+        dynamic_data: coauth_data::PolicyData,
+    ) -> Result<bool, LoadError> {
+        self.inner.set_dynamic_data(dynamic_data).await
+    }
+
+    /// Create a new policy instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy can't be instantiated.
+    #[tracing::instrument(name = "policy.instantiate", skip_all)]
+    pub async fn instantiate(&self) -> Result<Policy, InstantiateError> {
+        let evaluator = self.inner.instantiate().await?;
+        Ok(Policy { inner: evaluator })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Policy - the main public-facing evaluator
+// ---------------------------------------------------------------------------
+
+/// An instantiated policy evaluator.
+///
+/// Created by [`PolicyFactory::instantiate`]. Wraps a [`PolicyEvaluator`]
+/// trait object, delegating evaluation calls to the selected backend.
+pub struct Policy {
+    inner: Box<dyn PolicyEvaluator>,
+}
+
+impl Policy {
+    /// Evaluate the 'email' policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy engine fails to evaluate.
+    #[tracing::instrument(
+        name = "policy.evaluate_email",
+        skip_all,
+        fields(
+            %input.email,
+        ),
+    )]
+    pub async fn evaluate_email(
+        &mut self,
+        input: EmailInput<'_>,
+    ) -> Result<EvaluationResult, EvaluationError> {
+        self.inner.evaluate_email(input).await
+    }
+
+    /// Evaluate the 'register' policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy engine fails to evaluate.
+    #[tracing::instrument(
+        name = "policy.evaluate.register",
+        skip_all,
+        fields(
+            ?input.registration_method,
+            input.username = input.username,
+            input.email = input.email,
+        ),
+    )]
+    pub async fn evaluate_register(
+        &mut self,
+        input: RegisterInput<'_>,
+    ) -> Result<EvaluationResult, EvaluationError> {
+        self.inner.evaluate_register(input).await
+    }
+
+    /// Evaluate the `client_registration` policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy engine fails to evaluate.
+    #[tracing::instrument(skip(self))]
+    pub async fn evaluate_client_registration(
+        &mut self,
+        input: ClientRegistrationInput<'_>,
+    ) -> Result<EvaluationResult, EvaluationError> {
+        self.inner.evaluate_client_registration(input).await
+    }
+
+    /// Evaluate the `authorization_grant` policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy engine fails to evaluate.
+    #[tracing::instrument(
+        name = "policy.evaluate.authorization_grant",
+        skip_all,
+        fields(
+            %input.scope,
+            %input.client.id,
+        ),
+    )]
+    pub async fn evaluate_authorization_grant(
+        &mut self,
+        input: AuthorizationGrantInput<'_>,
+    ) -> Result<EvaluationResult, EvaluationError> {
+        self.inner.evaluate_authorization_grant(input).await
+    }
+}

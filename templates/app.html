@@ -1,0 +1,19 @@
+{# Pasion Dioxus SPA shell #}
+{% set _ = translator(lang) %}
+
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ _("app.name") }}</title>
+    <script>
+      window.APP_CONFIG = JSON.parse("{{ app_config | tojson | add_slashes | safe }}");
+    </script>
+  </head>
+
+  <body>
+    <div id="main"></div>
+    <script type="module" async src="{{ app_config.script_src }}"></script>
+  </body>
+</html>

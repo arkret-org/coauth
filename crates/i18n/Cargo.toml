@@ -1,0 +1,28 @@
+[package]
+name = "coauth-i18n"
+description = "Internationalization support for Pasion"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+camino.workspace = true
+fluent-bundle.workspace = true
+fluent-syntax.workspace = true
+fluent-langneg.workspace = true
+unic-langid.workspace = true
+intl-memoizer.workspace = true
+icu_calendar.workspace = true
+icu_datetime.workspace = true
+icu_experimental.workspace = true
+icu_locid.workspace = true
+icu_locid_transform.workspace = true
+thiserror.workspace = true
+writeable.workspace = true
