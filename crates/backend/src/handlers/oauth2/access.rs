@@ -1,5 +1,6 @@
 use std::{net::IpAddr, time::Duration};
 
+use coauth_config::ContrixConfig;
 use coauth_data::{
     AuthorizationGrant, AuthorizationGrantStage, BoxClock, BoxRepository, BoxRng, BrowserSession,
     Client, Clock, MatrixUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
@@ -169,6 +170,7 @@ pub async fn accept_authorization_consent(
     clock: &BoxClock,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
     policy_factory: &PolicyFactory,
     browser_session: &BrowserSession,
     grant_id: Ulid,
@@ -232,9 +234,11 @@ pub async fn accept_authorization_consent(
                 rng,
                 clock,
                 url_builder,
+                contrix_config,
                 key_store,
                 &client,
                 Some(&grant),
+                Some(&session),
                 browser_session,
                 None,
                 last_authentication.as_ref(),

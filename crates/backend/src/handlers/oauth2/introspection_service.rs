@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, TokenFormatError, TokenType,
     UrlBuilder,
@@ -103,6 +104,7 @@ pub async fn introspect_token(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
     activity_tracker: &ActivityTracker,
     token_str: &str,
     token_type_hint: Option<OAuthTokenTypeHint>,
@@ -163,7 +165,7 @@ pub async fn introspect_token(
                 }
 
                 (
-                    Some(contrix::user_did(url_builder, &user)),
+                    Some(contrix::user_did_for(url_builder, contrix_config, &user)),
                     Some(user.username),
                 )
             } else {
@@ -174,6 +176,7 @@ pub async fn introspect_token(
                 .record_oauth2_session(clock, &session, ip)
                 .await;
 
+            let device_id = contrix::primary_device_id(&session.scope);
             let scope = normalize_scope(session.scope);
 
             IntrospectionResponse {
@@ -188,11 +191,14 @@ pub async fn introspect_token(
                     .map(|expires_at| expires_at.signed_duration_since(clock.now())),
                 iat: Some(access_token.created_at),
                 nbf: Some(access_token.created_at),
-                sub,
+                sub: sub.clone(),
                 aud: None,
-                iss: None,
+                iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(access_token.jti()),
-                device_id: None,
+                device_id: device_id.clone(),
+                contrix_principal_did: sub,
+                contrix_device_id: device_id,
+                contrix_session_id: Some(session.id.to_string()),
             }
         }
 
@@ -233,7 +239,7 @@ pub async fn introspect_token(
                 }
 
                 (
-                    Some(contrix::user_did(url_builder, &user)),
+                    Some(contrix::user_did_for(url_builder, contrix_config, &user)),
                     Some(user.username),
                 )
             } else {
@@ -244,6 +250,7 @@ pub async fn introspect_token(
                 .record_oauth2_session(clock, &session, ip)
                 .await;
 
+            let device_id = contrix::primary_device_id(&session.scope);
             let scope = normalize_scope(session.scope);
 
             IntrospectionResponse {
@@ -256,11 +263,14 @@ pub async fn introspect_token(
                 expires_in: None,
                 iat: Some(refresh_token.created_at),
                 nbf: Some(refresh_token.created_at),
-                sub,
+                sub: sub.clone(),
                 aud: None,
-                iss: None,
+                iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(refresh_token.jti()),
-                device_id: None,
+                device_id: device_id.clone(),
+                contrix_principal_did: sub,
+                contrix_device_id: device_id,
+                contrix_session_id: Some(session.id.to_string()),
             }
         }
 
@@ -326,8 +336,9 @@ pub async fn introspect_token(
                 .record_personal_session(clock, &session, ip)
                 .await;
 
+            let device_id = contrix::primary_device_id(&session.scope);
             let scope = normalize_scope(session.scope);
-            let actor_user_sub = contrix::user_did(url_builder, &actor_user);
+            let actor_user_sub = contrix::user_did_for(url_builder, contrix_config, &actor_user);
 
             IntrospectionResponse {
                 active: true,
@@ -341,11 +352,14 @@ pub async fn introspect_token(
                     .map(|expires_at| expires_at.signed_duration_since(clock.now())),
                 iat: Some(access_token.created_at),
                 nbf: Some(access_token.created_at),
-                sub: Some(actor_user_sub),
+                sub: Some(actor_user_sub.clone()),
                 aud: None,
-                iss: None,
+                iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
-                device_id: None,
+                device_id: device_id.clone(),
+                contrix_principal_did: Some(actor_user_sub),
+                contrix_device_id: device_id,
+                contrix_session_id: Some(session.id.to_string()),
             }
         }
     };

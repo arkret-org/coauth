@@ -1,5 +1,6 @@
 use std::{net::IpAddr, sync::Arc};
 
+use coauth_config::ContrixConfig;
 use coauth_data::{
     AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, PgRepositoryFactory,
     RepositoryFactory, SiteConfig, SystemClock, UrlBuilder,
@@ -31,6 +32,7 @@ use crate::{
 pub struct AppState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
+    pub contrix_config: ContrixConfig,
     pub key_store: Keystore,
     pub cookie_manager: CookieManager,
     pub encrypter: Encrypter,
@@ -145,6 +147,7 @@ pub async fn inject_app_state(
     );
     depot.insert("templates", state.templates.clone());
     depot.insert("translator", state.templates.translator());
+    depot.insert("contrix_config", state.contrix_config.clone());
     depot.insert("keystore", state.key_store.clone());
     depot.insert("encrypter", state.encrypter.clone());
     depot.insert("url_builder", state.url_builder.clone());
@@ -176,6 +179,7 @@ pub trait DepotExt {
     fn get_box_repository_factory(&self) -> Option<&BoxRepositoryFactory>;
     fn get_templates(&self) -> Option<&Templates>;
     fn get_translator(&self) -> Option<&Arc<Translator>>;
+    fn get_contrix_config(&self) -> Option<&ContrixConfig>;
     fn get_keystore(&self) -> Option<&Keystore>;
     fn get_encrypter(&self) -> Option<&Encrypter>;
     fn get_url_builder(&self) -> Option<&UrlBuilder>;
@@ -209,6 +213,10 @@ impl DepotExt for Depot {
 
     fn get_translator(&self) -> Option<&Arc<Translator>> {
         self.get::<Arc<Translator>>("translator").ok()
+    }
+
+    fn get_contrix_config(&self) -> Option<&ContrixConfig> {
+        self.get::<ContrixConfig>("contrix_config").ok()
     }
 
     fn get_keystore(&self) -> Option<&Keystore> {

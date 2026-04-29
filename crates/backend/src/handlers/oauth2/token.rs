@@ -1,5 +1,6 @@
 use std::sync::{Arc, LazyLock};
 
+use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SiteConfig, SystemClock, UrlBuilder,
 };
@@ -368,6 +369,10 @@ async fn handle_post(
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
+    let contrix_config = depot
+        .get::<ContrixConfig>("contrix_config")
+        .cloned()
+        .unwrap_or_default();
     let homeserver = depot
         .get::<Arc<dyn HomeserverAdmin>>("homeserver_admin")
         .expect("HomeserverAdmin not found in depot");
@@ -450,6 +455,7 @@ async fn handle_post(
                 &client,
                 key_store,
                 url_builder,
+                &contrix_config,
                 site_config,
                 repo,
                 homeserver,
@@ -497,6 +503,7 @@ async fn handle_post(
                 &client,
                 key_store,
                 url_builder,
+                &contrix_config,
                 site_config,
                 repo,
                 homeserver,

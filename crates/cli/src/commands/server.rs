@@ -246,6 +246,7 @@ impl Options {
             let mut s = AppState {
                 repository_factory: PgRepositoryFactory::new(pool),
                 templates,
+                contrix_config: config.contrix,
                 key_store,
                 cookie_manager,
                 encrypter,

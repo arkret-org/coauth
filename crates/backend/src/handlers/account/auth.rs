@@ -102,6 +102,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let password_manager = depot.password_manager()?;
     let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
     let limiter = depot.limiter()?;
     let homeserver = depot.homeserver()?;
@@ -143,6 +144,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         &limiter,
         homeserver.as_ref(),
         &url_builder,
+        &contrix_config,
         &site_config,
         PasswordLoginRequest {
             username_or_email: input.username,
@@ -227,9 +229,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 &mut rng,
                 &clock,
                 &url_builder,
+                &contrix_config,
                 &key_store,
                 &user_session,
-                vec!["session.bind".to_owned()],
+                vec![contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
@@ -241,7 +244,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
                         username: user.username.clone(),
-                        did: contrix::user_did(&url_builder, &user),
+                        did: contrix::user_did_for(&url_builder, &contrix_config, &user),
                         handle: contrix::user_handle(&url_builder, &user),
                         mxid: homeserver.mxid(&user.username),
                         display_name,

@@ -1,5 +1,6 @@
 use std::sync::{Arc, LazyLock};
 
+use coauth_config::ContrixConfig;
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock, UrlBuilder};
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
 use coauth_keystore::Encrypter;
@@ -77,6 +78,9 @@ const INACTIVE: IntrospectionResponse = IntrospectionResponse {
     iss: None,
     jti: None,
     device_id: None,
+    contrix_principal_did: None,
+    contrix_device_id: None,
+    contrix_session_id: None,
 };
 
 impl Scribe for RouteError {
@@ -187,6 +191,10 @@ async fn handle_post(
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
+    let contrix_config = depot
+        .get::<ContrixConfig>("contrix_config")
+        .cloned()
+        .unwrap_or_default();
 
     let clock: BoxClock = Box::new(SystemClock::default());
 
@@ -231,6 +239,7 @@ async fn handle_post(
         &mut repo,
         &*clock,
         url_builder,
+        &contrix_config,
         activity_tracker,
         &form.token,
         form.token_type_hint,

@@ -1,4 +1,5 @@
 use anyhow::Error as AnyhowError;
+use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError, SiteConfig,
     UpstreamOAuthProvider, UrlBuilder, User,
@@ -64,6 +65,7 @@ pub async fn login_with_password(
     limiter: &Limiter,
     homeserver: &dyn HomeserverAdmin,
     url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
     site_config: &SiteConfig,
     request: PasswordLoginRequest,
 ) -> Result<PasswordLoginOutcome, PasswordLoginError> {
@@ -75,6 +77,7 @@ pub async fn login_with_password(
         site_config,
         homeserver,
         url_builder,
+        contrix_config,
         &mut repo,
         &request.username_or_email,
     )
@@ -200,10 +203,13 @@ async fn find_user_by_login_identifier(
     site_config: &SiteConfig,
     homeserver: &dyn HomeserverAdmin,
     url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
     repo: &mut BoxRepository,
     identifier: &str,
 ) -> Result<Option<User>, RepositoryError> {
-    if let Some(user_id) = contrix::parse_local_user_did(url_builder, identifier) {
+    if let Some(user_id) =
+        contrix::parse_local_user_did_for(url_builder, contrix_config, identifier)
+    {
         return repo.user().lookup(user_id).await;
     }
 

@@ -113,6 +113,7 @@ pub async fn get_viewer(
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let homeserver = depot.homeserver()?;
     let clock = make_clock();
 
@@ -172,7 +173,7 @@ pub async fn get_viewer(
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
                 username: user.username.clone(),
-                did: contrix::user_did(&url_builder, user),
+                did: contrix::user_did_for(&url_builder, &contrix_config, user),
                 handle: contrix::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,

@@ -47,13 +47,21 @@ pub struct AdminErrorResponse {
 /// The canonical admin scope for the Pasion Admin API.
 pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 
+/// Contrix admin scope family.
+pub const CONTRIX_ADMIN_SCOPE: &str = "urn:contrix:admin:*";
+
 /// Legacy admin scope, kept for backward compatibility with existing tokens.
 pub const ADMIN_SCOPE_LEGACY: &str = "urn:mas:admin";
 
 /// Returns `true` if the given scope string contains either the current or
 /// legacy admin scope.
 pub fn has_admin_scope(scope: &oauth2_types::scope::Scope) -> bool {
-    scope.contains(ADMIN_SCOPE) || scope.contains(ADMIN_SCOPE_LEGACY)
+    scope.contains(ADMIN_SCOPE)
+        || scope.contains(ADMIN_SCOPE_LEGACY)
+        || scope.contains(CONTRIX_ADMIN_SCOPE)
+        || scope
+            .iter()
+            .any(|token| token.as_str().starts_with("urn:contrix:admin:"))
 }
 
 /// JSON response wrapper that sets HTTP 201 Created status code.

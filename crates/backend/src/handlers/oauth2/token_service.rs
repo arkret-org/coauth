@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 use chrono::Duration;
+use coauth_config::ContrixConfig;
 use coauth_data::{
     AuthorizationGrantStage, BoxRepository, Client, Clock, DeviceCodeGrantState, RepositoryAccess,
     RepositoryError, SiteConfig, TokenType, UrlBuilder,
@@ -254,6 +255,7 @@ pub async fn exchange_authorization_code(
     client: &Client,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
     homeserver: &Arc<dyn HomeserverAdmin>,
@@ -495,9 +497,11 @@ pub async fn exchange_authorization_code(
                 rng,
                 clock,
                 url_builder,
+                contrix_config,
                 key_store,
                 client,
                 Some(&authz_grant),
+                Some(&session),
                 &browser_session,
                 Some(&access_token),
                 last_authentication.as_ref(),
@@ -854,6 +858,7 @@ pub async fn exchange_device_code(
     client: &Client,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
     homeserver: &Arc<dyn HomeserverAdmin>,
@@ -1026,9 +1031,11 @@ pub async fn exchange_device_code(
             rng,
             clock,
             url_builder,
+            contrix_config,
             key_store,
             client,
             None,
+            Some(&session),
             &browser_session,
             Some(&access_token),
             None,

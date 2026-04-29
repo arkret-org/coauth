@@ -1,3 +1,4 @@
+use coauth_config::{ContrixConfig, IdentityRegistryKind};
 use coauth_data::{SiteConfig, UrlBuilder};
 use coauth_iana::oauth::{
     OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod,
@@ -38,6 +39,34 @@ struct DiscoveryResponse {
 
     #[serde(rename = "org.contrix.did_binding_methods")]
     contrix_did_binding_methods: Vec<String>,
+
+    #[serde(rename = "org.contrix.supported_scopes")]
+    contrix_supported_scopes: Vec<String>,
+
+    #[serde(rename = "org.contrix.admin_audience")]
+    contrix_admin_audience: String,
+
+    #[serde(rename = "org.contrix.principal_servers")]
+    contrix_principal_servers: Vec<PrincipalServerMetadata>,
+
+    #[serde(rename = "org.contrix.identity_registry")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    contrix_identity_registry: Option<IdentityRegistryMetadata>,
+}
+
+#[derive(Debug, Serialize)]
+struct PrincipalServerMetadata {
+    name: String,
+    audience: String,
+    endpoint: String,
+    did: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct IdentityRegistryMetadata {
+    kind: &'static str,
+    resolver: String,
+    proof_required_for_pairwise: bool,
 }
 
 #[handler]
@@ -56,6 +85,10 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
     let site_config = depot
         .get::<SiteConfig>("site_config")
         .expect("SiteConfig not found in depot");
+    let contrix_config = depot
+        .get::<ContrixConfig>("contrix_config")
+        .cloned()
+        .unwrap_or_default();
 
     // This is how clients can authenticate
     let client_auth_methods_supported = Some(vec![
@@ -83,7 +116,11 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
     let userinfo_endpoint = Some(url_builder.oidc_userinfo_endpoint());
     let registration_endpoint = Some(url_builder.oauth_registration_endpoint());
 
-    let scopes_supported = Some(vec![scope::OPENID.to_string(), scope::EMAIL.to_string()]);
+    let scopes_supported = Some(vec![
+        scope::OPENID.to_string(),
+        scope::EMAIL.to_string(),
+        scope::COAUTH_ADMIN.to_string(),
+    ]);
 
     let response_types_supported = Some(vec![
         OAuthAuthorizationEndpointResponseType::Code.into(),
@@ -141,6 +178,9 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
         "auth_time".to_owned(),
         "at_hash".to_owned(),
         "c_hash".to_owned(),
+        contrix::CLAIM_PRINCIPAL_DID.to_owned(),
+        contrix::CLAIM_DEVICE_ID.to_owned(),
+        contrix::CLAIM_SESSION_ID.to_owned(),
     ]);
 
     let claims_parameter_supported = Some(false);
@@ -192,6 +232,29 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
         ..ProviderMetadata::default()
     };
 
+    let contrix_principal_servers = contrix_config
+        .principal_servers
+        .iter()
+        .map(|server| PrincipalServerMetadata {
+            name: server.name.clone(),
+            audience: server.audience.clone(),
+            endpoint: server.endpoint.to_string(),
+            did: server.did.clone(),
+        })
+        .collect();
+    let contrix_identity_registry =
+        contrix_config
+            .identity_registry
+            .as_ref()
+            .map(|registry| IdentityRegistryMetadata {
+                kind: match registry.kind {
+                    IdentityRegistryKind::Starid => "starid",
+                    IdentityRegistryKind::External => "external",
+                },
+                resolver: registry.resolver.to_string(),
+                proof_required_for_pairwise: registry.proof_required_for_pairwise,
+            });
+
     Json(DiscoveryResponse {
         standard,
         api_endpoint: format!("{}/api/v1", url_builder.prefix().unwrap_or_default()),
@@ -209,8 +272,18 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
         contrix_server_describe: url_builder
             .absolute_url("/api/v1/server/describe")
             .to_string(),
-        contrix_service_did: contrix::service_did(url_builder),
+        contrix_service_did: contrix::service_did_for(url_builder, &contrix_config),
         contrix_did_binding_methods: vec!["session_grant".to_owned()],
+        contrix_supported_scopes: vec![
+            scope::COAUTH_ADMIN.to_string(),
+            scope::CONTRIX_ADMIN.to_string(),
+            scope::CONTRIX_CLIENT.to_string(),
+            scope::CONTRIX_PRINCIPAL_SERVER.to_string(),
+            scope::CONTRIX_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
+        ],
+        contrix_admin_audience: contrix::required_audience_for(url_builder, &contrix_config),
+        contrix_principal_servers,
+        contrix_identity_registry,
     })
 }
 
@@ -241,6 +314,7 @@ mod tests {
             "site_config",
             crate::handlers::test_utils::test_site_config(),
         );
+        depot.insert("contrix_config", ContrixConfig::default());
         depot
     }
 

@@ -35,6 +35,7 @@ pub async fn post(
     let site_config = depot.site_config()?;
     let templates = depot.templates()?;
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let limiter = depot.limiter()?;
     let homeserver = depot.homeserver()?;
     let mut repo = depot.repo().await?;
@@ -104,6 +105,7 @@ pub async fn post(
         &limiter,
         homeserver.as_ref(),
         &url_builder,
+        &contrix_config,
         &site_config,
         PasswordLoginRequest {
             username_or_email: form.username,

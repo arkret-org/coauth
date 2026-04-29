@@ -10,6 +10,7 @@
 
 use std::{net::IpAddr, ops::Deref, sync::Arc};
 
+use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, BrowserSession, RepositoryError,
     Session, SiteConfig, SystemClock, UrlBuilder, User,
@@ -231,6 +232,7 @@ pub trait DepotExt {
     fn templates(&self) -> Result<coauth_templates::Templates, RouteError>;
     fn frontend_script_src(&self) -> Result<String, RouteError>;
     fn translator(&self) -> Result<Arc<coauth_i18n::Translator>, RouteError>;
+    fn contrix_config(&self) -> Result<ContrixConfig, RouteError>;
     fn cookie_manager(&self) -> Result<crate::handlers::CookieManager, RouteError>;
     fn metadata_cache(&self) -> Result<crate::handlers::MetadataCache, RouteError>;
     fn http_client(&self) -> Result<reqwest::Client, RouteError>;
@@ -302,6 +304,10 @@ impl DepotExt for Depot {
 
     fn translator(&self) -> Result<Arc<coauth_i18n::Translator>, RouteError> {
         depot_get(self, "translator")
+    }
+
+    fn contrix_config(&self) -> Result<ContrixConfig, RouteError> {
+        depot_get(self, "contrix_config")
     }
 
     fn cookie_manager(&self) -> Result<crate::handlers::CookieManager, RouteError> {

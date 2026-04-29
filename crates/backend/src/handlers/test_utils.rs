@@ -13,6 +13,7 @@ use std::{
 };
 
 use chrono::Duration;
+use coauth_config::ContrixConfig;
 use coauth_config::RateLimitingConfig;
 use coauth_data::{
     AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, PgRepositoryFactory,
@@ -118,6 +119,7 @@ pub(crate) async fn policy_factory(
 pub(crate) struct TestState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
+    pub contrix_config: ContrixConfig,
     pub key_store: Keystore,
     pub cookie_manager: CookieManager,
     pub metadata_cache: MetadataCache,
@@ -196,6 +198,7 @@ impl Handler for InjectTestState {
         );
         depot.insert("templates", state.templates.clone());
         depot.insert("translator", state.templates.translator());
+        depot.insert("contrix_config", state.contrix_config.clone());
         depot.insert("keystore", state.key_store.clone());
         depot.insert("encrypter", state.encrypter.clone());
         depot.insert("url_builder", state.url_builder.clone());
@@ -315,6 +318,7 @@ impl TestState {
         Ok(Self {
             repository_factory: PgRepositoryFactory::new(pool),
             templates,
+            contrix_config: ContrixConfig::default(),
             key_store,
             cookie_manager,
             metadata_cache,

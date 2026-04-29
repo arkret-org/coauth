@@ -69,6 +69,23 @@ pub const PHONE: ScopeToken = ScopeToken::from_static("phone");
 /// `offline_access` — requests a refresh token for long-lived access.
 pub const OFFLINE_ACCESS: ScopeToken = ScopeToken::from_static("offline_access");
 
+/// `urn:coauth:admin` — canonical coauth admin scope.
+pub const COAUTH_ADMIN: ScopeToken = ScopeToken::from_static("urn:coauth:admin");
+
+/// `urn:contrix:client:*` — Contrix client capability family.
+pub const CONTRIX_CLIENT: ScopeToken = ScopeToken::from_static("urn:contrix:client:*");
+
+/// `urn:contrix:principal-server:*` — Principal Server capability family.
+pub const CONTRIX_PRINCIPAL_SERVER: ScopeToken =
+    ScopeToken::from_static("urn:contrix:principal-server:*");
+
+/// `urn:contrix:principal-server:session.bind` — session-grant binding scope.
+pub const CONTRIX_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
+    ScopeToken::from_static("urn:contrix:principal-server:session.bind");
+
+/// `urn:contrix:admin:*` — Contrix admin capability family.
+pub const CONTRIX_ADMIN: ScopeToken = ScopeToken::from_static("urn:contrix:admin:*");
+
 /// Check whether a character belongs to the NQCHAR set defined in
 /// [RFC 6749 Appendix A]:
 ///

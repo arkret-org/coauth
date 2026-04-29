@@ -1,5 +1,6 @@
 use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Duration, Utc};
+use coauth_config::{ContrixConfig, IdentityRegistryKind};
 use coauth_data::{BrowserSession, Clock, RepositoryAccess, UrlBuilder, User};
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::{
@@ -9,6 +10,7 @@ use coauth_jose::{
 };
 use coauth_keystore::{Keystore, PrivateKey, WrongAlgorithmError};
 use der::pem::LineEnding;
+use oauth2_types::scope::Scope;
 use rand_core::CryptoRngCore;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,10 @@ use crate::handlers::common::{DepotExt, RouteError};
 const CONTRIX_PROTOCOL_VERSION: &str = "1.0";
 const CONTRIX_HTTP_BINDING: &str = "http_json";
 const SESSION_GRANT_TTL_MINUTES: i64 = 5;
+pub const CLAIM_PRINCIPAL_DID: &str = "org.contrix.principal_did";
+pub const CLAIM_DEVICE_ID: &str = "org.contrix.device_id";
+pub const CLAIM_SESSION_ID: &str = "org.contrix.session_id";
+pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:contrix:principal-server:session.bind";
 
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
@@ -148,6 +154,9 @@ pub struct SessionGrantPayload {
     pub not_before: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub revocation_ref: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    pub session_id: String,
     pub browser_session_id: String,
 }
 
@@ -158,14 +167,32 @@ struct SupportedBinding {
 }
 
 #[derive(Debug, Serialize)]
+struct PrincipalServerDescriptor {
+    name: String,
+    audience: String,
+    endpoint: String,
+    did: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct IdentityRegistryDescriptor {
+    kind: &'static str,
+    resolver: String,
+    proof_required_for_pairwise: bool,
+}
+
+#[derive(Debug, Serialize)]
 struct AuthMetadata {
     oauth_issuer: String,
     openid_configuration: String,
+    issuer_did: String,
     supported_auth_methods: Vec<&'static str>,
     token_endpoint_auth_methods: Vec<&'static str>,
     supported_grant_types: Vec<&'static str>,
     did_binding_methods: Vec<&'static str>,
     required_audience: String,
+    admin_audience: String,
+    session_grant_scope: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -176,6 +203,8 @@ struct ServiceDescribeResponse {
     supported_features: Vec<&'static str>,
     supported_bindings: Vec<SupportedBinding>,
     supported_operations: Vec<&'static str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    principal_servers: Vec<PrincipalServerDescriptor>,
     auth_metadata: AuthMetadata,
     limits: serde_json::Value,
 }
@@ -187,6 +216,8 @@ struct IdentityDescribeResponse {
     supported_receipts: Vec<String>,
     protocol_version: &'static str,
     profiles: Vec<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    identity_registry: Option<IdentityRegistryDescriptor>,
 }
 
 #[derive(Debug, Serialize)]
@@ -260,8 +291,34 @@ pub(crate) fn service_did(url_builder: &UrlBuilder) -> String {
     format!("did:web:{}", segments.join(":"))
 }
 
+pub(crate) fn service_did_for(url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String {
+    contrix_config
+        .service_did
+        .clone()
+        .unwrap_or_else(|| service_did(url_builder))
+}
+
+pub(crate) fn issuer_did_for(url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String {
+    contrix_config
+        .issuer_did
+        .clone()
+        .unwrap_or_else(|| service_did_for(url_builder, contrix_config))
+}
+
 pub(crate) fn user_did(url_builder: &UrlBuilder, user: &User) -> String {
     format!("{}:users:{}", service_did(url_builder), user.id)
+}
+
+pub(crate) fn user_did_for(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    user: &User,
+) -> String {
+    format!(
+        "{}:users:{}",
+        service_did_for(url_builder, contrix_config),
+        user.id
+    )
 }
 
 pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
@@ -276,11 +333,35 @@ pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
     url_builder.absolute_url("/api/v1").to_string()
 }
 
+pub(crate) fn required_audience_for(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+) -> String {
+    contrix_config
+        .admin_audience
+        .clone()
+        .unwrap_or_else(|| required_audience(url_builder))
+}
+
+fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    tokens.into_iter().find_map(|token| {
+        token
+            .strip_prefix("urn:matrix:client:device:")
+            .or_else(|| token.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:"))
+            .map(ToOwned::to_owned)
+    })
+}
+
+pub(crate) fn primary_device_id(scope: &Scope) -> Option<String> {
+    primary_device_id_from_tokens(scope.iter().map(|token| token.as_str()))
+}
+
 pub(crate) fn service_did_document(
     url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
     key_store: &Keystore,
 ) -> Result<DidDocument, SessionGrantError> {
-    let did = service_did(url_builder);
+    let did = service_did_for(url_builder, contrix_config);
     let mut verification_method = Vec::new();
     let mut authentication = Vec::new();
     let mut assertion_method = Vec::new();
@@ -320,8 +401,12 @@ pub(crate) fn service_did_document(
     })
 }
 
-pub(crate) fn user_did_document(url_builder: &UrlBuilder, user: &User) -> DidDocument {
-    let did = user_did(url_builder, user);
+pub(crate) fn user_did_document(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    user: &User,
+) -> DidDocument {
+    let did = user_did_for(url_builder, contrix_config, user);
 
     DidDocument {
         id: did.clone(),
@@ -343,11 +428,12 @@ pub(crate) fn issue_session_grant(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     scopes: Vec<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
-    let subject = user_did(url_builder, &browser_session.user);
+    let subject = user_did_for(url_builder, contrix_config, &browser_session.user);
     let session_key = PrivateKey::generate_ed25519(rng);
     let session_public_key = JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
         .with_use(JsonWebKeyUse::Sig)
@@ -362,16 +448,19 @@ pub(crate) fn issue_session_grant(
 
     let now = clock.now();
     let expires_at = now + Duration::try_minutes(SESSION_GRANT_TTL_MINUTES).unwrap();
+    let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
     let payload = SessionGrantPayload {
         kind: "cx.session.grant".to_owned(),
-        issuer: service_did(url_builder),
+        issuer: issuer_did_for(url_builder, contrix_config),
         subject,
         session_public_key: session_public_key.clone(),
-        audience: required_audience(url_builder),
+        audience: required_audience_for(url_builder, contrix_config),
         scopes,
         not_before: now,
         expires_at,
         revocation_ref: format!("cx:session:{}", browser_session.id),
+        device_id,
+        session_id: browser_session.id.to_string(),
         browser_session_id: browser_session.id.to_string(),
     };
 
@@ -436,6 +525,15 @@ pub(crate) fn parse_local_user_did(url_builder: &UrlBuilder, did: &str) -> Optio
     did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
 }
 
+pub(crate) fn parse_local_user_did_for(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    did: &str,
+) -> Option<Ulid> {
+    let prefix = format!("{}:users:", service_did_for(url_builder, contrix_config));
+    did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
+}
+
 pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Option<String> {
     let suffix = format!("@{}", url_builder.public_hostname().to_lowercase());
     handle
@@ -449,9 +547,20 @@ pub async fn server_describe(
     depot: &Depot,
 ) -> Result<Json<ServiceDescribeResponse>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
+    let principal_servers = contrix_config
+        .principal_servers
+        .iter()
+        .map(|server| PrincipalServerDescriptor {
+            name: server.name.clone(),
+            audience: server.audience.clone(),
+            endpoint: server.endpoint.to_string(),
+            did: server.did.clone(),
+        })
+        .collect();
 
     Ok(Json(ServiceDescribeResponse {
-        service_did: service_did(&url_builder),
+        service_did: service_did_for(&url_builder, &contrix_config),
         service_type: "auth_server",
         protocol_version: CONTRIX_PROTOCOL_VERSION,
         supported_features: vec![
@@ -473,9 +582,11 @@ pub async fn server_describe(
             "cx.directory.describe",
             "cx.directory.resolve_handle",
         ],
+        principal_servers,
         auth_metadata: AuthMetadata {
             oauth_issuer: url_builder.oidc_issuer().to_string(),
             openid_configuration: url_builder.oidc_discovery().to_string(),
+            issuer_did: issuer_did_for(&url_builder, &contrix_config),
             supported_auth_methods: vec![
                 "password",
                 "oidc",
@@ -489,7 +600,9 @@ pub async fn server_describe(
             ],
             supported_grant_types: vec!["authorization_code", "refresh_token", "device_code"],
             did_binding_methods: vec!["session_grant"],
-            required_audience: required_audience(&url_builder),
+            required_audience: required_audience_for(&url_builder, &contrix_config),
+            admin_audience: required_audience_for(&url_builder, &contrix_config),
+            session_grant_scope: PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
         },
         limits: serde_json::json!({
             "max_body_bytes": 1_048_576,
@@ -503,13 +616,31 @@ pub async fn identity_describe(
     depot: &Depot,
 ) -> Result<Json<IdentityDescribeResponse>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
+    let identity_registry =
+        contrix_config
+            .identity_registry
+            .as_ref()
+            .map(|registry| IdentityRegistryDescriptor {
+                kind: match registry.kind {
+                    IdentityRegistryKind::Starid => "starid",
+                    IdentityRegistryKind::External => "external",
+                },
+                resolver: registry.resolver.to_string(),
+                proof_required_for_pairwise: registry.proof_required_for_pairwise,
+            });
 
     Ok(Json(IdentityDescribeResponse {
-        service_did: service_did(&url_builder),
-        registry_mode: "writer",
+        service_did: service_did_for(&url_builder, &contrix_config),
+        registry_mode: if identity_registry.is_some() {
+            "delegated_resolver"
+        } else {
+            "local_bindings"
+        },
         supported_receipts: Vec::new(),
         protocol_version: CONTRIX_PROTOCOL_VERSION,
         profiles: vec!["cx.profile.identity_registry.v1"],
+        identity_registry,
     }))
 }
 
@@ -523,14 +654,16 @@ pub async fn identity_resolve(
         .await
         .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
 
-    let did_document = if body.did == service_did(&url_builder) {
-        service_did_document(&url_builder, &key_store)
+    let did_document = if body.did == service_did_for(&url_builder, &contrix_config) {
+        service_did_document(&url_builder, &contrix_config, &key_store)
             .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
     } else {
         let mut repo = depot.repo().await?;
-        let Some(user_id) = parse_local_user_did(&url_builder, &body.did) else {
+        let Some(user_id) = parse_local_user_did_for(&url_builder, &contrix_config, &body.did)
+        else {
             return Err(ContrixRouteError::NotFound);
         };
         let Some(user) = repo
@@ -541,7 +674,7 @@ pub async fn identity_resolve(
         else {
             return Err(ContrixRouteError::NotFound);
         };
-        user_did_document(&url_builder, &user)
+        user_did_document(&url_builder, &contrix_config, &user)
     };
 
     Ok(Json(IdentityResolveResponse {
@@ -562,14 +695,15 @@ pub async fn identity_document(
         .query::<String>("did")
         .ok_or_else(|| ContrixRouteError::BadRequest("missing did query parameter".into()))?;
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
 
-    let did_document = if did == service_did(&url_builder) {
-        service_did_document(&url_builder, &key_store)
+    let did_document = if did == service_did_for(&url_builder, &contrix_config) {
+        service_did_document(&url_builder, &contrix_config, &key_store)
             .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
     } else {
         let mut repo = depot.repo().await?;
-        let Some(user_id) = parse_local_user_did(&url_builder, &did) else {
+        let Some(user_id) = parse_local_user_did_for(&url_builder, &contrix_config, &did) else {
             return Err(ContrixRouteError::NotFound);
         };
         let Some(user) = repo
@@ -580,7 +714,7 @@ pub async fn identity_document(
         else {
             return Err(ContrixRouteError::NotFound);
         };
-        user_did_document(&url_builder, &user)
+        user_did_document(&url_builder, &contrix_config, &user)
     };
 
     Ok(Json(IdentityDocumentResponse {
@@ -596,9 +730,10 @@ pub async fn directory_describe(
     depot: &Depot,
 ) -> Result<Json<DirectoryDescribeResponse>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
 
     Ok(Json(DirectoryDescribeResponse {
-        service_did: service_did(&url_builder),
+        service_did: service_did_for(&url_builder, &contrix_config),
         resource_types: vec!["actor", "handle"],
         discovery_profiles: vec!["cx.profile.directory.v1"],
         restricted_query_proof: false,
@@ -615,6 +750,7 @@ pub async fn directory_resolve_handle(
         .await
         .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let Some(username) = parse_local_handle(&url_builder, &body.handle) else {
         return Err(ContrixRouteError::NotFound);
     };
@@ -629,7 +765,7 @@ pub async fn directory_resolve_handle(
         return Err(ContrixRouteError::NotFound);
     };
 
-    let did = user_did(&url_builder, &user);
+    let did = user_did_for(&url_builder, &contrix_config, &user);
     let verified = body
         .expected_did
         .as_deref()
@@ -646,9 +782,10 @@ pub async fn directory_resolve_handle(
 #[handler]
 pub async fn service_did_json(depot: &Depot) -> Result<Json<DidDocument>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
 
-    service_did_document(&url_builder, &key_store)
+    service_did_document(&url_builder, &contrix_config, &key_store)
         .map(Json)
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))
 }
@@ -664,6 +801,7 @@ pub async fn user_did_json(
     let user_id = Ulid::from_string(&raw_id)
         .map_err(|_| ContrixRouteError::BadRequest("invalid user id".into()))?;
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let mut repo = depot.repo().await?;
     let Some(user) = repo
         .user()
@@ -674,11 +812,16 @@ pub async fn user_did_json(
         return Err(ContrixRouteError::NotFound);
     };
 
-    Ok(Json(user_did_document(&url_builder, &user)))
+    Ok(Json(user_did_document(
+        &url_builder,
+        &contrix_config,
+        &user,
+    )))
 }
 
 #[cfg(test)]
 mod tests {
+    use coauth_config::ContrixConfig;
     use coauth_data::{Clock, SystemClock, User};
     use coauth_keystore::{JsonWebKeySet, PrivateKey};
     use rand_chacha::ChaChaRng;
@@ -719,6 +862,7 @@ mod tests {
     fn session_grant_is_signed_for_the_user_did() {
         let clock = SystemClock::default();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
+        let contrix_config = ContrixConfig::default();
         let key_store = test_keystore();
         let now = clock.now();
         let mut fixture_rng = ChaChaRng::seed_from_u64(9);
@@ -732,6 +876,7 @@ mod tests {
             &mut signing_rng,
             &clock,
             &url_builder,
+            &contrix_config,
             &key_store,
             &browser_session,
             vec!["session.bind".to_owned()],
@@ -745,11 +890,19 @@ mod tests {
         assert_eq!(payload.kind, "cx.session.grant");
         assert_eq!(
             payload.subject,
-            user_did(&url_builder, &browser_session.user)
+            user_did_for(&url_builder, &contrix_config, &browser_session.user)
         );
-        assert_eq!(payload.issuer, service_did(&url_builder));
-        assert_eq!(payload.audience, required_audience(&url_builder));
+        assert_eq!(
+            payload.issuer,
+            issuer_did_for(&url_builder, &contrix_config)
+        );
+        assert_eq!(
+            payload.audience,
+            required_audience_for(&url_builder, &contrix_config)
+        );
         assert_eq!(payload.scopes, vec!["session.bind"]);
+        assert_eq!(payload.session_id, browser_session.id.to_string());
+        assert_eq!(payload.device_id, None);
         assert!(payload.expires_at > payload.not_before);
         assert!(grant.session_private_key_pem.contains("PRIVATE KEY"));
         assert!(payload.session_public_key.contains("\"kid\":\"session-"));
@@ -780,13 +933,17 @@ mod tests {
     #[test]
     fn identity_document_exposes_user_handle_binding() {
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
+        let contrix_config = ContrixConfig::default();
         let now = Utc::now();
         let mut rng = ChaChaRng::seed_from_u64(13);
         let user = User::samples(now, &mut rng).into_iter().next().unwrap();
 
-        let document = user_did_document(&url_builder, &user);
+        let document = user_did_document(&url_builder, &contrix_config, &user);
 
-        assert_eq!(document.id, user_did(&url_builder, &user));
+        assert_eq!(
+            document.id,
+            user_did_for(&url_builder, &contrix_config, &user)
+        );
         assert_eq!(
             document.also_known_as,
             vec![format!("contrix://{}", user_handle(&url_builder, &user))]
