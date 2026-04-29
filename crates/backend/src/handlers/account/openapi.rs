@@ -24,7 +24,7 @@ use salvo::{
 /// * `GET /api-doc/openapi.json` - The generated OpenAPI 3.x JSON document.
 /// * `GET /swagger-ui/**` - The Swagger UI single-page application.
 pub fn build_openapi_router(router: &Router) -> Router {
-    let doc = OpenApi::new("Pasion REST API", env!("CARGO_PKG_VERSION")).merge_router(router);
+    let doc = OpenApi::new("coauth REST API", env!("CARGO_PKG_VERSION")).merge_router(router);
 
     Router::new()
         .push(doc.into_router("/api-doc/openapi.json"))

@@ -1,4 +1,4 @@
-# Pasion translation file
+# coauth translation file
 # Auto-converted from JSON format
 
 ## action
@@ -15,7 +15,7 @@ action-start-over = Start over
 ## app
 
 # Human readable name of the application
-app-human-name = Pasion
+app-human-name = coauth
 # Name of the application
 app-name = coauth
 # Introduction text displayed on the home page
@@ -34,7 +34,7 @@ branding-terms-and-conditions-link = Terms & Conditions
 common-display-name = Display Name
 common-email-address = Email address
 common-loading = Loading…
-common-mxid = Matrix ID
+common-mxid = Account handle
 common-password = Password
 common-password-confirm = Confirm password
 common-username = Username
@@ -102,8 +102,8 @@ coauth-emails-recovery-click-button = Click on the button below to create a new 
 coauth-emails-recovery-copy-link = Copy the following link and paste it into a browser to create a new password:
 coauth-emails-recovery-create-new-password = Create new password
 coauth-emails-recovery-fallback = The button doesn't work for you?
-coauth-emails-recovery-headline = You requested a password reset for your { $server_name } account.
-coauth-emails-recovery-subject = Reset your account password ({ $mxid })
+coauth-emails-recovery-headline = You requested a password reset for your { $server_name } coauth account.
+coauth-emails-recovery-subject = Reset your coauth account password ({ $mxid })
 coauth-emails-recovery-you-can-ignore =
     If you didn't ask for a new password, you can ignore this email. Your current password will continue to work.
 # The body of the email sent to verify an email address (HTML)
@@ -200,17 +200,17 @@ coauth-register-continue-with-password = Continue with password
 coauth-register-create-account-description = Choose a username to continue.
 coauth-register-create-account-heading = Create an account
 coauth-register-terms-of-service = I agree to the <a href="{ $tos_uri }" data-kind="primary" class="cpd-link">Terms and Conditions</a>
-coauth-registration-token-description = Enter a registration token provided by the homeserver administrator.
+coauth-registration-token-description = Enter a registration token provided by your coauth administrator.
 coauth-registration-token-field = Registration token
 coauth-registration-token-headline = Registration token
 # Displayed when the 'urn:palpo:admin:*' scope is requested
-coauth-scope-palpo-admin = Administer the server (urn:palpo:admin:*)
-coauth-scope-coauth-admin = Manage users (urn:coauth:admin)
-coauth-scope-send-messages = Send new messages on your behalf
-# Displayed when the 'urn:matrix:client:api:*' scope is requested
-coauth-scope-view-messages = View your existing messages and data
+coauth-scope-palpo-admin = Administer a legacy Palpo adapter (urn:palpo:admin:*)
+coauth-scope-coauth-admin = Manage coauth accounts (urn:coauth:admin)
+coauth-scope-send-messages = Use legacy messaging compatibility on your behalf
+# Displayed when a legacy Matrix compatibility scope is requested
+coauth-scope-view-messages = Use legacy Matrix compatibility data access
 # Displayed when the 'openid' scope is requested
-coauth-scope-view-profile = See your profile info and contact details
+coauth-scope-view-profile = See your coauth profile info and contact details
 # Page shown when the user tries to link an upstream account that is already linked to another account
 coauth-upstream-oauth2-link-mismatch-heading = This upstream account is already linked to another account.
 coauth-upstream-oauth2-register-choose-username-description = This cannot be changed later.

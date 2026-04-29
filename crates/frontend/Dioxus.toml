@@ -3,7 +3,7 @@ name = "coauth-frontend"
 default_platform = "web"
 
 [web.app]
-title = "Pasion"
+title = "coauth"
 
 [web.resource]
 style = ["assets/main.css"]

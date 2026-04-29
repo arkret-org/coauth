@@ -298,7 +298,7 @@ pub enum Error {
     Http(#[from] reqwest::Error),
 
     /// The provider returned a non-success response payload.
-    #[error("email provider returned status {status}: {body}")]
+    #[error("email provider returned non-success status {status}")]
     ProviderError {
         /// HTTP status code returned by the provider.
         status: u16,
@@ -321,8 +321,10 @@ impl EmailProvider for BlackholeProvider {
 
     async fn send(&self, email: &OutboundEmail) -> Result<SendResult, Error> {
         let to: Vec<String> = email.to.iter().map(ToString::to_string).collect();
-        println!("[EMAIL] transport=blackhole, email NOT sent: to={to:?}");
-        tracing::warn!("An email was supposed to be sent but no email backend is configured");
+        tracing::warn!(
+            email.to = ?to,
+            "An email was supposed to be sent but no email backend is configured"
+        );
         Ok(SendResult::default())
     }
 
@@ -1592,6 +1594,20 @@ mod tests {
         );
 
         assert_eq!(code.as_deref(), Some("personalizations.0.to.0.email"));
+    }
+
+    #[test]
+    fn provider_error_display_redacts_body() {
+        let error = provider_error(
+            400,
+            "recovery link: https://example.com/reset?t=secret".into(),
+        );
+
+        assert_eq!(
+            error.to_string(),
+            "email provider returned non-success status 400"
+        );
+        assert!(!error.to_string().contains("secret"));
     }
 
     #[tokio::test]

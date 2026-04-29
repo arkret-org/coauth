@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [string]$HomeserverUrl,
+    [string]$CoauthUrl,
 
     [Parameter(Position = 1, ValueFromRemainingArguments = $true)]
     [string[]]$Scopes
@@ -81,16 +81,16 @@ function Invoke-JsonRequest {
     }
 }
 
-$baseUrl = $HomeserverUrl.TrimEnd("/")
+$baseUrl = $CoauthUrl.TrimEnd("/")
 $scope = if ($Scopes.Count -eq 0) {
-    "urn:matrix:org.matrix.msc2967.client:api:*"
+    "urn:coauth:admin"
 }
 else {
     [string]::Join(" ", $Scopes)
 }
 
-Write-Host "Discovering the homeserver endpoints"
-$metadata = Invoke-JsonRequest -Method GET -Url "$baseUrl/_matrix/client/unstable/org.matrix.msc2965/auth_metadata"
+Write-Host "Discovering the coauth endpoints"
+$metadata = Invoke-JsonRequest -Method GET -Url "$baseUrl/.well-known/openid-configuration"
 
 Write-Host "Registering the client"
 $registration = Invoke-JsonRequest -Method POST -Url $metadata.registration_endpoint -Body @{
@@ -110,7 +110,7 @@ $deviceGrant = Invoke-JsonRequest -Method POST -Url $metadata.device_authorizati
 
 @"
 -----------------------
-            Homeserver: $baseUrl
+                Server: $baseUrl
  Registration endpoint: $($metadata.registration_endpoint)
   Device auth endpoint: $($metadata.device_authorization_endpoint)
         Token endpoint: $($metadata.token_endpoint)

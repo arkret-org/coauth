@@ -1,7 +1,7 @@
 #!/bin/sh
-# Device Authorization Grant (RFC 8628) test helper for Pasion
+# Device Authorization Grant (RFC 8628) helper for coauth
 #
-# Usage: ./device-code-grant.sh <server-url> [scope ...]
+# Usage: ./device-code-grant.sh <coauth-url> [scope ...]
 #
 # This script performs the full device authorization grant flow:
 #   1. Discovers OIDC metadata from the server
@@ -24,16 +24,16 @@ http() {
 }
 
 # ── Argument parsing ──────────────────────────────────────────────
-[ "$#" -ge 1 ] || die "usage: $0 <server-url> [scope ...]"
+[ "$#" -ge 1 ] || die "usage: $0 <coauth-url> [scope ...]"
 
 server="${1%/}"
 shift
 
-scope="${*:-urn:matrix:org.matrix.msc2967.client:api:*}"
+scope="${*:-urn:coauth:admin}"
 
 # ── Step 1: OIDC Discovery ───────────────────────────────────────
 echo "==> Discovering OIDC metadata"
-meta=$(http GET "${server}/_matrix/client/unstable/org.matrix.msc2965/auth_metadata")
+meta=$(http GET "${server}/.well-known/openid-configuration")
 
 device_authz_ep=$(printf '%s' "$meta" | jq -r '.device_authorization_endpoint')
 token_ep=$(printf '%s' "$meta" | jq -r '.token_endpoint')

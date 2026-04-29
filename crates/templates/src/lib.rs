@@ -564,7 +564,8 @@ mod tests {
         assert!(subject.contains("[matrix.example.com]"));
         assert!(subject.contains("Your email verification code"));
         assert!(text.contains("Your email verification code for matrix.example.com is: 654321"));
-        assert!(text.contains("Matrix homeserver: matrix.example.com"));
+        assert!(text.contains("coauth service: matrix.example.com"));
+        assert!(!text.contains("Matrix homeserver:"));
         assert!(!text.contains("Instance domain:"));
     }
 }

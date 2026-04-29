@@ -1,4 +1,4 @@
-# Pasion translation file
+# coauth translation file
 # Auto-converted from JSON format
 
 ## action
@@ -15,7 +15,7 @@ action-submit = 提交
 
 ## app
 
-app-human-name = Pasion
+app-human-name = coauth
 app-name = coauth
 app-technical-description =
     OpenID Connect 发现文档： <a class="cpd-link" data-kind="primary" href="{ $discovery_url }">{ $discovery_url }</a>
@@ -32,7 +32,7 @@ branding-terms-and-conditions-link = 条款与条件
 common-display-name = 显示名称
 common-email-address = 邮箱地址
 common-loading = 加载中...
-common-mxid = Matrix ID
+common-mxid = 账号标识
 common-password = 密码
 common-password-confirm = 确认密码
 common-username = 用户名
@@ -87,8 +87,8 @@ coauth-emails-recovery-click-button = 点击下面的按钮创建新密码：
 coauth-emails-recovery-copy-link = 复制以下链接并粘贴到浏览器中以创建新密码：
 coauth-emails-recovery-create-new-password = 创建新密码
 coauth-emails-recovery-fallback = 此按钮对你无效？
-coauth-emails-recovery-headline = 您已请求重置您在 { $server_name } 的密码。
-coauth-emails-recovery-subject = 重置账户密码 ({ $mxid })
+coauth-emails-recovery-headline = 你已请求重置 { $server_name } coauth 账户的密码。
+coauth-emails-recovery-subject = 重置 coauth 账户密码 ({ $mxid })
 coauth-emails-recovery-you-can-ignore = 如果你没有请求过重置密码可以忽略此邮件。当前密码仍然有效。
 coauth-emails-verify-body-html = 确认此电子邮件地址的验证码是： <strong>{ $code }</strong>
 coauth-emails-verify-body-text = 确认此电子邮件地址的验证码是： { $code }
@@ -155,16 +155,16 @@ coauth-register-create-account-description = 选择一个用户名以继续。
 coauth-register-create-account-heading = 创建账户
 coauth-register-sign-in-instead = 去登录
 coauth-register-terms-of-service = 我同意<a href="{ $tos_uri }" data-kind="primary" class="cpd-link">条款与条件 </a>
-coauth-registration-token-description = 输入由服务器管理员提供的注册 Token。
+coauth-registration-token-description = 输入由 coauth 管理员提供的注册 Token。
 coauth-registration-token-field = 注册 Token
 coauth-registration-token-headline = 注册 Token
 coauth-scope-edit-profile = 编辑个人资料和联系方式
 coauth-scope-manage-sessions = 管理设备和会话
-coauth-scope-palpo-admin = 管理 Palpo 服务器
-coauth-scope-coauth-admin = 管理 coauth 上的用户
-coauth-scope-send-messages = 以你的名义发送新消息
-coauth-scope-view-messages = 查看现有信息和数据
-coauth-scope-view-profile = 查看个人资料信息和联系方式
+coauth-scope-palpo-admin = 管理 legacy Palpo adapter
+coauth-scope-coauth-admin = 管理 coauth 账户
+coauth-scope-send-messages = 以你的身份使用 legacy 消息兼容能力
+coauth-scope-view-messages = 使用 legacy Matrix 兼容数据访问能力
+coauth-scope-view-profile = 查看 coauth 个人资料和联系方式
 coauth-upstream-oauth2-link-mismatch-heading = 此上游账户已与另一个账户关联。
 coauth-upstream-oauth2-login-link-action = 继续
 coauth-upstream-oauth2-login-link-description = 此用户名（{ $username }）已存在于一个账户，它将与该上游账户关联。

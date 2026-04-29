@@ -112,14 +112,11 @@ impl Mailer {
         context: &WithLanguage<EmailVerificationContext>,
         tags: &BTreeMap<String, String>,
     ) -> Result<SendResult, Error> {
-        println!(
-            "[EMAIL] prepare verification email to={to}, code={}",
-            context.code()
-        );
+        tracing::debug!("Preparing verification email");
         let email = self.prepare_verification_email(to, context, tags)?;
-        println!("[EMAIL] sending verification email...");
+        tracing::debug!("Sending verification email");
         let result = self.transport.send(&email).await?;
-        println!("[EMAIL] verification email sent OK");
+        tracing::debug!("Verification email accepted by provider");
         Ok(result)
     }
 
@@ -144,11 +141,11 @@ impl Mailer {
         context: &WithLanguage<EmailRecoveryContext>,
         tags: &BTreeMap<String, String>,
     ) -> Result<SendResult, Error> {
-        println!("[EMAIL] prepare recovery email to={to}");
+        tracing::debug!("Preparing recovery email");
         let email = self.prepare_recovery_email(to, context, tags)?;
-        println!("[EMAIL] sending recovery email...");
+        tracing::debug!("Sending recovery email");
         let result = self.transport.send(&email).await?;
-        println!("[EMAIL] recovery email sent OK");
+        tracing::debug!("Recovery email accepted by provider");
         Ok(result)
     }
 

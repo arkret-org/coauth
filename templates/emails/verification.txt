@@ -8,4 +8,4 @@ Hello {{ username|default("user") }},
 
 Your email verification code for {{ branding.server_name }} is: {{ authentication_code.code }}
 
-Matrix homeserver: {{ branding.server_name }}
+coauth service: {{ branding.server_name }}

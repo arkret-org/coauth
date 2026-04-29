@@ -137,7 +137,7 @@ async fn enqueue_notification_request(
         Some("Notification request created"),
         json!({
             "template_key": template_key,
-            "payload": payload,
+            "payload_redacted": true,
             "locale": locale,
         }),
     )
@@ -224,7 +224,7 @@ pub(crate) async fn send_email_authentication_code(
 
     info!(
         email = %user_email_authentication.email,
-        code = %code.code,
+        authentication_code.id = %code.id,
         "Email verification code generated"
     );
 
@@ -296,7 +296,7 @@ pub(crate) async fn send_sms_authentication_code(
 
     info!(
         phone = %user_phone_authentication.phone,
-        code = %code.code,
+        authentication_code.id = %code.id,
         "SMS verification code generated"
     );
 
@@ -523,9 +523,9 @@ fn notification_failure_from_error(error: &NotificationError) -> NotificationDel
                 };
                 (code, Some(error.to_string()), !is_permanent_tls)
             }
-            coauth_messaging::SmsTransportError::ProviderError { status, body } => (
+            coauth_messaging::SmsTransportError::ProviderError { status, .. } => (
                 Some(format!("sms_provider_{status}")),
-                Some(body.clone()),
+                Some(format!("SMS provider returned non-success status {status}")),
                 *status >= 500 || *status == 429,
             ),
         },
@@ -1112,7 +1112,10 @@ impl RunnableJob for ProcessNotificationDeliveriesJob {
 mod tests {
     use thiserror::Error;
 
-    use super::{EMAIL_VERIFICATION_LANGUAGE, is_permanent_tls_validation_error};
+    use super::{
+        EMAIL_VERIFICATION_LANGUAGE, NotificationError, is_permanent_tls_validation_error,
+        notification_failure_from_error,
+    };
 
     #[derive(Debug, Error)]
     #[error("{message}")]
@@ -1152,5 +1155,22 @@ mod tests {
     #[test]
     fn email_verification_language_is_fixed_to_english() {
         assert_eq!(EMAIL_VERIFICATION_LANGUAGE, "en");
+    }
+
+    #[test]
+    fn sms_provider_failure_redacts_provider_body() {
+        let error = NotificationError::Sms(coauth_messaging::SmsTransportError::ProviderError {
+            status: 400,
+            body: "Your verification code is 123456".to_owned(),
+        });
+
+        let failure = notification_failure_from_error(&error);
+
+        assert_eq!(failure.code.as_deref(), Some("sms_provider_400"));
+        assert_eq!(
+            failure.message.as_deref(),
+            Some("SMS provider returned non-success status 400")
+        );
+        assert!(!format!("{failure:?}").contains("123456"));
     }
 }

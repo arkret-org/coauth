@@ -1,6 +1,6 @@
 # coauth Active TODO
 
-> 更新日期: 2026-04-29
+> 更新日期: 2026-04-30
 > 范围: 组织部署 Principal Server 时使用的 Auth / Account Server，提供 OIDC/SSO、账号生命周期、DID 绑定、设备/会话、claim/attestation、权限与审计管理。
 
 ## 0. 当前边界
@@ -33,7 +33,7 @@
 - [ ] 代码命名分层:
   - [x] 新增 Contrix module / route group。
   - [x] Pasion/Matrix 特有 handler 不得被 Contrix 默认路由引用。
-  - [ ] i18n 文案同步替换。
+  - [x] i18n 文案同步替换。
 
 并行性: docs/config/scope/i18n 可并行，但 scope registry 必须先冻结，避免 sodmin 与 chask 重复改动。
 
@@ -100,7 +100,7 @@
   - [ ] `sodmin` admin dashboard。
   - [ ] `soland` trusted Principal Server。
   - [ ] internal service client for federation/admin automation。
-- [ ] Device code grant supports CLI/admin workflows。
+- [x] Device code grant supports CLI/admin workflows。
 - [ ] Passkey/WebAuthn:
   - [ ] registration ceremony。
   - [ ] authentication ceremony。
@@ -155,22 +155,27 @@
   - [ ] policy can deny/quarantine/require_review。
   - [ ] policy cannot grant missing capability。
   - [ ] signed policy decision includes policy id, version, subject, action, resource, frontier。
+  - [ ] preserve and display `allowed_entity_facets` when coauth stores/administers capability policy templates。
+  - [ ] policy dry-run input can include entity facets from Principal Server reducer output。
 - [ ] Cedar/OPA mapping:
   - [ ] principal DID。
   - [ ] device id。
   - [ ] organization role claim。
   - [ ] risk/MFA claim。
   - [ ] admin scope。
+  - [ ] entity facets as structured policy attributes, separate from `entity_type` compatibility labels。
 - [ ] Approval workflows:
   - [ ] proposal mode。
   - [ ] two-person approval。
   - [ ] guardian/controller approval。
   - [ ] break-glass with audit expiry。
 
+并行性: coauth 只保存和审计 policy/capability metadata，不负责 reducer 判定；facet policy templates 可与 soland authz 实现并行，但 dry-run 需要 soland 提供目标 facets。
+
 ## P1: Notification and Verification Runtime
 
-- [ ] Email/SMS verification templates renamed to Contrix/coauth。
-- [ ] Notification dispatch never leaks recovery or token secrets in logs。
+- [x] Email/SMS verification templates renamed to Contrix/coauth。
+- [x] Notification dispatch never leaks recovery or token secrets in logs。
 - [ ] Rate limits:
   - [ ] login。
   - [ ] recovery。
@@ -190,7 +195,7 @@
   - [ ] Matrix localpart -> handle claim candidate。
   - [ ] existing OAuth clients -> Contrix client registry。
   - [ ] admin scopes -> Contrix admin scopes。
-- [ ] Docs list which legacy routes remain supported and which are removed。
+- [x] Docs list which legacy routes remain supported and which are removed。
 
 ## P1: Test and Release Gates
 
@@ -204,7 +209,7 @@
   - [ ] WebAuthn ceremony。
   - [ ] recovery flow。
   - [ ] admin audit。
-  - [ ] log redaction。
+  - [x] log redaction。
 
 ## 本轮验证记录
 
@@ -213,6 +218,14 @@
 - [x] 2026-04-29: `cargo check -p coauth-backend --message-format short`。
 - [x] 2026-04-29: `cargo test -p coauth-backend session_grant --message-format short`。
 - [x] 2026-04-29: `cargo test -p coauth-data session_grant --message-format short`。
+- [x] 2026-04-30: `cargo fmt --all`。
+- [x] 2026-04-30: `cargo fmt --all -- --check`。
+- [x] 2026-04-30: `cargo test -j 1 -p coauth-templates verification_email_renders_instance_identifiers_in_english --lib`。
+- [x] 2026-04-30: `cargo test -j 1 -p coauth-messaging provider_error_display_redacts_body --lib`。
+- [x] 2026-04-30: `cargo test -j 1 -p coauth-messaging paloud_internal_transport_signs_request --lib`。
+- [x] 2026-04-30: `cargo test -j 1 -p coauth-tasks sms_provider_failure_redacts_provider_body --lib`。
+- [x] 2026-04-30: `cargo check -j 1 -p coauth-backend --message-format short`。
+- [x] 2026-04-30: `git diff --check`。
 
 ## Definition of Done
 

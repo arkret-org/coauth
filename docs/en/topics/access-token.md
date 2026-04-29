@@ -1,42 +1,58 @@
 # Get an access token
 
-The Pasion repository contains helper scripts in `misc/` to interactively get an access token with arbitrary scopes:
+`coauth` includes helper scripts in `misc/` for interactive CLI/admin access
+through the OAuth 2.0 Device Authorization Grant:
 
-- `misc/device-code-grant.sh` for POSIX shells. It requires `sh`, `jq` and `curl`.
-- `misc/device-code-grant.ps1` for PowerShell on Windows. It does not require `jq`.
+- `misc/device-code-grant.sh` for POSIX shells. It requires `sh`, `jq`, and
+  `curl`.
+- `misc/device-code-grant.ps1` for PowerShell on Windows. It does not require
+  `jq`.
 
-They can be run from anywhere, not necessarily from the host where Pasion is running.
+The scripts use the standard OIDC discovery document at
+`/.well-known/openid-configuration`, dynamically register a native public
+client, and default to the `urn:coauth:admin` scope when no scope is passed.
 
 ```sh
-sh ./misc/device-code-grant.sh [palpo-url] <scope>...
+sh ./misc/device-code-grant.sh https://auth.example.com/
 ```
 
 ```powershell
-pwsh -File ./misc/device-code-grant.ps1 [palpo-url] <scope>...
+pwsh -File ./misc/device-code-grant.ps1 https://auth.example.com/
 ```
 
-This will prompt you to open a URL in your browser, finish the authentication flow, and print the access and refresh tokens.
+This prints a verification URL and user code. Finish the browser flow, then the
+script prints the token response.
 
-This can be used to get access to the Pasion admin API:
+## Common scopes
+
+Use `urn:coauth:admin` for the stable coauth admin API:
 
 ```sh
-sh ./misc/device-code-grant.sh https://palpo.example.com/ urn:coauth:admin
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
 ```
 
-```powershell
-pwsh -File ./misc/device-code-grant.ps1 https://palpo.example.com/ urn:coauth:admin
-```
-
-Or to the Palpo admin API:
+Use Contrix scopes for Contrix-native integrations:
 
 ```sh
-sh ./misc/device-code-grant.sh https://palpo.example.com/ urn:matrix:org.matrix.msc2967.client:api:* urn:palpo:admin:*
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:contrix:admin:* urn:contrix:principal-server:session.bind
 ```
 
-Or even both at the same time:
+Legacy Matrix / Palpo scopes are only for deployments that explicitly enable a
+compatibility adapter. New CLI/admin integrations should not request them.
+
+## Automation
+
+For non-interactive automation, prefer the OAuth 2.0 client credentials grant
+with a confidential client:
 
 ```sh
-sh ./misc/device-code-grant.sh https://palpo.example.com/ urn:matrix:org.matrix.msc2967.client:api:* urn:coauth:admin urn:palpo:admin:*
+TOKEN=$(curl -sS -X POST https://auth.example.com/oauth2/token \
+  -d "grant_type=client_credentials" \
+  -d "client_id=${CLIENT_ID}" \
+  -d "client_secret=${CLIENT_SECRET}" \
+  -d "scope=urn:coauth:admin" \
+  | jq -r '.access_token')
 ```
 
-Note that the token will only be valid for a short time (5 minutes by default) and needs to be revoked manually from the Pasion user interface.
+Access tokens are short-lived by default. Store them as secrets and revoke the
+underlying session or client credentials when automation is decommissioned.

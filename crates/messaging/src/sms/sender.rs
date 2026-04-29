@@ -31,7 +31,12 @@ impl SmsSender {
         code: &str,
         language: &str,
     ) -> Result<(), SmsTransportError> {
-        println!("[SMS] send_verification_code to={to}, code={code}, language={language}");
+        tracing::debug!(
+            sms.to = %to,
+            sms.language = %language,
+            sms.transport = self.transport.binding_key(),
+            "Sending SMS verification code"
+        );
 
         if self.transport.is_aliyun() {
             // Aliyun: pass code as JSON template params

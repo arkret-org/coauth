@@ -1,44 +1,56 @@
 # 获取访问令牌
 
-本页介绍如何通过命令行获取 Pasion 管理 API 的访问令牌。
+`coauth` 在 `misc/` 中提供了脚本，用 OAuth 2.0 Device Authorization Grant
+为 CLI 或管理员场景交互式获取访问令牌：
 
-## 使用设备码流程
+- `misc/device-code-grant.sh` 面向 POSIX shell，需要 `sh`、`jq` 和 `curl`。
+- `misc/device-code-grant.ps1` 面向 Windows PowerShell / PowerShell 7，不依赖
+  `jq`。
 
-仓库在 `misc/` 中提供了现成脚本来执行设备码授权流程（Device Code Grant）：
+脚本会读取标准 OIDC discovery 文档
+`/.well-known/openid-configuration`，动态注册 native public client，并在未显式传入
+scope 时默认请求 `urn:coauth:admin`。
 
 ```bash
-# macOS / Linux
-sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
+sh ./misc/device-code-grant.sh https://auth.example.com/
 ```
 
 ```powershell
-# Windows PowerShell / PowerShell 7+
-pwsh -File ./misc/device-code-grant.ps1 https://auth.example.com/ urn:coauth:admin
+pwsh -File ./misc/device-code-grant.ps1 https://auth.example.com/
 ```
 
-## 使用客户端凭据流程
+脚本会输出验证 URL 和用户码。你在浏览器中完成授权后，脚本会打印 token response。
 
-如果你有配置好的 OAuth 2.0 客户端：
+## 常用 scope
+
+访问稳定的 coauth admin API 时使用 `urn:coauth:admin`：
 
 ```bash
-TOKEN=$(curl -s -X POST https://auth.example.com/oauth2/token \
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
+```
+
+Contrix-native 集成应使用 Contrix scope：
+
+```bash
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:contrix:admin:* urn:contrix:principal-server:session.bind
+```
+
+Legacy Matrix / Palpo scope 只适用于显式启用 compatibility adapter 的部署。新的 CLI
+或 admin 集成不应再请求这些 scope。
+
+## 自动化
+
+非交互式自动化应优先使用 OAuth 2.0 client credentials grant，并配置 confidential
+client：
+
+```bash
+TOKEN=$(curl -sS -X POST https://auth.example.com/oauth2/token \
   -d "grant_type=client_credentials" \
-  -d "client_id=你的客户端ID" \
-  -d "client_secret=你的客户端密钥" \
+  -d "client_id=${CLIENT_ID}" \
+  -d "client_secret=${CLIENT_SECRET}" \
   -d "scope=urn:coauth:admin" \
   | jq -r '.access_token')
 ```
 
-## 常用作用域
-
-| 作用域 | 说明 |
-|--------|------|
-| `urn:coauth:admin` | Pasion 管理 API 完全访问权限 |
-| `urn:palpo:admin:api` | Palpo 管理 API 访问权限 |
-| `urn:matrix:client:api:*` | Matrix 客户端 API 完全访问权限 |
-
-## 注意事项
-
-- 访问令牌有过期时间（默认 5 分钟），过期后需要重新获取
-- 管理 API 的访问令牌应安全存储，不要泄露给未授权的用户
-- 建议在自动化脚本中使用客户端凭据流程，在交互式场景中使用设备码流程
+访问令牌默认是短生命周期。请把它们作为 secret 存储，并在自动化下线时撤销对应 session
+或 client credential。

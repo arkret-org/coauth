@@ -21,6 +21,7 @@
 - [授权与会话](./topics/authorization.md)
 - [使用管理 API](./topics/admin-api.md)
 - [获取访问令牌](./topics/access-token.md)
+- [Legacy 兼容路由](./topics/legacy-compatibility.md)
 
 # 参考
 
