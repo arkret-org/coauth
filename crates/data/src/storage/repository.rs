@@ -11,6 +11,7 @@ use crate::{
     oauth2::{
         OAuth2AccessTokenRepository, OAuth2AuthorizationGrantRepository, OAuth2ClientRepository,
         OAuth2DeviceCodeGrantRepository, OAuth2RefreshTokenRepository, OAuth2SessionRepository,
+        SessionGrantRepository,
     },
     personal::{PersonalAccessTokenRepository, PersonalSessionRepository},
     policy_data::PolicyDataRepository,
@@ -193,6 +194,11 @@ pub trait RepositoryAccess: Send {
         &'c mut self,
     ) -> Box<dyn OAuth2SessionRepository<Error = Self::Error> + 'c>;
 
+    /// Get a [`SessionGrantRepository`]
+    fn oauth2_session_grant<'c>(
+        &'c mut self,
+    ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c>;
+
     /// Get an [`OAuth2AccessTokenRepository`]
     fn oauth2_access_token<'c>(
         &'c mut self,
@@ -256,7 +262,7 @@ mod impls {
         oauth2::{
             OAuth2AccessTokenRepository, OAuth2AuthorizationGrantRepository,
             OAuth2ClientRepository, OAuth2DeviceCodeGrantRepository, OAuth2RefreshTokenRepository,
-            OAuth2SessionRepository,
+            OAuth2SessionRepository, SessionGrantRepository,
         },
         personal::{PersonalAccessTokenRepository, PersonalSessionRepository},
         policy_data::PolicyDataRepository,
@@ -435,6 +441,15 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn OAuth2SessionRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.oauth2_session(), &mut self.mapper))
+        }
+
+        fn oauth2_session_grant<'c>(
+            &'c mut self,
+        ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.oauth2_session_grant(),
+                &mut self.mapper,
+            ))
         }
 
         fn oauth2_access_token<'c>(
@@ -622,6 +637,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn OAuth2SessionRepository<Error = Self::Error> + 'c> {
             (**self).oauth2_session()
+        }
+
+        fn oauth2_session_grant<'c>(
+            &'c mut self,
+        ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
+            (**self).oauth2_session_grant()
         }
 
         fn oauth2_access_token<'c>(

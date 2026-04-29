@@ -168,17 +168,38 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
 
 fn scope_description(scope: &str) -> String {
     match scope {
-        "openid" => "Verify your identity".to_string(),
-        "profile" => "View your profile information".to_string(),
-        "email" => "View your email address".to_string(),
+        "openid" => "Verify your identity with coauth".to_string(),
+        "profile" => "View your basic account profile".to_string(),
+        "email" => "View your verified email address".to_string(),
         "phone" => "View your phone number".to_string(),
         "address" => "View your address".to_string(),
-        "urn:matrix:org.matrix.msc2967.client:api:*" => {
-            "Access the Matrix API on your behalf".to_string()
+        "urn:contrix:principal-server:session.bind" => {
+            "Receive a short-lived session grant bound to this login session".to_string()
         }
-        "urn:matrix:org.matrix.msc2967.client:device:*" => "Manage your devices".to_string(),
-        other if other.starts_with("urn:coauth:admin") || other.starts_with("urn:mas:admin") => {
-            "Administrative access".to_string()
+        other if other.starts_with("urn:contrix:principal-server:") => {
+            "Act as a trusted Principal Server integration".to_string()
+        }
+        other if other.starts_with("urn:contrix:client:") => {
+            "Use Contrix client capabilities on your behalf".to_string()
+        }
+        other
+            if other == "urn:coauth:admin"
+                || other.starts_with("urn:contrix:admin:")
+                || other.starts_with("urn:mas:admin") =>
+        {
+            "Administrative access to coauth management APIs".to_string()
+        }
+        "urn:matrix:org.matrix.msc2967.client:api:*" | "urn:matrix:client:api:*" => {
+            "Legacy Matrix client API access via the compatibility adapter".to_string()
+        }
+        other
+            if other.starts_with("urn:matrix:org.matrix.msc2967.client:device:")
+                || other.starts_with("urn:matrix:client:device:") =>
+        {
+            "Bind this authorization to a legacy Matrix device ID".to_string()
+        }
+        other if other.starts_with("urn:palpo:admin:") => {
+            "Legacy Palpo admin access via the compatibility adapter".to_string()
         }
         other => other.to_string(),
     }

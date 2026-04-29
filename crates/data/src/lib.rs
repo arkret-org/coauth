@@ -141,7 +141,7 @@ pub use self::{
     oauth2::{
         AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, DeviceCodeGrant,
         DeviceCodeGrantState, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField,
-        LocalizedClientMetadata, Pkce, Session, SessionState,
+        LocalizedClientMetadata, Pkce, Session, SessionGrant, SessionState,
     },
     policy_data::PolicyData,
     post_auth_action::{AccountAction, PostAuthAction},

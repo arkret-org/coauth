@@ -120,6 +120,10 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
         scope::OPENID.to_string(),
         scope::EMAIL.to_string(),
         scope::COAUTH_ADMIN.to_string(),
+        scope::CONTRIX_ADMIN.to_string(),
+        scope::CONTRIX_CLIENT.to_string(),
+        scope::CONTRIX_PRINCIPAL_SERVER.to_string(),
+        scope::CONTRIX_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
     ]);
 
     let response_types_supported = Some(vec![
@@ -344,5 +348,48 @@ mod tests {
         assert_eq!(userinfo_algs.len(), 2);
         assert!(userinfo_algs.contains(&"ES512"));
         assert!(userinfo_algs.contains(&"EdDSA"));
+    }
+
+    #[tokio::test]
+    async fn discovery_advertises_contrix_scopes_and_claims() {
+        crate::handlers::test_utils::setup();
+
+        let Json(response) = get_inner(&test_depot());
+        let body = serde_json::to_value(response).unwrap();
+
+        let scopes = body["scopes_supported"].as_array().unwrap();
+        assert!(scopes.iter().any(|scope| scope == "urn:coauth:admin"));
+        assert!(scopes.iter().any(|scope| scope == "urn:contrix:admin:*"));
+        assert!(scopes.iter().any(|scope| scope == "urn:contrix:client:*"));
+        assert!(
+            scopes
+                .iter()
+                .any(|scope| scope == "urn:contrix:principal-server:*")
+        );
+        assert!(
+            scopes
+                .iter()
+                .any(|scope| scope == "urn:contrix:principal-server:session.bind")
+        );
+
+        let contrix_scopes = body["org.contrix.supported_scopes"].as_array().unwrap();
+        assert!(
+            contrix_scopes
+                .iter()
+                .any(|scope| scope == "urn:contrix:principal-server:session.bind")
+        );
+
+        let claims = body["claims_supported"].as_array().unwrap();
+        assert!(
+            claims
+                .iter()
+                .any(|claim| claim == contrix::CLAIM_PRINCIPAL_DID)
+        );
+        assert!(claims.iter().any(|claim| claim == contrix::CLAIM_DEVICE_ID));
+        assert!(
+            claims
+                .iter()
+                .any(|claim| claim == contrix::CLAIM_SESSION_ID)
+        );
     }
 }

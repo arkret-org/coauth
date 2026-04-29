@@ -1,7 +1,10 @@
 use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::{ContrixConfig, IdentityRegistryKind};
-use coauth_data::{BrowserSession, Clock, RepositoryAccess, UrlBuilder, User};
+use coauth_data::{
+    BrowserSession, Clock, Pagination, RepositoryAccess, SessionGrant, UrlBuilder, User,
+    oauth2::{NewSessionGrant, SessionGrantFilter},
+};
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::{
     constraints::Constrainable,
@@ -10,8 +13,8 @@ use coauth_jose::{
 };
 use coauth_keystore::{Keystore, PrivateKey, WrongAlgorithmError};
 use der::pem::LineEnding;
-use oauth2_types::scope::Scope;
-use rand_core::CryptoRngCore;
+use oauth2_types::scope::{Scope, ScopeToken};
+use rand_core::{CryptoRngCore, RngCore};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -99,6 +102,12 @@ pub struct SessionGrantMaterial {
     pub session_public_key: String,
     pub session_private_key_pem: String,
     pub expires_at: String,
+    pub expires_at_timestamp: DateTime<Utc>,
+    pub issuer: String,
+    pub subject: String,
+    pub device_id: Option<String>,
+    pub audience: String,
+    pub scopes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -268,6 +277,51 @@ struct ResolveHandleRequest {
     proof_challenge: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct SessionGrantRecord {
+    id: String,
+    browser_session_id: String,
+    issuer: String,
+    subject: String,
+    device_id: Option<String>,
+    audience: String,
+    scopes: Vec<String>,
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    revoked_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize)]
+struct SessionGrantListResponse {
+    grants: Vec<SessionGrantRecord>,
+}
+
+#[derive(Debug, Serialize)]
+struct SessionGrantRevokeResponse {
+    grant: SessionGrantRecord,
+}
+
+impl From<SessionGrant> for SessionGrantRecord {
+    fn from(value: SessionGrant) -> Self {
+        Self {
+            id: value.id.to_string(),
+            browser_session_id: value.browser_session_id.to_string(),
+            issuer: value.issuer,
+            subject: value.subject,
+            device_id: value.device_id,
+            audience: value.audience,
+            scopes: value
+                .scope
+                .iter()
+                .map(|scope| scope.as_str().to_owned())
+                .collect(),
+            created_at: value.created_at,
+            expires_at: value.expires_at,
+            revoked_at: value.revoked_at,
+        }
+    }
+}
+
 pub(crate) fn service_did(url_builder: &UrlBuilder) -> String {
     let base = url_builder.http_base();
     let host = match base.port() {
@@ -346,7 +400,8 @@ pub(crate) fn required_audience_for(
 fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) -> Option<String> {
     tokens.into_iter().find_map(|token| {
         token
-            .strip_prefix("urn:matrix:client:device:")
+            .strip_prefix("urn:contrix:client:device:")
+            .or_else(|| token.strip_prefix("urn:matrix:client:device:"))
             .or_else(|| token.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:"))
             .map(ToOwned::to_owned)
     })
@@ -449,17 +504,19 @@ pub(crate) fn issue_session_grant(
     let now = clock.now();
     let expires_at = now + Duration::try_minutes(SESSION_GRANT_TTL_MINUTES).unwrap();
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
+    let issuer = issuer_did_for(url_builder, contrix_config);
+    let audience = required_audience_for(url_builder, contrix_config);
     let payload = SessionGrantPayload {
         kind: "cx.session.grant".to_owned(),
-        issuer: issuer_did_for(url_builder, contrix_config),
-        subject,
+        issuer: issuer.clone(),
+        subject: subject.clone(),
         session_public_key: session_public_key.clone(),
-        audience: required_audience_for(url_builder, contrix_config),
-        scopes,
+        audience: audience.clone(),
+        scopes: scopes.clone(),
         not_before: now,
         expires_at,
         revocation_ref: format!("cx:session:{}", browser_session.id),
-        device_id,
+        device_id: device_id.clone(),
         session_id: browser_session.id.to_string(),
         browser_session_id: browser_session.id.to_string(),
     };
@@ -475,7 +532,51 @@ pub(crate) fn issue_session_grant(
         session_public_key,
         session_private_key_pem,
         expires_at: expires_at.to_rfc3339(),
+        expires_at_timestamp: expires_at,
+        issuer,
+        subject,
+        device_id,
+        audience,
+        scopes,
     })
+}
+
+pub(crate) async fn persist_session_grant<R>(
+    repo: &mut R,
+    rng: &mut (dyn RngCore + Send),
+    clock: &dyn Clock,
+    browser_session: &BrowserSession,
+    material: &SessionGrantMaterial,
+) -> Result<SessionGrant, R::Error>
+where
+    R: RepositoryAccess + ?Sized,
+{
+    let scope: Scope = material
+        .scopes
+        .iter()
+        .map(|scope| scope.parse::<ScopeToken>())
+        .collect::<Result<Scope, _>>()
+        // This can only fail if an internal caller constructed an invalid scope
+        // string before signing the JWT.
+        .expect("session grant scopes must be valid OAuth scope tokens");
+
+    repo.oauth2_session_grant()
+        .add(
+            rng,
+            clock,
+            NewSessionGrant {
+                browser_session_id: browser_session.id,
+                issuer: &material.issuer,
+                subject: &material.subject,
+                device_id: material.device_id.as_deref(),
+                audience: &material.audience,
+                scope,
+                grant_jwt: &material.grant_jwt,
+                session_public_key: &material.session_public_key,
+                expires_at: material.expires_at_timestamp,
+            },
+        )
+        .await
 }
 
 fn preferred_signing_key(
@@ -780,6 +881,95 @@ pub async fn directory_resolve_handle(
 }
 
 #[handler]
+pub async fn list_session_grants(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<SessionGrantListResponse>, ContrixRouteError> {
+    let clock = crate::handlers::make_clock();
+    let subject = req.query::<String>("subject");
+    let device_id = req.query::<String>("device_id");
+    let audience = req.query::<String>("audience");
+    let mut filter = SessionGrantFilter::new();
+
+    if let Some(subject) = subject.as_deref() {
+        filter = filter.for_subject(subject);
+    }
+
+    if let Some(device_id) = device_id.as_deref() {
+        filter = filter.for_device(device_id);
+    }
+
+    if let Some(audience) = audience.as_deref() {
+        filter = filter.for_audience(audience);
+    }
+
+    if let Some(browser_session_id) = req.query::<String>("browser_session_id") {
+        let browser_session_id = Ulid::from_string(&browser_session_id)
+            .map_err(|_| ContrixRouteError::BadRequest("invalid browser_session_id".into()))?;
+        filter = filter.for_browser_session(browser_session_id);
+    }
+
+    if req.query::<bool>("active_only").unwrap_or(false) {
+        filter = filter.active_at(clock.now());
+    }
+
+    // TODO(contrix-authz): require Principal Server/admin authentication before
+    // exposing this beyond trusted deployment boundaries.
+    let mut repo = depot.repo().await?;
+    let page = repo
+        .oauth2_session_grant()
+        .list(filter, Pagination::first(100))
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    repo.cancel()
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    Ok(Json(SessionGrantListResponse {
+        grants: page
+            .edges
+            .into_iter()
+            .map(|edge| edge.node.into())
+            .collect(),
+    }))
+}
+
+#[handler]
+pub async fn revoke_session_grant(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<SessionGrantRevokeResponse>, ContrixRouteError> {
+    let clock = crate::handlers::make_clock();
+    let raw_id = req
+        .param::<String>("id")
+        .ok_or_else(|| ContrixRouteError::BadRequest("missing session grant id".into()))?;
+    let id = Ulid::from_string(&raw_id)
+        .map_err(|_| ContrixRouteError::BadRequest("invalid session grant id".into()))?;
+    let mut repo = depot.repo().await?;
+    let grant = repo
+        .oauth2_session_grant()
+        .lookup(id)
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+        .ok_or(ContrixRouteError::NotFound)?;
+
+    // TODO(contrix-authz): require admin/Principal Server authorization and
+    // write audit actor/reason before enabling broad revoke access.
+    let grant = repo
+        .oauth2_session_grant()
+        .revoke(&clock, grant)
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    repo.save()
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    Ok(Json(SessionGrantRevokeResponse {
+        grant: grant.into(),
+    }))
+}
+
+#[handler]
 pub async fn service_did_json(depot: &Depot) -> Result<Json<DidDocument>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
@@ -879,7 +1069,7 @@ mod tests {
             &contrix_config,
             &key_store,
             &browser_session,
-            vec!["session.bind".to_owned()],
+            vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
         )
         .unwrap();
 
@@ -900,7 +1090,7 @@ mod tests {
             payload.audience,
             required_audience_for(&url_builder, &contrix_config)
         );
-        assert_eq!(payload.scopes, vec!["session.bind"]);
+        assert_eq!(payload.scopes, vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE]);
         assert_eq!(payload.session_id, browser_session.id.to_string());
         assert_eq!(payload.device_id, None);
         assert!(payload.expires_at > payload.not_before);

@@ -94,6 +94,14 @@
         }
       ]
     },
+    "contrix": {
+      "description": "Contrix-specific audiences, DIDs, and downstream integration metadata",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ContrixConfig"
+        }
+      ]
+    },
     "telemetry": {
       "description": "Configuration related to sending monitoring data",
       "allOf": [
@@ -1260,6 +1268,125 @@
           "description": "Require SSL, verify CA, and confirm the hostname matches the cert",
           "type": "string",
           "const": "verify-full"
+        }
+      ]
+    },
+    "ContrixConfig": {
+      "description": "Contrix-specific deployment settings layered on top of the generic OIDC\nand account-management configuration.",
+      "type": "object",
+      "properties": {
+        "principal_servers": {
+          "description": "Principal Server audiences trusted to consume session grants and admin\ntokens emitted by coauth.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PrincipalServerConfig"
+          }
+        },
+        "identity_registry": {
+          "description": "External DID / identity registry resolver used for Contrix identity\nbinding workflows.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IdentityRegistryConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "service_did": {
+          "description": "Optional explicit service DID for the coauth deployment.\n\nWhen omitted, the backend derives a `did:web` identifier from\n`http.public_base`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issuer_did": {
+          "description": "Optional issuer DID to embed in Contrix session grants and discovery\ndocuments. Defaults to `service_did`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "admin_audience": {
+          "description": "Audience string expected by Contrix admin integrations.\n\nWhen omitted, the backend falls back to the local `/api/v1` endpoint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "PrincipalServerConfig": {
+      "description": "Trusted Principal Server metadata published through Contrix discovery.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Human-readable identifier for the consumer, such as `soland-prod`.",
+          "type": "string"
+        },
+        "audience": {
+          "description": "Audience string used when validating tokens or session grants for this\nPrincipal Server.",
+          "type": "string"
+        },
+        "endpoint": {
+          "description": "Base URL of the Principal Server integration point.",
+          "type": "string",
+          "format": "uri"
+        },
+        "did": {
+          "description": "Optional DID advertised for this Principal Server.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "audience",
+        "endpoint"
+      ]
+    },
+    "IdentityRegistryConfig": {
+      "description": "External identity-registry resolver configuration.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Resolver flavour used by the deployment.",
+          "default": "starid",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IdentityRegistryKind"
+            }
+          ]
+        },
+        "resolver": {
+          "description": "Base URL of the resolver, for example a `starid` deployment.",
+          "type": "string",
+          "format": "uri"
+        },
+        "proof_required_for_pairwise": {
+          "description": "Whether pairwise or private DID lookups require proof material before\nthe resolver should be queried.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "resolver"
+      ]
+    },
+    "IdentityRegistryKind": {
+      "description": "Supported identity-registry resolver flavours.",
+      "oneOf": [
+        {
+          "description": "Resolver backed by `starid`.",
+          "type": "string",
+          "const": "starid"
+        },
+        {
+          "description": "Generic external resolver.",
+          "type": "string",
+          "const": "external"
         }
       ]
     },

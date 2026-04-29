@@ -6,10 +6,15 @@ pub fn get_ninety_days_ago() -> String {
 }
 
 /// Extract device ID from an OAuth2 scope string.
-/// Looks for "urn:matrix:org.matrix.msc2967.client:device:" prefix.
+/// Prefer the Contrix device scope and keep Matrix prefixes as legacy
+/// compatibility.
 pub fn device_id_from_scope(scope: &str) -> Option<String> {
     for part in scope.split_whitespace() {
-        if let Some(device_id) = part.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:") {
+        if let Some(device_id) = part
+            .strip_prefix("urn:contrix:client:device:")
+            .or_else(|| part.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:"))
+            .or_else(|| part.strip_prefix("urn:matrix:client:device:"))
+        {
             if !device_id.is_empty() {
                 return Some(device_id.to_string());
             }

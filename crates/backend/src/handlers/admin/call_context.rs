@@ -64,7 +64,9 @@ pub enum Rejection {
     LoadUser(Ulid),
 
     /// The session does not have the required admin scope
-    #[error("Missing admin scope (expected urn:coauth:admin or urn:mas:admin)")]
+    #[error(
+        "Missing admin scope (expected urn:coauth:admin, urn:contrix:admin:* or legacy urn:mas:admin)"
+    )]
     MissingScope,
 }
 

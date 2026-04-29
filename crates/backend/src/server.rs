@@ -497,6 +497,11 @@ fn build_account_api_router(router: Router) -> Router {
         .push(Router::with_path("identity/document").get(contrix::identity_document))
         .push(Router::with_path("directory/describe").get(contrix::directory_describe))
         .push(Router::with_path("directory/resolve-handle").post(contrix::directory_resolve_handle))
+        .push(
+            Router::with_path("session-grants")
+                .get(contrix::list_session_grants)
+                .push(Router::with_path("{id}/revoke").post(contrix::revoke_session_grant)),
+        )
         // Viewer
         .push(
             Router::with_path("viewer")

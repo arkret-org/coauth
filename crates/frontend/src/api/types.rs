@@ -577,6 +577,29 @@ pub struct LoginResponse {
     pub error: Option<String>,
     #[serde(default)]
     pub redirect: Option<String>,
+    #[serde(default)]
+    pub viewer: Option<LoginViewerInfo>,
+    #[serde(default)]
+    pub session_grant: Option<SessionGrantInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct LoginViewerInfo {
+    pub id: String,
+    pub username: String,
+    pub did: String,
+    pub handle: String,
+    pub mxid: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionGrantInfo {
+    pub grant_jwt: String,
+    pub session_public_key: String,
+    pub session_private_key_pem: String,
+    pub expires_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

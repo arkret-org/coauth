@@ -14,25 +14,25 @@
 
 目标: 文档、配置、API 和代码语义从 Matrix/Pasion 迁移到 Contrix/coauth。
 
-- [ ] README / docs 重写:
-  - [ ] 项目定位改为 Contrix Auth / Account Server。
-  - [ ] 移除 Palpo / Matrix 作为主路径的描述。
-  - [ ] 保留 Matrix compatibility 时标记为 legacy adapter。
-  - [ ] 补 Principal Server、starid、sodmin、chask 的集成说明。
+- [x] README / docs 重写:
+  - [x] 项目定位改为 Contrix Auth / Account Server。
+  - [x] 移除 Palpo / Matrix 作为主路径的描述。
+  - [x] 保留 Matrix compatibility 时标记为 legacy adapter。
+  - [x] 补 Principal Server、starid、sodmin、chask 的集成说明。
 - [ ] 配置模型收敛:
   - [ ] `matrix` 配置段移入 compatibility profile。
-  - [ ] 新增 `contrix.principal_servers`。
-  - [ ] 新增 `contrix.identity_registry` / starid resolver 配置。
-  - [ ] 新增 service DID、issuer DID、admin audience。
+  - [x] 新增 `contrix.principal_servers`。
+  - [x] 新增 `contrix.identity_registry` / starid resolver 配置。
+  - [x] 新增 service DID、issuer DID、admin audience。
 - [ ] scope 命名收敛:
-  - [ ] `urn:coauth:admin` 保留为 coauth 管理权限。
-  - [ ] 新增 `urn:contrix:client:*`。
-  - [ ] 新增 `urn:contrix:principal-server:*`。
-  - [ ] 新增 `urn:contrix:admin:*`。
+  - [x] `urn:coauth:admin` 保留为 coauth 管理权限。
+  - [x] 新增 `urn:contrix:client:*`。
+  - [x] 新增 `urn:contrix:principal-server:*`。
+  - [x] 新增 `urn:contrix:admin:*`。
   - [ ] Matrix scopes 只在 compatibility adapter 中出现。
 - [ ] 代码命名分层:
-  - [ ] 新增 Contrix module / route group。
-  - [ ] Pasion/Matrix 特有 handler 不得被 Contrix 默认路由引用。
+  - [x] 新增 Contrix module / route group。
+  - [x] Pasion/Matrix 特有 handler 不得被 Contrix 默认路由引用。
   - [ ] i18n 文案同步替换。
 
 并行性: docs/config/scope/i18n 可并行，但 scope registry 必须先冻结，避免 sodmin 与 chask 重复改动。
@@ -45,11 +45,11 @@
   - [ ] Account 与 principal DID 绑定。
   - [ ] 一个账号支持多个 DID binding，区分 primary、recovery、pairwise/private。
   - [ ] 设备 DID / device_id 与登录 session 绑定。
-  - [ ] session grant 记录 issuer、subject DID、device_id、audience、scope、expires_at、revoked_at。
+  - [x] session grant 记录 issuer、subject DID、device_id、audience、scope、expires_at、revoked_at。
   - [ ] refresh token 只保存 hash，绑定 device/session/audience。
 - [ ] 登录输出:
   - [ ] OAuth/OIDC token 携带 Contrix audience。
-  - [ ] token claims 包含 principal DID、device_id、session id。
+  - [x] token claims 包含 principal DID、device_id、session id。
   - [ ] 高风险 scope 需要 MFA / passkey / policy proof。
   - [ ] token 不进入 query string。
 - [ ] 账号生命周期:
@@ -94,7 +94,7 @@
 
 ## P0: Contrix OIDC / OAuth2 Contract
 
-- [ ] OIDC discovery advertises Contrix-specific claims and scopes。
+- [x] OIDC discovery advertises Contrix-specific claims and scopes。
 - [ ] Dynamic client registration supports:
   - [ ] `chask` public/native client。
   - [ ] `sodmin` admin dashboard。
@@ -129,6 +129,8 @@
 - [ ] Session/device admin:
   - [ ] list sessions。
   - [ ] revoke session。
+  - [x] list session grants。
+  - [x] revoke session grant。
   - [ ] list devices。
   - [ ] revoke device。
   - [ ] view token/audience/scope metadata without secrets。
@@ -193,6 +195,7 @@
 ## P1: Test and Release Gates
 
 - [ ] Unit tests for session grant, DID binding, claim issuance and revocation。
+  - [x] session grant signing unit test。
 - [ ] HTTP contract tests for all admin endpoints。
 - [ ] OIDC conformance smoke against generated discovery/JWKS/token endpoints。
 - [ ] Integration stack with `soland` + `starid` + `sodmin`。
@@ -202,6 +205,14 @@
   - [ ] recovery flow。
   - [ ] admin audit。
   - [ ] log redaction。
+
+## 本轮验证记录
+
+- [x] 2026-04-29: `cargo fmt --check`。
+- [x] 2026-04-29: `cargo check -p coauth-data --message-format short`。
+- [x] 2026-04-29: `cargo check -p coauth-backend --message-format short`。
+- [x] 2026-04-29: `cargo test -p coauth-backend session_grant --message-format short`。
+- [x] 2026-04-29: `cargo test -p coauth-data session_grant --message-format short`。
 
 ## Definition of Done
 

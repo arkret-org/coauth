@@ -7,12 +7,14 @@ mod client;
 mod device_code_grant;
 mod refresh_token;
 mod session;
+mod session_grant;
 
 pub use self::{
     access_token::PgOAuth2AccessTokenRepository,
     authorization_grant::PgOAuth2AuthorizationGrantRepository, client::PgOAuth2ClientRepository,
     device_code_grant::PgOAuth2DeviceCodeGrantRepository,
     refresh_token::PgOAuth2RefreshTokenRepository, session::PgOAuth2SessionRepository,
+    session_grant::PgOAuth2SessionGrantRepository,
 };
 
 #[cfg(test)]

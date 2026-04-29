@@ -9,6 +9,7 @@ use coauth_data::{
     oauth2::{
         OAuth2AccessTokenRepository, OAuth2AuthorizationGrantRepository, OAuth2ClientRepository,
         OAuth2DeviceCodeGrantRepository, OAuth2RefreshTokenRepository, OAuth2SessionRepository,
+        SessionGrantRepository,
     },
     personal::PersonalSessionRepository,
     policy_data::PolicyDataRepository,
@@ -40,7 +41,7 @@ use crate::{
     oauth2::{
         PgOAuth2AccessTokenRepository, PgOAuth2AuthorizationGrantRepository,
         PgOAuth2ClientRepository, PgOAuth2DeviceCodeGrantRepository,
-        PgOAuth2RefreshTokenRepository, PgOAuth2SessionRepository,
+        PgOAuth2RefreshTokenRepository, PgOAuth2SessionGrantRepository, PgOAuth2SessionRepository,
     },
     personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository},
     pg::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM,
@@ -284,6 +285,12 @@ impl RepositoryAccess for PgRepository {
         &'c mut self,
     ) -> Box<dyn OAuth2SessionRepository<Error = Self::Error> + 'c> {
         Box::new(PgOAuth2SessionRepository::new(&mut *self.conn))
+    }
+
+    fn oauth2_session_grant<'c>(
+        &'c mut self,
+    ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
+        Box::new(PgOAuth2SessionGrantRepository::new(&mut *self.conn))
     }
 
     fn oauth2_access_token<'c>(

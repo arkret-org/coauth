@@ -1,93 +1,96 @@
 # OAuth 2.0 scopes
 
-The [default policy](../topics/policy.md#authorization-requests) shipped with Pasion supports the following scopes:
+`coauth` now treats Contrix scopes as the primary product surface. Legacy
+Matrix / Palpo scopes still exist for compatibility adapters, but they are no
+longer the recommended integration path.
 
- - [`openid`](#openid)
- - [`email`](#email)
- - [`urn:matrix:client:api:*`](#urnmatrixclientapi)
- - [`urn:matrix:client:device:[device id]`](#urnmatrixclientdevicedevice-id)
- - [`urn:palpo:admin:*`](#urnpalpoadmin)
- - [`urn:coauth:admin`](#urncoauthadmin) (replaces `urn:mas:admin`)
-
-## OpenID Connect scopes
-
-Pasion supports the following standard OpenID Connect scopes, as defined in [OpenID Connect Core 1.0]:
+## Primary coauth / Contrix scopes
 
 ### `openid`
 
-The `openid` scope is a special scope that indicates that the client is requesting an OpenID Connect `id_token`.
-The userinfo endpoint as described by the same specification requires this scope to be present in the request.
-
-The default policy allows any client and any user to request this scope.
+Requests an OpenID Connect `id_token` and allows access to the userinfo
+endpoint. This remains the baseline scope for interactive OIDC clients such as
+`chask`.
 
 ### `email`
 
-Requires the `openid` scope to be present in the request.
-It adds the user's email address to the `id_token` and to the claims returned by the userinfo endpoint.
-
-The default policy allows any client and any user to request this scope.
-
-## Matrix-related scopes
-
-Those scopes are specific to the Matrix protocol and are part of [MSC2967].
-
-### `urn:matrix:client:api:*`
-
-This scope grants access to the full Matrix client-server API.
-
-The default policy allows any client and any user to request this scope.
-
-### `urn:matrix:client:device:[device id]`
-
-This scope sets the device ID of the session, where `[device id]` is the device ID of the session.
-Currently, Pasion only allows the following characters in the device ID: `a-z`, `A-Z`, `0-9` and `-`.
-It also needs to be at least 10 characters long.
-
-There can only be one device ID in the scope list of a session.
-
-The default policy allows any client and any user to request this scope.
-
-## Palpo-specific scopes
-
-Pasion also supports one Palpo-specific scope, which aren't formally defined in any specification.
-
-### `urn:palpo:admin:*`
-
-This scope grants access to the [Palpo admin API].
-
-Because of how Palpo works for now, this scope by itself isn't sufficient to access the admin API.
-A session wanting to access the admin API also needs to have the `urn:matrix:client:api:*` scope.
-
-The default policy doesn't allow everyone to request this scope.
-It allows:
-
-- users with the `can_request_admin` attribute set to `true` in the database
-- users listed in the [`policy.data.admin_users`](../reference/configuration.md#policy) configuration option
-
-## Pasion-specific scopes
-
-Pasion also has a few scopes that are specific to the Pasion implementation.
+Requests the user's verified email address when the deployment has that data.
+The scope is typically paired with `openid`.
 
 ### `urn:coauth:admin`
 
-This scope grants full access to the Pasion [Admin API].
+Canonical coauth admin scope. This grants access to the coauth admin API and is
+the preferred scope for stable admin tooling.
 
-> **Backward compatibility:** The legacy scope `urn:mas:admin` is still accepted
-> and behaves identically. Existing tokens that carry `urn:mas:admin` will
-> continue to work. New integrations should use `urn:coauth:admin`.
+### `urn:contrix:admin:*`
 
-The default policy doesn't allow everyone to request this scope.
-It allows:
+Contrix admin capability family. `coauth` currently accepts the wildcard family
+and `urn:contrix:admin:<capability>` prefixes as administrative access.
 
-- for the "[authorization code]" and "[device authorization]" grants:
-  - users with the `can_request_admin` attribute set to `true` in the database
-  - users listed in the [`policy.data.admin_users`](../reference/configuration.md#policy) configuration option
-- for the "client credentials" grant:
-  - clients that are listed in the [`policy.data.admin_clients`](../reference/configuration.md#policy) configuration option
+Use this family for Contrix-native admin integrations such as `sodmin` or
+internal automation that wants a Contrix namespace instead of the coauth one.
 
-[authorization code]: ../topics/authorization.md#authorization-code-grant
-[device authorization]: ../topics/authorization.md#device-authorization-grant
-[Admin API]: ../topics/admin-api.md
-[Palpo admin API]: https://palpo-im.github.io/palpo/latest/usage/administration/admin_api/index.html
-[OpenID Connect Core 1.0]: https://openid.net/specs/openid-connect-core-1_0.html
-[MSC2967]: https://github.com/matrix-org/matrix-spec-proposals/pull/2967
+### `urn:contrix:client:*`
+
+Contrix client capability family. This is intended for first-party or trusted
+Contrix clients such as `chask`.
+
+Today it is advertised as a coarse-grained capability family; narrower suffixes
+can be added by policy and client conventions over time.
+
+### `urn:contrix:principal-server:*`
+
+Principal Server capability family. This is the namespace intended for trusted
+Principal Server integrations that need scoped access beyond a generic OIDC
+login.
+
+### `urn:contrix:principal-server:session.bind`
+
+Requests or describes the ability to mint a short-lived Contrix session grant
+for the authenticated browser session. This is the scope `coauth` uses when it
+issues a session grant for a trusted Principal Server.
+
+## Contrix claims exposed alongside scopes
+
+When applicable, ID tokens, userinfo responses, and introspection responses can
+expose these Contrix claims:
+
+- `org.contrix.principal_did`
+- `org.contrix.device_id`
+- `org.contrix.session_id`
+
+`device_id` is only present when the session is bound to a device identifier.
+
+## Legacy compatibility scopes
+
+### `urn:matrix:client:api:*` and `urn:matrix:org.matrix.msc2967.client:api:*`
+
+Legacy Matrix client API access scopes. These belong to the compatibility
+adapter path and should not be used as the primary scope contract for new
+Contrix deployments.
+
+### `urn:matrix:client:device:[device id]` and `urn:matrix:org.matrix.msc2967.client:device:[device id]`
+
+Legacy Matrix device-binding scopes. They encode the device identifier in the
+scope token itself and are still understood by compatibility code paths.
+
+### `urn:palpo:admin:*`
+
+Legacy Palpo admin scope family. This is only relevant when `coauth` is acting
+as a delegated-auth bridge for an older Palpo / Matrix deployment.
+
+### `urn:mas:admin`
+
+Legacy admin scope kept for backward compatibility. Existing tokens that still
+carry `urn:mas:admin` continue to work, but new integrations should migrate to
+`urn:coauth:admin` or `urn:contrix:admin:*`.
+
+## Policy notes
+
+- OIDC discovery advertises the primary Contrix scope families and claims.
+- `urn:coauth:admin` is the stable scope for the existing admin API.
+- `urn:contrix:admin:*` is the Contrix-native admin namespace.
+- `urn:contrix:principal-server:session.bind` is the scope used for trusted
+  Principal Server session grants.
+- Matrix / Palpo scopes should be treated as legacy compatibility affordances,
+  not as the default scope registry for new work.

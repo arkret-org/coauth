@@ -1,58 +1,82 @@
 # 基本配置
 
-## 生成配置文件
+## 生成初始配置
 
-使用 `config generate` 命令生成一个带有合理默认值的配置文件：
+服务启动前需要准备签名密钥、加密密钥、数据库配置，以及 Contrix 部署元数据。
+
+用生成器输出一份带默认值的完整配置：
 
 ```bash
 coauth config generate > config.yaml
 ```
 
-生成的配置文件包含所有可用选项及其默认值。你需要根据实际部署环境修改以下关键设置：
+生成结果会比较冗长。实际部署时通常只保留你要覆盖的配置段，把未修改的默认项删掉。
 
-- 数据库连接信息
-- 公开访问的 URL（`http.public_base`）
-- 加密密钥和签名密钥
-- Matrix homeserver 地址
+## 几乎一定会改的配置段
 
-## 验证配置
+- `http.public_base`
+- `database`
+- `contrix.principal_servers`
+- `contrix.identity_registry`
+- `contrix.service_did`
+- `contrix.issuer_did`
+- `contrix.admin_audience`
+- `secrets`
+- `passwords`
 
-使用 `config check` 命令验证配置文件的正确性：
+当前 `matrix` 仍然保留在根配置模型里，因为 legacy compatibility adapter 还没有完全拆到独立
+profile。若你的部署不提供 Matrix / Palpo 兼容路径，应把它视为 legacy 配置段。
+
+## 校验配置
 
 ```bash
-coauth config check -c config.yaml
+coauth config check --config=config.yaml
 ```
 
-## 查看最终配置
-
-使用 `config dump` 命令查看合并后的完整配置（包括默认值）：
+## 查看合并后的最终配置
 
 ```bash
-coauth config dump -c config.yaml
+coauth config dump --config=config.yaml
 ```
 
-环境变量覆盖使用 `PASION_` 前缀，并以 `__` 作为层级分隔符。例如：
-`PASION_EMAIL__PROVIDER__TYPE=resend` 和
-`PASION_EMAIL__PROVIDER__API_KEY=re_xxxxxxxxx`。
+配置文件的加载优先级如下：
 
-## 编辑器支持
+1. 所有通过 `--config` 显式传入的文件
+2. 否则读取环境变量 `PASION_CONFIG`，并按 `:` 分隔
+3. 否则读取当前工作目录下的 `config.yaml`
 
-Pasion 提供 JSON Schema 文件，可以在支持的编辑器中获得自动补全和验证。配置文件的 JSON Schema 位于 `docs/config.schema.json`。
+环境变量覆盖也仍然沿用 legacy `PASION_` 前缀，并使用 `__` 作为层级分隔符，例如：
 
-### VS Code
+```bash
+PASION_EMAIL__PROVIDER__TYPE=resend
+PASION_EMAIL__PROVIDER__API_KEY=re_xxxxxxxxx
+```
 
-在配置文件的 YAML 头部添加以下注释即可启用自动补全：
+## 编辑器 Schema
+
+生成的 JSON Schema 位于 `docs/config.schema.json`。如果你修改了 Rust 配置模型，可以用：
+
+```bash
+cargo run -p coauth-config --bin schema > docs/config.schema.json
+```
+
+在 VS Code 等支持 YAML Schema 的编辑器里，可以这样引用：
 
 ```yaml
 # yaml-language-server: $schema=./docs/config.schema.json
 ```
 
-## 密钥管理
+## 同步配置型数据库状态
 
-配置文件中的敏感信息（如加密密钥、数据库密码等）可以通过以下方式提供：
+以下配置段会在启动时同步到数据库，最常见的是：
 
-- **内联** — 直接写在配置文件中（适合开发环境）
-- **文件引用** — 引用外部文件中的密钥内容（推荐用于生产环境）
-- **环境变量** — 通过环境变量注入（适合容器化部署）
+- `clients`
+- `upstream_oauth2`
 
-详细的配置选项请参阅[配置文件参考](../reference/configuration.md)。
+也可以手动执行：
+
+```bash
+coauth config sync
+```
+
+如果希望数据库里被删除的条目也一起清理，追加 `--prune`。

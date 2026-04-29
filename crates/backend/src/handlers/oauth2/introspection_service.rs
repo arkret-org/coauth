@@ -24,6 +24,9 @@ use crate::handlers::contrix;
 const UNSTABLE_API_SCOPE: ScopeToken =
     ScopeToken::from_static("urn:matrix:org.matrix.msc2967.client:api:*");
 const STABLE_API_SCOPE: ScopeToken = ScopeToken::from_static("urn:matrix:client:api:*");
+const CONTRIX_CLIENT_DEVICE_SCOPE_PREFIX: &str = "urn:contrix:client:device:";
+const LEGACY_MATRIX_CLIENT_DEVICE_SCOPE_PREFIX: &str = "urn:matrix:client:device:";
+const LEGACY_MATRIX_MSC_DEVICE_SCOPE_PREFIX: &str = "urn:matrix:org.matrix.msc2967.client:device:";
 
 /// Normalize a scope by adding the stable and unstable API scope equivalents
 /// if missing.
@@ -37,16 +40,20 @@ fn normalize_scope(mut scope: Scope) -> Scope {
         } else {
             let s = token.as_str();
             let device_id = s
-                .strip_prefix("urn:matrix:client:device:")
-                .or_else(|| s.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:"));
+                .strip_prefix(CONTRIX_CLIENT_DEVICE_SCOPE_PREFIX)
+                .or_else(|| s.strip_prefix(LEGACY_MATRIX_CLIENT_DEVICE_SCOPE_PREFIX))
+                .or_else(|| s.strip_prefix(LEGACY_MATRIX_MSC_DEVICE_SCOPE_PREFIX));
             if let Some(device_id) = device_id {
-                if let (Ok(stable), Ok(unstable)) = (
-                    format!("urn:matrix:client:device:{device_id}").parse::<ScopeToken>(),
-                    format!("urn:matrix:org.matrix.msc2967.client:device:{device_id}")
-                        .parse::<ScopeToken>(),
-                ) {
-                    to_add.insert(stable);
-                    to_add.insert(unstable);
+                let device_scopes = [
+                    format!("{CONTRIX_CLIENT_DEVICE_SCOPE_PREFIX}{device_id}"),
+                    format!("{LEGACY_MATRIX_CLIENT_DEVICE_SCOPE_PREFIX}{device_id}"),
+                    format!("{LEGACY_MATRIX_MSC_DEVICE_SCOPE_PREFIX}{device_id}"),
+                ];
+
+                for device_scope in device_scopes {
+                    if let Ok(token) = device_scope.parse::<ScopeToken>() {
+                        to_add.insert(token);
+                    }
                 }
             }
         }

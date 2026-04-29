@@ -6,6 +6,7 @@ mod client;
 mod device_code_grant;
 mod refresh_token;
 mod session;
+mod session_grant;
 
 pub use self::{
     access_token::OAuth2AccessTokenRepository,
@@ -14,4 +15,5 @@ pub use self::{
     device_code_grant::{OAuth2DeviceCodeGrantParams, OAuth2DeviceCodeGrantRepository},
     refresh_token::OAuth2RefreshTokenRepository,
     session::{OAuth2SessionFilter, OAuth2SessionRepository},
+    session_grant::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository},
 };

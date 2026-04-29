@@ -236,6 +236,17 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
+            let mut grant_repo = depot.repo().await?;
+            contrix::persist_session_grant(
+                &mut grant_repo,
+                &mut rng,
+                &clock,
+                &user_session,
+                &session_grant,
+            )
+            .await?;
+            grant_repo.save().await?;
+
             cookie_jar.finalize(
                 res,
                 Json(LoginResponse {

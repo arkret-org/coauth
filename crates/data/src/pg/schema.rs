@@ -314,6 +314,23 @@ diesel::table! {
 }
 
 diesel::table! {
+    oauth2_session_grants (id) {
+        id -> Uuid,
+        user_session_id -> Uuid,
+        issuer -> Text,
+        subject -> Text,
+        device_id -> Nullable<Text>,
+        audience -> Text,
+        scope_list -> Array<Text>,
+        grant_jwt -> Text,
+        session_public_key -> Text,
+        created_at -> Timestamptz,
+        expires_at -> Timestamptz,
+        revoked_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
     upstream_oauth_providers (id) {
         id -> Uuid,
         issuer -> Nullable<Text>,
@@ -672,6 +689,7 @@ diesel::joinable!(oauth2_sessions -> oauth2_clients (oauth2_client_id));
 diesel::joinable!(oauth2_access_tokens -> oauth2_sessions (oauth2_session_id));
 diesel::joinable!(oauth2_authorization_grants -> oauth2_clients (oauth2_client_id));
 diesel::joinable!(oauth2_device_code_grant -> oauth2_clients (oauth2_client_id));
+diesel::joinable!(oauth2_session_grants -> user_sessions (user_session_id));
 diesel::joinable!(oauth2_client_localized_metadata -> oauth2_clients (client_id));
 diesel::joinable!(upstream_oauth_links -> upstream_oauth_providers (upstream_oauth_provider_id));
 diesel::joinable!(upstream_oauth_authorization_sessions -> upstream_oauth_providers (upstream_oauth_provider_id));
@@ -713,6 +731,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     oauth2_refresh_tokens,
     oauth2_authorization_grants,
     oauth2_device_code_grant,
+    oauth2_session_grants,
     upstream_oauth_providers,
     upstream_oauth_links,
     upstream_oauth_authorization_sessions,

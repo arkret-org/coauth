@@ -221,13 +221,14 @@ fn scope_tokens(scope: &scope::Scope) -> Vec<String> {
         .collect()
 }
 
-fn matrix_device_ids(scope: &scope::Scope) -> Vec<String> {
+fn client_device_ids(scope: &scope::Scope) -> Vec<String> {
     scope
         .iter()
         .filter_map(|token| {
             let token = token.as_str();
             token
-                .strip_prefix("urn:matrix:client:device:")
+                .strip_prefix("urn:contrix:client:device:")
+                .or_else(|| token.strip_prefix("urn:matrix:client:device:"))
                 .or_else(|| token.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:"))
                 .map(str::to_owned)
         })
@@ -378,14 +379,14 @@ pub async fn exchange_authorization_code(
     };
 
     let requested_scopes = scope_tokens(&session.scope);
-    let requested_matrix_device_ids = matrix_device_ids(&session.scope);
+    let requested_device_ids = client_device_ids(&session.scope);
     debug!(
         oauth2_client.id = %client.id,
         authorization_grant.id = %authz_grant.id,
         oauth2_session.id = %session.id,
         scopes = ?requested_scopes,
         openid_requested = session.scope.contains(&scope::OPENID),
-        matrix_device_ids = ?requested_matrix_device_ids,
+        device_ids = ?requested_device_ids,
         "Loaded OAuth session for authorization_code exchange"
     );
 
@@ -538,17 +539,17 @@ pub async fn exchange_authorization_code(
         .await?;
 
     // Look for device to provision
-    if !requested_matrix_device_ids.is_empty() {
+    if !requested_device_ids.is_empty() {
         debug!(
             oauth2_client.id = %client.id,
             authorization_grant.id = %authz_grant.id,
             oauth2_session.id = %session.id,
             browser_session.id = %browser_session.id,
-            matrix_device_ids = ?requested_matrix_device_ids,
-            "Provisioning Matrix devices during authorization_code exchange"
+            device_ids = ?requested_device_ids,
+            "Provisioning client devices during authorization_code exchange"
         );
     }
-    for device_id in &requested_matrix_device_ids {
+    for device_id in &requested_device_ids {
         homeserver
             .upsert_device(
                 &browser_session.user.username,
@@ -970,7 +971,7 @@ pub async fn exchange_device_code(
         .await?;
 
     let requested_scopes = scope_tokens(&session.scope);
-    let requested_matrix_device_ids = matrix_device_ids(&session.scope);
+    let requested_device_ids = client_device_ids(&session.scope);
     debug!(
         oauth2_client.id = %client.id,
         device_code_grant.id = %grant.id,
@@ -978,7 +979,7 @@ pub async fn exchange_device_code(
         browser_session.id = %browser_session.id,
         scopes = ?requested_scopes,
         openid_requested = session.scope.contains(&scope::OPENID),
-        matrix_device_ids = ?requested_matrix_device_ids,
+        device_ids = ?requested_device_ids,
         "Started OAuth session for device_code exchange"
     );
 
@@ -1062,17 +1063,17 @@ pub async fn exchange_device_code(
         .await?;
 
     // Look for device to provision
-    if !requested_matrix_device_ids.is_empty() {
+    if !requested_device_ids.is_empty() {
         debug!(
             oauth2_client.id = %client.id,
             device_code_grant.id = %device_code_grant_id,
             oauth2_session.id = %session.id,
             browser_session.id = %browser_session.id,
-            matrix_device_ids = ?requested_matrix_device_ids,
-            "Provisioning Matrix devices during device_code exchange"
+            device_ids = ?requested_device_ids,
+            "Provisioning client devices during device_code exchange"
         );
     }
-    for device_id in &requested_matrix_device_ids {
+    for device_id in &requested_device_ids {
         homeserver
             .upsert_device(&browser_session.user.username, device_id, None)
             .await

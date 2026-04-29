@@ -1,258 +1,299 @@
 # 配置文件参考
 
-本页列出 Pasion 配置文件的所有可用选项。完整的英文配置参考请查看[英文版本](../../reference/configuration.md)。
-
-## 配置文件格式
-
-Pasion 使用 YAML 格式的配置文件。通过 `-c` 或 `--config` 参数指定：
+`coauth` 使用 YAML 配置文件。可以先生成一份完整样例：
 
 ```bash
-coauth server -c config.yaml
+coauth config generate > config.yaml
 ```
 
-## 主要配置段
+`docs/config.schema.json` 来自 `coauth_config::RootConfig` 自动生成。环境变量覆盖目前仍然沿用
+legacy `PASION_` 前缀。
 
-### `http` — HTTP 服务器
+## `http`
+
+控制公开 URL、监听器以及暴露哪些路由组。
 
 ```yaml
 http:
-  # 对外公开的基础 URL（必须包含协议和域名）
-  # 同时用于生成 upstream OAuth callback URL
   public_base: https://auth.example.com/
-
-  # 可选的签发者 URL（用于 OIDC 发现）
-  # issuer: https://auth.example.com/
-
-  # 监听器配置
+  issuer: https://auth.example.com/
   listeners:
     - name: web
       binds:
         - address: "[::]:8080"
-      proxy_protocol: false
       resources:
-        - name: discovery    # OIDC 发现端点
-        - name: human        # 用户界面（登录、注册等）
-        - name: oauth        # OAuth 2.0 端点
-        - name: compat       # 旧版 Matrix 登录兼容层
-        - name: graphql      # GraphQL API
-        - name: assets       # 静态资源
-          path: /path/to/dist/
-        - name: health       # 健康检查端点
-
-  # 信任的代理 IP 范围
-  trusted_proxies:
-    - 192.168.0.0/16
-    - 172.16.0.0/12
-    - 10.0.0.0/8
-    - 127.0.0.0/8
-    - "::1/128"
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: restapi
+        - name: assets
+          path: ./dist
+        - name: compat    # legacy Matrix compatibility adapter
+        - name: adminapi  # 管理 API
 ```
 
-### `database` — 数据库连接
+### `http.listeners`
+
+常见资源名：
+
+- `discovery`：`/.well-known/*`
+- `human`：浏览器页面
+- `oauth`：OAuth2 / OIDC 端点
+- `restapi`：SPA/API 后端
+- `assets`：前端静态资源
+- `compat`：legacy Matrix 兼容路由
+- `adminapi`：`/api/admin/v1/*`
+- `health`、`prometheus`：运维端点
+
+## `database`
+
+PostgreSQL 连接配置。
 
 ```yaml
 database:
-  uri: postgresql://user:password@localhost/coauth
-  max_connections: 10
+  uri: postgresql://coauth:password@localhost/coauth
   min_connections: 0
+  max_connections: 10
   connect_timeout: 30
 ```
 
-### `matrix` — Matrix Homeserver
+`coauth` 不应直接连接到 transaction pooling 模式的 pgBouncer / pgCat，因为服务依赖
+需要 session 语义的 PostgreSQL 特性。
+
+## `contrix`
+
+Contrix 部署元数据，叠加在通用 OIDC server 之上。
+
+```yaml
+contrix:
+  principal_servers:
+    - name: soland
+      audience: https://soland.example.com/api
+      endpoint: https://soland.example.com/
+      did: did:web:soland.example.com
+
+  identity_registry:
+    kind: starid
+    resolver: https://starid.example.com/
+    proof_required_for_pairwise: true
+
+  service_did: did:web:auth.example.com
+  issuer_did: did:web:auth.example.com
+  admin_audience: https://auth.example.com/api/v1
+```
+
+- `principal_servers`：通过 Contrix discovery 发布的受信任 Principal Server 描述
+- `identity_registry`：委托的 DID / identity resolver，通常是 `starid`
+- `service_did`：显式 service DID；未配置时从 `http.public_base` 推导
+- `issuer_did`：session grant 中写入的 DID；默认继承 `service_did`
+- `admin_audience`：Contrix admin 集成期望的 audience；默认回退到本地 `/api/v1`
+
+## `matrix`
+
+Legacy Matrix / Palpo compatibility 配置。
 
 ```yaml
 matrix:
-  homeserver: example.com          # Matrix 服务器名称
-  secret: "共享密钥"                # 与 homeserver 的共享密钥
-  endpoint: "https://matrix.example.com"  # homeserver API 地址
+  kind: palpo
+  homeserver: matrix.example.com
+  secret: shared-secret
+  endpoint: https://matrix.example.com/
 ```
 
-### `secrets` — 密钥和加密
+这个配置段还保留在根配置模型里，因为 compatibility adapter 尚未彻底拆成可选 profile。
+对新的 Contrix-first 部署来说，除非你真的在承接 Matrix / Palpo 流量，否则应把它视为 legacy 配置。
+
+## `templates`
+
+可选的 HTML 模板、翻译文件、前端资源 manifest 覆盖。
+
+```yaml
+templates:
+  path: ./templates
+  assets_manifest: ./dist/manifest.json
+  translations_path: ./translations
+```
+
+## `clients`
+
+静态 OAuth2 / OIDC client 注册项，会在启动时同步到数据库。
+
+```yaml
+clients:
+  - client_id: 01HFVBY12TMNTYTBV8W921M5FA
+    client_auth_method: client_secret_post
+    client_secret: super-secret
+    redirect_uris:
+      - https://app.example.com/callback
+```
+
+## `secrets`
+
+加密和签名密钥。
 
 ```yaml
 secrets:
-  encryption: "32字节的加密密钥（Base64编码）"
+  encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
   keys:
-    - kid: "key-id-1"
-      key: |
-        -----BEGIN RSA PRIVATE KEY-----
-        ...
-        -----END RSA PRIVATE KEY-----
+    - key_file: ./keys/signing.pem
 ```
 
-### `passwords` — 密码策略
+至少应配置一把签名密钥。`coauth` 会用这些密钥签发 ID token、signed userinfo、JWKS，以及
+Contrix session grant。
+
+## `passwords`
+
+本地密码登录配置。
 
 ```yaml
 passwords:
-  enabled: true              # 是否启用密码登录
-  minimum_complexity: 3      # 最低密码复杂度（0-4）
+  enabled: true
+  minimum_complexity: 3
   schemes:
     - version: 1
-      algorithm: argon2id    # 密码哈希算法
+      algorithm: argon2id
 ```
 
-### `account` — 账户管理
+## `account`
+
+自助账户管理开关。
 
 ```yaml
 account:
+  email_change_allowed: true
+  displayname_change_allowed: true
   password_registration_enabled: false
+  password_change_allowed: true
+  password_recovery_enabled: false
   login_with_email_allowed: false
-
-  # 可选的管理员门户地址。
-  # 配置后，具备管理员权限的用户会在账户页面看到入口链接。
   admin_portal_url: https://admin.example.com/
 ```
 
-### `email` — 邮件发送
+## `captcha`
+
+为登录、恢复、注册等易受滥用的流程配置 CAPTCHA。
 
 ```yaml
-email:
-  from: '"Pasion" <noreply@example.com>'
-  reply_to: '"Support" <support@example.com>'
-  provider:
-    type: resend
-    api_key: "re_xxxxxxxxx"
-    # 可选类型: blackhole / smtp / sendmail / resend / sendgrid / twilio / brevo / aws_ses / http_webhook
-    # webhook:
-    #   signing_secret: whsec_xxxxxxxxx
-    #   max_age_seconds: 300
-
-  # SMTP 示例
-  # provider:
-  #   type: smtp
-  #   mode: starttls
-  #   hostname: smtp.example.com
-  #   port: 587
-  #   username: "smtp_user"
-  #   password: "smtp_password"
-
-  # AWS SES 示例
-  # provider:
-  #   type: aws_ses
-  #   region: us-east-1
-  #   access_key_id: AKIAXXXXXXXXXXXXXXXX
-  #   secret_access_key: your-secret-access-key
-  #   session_token: optional-session-token
-  #   endpoint: https://email.us-east-1.amazonaws.com
-  #   configuration_set_name: default-set
-  #   webhook:
-  #     topic_arn: arn:aws:sns:us-east-1:123456789012:ses-feedback
-  #     auto_confirm_subscription: true
+captcha:
+  service: recaptcha_v2
+  site_key: "site-key"
+  secret_key: "secret-key"
 ```
 
-`twilio` 邮件 provider 实际上走的是 Twilio SendGrid 的 Mail Send API，
-和短信里的 `twilio` provider 是两套能力。
+## `policy`
 
-如果启用了异步投递回执，可以把公开 webhook 路径配置到对应 provider：
-`/webhooks/email/resend`、`/webhooks/email/sendgrid`、`/webhooks/email/twilio`、
-`/webhooks/email/brevo`、`/webhooks/email/aws-ses`。
-
-### `sms` — 短信发送
+授权策略引擎配置。
 
 ```yaml
-sms:
-  # 默认 provider：不发送任何短信
-  provider:
-    type: blackhole
-
-  # Twilio 短信
-  #provider:
-  #  type: twilio
-  #  account_sid: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  #  auth_token: your-auth-token
-  #  from_number: +12065550123
-
-  # HTTP webhook 短信
-  #provider:
-  #  type: http_webhook
-  #  url: https://sms.example.com/api/send
-  #  api_key: example-token
-  #  from_number: +12065550123
-
-  # 阿里云短信
-  #provider:
-  #  type: aliyun_sms
-  #  access_key_id: your-access-key-id
-  #  access_key_secret: your-access-key-secret
-  #  sign_name: 你的签名
-  #  template_code: SMS_123456789
-
-  # 腾讯云短信
-  #provider:
-  #  type: tencent_cloud_sms
-  #  secret_id: your-secret-id
-  #  secret_key: your-secret-key
-  #  sdk_app_id: "1400000000"
-  #  sign_name: 你的签名
-  #  template_id: "1234567"
-
-  # Paloud internal notification API
-  #provider:
-  #  type: paloud_internal
-  #  url: https://admin.example.com/api/v1/internal/notifications/sms/send
-  #  key_id: coauth-service
-  #  secret: super-secret
-  #  workspace: demo
+policy:
+  engine: cedar
+  cedar_policy_file: ./policies/policies.cedar
 ```
 
-`sms.provider.type` 支持 `blackhole`、`twilio`、`http_webhook`、
-`aliyun_sms`、`tencent_cloud_sms` 和 `paloud_internal`。
+当前项目原生支持 Cedar，也可以在编译相应 feature 后把决策委托给远端策略服务。
 
-### `telemetry` — 可观测性
+## `rate_limiting`
 
-```yaml
-telemetry:
-  tracing:
-    exporter: otlp           # none / stdout / otlp
-    endpoint: "https://otel-collector:4318"
-    propagators:
-      - tracecontext
-      - baggage
-  metrics:
-    exporter: prometheus      # none / stdout / otlp / prometheus
-```
-
-### `rate_limiting` — 速率限制
+登录、恢复、注册等流程的限流配置。
 
 ```yaml
 rate_limiting:
   login:
-    burst: 3                  # 突发允许次数
-    per_second: 0.5           # 每秒允许次数
-  registration:
-    burst: 3
-    per_second: 0.1
+    per_ip:
+      burst: 3
+      per_second: 0.05
+    per_account:
+      burst: 1800
+      per_second: 0.5
 ```
 
-### `captcha` — 验证码
+## `telemetry`
+
+Tracing、metrics 和 Sentry 错误上报。
 
 ```yaml
-captcha:
-  service: recaptcha_v2       # recaptcha_v2 / cloudflare_turnstile / hcaptcha
-  site_key: "你的站点密钥"
-  secret_key: "你的密钥"
+telemetry:
+  tracing:
+    exporter: otlp
+    endpoint: https://otel.example.com:4318
+  metrics:
+    exporter: prometheus
+  sentry:
+    dsn: https://public@host/1
 ```
 
-### `policy` — 策略引擎
+## `email`
 
-Pasion 支持多种策略引擎后端。详细文档请参阅[策略引擎](../topics/policy.md)。
-
-#### Cedar 后端（默认）
+邮件发送配置。
 
 ```yaml
-policy:
-  engine: cedar  # 默认值，可省略
-  cedar_policy_file: ./policies/policies.cedar
+email:
+  from: '"coauth" <noreply@example.com>'
+  provider:
+    type: resend
+    api_key: re_xxxxxxxxx
 ```
 
-#### Remote HTTP 后端
+支持的 provider family 包括 `blackhole`、`smtp`、`sendmail`、`resend`、
+`sendgrid`、`twilio`、`brevo`、`aws_ses` 和 `http_webhook`。
 
-需要编译时启用 `remote` 特性标志。
+## `sms`
+
+短信发送配置。
 
 ```yaml
-policy:
-  engine: remote
-  remote_endpoint: http://localhost:8181
+sms:
+  provider:
+    type: twilio
+    account_sid: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    auth_token: your-auth-token
+    from_number: "+12065550123"
 ```
 
-更多配置选项请参阅[完整英文参考文档](../../en/reference/configuration.md)。
+## `upstream_oauth2`
+
+用于联邦登录的受信任 upstream OAuth2 / OIDC provider。
+
+```yaml
+upstream_oauth2:
+  providers:
+    - id: 01HFVBY12TMNTYTBV8W921M5FA
+      issuer: https://accounts.google.com
+      client_id: your-client-id
+      client_secret: your-client-secret
+      token_endpoint_auth_method: client_secret_post
+      scope: "openid email profile"
+```
+
+这个配置段会和 `clients` 一样，在启动时同步到数据库。
+
+## `branding`
+
+服务名、Logo、页脚链接、隐私政策、服务条款等品牌化配置。
+
+```yaml
+branding:
+  service_name: Example Auth
+  logo_uri: https://assets.example.com/logo.svg
+  policy_uri: https://example.com/privacy
+  tos_uri: https://example.com/terms
+```
+
+## `experimental`
+
+还可能继续调整形态的实验性开关和时长参数。
+
+```yaml
+experimental:
+  access_token_ttl: 300
+  compat_token_ttl: 300
+```
+
+## `storage`
+
+文件或对象存储后端配置，用于上传资源和后续二进制工件。
+
+```yaml
+storage:
+  backend: fs
+```
