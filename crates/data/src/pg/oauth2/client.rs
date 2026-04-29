@@ -1,15 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-use oauth2_types::{oidc::ApplicationType, requests::GrantType};
 use coauth_data::{
     Client, Clock, JwksOrJwksUri, LocalizableField, LocalizedClientMetadata, new_id,
     oauth2::OAuth2ClientRepository,
 };
 use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
+use oauth2_types::{oidc::ApplicationType, requests::GrantType};
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;

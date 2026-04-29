@@ -3,11 +3,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use oauth2_types::scope::Scope;
 use coauth_data::{
     BoxClock, BoxRepository, RepositoryError, Session, TokenFormatError, TokenType, User,
     personal::session::{PersonalSession, PersonalSessionOwner},
 };
+use oauth2_types::scope::Scope;
 use salvo::{http::StatusCode, prelude::*};
 use ulid::Ulid;
 

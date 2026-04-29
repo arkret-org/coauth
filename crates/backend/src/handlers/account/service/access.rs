@@ -1,7 +1,7 @@
 use anyhow::Error as AnyhowError;
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError, SiteConfig,
-    UpstreamOAuthProvider, User,
+    UpstreamOAuthProvider, UrlBuilder, User,
     upstream_oauth2::UpstreamOAuthProviderRepository,
     user::{BrowserSessionRepository, UserPasswordRepository, UserRepository},
 };
@@ -12,7 +12,7 @@ use ulid::Ulid;
 use zeroize::Zeroizing;
 
 use crate::handlers::{
-    Limiter, RequesterFingerprint,
+    Limiter, RequesterFingerprint, contrix,
     passwords::{PasswordManager, PasswordVerificationResult},
 };
 
@@ -63,6 +63,7 @@ pub async fn login_with_password(
     password_manager: &PasswordManager,
     limiter: &Limiter,
     homeserver: &dyn HomeserverAdmin,
+    url_builder: &UrlBuilder,
     site_config: &SiteConfig,
     request: PasswordLoginRequest,
 ) -> Result<PasswordLoginOutcome, PasswordLoginError> {
@@ -70,11 +71,14 @@ pub async fn login_with_password(
         return Ok(PasswordLoginOutcome::Disabled);
     }
 
-    let username = homeserver
-        .localpart(&request.username_or_email)
-        .unwrap_or(&request.username_or_email);
-
-    let Some(user) = find_user_by_email_or_by_username(site_config, &mut repo, username).await?
+    let Some(user) = find_user_by_login_identifier(
+        site_config,
+        homeserver,
+        url_builder,
+        &mut repo,
+        &request.username_or_email,
+    )
+    .await?
     else {
         return Ok(PasswordLoginOutcome::InvalidCredentials);
     };
@@ -190,4 +194,25 @@ async fn find_user_by_email_or_by_username(
     }
 
     repo.user().find_by_username(username_or_email).await
+}
+
+async fn find_user_by_login_identifier(
+    site_config: &SiteConfig,
+    homeserver: &dyn HomeserverAdmin,
+    url_builder: &UrlBuilder,
+    repo: &mut BoxRepository,
+    identifier: &str,
+) -> Result<Option<User>, RepositoryError> {
+    if let Some(user_id) = contrix::parse_local_user_did(url_builder, identifier) {
+        return repo.user().lookup(user_id).await;
+    }
+
+    if let Some(username) = contrix::parse_local_handle(url_builder, identifier)
+        && let Some(user) = repo.user().find_by_username(&username).await?
+    {
+        return Ok(Some(user));
+    }
+
+    let username_or_email = homeserver.localpart(identifier).unwrap_or(identifier);
+    find_user_by_email_or_by_username(site_config, repo, username_or_email).await
 }

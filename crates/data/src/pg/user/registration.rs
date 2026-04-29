@@ -2,14 +2,14 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-use ipnetwork::IpNetwork;
 use coauth_data::{
     Clock, UpstreamOAuthAuthorizationSession, UserEmailAuthentication, UserPhoneAuthentication,
     UserRegistration, UserRegistrationPassword, UserRegistrationToken, new_id,
     user::UserRegistrationRepository,
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
+use ipnetwork::IpNetwork;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
@@ -545,8 +545,6 @@ struct UuidRow {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use ipnetwork::IpNetwork;
-    use oauth2_types::scope::Scope;
     use coauth_data::{
         Clock, RepositoryAccess as _, RepositoryFactory as _, RepositoryTransaction as _,
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
@@ -555,6 +553,8 @@ mod tests {
         clock::MockClock, upstream_oauth2::UpstreamOAuthProviderParams,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
+    use ipnetwork::IpNetwork;
+    use oauth2_types::scope::Scope;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use uuid::Uuid;

@@ -10,7 +10,6 @@ pub use session::PgPersonalSessionRepository;
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use oauth2_types::scope::{OPENID, PROFILE, Scope};
     use coauth_data::{
         Clock, Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
         RepositoryTransaction as _,
@@ -21,6 +20,7 @@ mod tests {
         },
         user::UserRepository,
     };
+    use oauth2_types::scope::{OPENID, PROFILE, Scope};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 

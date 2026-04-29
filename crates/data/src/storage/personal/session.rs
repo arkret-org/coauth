@@ -2,7 +2,6 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use oauth2_types::scope::Scope;
 use coauth_data::{
     Client, Clock, User,
     personal::{
@@ -10,6 +9,7 @@ use coauth_data::{
         session::{PersonalSession, PersonalSessionOwner},
     },
 };
+use oauth2_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 

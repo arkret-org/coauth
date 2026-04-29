@@ -403,9 +403,9 @@ pub async fn update_token(
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
+    use coauth_data::Clock as _;
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
-    use coauth_data::Clock as _;
     use serde_json::json;
     use ulid::Ulid;
 

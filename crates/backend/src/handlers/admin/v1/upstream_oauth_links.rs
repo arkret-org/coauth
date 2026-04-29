@@ -22,13 +22,13 @@ use crate::{
 
 #[cfg(test)]
 mod test_utils {
-    use oauth2_types::scope::{OPENID, Scope};
     use coauth_data::{
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
         UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
         UpstreamOAuthProviderTokenAuthMethod, upstream_oauth2::UpstreamOAuthProviderParams,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
+    use oauth2_types::scope::{OPENID, Scope};
 
     pub(crate) fn oidc_provider_params(name: &str) -> UpstreamOAuthProviderParams {
         UpstreamOAuthProviderParams {
@@ -490,13 +490,13 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use hyper::{Request, StatusCode};
-    use insta::assert_json_snapshot;
     use coauth_data::{
         RepositoryAccess, UpstreamOAuthAuthorizationSessionState,
         upstream_oauth2::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
         user::UserRepository,
     };
+    use hyper::{Request, StatusCode};
+    use insta::assert_json_snapshot;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use ulid::Ulid;

@@ -2,14 +2,14 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
 use coauth_data::{
     Authentication, AuthenticationMethod, BrowserSession, Clock, Page, Pagination, Password,
     UpstreamOAuthAuthorizationSession, User, new_id,
     pagination::{Node, PaginationDirection},
     user::{BrowserSessionFilter, BrowserSessionRepository},
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;

@@ -2,12 +2,12 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
 use coauth_data::{
     Clock, new_id,
     notification::{NotificationChannel, NotificationTemplateVersion},
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use uuid::Uuid;
 

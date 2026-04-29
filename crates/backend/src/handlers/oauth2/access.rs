@@ -1,6 +1,5 @@
 use std::{net::IpAddr, time::Duration};
 
-use oauth2_types::requests::AuthorizationResponse;
 use coauth_data::{
     AuthorizationGrant, AuthorizationGrantStage, BoxClock, BoxRepository, BoxRng, BrowserSession,
     Client, Clock, MatrixUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
@@ -13,6 +12,7 @@ use coauth_data::{
 use coauth_keystore::Keystore;
 use coauth_matrix::HomeserverAdmin;
 use coauth_policy::{Policy, PolicyFactory};
+use oauth2_types::requests::AuthorizationResponse;
 use thiserror::Error;
 use ulid::Ulid;
 

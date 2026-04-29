@@ -2,9 +2,9 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::Parser;
-use figment::Figment;
 use coauth_backend::util::{database_url_from_config, diesel_pool_from_config};
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig};
+use figment::Figment;
 use tracing::info_span;
 
 #[derive(Parser, Debug)]

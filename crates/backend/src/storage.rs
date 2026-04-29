@@ -5,8 +5,8 @@
 
 use std::{sync::OnceLock, time::Duration};
 
-use opendal::{Operator, layers::LoggingLayer};
 use coauth_config::StorageConfig;
+use opendal::{Operator, layers::LoggingLayer};
 
 static OPERATOR: OnceLock<Operator> = OnceLock::new();
 static REDIRECT_CONFIG: OnceLock<Option<RedirectConfig>> = OnceLock::new();

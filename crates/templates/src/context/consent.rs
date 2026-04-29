@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use chrono::Duration;
-use oauth2_types::scope::OPENID;
 use coauth_data::{AuthorizationGrant, Client, DeviceCodeGrant, MatrixUser, PostAuthAction};
+use oauth2_types::scope::OPENID;
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 

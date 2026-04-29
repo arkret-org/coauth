@@ -11,6 +11,7 @@ use super::{
 };
 use crate::{
     handlers::account::service::connections::load_linked_accounts,
+    handlers::contrix,
     services::user_profile::{UserProfileServiceError, load_viewer_profile},
 };
 
@@ -34,6 +35,8 @@ enum ViewerData {
 struct ViewerUser {
     id: String,
     username: String,
+    did: String,
+    handle: String,
     can_request_admin: bool,
     has_password: bool,
     profile: UserProfileData,
@@ -109,6 +112,7 @@ pub async fn get_viewer(
 ) -> Result<Json<ViewerResponse>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
+    let url_builder = depot.url_builder()?;
     let homeserver = depot.homeserver()?;
     let clock = make_clock();
 
@@ -168,6 +172,8 @@ pub async fn get_viewer(
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
                 username: user.username.clone(),
+                did: contrix::user_did(&url_builder, user),
+                handle: contrix::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,
                 profile: UserProfileData {

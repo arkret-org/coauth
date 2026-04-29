@@ -1,15 +1,15 @@
 use std::{collections::HashMap, error::Error, sync::LazyLock};
 
+use coauth_data::{
+    Clock, RepositoryAccess, Session,
+    oauth2::{OAuth2AccessTokenRepository, OAuth2SessionRepository},
+};
 use headers::{
     Header, HeaderMapExt, HeaderName,
     authorization::{Bearer, Credentials},
 };
 use http::{HeaderMap, HeaderValue, StatusCode, header::WWW_AUTHENTICATE};
 use oauth2_types::scope::ScopeToken;
-use coauth_data::{
-    Clock, RepositoryAccess, Session,
-    oauth2::{OAuth2AccessTokenRepository, OAuth2SessionRepository},
-};
 use salvo::{
     extract::{Extractible, Metadata},
     prelude::*,

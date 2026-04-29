@@ -5,8 +5,8 @@
 
 use std::sync::Arc;
 
-use headers::HeaderMapExt as _;
 use coauth_i18n::{DataLocale, Translator, locale};
+use headers::HeaderMapExt as _;
 use salvo::prelude::*;
 
 use crate::salvo_utils::language_detection::AcceptLanguage;

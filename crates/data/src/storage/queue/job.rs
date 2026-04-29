@@ -2,8 +2,8 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use opentelemetry::trace::TraceContextExt;
 use coauth_data::Clock;
+use opentelemetry::trace::TraceContextExt;
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use tracing_opentelemetry::OpenTelemetrySpanExt;

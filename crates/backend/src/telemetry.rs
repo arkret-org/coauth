@@ -1,6 +1,10 @@
 use std::sync::{LazyLock, OnceLock};
 
 use anyhow::Context as _;
+use coauth_config::{
+    MetricsConfig, MetricsExporterKind, Propagator, TelemetryConfig, TracingConfig,
+    TracingExporterKind,
+};
 use hyper::header::CONTENT_TYPE;
 use opentelemetry::{
     InstrumentationScope, KeyValue,
@@ -20,10 +24,6 @@ use opentelemetry_sdk::{
     },
 };
 use opentelemetry_semantic_conventions as semcov;
-use coauth_config::{
-    MetricsConfig, MetricsExporterKind, Propagator, TelemetryConfig, TracingConfig,
-    TracingExporterKind,
-};
 
 static SCOPE: LazyLock<InstrumentationScope> = LazyLock::new(|| {
     InstrumentationScope::builder(env!("CARGO_PKG_NAME"))

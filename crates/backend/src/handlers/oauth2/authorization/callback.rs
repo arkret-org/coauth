@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
-use oauth2_types::requests::ResponseMode;
 use coauth_data::AuthorizationGrant;
 use coauth_i18n::DataLocale;
 use coauth_templates::{FormPostContext, Templates};
+use oauth2_types::requests::ResponseMode;
 use salvo::{
     prelude::*,
     writing::{Redirect, Text},

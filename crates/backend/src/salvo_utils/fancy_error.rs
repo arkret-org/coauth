@@ -1,5 +1,5 @@
-use http::StatusCode;
 use coauth_templates::ErrorContext;
+use http::StatusCode;
 use salvo::prelude::*;
 
 use super::sentry::SentryEventID;

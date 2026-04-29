@@ -1,14 +1,14 @@
 use std::sync::{Arc, LazyLock};
 
+use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock, UrlBuilder};
+use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
+use coauth_keystore::Encrypter;
+use coauth_matrix::HomeserverAdmin;
 use oauth2_types::{
     errors::{ClientError, ClientErrorCode},
     requests::{IntrospectionRequest, IntrospectionResponse},
 };
 use opentelemetry::{Key, KeyValue, metrics::Counter};
-use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock};
-use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
-use coauth_keystore::Encrypter;
-use coauth_matrix::HomeserverAdmin;
 use salvo::{Extractible, prelude::*};
 use thiserror::Error;
 use ulid::Ulid;
@@ -184,6 +184,9 @@ async fn handle_post(
     let activity_tracker = depot
         .get::<ActivityTracker>("activity_tracker")
         .expect("ActivityTracker not found in depot");
+    let url_builder = depot
+        .get::<UrlBuilder>("url_builder")
+        .expect("UrlBuilder not found in depot");
 
     let clock: BoxClock = Box::new(SystemClock::default());
 
@@ -227,6 +230,7 @@ async fn handle_post(
     let reply = introspection_service::introspect_token(
         &mut repo,
         &*clock,
+        url_builder,
         activity_tracker,
         &form.token,
         form.token_type_hint,

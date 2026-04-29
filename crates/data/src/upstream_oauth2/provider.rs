@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use oauth2_types::scope::Scope;
 use coauth_iana::jose::JsonWebSignatureAlg;
+use oauth2_types::scope::Scope;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ulid::Ulid;

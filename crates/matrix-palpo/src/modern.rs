@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
 use anyhow::Context as _;
-use http::{Method, StatusCode};
 use coauth_matrix::{
     ConnectorCapabilities, ConnectorProvider, HomeserverAdmin, MatrixUser, ProvisionRequest,
 };
+use http::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use url::Url;

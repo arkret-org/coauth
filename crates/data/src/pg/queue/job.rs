@@ -3,15 +3,15 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
+use coauth_data::{
+    Clock, new_id,
+    queue::{AbandonedJob, Job, QueueJobRepository, Worker},
+};
 use diesel::{
     prelude::*,
     sql_types::{Array, BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid},
 };
 use diesel_async::RunQueryDsl;
-use coauth_data::{
-    Clock, new_id,
-    queue::{AbandonedJob, Job, QueueJobRepository, Worker},
-};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;

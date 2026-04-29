@@ -373,12 +373,12 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use hyper::{Request, StatusCode};
-    use insta::assert_json_snapshot;
     use coauth_data::{
         RepositoryAccess,
         user::{UserEmailRepository, UserRepository},
     };
+    use hyper::{Request, StatusCode};
+    use insta::assert_json_snapshot;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use ulid::Ulid;

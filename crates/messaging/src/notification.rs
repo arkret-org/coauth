@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use lettre::message::Mailbox;
 use coauth_templates::{EmailRecoveryContext, EmailVerificationContext, WithLanguage};
+use lettre::message::Mailbox;
 use thiserror::Error;
 
 use crate::{

@@ -2,8 +2,6 @@ use std::{process::ExitCode, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use clap::Parser;
-use figment::Figment;
-use itertools::Itertools;
 use coauth_backend::{
     app_state::AppState,
     handlers::{ActivityTracker, CookieManager, Limiter, MetadataCache},
@@ -22,6 +20,8 @@ use coauth_config::{
     UpstreamOAuth2Config,
 };
 use coauth_data::{PgRepositoryFactory, SystemClock, UrlBuilder};
+use figment::Figment;
+use itertools::Itertools;
 use tracing::{info, info_span, warn};
 
 #[allow(clippy::struct_excessive_bools)]

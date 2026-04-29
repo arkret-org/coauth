@@ -12,12 +12,12 @@ use std::{
 };
 
 use chrono::Timelike as _;
+use coauth_data::UrlBuilder;
+use coauth_i18n::{DataLocale, Translator};
 use minijinja::{
     Error, ErrorKind, State, Value,
     value::{Kwargs, Object, ViaDeserialize, from_args},
 };
-use coauth_data::UrlBuilder;
-use coauth_i18n::{DataLocale, Translator};
 use url::Url;
 
 /// Populate the given minijinja [`Environment`](minijinja::Environment) with

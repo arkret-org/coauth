@@ -10,7 +10,6 @@ use std::{net::IpAddr, str::FromStr};
 
 use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Duration, Utc};
-use lettre::Address;
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError,
     UpstreamOAuthAuthorizationSession, UpstreamOAuthLink, User, UserEmailAuthentication,
@@ -25,6 +24,7 @@ use coauth_data::{
 };
 use coauth_matrix::HomeserverAdmin;
 use coauth_policy::PolicyFactory;
+use lettre::Address;
 use rand_chacha::rand_core::CryptoRngCore;
 use serde_json::Value;
 use thiserror::Error;

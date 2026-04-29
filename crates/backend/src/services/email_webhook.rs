@@ -3,12 +3,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context, anyhow};
 use base64ct::{Base64, Encoding};
 use chrono::{TimeZone, Utc};
-use der::{DecodePem as _, Encode as _};
-use hmac::{Hmac, Mac};
-use http::HeaderMap;
-use p256::ecdsa::{
-    Signature as P256Signature, VerifyingKey as P256VerifyingKey, signature::Verifier as _,
-};
 use coauth_config::{
     AwsSesEmailProviderConfig, AwsSesWebhookConfig, BrevoWebhookConfig, EmailConfig,
     EmailProviderConfig, ResendWebhookConfig, SendgridWebhookConfig,
@@ -19,6 +13,12 @@ use coauth_data::{
     NotificationRequestStatus, RepositoryAccess, notification::NewNotificationEventLog,
 };
 use coauth_messaging::email::DELIVERY_ID_TAG;
+use der::{DecodePem as _, Encode as _};
+use hmac::{Hmac, Mac};
+use http::HeaderMap;
+use p256::ecdsa::{
+    Signature as P256Signature, VerifyingKey as P256VerifyingKey, signature::Verifier as _,
+};
 use pkcs8::DecodePublicKey;
 use rand_core::RngCore;
 use rsa::{

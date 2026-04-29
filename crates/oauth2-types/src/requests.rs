@@ -15,8 +15,8 @@
 use std::{collections::HashSet, fmt, hash::Hash, num::NonZeroU32};
 
 use chrono::{DateTime, Duration, Utc};
-use language_tags::LanguageTag;
 use coauth_iana::oauth::{OAuthAccessTokenType, OAuthTokenTypeHint};
+use language_tags::LanguageTag;
 use serde::{Deserialize, Serialize};
 use serde_with::{
     DeserializeFromStr, DisplayFromStr, DurationSeconds, SerializeDisplay, StringWithSeparator,

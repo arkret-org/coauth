@@ -2,13 +2,13 @@
 
 use std::collections::BTreeMap;
 
-use oauth2_types::scope::{OPENID, Scope};
 use coauth_data::{
     PostAuthAction, UpstreamOAuthLink, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
     UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
     UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod, User,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
+use oauth2_types::scope::{OPENID, Scope};
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;

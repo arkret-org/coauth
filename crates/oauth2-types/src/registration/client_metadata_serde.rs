@@ -1,10 +1,10 @@
 use chrono::Duration;
-use language_tags::LanguageTag;
 use coauth_iana::{
     jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg},
     oauth::OAuthClientAuthenticationMethod,
 };
 use coauth_jose::jwk::PublicJsonWebKeySet;
+use language_tags::LanguageTag;
 use serde::{
     Deserialize, Serialize,
     de::{self, DeserializeOwned, MapAccess, Visitor},

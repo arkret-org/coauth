@@ -1,12 +1,12 @@
 use std::str::FromStr as _;
 
 use chrono::{DateTime, Utc};
+use coauth_iana::oauth::PkceCodeChallengeMethod;
 use oauth2_types::{
     pkce::{CodeChallengeError, CodeChallengeMethodExt},
     requests::ResponseMode,
     scope::{OPENID, PROFILE, Scope},
 };
-use coauth_iana::oauth::PkceCodeChallengeMethod;
 use rand_core::RngCore;
 use ruma_common::UserId;
 use serde::Serialize;

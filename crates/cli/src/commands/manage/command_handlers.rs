@@ -10,7 +10,6 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use chrono::Duration;
-use figment::Figment;
 use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config};
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
 use coauth_data::{
@@ -25,6 +24,7 @@ use coauth_data::{
         UserRepository,
     },
 };
+use figment::Figment;
 use rand_core::{RngCore, SeedableRng};
 use tracing::{error, info, info_span, warn};
 use zeroize::Zeroizing;

@@ -1,10 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
-use oauth2_types::{oidc::ApplicationType, requests::GrantType};
 use coauth_data::{Client, Clock, LocalizedClientMetadata};
 use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
+use oauth2_types::{oidc::ApplicationType, requests::GrantType};
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;

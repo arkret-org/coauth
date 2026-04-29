@@ -4,13 +4,13 @@
 
 use std::str::FromStr;
 
-use oauth2_types::scope::{Scope, ScopeToken};
 use coauth_data::{
     RepositoryAccess,
     audit::AdminOperation,
     oauth2::OAuth2SessionFilter,
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
 };
+use oauth2_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -347,8 +347,8 @@ pub async fn list_sessions(
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use hyper::{Request, StatusCode};
     use coauth_data::{AccessToken, Clock as _};
+    use hyper::{Request, StatusCode};
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};

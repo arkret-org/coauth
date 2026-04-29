@@ -10,9 +10,6 @@ use std::{collections::BTreeMap, process::ExitCode};
 
 use anyhow::Context;
 use clap::CommandFactory;
-use console::{Alignment, Style, Term, pad_str, style};
-use dialoguer::{Confirm, FuzzySelect, Input, Password, theme::ColorfulTheme};
-use figment::Figment;
 use coauth_backend::util::{
     diesel_pool_from_config, homeserver_connection_from_config, password_manager_from_config,
 };
@@ -26,6 +23,9 @@ use coauth_data::{
 };
 use coauth_matrix::HomeserverAdmin;
 use coauth_messaging::Address;
+use console::{Alignment, Style, Term, pad_str, style};
+use dialoguer::{Confirm, FuzzySelect, Input, Password, theme::ColorfulTheme};
+use figment::Figment;
 use rand_core::{RngCore, SeedableRng};
 use tracing::{info, warn};
 use zeroize::Zeroizing;

@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
+use coauth_data::{Clock, RepositoryAccess, queue::InsertableJob};
 use opentelemetry::{
     KeyValue,
     metrics::{Histogram, UpDownCounter},
 };
-use coauth_data::{Clock, RepositoryAccess, queue::InsertableJob};
 use rand_core::RngCore;
 use tokio::task::JoinSet;
 use tracing::Instrument as _;

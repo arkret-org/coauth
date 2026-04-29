@@ -103,6 +103,7 @@ pub async fn post(
         &password_manager,
         &limiter,
         homeserver.as_ref(),
+        &url_builder,
         &site_config,
         PasswordLoginRequest {
             username_or_email: form.username,

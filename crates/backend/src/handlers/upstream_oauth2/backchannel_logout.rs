@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use oauth2_types::errors::{ClientError, ClientErrorCode};
 use coauth_data::{
     Pagination, UpstreamOAuthProvider, UpstreamOAuthProviderOnBackchannelLogout,
     oauth2::OAuth2SessionFilter,
@@ -12,6 +11,7 @@ use coauth_jose::{
     claims::{self, Claim, TimeOptions},
     jwt::JwtDecodeError,
 };
+use oauth2_types::errors::{ClientError, ClientErrorCode};
 use salvo::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;

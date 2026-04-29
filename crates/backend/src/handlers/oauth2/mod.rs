@@ -36,6 +36,8 @@ use coauth_jose::{
 use coauth_keystore::Keystore;
 use thiserror::Error;
 
+use crate::handlers::contrix;
+
 /// Authorization endpoint (user consent and code issuance).
 pub mod authorization;
 /// Device authorization grant (RFC 8628).
@@ -87,7 +89,10 @@ pub(crate) fn generate_id_token(
     let mut claims = HashMap::new();
     let now = clock.now();
     claims::ISS.insert(&mut claims, url_builder.oidc_issuer().to_string())?;
-    claims::SUB.insert(&mut claims, &browser_session.user.sub)?;
+    claims::SUB.insert(
+        &mut claims,
+        contrix::user_did(url_builder, &browser_session.user),
+    )?;
     claims::AUD.insert(&mut claims, client.client_id.clone())?;
     claims::IAT.insert(&mut claims, now)?;
     claims::EXP.insert(&mut claims, now + Duration::try_hours(1).unwrap())?;
@@ -236,7 +241,7 @@ mod tests {
         );
         assert_eq!(
             payload.get("sub").and_then(Value::as_str),
-            Some(browser_session.user.sub.as_str())
+            Some(contrix::user_did(&url_builder, &browser_session.user).as_str())
         );
         assert_eq!(
             payload.get("aud").and_then(Value::as_str),

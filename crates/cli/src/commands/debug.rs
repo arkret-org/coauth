@@ -1,7 +1,6 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use figment::Figment;
 use coauth_backend::util::{
     diesel_pool_from_config, load_policy_factory_dynamic_data, policy_factory_from_config,
 };
@@ -10,6 +9,7 @@ use coauth_config::{
     MatrixConfig, PolicyConfig,
 };
 use coauth_data::PgRepositoryFactory;
+use figment::Figment;
 use tracing::{info, info_span};
 
 #[derive(Parser, Debug)]

@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
 use coauth_data::{
     Clock, User, UserPhone, UserPhoneAuthentication, UserPhoneAuthenticationCode, UserRegistration,
     new_id, user::UserPhoneRepository,
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;

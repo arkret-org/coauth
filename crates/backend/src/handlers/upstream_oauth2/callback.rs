@@ -1,7 +1,5 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use oauth2_types::{errors::ClientErrorCode, requests::AccessTokenRequest};
-use opentelemetry::{Key, KeyValue, metrics::Counter};
 use coauth_data::{
     Clock, UpstreamOAuthProvider, UpstreamOAuthProviderResponseMode,
     upstream_oauth2::{
@@ -11,6 +9,8 @@ use coauth_data::{
 };
 use coauth_jose::claims::TokenHash;
 use coauth_templates::FormPostContext;
+use oauth2_types::{errors::ClientErrorCode, requests::AccessTokenRequest};
+use opentelemetry::{Key, KeyValue, metrics::Counter};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;

@@ -1,9 +1,3 @@
-use oauth2_types::{
-    errors::{ClientError, ClientErrorCode},
-    pkce,
-    requests::{AuthorizationRequest, GrantType, Prompt, ResponseMode},
-    response_type::ResponseType,
-};
 use coauth_data::{
     AuthorizationCode, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, Pkce, PostAuthAction,
     RepositoryAccess, SystemClock, UrlBuilder,
@@ -13,6 +7,12 @@ use coauth_data::{
     },
 };
 use coauth_templates::Templates;
+use oauth2_types::{
+    errors::{ClientError, ClientErrorCode},
+    pkce,
+    requests::{AuthorizationRequest, GrantType, Prompt, ResponseMode},
+    response_type::ResponseType,
+};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::prelude::*;

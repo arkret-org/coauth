@@ -4,10 +4,10 @@ pub mod client_credentials;
 
 use std::collections::HashMap;
 
-pub use oauth2_types::*;
 #[doc(inline)]
 pub use coauth_iana as iana;
 use coauth_jose::jwt::Jwt;
+pub use oauth2_types::*;
 use serde_json::Value;
 
 /// An OpenID Connect [ID Token].

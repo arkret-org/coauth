@@ -13,7 +13,6 @@ pub use self::{
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use oauth2_types::scope::{OPENID, Scope};
     use coauth_data::{
         Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
         RepositoryTransaction as _, UpstreamOAuthLinkPatch, UpstreamOAuthProviderClaimsImports,
@@ -27,6 +26,7 @@ mod tests {
         user::UserRepository,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
+    use oauth2_types::scope::{OPENID, Scope};
     use rand_core::SeedableRng;
 
     use crate::PgRepositoryFactory;

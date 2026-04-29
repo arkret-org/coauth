@@ -6,8 +6,8 @@ use std::{
 };
 
 use chrono::Duration;
-use oauth2_types::scope::OPENID;
 use coauth_data::{Client, DeviceCodeGrant, MatrixUser};
+use oauth2_types::scope::OPENID;
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 

@@ -18,15 +18,15 @@ pub use self::{
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use oauth2_types::{
-        requests::{GrantType, ResponseMode},
-        scope::{EMAIL, OPENID, PROFILE, Scope},
-    };
     use coauth_data::{
         AuthorizationCode, Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _,
         RepositoryTransaction as _,
         clock::MockClock,
         oauth2::{OAuth2DeviceCodeGrantParams, OAuth2SessionFilter, OAuth2SessionRepository},
+    };
+    use oauth2_types::{
+        requests::{GrantType, ResponseMode},
+        scope::{EMAIL, OPENID, PROFILE, Scope},
     };
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;

@@ -11,8 +11,8 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::Parser;
-use figment::Figment;
 use coauth_config::{ConfigurationSection, RootConfig};
+use figment::Figment;
 use tracing::{info, info_span, warn};
 use url::Host;
 

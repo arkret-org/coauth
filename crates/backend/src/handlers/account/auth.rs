@@ -17,6 +17,7 @@ use crate::{
             PasswordLoginOutcome, PasswordLoginRequest, load_enabled_upstream_providers,
             login_with_password, logout_browser_session,
         },
+        contrix,
     },
     salvo_utils::session::SessionInfoExt,
 };
@@ -47,14 +48,26 @@ pub struct LoginResponse {
     pub error: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewer: Option<ViewerInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_grant: Option<SessionGrantInfo>,
 }
 
 #[derive(Serialize, ToSchema)]
 pub struct ViewerInfo {
     pub id: String,
     pub username: String,
+    pub did: String,
+    pub handle: String,
     pub mxid: String,
     pub display_name: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct SessionGrantInfo {
+    pub grant_jwt: String,
+    pub session_public_key: String,
+    pub session_private_key_pem: String,
+    pub expires_at: String,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -88,6 +101,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let clock = make_clock();
     let password_manager = depot.password_manager()?;
     let site_config = depot.site_config()?;
+    let url_builder = depot.url_builder()?;
+    let key_store = depot.key_store()?;
     let limiter = depot.limiter()?;
     let homeserver = depot.homeserver()?;
     let repo = depot.repo().await?;
@@ -115,6 +130,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             status: "error",
             error: Some("invalid_credentials"),
             viewer: None,
+            session_grant: None,
         }));
         return Ok(());
     }
@@ -126,6 +142,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         &password_manager,
         &limiter,
         homeserver.as_ref(),
+        &url_builder,
         &site_config,
         PasswordLoginRequest {
             username_or_email: input.username,
@@ -149,6 +166,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 status: "error",
                 error: Some("password_login_disabled"),
                 viewer: None,
+                session_grant: None,
             }));
             Ok(())
         }
@@ -158,6 +176,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 status: "error",
                 error: Some("invalid_credentials"),
                 viewer: None,
+                session_grant: None,
             }));
             Ok(())
         }
@@ -168,6 +187,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 status: "error",
                 error: Some("rate_limited"),
                 viewer: None,
+                session_grant: None,
             }));
             Ok(())
         }
@@ -177,6 +197,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 status: "error",
                 error: Some("account_deactivated"),
                 viewer: None,
+                session_grant: None,
             }));
             Ok(())
         }
@@ -186,6 +207,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 status: "error",
                 error: Some("account_locked"),
                 viewer: None,
+                session_grant: None,
             }));
             Ok(())
         }
@@ -201,6 +223,15 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
+            let session_grant = contrix::issue_session_grant(
+                &mut rng,
+                &clock,
+                &url_builder,
+                &key_store,
+                &user_session,
+                vec!["session.bind".to_owned()],
+            )
+            .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
             cookie_jar.finalize(
                 res,
@@ -210,8 +241,16 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
                         username: user.username.clone(),
+                        did: contrix::user_did(&url_builder, &user),
+                        handle: contrix::user_handle(&url_builder, &user),
                         mxid: homeserver.mxid(&user.username),
                         display_name,
+                    }),
+                    session_grant: Some(SessionGrantInfo {
+                        grant_jwt: session_grant.grant_jwt,
+                        session_public_key: session_grant.session_public_key,
+                        session_private_key_pem: session_grant.session_private_key_pem,
+                        expires_at: session_grant.expires_at,
                     }),
                 }),
             );

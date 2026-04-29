@@ -9,11 +9,11 @@
 
 use std::{fmt, ops::Deref};
 
-use language_tags::LanguageTag;
 use coauth_iana::{
     jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg},
     oauth::{OAuthAccessTokenType, OAuthClientAuthenticationMethod, PkceCodeChallengeMethod},
 };
+use language_tags::LanguageTag;
 use serde::{Deserialize, Serialize};
 use serde_with::{
     DeserializeFromStr, SerializeDisplay, StringWithSeparator, formats::SpaceSeparator, serde_as,

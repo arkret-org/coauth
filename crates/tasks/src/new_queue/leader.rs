@@ -1,8 +1,8 @@
 use chrono::Duration;
+use coauth_data::{DatabaseError, PgRepository, RepositoryAccess, queue::InsertableJob};
 use cron::Schedule;
 use diesel::{sql_query, sql_types::Bool};
 use diesel_async::RunQueryDsl;
-use coauth_data::{DatabaseError, PgRepository, RepositoryAccess, queue::InsertableJob};
 
 use super::{QueueRunnerError, shared::MAX_ATTEMPTS};
 use crate::State;

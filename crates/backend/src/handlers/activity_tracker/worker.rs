@@ -6,12 +6,12 @@
 use std::{collections::HashMap, net::IpAddr};
 
 use chrono::{DateTime, Utc};
+use coauth_data::{
+    BoxRepositoryFactory, RepositoryAccess, RepositoryError, user::BrowserSessionRepository,
+};
 use opentelemetry::{
     Key, KeyValue,
     metrics::{Counter, Gauge, Histogram},
-};
-use coauth_data::{
-    BoxRepositoryFactory, RepositoryAccess, RepositoryError, user::BrowserSessionRepository,
 };
 use tokio_util::sync::CancellationToken;
 use ulid::Ulid;

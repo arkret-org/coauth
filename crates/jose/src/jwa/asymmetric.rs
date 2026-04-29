@@ -1,8 +1,8 @@
-use digest::Digest;
-use elliptic_curve::sec1::ToEncodedPoint;
 use coauth_iana::jose::{
     JsonWebKeyEcEllipticCurve, JsonWebKeyOkpEllipticCurve, JsonWebSignatureAlg,
 };
+use digest::Digest;
+use elliptic_curve::sec1::ToEncodedPoint;
 use sha2::{Sha256, Sha384, Sha512};
 use signature::{Signer as _, rand_core::CryptoRngCore};
 use thiserror::Error;

@@ -2,13 +2,13 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
 use coauth_data::{
     AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType,
     account::{AccountRepository, AccountSecuritySummary},
     audit::AccountSecurityEvent,
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use ulid::Ulid;
 use uuid::Uuid;
 

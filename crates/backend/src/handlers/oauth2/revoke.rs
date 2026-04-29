@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock};
+use coauth_keystore::Encrypter;
+use coauth_matrix::HomeserverAdmin;
 use oauth2_types::{
     errors::{ClientError, ClientErrorCode},
     requests::RevocationRequest,
 };
-use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock};
-use coauth_keystore::Encrypter;
-use coauth_matrix::HomeserverAdmin;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::{Extractible, prelude::*};

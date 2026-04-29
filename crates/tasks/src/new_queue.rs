@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
+use coauth_data::queue::{InsertableJob, Worker};
 use cron::Schedule;
 use opentelemetry::metrics::{Counter, Histogram};
-use coauth_data::queue::{InsertableJob, Worker};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 

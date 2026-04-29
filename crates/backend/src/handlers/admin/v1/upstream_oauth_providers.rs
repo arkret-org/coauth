@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use oauth2_types::scope::Scope;
 use coauth_data::{
     RepositoryAccess, UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
     UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
@@ -14,6 +13,7 @@ use coauth_data::{
     },
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
+use oauth2_types::scope::Scope;
 use salvo::{http::StatusCode, prelude::*};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -527,8 +527,6 @@ pub async fn enable_provider(
 
 #[cfg(test)]
 mod tests {
-    use hyper::{Request, StatusCode};
-    use oauth2_types::scope::{OPENID, Scope};
     use coauth_data::{
         RepositoryAccess, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
         UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
@@ -536,6 +534,8 @@ mod tests {
         upstream_oauth2::{UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository},
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
+    use hyper::{Request, StatusCode};
+    use oauth2_types::scope::{OPENID, Scope};
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};

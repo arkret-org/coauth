@@ -1,6 +1,4 @@
 use chrono::Duration;
-use diesel_async::RunQueryDsl;
-use oauth2_types::scope::{OPENID, Scope};
 use coauth_data::{
     Clock, Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
     RepositoryTransaction as _, UserEmailPatch, UserPatch, UserProfilePatch,
@@ -12,6 +10,8 @@ use coauth_data::{
     },
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
+use diesel_async::RunQueryDsl;
+use oauth2_types::scope::{OPENID, Scope};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 

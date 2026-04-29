@@ -1,5 +1,5 @@
-use oauth2_types::webfinger::WebFingerResponse;
 use coauth_data::UrlBuilder;
+use oauth2_types::webfinger::WebFingerResponse;
 use salvo::prelude::*;
 use serde::Deserialize;
 

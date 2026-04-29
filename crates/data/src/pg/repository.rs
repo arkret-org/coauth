@@ -1,9 +1,4 @@
 use async_trait::async_trait;
-use diesel_async::{
-    AsyncPgConnection, RunQueryDsl as _,
-    pooled_connection::deadpool::{Object as PooledConnection, Pool},
-};
-use futures_util::{FutureExt, future::BoxFuture};
 use coauth_data::{
     BoxRepository, BoxRepositoryFactory, MapErr, Repository, RepositoryAccess, RepositoryError,
     RepositoryFactory, RepositoryTransaction,
@@ -29,6 +24,11 @@ use coauth_data::{
     },
     workflow::WorkflowRepository,
 };
+use diesel_async::{
+    AsyncPgConnection, RunQueryDsl as _,
+    pooled_connection::deadpool::{Object as PooledConnection, Pool},
+};
+use futures_util::{FutureExt, future::BoxFuture};
 use tracing::Instrument;
 
 use crate::{

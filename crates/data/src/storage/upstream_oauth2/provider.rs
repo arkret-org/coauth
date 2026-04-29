@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
-use oauth2_types::scope::Scope;
 use coauth_data::{
     Clock, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
     UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
@@ -9,6 +8,7 @@ use coauth_data::{
     UpstreamOAuthProviderTokenAuthMethod,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
+use oauth2_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;

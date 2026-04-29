@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
 use coauth_data::{
     Clock, Page, Pagination, UpstreamOAuthLink, UpstreamOAuthLinkPatch, UpstreamOAuthProvider,
     User, new_id,
     pagination::{Node, PaginationDirection},
     upstream_oauth2::{UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository},
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;

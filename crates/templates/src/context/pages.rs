@@ -3,8 +3,8 @@
 
 use std::{collections::BTreeMap, fmt::Formatter};
 
-use http::{Method, Uri, Version};
 use coauth_data::{UrlBuilder, User};
+use http::{Method, Uri, Version};
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 

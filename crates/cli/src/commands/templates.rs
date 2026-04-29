@@ -10,13 +10,13 @@ use anyhow::{Context as _, bail};
 use camino::Utf8PathBuf;
 use chrono::DateTime;
 use clap::Parser;
-use figment::Figment;
 use coauth_backend::util::{site_config_from_config, templates_from_config};
 use coauth_config::{
     AccountConfig, BrandingConfig, CaptchaConfig, ConfigurationSection, ConfigurationSectionExt,
     ExperimentalConfig, MatrixConfig, PasswordsConfig, SmsConfig, TemplatesConfig,
 };
 use coauth_data::{Clock, SystemClock};
+use figment::Figment;
 use rand_core::SeedableRng;
 use tracing::info_span;
 

@@ -15,15 +15,15 @@
 
 use std::sync::{Arc, LazyLock};
 
-use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
-use new_queue::QueueRunnerError;
-use opentelemetry::metrics::Meter;
 use coauth_data::{
     BoxRepository, Clock, PgRepositoryFactory, RepositoryError, RepositoryFactory, SiteConfig,
     UrlBuilder,
 };
 use coauth_matrix::HomeserverAdmin;
 use coauth_messaging::NotificationCenter;
+use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
+use new_queue::QueueRunnerError;
+use opentelemetry::metrics::Meter;
 use rand_core::SeedableRng;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 

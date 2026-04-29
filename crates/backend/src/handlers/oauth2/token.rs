@@ -1,10 +1,5 @@
 use std::sync::{Arc, LazyLock};
 
-use oauth2_types::{
-    errors::{ClientError, ClientErrorCode},
-    requests::{AccessTokenRequest, AccessTokenResponse},
-};
-use opentelemetry::{Key, KeyValue, metrics::Counter};
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SiteConfig, SystemClock, UrlBuilder,
 };
@@ -12,6 +7,11 @@ use coauth_keystore::Keystore;
 use coauth_matrix::HomeserverAdmin;
 use coauth_policy::Policy;
 use coauth_templates::Templates;
+use oauth2_types::{
+    errors::{ClientError, ClientErrorCode},
+    requests::{AccessTokenRequest, AccessTokenResponse},
+};
+use opentelemetry::{Key, KeyValue, metrics::Counter};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::{Extractible, prelude::*};

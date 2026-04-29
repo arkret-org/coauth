@@ -2,9 +2,6 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-use oauth2_types::scope::Scope;
 use coauth_data::{
     Clock, Page, Pagination, User, new_id,
     pagination::{Node, PaginationDirection},
@@ -14,6 +11,9 @@ use coauth_data::{
         session::{PersonalSession, PersonalSessionOwner, SessionState},
     },
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
+use oauth2_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;

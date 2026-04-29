@@ -2,16 +2,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use diesel::{sql_query, sql_types::Bool};
-use diesel_async::{
-    AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object as PooledConnection,
-};
 use coauth_config::{ClientsConfig, UpstreamOAuth2Config};
 use coauth_data::{
     Clock, Pagination, PgRepository, RepositoryAccess, UpstreamOAuthProviderSource,
     upstream_oauth2::{UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams},
 };
 use coauth_keystore::Encrypter;
+use diesel::{sql_query, sql_types::Bool};
+use diesel_async::{
+    AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object as PooledConnection,
+};
 use tracing::{error, info, info_span, warn};
 
 /// Result of a `pg_try_advisory_lock` query

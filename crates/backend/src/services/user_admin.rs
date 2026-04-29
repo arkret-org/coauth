@@ -1,7 +1,6 @@
 use std::str::FromStr as _;
 
 use anyhow::Error as AnyhowError;
-use lettre::address::AddressError;
 use coauth_data::{
     AdminUserPatch, BoxRepository, Clock, RepositoryAccess, RepositoryError, UpstreamOAuthLink,
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
@@ -11,6 +10,7 @@ use coauth_data::{
     user::{UserEmailRepository, UserRepository},
 };
 use coauth_matrix::HomeserverAdmin;
+use lettre::address::AddressError;
 use rand_core::RngCore;
 use thiserror::Error;
 use ulid::Ulid;

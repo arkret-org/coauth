@@ -1,7 +1,6 @@
 use std::net::IpAddr;
 
 use anyhow::Error as AnyhowError;
-use minijinja::Environment;
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, Pagination, PostAuthAction, RepositoryAccess,
     RepositoryError, SiteConfig, UpstreamOAuthAuthorizationSession, UpstreamOAuthLink,
@@ -17,6 +16,7 @@ use coauth_data::{
 use coauth_jose::jwt::Jwt;
 use coauth_matrix::HomeserverAdmin;
 use coauth_policy::{Policy, RegisterInput, RegistrationMethod, Requester as PolicyRequester};
+use minijinja::Environment;
 use rand_core::RngCore;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use thiserror::Error;

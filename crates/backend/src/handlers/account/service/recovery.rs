@@ -9,12 +9,12 @@
 use std::{net::IpAddr, str::FromStr};
 
 use anyhow::{Context as _, Error as AnyhowError};
-use lettre::Address;
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, UserRecoverySession,
     UserRecoveryTicket,
     user::{UserEmailRepository, UserPasswordRepository, UserRecoveryRepository, UserRepository},
 };
+use lettre::Address;
 use rand_chacha::rand_core::CryptoRngCore;
 use rand_core::RngCore;
 use thiserror::Error;

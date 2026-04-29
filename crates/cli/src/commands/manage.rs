@@ -14,9 +14,9 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{ArgAction, Parser};
-use figment::Figment;
 use coauth_data::Ulid;
 use coauth_messaging::Address;
+use figment::Figment;
 
 const USER_ATTRIBUTES_HEADING: &str = "User attributes";
 

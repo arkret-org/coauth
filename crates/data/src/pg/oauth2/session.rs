@@ -2,15 +2,15 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-use ipnetwork::IpNetwork;
-use oauth2_types::scope::{Scope, ScopeToken};
 use coauth_data::{
     BrowserSession, Client, Clock, Page, Pagination, Session, SessionState, User, new_id,
     oauth2::{OAuth2SessionFilter, OAuth2SessionRepository},
     pagination::{Node, PaginationDirection},
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
+use ipnetwork::IpNetwork;
+use oauth2_types::scope::{Scope, ScopeToken};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;

@@ -7,9 +7,9 @@ use std::borrow::Cow;
 
 use anyhow::{Context, bail};
 use camino::Utf8PathBuf;
-use futures_util::future::try_join;
 use coauth_jose::jwk::{JsonWebKey, Thumbprint};
 use coauth_keystore::PrivateKey;
+use futures_util::future::try_join;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;

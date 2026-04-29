@@ -1,10 +1,10 @@
 use chrono::Duration;
+use coauth_data::oauth2::OAuth2DeviceCodeGrantParams;
 use oauth2_types::{
     errors::{ClientError, ClientErrorCode},
     requests::{DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType},
     scope::ScopeToken,
 };
-use coauth_data::oauth2::OAuth2DeviceCodeGrantParams;
 use rand::distr::{Alphanumeric, SampleString};
 use salvo::{Extractible, prelude::*};
 use thiserror::Error;

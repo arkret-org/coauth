@@ -391,8 +391,8 @@ mod ec_impls {
 // ---------------------------------------------------------------------------
 
 mod okp_impls {
-    use ed25519_dalek::VerifyingKey;
     use coauth_iana::jose::JsonWebKeyOkpEllipticCurve;
+    use ed25519_dalek::VerifyingKey;
 
     use super::{JsonWebKeyPublicParameters, OkpPublicParameters};
     use crate::{base64::Base64UrlNoPad, jwk::InvalidOkpParameters};

@@ -15,9 +15,9 @@ use std::{
 use anyhow::Context as _;
 use arc_swap::ArcSwap;
 use camino::{Utf8Path, Utf8PathBuf};
-use minijinja::{UndefinedBehavior, Value};
 use coauth_data::UrlBuilder;
 use coauth_i18n::Translator;
+use minijinja::{UndefinedBehavior, Value};
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 use thiserror::Error;

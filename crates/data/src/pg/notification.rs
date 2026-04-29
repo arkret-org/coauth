@@ -1,10 +1,5 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::{
-    prelude::*,
-    sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid},
-};
-use diesel_async::RunQueryDsl;
 use coauth_data::{
     Clock, NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDeliveryStatus, NotificationEventKind, NotificationEventLog,
@@ -14,6 +9,11 @@ use coauth_data::{
         NotificationRepository,
     },
 };
+use diesel::{
+    prelude::*,
+    sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid},
+};
+use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use serde::de::DeserializeOwned;
 use ulid::Ulid;

@@ -20,6 +20,8 @@ use std::{collections::HashSet, num::NonZeroU32};
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use chrono::{DateTime, Utc};
+use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, PkceCodeChallengeMethod};
+use coauth_jose::claims::{self, TokenHash};
 use language_tags::LanguageTag;
 use oauth2_types::{
     pkce,
@@ -30,8 +32,6 @@ use oauth2_types::{
     },
     scope::{OPENID, Scope},
 };
-use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, PkceCodeChallengeMethod};
-use coauth_jose::claims::{self, TokenHash};
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 use url::Url;

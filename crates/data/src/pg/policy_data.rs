@@ -3,9 +3,9 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::{Clock, PolicyData, new_id, policy_data::PolicyDataRepository};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use coauth_data::{Clock, PolicyData, new_id, policy_data::PolicyDataRepository};
 use rand_core::RngCore;
 use serde_json::Value;
 use uuid::Uuid;
@@ -125,11 +125,11 @@ impl PolicyDataRepository for PgPolicyDataRepository<'_> {
 
 #[cfg(test)]
 mod tests {
-    use diesel_async::RunQueryDsl;
     use coauth_data::{
         RepositoryAccess as _, RepositoryFactory as _, RepositoryTransaction as _,
         clock::MockClock, policy_data::PolicyDataRepository,
     };
+    use diesel_async::RunQueryDsl;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use serde_json::json;

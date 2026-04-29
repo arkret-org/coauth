@@ -111,12 +111,12 @@ impl SecretsConfig {
 
 #[cfg(test)]
 mod tests {
+    use coauth_iana::jose::JsonWebSignatureAlg;
+    use coauth_jose::constraints::Constrainable;
     use figment::{
         Figment, Jail,
         providers::{Format, Yaml},
     };
-    use coauth_iana::jose::JsonWebSignatureAlg;
-    use coauth_jose::constraints::Constrainable;
     use rand_core::SeedableRng;
     use tokio::{runtime::Handle, task};
 

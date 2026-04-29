@@ -3,8 +3,8 @@
 use std::sync::LazyLock;
 
 use chrono::{DateTime, Duration, Utc};
-use cookie::{Cookie, CookieJar as RawCookieJar, Key, SameSite};
 use coauth_data::Clock;
+use cookie::{Cookie, CookieJar as RawCookieJar, Key, SameSite};
 use salvo::{
     extract::{Extractible, Metadata},
     prelude::*,

@@ -377,11 +377,11 @@ pub async fn resend_recovery_email(
 
 #[cfg(test)]
 mod tests {
-    use hyper::{Request, StatusCode};
     use coauth_data::{
         RepositoryAccess,
         user::{UserEmailRepository, UserRecoveryRepository, UserRepository},
     };
+    use hyper::{Request, StatusCode};
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};

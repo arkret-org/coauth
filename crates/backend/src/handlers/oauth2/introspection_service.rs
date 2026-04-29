@@ -1,11 +1,8 @@
 use std::collections::BTreeSet;
 
-use oauth2_types::{
-    requests::IntrospectionResponse,
-    scope::{Scope, ScopeToken},
-};
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, TokenFormatError, TokenType,
+    UrlBuilder,
     oauth2::{OAuth2AccessTokenRepository, OAuth2RefreshTokenRepository, OAuth2SessionRepository},
     personal::{
         PersonalAccessTokenRepository, PersonalSessionRepository, session::PersonalSessionOwner,
@@ -13,10 +10,15 @@ use coauth_data::{
     user::UserRepository,
 };
 use coauth_iana::oauth::OAuthTokenTypeHint;
+use oauth2_types::{
+    requests::IntrospectionResponse,
+    scope::{Scope, ScopeToken},
+};
 use thiserror::Error;
 use ulid::Ulid;
 
 use crate::handlers::ActivityTracker;
+use crate::handlers::contrix;
 
 const UNSTABLE_API_SCOPE: ScopeToken =
     ScopeToken::from_static("urn:matrix:org.matrix.msc2967.client:api:*");
@@ -100,6 +102,7 @@ pub enum IntrospectionError {
 pub async fn introspect_token(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
+    url_builder: &UrlBuilder,
     activity_tracker: &ActivityTracker,
     token_str: &str,
     token_type_hint: Option<OAuthTokenTypeHint>,
@@ -159,7 +162,10 @@ pub async fn introspect_token(
                     return Err(IntrospectionError::InvalidUser(user.id));
                 }
 
-                (Some(user.sub), Some(user.username))
+                (
+                    Some(contrix::user_did(url_builder, &user)),
+                    Some(user.username),
+                )
             } else {
                 (None, None)
             };
@@ -226,7 +232,10 @@ pub async fn introspect_token(
                     return Err(IntrospectionError::InvalidUser(user.id));
                 }
 
-                (Some(user.sub), Some(user.username))
+                (
+                    Some(contrix::user_did(url_builder, &user)),
+                    Some(user.username),
+                )
             } else {
                 (None, None)
             };
@@ -318,6 +327,7 @@ pub async fn introspect_token(
                 .await;
 
             let scope = normalize_scope(session.scope);
+            let actor_user_sub = contrix::user_did(url_builder, &actor_user);
 
             IntrospectionResponse {
                 active: true,
@@ -331,7 +341,7 @@ pub async fn introspect_token(
                     .map(|expires_at| expires_at.signed_duration_since(clock.now())),
                 iat: Some(access_token.created_at),
                 nbf: Some(access_token.created_at),
-                sub: Some(actor_user.sub),
+                sub: Some(actor_user_sub),
                 aud: None,
                 iss: None,
                 jti: None,

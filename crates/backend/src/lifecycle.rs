@@ -1,7 +1,7 @@
 use std::{process::ExitCode, time::Duration};
 
-use futures_util::future::{BoxFuture, Either};
 use coauth_templates::Templates;
+use futures_util::future::{BoxFuture, Either};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::handlers::ActivityTracker;

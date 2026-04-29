@@ -6,13 +6,13 @@ use std::str::FromStr as _;
 
 use anyhow::Context;
 use chrono::{DateTime, Duration, Utc};
-use oauth2_types::scope::{Scope, ScopeToken};
 use coauth_data::{
     TokenType,
     personal::{PersonalSessionFilter, session::PersonalSessionOwner},
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
 };
 use coauth_matrix::HomeserverAdmin;
+use oauth2_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -570,10 +570,10 @@ mod tests {
     use std::collections::BTreeSet;
 
     use chrono::Duration;
+    use coauth_data::{Clock, personal::session::PersonalSessionOwner};
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
     use oauth2_types::scope::{OPENID, Scope};
-    use coauth_data::{Clock, personal::session::PersonalSessionOwner};
     use serde_json::{Value, json};
     use ulid::Ulid;
 

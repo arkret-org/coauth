@@ -1,12 +1,12 @@
 //! The error types used in this crate.
 
 use async_trait::async_trait;
-use oauth2_types::{oidc::ProviderMetadataVerificationError, pkce::CodeChallengeError};
 use coauth_jose::{
     claims::ClaimError,
     jwa::InvalidAlgorithm,
     jwt::{JwtDecodeError, JwtSignatureError, NoKeyWorked},
 };
+use oauth2_types::{oidc::ProviderMetadataVerificationError, pkce::CodeChallengeError};
 use serde::Deserialize;
 use thiserror::Error;
 

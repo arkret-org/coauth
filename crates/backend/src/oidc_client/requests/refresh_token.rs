@@ -17,11 +17,11 @@
 //! [Refresh Tokens]: https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokens
 
 use chrono::{DateTime, Utc};
+use coauth_jose::claims::{self, TokenHash};
 use oauth2_types::{
     requests::{AccessTokenRequest, AccessTokenResponse, RefreshTokenGrant},
     scope::Scope,
 };
-use coauth_jose::claims::{self, TokenHash};
 use rand_core::RngCore as Rng;
 use url::Url;
 

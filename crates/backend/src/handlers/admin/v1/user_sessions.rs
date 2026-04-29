@@ -223,9 +223,9 @@ pub async fn list_sessions(
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
+    use coauth_data::Clock as _;
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
-    use coauth_data::Clock as _;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 

@@ -2,14 +2,14 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-use oauth2_types::scope::{Scope, ScopeToken};
 use coauth_data::{
     Clock, Page, Pagination, Session, SessionState, User,
     app_session::{AppSession, AppSessionFilter, AppSessionRepository, AppSessionState},
     pagination::PaginationDirection,
 };
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
+use oauth2_types::scope::{Scope, ScopeToken};
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -241,16 +241,16 @@ impl AppSessionRepository for PgAppSessionRepository<'_> {
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use oauth2_types::{
-        requests::GrantType,
-        scope::{OPENID, Scope},
-    };
     use coauth_data::{
         Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
         RepositoryTransaction as _,
         app_session::{AppSession, AppSessionFilter},
         clock::MockClock,
         oauth2::OAuth2SessionRepository,
+    };
+    use oauth2_types::{
+        requests::GrantType,
+        scope::{OPENID, Scope},
     };
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;

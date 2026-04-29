@@ -1,4 +1,3 @@
-use oauth2_types::scope::OPENID;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock, UrlBuilder,
     oauth2::OAuth2ClientRepository,
@@ -8,6 +7,7 @@ use coauth_jose::{
     jwt::{JsonWebSignatureHeader, Jwt},
 };
 use coauth_keystore::Keystore;
+use oauth2_types::scope::OPENID;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::{Extractible, prelude::*};
@@ -16,6 +16,7 @@ use serde_with::skip_serializing_none;
 use thiserror::Error;
 use ulid::Ulid;
 
+use crate::handlers::contrix;
 use crate::salvo_utils::user_authorization::{AuthorizationVerificationError, UserAuthorization};
 
 #[skip_serializing_none]
@@ -164,9 +165,9 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
         .ok_or(RouteError::NoSuchUser(user_id))?;
 
     let user_info = UserInfo {
-        sub: user.sub.clone(),
+        sub: contrix::user_did(&url_builder, &user),
         username: user.username.clone(),
-        preferred_username: user.username.clone(),
+        preferred_username: contrix::user_handle(&url_builder, &user),
         name: user.display_name.clone(),
         picture: user.avatar_url.clone(),
         locale: user.preferred_locale.clone(),

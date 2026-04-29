@@ -1,8 +1,5 @@
 use std::{net::IpAddr, sync::Arc};
 
-use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
-use ipnetwork::IpNetwork;
-use opentelemetry::KeyValue;
 use coauth_data::{
     AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, PgRepositoryFactory,
     RepositoryFactory, SiteConfig, SystemClock, UrlBuilder,
@@ -12,6 +9,9 @@ use coauth_keystore::{Encrypter, Keystore};
 use coauth_matrix::{ConnectorRegistry, HomeserverAdmin};
 use coauth_policy::{Policy, PolicyFactory};
 use coauth_templates::Templates;
+use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
+use ipnetwork::IpNetwork;
+use opentelemetry::KeyValue;
 use rand_core::SeedableRng;
 use salvo::prelude::*;
 use tracing::Instrument;

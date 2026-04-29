@@ -13,14 +13,6 @@ use std::{
 };
 
 use chrono::Duration;
-use cookie_store::{CookieStore, RawCookie};
-use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
-use headers::{Authorization, ContentType, HeaderMapExt, HeaderName, HeaderValue};
-use hyper::{
-    Request, Response, StatusCode,
-    header::{CONTENT_TYPE, COOKIE, SET_COOKIE},
-};
-use oauth2_types::scope::Scope;
 use coauth_config::RateLimitingConfig;
 use coauth_data::{
     AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, PgRepositoryFactory,
@@ -39,6 +31,14 @@ use coauth_messaging::{MailTransport, Mailer, NotificationCenter};
 use coauth_policy::{InstantiateError, Policy, PolicyFactory};
 use coauth_tasks::QueueWorker;
 use coauth_templates::{SiteConfigExt, Templates};
+use cookie_store::{CookieStore, RawCookie};
+use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
+use headers::{Authorization, ContentType, HeaderMapExt, HeaderName, HeaderValue};
+use hyper::{
+    Request, Response, StatusCode,
+    header::{CONTENT_TYPE, COOKIE, SET_COOKIE},
+};
+use oauth2_types::scope::Scope;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::{
@@ -387,6 +387,18 @@ impl TestState {
                 Router::with_path("/.well-known/webfinger")
                     .get(crate::handlers::oauth2::webfinger::get),
             )
+            .push(
+                Router::with_path("/.well-known/did.json")
+                    .get(crate::handlers::contrix::service_did_json),
+            )
+            .push(
+                Router::with_path("/did.json")
+                    .get(crate::handlers::contrix::service_did_json),
+            )
+            .push(
+                Router::with_path("/users/{id}/did.json")
+                    .get(crate::handlers::contrix::user_did_json),
+            )
             // OAuth2 endpoints
             .push(
                 Router::with_path("/oauth2/keys.json").get(crate::handlers::oauth2::keys::get),
@@ -417,6 +429,12 @@ impl TestState {
                     .post(crate::handlers::oauth2::device::authorize::post),
             )
             // REST API
+            .push(Router::with_path("/api/v1/server/describe").get(crate::handlers::contrix::server_describe))
+            .push(Router::with_path("/api/v1/identity/describe").get(crate::handlers::contrix::identity_describe))
+            .push(Router::with_path("/api/v1/identity/resolve").post(crate::handlers::contrix::identity_resolve))
+            .push(Router::with_path("/api/v1/identity/document").get(crate::handlers::contrix::identity_document))
+            .push(Router::with_path("/api/v1/directory/describe").get(crate::handlers::contrix::directory_describe))
+            .push(Router::with_path("/api/v1/directory/resolve-handle").post(crate::handlers::contrix::directory_resolve_handle))
             .push(Router::with_path("/api/v1/viewer").get(crate::handlers::account::viewer::get_viewer))
             .push(Router::with_path("/api/v1/site-config").get(crate::handlers::account::site_config::get))
             .push(

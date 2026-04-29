@@ -4,13 +4,13 @@
 // round-trip serialisation, key generation, JWT signing + verification via
 // the Keystore / JWKS API, and thumbprint consistency.
 
-use der::pem::LineEnding;
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::{
     jwk::{ParametersInfo, Thumbprint},
     jwt::{JsonWebSignatureHeader, Jwt},
 };
 use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+use der::pem::LineEnding;
 use rand_core::SeedableRng;
 
 /// Shared password used for encrypted-key tests.

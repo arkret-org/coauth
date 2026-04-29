@@ -356,8 +356,8 @@ impl From<OkpPrivateParameters> for super::public_parameters::OkpPublicParameter
 }
 
 mod okp_impls {
-    use ed25519_dalek::SigningKey;
     use coauth_iana::jose::JsonWebKeyOkpEllipticCurve;
+    use ed25519_dalek::SigningKey;
 
     use super::OkpPrivateParameters;
     use crate::{base64::Base64UrlNoPad, jwk::InvalidOkpParameters};

@@ -237,12 +237,12 @@ fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use hyper::{Request, StatusCode};
     use coauth_data::{
         RepositoryAccess,
         user::{BrowserSessionRepository, UserRepository},
     };
     use coauth_matrix::{HomeserverAdmin, ProvisionRequest};
+    use hyper::{Request, StatusCode};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use ulid::Ulid;

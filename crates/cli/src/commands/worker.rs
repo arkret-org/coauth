@@ -1,7 +1,6 @@
 use std::{process::ExitCode, time::Duration};
 
 use clap::Parser;
-use figment::Figment;
 use coauth_backend::{
     lifecycle::LifecycleManager,
     util::{
@@ -12,6 +11,7 @@ use coauth_backend::{
 };
 use coauth_config::{AppConfig, ConfigurationSection};
 use coauth_data::{PgRepositoryFactory, SystemClock, UrlBuilder};
+use figment::Figment;
 use tracing::{info, info_span};
 
 /// CLI options for the background task worker process.

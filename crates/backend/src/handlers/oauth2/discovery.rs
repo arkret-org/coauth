@@ -1,8 +1,3 @@
-use oauth2_types::{
-    oidc::{ClaimType, ProviderMetadata, SubjectType},
-    requests::{Display, GrantType, Prompt, ResponseMode},
-    scope,
-};
 use coauth_data::{SiteConfig, UrlBuilder};
 use coauth_iana::oauth::{
     OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod,
@@ -10,8 +5,15 @@ use coauth_iana::oauth::{
 };
 use coauth_jose::jwa::SUPPORTED_SIGNING_ALGORITHMS;
 use coauth_keystore::Keystore;
+use oauth2_types::{
+    oidc::{ClaimType, ProviderMetadata, SubjectType},
+    requests::{Display, GrantType, Prompt, ResponseMode},
+    scope,
+};
 use salvo::prelude::*;
 use serde::Serialize;
+
+use crate::handlers::contrix;
 
 #[derive(Debug, Serialize)]
 struct DiscoveryResponse {
@@ -24,6 +26,18 @@ struct DiscoveryResponse {
     // As per MSC2965
     account_management_uri: url::Url,
     account_management_actions_supported: Vec<String>,
+
+    #[serde(rename = "org.contrix.api_endpoint")]
+    contrix_api_endpoint: String,
+
+    #[serde(rename = "org.contrix.server_describe")]
+    contrix_server_describe: String,
+
+    #[serde(rename = "org.contrix.service_did")]
+    contrix_service_did: String,
+
+    #[serde(rename = "org.contrix.did_binding_methods")]
+    contrix_did_binding_methods: Vec<String>,
 }
 
 #[handler]
@@ -191,6 +205,12 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
             "org.matrix.session_end".to_owned(),
             "org.matrix.cross_signing_reset".to_owned(),
         ],
+        contrix_api_endpoint: url_builder.absolute_url("/api/v1").to_string(),
+        contrix_server_describe: url_builder
+            .absolute_url("/api/v1/server/describe")
+            .to_string(),
+        contrix_service_did: contrix::service_did(url_builder),
+        contrix_did_binding_methods: vec!["session_grant".to_owned()],
     })
 }
 

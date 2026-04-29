@@ -6,6 +6,9 @@ use std::{
 };
 
 use anyhow::Context;
+use coauth_config::{HttpBindConfig, HttpResource, HttpTlsConfig, UnixOrTcp};
+use coauth_data::UrlBuilder;
+use coauth_templates::Templates;
 use headers::{CacheControl, HeaderMapExt as _, UserAgent};
 use http::{
     Method, StatusCode, Version,
@@ -17,9 +20,6 @@ use opentelemetry_semantic_conventions::trace::{
     HTTP_REQUEST_METHOD, HTTP_RESPONSE_STATUS_CODE, HTTP_ROUTE, NETWORK_PROTOCOL_NAME,
     NETWORK_PROTOCOL_VERSION, URL_PATH, URL_QUERY, URL_SCHEME, USER_AGENT_ORIGINAL,
 };
-use coauth_config::{HttpBindConfig, HttpResource, HttpTlsConfig, UnixOrTcp};
-use coauth_data::UrlBuilder;
-use coauth_templates::Templates;
 use rustls::ServerConfig;
 use salvo::{
     cors::{Any, Cors},
@@ -287,7 +287,7 @@ pub fn build_router(
 
     // Build sub-routers for each resource
     use crate::handlers::{
-        health,
+        contrix, health,
         oauth2::{discovery, webfinger},
     };
 
@@ -309,6 +309,21 @@ pub fn build_router(
                     Router::with_path("/.well-known/webfinger")
                         .hoop(public_oidc_browser_cors())
                         .get(webfinger::get),
+                )
+                .push(
+                    Router::with_path("/.well-known/did.json")
+                        .hoop(public_oidc_browser_cors())
+                        .get(contrix::service_did_json),
+                )
+                .push(
+                    Router::with_path("/did.json")
+                        .hoop(public_oidc_browser_cors())
+                        .get(contrix::service_did_json),
+                )
+                .push(
+                    Router::with_path("/users/{id}/did.json")
+                        .hoop(public_oidc_browser_cors())
+                        .get(contrix::user_did_json),
                 ),
             coauth_config::HttpResource::Human => build_human_router(router, templates.clone()),
             coauth_config::HttpResource::RestApi {
@@ -472,9 +487,16 @@ fn build_oauth_router(router: Router) -> Router {
 }
 
 fn build_account_api_router(router: Router) -> Router {
-    use crate::handlers::account::*;
+    use crate::handlers::{account::*, contrix};
 
     let api_router = Router::with_path("/api/v1")
+        // Contrix service surface
+        .push(Router::with_path("server/describe").get(contrix::server_describe))
+        .push(Router::with_path("identity/describe").get(contrix::identity_describe))
+        .push(Router::with_path("identity/resolve").post(contrix::identity_resolve))
+        .push(Router::with_path("identity/document").get(contrix::identity_document))
+        .push(Router::with_path("directory/describe").get(contrix::directory_describe))
+        .push(Router::with_path("directory/resolve-handle").post(contrix::directory_resolve_handle))
         // Viewer
         .push(
             Router::with_path("viewer")

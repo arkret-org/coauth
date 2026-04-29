@@ -8,14 +8,6 @@
 use std::sync::Arc;
 
 use chrono::Duration;
-use oauth2_types::{
-    pkce::CodeChallengeError,
-    requests::{
-        AccessTokenResponse, AuthorizationCodeGrant, ClientCredentialsGrant, DeviceCodeGrant,
-        GrantType, RefreshTokenGrant,
-    },
-    scope,
-};
 use coauth_data::{
     AuthorizationGrantStage, BoxRepository, Client, Clock, DeviceCodeGrantState, RepositoryAccess,
     RepositoryError, SiteConfig, TokenType, UrlBuilder,
@@ -30,6 +22,14 @@ use coauth_keystore::Keystore;
 use coauth_matrix::HomeserverAdmin;
 use coauth_policy::Policy;
 use coauth_templates::{DeviceNameContext, TemplateContext, Templates};
+use oauth2_types::{
+    pkce::CodeChallengeError,
+    requests::{
+        AccessTokenResponse, AuthorizationCodeGrant, ClientCredentialsGrant, DeviceCodeGrant,
+        GrantType, RefreshTokenGrant,
+    },
+    scope,
+};
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 use ulid::Ulid;

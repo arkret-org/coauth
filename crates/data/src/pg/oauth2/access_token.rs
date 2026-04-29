@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
+use coauth_data::{AccessToken, AccessTokenState, Clock, Session, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use coauth_data::{AccessToken, AccessTokenState, Clock, Session, new_id};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
