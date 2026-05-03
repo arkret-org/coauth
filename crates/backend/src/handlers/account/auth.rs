@@ -5,7 +5,7 @@
 
 use std::sync::LazyLock;
 
-use coauth_data::{BoxRepository, BrowserSession, RepositoryAccess, SiteConfig, UrlBuilder, User};
+use coauth_data::{RepositoryAccess, UrlBuilder};
 use opentelemetry::{Key, KeyValue, metrics::Counter};
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -328,10 +328,9 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     }
 }
 
-/// Scaffold-only OIDC authorization-code exchange that resolves a local user
-/// from `login_hint`, then mints a temporary audience-bound Contrix session
-/// grant without validating the authorization code against the real OIDC token
-/// endpoint yet.
+/// OIDC authorization-code exchange bridge that now validates the incoming
+/// authorization code against coauth's local OAuth2 authorization-grant store
+/// before minting a temporary audience-bound Contrix session grant.
 #[endpoint]
 pub async fn oidc_code_exchange(
     req: &mut Request,
@@ -456,22 +455,18 @@ pub async fn oidc_code_exchange(
         }
     }
 
-    let Some(user) = resolve_user_by_login_hint(
-        site_config,
-        homeserver.as_ref(),
-        &url_builder,
-        &contrix_config,
-        &mut repo,
-        input.login_hint.trim(),
-    )
-    .await? else {
+    let Some(authz_grant) = repo
+        .oauth2_authorization_grant()
+        .find_by_code(input.authorization_code.trim())
+        .await?
+    else {
         res.render(Json(LoginResponse {
             status: "error",
-            error: Some("invalid_login_hint"),
+            error: Some("invalid_authorization_code"),
             viewer: None,
             session_grant: None,
             warnings: vec![
-                "TODO(contrix): replace login_hint bridge lookup with real OIDC callback subject resolution"
+                "authorization_code was not issued by this coauth OAuth2 authorization server"
                     .to_owned(),
             ],
         }));
@@ -479,21 +474,161 @@ pub async fn oidc_code_exchange(
     };
 
     let now = clock.now();
+    let oauth2_session_id = match authz_grant.stage {
+        coauth_data::AuthorizationGrantStage::Fulfilled {
+            session_id,
+            fulfilled_at,
+        } => {
+            if now - fulfilled_at > chrono::Duration::minutes(10) {
+                res.render(Json(LoginResponse {
+                    status: "error",
+                    error: Some("invalid_authorization_code"),
+                    viewer: None,
+                    session_grant: None,
+                    warnings: vec![
+                        "authorization_code is expired for the bridge scaffold".to_owned(),
+                    ],
+                }));
+                return Ok(());
+            }
+            session_id
+        }
+        coauth_data::AuthorizationGrantStage::Pending
+        | coauth_data::AuthorizationGrantStage::Cancelled { .. }
+        | coauth_data::AuthorizationGrantStage::Exchanged { .. } => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_authorization_code"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![
+                    "authorization_code is not in a fulfilled, single-use exchangeable state"
+                        .to_owned(),
+                ],
+            }));
+            return Ok(());
+        }
+    };
+
+    if authz_grant.redirect_uri != redirect_uri {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_redirect_uri"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "authorization_code was issued for redirect_uri={} rather than {}",
+                authz_grant.redirect_uri, redirect_uri
+            )],
+        }));
+        return Ok(());
+    }
+
+    if let Some(expected_login_hint) = authz_grant.login_hint.as_deref()
+        && expected_login_hint != input.login_hint.trim()
+    {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_login_hint"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![
+                format!(
+                    "authorization_code was issued for login_hint={} rather than {}",
+                    expected_login_hint,
+                    input.login_hint.trim()
+                ),
+            ],
+        }));
+        return Ok(());
+    }
+
+    let Some(code) = authz_grant.code.as_ref() else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![
+                "authorization_code grant is missing embedded code payload".to_owned(),
+            ],
+        }));
+        return Ok(());
+    };
+
+    match code.pkce.as_ref() {
+        Some(pkce) => {
+            if let Err(error) = pkce.verify(input.code_verifier.trim()) {
+                res.render(Json(LoginResponse {
+                    status: "error",
+                    error: Some("invalid_code_verifier"),
+                    viewer: None,
+                    session_grant: None,
+                    warnings: vec![format!("pkce verification failed: {error}")],
+                }));
+                return Ok(());
+            }
+        }
+        None => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_code_verifier"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![
+                    "authorization_code was issued without PKCE, but the bridge requires PKCE-backed OIDC codes"
+                        .to_owned(),
+                ],
+            }));
+            return Ok(());
+        }
+    }
+
+    let Some(oauth2_session) = repo.oauth2_session().lookup(oauth2_session_id).await? else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "authorization_code references missing oauth2_session={oauth2_session_id}"
+            )],
+        }));
+        return Ok(());
+    };
+
+    let Some(user_session_id) = oauth2_session.user_session_id else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![
+                "authorization_code is not bound to a browser user session".to_owned(),
+            ],
+        }));
+        return Ok(());
+    };
+
+    let Some(browser_session) = repo.browser_session().lookup(user_session_id).await? else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "authorization_code references missing browser_session={user_session_id}"
+            )],
+        }));
+        return Ok(());
+    };
+
     let device_id = input.device_id.trim().to_owned();
     let grant_target = session_grant_target_for_requested_audience(
         &url_builder,
         &contrix_config,
         input.principal_audience.as_deref(),
     );
-    let browser_session = BrowserSession {
-        id: Ulid::new(),
-        user: user.clone(),
-        created_at: now,
-        finished_at: None,
-        user_agent: Some("yougen oidc scaffold exchange".to_owned()),
-        last_active_at: Some(now),
-        last_active_ip: None,
-    };
     let session_grant = contrix::issue_session_grant_for_audience(
         &mut rng,
         &clock,
@@ -514,8 +649,12 @@ pub async fn oidc_code_exchange(
         &session_grant,
     )
     .await?;
+    repo.oauth2_authorization_grant()
+        .exchange(&clock, authz_grant)
+        .await?;
     repo.save().await?;
 
+    let user = &browser_session.user;
     let display_name = match homeserver.query_user(&user.username).await {
         Ok(info) => info.displayname,
         Err(_) => None,
@@ -546,11 +685,16 @@ pub async fn oidc_code_exchange(
                 .map(|(name, endpoint)| SessionGrantPrincipalServerInfo { name, endpoint }),
         }),
         warnings: vec![
-            "TODO(contrix): authorization_code and code_verifier are scaffold inputs only; replace this endpoint with real OIDC callback and token-endpoint validation.".to_owned(),
+            "TODO(contrix): replace local authorization-grant lookup with a full OAuth2/OIDC token exchange or upstream-bound proof/introspection validation before treating this bridge as production-grade.".to_owned(),
             format!("device_id={device_id}"),
             format!("redirect_uri={}", redirect_uri),
             format!("issuer={issuer}"),
             format!("token_endpoint={token_endpoint}"),
+            format!("oauth2_session_id={oauth2_session_id}"),
+            format!("browser_session_id={user_session_id}"),
+            "authorization_code_validated_locally=true".to_owned(),
+            "pkce_verified=true".to_owned(),
+            "authorization_code_consumed=true".to_owned(),
             format!(
                 "callback_state_checked={}",
                 input.expected_state.is_some()
@@ -623,46 +767,6 @@ pub async fn providers(depot: &Depot) -> Result<Json<ProvidersResponse>, RouteEr
         password_registration_enabled: site_config.password_registration_enabled,
         account_recovery_allowed: site_config.account_recovery_allowed,
     }))
-}
-
-async fn resolve_user_by_login_hint(
-    site_config: &SiteConfig,
-    homeserver: &dyn crate::handlers::HomeserverAdmin,
-    url_builder: &UrlBuilder,
-    contrix_config: &coauth_config::ContrixConfig,
-    repo: &mut BoxRepository,
-    identifier: &str,
-) -> Result<Option<User>, RouteError> {
-    if let Some(user_id) = contrix::parse_local_user_did_for(url_builder, contrix_config, identifier)
-    {
-        return repo.user().lookup(user_id).await.map_err(RouteError::from);
-    }
-
-    if let Some(username) = contrix::parse_local_handle(url_builder, identifier)
-        && let Some(user) = repo.user().find_by_username(&username).await.map_err(RouteError::from)?
-    {
-        return Ok(Some(user));
-    }
-
-    let username_or_email = homeserver.localpart(identifier).unwrap_or(identifier);
-    if site_config.login_with_email_allowed && username_or_email.contains('@') {
-        let maybe_user_email = repo
-            .user_email()
-            .find_by_email(username_or_email)
-            .await
-            .map_err(RouteError::from)?;
-        if let Some(user_email) = maybe_user_email {
-            let user = repo.user().lookup(user_email.user_id).await.map_err(RouteError::from)?;
-            if user.is_some() {
-                return Ok(user);
-            }
-        }
-    }
-
-    repo.user()
-        .find_by_username(username_or_email)
-        .await
-        .map_err(RouteError::from)
 }
 
 fn session_grant_target_for_requested_audience(
