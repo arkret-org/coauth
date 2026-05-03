@@ -5,9 +5,18 @@
 
 use std::sync::LazyLock;
 
+use http::header::ACCEPT;
+use mime::APPLICATION_JSON;
 use coauth_data::{RepositoryAccess, UrlBuilder};
+use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use opentelemetry::{Key, KeyValue, metrics::Counter};
-use oauth2_types::requests::AuthorizationCodeGrant as OAuthAuthorizationCodeGrant;
+use oauth2_types::{
+    errors::{ClientError, ClientErrorCode},
+    requests::{
+        AccessTokenRequest, AccessTokenResponse,
+        AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
+    },
+};
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -23,6 +32,7 @@ use crate::{
         contrix,
     },
     oidc_client::requests::jose::{JwtVerificationData, verify_signed_jwt},
+    oidc_client::types::client_credentials::ClientCredentials,
     salvo_utils::session::SessionInfoExt,
 };
 
@@ -352,13 +362,10 @@ pub async fn oidc_code_exchange(
 ) -> Result<(), RouteError> {
     let mut rng = make_rng();
     let clock = make_clock();
-    let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
-    let templates = depot.templates()?;
     let homeserver = depot.homeserver()?;
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
     let http_client = depot
         .get::<reqwest::Client>("http_client")
         .cloned()
@@ -375,7 +382,6 @@ pub async fn oidc_code_exchange(
                 "activity_tracker not found in depot",
             )))
         })?;
-    let user_agent: Option<String> = req.header("user-agent");
     let mut repo = depot.repo().await?;
 
     let input: OidcCodeExchangeRequest = req
@@ -636,91 +642,108 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
+    if oauth2_client.token_endpoint_auth_method.as_ref()
+        != Some(&OAuthClientAuthenticationMethod::None)
+    {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_client"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "authorization_code client_id={} requires token_endpoint_auth_method={}; the browser OIDC bridge only supports public clients with token_endpoint_auth_method=none",
+                oauth2_client.client_id,
+                oauth2_client
+                    .token_endpoint_auth_method
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "missing".to_owned())
+            )],
+        }));
+        return Ok(());
+    }
 
     let oauth_code_grant = OAuthAuthorizationCodeGrant {
         code: input.authorization_code.trim().to_owned(),
         redirect_uri: Some(redirect_uri.clone()),
         code_verifier: Some(input.code_verifier.trim().to_owned()),
     };
-    let oauth_token_reply = match crate::handlers::oauth2::token_service::exchange_authorization_code(
-        &mut rng,
-        &clock,
-        &activity_tracker,
-        &oauth_code_grant,
-        &oauth2_client,
-        &key_store,
-        &url_builder,
-        &contrix_config,
-        &site_config,
-        repo,
-        &homeserver,
-        &templates,
-        user_agent,
-    )
-    .await
-    {
-        Ok((reply, next_repo)) => {
-            repo = next_repo;
-            reply
-        }
-        Err(
-            crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::GrantNotFound
-            | crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::InvalidGrant(_),
-        ) => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_authorization_code"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "authorization_code could not be exchanged through the local OAuth2 token service"
-                        .to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
-        Err(
-            crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::UnauthorizedClient(_)
-            | crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::UnexpectedClient { .. },
-        ) => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_client"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "authorization_code is not bound to the requested OAuth2 client".to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
-        Err(crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::PkceVerification(error)) => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_code_verifier"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!("pkce verification failed: {error}")],
-            }));
-            return Ok(());
-        }
-        Err(crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::BadRequest) => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_request"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "authorization_code exchange request was rejected by the local OAuth2 token service"
-                        .to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
-        Err(error) => {
-            return Err(RouteError::Internal(Box::new(error)));
-        }
+    let oauth_token_request = AccessTokenRequest::AuthorizationCode(oauth_code_grant.clone());
+    let local_token_credentials = ClientCredentials::None {
+        client_id: oauth2_client.client_id.clone(),
     };
+    let oauth_token_http_request = local_token_credentials
+        .authenticated_form(
+            http_client
+                .post(token_endpoint.as_str())
+                .header(ACCEPT, APPLICATION_JSON.as_ref()),
+            &oauth_token_request,
+            clock.now(),
+            &mut rng,
+        )
+        .map_err(|error| RouteError::Internal(Box::new(error)))?;
+    let oauth_token_http_response = oauth_token_http_request
+        .send()
+        .await
+        .map_err(|error| RouteError::Internal(Box::new(error)))?;
+    if !oauth_token_http_response.status().is_success() {
+        let status = oauth_token_http_response.status();
+        let token_error = oauth_token_http_response.json::<ClientError>().await;
+        if status.is_server_error() {
+            return Err(RouteError::Internal(Box::new(std::io::Error::other(
+                match token_error {
+                    Ok(error) => format!("local OAuth2 token endpoint returned server_error: {error:?}"),
+                    Err(error) => format!("local OAuth2 token endpoint returned {status} and its error body could not be decoded: {error}"),
+                },
+            ))));
+        }
+        match token_error {
+            Ok(error) => {
+                let error_description = error
+                    .error_description
+                    .as_deref()
+                    .unwrap_or("local OAuth2 token endpoint rejected the authorization_code exchange")
+                    .to_owned();
+                let lower_description = error_description.to_ascii_lowercase();
+                let (code, error_kind) = match error.error {
+                    ClientErrorCode::InvalidGrant if lower_description.contains("pkce") => {
+                        ("invalid_code_verifier", format!("pkce verification failed: {error_description}"))
+                    }
+                    ClientErrorCode::InvalidGrant => {
+                        ("invalid_authorization_code", error_description)
+                    }
+                    ClientErrorCode::InvalidClient | ClientErrorCode::UnauthorizedClient => {
+                        ("invalid_client", error_description)
+                    }
+                    ClientErrorCode::InvalidRequest => ("invalid_request", error_description),
+                    _ => ("invalid_authorization_code", error_description),
+                };
+                res.render(Json(LoginResponse {
+                    status: "error",
+                    error: Some(code),
+                    viewer: None,
+                    session_grant: None,
+                    warnings: vec![format!(
+                        "local OAuth2 token endpoint rejected the authorization_code exchange: {error_kind}"
+                    )],
+                }));
+                return Ok(());
+            }
+            Err(error) => {
+                return Err(RouteError::Internal(Box::new(std::io::Error::other(
+                    format!(
+                        "local OAuth2 token endpoint returned {status} and its error body could not be decoded: {error}"
+                    ),
+                ))));
+            }
+        }
+    }
+    let oauth_token_reply: AccessTokenResponse = oauth_token_http_response
+        .json()
+        .await
+        .map_err(|error| RouteError::Internal(Box::new(error)))?;
+    repo.cancel().await?;
+    let mut repo = depot.repo().await?;
 
     let oauth2_session_id = exchangeable_oauth2_session_id.ok_or_else(|| {
         RouteError::Internal(Box::new(std::io::Error::other(
@@ -1001,7 +1024,7 @@ pub async fn oidc_code_exchange(
                 .map(|(name, endpoint)| SessionGrantPrincipalServerInfo { name, endpoint }),
         }),
         warnings: vec![
-            "TODO(contrix): replace the local OAuth2 token-service bridge with a full upstream token endpoint exchange or proof/introspection validation before treating this flow as production-grade.".to_owned(),
+            "TODO(contrix): replace the local OAuth2 HTTP token bridge with a full upstream token endpoint exchange or proof/introspection validation before treating this flow as production-grade.".to_owned(),
             format!("device_id={device_id}"),
             format!("redirect_uri={}", redirect_uri),
             format!("issuer={issuer}"),
@@ -1019,7 +1042,7 @@ pub async fn oidc_code_exchange(
                     .map(ToString::to_string)
                     .unwrap_or_else(|| "missing".to_owned())
             ),
-            "authorization_code_exchanged_via_local_token_service=true".to_owned(),
+            "authorization_code_exchanged_via_local_http_token_endpoint=true".to_owned(),
             "oauth_access_token_issued=true".to_owned(),
             "oauth_access_token_introspected_locally=true".to_owned(),
             "oauth_access_token_validated_via_local_userinfo=true".to_owned(),
