@@ -60,6 +60,7 @@ pub struct LoginResponse {
 pub struct OidcCodeExchangeRequest {
     pub authorization_code: String,
     pub code_verifier: String,
+    pub redirect_uri: String,
     pub login_hint: String,
     pub device_id: String,
     #[serde(default)]
@@ -351,6 +352,7 @@ pub async fn oidc_code_exchange(
 
     if input.authorization_code.trim().is_empty()
         || input.code_verifier.trim().is_empty()
+        || input.redirect_uri.trim().is_empty()
         || input.login_hint.trim().is_empty()
         || input.device_id.trim().is_empty()
     {
@@ -360,7 +362,7 @@ pub async fn oidc_code_exchange(
             viewer: None,
             session_grant: None,
             warnings: vec![
-                "authorization_code, code_verifier, login_hint, and device_id are required"
+                "authorization_code, code_verifier, redirect_uri, login_hint, and device_id are required"
                     .to_owned(),
             ],
         }));
@@ -487,6 +489,7 @@ pub async fn oidc_code_exchange(
         warnings: vec![
             "TODO(contrix): authorization_code and code_verifier are scaffold inputs only; replace this endpoint with real OIDC callback and token-endpoint validation.".to_owned(),
             format!("device_id={device_id}"),
+            format!("redirect_uri={}", input.redirect_uri.trim()),
             format!(
                 "callback_state_checked={}",
                 input.expected_state.is_some()
