@@ -369,6 +369,17 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
 
+    if url::Url::parse(input.redirect_uri.trim()).is_err() {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_redirect_uri"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec!["redirect_uri must be a valid absolute URI".to_owned()],
+        }));
+        return Ok(());
+    }
+
     if let Some(expected_state) = input.expected_state.as_deref() {
         let returned_state = input.state.as_deref().unwrap_or_default();
         if returned_state.is_empty() {
