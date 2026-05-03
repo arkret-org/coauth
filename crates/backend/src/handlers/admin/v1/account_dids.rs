@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-#[derive(Deserialize, Serialize, JsonSchema, ToSchema)]
+#[derive(Clone, Copy, Deserialize, Serialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DidBindingKind {
     Primary,
@@ -23,7 +23,7 @@ pub enum DidBindingKind {
     Pairwise,
 }
 
-#[derive(Serialize, JsonSchema, ToSchema)]
+#[derive(Clone, Copy, Serialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DidBindingState {
     PendingProof,
@@ -60,22 +60,22 @@ pub struct DidBindingResolverDescriptor {
     proof_required_for_pairwise: bool,
 }
 
-#[derive(Serialize, JsonSchema, ToSchema)]
+#[derive(Clone, Serialize, JsonSchema, ToSchema)]
 pub struct AccountDidBindingPreview {
     /// Bound principal DID.
-    did: String,
+    pub(crate) did: String,
 
     /// Binding purpose.
-    kind: DidBindingKind,
+    pub(crate) kind: DidBindingKind,
 
     /// High-level lifecycle state for downstream admin/UI surfaces.
-    state: DidBindingState,
+    pub(crate) state: DidBindingState,
 
     /// Whether this binding is the account's current primary DID.
-    primary: bool,
+    pub(crate) primary: bool,
 
     /// Whether this binding is currently active.
-    active: bool,
+    pub(crate) active: bool,
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]

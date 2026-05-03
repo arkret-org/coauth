@@ -9,7 +9,9 @@ use ulid::Ulid;
 
 use crate::{
     AppError, JsonResult,
-    handlers::admin::v1::account_dids::AccountDidBindingPreview,
+    handlers::admin::v1::account_dids::{
+        AccountDidBindingPreview, preview_bindings_for_user, primary_did_for_user,
+    },
     handlers::{
         admin::{
             call_context::extract_call_context,
@@ -89,6 +91,12 @@ pub struct AccountRecord {
 
 impl From<coauth_data::User> for AccountRecord {
     fn from(user: coauth_data::User) -> Self {
+        Self::from_user(user, &coauth_config::ContrixConfig::default())
+    }
+}
+
+impl AccountRecord {
+    fn from_user(user: coauth_data::User, contrix_config: &coauth_config::ContrixConfig) -> Self {
         let status = if user.deactivated_at.is_some() {
             AccountStatus::Disabled
         } else if user.locked_at.is_some() {
@@ -96,6 +104,15 @@ impl From<coauth_data::User> for AccountRecord {
         } else {
             AccountStatus::Active
         };
+        let principal_did_bindings = preview_bindings_for_user(&user, contrix_config);
+        let primary_principal_binding = principal_did_bindings
+            .iter()
+            .find(|binding| binding.primary)
+            .cloned();
+        let principal_dids = principal_did_bindings
+            .iter()
+            .map(|binding| binding.did.clone())
+            .collect();
 
         Self {
             id: user.id,
@@ -109,13 +126,10 @@ impl From<coauth_data::User> for AccountRecord {
             display_name: user.display_name,
             avatar_url: user.avatar_url,
             preferred_locale: user.preferred_locale,
-            // TODO(contrix): populate from account<->principal DID binding records.
-            primary_principal_did: None,
-            principal_dids: Vec::new(),
-            // TODO(contrix): backfill from DID binding rows once delegated/public resolver
-            // verification and admin storage are implemented.
-            primary_principal_binding: None,
-            principal_did_bindings: Vec::new(),
+            primary_principal_did: Some(primary_did_for_user(&user)),
+            principal_dids,
+            primary_principal_binding,
+            principal_did_bindings,
         }
     }
 }
@@ -191,6 +205,7 @@ pub async fn list_accounts(
 ) -> JsonResult<PaginatedResponse<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
+    let contrix_config = depot.contrix_config()?;
     let (pagination, include_count) = extract_pagination(req)?;
     let params: AccountFilterParams = req.parse_queries().unwrap_or_default();
 
@@ -219,7 +234,7 @@ pub async fn list_accounts(
             let page = repo.user().list(filter, pagination).await?;
             let count = repo.user().count(filter).await?;
             PaginatedResponse::for_page(
-                page.map(AccountRecord::from),
+                page.map(|user| AccountRecord::from_user(user, &contrix_config)),
                 pagination,
                 Some(count),
                 &base,
@@ -227,7 +242,12 @@ pub async fn list_accounts(
         }
         IncludeCount::False => {
             let page = repo.user().list(filter, pagination).await?;
-            PaginatedResponse::for_page(page.map(AccountRecord::from), pagination, None, &base)
+            PaginatedResponse::for_page(
+                page.map(|user| AccountRecord::from_user(user, &contrix_config)),
+                pagination,
+                None,
+                &base,
+            )
         }
         IncludeCount::Only => {
             let count = repo.user().count(filter).await?;
@@ -246,6 +266,7 @@ pub async fn get_account(
 ) -> JsonResult<SingleResponse<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
+    let contrix_config = depot.contrix_config()?;
     let id = extract_ulid_param(req)?;
 
     let account = repo
@@ -254,8 +275,9 @@ pub async fn get_account(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
-    Ok(Json(SingleResponse::new_canonical(AccountRecord::from(
+    Ok(Json(SingleResponse::new_canonical(AccountRecord::from_user(
         account,
+        &contrix_config,
     ))))
 }
 
@@ -337,6 +359,7 @@ async fn patch_account(
         user: admin_user,
         ..
     } = call_context;
+    let contrix_config = depot.contrix_config()?;
     let id = extract_ulid_param(req)?;
     let homeserver = depot.homeserver()?;
     let mut rng = crate::handlers::account::make_rng();
@@ -358,8 +381,9 @@ async fn patch_account(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(AccountRecord::from(
+    Ok(Json(SingleResponse::new_canonical(AccountRecord::from_user(
         account,
+        &contrix_config,
     ))))
 }
 
