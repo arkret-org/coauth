@@ -63,6 +63,7 @@ pub struct OidcCodeExchangeRequest {
     pub redirect_uri: String,
     pub issuer: String,
     pub token_endpoint: String,
+    pub client_id: String,
     pub login_hint: String,
     pub device_id: String,
     #[serde(default)]
@@ -355,6 +356,7 @@ pub async fn oidc_code_exchange(
         || input.redirect_uri.trim().is_empty()
         || input.issuer.trim().is_empty()
         || input.token_endpoint.trim().is_empty()
+        || input.client_id.trim().is_empty()
         || input.login_hint.trim().is_empty()
         || input.device_id.trim().is_empty()
     {
@@ -364,7 +366,7 @@ pub async fn oidc_code_exchange(
             viewer: None,
             session_grant: None,
             warnings: vec![
-                "authorization_code, code_verifier, redirect_uri, issuer, token_endpoint, login_hint, and device_id are required"
+                "authorization_code, code_verifier, redirect_uri, issuer, token_endpoint, client_id, login_hint, and device_id are required"
                     .to_owned(),
             ],
         }));
@@ -654,6 +656,20 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
+    if oauth2_client.client_id != input.client_id.trim() {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_client"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "authorization_code was issued for client_id={} rather than {}",
+                oauth2_client.client_id,
+                input.client_id.trim()
+            )],
+        }));
+        return Ok(());
+    }
 
     let Some(user_session_id) = oauth2_session.user_session_id else {
         res.render(Json(LoginResponse {
@@ -748,6 +764,7 @@ pub async fn oidc_code_exchange(
             format!("redirect_uri={}", redirect_uri),
             format!("issuer={issuer}"),
             format!("token_endpoint={token_endpoint}"),
+            format!("client_id={}", oauth2_client.client_id),
             format!("oauth2_session_id={oauth2_session_id}"),
             format!("oauth2_client_id={}", oauth2_client.client_id),
             format!("browser_session_id={user_session_id}"),
