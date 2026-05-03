@@ -201,6 +201,45 @@ pub struct AccountRiskActionExecuteResponse {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountRiskActionCurrentResponse {
+    /// Account targeted by the current risk-action state machine.
+    account_id: String,
+
+    /// Latest proposal identifier, if any.
+    proposal_id: Option<String>,
+
+    /// Latest recorded action, if any.
+    action: Option<String>,
+
+    /// Current lifecycle state derived from the latest scaffold record.
+    lifecycle_state: String,
+
+    /// Latest recorded operation name, if any.
+    last_operation: Option<String>,
+
+    /// Optional ticket or incident reference.
+    ticket: Option<String>,
+
+    /// When the current state record was written.
+    recorded_at: Option<DateTime<Utc>>,
+
+    /// Admin identifier associated with the latest state record.
+    recorded_by: Option<String>,
+
+    /// Admin username associated with the latest state record.
+    recorded_by_username: Option<String>,
+
+    /// Execution endpoint referenced by the latest proposal/approval state.
+    execution_endpoint: Option<String>,
+
+    /// Mutation endpoint referenced by the latest execute state.
+    mutation_endpoint: Option<String>,
+
+    /// Remaining implementation work for this scaffold state.
+    todo: Option<String>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRecord {
     #[serde(skip)]
     id: Ulid,
@@ -727,6 +766,74 @@ pub async fn list_risk_action_history(
 }
 
 #[endpoint]
+#[tracing::instrument(
+    name = "handler.admin.v1.accounts.get_risk_action_current",
+    skip_all
+)]
+pub async fn get_risk_action_current(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<SingleResponse<AccountRiskActionCurrentResponse>> {
+    let crate::handlers::admin::call_context::CallContext { mut repo, .. } =
+        extract_call_context(req, depot).await?;
+    let id = extract_ulid_param(req)?;
+    repo.user()
+        .lookup(id)
+        .await?
+        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+
+    let logs = repo
+        .audit()
+        .list_admin_operations(
+            coauth_data::audit::AdminOperationFilter::new()
+                .for_resource_type("account")
+                .with_limit(100),
+        )
+        .await?;
+
+    repo.cancel().await?;
+
+    let current = logs
+        .into_iter()
+        .filter(|log| is_account_risk_action_log(log, id))
+        .next()
+        .map(|log| AccountRiskActionCurrentResponse {
+            account_id: id.to_string(),
+            proposal_id: risk_action_detail_string(&log.details, "proposal_id"),
+            action: risk_action_detail_string(&log.details, "action"),
+            lifecycle_state: risk_action_lifecycle_state(&log.operation).to_owned(),
+            last_operation: risk_action_operation_name(&log.operation),
+            ticket: risk_action_detail_string(&log.details, "ticket"),
+            recorded_at: Some(log.created_at),
+            recorded_by: risk_action_detail_string(&log.details, "requested_by")
+                .or_else(|| risk_action_detail_string(&log.details, "approved_by")),
+            recorded_by_username: risk_action_detail_string(&log.details, "requested_by_username")
+                .or_else(|| risk_action_detail_string(&log.details, "approved_by_username")),
+            execution_endpoint: risk_action_detail_string(&log.details, "execution_endpoint"),
+            mutation_endpoint: risk_action_detail_string(&log.details, "mutation_endpoint"),
+            todo: risk_action_detail_string(&log.details, "todo"),
+        })
+        .unwrap_or(AccountRiskActionCurrentResponse {
+            account_id: id.to_string(),
+            proposal_id: None,
+            action: None,
+            lifecycle_state: "idle".to_owned(),
+            last_operation: None,
+            ticket: None,
+            recorded_at: None,
+            recorded_by: None,
+            recorded_by_username: None,
+            execution_endpoint: None,
+            mutation_endpoint: None,
+            todo: Some(
+                "No risk-action scaffold state has been recorded for this account yet.".to_owned(),
+            ),
+        });
+
+    Ok(Json(SingleResponse::new_canonical(current)))
+}
+
+#[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.accounts.lock", skip_all)]
 pub async fn lock_account(
     req: &mut Request,
@@ -879,6 +986,42 @@ fn is_account_risk_action_log(log: &coauth_data::audit::AdminOperationLog, accou
                     || operation.ends_with("_proposal_approved")
                     || operation.ends_with("_proposal_executed"))
     )
+}
+
+fn risk_action_operation_name(operation: &coauth_data::audit::AdminOperation) -> Option<String> {
+    match operation {
+        coauth_data::audit::AdminOperation::Other(operation) => Some(operation.clone()),
+        _ => None,
+    }
+}
+
+fn risk_action_lifecycle_state(operation: &coauth_data::audit::AdminOperation) -> &'static str {
+    match operation {
+        coauth_data::audit::AdminOperation::Other(operation)
+            if operation.ends_with("_proposal_executed") =>
+        {
+            "execute_scaffold_recorded"
+        }
+        coauth_data::audit::AdminOperation::Other(operation)
+            if operation.ends_with("_proposal_approved") =>
+        {
+            "approval_scaffold_recorded"
+        }
+        coauth_data::audit::AdminOperation::Other(operation)
+            if operation.ends_with("_proposal") =>
+        {
+            "proposal_scaffold_recorded"
+        }
+        _ => "idle",
+    }
+}
+
+fn risk_action_detail_string(details: &serde_json::Value, field: &str) -> Option<String> {
+    details
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+        .filter(|value| !value.trim().is_empty())
 }
 
 #[cfg(test)]

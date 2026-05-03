@@ -703,6 +703,10 @@ fn build_admin_router(router: Router) -> Router {
                             Router::with_path("risk-action/history")
                                 .get(accounts::list_risk_action_history),
                         )
+                        .push(
+                            Router::with_path("risk-action/current")
+                                .get(accounts::get_risk_action_current),
+                        )
                         .push(Router::with_path("risk-action").post(accounts::risk_action))
                         .push(
                             Router::with_path("risk-action/{proposal_id}/approve")
