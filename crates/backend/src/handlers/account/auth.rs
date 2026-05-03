@@ -22,6 +22,7 @@ use crate::{
         },
         contrix,
     },
+    oidc_client::requests::jose::{JwtVerificationData, verify_signed_jwt},
     salvo_utils::session::SessionInfoExt,
 };
 
@@ -64,6 +65,7 @@ pub struct OidcCodeExchangeRequest {
     pub redirect_uri: String,
     pub issuer: String,
     pub token_endpoint: String,
+    pub userinfo_endpoint: String,
     pub client_id: String,
     pub login_hint: String,
     pub device_id: String,
@@ -83,6 +85,15 @@ pub struct ViewerInfo {
     pub handle: String,
     pub mxid: String,
     pub display_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct OidcUserinfoClaims {
+    sub: String,
+    #[serde(rename = "org.contrix.principal_did")]
+    principal_did: String,
+    #[serde(rename = "org.contrix.session_id")]
+    session_id: String,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -348,6 +359,14 @@ pub async fn oidc_code_exchange(
     let templates = depot.templates()?;
     let homeserver = depot.homeserver()?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let http_client = depot
+        .get::<reqwest::Client>("http_client")
+        .cloned()
+        .ok_or_else(|| {
+            RouteError::Internal(Box::new(std::io::Error::other(
+                "http_client not found in depot",
+            )))
+        })?;
     let service_activity_tracker = depot
         .get::<crate::handlers::ActivityTracker>("activity_tracker")
         .cloned()
@@ -369,6 +388,7 @@ pub async fn oidc_code_exchange(
         || input.redirect_uri.trim().is_empty()
         || input.issuer.trim().is_empty()
         || input.token_endpoint.trim().is_empty()
+        || input.userinfo_endpoint.trim().is_empty()
         || input.client_id.trim().is_empty()
         || input.login_hint.trim().is_empty()
         || input.device_id.trim().is_empty()
@@ -379,7 +399,7 @@ pub async fn oidc_code_exchange(
             viewer: None,
             session_grant: None,
             warnings: vec![
-                "authorization_code, code_verifier, redirect_uri, issuer, token_endpoint, client_id, login_hint, and device_id are required"
+                "authorization_code, code_verifier, redirect_uri, issuer, token_endpoint, userinfo_endpoint, client_id, login_hint, and device_id are required"
                     .to_owned(),
             ],
         }));
@@ -425,6 +445,19 @@ pub async fn oidc_code_exchange(
             return Ok(());
         }
     };
+    let userinfo_endpoint = match url::Url::parse(input.userinfo_endpoint.trim()) {
+        Ok(uri) => uri,
+        Err(_) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_userinfo_endpoint"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec!["userinfo_endpoint must be a valid absolute URI".to_owned()],
+            }));
+            return Ok(());
+        }
+    };
     if issuer.scheme() != token_endpoint.scheme()
         || issuer.domain() != token_endpoint.domain()
         || issuer.port_or_known_default() != token_endpoint.port_or_known_default()
@@ -440,17 +473,36 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
+    if issuer.scheme() != userinfo_endpoint.scheme()
+        || issuer.domain() != userinfo_endpoint.domain()
+        || issuer.port_or_known_default() != userinfo_endpoint.port_or_known_default()
+    {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_discovery_binding"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![
+                "issuer and userinfo_endpoint must resolve to the same origin for the OIDC exchange scaffold".to_owned(),
+            ],
+        }));
+        return Ok(());
+    }
     let expected_issuer = url_builder.oidc_issuer();
     let expected_token_endpoint = url_builder.oauth_token_endpoint();
-    if issuer != expected_issuer || token_endpoint != expected_token_endpoint {
+    let expected_userinfo_endpoint = url_builder.oidc_userinfo_endpoint();
+    if issuer != expected_issuer
+        || token_endpoint != expected_token_endpoint
+        || userinfo_endpoint != expected_userinfo_endpoint
+    {
         res.render(Json(LoginResponse {
             status: "error",
             error: Some("invalid_discovery_binding"),
             viewer: None,
             session_grant: None,
             warnings: vec![format!(
-                "OIDC exchange metadata does not match this coauth issuer/token surface: expected issuer={} token_endpoint={} but received issuer={} token_endpoint={}",
-                expected_issuer, expected_token_endpoint, issuer, token_endpoint
+                "OIDC exchange metadata does not match this coauth issuer/token/userinfo surface: expected issuer={} token_endpoint={} userinfo_endpoint={} but received issuer={} token_endpoint={} userinfo_endpoint={}",
+                expected_issuer, expected_token_endpoint, expected_userinfo_endpoint, issuer, token_endpoint, userinfo_endpoint
             )],
         }));
         return Ok(());
@@ -825,6 +877,70 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
+    let (oauth_userinfo, userinfo_response_signed) = match fetch_local_oidc_userinfo(
+        &http_client,
+        &key_store,
+        &userinfo_endpoint,
+        &expected_issuer,
+        &oauth_token_reply.access_token,
+        &oauth2_client.client_id,
+        oauth2_client.userinfo_signed_response_alg.as_ref(),
+    )
+    .await
+    {
+        Ok(reply) => reply,
+        Err(error) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_authorization_code"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![format!(
+                    "fresh OAuth access token failed local userinfo validation: {error}"
+                )],
+            }));
+            return Ok(());
+        }
+    };
+    if oauth_userinfo.sub != expected_subject {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "fresh OAuth userinfo subject mismatch: expected {} but userinfo returned {}",
+                expected_subject, oauth_userinfo.sub
+            )],
+        }));
+        return Ok(());
+    }
+    if oauth_userinfo.principal_did != expected_subject {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "fresh OAuth userinfo principal_did mismatch: expected {} but userinfo returned {}",
+                expected_subject, oauth_userinfo.principal_did
+            )],
+        }));
+        return Ok(());
+    }
+    if oauth_userinfo.session_id != expected_oauth_session_id {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "fresh OAuth userinfo session mismatch: expected {} but userinfo returned {}",
+                expected_oauth_session_id, oauth_userinfo.session_id
+            )],
+        }));
+        return Ok(());
+    }
 
     let device_id = input.device_id.trim().to_owned();
     let grant_target = session_grant_target_for_requested_audience(
@@ -890,6 +1006,7 @@ pub async fn oidc_code_exchange(
             format!("redirect_uri={}", redirect_uri),
             format!("issuer={issuer}"),
             format!("token_endpoint={token_endpoint}"),
+            format!("userinfo_endpoint={userinfo_endpoint}"),
             format!("client_id={}", oauth2_client.client_id),
             format!("oauth2_session_id={oauth2_session_id}"),
             format!("oauth2_client_id={}", oauth2_client.client_id),
@@ -905,6 +1022,8 @@ pub async fn oidc_code_exchange(
             "authorization_code_exchanged_via_local_token_service=true".to_owned(),
             "oauth_access_token_issued=true".to_owned(),
             "oauth_access_token_introspected_locally=true".to_owned(),
+            "oauth_access_token_validated_via_local_userinfo=true".to_owned(),
+            format!("oauth_userinfo_response_signed={userinfo_response_signed}"),
             format!(
                 "oauth_refresh_token_issued={}",
                 oauth_token_reply.refresh_token.is_some()
@@ -917,6 +1036,7 @@ pub async fn oidc_code_exchange(
                     .as_deref()
                     .unwrap_or("missing")
             ),
+            format!("oauth_userinfo_subject={}", oauth_userinfo.sub),
             format!(
                 "callback_state_checked={}",
                 input.expected_state.is_some()
@@ -1018,4 +1138,69 @@ fn session_grant_target_for_requested_audience(
     }
 
     contrix::password_login_session_grant_target(url_builder, contrix_config)
+}
+
+async fn fetch_local_oidc_userinfo(
+    http_client: &reqwest::Client,
+    key_store: &coauth_keystore::Keystore,
+    userinfo_endpoint: &url::Url,
+    issuer: &url::Url,
+    access_token: &str,
+    expected_client_id: &String,
+    expected_signed_alg: Option<&coauth_iana::jose::JsonWebSignatureAlg>,
+) -> Result<(OidcUserinfoClaims, bool), String> {
+    let response = http_client
+        .get(userinfo_endpoint.clone())
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|error| format!("userinfo endpoint request failed: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("userinfo endpoint returned error status: {error}"))?;
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .unwrap_or_default();
+
+    if content_type.starts_with("application/jwt") {
+        let expected_alg = expected_signed_alg.ok_or_else(|| {
+            "userinfo endpoint returned a signed JWT but the selected client does not advertise a signed userinfo response".to_owned()
+        })?;
+        let jwt_body = response
+            .text()
+            .await
+            .map_err(|error| format!("failed to read signed userinfo response: {error}"))?;
+        let jwks = key_store.public_jwks();
+        let jwt = verify_signed_jwt(
+            jwt_body.as_str(),
+            JwtVerificationData {
+                issuer: Some(issuer.as_str()),
+                jwks: &jwks,
+                client_id: expected_client_id,
+                signing_algorithm: expected_alg,
+            },
+        )
+        .map_err(|error| format!("userinfo JWT verification failed: {error}"))?;
+        let claims = serde_json::from_value::<OidcUserinfoClaims>(serde_json::json!(
+            jwt.payload().clone()
+        ))
+            .map_err(|error| format!("failed to decode signed userinfo claims: {error}"))?;
+        return Ok((claims, true));
+    }
+
+    if expected_signed_alg.is_some() {
+        return Err(
+            "userinfo endpoint returned JSON but the selected client expects a signed JWT response"
+                .to_owned(),
+        );
+    }
+
+    let claims = response
+        .json::<OidcUserinfoClaims>()
+        .await
+        .map_err(|error| format!("failed to decode JSON userinfo response: {error}"))?;
+    Ok((claims, false))
 }
