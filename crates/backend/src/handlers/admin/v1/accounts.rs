@@ -688,6 +688,45 @@ pub async fn execute_risk_action(
 }
 
 #[endpoint]
+#[tracing::instrument(
+    name = "handler.admin.v1.accounts.list_risk_action_history",
+    skip_all
+)]
+pub async fn list_risk_action_history(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<crate::handlers::admin::v1::audit_feed::AuditFeedResponse> {
+    let crate::handlers::admin::call_context::CallContext { mut repo, .. } =
+        extract_call_context(req, depot).await?;
+    let id = extract_ulid_param(req)?;
+    repo.user()
+        .lookup(id)
+        .await?
+        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+
+    let logs = repo
+        .audit()
+        .list_admin_operations(
+            coauth_data::audit::AdminOperationFilter::new()
+                .for_resource_type("account")
+                .with_limit(100),
+        )
+        .await?;
+
+    repo.cancel().await?;
+
+    let data = logs
+        .into_iter()
+        .filter(|log| is_account_risk_action_log(log, id))
+        .map(crate::handlers::admin::v1::audit_feed::AuditEntry::from)
+        .collect();
+
+    Ok(Json(
+        crate::handlers::admin::v1::audit_feed::AuditFeedResponse { data },
+    ))
+}
+
+#[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.accounts.lock", skip_all)]
 pub async fn lock_account(
     req: &mut Request,
@@ -825,6 +864,21 @@ fn risk_action_execution_endpoint(action: &str, id: Ulid) -> Result<String, AppE
     };
 
     Ok(format!("/api/admin/v1/accounts/{id}/{action_path}"))
+}
+
+fn is_account_risk_action_log(log: &coauth_data::audit::AdminOperationLog, account_id: Ulid) -> bool {
+    if log.resource_type != "account" || log.resource_id != Some(account_id) {
+        return false;
+    }
+
+    matches!(
+        &log.operation,
+        coauth_data::audit::AdminOperation::Other(operation)
+            if operation.starts_with("account_")
+                && (operation.ends_with("_proposal")
+                    || operation.ends_with("_proposal_approved")
+                    || operation.ends_with("_proposal_executed"))
+    )
 }
 
 #[cfg(test)]

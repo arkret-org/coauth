@@ -699,6 +699,10 @@ fn build_admin_router(router: Router) -> Router {
                 .push(
                     Router::with_path("{id}")
                         .get(accounts::get_account)
+                        .push(
+                            Router::with_path("risk-action/history")
+                                .get(accounts::list_risk_action_history),
+                        )
                         .push(Router::with_path("risk-action").post(accounts::risk_action))
                         .push(
                             Router::with_path("risk-action/{proposal_id}/approve")
