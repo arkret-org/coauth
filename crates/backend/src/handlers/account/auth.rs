@@ -61,6 +61,8 @@ pub struct OidcCodeExchangeRequest {
     pub authorization_code: String,
     pub code_verifier: String,
     pub redirect_uri: String,
+    pub issuer: String,
+    pub token_endpoint: String,
     pub login_hint: String,
     pub device_id: String,
     #[serde(default)]
@@ -353,6 +355,8 @@ pub async fn oidc_code_exchange(
     if input.authorization_code.trim().is_empty()
         || input.code_verifier.trim().is_empty()
         || input.redirect_uri.trim().is_empty()
+        || input.issuer.trim().is_empty()
+        || input.token_endpoint.trim().is_empty()
         || input.login_hint.trim().is_empty()
         || input.device_id.trim().is_empty()
     {
@@ -362,20 +366,64 @@ pub async fn oidc_code_exchange(
             viewer: None,
             session_grant: None,
             warnings: vec![
-                "authorization_code, code_verifier, redirect_uri, login_hint, and device_id are required"
+                "authorization_code, code_verifier, redirect_uri, issuer, token_endpoint, login_hint, and device_id are required"
                     .to_owned(),
             ],
         }));
         return Ok(());
     }
 
-    if url::Url::parse(input.redirect_uri.trim()).is_err() {
+    let redirect_uri = match url::Url::parse(input.redirect_uri.trim()) {
+        Ok(uri) => uri,
+        Err(_) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_redirect_uri"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec!["redirect_uri must be a valid absolute URI".to_owned()],
+            }));
+            return Ok(());
+        }
+    };
+    let issuer = match url::Url::parse(input.issuer.trim()) {
+        Ok(uri) => uri,
+        Err(_) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_issuer"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec!["issuer must be a valid absolute URI".to_owned()],
+            }));
+            return Ok(());
+        }
+    };
+    let token_endpoint = match url::Url::parse(input.token_endpoint.trim()) {
+        Ok(uri) => uri,
+        Err(_) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_token_endpoint"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec!["token_endpoint must be a valid absolute URI".to_owned()],
+            }));
+            return Ok(());
+        }
+    };
+    if issuer.scheme() != token_endpoint.scheme()
+        || issuer.domain() != token_endpoint.domain()
+        || issuer.port_or_known_default() != token_endpoint.port_or_known_default()
+    {
         res.render(Json(LoginResponse {
             status: "error",
-            error: Some("invalid_redirect_uri"),
+            error: Some("invalid_discovery_binding"),
             viewer: None,
             session_grant: None,
-            warnings: vec!["redirect_uri must be a valid absolute URI".to_owned()],
+            warnings: vec![
+                "issuer and token_endpoint must resolve to the same origin for the OIDC exchange scaffold".to_owned(),
+            ],
         }));
         return Ok(());
     }
@@ -500,7 +548,9 @@ pub async fn oidc_code_exchange(
         warnings: vec![
             "TODO(contrix): authorization_code and code_verifier are scaffold inputs only; replace this endpoint with real OIDC callback and token-endpoint validation.".to_owned(),
             format!("device_id={device_id}"),
-            format!("redirect_uri={}", input.redirect_uri.trim()),
+            format!("redirect_uri={}", redirect_uri),
+            format!("issuer={issuer}"),
+            format!("token_endpoint={token_endpoint}"),
             format!(
                 "callback_state_checked={}",
                 input.expected_state.is_some()
