@@ -41,6 +41,54 @@ impl std::fmt::Display for AccountStatus {
     }
 }
 
+#[derive(Deserialize, JsonSchema, ToSchema)]
+#[serde(rename = "AccountRiskActionProposalRequest")]
+pub struct AccountRiskActionProposalRequest {
+    /// Risk action to stage for approval: `lock`, `disable`, `erase`, or
+    /// `reset_recovery`.
+    action: String,
+
+    /// Human reason for the requested action.
+    reason: Option<String>,
+
+    /// Optional ticket or incident reference.
+    ticket: Option<String>,
+
+    /// Optional approver identifier. Leave empty while the request is still a
+    /// draft proposal.
+    approved_by: Option<String>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountRiskActionProposalResponse {
+    /// Account targeted by the proposal.
+    account_id: String,
+
+    /// Requested action.
+    action: String,
+
+    /// Human reason supplied by the caller.
+    reason: Option<String>,
+
+    /// Optional ticket or incident reference.
+    ticket: Option<String>,
+
+    /// Optional approver identifier.
+    approved_by: Option<String>,
+
+    /// Proposal state reported by the scaffold contract.
+    proposal_state: String,
+
+    /// Approval mode expected before executing the real mutation endpoint.
+    approval_mode: String,
+
+    /// Final execution endpoint that would perform the mutation after approval.
+    execution_endpoint: String,
+
+    /// Remaining implementation work for this scaffold.
+    todo: String,
+}
+
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRecord {
     #[serde(skip)]
@@ -282,6 +330,52 @@ pub async fn get_account(
 }
 
 #[endpoint]
+#[tracing::instrument(name = "handler.admin.v1.accounts.risk_action", skip_all)]
+pub async fn risk_action(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<AccountRiskActionProposalResponse> {
+    let params: AccountRiskActionProposalRequest =
+        req.parse_json().await.map_err(AppError::internal)?;
+    if params.action.trim().is_empty() {
+        return Err(AppError::bad_request("risk action is required"));
+    }
+    if params
+        .reason
+        .as_deref()
+        .is_none_or(|reason| reason.trim().is_empty())
+    {
+        return Err(AppError::bad_request(
+            "risk action proposals require a non-empty reason",
+        ));
+    }
+
+    let ctx = extract_call_context(req, depot).await?;
+    let id = extract_ulid_param(req)?;
+    let account = ctx
+        .repo
+        .user()
+        .lookup(id)
+        .await?
+        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+    ctx.repo.cancel().await?;
+
+    let execution_endpoint = risk_action_execution_endpoint(&params.action, account.id)?;
+
+    Ok(Json(AccountRiskActionProposalResponse {
+        account_id: account.id.to_string(),
+        action: params.action,
+        reason: params.reason,
+        ticket: params.ticket,
+        approved_by: params.approved_by,
+        proposal_state: "draft".to_owned(),
+        approval_mode: "proposal_scaffold_required".to_owned(),
+        execution_endpoint,
+        todo: "TODO(contrix): persist proposal records, capture requester/approver context, require explicit approval, then route approved proposals into the dedicated /lock, /disable, /erase, or /reset-recovery mutation endpoints.".to_owned(),
+    }))
+}
+
+#[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.accounts.lock", skip_all)]
 pub async fn lock_account(
     req: &mut Request,
@@ -403,6 +497,22 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
         }
         other => AppError::bad_request(other.to_string()),
     }
+}
+
+fn risk_action_execution_endpoint(action: &str, id: Ulid) -> Result<String, AppError> {
+    let action_path = match action {
+        "lock" => "lock",
+        "disable" => "disable",
+        "erase" => "erase",
+        "reset_recovery" => "reset-recovery",
+        other => {
+            return Err(AppError::bad_request(format!(
+                "Unknown account risk action: {other}"
+            )));
+        }
+    };
+
+    Ok(format!("/api/admin/v1/accounts/{id}/{action_path}"))
 }
 
 #[cfg(test)]
