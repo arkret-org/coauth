@@ -5,9 +5,11 @@
 
 use std::sync::LazyLock;
 
+use coauth_data::{BoxRepository, BrowserSession, RepositoryAccess, SiteConfig, UrlBuilder, User};
 use opentelemetry::{Key, KeyValue, metrics::Counter};
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
+use ulid::Ulid;
 
 use super::{DepotExt, NodeType, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
 use crate::{
@@ -50,6 +52,22 @@ pub struct LoginResponse {
     pub viewer: Option<ViewerInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_grant: Option<SessionGrantInfo>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct OidcCodeExchangeRequest {
+    pub authorization_code: String,
+    pub code_verifier: String,
+    pub login_hint: String,
+    pub device_id: String,
+    #[serde(default)]
+    pub principal_audience: Option<String>,
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub expected_state: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -64,10 +82,21 @@ pub struct ViewerInfo {
 
 #[derive(Serialize, ToSchema)]
 pub struct SessionGrantInfo {
+    pub kind: &'static str,
     pub grant_jwt: String,
     pub session_public_key: String,
     pub session_private_key_pem: String,
     pub expires_at: String,
+    pub audience: String,
+    pub scopes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub principal_server: Option<SessionGrantPrincipalServerInfo>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct SessionGrantPrincipalServerInfo {
+    pub name: String,
+    pub endpoint: String,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -93,8 +122,9 @@ pub struct ProviderInfo {
 
 // ── POST /api/v1/auth/login ────────────────────────────────────
 
-/// Authenticate a user with username and password, returning viewer info and
-/// setting a session cookie on success.
+/// Authenticate a user with username and password, returning viewer info,
+/// setting a session cookie on success, and minting a temporary scaffold
+/// session grant for the configured principal-server bridge.
 #[endpoint]
 pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Result<(), RouteError> {
     let mut rng = make_rng();
@@ -132,6 +162,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             error: Some("invalid_credentials"),
             viewer: None,
             session_grant: None,
+            warnings: Vec::new(),
         }));
         return Ok(());
     }
@@ -169,6 +200,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 error: Some("password_login_disabled"),
                 viewer: None,
                 session_grant: None,
+                warnings: Vec::new(),
             }));
             Ok(())
         }
@@ -179,6 +211,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 error: Some("invalid_credentials"),
                 viewer: None,
                 session_grant: None,
+                warnings: Vec::new(),
             }));
             Ok(())
         }
@@ -190,6 +223,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 error: Some("rate_limited"),
                 viewer: None,
                 session_grant: None,
+                warnings: Vec::new(),
             }));
             Ok(())
         }
@@ -200,6 +234,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 error: Some("account_deactivated"),
                 viewer: None,
                 session_grant: None,
+                warnings: Vec::new(),
             }));
             Ok(())
         }
@@ -210,6 +245,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 error: Some("account_locked"),
                 viewer: None,
                 session_grant: None,
+                warnings: Vec::new(),
             }));
             Ok(())
         }
@@ -225,13 +261,18 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
-            let session_grant = contrix::issue_session_grant(
+            let grant_target =
+                contrix::password_login_session_grant_target(&url_builder, &contrix_config);
+            // TODO(contrix): replace password bootstrap minting with the real
+            // coauth-owned OIDC/passkey exchange and proof-bound grant issuance.
+            let session_grant = contrix::issue_session_grant_for_audience(
                 &mut rng,
                 &clock,
                 &url_builder,
                 &contrix_config,
                 &key_store,
                 &user_session,
+                grant_target.audience.clone(),
                 vec![contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
@@ -261,16 +302,198 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         display_name,
                     }),
                     session_grant: Some(SessionGrantInfo {
+                        kind: "cx.session_grant",
                         grant_jwt: session_grant.grant_jwt,
                         session_public_key: session_grant.session_public_key,
                         session_private_key_pem: session_grant.session_private_key_pem,
                         expires_at: session_grant.expires_at,
+                        audience: session_grant.audience,
+                        scopes: session_grant.scopes,
+                        principal_server: grant_target
+                            .principal_server_name
+                            .zip(grant_target.principal_server_endpoint)
+                            .map(|(name, endpoint)| SessionGrantPrincipalServerInfo {
+                                name,
+                                endpoint,
+                            }),
                     }),
+                    warnings: Vec::new(),
                 }),
             );
             Ok(())
         }
     }
+}
+
+/// Scaffold-only OIDC authorization-code exchange that resolves a local user
+/// from `login_hint`, then mints a temporary audience-bound Contrix session
+/// grant without validating the authorization code against the real OIDC token
+/// endpoint yet.
+#[endpoint]
+pub async fn oidc_code_exchange(
+    req: &mut Request,
+    depot: &Depot,
+    res: &mut Response,
+) -> Result<(), RouteError> {
+    let mut rng = make_rng();
+    let clock = make_clock();
+    let site_config = depot.site_config()?;
+    let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
+    let key_store = depot.key_store()?;
+    let homeserver = depot.homeserver()?;
+    let mut repo = depot.repo().await?;
+
+    let input: OidcCodeExchangeRequest = req
+        .parse_json()
+        .await
+        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
+
+    if input.authorization_code.trim().is_empty()
+        || input.code_verifier.trim().is_empty()
+        || input.login_hint.trim().is_empty()
+        || input.device_id.trim().is_empty()
+    {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_request"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![
+                "authorization_code, code_verifier, login_hint, and device_id are required"
+                    .to_owned(),
+            ],
+        }));
+        return Ok(());
+    }
+
+    if let Some(expected_state) = input.expected_state.as_deref() {
+        let returned_state = input.state.as_deref().unwrap_or_default();
+        if returned_state.is_empty() {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_state"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![
+                    "callback state is required when expected_state is supplied".to_owned(),
+                ],
+            }));
+            return Ok(());
+        }
+        if returned_state != expected_state {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_state"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![format!(
+                    "callback state mismatch: expected {expected_state} but received {returned_state}"
+                )],
+            }));
+            return Ok(());
+        }
+    }
+
+    let Some(user) = resolve_user_by_login_hint(
+        site_config,
+        homeserver.as_ref(),
+        &url_builder,
+        &contrix_config,
+        &mut repo,
+        input.login_hint.trim(),
+    )
+    .await? else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_login_hint"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![
+                "TODO(contrix): replace login_hint bridge lookup with real OIDC callback subject resolution"
+                    .to_owned(),
+            ],
+        }));
+        return Ok(());
+    };
+
+    let now = clock.now();
+    let device_id = input.device_id.trim().to_owned();
+    let grant_target = session_grant_target_for_requested_audience(
+        &url_builder,
+        &contrix_config,
+        input.principal_audience.as_deref(),
+    );
+    let browser_session = BrowserSession {
+        id: Ulid::new(),
+        user: user.clone(),
+        created_at: now,
+        finished_at: None,
+        user_agent: Some("yougen oidc scaffold exchange".to_owned()),
+        last_active_at: Some(now),
+        last_active_ip: None,
+    };
+    let session_grant = contrix::issue_session_grant_for_audience(
+        &mut rng,
+        &clock,
+        &url_builder,
+        &contrix_config,
+        &key_store,
+        &browser_session,
+        grant_target.audience.clone(),
+        vec![contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+    )
+    .map_err(|error| RouteError::Internal(Box::new(error)))?;
+
+    contrix::persist_session_grant(
+        &mut repo,
+        &mut rng,
+        &clock,
+        &browser_session,
+        &session_grant,
+    )
+    .await?;
+    repo.save().await?;
+
+    let display_name = match homeserver.query_user(&user.username).await {
+        Ok(info) => info.displayname,
+        Err(_) => None,
+    };
+
+    res.render(Json(LoginResponse {
+        status: "success",
+        error: None,
+        viewer: Some(ViewerInfo {
+            id: NodeType::User.serialize(user.id),
+            username: user.username.clone(),
+            did: contrix::user_did_for(&url_builder, &contrix_config, &user),
+            handle: contrix::user_handle(&url_builder, &user),
+            mxid: homeserver.mxid(&user.username),
+            display_name,
+        }),
+        session_grant: Some(SessionGrantInfo {
+            kind: "cx.session_grant",
+            grant_jwt: session_grant.grant_jwt,
+            session_public_key: session_grant.session_public_key,
+            session_private_key_pem: session_grant.session_private_key_pem,
+            expires_at: session_grant.expires_at,
+            audience: session_grant.audience,
+            scopes: session_grant.scopes,
+            principal_server: grant_target
+                .principal_server_name
+                .zip(grant_target.principal_server_endpoint)
+                .map(|(name, endpoint)| SessionGrantPrincipalServerInfo { name, endpoint }),
+        }),
+        warnings: vec![
+            "TODO(contrix): authorization_code and code_verifier are scaffold inputs only; replace this endpoint with real OIDC callback and token-endpoint validation.".to_owned(),
+            format!("device_id={device_id}"),
+            format!(
+                "callback_state_checked={}",
+                input.expected_state.is_some()
+            ),
+        ],
+    }));
+    Ok(())
 }
 
 // ── POST /api/v1/auth/logout ───────────────────────────────────
@@ -336,4 +559,73 @@ pub async fn providers(depot: &Depot) -> Result<Json<ProvidersResponse>, RouteEr
         password_registration_enabled: site_config.password_registration_enabled,
         account_recovery_allowed: site_config.account_recovery_allowed,
     }))
+}
+
+async fn resolve_user_by_login_hint(
+    site_config: &SiteConfig,
+    homeserver: &dyn crate::handlers::HomeserverAdmin,
+    url_builder: &UrlBuilder,
+    contrix_config: &coauth_config::ContrixConfig,
+    repo: &mut BoxRepository,
+    identifier: &str,
+) -> Result<Option<User>, RouteError> {
+    if let Some(user_id) = contrix::parse_local_user_did_for(url_builder, contrix_config, identifier)
+    {
+        return repo.user().lookup(user_id).await.map_err(RouteError::from);
+    }
+
+    if let Some(username) = contrix::parse_local_handle(url_builder, identifier)
+        && let Some(user) = repo.user().find_by_username(&username).await.map_err(RouteError::from)?
+    {
+        return Ok(Some(user));
+    }
+
+    let username_or_email = homeserver.localpart(identifier).unwrap_or(identifier);
+    if site_config.login_with_email_allowed && username_or_email.contains('@') {
+        let maybe_user_email = repo
+            .user_email()
+            .find_by_email(username_or_email)
+            .await
+            .map_err(RouteError::from)?;
+        if let Some(user_email) = maybe_user_email {
+            let user = repo.user().lookup(user_email.user_id).await.map_err(RouteError::from)?;
+            if user.is_some() {
+                return Ok(user);
+            }
+        }
+    }
+
+    repo.user()
+        .find_by_username(username_or_email)
+        .await
+        .map_err(RouteError::from)
+}
+
+fn session_grant_target_for_requested_audience(
+    url_builder: &UrlBuilder,
+    contrix_config: &coauth_config::ContrixConfig,
+    requested_audience: Option<&str>,
+) -> contrix::SessionGrantTarget {
+    if let Some(requested_audience) = requested_audience.map(str::trim).filter(|value| !value.is_empty())
+    {
+        if let Some(server) = contrix_config
+            .principal_servers
+            .iter()
+            .find(|server| server.audience == requested_audience)
+        {
+            return contrix::SessionGrantTarget {
+                audience: server.audience.clone(),
+                principal_server_name: Some(server.name.clone()),
+                principal_server_endpoint: Some(server.endpoint.to_string()),
+            };
+        }
+
+        return contrix::SessionGrantTarget {
+            audience: requested_audience.to_owned(),
+            principal_server_name: None,
+            principal_server_endpoint: None,
+        };
+    }
+
+    contrix::password_login_session_grant_target(url_builder, contrix_config)
 }
