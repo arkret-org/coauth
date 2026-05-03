@@ -339,7 +339,6 @@ pub async fn oidc_code_exchange(
 ) -> Result<(), RouteError> {
     let mut rng = make_rng();
     let clock = make_clock();
-    let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
@@ -423,6 +422,21 @@ pub async fn oidc_code_exchange(
             warnings: vec![
                 "issuer and token_endpoint must resolve to the same origin for the OIDC exchange scaffold".to_owned(),
             ],
+        }));
+        return Ok(());
+    }
+    let expected_issuer = url_builder.oidc_issuer();
+    let expected_token_endpoint = url_builder.oauth_token_endpoint();
+    if issuer != expected_issuer || token_endpoint != expected_token_endpoint {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_discovery_binding"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "OIDC exchange metadata does not match this coauth issuer/token surface: expected issuer={} token_endpoint={} but received issuer={} token_endpoint={}",
+                expected_issuer, expected_token_endpoint, issuer, token_endpoint
+            )],
         }));
         return Ok(());
     }
@@ -596,6 +610,50 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     };
+    if oauth2_session.client_id != authz_grant.client_id {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "authorization_code client binding mismatch: grant client={} session client={}",
+                authz_grant.client_id, oauth2_session.client_id
+            )],
+        }));
+        return Ok(());
+    }
+
+    let Some(oauth2_client) = repo.oauth2_client().lookup(authz_grant.client_id).await? else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "authorization_code references missing oauth2_client={}",
+                authz_grant.client_id
+            )],
+        }));
+        return Ok(());
+    };
+    if !oauth2_client
+        .redirect_uris
+        .iter()
+        .any(|registered_redirect_uri| registered_redirect_uri == &redirect_uri)
+    {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_redirect_uri"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "authorization_code client={} no longer allows redirect_uri={}",
+                oauth2_client.client_id, redirect_uri
+            )],
+        }));
+        return Ok(());
+    }
 
     let Some(user_session_id) = oauth2_session.user_session_id else {
         res.render(Json(LoginResponse {
@@ -691,6 +749,7 @@ pub async fn oidc_code_exchange(
             format!("issuer={issuer}"),
             format!("token_endpoint={token_endpoint}"),
             format!("oauth2_session_id={oauth2_session_id}"),
+            format!("oauth2_client_id={}", oauth2_client.client_id),
             format!("browser_session_id={user_session_id}"),
             "authorization_code_validated_locally=true".to_owned(),
             "pkce_verified=true".to_owned(),
