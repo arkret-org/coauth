@@ -17,6 +17,7 @@ use oauth2_types::scope::{Scope, ScopeToken};
 use rand_core::{CryptoRngCore, RngCore};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
+use sha2::Digest as _;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -110,19 +111,29 @@ pub struct SessionGrantMaterial {
     pub scopes: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct SessionGrantTarget {
+    pub audience: String,
+    pub principal_server_name: Option<String>,
+    pub principal_server_endpoint: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DidDocument {
     pub id: String,
 
+    #[serde(rename = "alsoKnownAs")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub also_known_as: Vec<String>,
 
+    #[serde(rename = "verificationMethod")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub verification_method: Vec<VerificationMethod>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authentication: Vec<String>,
 
+    #[serde(rename = "assertionMethod")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assertion_method: Vec<String>,
 
@@ -138,6 +149,8 @@ pub struct VerificationMethod {
     pub kind: &'static str,
 
     pub controller: String,
+
+    #[serde(rename = "publicKeyJwk")]
     pub public_key_jwk: PublicJsonWebKey,
 }
 
@@ -148,6 +161,7 @@ pub struct DidService {
     #[serde(rename = "type")]
     pub kind: &'static str,
 
+    #[serde(rename = "serviceEndpoint")]
     pub service_endpoint: String,
 }
 
@@ -157,6 +171,7 @@ pub struct SessionGrantPayload {
     pub kind: String,
     pub issuer: String,
     pub subject: String,
+    pub service_account_id: String,
     pub session_public_key: String,
     pub audience: String,
     pub scopes: Vec<String>,
@@ -167,6 +182,37 @@ pub struct SessionGrantPayload {
     pub device_id: Option<String>,
     pub session_id: String,
     pub browser_session_id: String,
+    pub proof: SessionGrantProof,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionGrantProof {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub alg: String,
+    pub key_id: String,
+    pub canonicalization: String,
+    pub payload_hash_alg: String,
+    pub payload_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SessionGrantPayloadClaims {
+    #[serde(rename = "type")]
+    kind: String,
+    issuer: String,
+    subject: String,
+    service_account_id: String,
+    session_public_key: String,
+    audience: String,
+    scopes: Vec<String>,
+    not_before: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    revocation_ref: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    device_id: Option<String>,
+    session_id: String,
+    browser_session_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -175,7 +221,7 @@ struct SupportedBinding {
     base_url: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct PrincipalServerDescriptor {
     name: String,
     audience: String,
@@ -191,6 +237,42 @@ struct IdentityRegistryDescriptor {
 }
 
 #[derive(Debug, Serialize)]
+struct IdentityRegistryResolverDescriptor {
+    mode: &'static str,
+    endpoint: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delegated_resolver: Option<IdentityRegistryDescriptor>,
+}
+
+#[derive(Debug, Serialize)]
+struct ServiceBoundaryDescriptor {
+    authoritative_for: Vec<&'static str>,
+    not_authoritative_for: Vec<&'static str>,
+    delegated_to: Vec<&'static str>,
+    principal_server_authorization: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct StandardErrorEnvelopeDescriptor {
+    schema: &'static str,
+    content_type: &'static str,
+    example: serde_json::Value,
+    codes: Vec<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+struct OAuthClientHintDescriptor {
+    id: String,
+    client_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_name: Option<String>,
+    redirect_uris: Vec<String>,
+    grant_types: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    token_endpoint_auth_method: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct AuthMetadata {
     oauth_issuer: String,
     openid_configuration: String,
@@ -202,6 +284,8 @@ struct AuthMetadata {
     required_audience: String,
     admin_audience: String,
     session_grant_scope: &'static str,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    oidc_clients: Vec<OAuthClientHintDescriptor>,
 }
 
 #[derive(Debug, Serialize)]
@@ -209,13 +293,20 @@ struct ServiceDescribeResponse {
     service_did: String,
     service_type: &'static str,
     protocol_version: &'static str,
+    supported_profiles: Vec<&'static str>,
     supported_features: Vec<&'static str>,
     supported_bindings: Vec<SupportedBinding>,
     supported_operations: Vec<&'static str>,
+    admin_audience: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     principal_servers: Vec<PrincipalServerDescriptor>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    principal_server_delegation_targets: Vec<PrincipalServerDescriptor>,
+    identity_registry_resolver: IdentityRegistryResolverDescriptor,
+    service_boundary: ServiceBoundaryDescriptor,
     auth_metadata: AuthMetadata,
     limits: serde_json::Value,
+    standard_error_envelope: StandardErrorEnvelopeDescriptor,
 }
 
 #[derive(Debug, Serialize)]
@@ -299,6 +390,47 @@ struct SessionGrantListResponse {
 #[derive(Debug, Serialize)]
 struct SessionGrantRevokeResponse {
     grant: SessionGrantRecord,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionGrantIntrospectionRequest {
+    id: Option<String>,
+    grant_jwt: Option<String>,
+    audience: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SessionGrantIntrospectionStatus {
+    Active,
+    Revoked,
+    Expired,
+    Locked,
+    Suspended,
+    AudienceMismatch,
+    NotFound,
+}
+
+#[derive(Debug, Serialize)]
+struct SessionGrantIntrospectionGrant {
+    id: String,
+    issuer: String,
+    subject: String,
+    service_account_id: String,
+    device_id: Option<String>,
+    audience: String,
+    scopes: Vec<String>,
+    expires_at: DateTime<Utc>,
+    revoked_at: Option<DateTime<Utc>>,
+    revocation_ref: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SessionGrantIntrospectionResponse {
+    active: bool,
+    status: SessionGrantIntrospectionStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    grant: Option<SessionGrantIntrospectionGrant>,
 }
 
 impl From<SessionGrant> for SessionGrantRecord {
@@ -397,6 +529,274 @@ pub(crate) fn required_audience_for(
         .unwrap_or_else(|| required_audience(url_builder))
 }
 
+pub(crate) fn password_login_session_grant_target(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+) -> SessionGrantTarget {
+    if let Some(server) = contrix_config.principal_servers.first() {
+        // TODO(contrix): replace this scaffold default with the exact
+        // principal-server audience proven during the real OIDC/passkey flow.
+        SessionGrantTarget {
+            audience: server.audience.clone(),
+            principal_server_name: Some(server.name.clone()),
+            principal_server_endpoint: Some(server.endpoint.to_string()),
+        }
+    } else {
+        SessionGrantTarget {
+            audience: required_audience_for(url_builder, contrix_config),
+            principal_server_name: None,
+            principal_server_endpoint: None,
+        }
+    }
+}
+
+fn identity_registry_kind(kind: &IdentityRegistryKind) -> &'static str {
+    match kind {
+        IdentityRegistryKind::PublicDidResolver => "public_did_resolver",
+        IdentityRegistryKind::External => "external",
+    }
+}
+
+fn delegated_identity_registry_descriptor(
+    contrix_config: &ContrixConfig,
+) -> Option<IdentityRegistryDescriptor> {
+    contrix_config
+        .identity_registry
+        .as_ref()
+        .map(|registry| IdentityRegistryDescriptor {
+            kind: identity_registry_kind(&registry.kind),
+            resolver: registry.resolver.to_string(),
+            proof_required_for_pairwise: registry.proof_required_for_pairwise,
+        })
+}
+
+fn identity_registry_resolver_descriptor(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+) -> IdentityRegistryResolverDescriptor {
+    let delegated_resolver = delegated_identity_registry_descriptor(contrix_config);
+    IdentityRegistryResolverDescriptor {
+        mode: if delegated_resolver.is_some() {
+            "delegated_resolver"
+        } else {
+            "local_bindings"
+        },
+        endpoint: url_builder
+            .absolute_url("/api/v1/identity/resolve")
+            .to_string(),
+        delegated_resolver,
+    }
+}
+
+fn service_boundary_descriptor() -> ServiceBoundaryDescriptor {
+    ServiceBoundaryDescriptor {
+        authoritative_for: vec![
+            "service_account",
+            "device_session",
+            "session_grant",
+            "claim_attestation",
+            "admin_action",
+        ],
+        not_authoritative_for: vec![
+            "did_document_registry",
+            "did_key_log",
+            "identity_registry_receipt",
+            "principal_server_write_authorization",
+        ],
+        delegated_to: vec!["identity_registry", "principal_server_authorization_engine"],
+        principal_server_authorization: "Principal Server writes are decided by the downstream authorization engine from session grants, capabilities, and Space policy.",
+    }
+}
+
+fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
+    StandardErrorEnvelopeDescriptor {
+        schema: "cx.error.envelope.v1",
+        content_type: "application/json",
+        example: serde_json::json!({
+            "ok": false,
+            "error": {
+                "code": "machine_readable_code",
+                "message": "human-readable message"
+            }
+        }),
+        codes: vec!["bad_json", "not_found", "internal_error"],
+    }
+}
+
+fn service_describe_response(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+) -> ServiceDescribeResponse {
+    let principal_servers: Vec<PrincipalServerDescriptor> = contrix_config
+        .principal_servers
+        .iter()
+        .map(|server| PrincipalServerDescriptor {
+            name: server.name.clone(),
+            audience: server.audience.clone(),
+            endpoint: server.endpoint.to_string(),
+            did: server.did.clone(),
+        })
+        .collect();
+    let admin_audience = required_audience_for(url_builder, contrix_config);
+
+    ServiceDescribeResponse {
+        service_did: service_did_for(url_builder, contrix_config),
+        service_type: "auth_account_server",
+        protocol_version: CONTRIX_PROTOCOL_VERSION,
+        supported_profiles: vec![
+            "cx.profile.auth_account.v1",
+            "cx.profile.account_lifecycle.v1",
+            "cx.profile.account_first_onboarding.v1",
+            "cx.profile.did_binding.v1",
+            "cx.profile.session_grant.v1",
+            "cx.profile.claim_attestation.v1",
+            "cx.profile.policy_hook.v1",
+            "cx.profile.legacy_compatibility.v1",
+        ],
+        supported_features: vec![
+            "oidc",
+            "account_first_onboarding",
+            "session_grant",
+            "did_binding",
+            "did_resolution",
+            "handle_resolution",
+            "account_recovery",
+            "claim_attestation",
+            "policy_hook",
+        ],
+        supported_bindings: vec![SupportedBinding {
+            binding: CONTRIX_HTTP_BINDING,
+            base_url: url_builder.http_base().to_string(),
+        }],
+        supported_operations: vec![
+            "cx.server.describe",
+            "cx.identity.describe_registry",
+            "cx.identity.resolve",
+            "cx.identity.get_document",
+            "cx.directory.describe",
+            "cx.directory.resolve_handle",
+            "cx.session_grant.list",
+            "cx.session_grant.introspect",
+            "cx.session_grant.revoke",
+        ],
+        admin_audience: admin_audience.clone(),
+        principal_servers: principal_servers.clone(),
+        principal_server_delegation_targets: principal_servers,
+        identity_registry_resolver: identity_registry_resolver_descriptor(
+            url_builder,
+            contrix_config,
+        ),
+        service_boundary: service_boundary_descriptor(),
+        auth_metadata: AuthMetadata {
+            oauth_issuer: url_builder.oidc_issuer().to_string(),
+            openid_configuration: url_builder.oidc_discovery().to_string(),
+            issuer_did: issuer_did_for(url_builder, contrix_config),
+            supported_auth_methods: vec![
+                "password",
+                "oidc",
+                "device_pairing",
+                "recovery_challenge",
+            ],
+            token_endpoint_auth_methods: vec![
+                "private_key_jwt",
+                "client_secret_basic",
+                "client_secret_post",
+            ],
+            supported_grant_types: vec!["authorization_code", "refresh_token", "device_code"],
+            did_binding_methods: vec![
+                "did_controller_key",
+                "device_key",
+                "passkey",
+                "oidc_binding_proof",
+                "vc_presentation",
+            ],
+            required_audience: required_audience_for(url_builder, contrix_config),
+            admin_audience,
+            session_grant_scope: PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
+            oidc_clients: Vec::new(),
+        },
+        limits: serde_json::json!({
+            "max_body_bytes": 1_048_576,
+            "max_page_size": 100,
+            "session_grant_ttl_seconds": SESSION_GRANT_TTL_MINUTES * 60,
+        }),
+        standard_error_envelope: standard_error_envelope_descriptor(),
+    }
+}
+
+fn write_canonical_json(
+    value: &serde_json::Value,
+    out: &mut Vec<u8>,
+) -> Result<(), serde_json::Error> {
+    match value {
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_) => serde_json::to_writer(out, value),
+        serde_json::Value::Array(items) => {
+            out.push(b'[');
+            for (idx, item) in items.iter().enumerate() {
+                if idx > 0 {
+                    out.push(b',');
+                }
+                write_canonical_json(item, out)?;
+            }
+            out.push(b']');
+            Ok(())
+        }
+        serde_json::Value::Object(map) => {
+            out.push(b'{');
+            let mut entries: Vec<_> = map.iter().collect();
+            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            for (idx, (key, item)) in entries.into_iter().enumerate() {
+                if idx > 0 {
+                    out.push(b',');
+                }
+                serde_json::to_writer(&mut *out, key)?;
+                out.push(b':');
+                write_canonical_json(item, out)?;
+            }
+            out.push(b'}');
+            Ok(())
+        }
+    }
+}
+
+fn canonical_json_sha256(value: &impl Serialize) -> Result<String, serde_json::Error> {
+    let value = serde_json::to_value(value)?;
+    let mut canonical = Vec::new();
+    write_canonical_json(&value, &mut canonical)?;
+    Ok(format!(
+        "sha256:{}",
+        hex::encode(sha2::Sha256::digest(&canonical))
+    ))
+}
+
+fn session_grant_claims_hash(
+    claims: &SessionGrantPayloadClaims,
+) -> Result<String, serde_json::Error> {
+    canonical_json_sha256(claims)
+}
+
+#[cfg(test)]
+fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGrantPayloadClaims {
+    SessionGrantPayloadClaims {
+        kind: payload.kind.clone(),
+        issuer: payload.issuer.clone(),
+        subject: payload.subject.clone(),
+        service_account_id: payload.service_account_id.clone(),
+        session_public_key: payload.session_public_key.clone(),
+        audience: payload.audience.clone(),
+        scopes: payload.scopes.clone(),
+        not_before: payload.not_before,
+        expires_at: payload.expires_at,
+        revocation_ref: payload.revocation_ref.clone(),
+        device_id: payload.device_id.clone(),
+        session_id: payload.session_id.clone(),
+        browser_session_id: payload.browser_session_id.clone(),
+    }
+}
+
 fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) -> Option<String> {
     tokens.into_iter().find_map(|token| {
         token
@@ -488,6 +888,28 @@ pub(crate) fn issue_session_grant(
     browser_session: &BrowserSession,
     scopes: Vec<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
+    issue_session_grant_for_audience(
+        rng,
+        clock,
+        url_builder,
+        contrix_config,
+        key_store,
+        browser_session,
+        required_audience_for(url_builder, contrix_config),
+        scopes,
+    )
+}
+
+pub(crate) fn issue_session_grant_for_audience(
+    rng: &mut (dyn CryptoRngCore + Send),
+    clock: &dyn Clock,
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    key_store: &Keystore,
+    browser_session: &BrowserSession,
+    audience: String,
+    scopes: Vec<String>,
+) -> Result<SessionGrantMaterial, SessionGrantError> {
     let subject = user_did_for(url_builder, contrix_config, &browser_session.user);
     let session_key = PrivateKey::generate_ed25519(rng);
     let session_public_key = JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
@@ -505,11 +927,11 @@ pub(crate) fn issue_session_grant(
     let expires_at = now + Duration::try_minutes(SESSION_GRANT_TTL_MINUTES).unwrap();
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
     let issuer = issuer_did_for(url_builder, contrix_config);
-    let audience = required_audience_for(url_builder, contrix_config);
-    let payload = SessionGrantPayload {
+    let claims = SessionGrantPayloadClaims {
         kind: "cx.session.grant".to_owned(),
         issuer: issuer.clone(),
         subject: subject.clone(),
+        service_account_id: browser_session.user.id.to_string(),
         session_public_key: session_public_key.clone(),
         audience: audience.clone(),
         scopes: scopes.clone(),
@@ -520,10 +942,34 @@ pub(crate) fn issue_session_grant(
         session_id: browser_session.id.to_string(),
         browser_session_id: browser_session.id.to_string(),
     };
+    let payload_hash = session_grant_claims_hash(&claims)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
-    let header = JsonWebSignatureHeader::new(alg.clone())
-        .with_kid(key.kid().ok_or(SessionGrantError::NoSigningKey)?);
+    let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
+    let payload = SessionGrantPayload {
+        kind: claims.kind,
+        issuer: claims.issuer,
+        subject: claims.subject,
+        service_account_id: claims.service_account_id,
+        session_public_key: claims.session_public_key,
+        audience: claims.audience,
+        scopes: claims.scopes,
+        not_before: claims.not_before,
+        expires_at: claims.expires_at,
+        revocation_ref: claims.revocation_ref,
+        device_id: claims.device_id,
+        session_id: claims.session_id,
+        browser_session_id: claims.browser_session_id,
+        proof: SessionGrantProof {
+            kind: "cx.session.grant.proof.v1".to_owned(),
+            alg: alg.to_string(),
+            key_id: key_id.clone(),
+            canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
+            payload_hash_alg: "sha-256".to_owned(),
+            payload_hash,
+        },
+    };
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
     let signer = key.params().signing_key_for_alg(&alg)?;
     let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
 
@@ -649,67 +1095,37 @@ pub async fn server_describe(
 ) -> Result<Json<ServiceDescribeResponse>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
-    let principal_servers = contrix_config
-        .principal_servers
-        .iter()
-        .map(|server| PrincipalServerDescriptor {
-            name: server.name.clone(),
-            audience: server.audience.clone(),
-            endpoint: server.endpoint.to_string(),
-            did: server.did.clone(),
+    let mut repo = depot.repo().await?;
+    let oidc_clients = repo
+        .oauth2_client()
+        .all_static()
+        .await?
+        .into_iter()
+        .filter(|client| {
+            client.grant_types.iter().any(|grant_type| {
+                matches!(
+                    grant_type,
+                    oauth2_types::requests::GrantType::AuthorizationCode
+                )
+            })
         })
-        .collect();
+        .map(|client| OAuthClientHintDescriptor {
+            id: client.id.to_string(),
+            client_id: client.client_id.clone(),
+            client_name: client.client_name.clone(),
+            redirect_uris: client.redirect_uris.iter().map(ToString::to_string).collect(),
+            grant_types: client.grant_types.iter().map(ToString::to_string).collect(),
+            token_endpoint_auth_method: client
+                .token_endpoint_auth_method
+                .as_ref()
+                .map(ToString::to_string),
+        })
+        .collect::<Vec<_>>();
+    repo.cancel().await?;
 
-    Ok(Json(ServiceDescribeResponse {
-        service_did: service_did_for(&url_builder, &contrix_config),
-        service_type: "auth_server",
-        protocol_version: CONTRIX_PROTOCOL_VERSION,
-        supported_features: vec![
-            "oidc",
-            "session_grant",
-            "did_resolution",
-            "handle_resolution",
-            "account_recovery",
-        ],
-        supported_bindings: vec![SupportedBinding {
-            binding: CONTRIX_HTTP_BINDING,
-            base_url: url_builder.http_base().to_string(),
-        }],
-        supported_operations: vec![
-            "cx.server.describe",
-            "cx.identity.describe_registry",
-            "cx.identity.resolve",
-            "cx.identity.get_document",
-            "cx.directory.describe",
-            "cx.directory.resolve_handle",
-        ],
-        principal_servers,
-        auth_metadata: AuthMetadata {
-            oauth_issuer: url_builder.oidc_issuer().to_string(),
-            openid_configuration: url_builder.oidc_discovery().to_string(),
-            issuer_did: issuer_did_for(&url_builder, &contrix_config),
-            supported_auth_methods: vec![
-                "password",
-                "oidc",
-                "device_pairing",
-                "recovery_challenge",
-            ],
-            token_endpoint_auth_methods: vec![
-                "private_key_jwt",
-                "client_secret_basic",
-                "client_secret_post",
-            ],
-            supported_grant_types: vec!["authorization_code", "refresh_token", "device_code"],
-            did_binding_methods: vec!["session_grant"],
-            required_audience: required_audience_for(&url_builder, &contrix_config),
-            admin_audience: required_audience_for(&url_builder, &contrix_config),
-            session_grant_scope: PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
-        },
-        limits: serde_json::json!({
-            "max_body_bytes": 1_048_576,
-            "session_grant_ttl_seconds": SESSION_GRANT_TTL_MINUTES * 60,
-        }),
-    }))
+    let mut response = service_describe_response(&url_builder, &contrix_config);
+    response.auth_metadata.oidc_clients = oidc_clients;
+    Ok(Json(response))
 }
 
 #[handler]
@@ -718,18 +1134,7 @@ pub async fn identity_describe(
 ) -> Result<Json<IdentityDescribeResponse>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
-    let identity_registry =
-        contrix_config
-            .identity_registry
-            .as_ref()
-            .map(|registry| IdentityRegistryDescriptor {
-                kind: match registry.kind {
-                    IdentityRegistryKind::Starid => "starid",
-                    IdentityRegistryKind::External => "external",
-                },
-                resolver: registry.resolver.to_string(),
-                proof_required_for_pairwise: registry.proof_required_for_pairwise,
-            });
+    let identity_registry = delegated_identity_registry_descriptor(&contrix_config);
 
     Ok(Json(IdentityDescribeResponse {
         service_did: service_did_for(&url_builder, &contrix_config),
@@ -969,6 +1374,135 @@ pub async fn revoke_session_grant(
     }))
 }
 
+fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectionGrant {
+    SessionGrantIntrospectionGrant {
+        id: grant.id.to_string(),
+        issuer: grant.issuer.clone(),
+        subject: grant.subject.clone(),
+        service_account_id: grant
+            .subject
+            .rsplit_once(":users:")
+            .map(|(_, id)| id.to_owned())
+            .unwrap_or_else(|| grant.browser_session_id.to_string()),
+        device_id: grant.device_id.clone(),
+        audience: grant.audience.clone(),
+        scopes: grant
+            .scope
+            .iter()
+            .map(|scope| scope.as_str().to_owned())
+            .collect(),
+        expires_at: grant.expires_at,
+        revoked_at: grant.revoked_at,
+        revocation_ref: format!("cx:session:{}", grant.browser_session_id),
+    }
+}
+
+fn introspection_status(
+    grant: &SessionGrant,
+    user: Option<&User>,
+    now: DateTime<Utc>,
+    audience: Option<&str>,
+) -> SessionGrantIntrospectionStatus {
+    if audience.is_some_and(|audience| audience != grant.audience) {
+        return SessionGrantIntrospectionStatus::AudienceMismatch;
+    }
+
+    if grant.revoked_at.is_some() {
+        return SessionGrantIntrospectionStatus::Revoked;
+    }
+
+    if grant.expires_at <= now {
+        return SessionGrantIntrospectionStatus::Expired;
+    }
+
+    if let Some(user) = user {
+        if user.locked_at.is_some() {
+            return SessionGrantIntrospectionStatus::Locked;
+        }
+
+        if user.deactivated_at.is_some() {
+            return SessionGrantIntrospectionStatus::Suspended;
+        }
+    }
+
+    SessionGrantIntrospectionStatus::Active
+}
+
+#[handler]
+pub async fn introspect_session_grant(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<SessionGrantIntrospectionResponse>, ContrixRouteError> {
+    let body: SessionGrantIntrospectionRequest = req
+        .parse_json()
+        .await
+        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
+
+    if body.id.is_none() && body.grant_jwt.is_none() {
+        return Err(ContrixRouteError::BadRequest(
+            "missing id or grant_jwt".to_owned(),
+        ));
+    }
+
+    let clock = crate::handlers::make_clock();
+    let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
+    let mut repo = depot.repo().await?;
+
+    let grant = if let Some(id) = body.id.as_deref() {
+        let id = Ulid::from_string(id)
+            .map_err(|_| ContrixRouteError::BadRequest("invalid session grant id".into()))?;
+        repo.oauth2_session_grant()
+            .lookup(id)
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+    } else if let Some(grant_jwt) = body.grant_jwt.as_deref() {
+        repo.oauth2_session_grant()
+            .lookup_by_grant_jwt(grant_jwt)
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+    } else {
+        None
+    };
+
+    let Some(grant) = grant else {
+        repo.cancel()
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        return Ok(Json(SessionGrantIntrospectionResponse {
+            active: false,
+            status: SessionGrantIntrospectionStatus::NotFound,
+            grant: None,
+        }));
+    };
+
+    let user = if let Some(user_id) =
+        parse_local_user_did_for(&url_builder, &contrix_config, &grant.subject)
+    {
+        repo.user()
+            .lookup(user_id)
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+    } else {
+        None
+    };
+    let status = introspection_status(&grant, user.as_ref(), clock.now(), body.audience.as_deref());
+    let active = status == SessionGrantIntrospectionStatus::Active;
+    let grant = (status != SessionGrantIntrospectionStatus::NotFound
+        && status != SessionGrantIntrospectionStatus::AudienceMismatch)
+        .then(|| introspection_grant_record(&grant));
+
+    repo.cancel()
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    Ok(Json(SessionGrantIntrospectionResponse {
+        active,
+        status,
+        grant,
+    }))
+}
+
 #[handler]
 pub async fn service_did_json(depot: &Depot) -> Result<Json<DidDocument>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
@@ -1011,11 +1545,16 @@ pub async fn user_did_json(
 
 #[cfg(test)]
 mod tests {
-    use coauth_config::ContrixConfig;
-    use coauth_data::{Clock, SystemClock, User};
+    use coauth_config::{
+        ContrixConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
+    };
+    use coauth_data::{Clock, RepositoryAccess, SystemClock, User};
     use coauth_keystore::{JsonWebKeySet, PrivateKey};
+    use hyper::{Request, StatusCode};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
+
+    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
     use super::*;
 
@@ -1046,6 +1585,104 @@ mod tests {
             user_handle(&url_builder, &user),
             format!("{}@auth.example.com", user.username)
         );
+    }
+
+    #[test]
+    fn service_describe_exposes_auth_account_boundary_profile() {
+        let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
+        let contrix_config = ContrixConfig {
+            service_did: Some("did:web:auth.example.com".to_owned()),
+            issuer_did: Some("did:web:issuer.example.com".to_owned()),
+            admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
+            principal_servers: vec![PrincipalServerConfig {
+                name: "soland-prod".to_owned(),
+                audience: "https://soland.example.com/api".to_owned(),
+                endpoint: "https://soland.example.com/contrix".parse().unwrap(),
+                did: Some("did:web:soland.example.com".to_owned()),
+            }],
+            identity_registry: Some(IdentityRegistryConfig {
+                kind: IdentityRegistryKind::PublicDidResolver,
+                resolver: "https://resolver.example.com/resolve".parse().unwrap(),
+                proof_required_for_pairwise: true,
+            }),
+        };
+
+        let body =
+            serde_json::to_value(service_describe_response(&url_builder, &contrix_config)).unwrap();
+
+        assert_eq!(body["service_did"], "did:web:auth.example.com");
+        assert_eq!(body["service_type"], "auth_account_server");
+        assert_eq!(body["admin_audience"], "https://auth.example.com/api/admin");
+        assert_eq!(
+            body["auth_metadata"]["issuer_did"],
+            "did:web:issuer.example.com"
+        );
+        assert_eq!(
+            body["auth_metadata"]["session_grant_scope"],
+            PRINCIPAL_SERVER_SESSION_BIND_SCOPE
+        );
+        assert_eq!(
+            body["principal_server_delegation_targets"][0]["audience"],
+            "https://soland.example.com/api"
+        );
+        assert_eq!(
+            body["identity_registry_resolver"]["mode"],
+            "delegated_resolver"
+        );
+        assert_eq!(
+            body["identity_registry_resolver"]["endpoint"],
+            "https://auth.example.com/api/v1/identity/resolve"
+        );
+        assert_eq!(
+            body["identity_registry_resolver"]["delegated_resolver"]["kind"],
+            "public_did_resolver"
+        );
+        assert_eq!(
+            body["identity_registry_resolver"]["delegated_resolver"]["resolver"],
+            "https://resolver.example.com/resolve"
+        );
+        assert_eq!(
+            body["standard_error_envelope"]["example"],
+            serde_json::json!({
+                "ok": false,
+                "error": {
+                    "code": "machine_readable_code",
+                    "message": "human-readable message"
+                }
+            })
+        );
+
+        let supported_profiles = body["supported_profiles"].as_array().unwrap();
+        assert!(supported_profiles.contains(&serde_json::json!("cx.profile.auth_account.v1")));
+        assert!(supported_profiles.contains(&serde_json::json!("cx.profile.did_binding.v1")));
+        assert!(supported_profiles.contains(&serde_json::json!("cx.profile.session_grant.v1")));
+        let not_authoritative_for = body["service_boundary"]["not_authoritative_for"]
+            .as_array()
+            .unwrap();
+        assert!(not_authoritative_for.contains(&serde_json::json!("did_key_log")));
+        assert!(not_authoritative_for.contains(&serde_json::json!("identity_registry_receipt")));
+    }
+
+    #[test]
+    fn service_describe_defaults_to_local_identity_binding_resolver() {
+        let url_builder = UrlBuilder::new(
+            "https://auth.example.com/coauth/".parse().unwrap(),
+            None,
+            None,
+        );
+
+        let body = serde_json::to_value(service_describe_response(
+            &url_builder,
+            &ContrixConfig::default(),
+        ))
+        .unwrap();
+
+        assert_eq!(body["identity_registry_resolver"]["mode"], "local_bindings");
+        assert_eq!(
+            body["identity_registry_resolver"]["endpoint"],
+            "https://auth.example.com/coauth/api/v1/identity/resolve"
+        );
+        assert!(body["identity_registry_resolver"]["delegated_resolver"].is_null());
     }
 
     #[test]
@@ -1083,6 +1720,10 @@ mod tests {
             user_did_for(&url_builder, &contrix_config, &browser_session.user)
         );
         assert_eq!(
+            payload.service_account_id,
+            browser_session.user.id.to_string()
+        );
+        assert_eq!(
             payload.issuer,
             issuer_did_for(&url_builder, &contrix_config)
         );
@@ -1094,8 +1735,266 @@ mod tests {
         assert_eq!(payload.session_id, browser_session.id.to_string());
         assert_eq!(payload.device_id, None);
         assert!(payload.expires_at > payload.not_before);
+        assert_eq!(payload.proof.kind, "cx.session.grant.proof.v1");
+        assert_eq!(payload.proof.alg, "EdDSA");
+        assert_eq!(payload.proof.key_id, "test-eddsa");
+        assert_eq!(payload.proof.payload_hash_alg, "sha-256");
+        assert_eq!(
+            payload.proof.payload_hash,
+            session_grant_claims_hash(&session_grant_claims_from_payload(payload)).unwrap()
+        );
         assert!(grant.session_private_key_pem.contains("PRIVATE KEY"));
         assert!(payload.session_public_key.contains("\"kid\":\"session-"));
+    }
+
+    #[test]
+    fn session_grant_record_exposes_metadata_without_secrets() {
+        let now = Utc::now();
+        let grant = SessionGrant {
+            id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
+            browser_session_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap(),
+            issuer: "did:web:auth.example.com".to_owned(),
+            subject: "did:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP".to_owned(),
+            device_id: Some("device-1".to_owned()),
+            audience: "https://soland.example.com/api".to_owned(),
+            scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
+            grant_jwt: "header.payload.signature".to_owned(),
+            session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
+            created_at: now,
+            expires_at: now + chrono::Duration::minutes(5),
+            revoked_at: None,
+        };
+
+        let body = serde_json::to_value(SessionGrantRecord::from(grant)).unwrap();
+
+        assert_eq!(body["audience"], "https://soland.example.com/api");
+        assert_eq!(
+            body["scopes"],
+            serde_json::json!([PRINCIPAL_SERVER_SESSION_BIND_SCOPE])
+        );
+        assert!(body.get("grant_jwt").is_none());
+        assert!(body.get("session_public_key").is_none());
+        assert!(body.get("session_private_key_pem").is_none());
+    }
+
+    #[test]
+    fn session_grant_introspection_statuses_are_minimal_and_standardized() {
+        let now = Utc::now();
+        let mut rng = ChaChaRng::seed_from_u64(14);
+        let mut user = User::samples(now, &mut rng).into_iter().next().unwrap();
+        let mut grant = SessionGrant {
+            id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
+            browser_session_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap(),
+            issuer: "did:web:auth.example.com".to_owned(),
+            subject: format!("did:web:auth.example.com:users:{}", user.id),
+            device_id: Some("device-1".to_owned()),
+            audience: "https://soland.example.com/api".to_owned(),
+            scope: Scope::from_iter([PRINCIPAL_SERVER_SESSION_BIND_SCOPE.parse().unwrap()]),
+            grant_jwt: "header.payload.signature".to_owned(),
+            session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
+            created_at: now,
+            expires_at: now + chrono::Duration::minutes(5),
+            revoked_at: None,
+        };
+
+        assert_eq!(
+            introspection_status(
+                &grant,
+                Some(&user),
+                now,
+                Some("https://soland.example.com/api")
+            ),
+            SessionGrantIntrospectionStatus::Active
+        );
+        assert_eq!(
+            introspection_status(
+                &grant,
+                Some(&user),
+                now,
+                Some("https://other.example.com/api")
+            ),
+            SessionGrantIntrospectionStatus::AudienceMismatch
+        );
+
+        user.locked_at = Some(now);
+        assert_eq!(
+            introspection_status(&grant, Some(&user), now, None),
+            SessionGrantIntrospectionStatus::Locked
+        );
+
+        user.locked_at = None;
+        user.deactivated_at = Some(now);
+        assert_eq!(
+            introspection_status(&grant, Some(&user), now, None),
+            SessionGrantIntrospectionStatus::Suspended
+        );
+
+        grant.revoked_at = Some(now);
+        assert_eq!(
+            introspection_status(&grant, Some(&user), now, None),
+            SessionGrantIntrospectionStatus::Revoked
+        );
+    }
+
+    async fn seed_persisted_session_grant(
+        state: &TestState,
+    ) -> (BrowserSession, SessionGrant, SessionGrantMaterial) {
+        let mut rng = state.rng();
+        let mut repo = state.repository().await.unwrap();
+        let user = repo
+            .user()
+            .add(&mut rng, &*state.clock, "alice".to_owned())
+            .await
+            .unwrap();
+        let browser_session = repo
+            .browser_session()
+            .add(
+                &mut rng,
+                &*state.clock,
+                &user,
+                Some("Mozilla/5.0".to_owned()),
+            )
+            .await
+            .unwrap();
+        let material = issue_session_grant(
+            &mut rng,
+            &*state.clock,
+            &state.url_builder,
+            &state.contrix_config,
+            &state.key_store,
+            &browser_session,
+            vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        )
+        .unwrap();
+        let grant = persist_session_grant(
+            &mut repo,
+            &mut rng,
+            &*state.clock,
+            &browser_session,
+            &material,
+        )
+        .await
+        .unwrap();
+        repo.save().await.unwrap();
+
+        (browser_session, grant, material)
+    }
+
+    #[tokio::test]
+    async fn session_grant_http_list_and_filter_work() {
+        setup();
+        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
+        let (browser_session, grant, _material) = seed_persisted_session_grant(&state).await;
+
+        let response = state
+            .request(Request::get("/api/v1/session-grants").empty())
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["grants"].as_array().unwrap().len(), 1);
+        assert_eq!(body["grants"][0]["id"], grant.id.to_string());
+        assert_eq!(
+            body["grants"][0]["browser_session_id"],
+            browser_session.id.to_string()
+        );
+        assert_eq!(
+            body["grants"][0]["scopes"],
+            serde_json::json!([PRINCIPAL_SERVER_SESSION_BIND_SCOPE])
+        );
+
+        let response = state
+            .request(
+                Request::get(format!(
+                    "/api/v1/session-grants?browser_session_id={}&active_only=true",
+                    browser_session.id
+                ))
+                .empty(),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["grants"].as_array().unwrap().len(), 1);
+
+        let response = state
+            .request(Request::get("/api/v1/session-grants?browser_session_id=not-a-ulid").empty())
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["error"]["code"], "bad_json");
+        assert_eq!(body["error"]["message"], "invalid browser_session_id");
+    }
+
+    #[tokio::test]
+    async fn session_grant_http_introspection_returns_minimal_metadata() {
+        setup();
+        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
+        let (_browser_session, grant, material) = seed_persisted_session_grant(&state).await;
+
+        let response = state
+            .request(
+                Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
+                    "grant_jwt": material.grant_jwt,
+                    "audience": grant.audience,
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["active"], true);
+        assert_eq!(body["status"], "active");
+        assert_eq!(body["grant"]["id"], grant.id.to_string());
+        assert_eq!(body["grant"]["subject"], grant.subject);
+        assert_eq!(body["grant"]["audience"], grant.audience);
+        assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
+        assert!(body["grant"].get("grant_jwt").is_none());
+        assert!(body["grant"].get("session_public_key").is_none());
+
+        let response = state
+            .request(
+                Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
+                    "id": grant.id,
+                    "audience": "https://other.example.com/api",
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["active"], false);
+        assert_eq!(body["status"], "audience_mismatch");
+        assert_eq!(body["grant"], serde_json::Value::Null);
+    }
+
+    #[tokio::test]
+    async fn session_grant_http_revoke_updates_followup_introspection() {
+        setup();
+        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
+        let (_browser_session, grant, _material) = seed_persisted_session_grant(&state).await;
+
+        let response = state
+            .request(Request::post(format!("/api/v1/session-grants/{}/revoke", grant.id)).empty())
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["grant"]["id"], grant.id.to_string());
+        assert!(body["grant"]["revoked_at"].is_string());
+
+        let response = state
+            .request(
+                Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
+                    "id": grant.id,
+                    "audience": grant.audience,
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["active"], false);
+        assert_eq!(body["status"], "revoked");
+        assert_eq!(body["grant"]["id"], grant.id.to_string());
+        assert!(body["grant"]["revoked_at"].is_string());
     }
 
     #[test]
