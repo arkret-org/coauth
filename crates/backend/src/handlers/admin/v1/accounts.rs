@@ -1,6 +1,7 @@
 //! Contrix account administration endpoints.
 
 use chrono::{DateTime, Utc};
+use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_data::{AdminUserPatch, RepositoryAccess, user::UserFilter};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -362,23 +363,52 @@ pub async fn risk_action(
         ));
     }
 
-    let ctx = extract_call_context(req, depot).await?;
-    let requested_at = ctx.clock.now();
-    let requested_by = ctx.user.as_ref().map(|user| user.id.to_string());
-    let requested_by_username = ctx.user.as_ref().map(|user| user.username.clone());
+    let crate::handlers::admin::call_context::CallContext {
+        mut repo,
+        clock,
+        user: admin_user,
+        ..
+    } = extract_call_context(req, depot).await?;
+    let requested_at = clock.now();
+    let requested_by = admin_user.as_ref().map(|user| user.id.to_string());
+    let requested_by_username = admin_user.as_ref().map(|user| user.username.clone());
     let id = extract_ulid_param(req)?;
-    let account = ctx
-        .repo
+    let account = repo
         .user()
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    ctx.repo.cancel().await?;
-
+    let proposal_id = Ulid::new().to_string();
     let execution_endpoint = risk_action_execution_endpoint(&params.action, account.id)?;
 
+    if let Some(admin_user) = &admin_user {
+        let mut rng = crate::handlers::account::make_rng();
+        repo.audit()
+            .add_admin_operation(
+                &mut rng,
+                &clock,
+                NewAdminOperationLog::new(
+                    admin_user.id,
+                    AdminOperation::Other(format!("account_{}_proposal", params.action).into()),
+                    "account",
+                    serde_json::json!({
+                        "proposal_id": proposal_id,
+                        "action": params.action,
+                        "reason": params.reason,
+                        "ticket": params.ticket,
+                        "approved_by": params.approved_by,
+                    }),
+                )
+                .with_resource_id(account.id),
+            )
+            .await?;
+        repo.save().await?;
+    } else {
+        repo.cancel().await?;
+    }
+
     Ok(Json(AccountRiskActionProposalResponse {
-        proposal_id: Ulid::new().to_string(),
+        proposal_id,
         account_id: account.id.to_string(),
         action: params.action,
         reason: params.reason,
