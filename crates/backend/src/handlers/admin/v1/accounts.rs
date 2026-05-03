@@ -61,6 +61,9 @@ pub struct AccountRiskActionProposalRequest {
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionProposalResponse {
+    /// Proposal identifier for tracking and later approval.
+    proposal_id: String,
+
     /// Account targeted by the proposal.
     account_id: String,
 
@@ -75,6 +78,15 @@ pub struct AccountRiskActionProposalResponse {
 
     /// Optional approver identifier.
     approved_by: Option<String>,
+
+    /// When the proposal was requested.
+    requested_at: DateTime<Utc>,
+
+    /// Admin identifier that submitted the proposal scaffold, if available.
+    requested_by: Option<String>,
+
+    /// Admin username that submitted the proposal scaffold, if available.
+    requested_by_username: Option<String>,
 
     /// Proposal state reported by the scaffold contract.
     proposal_state: String,
@@ -351,6 +363,9 @@ pub async fn risk_action(
     }
 
     let ctx = extract_call_context(req, depot).await?;
+    let requested_at = ctx.clock.now();
+    let requested_by = ctx.user.as_ref().map(|user| user.id.to_string());
+    let requested_by_username = ctx.user.as_ref().map(|user| user.username.clone());
     let id = extract_ulid_param(req)?;
     let account = ctx
         .repo
@@ -363,11 +378,15 @@ pub async fn risk_action(
     let execution_endpoint = risk_action_execution_endpoint(&params.action, account.id)?;
 
     Ok(Json(AccountRiskActionProposalResponse {
+        proposal_id: Ulid::new().to_string(),
         account_id: account.id.to_string(),
         action: params.action,
         reason: params.reason,
         ticket: params.ticket,
         approved_by: params.approved_by,
+        requested_at,
+        requested_by,
+        requested_by_username,
         proposal_state: "draft".to_owned(),
         approval_mode: "proposal_scaffold_required".to_owned(),
         execution_endpoint,
