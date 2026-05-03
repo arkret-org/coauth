@@ -60,6 +60,22 @@ pub struct AccountRiskActionProposalRequest {
     approved_by: Option<String>,
 }
 
+#[derive(Deserialize, JsonSchema, ToSchema)]
+#[serde(rename = "AccountRiskActionApprovalRequest")]
+pub struct AccountRiskActionApprovalRequest {
+    /// Risk action being approved.
+    action: String,
+
+    /// Optional ticket or incident reference.
+    ticket: Option<String>,
+
+    /// Optional approver identifier override.
+    approved_by: Option<String>,
+
+    /// Human approval note for the scaffold audit trail.
+    approval_note: Option<String>,
+}
+
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionProposalResponse {
     /// Proposal identifier for tracking and later approval.
@@ -94,6 +110,42 @@ pub struct AccountRiskActionProposalResponse {
 
     /// Approval mode expected before executing the real mutation endpoint.
     approval_mode: String,
+
+    /// Final execution endpoint that would perform the mutation after approval.
+    execution_endpoint: String,
+
+    /// Remaining implementation work for this scaffold.
+    todo: String,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountRiskActionApprovalResponse {
+    /// Proposal identifier being approved.
+    proposal_id: String,
+
+    /// Account targeted by the proposal.
+    account_id: String,
+
+    /// Approved action.
+    action: String,
+
+    /// Optional ticket or incident reference.
+    ticket: Option<String>,
+
+    /// Approval state reported by the scaffold contract.
+    approval_state: String,
+
+    /// When the approval was recorded.
+    approved_at: DateTime<Utc>,
+
+    /// Admin identifier that approved the proposal, if available.
+    approved_by: Option<String>,
+
+    /// Admin username that approved the proposal, if available.
+    approved_by_username: Option<String>,
+
+    /// Human approval note for the scaffold trail.
+    approval_note: Option<String>,
 
     /// Final execution endpoint that would perform the mutation after approval.
     execution_endpoint: String,
@@ -421,6 +473,90 @@ pub async fn risk_action(
         approval_mode: "proposal_scaffold_required".to_owned(),
         execution_endpoint,
         todo: "TODO(contrix): persist proposal records, capture requester/approver context, require explicit approval, then route approved proposals into the dedicated /lock, /disable, /erase, or /reset-recovery mutation endpoints.".to_owned(),
+    }))
+}
+
+#[endpoint]
+#[tracing::instrument(name = "handler.admin.v1.accounts.approve_risk_action", skip_all)]
+pub async fn approve_risk_action(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<AccountRiskActionApprovalResponse> {
+    let params: AccountRiskActionApprovalRequest =
+        req.parse_json().await.map_err(AppError::internal)?;
+    if params.action.trim().is_empty() {
+        return Err(AppError::bad_request("risk action is required"));
+    }
+    if params
+        .approval_note
+        .as_deref()
+        .is_none_or(|note| note.trim().is_empty())
+    {
+        return Err(AppError::bad_request(
+            "risk action approvals require a non-empty approval_note",
+        ));
+    }
+
+    let crate::handlers::admin::call_context::CallContext {
+        mut repo,
+        clock,
+        user: admin_user,
+        ..
+    } = extract_call_context(req, depot).await?;
+    let approved_at = clock.now();
+    let id = extract_ulid_param(req)?;
+    let proposal_id = req
+        .param::<String>("proposal_id")
+        .ok_or_else(|| AppError::bad_request("missing proposal_id"))?;
+    let account = repo
+        .user()
+        .lookup(id)
+        .await?
+        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+    let execution_endpoint = risk_action_execution_endpoint(&params.action, account.id)?;
+
+    if let Some(admin_user) = &admin_user {
+        let mut rng = crate::handlers::account::make_rng();
+        repo.audit()
+            .add_admin_operation(
+                &mut rng,
+                &clock,
+                NewAdminOperationLog::new(
+                    admin_user.id,
+                    AdminOperation::Other(
+                        format!("account_{}_proposal_approved", params.action).into(),
+                    ),
+                    "account",
+                    serde_json::json!({
+                        "proposal_id": proposal_id,
+                        "action": params.action,
+                        "ticket": params.ticket,
+                        "approved_by": params.approved_by,
+                        "approval_note": params.approval_note,
+                    }),
+                )
+                .with_resource_id(account.id),
+            )
+            .await?;
+        repo.save().await?;
+    } else {
+        repo.cancel().await?;
+    }
+
+    Ok(Json(AccountRiskActionApprovalResponse {
+        proposal_id,
+        account_id: account.id.to_string(),
+        action: params.action,
+        ticket: params.ticket,
+        approval_state: "approved_scaffold".to_owned(),
+        approved_at,
+        approved_by: params
+            .approved_by
+            .or_else(|| admin_user.as_ref().map(|user| user.id.to_string())),
+        approved_by_username: admin_user.as_ref().map(|user| user.username.clone()),
+        approval_note: params.approval_note,
+        execution_endpoint,
+        todo: "TODO(contrix): replace approval scaffold with persisted proposal state transitions, authorization checks, and a controlled execute step that consumes approved proposals.".to_owned(),
     }))
 }
 

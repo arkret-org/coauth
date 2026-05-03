@@ -700,6 +700,10 @@ fn build_admin_router(router: Router) -> Router {
                     Router::with_path("{id}")
                         .get(accounts::get_account)
                         .push(Router::with_path("risk-action").post(accounts::risk_action))
+                        .push(
+                            Router::with_path("risk-action/{proposal_id}/approve")
+                                .post(accounts::approve_risk_action),
+                        )
                         .push(Router::with_path("lock").post(accounts::lock_account))
                         .push(Router::with_path("disable").post(accounts::disable_account))
                         .push(Router::with_path("erase").post(accounts::erase_account))
