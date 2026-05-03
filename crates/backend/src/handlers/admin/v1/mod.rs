@@ -1,10 +1,15 @@
+pub mod account_dids;
+pub mod accounts;
 pub mod audit_feed;
+pub mod claims;
 pub mod connector_health;
+pub mod devices;
 pub mod notification_channels;
 pub mod notification_templates;
 pub mod oauth2_clients;
 pub mod oauth2_sessions;
 pub mod personal_sessions;
+pub mod policy_checks;
 pub mod policy_data;
 pub mod site_config;
 pub mod upstream_oauth_links;

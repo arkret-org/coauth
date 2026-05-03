@@ -60,13 +60,13 @@ pub struct User {
     /// Whether the user can request admin privileges.
     admin: bool,
 
-    /// Whether the user was a guest before migrating to Pasion,
+    /// Whether the user was a legacy guest during Matrix-era migration.
     legacy_guest: bool,
 
-    /// Human-facing display name stored by Pasion.
+    /// Human-facing display name for the legacy compatibility data model.
     display_name: Option<String>,
 
-    /// Optional avatar URL stored by Pasion.
+    /// Optional avatar URL for the legacy compatibility data model.
     avatar_url: Option<String>,
 
     /// Preferred locale stored for this user.
@@ -305,7 +305,7 @@ impl OAuth2Session {
                 user_id: Some(Ulid::from_bytes([0x04; 16])),
                 user_session_id: Some(Ulid::from_bytes([0x05; 16])),
                 client_id: Ulid::from_bytes([0x06; 16]),
-                scope: "urn:matrix:client:api:*".to_owned(),
+                scope: "urn:contrix:admin:session".to_owned(),
                 user_agent: Some("Mozilla/5.0".to_owned()),
                 last_active_at: Some(DateTime::default()),
                 last_active_ip: Some("127.0.0.1".parse().unwrap()),
@@ -844,7 +844,7 @@ impl PersonalSession {
                 owner_client_id: None,
                 actor_user_id: Ulid::from_string("01FSHN9AG0MZAA6S4AF7CTV32E").unwrap(),
                 human_name: "Alice's Development Token".to_owned(),
-                scope: "openid urn:matrix:org.matrix.msc2967.client:api:*".to_owned(),
+                scope: "openid urn:coauth:admin".to_owned(),
                 last_active_at: Some(DateTime::from_timestamp(1_642_347_000, 0).unwrap()), /* 2022-01-16T17:10:00Z */
                 last_active_ip: Some("192.168.1.100".parse().unwrap()),
                 expires_at: None,

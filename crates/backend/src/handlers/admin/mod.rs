@@ -44,7 +44,7 @@ pub struct AdminErrorResponse {
     pub request_id: Option<String>,
 }
 
-/// The canonical admin scope for the Pasion Admin API.
+/// The canonical admin scope for the coauth Admin API.
 pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 
 /// Contrix admin scope family.

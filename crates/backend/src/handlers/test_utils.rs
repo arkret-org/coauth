@@ -368,8 +368,9 @@ impl TestState {
     /// Build a Salvo router with all test routes and state injection.
     fn build_test_router(&self) -> Router {
         use crate::handlers::admin::v1::{
-            audit_feed, connector_health, notification_channels, notification_templates,
-            oauth2_sessions, personal_sessions, policy_data, site_config, upstream_oauth_links,
+            account_dids, accounts, audit_feed, claims, connector_health, devices,
+            notification_channels, notification_templates, oauth2_sessions, personal_sessions,
+            policy_checks, policy_data, site_config, upstream_oauth_links,
             upstream_oauth_providers, user_emails, user_registration_tokens, user_sessions, users,
             version,
         };
@@ -439,6 +440,18 @@ impl TestState {
             .push(Router::with_path("/api/v1/identity/document").get(crate::handlers::contrix::identity_document))
             .push(Router::with_path("/api/v1/directory/describe").get(crate::handlers::contrix::directory_describe))
             .push(Router::with_path("/api/v1/directory/resolve-handle").post(crate::handlers::contrix::directory_resolve_handle))
+            .push(
+                Router::with_path("/api/v1/session-grants")
+                    .get(crate::handlers::contrix::list_session_grants)
+                    .push(
+                        Router::with_path("introspect")
+                            .post(crate::handlers::contrix::introspect_session_grant),
+                    )
+                    .push(
+                        Router::with_path("{id}/revoke")
+                            .post(crate::handlers::contrix::revoke_session_grant),
+                    ),
+            )
             .push(Router::with_path("/api/v1/viewer").get(crate::handlers::account::viewer::get_viewer))
             .push(Router::with_path("/api/v1/site-config").get(crate::handlers::account::site_config::get))
             .push(
@@ -549,6 +562,39 @@ impl TestState {
                     )
                     .push(Router::with_path("audit-feed").get(audit_feed::handler))
                     .push(
+                        Router::with_path("accounts")
+                            .get(accounts::list_accounts)
+                            .push(
+                                Router::with_path("{id}")
+                                    .get(accounts::get_account)
+                                    .push(
+                                        Router::with_path("lock")
+                                            .post(accounts::lock_account),
+                                    )
+                                    .push(
+                                        Router::with_path("disable")
+                                            .post(accounts::disable_account),
+                                    )
+                                    .push(
+                                        Router::with_path("erase")
+                                            .post(accounts::erase_account),
+                                    )
+                                    .push(
+                                        Router::with_path("reset-recovery")
+                                            .post(accounts::reset_recovery),
+                                    )
+                                    .push(
+                                        Router::with_path("dids")
+                                            .get(account_dids::list_account_dids)
+                                            .post(account_dids::add_account_did)
+                                            .push(
+                                                Router::with_path("{did_id}")
+                                                    .delete(account_dids::remove_account_did),
+                                            ),
+                                    ),
+                            ),
+                    )
+                    .push(
                         Router::with_path("users")
                             .get(users::list_users)
                             .post(users::add_user)
@@ -620,6 +666,14 @@ impl TestState {
                             ),
                     )
                     .push(
+                        Router::with_path("devices")
+                            .get(devices::list_devices)
+                            .push(
+                                Router::with_path("{id}/revoke")
+                                    .post(devices::revoke_device),
+                            ),
+                    )
+                    .push(
                         Router::with_path("user-registration-tokens")
                             .get(user_registration_tokens::list_tokens)
                             .post(user_registration_tokens::add_token)
@@ -658,6 +712,25 @@ impl TestState {
                             .push(Router::with_path("latest").get(policy_data::get_latest))
                             .push(Router::with_path("{id}").get(policy_data::get_by_id))
                             .put(policy_data::set_data),
+                    )
+                    .push(
+                        Router::with_path("claims")
+                            .post(claims::issue_claim)
+                            .push(Router::with_path("status").get(claims::list_claim_status))
+                            .push(
+                                Router::with_path("{id}/revoke")
+                                    .post(claims::revoke_claim),
+                            ),
+                    )
+                    .push(
+                        Router::with_path("policy-checks")
+                            .push(Router::with_path("dry-run").post(policy_checks::dry_run)),
+                    )
+                    .push(
+                        Router::with_path("policy-decision-audits").push(
+                            Router::with_path("{id}")
+                                .get(policy_checks::get_signed_decision_audit),
+                        ),
                     ),
             )
     }

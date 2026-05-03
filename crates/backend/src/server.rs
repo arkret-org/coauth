@@ -11,7 +11,7 @@ use coauth_data::UrlBuilder;
 use coauth_templates::Templates;
 use headers::{CacheControl, HeaderMapExt as _, UserAgent};
 use http::{
-    Method, StatusCode, Version,
+    HeaderValue, Method, StatusCode, Version,
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
 };
 use listenfd::ListenFd;
@@ -258,6 +258,36 @@ impl Handler for InjectAppState {
     }
 }
 
+#[derive(Clone)]
+struct OpenApiYaml {
+    yaml: String,
+}
+
+impl OpenApiYaml {
+    fn from_doc(doc: &salvo::oapi::OpenApi) -> Self {
+        Self {
+            yaml: serde_yaml::to_string(doc).expect("admin OpenAPI document should serialize"),
+        }
+    }
+}
+
+#[salvo::async_trait]
+impl Handler for OpenApiYaml {
+    async fn handle(
+        &self,
+        _req: &mut Request,
+        _depot: &mut Depot,
+        res: &mut Response,
+        _ctrl: &mut FlowCtrl,
+    ) {
+        res.headers_mut().insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/yaml; charset=utf-8"),
+        );
+        res.render(Text::Plain(self.yaml.clone()));
+    }
+}
+
 fn public_oidc_browser_cors() -> impl Handler {
     Cors::new()
         .allow_origin(Any)
@@ -500,6 +530,7 @@ fn build_account_api_router(router: Router) -> Router {
         .push(
             Router::with_path("session-grants")
                 .get(contrix::list_session_grants)
+                .push(Router::with_path("introspect").post(contrix::introspect_session_grant))
                 .push(Router::with_path("{id}/revoke").post(contrix::revoke_session_grant)),
         )
         // Viewer
@@ -560,6 +591,7 @@ fn build_account_api_router(router: Router) -> Router {
         .push(
             Router::with_path("auth")
                 .push(Router::with_path("login").post(auth::login))
+                .push(Router::with_path("oidc/exchange").post(auth::oidc_code_exchange))
                 .push(Router::with_path("logout").post(auth::logout))
                 .push(Router::with_path("providers").get(auth::providers))
                 // Registration
@@ -642,7 +674,7 @@ fn build_account_api_router(router: Router) -> Router {
 }
 
 fn build_admin_router(router: Router) -> Router {
-    use crate::handlers::{admin, admin::v1::*};
+    use crate::handlers::admin::v1::*;
 
     let admin_router = Router::with_path("/api/admin/v1")
         // Version
@@ -660,6 +692,28 @@ fn build_admin_router(router: Router) -> Router {
         )
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
+        // Contrix accounts
+        .push(
+            Router::with_path("accounts")
+                .get(accounts::list_accounts)
+                .push(
+                    Router::with_path("{id}")
+                        .get(accounts::get_account)
+                        .push(Router::with_path("lock").post(accounts::lock_account))
+                        .push(Router::with_path("disable").post(accounts::disable_account))
+                        .push(Router::with_path("erase").post(accounts::erase_account))
+                        .push(Router::with_path("reset-recovery").post(accounts::reset_recovery))
+                        .push(
+                            Router::with_path("dids")
+                                .get(account_dids::list_account_dids)
+                                .post(account_dids::add_account_did)
+                                .push(
+                                    Router::with_path("{did_id}")
+                                        .delete(account_dids::remove_account_did),
+                                ),
+                        ),
+                ),
+        )
         // Users
         .push(
             Router::with_path("users")
@@ -732,6 +786,12 @@ fn build_admin_router(router: Router) -> Router {
                         .push(Router::with_path("revoke").post(personal_sessions::revoke_session)),
                 ),
         )
+        // Contrix devices
+        .push(
+            Router::with_path("devices")
+                .get(devices::list_devices)
+                .push(Router::with_path("{id}/revoke").post(devices::revoke_device)),
+        )
         // User registration tokens
         .push(
             Router::with_path("user-registration-tokens")
@@ -789,19 +849,41 @@ fn build_admin_router(router: Router) -> Router {
                 .push(Router::with_path("latest").get(policy_data::get_latest))
                 .push(Router::with_path("{id}").get(policy_data::get_by_id))
                 .put(policy_data::set_data),
+        )
+        // Contrix claims and policy checks
+        .push(
+            Router::with_path("claims")
+                .post(claims::issue_claim)
+                .push(Router::with_path("status").get(claims::list_claim_status))
+                .push(Router::with_path("{id}/revoke").post(claims::revoke_claim)),
+        )
+        .push(
+            Router::with_path("policy-checks")
+                .push(Router::with_path("dry-run").post(policy_checks::dry_run)),
+        )
+        .push(
+            Router::with_path("policy-decision-audits")
+                .push(Router::with_path("{id}").get(policy_checks::get_signed_decision_audit)),
         );
 
     // Generate OpenAPI spec and Swagger UI for the admin API
-    let admin_doc = salvo::oapi::OpenApi::new("Pasion Admin API", env!("CARGO_PKG_VERSION"))
-        .merge_router(&admin_router);
+    let admin_doc = build_admin_openapi_doc(&admin_router);
+    let admin_doc_yaml = OpenApiYaml::from_doc(&admin_doc);
 
     router
         .push(admin_router)
-        .push(admin_doc.into_router("/api-doc/admin/openapi.json"))
+        .push(admin_doc.clone().into_router("/api-doc/admin/openapi.json"))
+        .push(Router::with_path("/api/admin/v1/openapi.yaml").get(admin_doc_yaml.clone()))
+        .push(Router::with_path("/.well-known/contrix/openapi.yaml").get(admin_doc_yaml))
         .push(
             salvo::oapi::swagger_ui::SwaggerUi::new("/api-doc/admin/openapi.json")
                 .into_router("admin-swagger-ui"),
         )
+}
+
+fn build_admin_openapi_doc(admin_router: &Router) -> salvo::oapi::OpenApi {
+    salvo::oapi::OpenApi::new("coauth Admin API", env!("CARGO_PKG_VERSION"))
+        .merge_router(admin_router)
 }
 
 #[handler]
@@ -1023,8 +1105,15 @@ mod tests {
 
     use coauth_config::HttpBindConfig;
     use coauth_data::UrlBuilder;
+    use http::{StatusCode, header::CONTENT_TYPE};
+    use salvo::{
+        prelude::Router,
+        test::{ResponseExt, TestClient},
+    };
 
-    use super::{absolute_redirect_location, build_listeners, relative_redirect_location};
+    use super::{
+        absolute_redirect_location, build_admin_router, build_listeners, relative_redirect_location,
+    };
 
     #[test]
     fn bind_error_mentions_requested_address() {
@@ -1066,5 +1155,67 @@ mod tests {
         let location = absolute_redirect_location(Some(&url_builder), "/password/change");
 
         assert_eq!(location, "https://example.com/mas/password/change");
+    }
+
+    #[tokio::test]
+    async fn admin_openapi_json_uses_coauth_title() {
+        let service = salvo::Service::new(build_admin_router(Router::new()));
+        let mut response = TestClient::get("http://127.0.0.1:8698/api-doc/admin/openapi.json")
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        let body = response.take_string().await.unwrap();
+        let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(json["info"]["title"], "coauth Admin API");
+        assert!(json["paths"]["/api/admin/v1/user-sessions"].is_object());
+        assert!(json["paths"]["/api/admin/v1/user-sessions/{id}"].is_object());
+        assert!(json["paths"]["/api/admin/v1/user-sessions/{id}/finish"].is_object());
+        assert!(json["paths"]["/api/admin/v1/oauth2-sessions"].is_object());
+        assert!(json["paths"]["/api/admin/v1/oauth2-sessions/{id}"].is_object());
+        assert!(json["paths"]["/api/admin/v1/oauth2-sessions/{id}/finish"].is_object());
+        assert!(json["paths"]["/api/admin/v1/personal-sessions"].is_object());
+        assert!(json["paths"]["/api/admin/v1/personal-sessions/{id}"].is_object());
+        assert!(json["paths"]["/api/admin/v1/personal-sessions/{id}/revoke"].is_object());
+        assert!(json["paths"]["/api/admin/v1/accounts"].is_object());
+        assert!(json["paths"]["/api/admin/v1/accounts/{id}"].is_object());
+        assert!(json["paths"]["/api/admin/v1/accounts/{id}/lock"].is_object());
+        assert!(json["paths"]["/api/admin/v1/accounts/{id}/disable"].is_object());
+        assert!(json["paths"]["/api/admin/v1/accounts/{id}/dids"].is_object());
+        assert!(json["paths"]["/api/admin/v1/devices"].is_object());
+        assert!(json["paths"]["/api/admin/v1/devices/{id}/revoke"].is_object());
+        assert!(json["paths"]["/api/admin/v1/claims"].is_object());
+        assert!(json["paths"]["/api/admin/v1/claims/status"].is_object());
+        assert!(json["paths"]["/api/admin/v1/policy-checks/dry-run"].is_object());
+        assert!(!body.contains("Pasion Admin API"));
+    }
+
+    #[tokio::test]
+    async fn admin_openapi_yaml_is_served_from_admin_and_well_known_paths() {
+        let service = salvo::Service::new(build_admin_router(Router::new()));
+
+        for path in [
+            "/api/admin/v1/openapi.yaml",
+            "/.well-known/contrix/openapi.yaml",
+        ] {
+            let mut response = TestClient::get(format!("http://127.0.0.1:8698{path}"))
+                .send(&service)
+                .await;
+
+            assert_eq!(response.status_code, Some(StatusCode::OK));
+            assert_eq!(
+                response
+                    .headers()
+                    .get(CONTENT_TYPE)
+                    .and_then(|value| value.to_str().ok()),
+                Some("application/yaml; charset=utf-8")
+            );
+
+            let body = response.take_string().await.unwrap();
+            assert!(body.contains("title: coauth Admin API"), "{body}");
+            assert!(body.contains("/api/admin/v1/user-sessions:"), "{body}");
+            assert!(!body.contains("Pasion Admin API"), "{body}");
+        }
     }
 }
