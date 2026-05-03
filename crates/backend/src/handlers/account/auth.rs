@@ -348,6 +348,14 @@ pub async fn oidc_code_exchange(
     let templates = depot.templates()?;
     let homeserver = depot.homeserver()?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let service_activity_tracker = depot
+        .get::<crate::handlers::ActivityTracker>("activity_tracker")
+        .cloned()
+        .ok_or_else(|| {
+            RouteError::Internal(Box::new(std::io::Error::other(
+                "activity_tracker not found in depot",
+            )))
+        })?;
     let user_agent: Option<String> = req.header("user-agent");
     let mut repo = depot.repo().await?;
 
@@ -704,6 +712,119 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     };
+    let expected_subject = contrix::user_did_for(&url_builder, &contrix_config, &browser_session.user);
+    let oauth_introspection = match crate::handlers::oauth2::introspection_service::introspect_token(
+        &mut repo,
+        &clock,
+        &url_builder,
+        &contrix_config,
+        &service_activity_tracker,
+        &oauth_token_reply.access_token,
+        Some(coauth_iana::oauth::OAuthTokenTypeHint::AccessToken),
+    )
+    .await
+    {
+        Ok(reply) => reply,
+        Err(
+            crate::handlers::oauth2::introspection_service::IntrospectionError::Repository(_)
+            | crate::handlers::oauth2::introspection_service::IntrospectionError::CantLoadOAuthSession(_)
+            | crate::handlers::oauth2::introspection_service::IntrospectionError::CantLoadPersonalSession(_)
+            | crate::handlers::oauth2::introspection_service::IntrospectionError::CantLoadUser(_)
+            | crate::handlers::oauth2::introspection_service::IntrospectionError::CantLoadOAuth2Client(_),
+        ) => {
+            return Err(RouteError::Internal(Box::new(std::io::Error::other(
+                "fresh OAuth token could not be introspected because local session state could not be loaded",
+            ))));
+        }
+        Err(error) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_authorization_code"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![format!(
+                    "fresh OAuth access token failed local introspection: {error}"
+                )],
+            }));
+            return Ok(());
+        }
+    };
+    if !oauth_introspection.active {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![
+                "fresh OAuth access token was minted but not reported active by local introspection"
+                    .to_owned(),
+            ],
+        }));
+        return Ok(());
+    }
+    if oauth_introspection.iss.as_deref() != Some(expected_issuer.as_str()) {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_discovery_binding"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "fresh OAuth access token issuer mismatch: expected {} but introspection returned {}",
+                expected_issuer,
+                oauth_introspection.iss.as_deref().unwrap_or("missing")
+            )],
+        }));
+        return Ok(());
+    }
+    if oauth_introspection.sub.as_deref() != Some(expected_subject.as_str()) {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "fresh OAuth access token subject mismatch: expected {} but introspection returned {}",
+                expected_subject,
+                oauth_introspection.sub.as_deref().unwrap_or("missing")
+            )],
+        }));
+        return Ok(());
+    }
+    let expected_oauth_client_id = oauth2_session.client_id.to_string();
+    if oauth_introspection.client_id.as_deref() != Some(expected_oauth_client_id.as_str()) {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_client"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "fresh OAuth access token client mismatch: expected {} but introspection returned {}",
+                expected_oauth_client_id,
+                oauth_introspection.client_id.as_deref().unwrap_or("missing")
+            )],
+        }));
+        return Ok(());
+    }
+    let expected_oauth_session_id = oauth2_session_id.to_string();
+    if oauth_introspection.contrix_session_id.as_deref()
+        != Some(expected_oauth_session_id.as_str())
+    {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_authorization_code"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "fresh OAuth access token session mismatch: expected {} but introspection returned {}",
+                expected_oauth_session_id,
+                oauth_introspection
+                    .contrix_session_id
+                    .as_deref()
+                    .unwrap_or("missing")
+            )],
+        }));
+        return Ok(());
+    }
 
     let device_id = input.device_id.trim().to_owned();
     let grant_target = session_grant_target_for_requested_audience(
@@ -783,11 +904,19 @@ pub async fn oidc_code_exchange(
             ),
             "authorization_code_exchanged_via_local_token_service=true".to_owned(),
             "oauth_access_token_issued=true".to_owned(),
+            "oauth_access_token_introspected_locally=true".to_owned(),
             format!(
                 "oauth_refresh_token_issued={}",
                 oauth_token_reply.refresh_token.is_some()
             ),
             format!("oauth_id_token_issued={}", oauth_token_reply.id_token.is_some()),
+            format!(
+                "oauth_introspection_subject={}",
+                oauth_introspection
+                    .sub
+                    .as_deref()
+                    .unwrap_or("missing")
+            ),
             format!(
                 "callback_state_checked={}",
                 input.expected_state.is_some()
