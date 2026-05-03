@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 
 use coauth_data::{RepositoryAccess, UrlBuilder};
 use opentelemetry::{Key, KeyValue, metrics::Counter};
+use oauth2_types::requests::AuthorizationCodeGrant as OAuthAuthorizationCodeGrant;
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -340,10 +341,14 @@ pub async fn oidc_code_exchange(
 ) -> Result<(), RouteError> {
     let mut rng = make_rng();
     let clock = make_clock();
+    let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
+    let templates = depot.templates()?;
     let homeserver = depot.homeserver()?;
+    let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let user_agent: Option<String> = req.header("user-agent");
     let mut repo = depot.repo().await?;
 
     let input: OidcCodeExchangeRequest = req
@@ -489,41 +494,9 @@ pub async fn oidc_code_exchange(
         return Ok(());
     };
 
-    let now = clock.now();
-    let oauth2_session_id = match authz_grant.stage {
-        coauth_data::AuthorizationGrantStage::Fulfilled {
-            session_id,
-            fulfilled_at,
-        } => {
-            if now - fulfilled_at > chrono::Duration::minutes(10) {
-                res.render(Json(LoginResponse {
-                    status: "error",
-                    error: Some("invalid_authorization_code"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![
-                        "authorization_code is expired for the bridge scaffold".to_owned(),
-                    ],
-                }));
-                return Ok(());
-            }
-            session_id
-        }
-        coauth_data::AuthorizationGrantStage::Pending
-        | coauth_data::AuthorizationGrantStage::Cancelled { .. }
-        | coauth_data::AuthorizationGrantStage::Exchanged { .. } => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_authorization_code"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "authorization_code is not in a fulfilled, single-use exchangeable state"
-                        .to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
+    let exchangeable_oauth2_session_id = match &authz_grant.stage {
+        coauth_data::AuthorizationGrantStage::Fulfilled { session_id, .. } => Some(*session_id),
+        _ => None,
     };
 
     if authz_grant.redirect_uri != redirect_uri {
@@ -555,73 +528,6 @@ pub async fn oidc_code_exchange(
                     input.login_hint.trim()
                 ),
             ],
-        }));
-        return Ok(());
-    }
-
-    let Some(code) = authz_grant.code.as_ref() else {
-        res.render(Json(LoginResponse {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![
-                "authorization_code grant is missing embedded code payload".to_owned(),
-            ],
-        }));
-        return Ok(());
-    };
-
-    match code.pkce.as_ref() {
-        Some(pkce) => {
-            if let Err(error) = pkce.verify(input.code_verifier.trim()) {
-                res.render(Json(LoginResponse {
-                    status: "error",
-                    error: Some("invalid_code_verifier"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![format!("pkce verification failed: {error}")],
-                }));
-                return Ok(());
-            }
-        }
-        None => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_code_verifier"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "authorization_code was issued without PKCE, but the bridge requires PKCE-backed OIDC codes"
-                        .to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
-    }
-
-    let Some(oauth2_session) = repo.oauth2_session().lookup(oauth2_session_id).await? else {
-        res.render(Json(LoginResponse {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "authorization_code references missing oauth2_session={oauth2_session_id}"
-            )],
-        }));
-        return Ok(());
-    };
-    if oauth2_session.client_id != authz_grant.client_id {
-        res.render(Json(LoginResponse {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "authorization_code client binding mismatch: grant client={} session client={}",
-                authz_grant.client_id, oauth2_session.client_id
-            )],
         }));
         return Ok(());
     }
@@ -669,6 +575,108 @@ pub async fn oidc_code_exchange(
             )],
         }));
         return Ok(());
+    }
+
+    let oauth_code_grant = OAuthAuthorizationCodeGrant {
+        code: input.authorization_code.trim().to_owned(),
+        redirect_uri: Some(redirect_uri.clone()),
+        code_verifier: Some(input.code_verifier.trim().to_owned()),
+    };
+    let oauth_token_reply = match crate::handlers::oauth2::token_service::exchange_authorization_code(
+        &mut rng,
+        &clock,
+        &activity_tracker,
+        &oauth_code_grant,
+        &oauth2_client,
+        &key_store,
+        &url_builder,
+        &contrix_config,
+        &site_config,
+        repo,
+        &homeserver,
+        &templates,
+        user_agent,
+    )
+    .await
+    {
+        Ok((reply, next_repo)) => {
+            repo = next_repo;
+            reply
+        }
+        Err(
+            crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::GrantNotFound
+            | crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::InvalidGrant(_),
+        ) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_authorization_code"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![
+                    "authorization_code could not be exchanged through the local OAuth2 token service"
+                        .to_owned(),
+                ],
+            }));
+            return Ok(());
+        }
+        Err(
+            crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::UnauthorizedClient(_)
+            | crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::UnexpectedClient { .. },
+        ) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_client"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![
+                    "authorization_code is not bound to the requested OAuth2 client".to_owned(),
+                ],
+            }));
+            return Ok(());
+        }
+        Err(crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::PkceVerification(error)) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_code_verifier"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![format!("pkce verification failed: {error}")],
+            }));
+            return Ok(());
+        }
+        Err(crate::handlers::oauth2::token_service::AuthorizationCodeExchangeError::BadRequest) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_request"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![
+                    "authorization_code exchange request was rejected by the local OAuth2 token service"
+                        .to_owned(),
+                ],
+            }));
+            return Ok(());
+        }
+        Err(error) => {
+            return Err(RouteError::Internal(Box::new(error)));
+        }
+    };
+
+    let oauth2_session_id = exchangeable_oauth2_session_id.ok_or_else(|| {
+        RouteError::Internal(Box::new(std::io::Error::other(
+            "authorization_code exchanged successfully without a fulfilled oauth2 session id",
+        )))
+    })?;
+    let Some(oauth2_session) = repo.oauth2_session().lookup(oauth2_session_id).await? else {
+        return Err(RouteError::Internal(Box::new(std::io::Error::other(format!(
+            "authorization_code exchange succeeded but oauth2_session={oauth2_session_id} could not be loaded",
+        )))));
+    };
+    if oauth2_session.client_id != authz_grant.client_id {
+        return Err(RouteError::Internal(Box::new(std::io::Error::other(format!(
+            "authorization_code exchange succeeded with mismatched client binding: grant client={} session client={}",
+            authz_grant.client_id, oauth2_session.client_id
+        )))));
     }
 
     let Some(user_session_id) = oauth2_session.user_session_id else {
@@ -723,9 +731,6 @@ pub async fn oidc_code_exchange(
         &session_grant,
     )
     .await?;
-    repo.oauth2_authorization_grant()
-        .exchange(&clock, authz_grant)
-        .await?;
     repo.save().await?;
 
     let user = &browser_session.user;
@@ -759,7 +764,7 @@ pub async fn oidc_code_exchange(
                 .map(|(name, endpoint)| SessionGrantPrincipalServerInfo { name, endpoint }),
         }),
         warnings: vec![
-            "TODO(contrix): replace local authorization-grant lookup with a full OAuth2/OIDC token exchange or upstream-bound proof/introspection validation before treating this bridge as production-grade.".to_owned(),
+            "TODO(contrix): replace the local OAuth2 token-service bridge with a full upstream token endpoint exchange or proof/introspection validation before treating this flow as production-grade.".to_owned(),
             format!("device_id={device_id}"),
             format!("redirect_uri={}", redirect_uri),
             format!("issuer={issuer}"),
@@ -768,9 +773,21 @@ pub async fn oidc_code_exchange(
             format!("oauth2_session_id={oauth2_session_id}"),
             format!("oauth2_client_id={}", oauth2_client.client_id),
             format!("browser_session_id={user_session_id}"),
-            "authorization_code_validated_locally=true".to_owned(),
-            "pkce_verified=true".to_owned(),
-            "authorization_code_consumed=true".to_owned(),
+            format!(
+                "oauth_scope={}",
+                oauth_token_reply
+                    .scope
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "missing".to_owned())
+            ),
+            "authorization_code_exchanged_via_local_token_service=true".to_owned(),
+            "oauth_access_token_issued=true".to_owned(),
+            format!(
+                "oauth_refresh_token_issued={}",
+                oauth_token_reply.refresh_token.is_some()
+            ),
+            format!("oauth_id_token_issued={}", oauth_token_reply.id_token.is_some()),
             format!(
                 "callback_state_checked={}",
                 input.expected_state.is_some()
