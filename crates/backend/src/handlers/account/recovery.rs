@@ -38,6 +38,12 @@ static PRINCIPAL_RECOVERY_CACHE: LazyLock<Mutex<Value>> = LazyLock::new(|| {
         "in_flight_job": null,
         "queue": [],
         "failure_log": [],
+        "last_upstream_probe_at": null,
+        "upstream_binding": {
+            "principal_base_url": null,
+            "binding_state": "unbound",
+            "discovery_mode": "static_path_scaffold"
+        },
         "cached_snapshot": null
     }))
 });
@@ -252,6 +258,9 @@ pub struct RecoveryDescribeResponse {
     pub recovery_principal_cache_retry_path: &'static str,
     pub recovery_principal_cache_invalidate_path: &'static str,
     pub recovery_principal_cache_failures_path: &'static str,
+    pub recovery_principal_cache_upstream_path: &'static str,
+    pub recovery_principal_cache_upstream_probe_path: &'static str,
+    pub recovery_principal_cache_upstream_bind_path: &'static str,
     pub key_backup_rest_base: &'static str,
     pub key_backup_schema: &'static str,
     pub device_message_schema: &'static str,
@@ -317,6 +326,9 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
         recovery_principal_cache_retry_path: "/api/v1/auth/recovery/principal-cache/retry",
         recovery_principal_cache_invalidate_path: "/api/v1/auth/recovery/principal-cache/invalidate",
         recovery_principal_cache_failures_path: "/api/v1/auth/recovery/principal-cache/failures",
+        recovery_principal_cache_upstream_path: "/api/v1/auth/recovery/principal-cache/upstream",
+        recovery_principal_cache_upstream_probe_path: "/api/v1/auth/recovery/principal-cache/upstream/probe",
+        recovery_principal_cache_upstream_bind_path: "/api/v1/auth/recovery/principal-cache/upstream/bind",
         key_backup_rest_base: "/api/v1/keys/backups",
         key_backup_schema: "cx.schema.key_backup.v1",
         device_message_schema: "cx.schema.device_message.v1",
@@ -511,6 +523,9 @@ pub async fn get_recovery_principal_snapshot() -> Json<Value> {
         "principal_cache_retry_path": "/api/v1/auth/recovery/principal-cache/retry",
         "principal_cache_invalidate_path": "/api/v1/auth/recovery/principal-cache/invalidate",
         "principal_cache_failures_path": "/api/v1/auth/recovery/principal-cache/failures",
+        "principal_cache_upstream_path": "/api/v1/auth/recovery/principal-cache/upstream",
+        "principal_cache_upstream_probe_path": "/api/v1/auth/recovery/principal-cache/upstream/probe",
+        "principal_cache_upstream_bind_path": "/api/v1/auth/recovery/principal-cache/upstream/bind",
         "principal_recovery_contract_stack_path": "/api/v1/recovery/contract-stack",
         "principal_recovery_live_snapshot_path": "/api/v1/recovery/live-snapshot",
         "principal_restore_state_durability_path": "/api/v1/keys/backups/restore-state/durability",
@@ -567,8 +582,17 @@ pub async fn get_recovery_principal_cache_status() -> Json<Value> {
         "retry_path": "/api/v1/auth/recovery/principal-cache/retry",
         "invalidate_path": "/api/v1/auth/recovery/principal-cache/invalidate",
         "failures_path": "/api/v1/auth/recovery/principal-cache/failures",
+        "upstream_path": "/api/v1/auth/recovery/principal-cache/upstream",
+        "upstream_probe_path": "/api/v1/auth/recovery/principal-cache/upstream/probe",
+        "upstream_bind_path": "/api/v1/auth/recovery/principal-cache/upstream/bind",
         "upstream_live_snapshot_path": "/api/v1/recovery/live-snapshot",
         "upstream_contract_stack_path": "/api/v1/recovery/contract-stack",
+        "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
+            "principal_base_url": null,
+            "binding_state": "unbound",
+            "discovery_mode": "static_path_scaffold"
+        })),
+        "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
         "last_refresh_at": cache.get("last_refresh_at").cloned().unwrap_or(Value::Null),
         "refresh_state": cache.get("refresh_state").cloned().unwrap_or_else(|| json!("idle")),
         "refresh_count": cache.get("refresh_count").cloned().unwrap_or_else(|| json!(0)),
@@ -613,6 +637,9 @@ pub async fn get_recovery_principal_cache_policy() -> Json<Value> {
         "retry_path": "/api/v1/auth/recovery/principal-cache/retry",
         "invalidate_path": "/api/v1/auth/recovery/principal-cache/invalidate",
         "failures_path": "/api/v1/auth/recovery/principal-cache/failures",
+        "upstream_path": "/api/v1/auth/recovery/principal-cache/upstream",
+        "upstream_probe_path": "/api/v1/auth/recovery/principal-cache/upstream/probe",
+        "upstream_bind_path": "/api/v1/auth/recovery/principal-cache/upstream/bind",
         "freshness": {
             "max_stale_seconds": 300,
             "serve_stale_while_refreshing": true,
@@ -636,6 +663,133 @@ pub async fn get_recovery_principal_cache_policy() -> Json<Value> {
             "manual_invalidation"
         ],
         "todo": "TODO(coauth.recovery): replace static cache policy scaffold with tenant policy, principal-server ETag binding, and durable retry budget accounting."
+    }))
+}
+
+#[endpoint]
+pub async fn get_recovery_principal_cache_upstream() -> Json<Value> {
+    let cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock")
+        .clone();
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_cache_upstream.v1",
+        "version": "2026-05-04-scaffold",
+        "binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
+            "principal_base_url": null,
+            "binding_state": "unbound",
+            "discovery_mode": "static_path_scaffold"
+        })),
+        "last_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "probe_path": "/api/v1/auth/recovery/principal-cache/upstream/probe",
+        "bind_path": "/api/v1/auth/recovery/principal-cache/upstream/bind",
+        "expected_principal_paths": {
+            "contract_stack": "/api/v1/recovery/contract-stack",
+            "stack_bundle": "/api/v1/recovery/stack-bundle",
+            "live_snapshot": "/api/v1/recovery/live-snapshot",
+            "restore_state_durability": "/api/v1/keys/backups/restore-state/durability",
+            "restore_state_checkpoints": "/api/v1/keys/backups/restore-state/checkpoints",
+            "restore_tickets": "/api/v1/keys/backups/restore-tickets"
+        },
+        "todo": "TODO(coauth.recovery): replace upstream binding scaffold with live principal discovery, DID audience checks, TLS policy, and cache invalidation on binding change."
+    }))
+}
+
+#[endpoint]
+pub async fn post_recovery_principal_cache_upstream_probe(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+    let probed_at = Utc::now().to_rfc3339();
+    let principal_base_url = body
+        .get("principal_base_url")
+        .cloned()
+        .unwrap_or_else(|| json!("http://127.0.0.1:8080"));
+    let mut cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock");
+    let upstream_binding = cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
+        "principal_base_url": principal_base_url.clone(),
+        "binding_state": "probe_only",
+        "discovery_mode": "static_path_scaffold"
+    }));
+    *cache = json!({
+        "cache_mode": "memory_snapshot_scaffold",
+        "refresh_state": cache.get("refresh_state").cloned().unwrap_or_else(|| json!("idle")),
+        "refresh_count": cache.get("refresh_count").and_then(Value::as_u64).unwrap_or(0),
+        "failure_count": cache.get("failure_count").and_then(Value::as_u64).unwrap_or(0),
+        "last_refresh_at": cache.get("last_refresh_at").cloned().unwrap_or(Value::Null),
+        "last_failure_at": cache.get("last_failure_at").cloned().unwrap_or(Value::Null),
+        "last_failure_code": cache.get("last_failure_code").cloned().unwrap_or(Value::Null),
+        "last_reason": cache.get("last_reason").cloned().unwrap_or(Value::Null),
+        "in_flight_job": cache.get("in_flight_job").cloned().unwrap_or(Value::Null),
+        "queue": cache.get("queue").cloned().unwrap_or_else(|| json!([])),
+        "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
+        "last_upstream_probe_at": probed_at,
+        "upstream_binding": upstream_binding,
+        "cached_snapshot": cache.get("cached_snapshot").cloned().unwrap_or(Value::Null)
+    });
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_cache_upstream_probe.v1",
+        "version": "2026-05-04-scaffold",
+        "principal_base_url": principal_base_url,
+        "probe_state": "scaffold_reachable",
+        "probed_at": probed_at,
+        "discovered_paths": {
+            "contract_stack": "/api/v1/recovery/contract-stack",
+            "stack_bundle": "/api/v1/recovery/stack-bundle",
+            "live_snapshot": "/api/v1/recovery/live-snapshot",
+            "restore_tickets": "/api/v1/keys/backups/restore-tickets"
+        },
+        "bind_path": "/api/v1/auth/recovery/principal-cache/upstream/bind",
+        "todo": "TODO(coauth.recovery): replace probe scaffold with live HTTP discovery, service DID verification, and recovery contract compatibility checks."
+    }))
+}
+
+#[endpoint]
+pub async fn post_recovery_principal_cache_upstream_bind(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+    let bound_at = Utc::now().to_rfc3339();
+    let principal_base_url = body
+        .get("principal_base_url")
+        .cloned()
+        .unwrap_or_else(|| json!("http://127.0.0.1:8080"));
+    let audience = body
+        .get("audience")
+        .cloned()
+        .unwrap_or_else(|| json!("contrix-principal"));
+    let mut cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock");
+    *cache = json!({
+        "cache_mode": "memory_snapshot_scaffold",
+        "refresh_state": "upstream_bound",
+        "refresh_count": cache.get("refresh_count").and_then(Value::as_u64).unwrap_or(0),
+        "failure_count": cache.get("failure_count").and_then(Value::as_u64).unwrap_or(0),
+        "last_refresh_at": cache.get("last_refresh_at").cloned().unwrap_or(Value::Null),
+        "last_failure_at": cache.get("last_failure_at").cloned().unwrap_or(Value::Null),
+        "last_failure_code": cache.get("last_failure_code").cloned().unwrap_or(Value::Null),
+        "last_reason": body.get("reason").cloned().unwrap_or_else(|| json!("operator_upstream_bind")),
+        "in_flight_job": Value::Null,
+        "queue": [],
+        "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
+        "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "upstream_binding": {
+            "principal_base_url": principal_base_url.clone(),
+            "audience": audience.clone(),
+            "binding_state": "bound_scaffold",
+            "bound_at": bound_at,
+            "discovery_mode": "static_path_scaffold"
+        },
+        "cached_snapshot": Value::Null
+    });
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_cache_upstream_bind.v1",
+        "version": "2026-05-04-scaffold",
+        "principal_base_url": principal_base_url,
+        "audience": audience,
+        "binding_state": "bound_scaffold",
+        "bound_at": bound_at,
+        "status_path": "/api/v1/auth/recovery/principal-cache/status",
+        "refresh_path": "/api/v1/auth/recovery/principal-cache/refresh",
+        "upstream_path": "/api/v1/auth/recovery/principal-cache/upstream",
+        "todo": "TODO(coauth.recovery): replace upstream bind scaffold with durable tenant binding, DID proof checks, and automatic cache invalidation."
     }))
 }
 
@@ -680,6 +834,12 @@ pub async fn post_recovery_principal_cache_refresh(JsonBody(body): JsonBody<Valu
         "in_flight_job": in_flight_job,
         "queue": queue,
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
+        "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
+            "principal_base_url": null,
+            "binding_state": "unbound",
+            "discovery_mode": "static_path_scaffold"
+        })),
         "cached_snapshot": {
             "contract": "contrix.auth.recovery_principal_snapshot_cache_entry.v1",
             "snapshot_contract": "contrix.rest.recovery_live_snapshot.v1",
@@ -758,6 +918,12 @@ pub async fn post_recovery_principal_cache_retry(JsonBody(body): JsonBody<Value>
         "in_flight_job": job.clone(),
         "queue": queue,
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
+        "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
+            "principal_base_url": null,
+            "binding_state": "unbound",
+            "discovery_mode": "static_path_scaffold"
+        })),
         "cached_snapshot": cached_snapshot
     });
     Json(json!({
@@ -800,6 +966,12 @@ pub async fn post_recovery_principal_cache_invalidate(JsonBody(body): JsonBody<V
         "in_flight_job": Value::Null,
         "queue": [],
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
+        "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
+            "principal_base_url": null,
+            "binding_state": "unbound",
+            "discovery_mode": "static_path_scaffold"
+        })),
         "cached_snapshot": Value::Null
     });
     Json(json!({
@@ -858,6 +1030,12 @@ pub async fn post_recovery_principal_cache_complete(JsonBody(body): JsonBody<Val
         "in_flight_job": Value::Null,
         "queue": [],
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
+        "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
+            "principal_base_url": null,
+            "binding_state": "unbound",
+            "discovery_mode": "static_path_scaffold"
+        })),
         "cached_snapshot": {
             "contract": "contrix.auth.recovery_principal_snapshot_cache_entry.v1",
             "snapshot_contract": "contrix.rest.recovery_live_snapshot.v1",
@@ -918,6 +1096,12 @@ pub async fn post_recovery_principal_cache_fail(JsonBody(body): JsonBody<Value>)
         "in_flight_job": Value::Null,
         "queue": [],
         "failure_log": failure_log,
+        "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
+            "principal_base_url": null,
+            "binding_state": "unbound",
+            "discovery_mode": "static_path_scaffold"
+        })),
         "cached_snapshot": cache.get("cached_snapshot").cloned().unwrap_or(Value::Null)
     });
     Json(json!({

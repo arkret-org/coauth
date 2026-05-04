@@ -645,7 +645,13 @@ fn build_account_api_router(router: Router) -> Router {
                                 .push(Router::with_path("policy").get(recovery::get_recovery_principal_cache_policy))
                                 .push(Router::with_path("refresh").post(recovery::post_recovery_principal_cache_refresh))
                                 .push(Router::with_path("retry").post(recovery::post_recovery_principal_cache_retry))
-                                .push(Router::with_path("invalidate").post(recovery::post_recovery_principal_cache_invalidate)),
+                                .push(Router::with_path("invalidate").post(recovery::post_recovery_principal_cache_invalidate))
+                                .push(
+                                    Router::with_path("upstream")
+                                        .get(recovery::get_recovery_principal_cache_upstream)
+                                        .push(Router::with_path("probe").post(recovery::post_recovery_principal_cache_upstream_probe))
+                                        .push(Router::with_path("bind").post(recovery::post_recovery_principal_cache_upstream_bind)),
+                                ),
                         )
                         .push(
                             Router::with_path("principal-cache")
