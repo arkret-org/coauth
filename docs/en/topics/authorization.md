@@ -1,11 +1,13 @@
 # Authorization and sessions
 
-The main job of the authentication service is to grant access to resources to clients, and to let resources know who is accessing them.
-In less abstract terms, this means that the service is responsible for issuing access tokens and letting the homeserver (and other services) introspect those access tokens.
+The main job of `coauth` is to authenticate service accounts and clients, then
+issue tokens or Contrix session grants that downstream services can validate.
+Principal Servers use session grants to bind a local account, principal DID,
+device, audience, scopes, expiry, revocation reference, and signing proof.
 
 ## How access tokens work
 
-In Pasion, the access token is an opaque string for which the service has metadata associated with it.
+In `coauth`, the access token is an opaque string for which the service has metadata associated with it.
 An access token has:
 
 - a subject, which is the user the token is issued for
@@ -18,6 +20,25 @@ One exception is the validity of the token: the service may revoke a token befor
 
 A typical client will get a short-lived access token (valid 5 minutes) along with a refresh token.
 The refresh token can then be used to get a new access token without the user having to re-authenticate.
+
+## Contrix session grants
+
+Contrix Principal Servers should validate `cx.session.grant` records instead of
+treating legacy scopes as capabilities. The grant payload includes the issuer
+service DID, subject principal DID, service account ID, device ID when present,
+audience, scopes, expiry, revocation reference, and a proof block containing the
+signing algorithm, key ID, canonical payload hash, and hash algorithm.
+
+`POST /api/v1/session-grants/introspect` accepts either a grant ID or signed
+grant JWT plus an optional audience. It returns a minimal response with
+`active`, a standard status (`active`, `revoked`, `expired`, `locked`,
+`suspended`, `audience_mismatch`, or `not_found`), and non-secret grant metadata.
+It never returns the stored JWT, refresh token, session private key, handle, or
+claim payloads.
+
+Legacy Matrix and Palpo scopes remain compatibility inputs only. They do not
+become Contrix capabilities and should not be used as authorization subjects for
+new Principal Server writes.
 
 ## How Palpo behaves
 
@@ -78,15 +99,15 @@ It is useful for automated machine-to-machine communication, and is often referr
 
 Palpo doesn't yet support this concept, and as such requesting any Palpo API, even the admin API, requires a user attached to the session.
 
-This isn't the case with Pasion's Admin API, which can be accessed with a client-only session:
+This isn't the case with the coauth Admin API, which can be accessed with a client-only session:
 the API can be requested by a session which has the [`urn:coauth:admin`] scope without being backed by a user.
 
 ### Supported authorization grants
 
-Pasion supports a few different authorization grants for OAuth 2.0 sessions.
+coauth supports a few different authorization grants for OAuth 2.0 sessions.
 Whilst this section won't go into the technical details of how those grants work, it's important to understand what they are and what they are used for.
 
-| Grant type                                          | Entity | User interaction | Matrix C-S API | Palpo Admin API | Pasion Admin API |
+| Grant type                                          | Entity | User interaction | Matrix C-S API | Palpo Admin API | coauth Admin API |
 | --------------------------------------------------- | ------ | ---------------- | -------------- | ----------------- | ------------- |
 | [Authorization code](#authorization-code-grant)     | User   | Same device      | Yes            | Yes               | Yes           |
 | [Device authorization](#device-authorization-grant) | User   | Other device     | Yes            | Yes               | Yes           |
@@ -123,11 +144,11 @@ This grant isn't meant for automation either, as it still requires user interact
 
 The client credentials grant ([RFC 6749] section 4.4) is a bit special, as it lets a client authenticate as itself, without a user.
 
-This has no meaning yet in the Matrix C-S API, but is useful for other APIs like the Pasion Admin API.
+This has no meaning yet in the Matrix C-S API, but is useful for other APIs like the coauth Admin API.
 It may also be used in the future as a foundation for a new Application Service API, replacing the current `hs_token`/`as_token` mechanism.
 
 This works by presenting the client credentials to get back an access token.
-The simplest type of client credentials is a client ID and client secret pair, but Pasion also supports client authentication with a JWT ([RFC 7523]), which is a robust way to authenticate clients without a shared secret.
+The simplest type of client credentials is a client ID and client secret pair, but coauth also supports client authentication with a JWT ([RFC 7523]), which is a robust way to authenticate clients without a shared secret.
 
 ## Personal sessions (personal access tokens)
 
@@ -165,5 +186,5 @@ Personal sessions can be used so long as:
 [`urn:matrix:org.matrix.msc2967.client:api:*`]: ../reference/scopes.md#urnmatrixorgmatrixmsc2967clientapi
 [`urn:matrix:org.matrix.msc2967.client:device:AABBCC`]: ../reference/scopes.md#urnmatrixorgmatrixmsc2967clientdevicedevice-id
 [`urn:palpo:admin:*`]: ../reference/scopes.md#urnpalpoadmin
-[`urn:coauth:admin`]: ../reference/scopes.md#urnmasadmin
+[`urn:coauth:admin`]: ../reference/scopes.md#urncoauthadmin
 [Admin API]: ./admin-api.md

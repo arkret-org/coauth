@@ -73,8 +73,8 @@ contrix:
       did: did:web:soland.example.com
 
   identity_registry:
-    kind: starid
-    resolver: https://starid.example.com/
+    kind: public_did_resolver
+    resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
 
   service_did: did:web:auth.example.com
@@ -83,7 +83,7 @@ contrix:
 ```
 
 - `principal_servers`：通过 Contrix discovery 发布的受信任 Principal Server 描述
-- `identity_registry`：委托的 DID / identity resolver，通常是 `starid`
+- `identity_registry`：委托的 DID / identity resolver，通常是 public DID resolver 服务
 - `service_did`：显式 service DID；未配置时从 `http.public_base` 推导
 - `issuer_did`：session grant 中写入的 DID；默认继承 `service_did`
 - `admin_audience`：Contrix admin 集成期望的 audience；默认回退到本地 `/api/v1`

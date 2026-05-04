@@ -1353,7 +1353,7 @@
       "properties": {
         "kind": {
           "description": "Resolver flavour used by the deployment.",
-          "default": "starid",
+          "default": "public_did_resolver",
           "allOf": [
             {
               "$ref": "#/definitions/IdentityRegistryKind"
@@ -1361,7 +1361,7 @@
           ]
         },
         "resolver": {
-          "description": "Base URL of the resolver, for example a `starid` deployment.",
+          "description": "Base URL of the resolver, for example a public DID resolver deployment.",
           "type": "string",
           "format": "uri"
         },
@@ -1379,9 +1379,9 @@
       "description": "Supported identity-registry resolver flavours.",
       "oneOf": [
         {
-          "description": "Resolver backed by `starid`.",
+          "description": "Resolver backed by public DID methods or delegated DID services.",
           "type": "string",
-          "const": "starid"
+          "const": "public_did_resolver"
         },
         {
           "description": "Generic external resolver.",

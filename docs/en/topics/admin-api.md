@@ -1,7 +1,9 @@
 # Admin API
 
-Pasion provides a REST-like API for administrators to manage the service.
-This API is intended to build tools on top of Pasion, and is only available to administrators.
+`coauth` provides a REST-like API for administrators and `sodmin` to manage
+accounts, sessions, devices, claims, OAuth clients, notification channels,
+connectors, and policy data. The API is only available to administrators and
+trusted automation.
 
 ## Enabling the API
 
@@ -37,10 +39,22 @@ http:
 ## Reference documentation
 
 The API is documented using the [OpenAPI specification](https://spec.openapis.org/oas/v3.1.0).
-The API schema is available [here](../api/spec.json).
-This schema can be viewed in tools like Swagger UI, available [here](../api/).
+When the admin API resource is enabled, `coauth` serves the same generated
+specification at these runtime paths:
 
-If admin API is enabled, Pasion will also serve the specification at `/api/spec.json`, with a Swagger UI available at `/api/doc/`.
+- `GET /api/admin/v1/openapi.yaml` for the Contrix-native admin API contract.
+- `GET /.well-known/contrix/openapi.yaml` for discovery by `sodmin` and
+  service automation.
+- `GET /api-doc/admin/openapi.json` for legacy Swagger tooling.
+- `GET /admin-swagger-ui/` for the hosted Swagger UI.
+
+The Contrix-native admin surface now includes `GET /api/admin/v1/accounts`,
+`GET /api/admin/v1/accounts/{id}`, `POST /api/admin/v1/accounts/{id}/lock`,
+and `POST /api/admin/v1/accounts/{id}/disable`. DID bindings, device
+administration, claim issuance/revocation, policy dry-run, and signed policy
+decision audit routes are present in OpenAPI as guarded contract endpoints and
+return `501 Not Implemented` until the storage, proof verification, and audit
+models land.
 
 ## Authentication
 
@@ -64,10 +78,8 @@ clients:
     client_auth_method: client_secret_post
     client_secret: wie9oh2EekeeDeithei9Eipaeh2sohte
     redirect_uris:
-      # The Swagger UI callback in the hosted documentation
-      - https://palpo-im.github.io/coauth/api/oauth2-redirect.html
       # The Swagger UI callback hosted by the service
-      - https://auth.example.com/api/doc/oauth2-callback
+      - https://auth.example.com/admin-swagger-ui/oauth2-callback
 ```
 
 Then, in Swagger UI, click on the "Authorize" button.
@@ -179,6 +191,12 @@ Error responses will use a 4xx or 5xx status code, with the following shape:
 ```
 
 Well-known error codes are not yet specified.
+
+Session and session-grant endpoints expose token metadata such as client ID,
+audience, scope, expiry, revocation state, and last activity. They do not return
+stored JWTs, refresh tokens, session private keys, or provider secrets in list
+and detail responses. Personal access tokens are only returned immediately after
+creation or regeneration.
 
 ## Example
 

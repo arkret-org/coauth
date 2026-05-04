@@ -1,10 +1,26 @@
 # 使用管理 API
 
-Pasion 提供了 RESTful 管理 API，用于管理用户、会话和 OAuth 2.0 客户端。
+`coauth` 提供 REST-like 管理 API，供管理员、`sodmin` 和受信任的自动化系统管理账号、
+会话、设备、claim、OAuth 客户端、通知渠道、连接器和策略数据。
+
+管理 API 默认不暴露。需要在 `http.listeners` 的 `resources` 中启用 `adminapi`。所有请求
+都必须携带具备 `urn:coauth:admin` 或 `urn:contrix:admin:*` 的访问令牌；旧部署中的
+`urn:mas:admin` 仍作为兼容 scope 被接受。
 
 ## API 文档
 
-完整的 API 文档以 OpenAPI 规范提供，可在 [API 参考](../api/index.html) 中查看。
+完整 API 文档以 OpenAPI 规范提供。启用 `adminapi` 后，运行时会暴露这些路径：
+
+- `GET /api/admin/v1/openapi.yaml`：Contrix-native 管理 API 合约。
+- `GET /.well-known/contrix/openapi.yaml`：供 `sodmin` 和服务自动化发现。
+- `GET /api-doc/admin/openapi.json`：兼容 Swagger 工具的 JSON 版本。
+- `GET /admin-swagger-ui/`：服务内置 Swagger UI。
+
+Contrix-native 管理面现在包含 `GET /api/admin/v1/accounts`、
+`GET /api/admin/v1/accounts/{id}`、`POST /api/admin/v1/accounts/{id}/lock` 和
+`POST /api/admin/v1/accounts/{id}/disable`。DID binding、设备管理、claim
+签发/吊销、policy dry-run 和 signed policy decision audit 路由已经进入 OpenAPI，
+但在对应存储、proof verification 和审计模型落地前会返回 `501 Not Implemented`。
 
 ## 认证方式
 
@@ -33,7 +49,7 @@ curl -X POST https://auth.example.com/oauth2/token \
 
 ## 响应格式
 
-管理 API 遵循 JSON API 规范，所有响应使用统一的 JSON 格式。
+管理 API 借鉴 JSON:API 形状，列表、详情和错误响应都使用稳定 envelope。
 
 ### 成功响应
 
@@ -65,34 +81,46 @@ curl "https://auth.example.com/api/admin/v1/users?page[first]=10&page[after]=游
 
 ```json
 {
-  "page": {
-    "has_next_page": true,
-    "has_previous_page": false,
-    "start_cursor": "...",
-    "end_cursor": "..."
+  "meta": {
+    "count": 42
+  },
+  "links": {
+    "self": "/api/admin/v1/users?page[first]=10",
+    "next": "/api/admin/v1/users?page[first]=10&page[after]=01H..."
   }
 }
 ```
 
+会话和 session grant 端点只暴露 client ID、audience、scope、过期时间、吊销状态和
+last activity 等元数据。列表和详情响应不会返回已存储的 JWT、refresh token、session
+private key 或 provider secret。Personal access token 只会在创建或重新生成时返回一次。
+
 ## 常用操作
 
-### 列出所有用户
+### 列出所有账号
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  https://auth.example.com/api/admin/v1/users
+  https://auth.example.com/api/admin/v1/accounts
 ```
 
-### 锁定用户
+### 锁定账号
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  https://auth.example.com/api/admin/v1/users/$USER_ID/lock
+  https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/lock
 ```
 
-### 终止用户的所有会话
+### 终止会话
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  https://auth.example.com/api/admin/v1/users/$USER_ID/sessions/kill
+  https://auth.example.com/api/admin/v1/user-sessions/$SESSION_ID/finish
+```
+
+### 吊销 personal session
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  https://auth.example.com/api/admin/v1/personal-sessions/$SESSION_ID/revoke
 ```

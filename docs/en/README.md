@@ -2,7 +2,7 @@
 
 This documentation describes `coauth`, the Contrix Auth / Account Server. It is
 intended for operators, administrators, and developers integrating coauth with
-Contrix Principal Servers, `starid`, `sodmin`, and first-party clients.
+Contrix Principal Servers, public DID resolver services, `sodmin`, and first-party clients.
 
 `coauth` is an OAuth 2.0 and OpenID Connect provider. Its primary product
 surface is Contrix-native account, session, DID-binding, claim, and admin

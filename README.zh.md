@@ -5,14 +5,14 @@
 
 `coauth` 不是 DID Registry。它负责证明“谁登录了哪个本地账号、设备和会话”，再把这
 些状态发布给 Principal Server 和管理工具。DID document、key-log、registry
-receipt 等能力属于 `starid`。
+receipt 等能力属于委托的 public DID resolver / DID 服务。
 
 ## 集成模型
 
 - `chask` 作为 Contrix 的 public/native client，消费 OIDC token。
 - Principal Server（例如 `soland`）从 `coauth` 获取 session grant 和账号元数据。
 - `sodmin` 通过 `urn:coauth:admin` 或 `urn:contrix:admin:*` 访问管理 API。
-- `starid` 继续作为委托的 identity registry / resolver。
+- 委托的 public DID resolver / DID 服务继续作为 identity registry / resolver。
 - Matrix / Palpo 集成保留为 legacy compatibility adapter，不再是主产品路径。
 
 ## 当前状态
@@ -62,8 +62,8 @@ contrix:
       endpoint: https://soland.example.com/
       did: did:web:soland.example.com
   identity_registry:
-    kind: starid
-    resolver: https://starid.example.com/
+    kind: public_did_resolver
+    resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
   service_did: did:web:auth.example.com
   issuer_did: did:web:auth.example.com

@@ -75,8 +75,8 @@ contrix:
       did: did:web:soland.example.com
 
   identity_registry:
-    kind: starid
-    resolver: https://starid.example.com/
+    kind: public_did_resolver
+    resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
 
   service_did: did:web:auth.example.com
@@ -86,7 +86,7 @@ contrix:
 
 - `principal_servers`: trusted Principal Server descriptors published through
   Contrix discovery
-- `identity_registry`: delegated DID / identity resolver, typically `starid`
+- `identity_registry`: delegated DID / identity resolver, typically a public DID resolver service
 - `service_did`: explicit service DID, otherwise derived from `http.public_base`
 - `issuer_did`: DID emitted in session grants, defaults to `service_did`
 - `admin_audience`: audience expected by Contrix admin integrations, defaults

@@ -78,7 +78,7 @@ pub struct IdentityRegistryConfig {
     #[serde(default)]
     pub kind: IdentityRegistryKind,
 
-    /// Base URL of the resolver, for example a `starid` deployment.
+    /// Base URL of the resolver, for example a public DID resolver deployment.
     pub resolver: Url,
 
     /// Whether pairwise or private DID lookups require proof material before
@@ -91,9 +91,9 @@ pub struct IdentityRegistryConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum IdentityRegistryKind {
-    /// Resolver backed by `starid`.
+    /// Resolver backed by public DID methods or delegated DID services.
     #[default]
-    Starid,
+    PublicDidResolver,
     /// Generic external resolver.
     External,
 }

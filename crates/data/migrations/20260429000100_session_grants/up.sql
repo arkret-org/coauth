@@ -19,6 +19,9 @@ CREATE INDEX IF NOT EXISTS oauth2_session_grants_user_session_idx
 CREATE INDEX IF NOT EXISTS oauth2_session_grants_subject_idx
     ON oauth2_session_grants(subject);
 
+CREATE UNIQUE INDEX IF NOT EXISTS oauth2_session_grants_grant_jwt_idx
+    ON oauth2_session_grants(grant_jwt);
+
 CREATE INDEX IF NOT EXISTS oauth2_session_grants_device_id_idx
     ON oauth2_session_grants(device_id)
     WHERE device_id IS NOT NULL;

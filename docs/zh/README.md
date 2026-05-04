@@ -1,7 +1,7 @@
 # 关于本文档
 
 本文档介绍 `coauth`，即 Contrix Auth / Account Server。它面向运维人员、管理员，以及
-需要把 coauth 接入 Contrix Principal Server、`starid`、`sodmin` 和第一方客户端的开发者。
+需要把 coauth 接入 Contrix Principal Server、public DID resolver 服务、`sodmin` 和第一方客户端的开发者。
 
 `coauth` 是 OAuth 2.0 和 OpenID Connect Provider。它的主产品接口是 Contrix-native
 账户、会话、DID 绑定、claim 和 admin 集成。Legacy Matrix / Palpo 只作为旧部署的

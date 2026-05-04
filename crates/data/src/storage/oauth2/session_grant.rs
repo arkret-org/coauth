@@ -129,6 +129,12 @@ pub trait SessionGrantRepository: Send + Sync {
     /// Look up a session grant by id.
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
 
+    /// Look up a session grant by its signed JWT.
+    async fn lookup_by_grant_jwt(
+        &mut self,
+        grant_jwt: &str,
+    ) -> Result<Option<SessionGrant>, Self::Error>;
+
     /// List session grants matching the supplied filter.
     async fn list(
         &mut self,
@@ -153,6 +159,11 @@ repository_impl!(SessionGrantRepository:
     ) -> Result<SessionGrant, Self::Error>;
 
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
+
+    async fn lookup_by_grant_jwt(
+        &mut self,
+        grant_jwt: &str,
+    ) -> Result<Option<SessionGrant>, Self::Error>;
 
     async fn list(
         &mut self,

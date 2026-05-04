@@ -197,6 +197,23 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
             .map_err(Into::into)
     }
 
+    #[tracing::instrument(name = "db.oauth2_session_grant.lookup_by_grant_jwt", skip_all, err)]
+    async fn lookup_by_grant_jwt(
+        &mut self,
+        grant_jwt: &str,
+    ) -> Result<Option<SessionGrant>, Self::Error> {
+        let row = oauth2_session_grants::table
+            .filter(oauth2_session_grants::grant_jwt.eq(grant_jwt))
+            .select(SessionGrantLookup::as_select())
+            .first::<SessionGrantLookup>(self.conn)
+            .await
+            .optional()?;
+
+        row.map(SessionGrant::try_from)
+            .transpose()
+            .map_err(Into::into)
+    }
+
     #[tracing::instrument(name = "db.oauth2_session_grant.list", skip_all, err)]
     async fn list(
         &mut self,

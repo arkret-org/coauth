@@ -7,7 +7,7 @@ notifications, and a stable admin API for Contrix deployments.
 `coauth` is not a DID registry. It proves who authenticated to which local
 account, device, and session, then publishes that state to Principal Servers
 and admin tooling. DID documents, key logs, and registry receipts belong to
-`starid`.
+delegated/public DID resolver services.
 
 ## Integration model
 
@@ -16,7 +16,7 @@ and admin tooling. DID documents, key logs, and registry receipts belong to
   metadata from `coauth`.
 - `sodmin` uses the admin API with `urn:coauth:admin` or
   `urn:contrix:admin:*`.
-- `starid` remains the delegated identity registry / resolver.
+- A delegated/public DID resolver remains the identity registry / resolver source.
 - Matrix / Palpo support remains available as a legacy compatibility adapter,
   not the primary product path.
 
@@ -39,7 +39,7 @@ Track the remaining work in [`_todos.md`](_todos.md).
 - OpenID Connect provider with authorization code, refresh token, client
   credentials, and device code grants
 - Contrix discovery, service DID documents, handle resolution, and short-lived
-  session grants
+  session grants with Principal Server introspection
 - Local account lifecycle, password auth, upstream OAuth2 federation, and
   recovery workflows
 - Admin APIs for sessions, tokens, users, clients, templates, connectors, and
@@ -73,8 +73,8 @@ contrix:
       endpoint: https://soland.example.com/
       did: did:web:soland.example.com
   identity_registry:
-    kind: starid
-    resolver: https://starid.example.com/
+    kind: public_did_resolver
+    resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
   service_did: did:web:auth.example.com
   issuer_did: did:web:auth.example.com
@@ -131,7 +131,10 @@ just build-all
 | `/api/v1/server/describe` | Contrix service metadata |
 | `/api/v1/identity/describe` | Identity-registry contract |
 | `/api/v1/directory/resolve-handle` | Handle -> DID resolution |
+| `/api/v1/session-grants/introspect` | Principal Server session grant validation |
 | `/api/admin/v1/*` | Admin API for `sodmin` and service automation |
+| `/api/admin/v1/openapi.yaml` | Contrix admin API OpenAPI document |
+| `/.well-known/contrix/openapi.yaml` | Admin API discovery document for `sodmin` |
 
 ## Documentation
 

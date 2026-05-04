@@ -36,8 +36,8 @@ pub struct AddRequest {
     /// Skip checking with the homeserver whether the username is available.
     ///
     /// Use this with caution! The main reason to use this, is when a user used
-    /// by an application service needs to exist in Pasion to craft special
-    /// tokens (like with admin access) for them
+    /// by an application service needs to exist in the compatibility adapter
+    /// to craft special tokens (like admin access) for them
     #[serde(default)]
     skip_homeserver_check: bool,
 }

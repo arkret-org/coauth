@@ -252,7 +252,7 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
             .as_ref()
             .map(|registry| IdentityRegistryMetadata {
                 kind: match registry.kind {
-                    IdentityRegistryKind::Starid => "starid",
+                    IdentityRegistryKind::PublicDidResolver => "public_did_resolver",
                     IdentityRegistryKind::External => "external",
                 },
                 resolver: registry.resolver.to_string(),

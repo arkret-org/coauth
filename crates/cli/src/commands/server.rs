@@ -236,6 +236,7 @@ impl Options {
         let email_webhook_service =
             EmailWebhookService::from_email_config(&config.email, http_client.clone())
                 .context("invalid email webhook configuration")?;
+        let contrix_config = config.contrix.clone();
 
         // Explicitly the config to properly zeroize secret keys
         drop(config);
@@ -246,7 +247,7 @@ impl Options {
             let mut s = AppState {
                 repository_factory: PgRepositoryFactory::new(pool),
                 templates,
-                contrix_config: config.contrix,
+                contrix_config,
                 key_store,
                 cookie_manager,
                 encrypter,
