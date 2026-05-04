@@ -227,6 +227,7 @@ pub struct RecoveryDescribeResponse {
     pub key_backup_rest_base: &'static str,
     pub key_backup_schema: &'static str,
     pub device_message_schema: &'static str,
+    pub principal_restore_start_path: &'static str,
     pub principal_restore_describe_path: &'static str,
     pub principal_restore_ticket_path: &'static str,
     pub principal_restore_ticket_advance_path: &'static str,
@@ -236,6 +237,7 @@ pub struct RecoveryDescribeResponse {
     pub verification_event_kinds: Vec<&'static str>,
     pub recovery_modes: Vec<&'static str>,
     pub example_backup_payload: Value,
+    pub recovery_restore_examples: Value,
     pub recovery_authz_examples: Value,
     pub todos: Vec<&'static str>,
 }
@@ -251,6 +253,7 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
         key_backup_rest_base: "/api/v1/keys/backups",
         key_backup_schema: "cx.schema.key_backup.v1",
         device_message_schema: "cx.schema.device_message.v1",
+        principal_restore_start_path: "/api/v1/keys/backups/{backup_id}/restore/start",
         principal_restore_describe_path: "/api/v1/keys/backups/{backup_id}/restore/describe",
         principal_restore_ticket_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}",
         principal_restore_ticket_advance_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/advance",
@@ -287,6 +290,29 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
                     "todo": "replace scaffold payload with encrypted export blob"
                 }
             ]
+        }),
+        recovery_restore_examples: serde_json::json!({
+            "restore_start_request": {
+                "backup_id": "backup-scaffold-current-device",
+                "actor": "did:web:alice.example",
+                "device_id": "device-web",
+                "verification_event_kind": "cx.key.verification.done",
+                "todo": "replace scaffold restore start with verified restore ticket handoff"
+            },
+            "restore_ticket_response_shape": {
+                "contract": "contrix.rest.key_backup_restore_ticket.v1",
+                "lifecycle_state": "authz_pending",
+                "allowed_next_transitions": [
+                    "authz_checked",
+                    "policy_checked",
+                    "approved",
+                    "materialized"
+                ]
+            },
+            "restore_ticket_advance_request": {
+                "transition": "authz_checked",
+                "note": "replace scaffold transition with policy-backed approval state machine"
+            }
         }),
         recovery_authz_examples: serde_json::json!({
             "authz_check_request": {
@@ -355,6 +381,7 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
             "TODO: bind key backup restore to durable encrypted blob storage.",
             "TODO: bind device verification messages to signed device envelopes.",
             "TODO: add recovery proofing policy and restore approvals.",
+            "TODO: bind recovery bridge restore-start and restore-ticket examples to live principal endpoints instead of static scaffold payloads.",
             "TODO: bind recovery bridge examples to live principal authz/policy endpoints instead of static scaffold paths.",
             "TODO: bind recovery bridge to live principal restore-describe endpoint instead of only publishing the path template.",
         ],
