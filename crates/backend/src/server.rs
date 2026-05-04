@@ -695,6 +695,9 @@ fn build_admin_router(router: Router) -> Router {
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
         // Contrix accounts
         .push(
+            Router::with_path("bridge/describe").get(accounts::admin_bridge_describe),
+        )
+        .push(
             Router::with_path("accounts")
                 .get(accounts::list_accounts)
                 .push(

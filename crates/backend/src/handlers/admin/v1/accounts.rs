@@ -317,6 +317,51 @@ pub struct AccountRiskActionHistoryResponse {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AdminBridgeDescribeResponse {
+    /// Scaffold contract identifier for coauth admin integration discovery.
+    contract: &'static str,
+
+    /// Scaffold contract version.
+    version: &'static str,
+
+    /// Base path for this admin REST surface.
+    api_base_path: &'static str,
+
+    /// Collection path for account administration.
+    accounts_path: &'static str,
+
+    /// Template path for one account.
+    account_detail_path_template: &'static str,
+
+    /// Template path for DID binding inventory.
+    account_dids_path_template: &'static str,
+
+    /// Template path for staging a risk action proposal.
+    risk_action_path_template: &'static str,
+
+    /// Template path for current risk-action state.
+    risk_action_current_path_template: &'static str,
+
+    /// Template path for risk-action transition history.
+    risk_action_history_path_template: &'static str,
+
+    /// Template path for approving a proposal.
+    risk_action_approve_path_template: &'static str,
+
+    /// Template path for executing an approved proposal.
+    risk_action_execute_path_template: &'static str,
+
+    /// How the current scaffold persists risk-action state.
+    risk_action_state_store_kind: &'static str,
+
+    /// Approval mode exposed by the current scaffold.
+    risk_action_approval_mode: &'static str,
+
+    /// Remaining scaffold tasks.
+    todos: Vec<&'static str>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionTransitionRecord {
     /// Account targeted by the persisted transition record.
     account_id: String,
@@ -588,6 +633,33 @@ pub async fn list_accounts(
     };
 
     Ok(Json(response))
+}
+
+#[endpoint]
+#[tracing::instrument(name = "handler.admin.v1.bridge.describe", skip_all)]
+pub async fn admin_bridge_describe() -> JsonResult<AdminBridgeDescribeResponse> {
+    Ok(Json(AdminBridgeDescribeResponse {
+        contract: "contrix.rest.coauth_admin_bridge.v1",
+        version: "2026-05-04-scaffold",
+        api_base_path: "/api/admin/v1",
+        accounts_path: "/api/admin/v1/accounts",
+        account_detail_path_template: "/api/admin/v1/accounts/{account_id}",
+        account_dids_path_template: "/api/admin/v1/accounts/{account_id}/dids",
+        risk_action_path_template: "/api/admin/v1/accounts/{account_id}/risk-action",
+        risk_action_current_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/current",
+        risk_action_history_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/history",
+        risk_action_approve_path_template:
+            "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve",
+        risk_action_execute_path_template:
+            "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute",
+        risk_action_state_store_kind: RISK_ACTION_STATE_STORE_KIND,
+        risk_action_approval_mode: "state_machine_scaffold_required",
+        todos: vec![
+            "TODO: replace audit-backed scaffold transitions with dedicated persisted proposal records",
+            "TODO: add controlled executor workers for lock, disable, erase, and reset-recovery mutations",
+            "TODO: publish formal OpenAPI examples for admin bridge discovery and risk-action workflows",
+        ],
+    }))
 }
 
 #[endpoint]
