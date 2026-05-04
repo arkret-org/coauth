@@ -88,6 +88,17 @@ pub struct OidcCodeExchangeRequest {
     pub expected_state: Option<String>,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct OidcBrowserBridgeSessionRequest {
+    pub redirect_uri: String,
+    pub login_hint: String,
+    pub device_id: String,
+    #[serde(default)]
+    pub principal_audience: Option<String>,
+    #[serde(default)]
+    pub client_id_hint: Option<String>,
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct ViewerInfo {
     pub id: String,
@@ -140,6 +151,7 @@ pub struct AuthBridgeDescribeResponse {
 #[derive(Serialize)]
 pub struct AuthBridgeOAuthDescriptor {
     pub discovery_path: &'static str,
+    pub browser_bridge_session_path: &'static str,
     pub exchange_path: &'static str,
     pub supported_flows: Vec<&'static str>,
     pub redirect_uri_modes: Vec<&'static str>,
@@ -185,6 +197,26 @@ pub struct ProviderInfo {
     pub human_name: Option<String>,
     pub brand_name: Option<String>,
     pub authorize_url: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct OidcBrowserBridgeSessionResponse {
+    pub contract: &'static str,
+    pub version: &'static str,
+    pub authorize_url: String,
+    pub callback_uri: String,
+    pub issuer: String,
+    pub authorization_endpoint: String,
+    pub token_endpoint: String,
+    pub userinfo_endpoint: String,
+    pub client_id: String,
+    pub state: String,
+    pub nonce: String,
+    pub code_verifier: String,
+    pub code_challenge: String,
+    pub code_challenge_method: &'static str,
+    pub principal_audience: String,
+    pub todo: &'static str,
 }
 
 // ── POST /api/v1/auth/login ────────────────────────────────────
@@ -1150,6 +1182,75 @@ pub async fn oidc_code_exchange(
 }
 
 #[endpoint]
+pub async fn oidc_browser_bridge_session(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<OidcBrowserBridgeSessionResponse>, RouteError> {
+    let url_builder = depot.url_builder()?;
+    let input: OidcBrowserBridgeSessionRequest = req
+        .parse_json()
+        .await
+        .map_err(|_| RouteError::BadRequest("invalid browser bridge session payload".to_owned()))?;
+
+    if input.redirect_uri.trim().is_empty()
+        || input.login_hint.trim().is_empty()
+        || input.device_id.trim().is_empty()
+    {
+        return Err(RouteError::BadRequest(
+            "redirect_uri, login_hint, and device_id are required".to_owned(),
+        ));
+    }
+
+    let principal_audience = input
+        .principal_audience
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "TODO_PRINCIPAL_AUDIENCE".to_owned());
+    let client_id = input
+        .client_id_hint
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "yougen".to_owned());
+    let state = format!("cx-state-{}", Ulid::new().to_string().to_lowercase());
+    let nonce = format!("cx-nonce-{}", Ulid::new().to_string().to_lowercase());
+    let code_verifier = format!("cx-pkce-verifier-{}", Ulid::new().to_string().to_lowercase());
+    let code_challenge = format!("TODO-S256-{}", Ulid::new().to_string().to_lowercase());
+    let mut authorize_url = url_builder.oauth_authorization_endpoint();
+    {
+        let mut query = authorize_url.query_pairs_mut();
+        query.append_pair("response_type", "code");
+        query.append_pair("client_id", client_id.as_str());
+        query.append_pair("redirect_uri", input.redirect_uri.trim());
+        query.append_pair("scope", "openid profile");
+        query.append_pair("state", state.as_str());
+        query.append_pair("nonce", nonce.as_str());
+        query.append_pair("login_hint", input.login_hint.trim());
+        query.append_pair("code_challenge_method", "S256");
+        query.append_pair("code_challenge", code_challenge.as_str());
+        query.append_pair("resource", principal_audience.as_str());
+    }
+
+    Ok(Json(OidcBrowserBridgeSessionResponse {
+        contract: "contrix.rest.oidc_browser_bridge_session.v1",
+        version: "2026-05-04-scaffold",
+        authorize_url: authorize_url.to_string(),
+        callback_uri: input.redirect_uri.trim().to_owned(),
+        issuer: url_builder.oidc_issuer().to_string(),
+        authorization_endpoint: url_builder.oauth_authorization_endpoint().to_string(),
+        token_endpoint: url_builder.oauth_token_endpoint().to_string(),
+        userinfo_endpoint: url_builder.oidc_userinfo_endpoint().to_string(),
+        client_id,
+        state,
+        nonce,
+        code_verifier,
+        code_challenge,
+        code_challenge_method: "S256",
+        principal_audience,
+        todo: "TODO: replace scaffold state/nonce/verifier generation with true browser-bound PKCE material and backed OAuth client selection.",
+    }))
+}
+
+#[endpoint]
 pub async fn auth_bridge_describe(depot: &Depot) -> Result<Json<AuthBridgeDescribeResponse>, RouteError> {
     let _ = depot.url_builder()?;
 
@@ -1159,6 +1260,7 @@ pub async fn auth_bridge_describe(depot: &Depot) -> Result<Json<AuthBridgeDescri
         api_base_path: "/api/v1",
         oauth: AuthBridgeOAuthDescriptor {
             discovery_path: "/.well-known/openid-configuration",
+            browser_bridge_session_path: "/api/v1/auth/oidc/browser-bridge/session",
             exchange_path: "/api/v1/auth/oidc/exchange",
             supported_flows: vec!["authorization_code_pkce_browser"],
             redirect_uri_modes: vec!["browser_origin_callback", "native_urn_callback"],
