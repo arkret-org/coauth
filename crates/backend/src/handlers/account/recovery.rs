@@ -225,6 +225,8 @@ pub struct RecoveryDescribeResponse {
     pub recovery_status_path: &'static str,
     pub recovery_resend_path: &'static str,
     pub recovery_principal_snapshot_path: &'static str,
+    pub recovery_principal_cache_status_path: &'static str,
+    pub recovery_principal_cache_refresh_path: &'static str,
     pub key_backup_rest_base: &'static str,
     pub key_backup_schema: &'static str,
     pub device_message_schema: &'static str,
@@ -280,6 +282,8 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
         recovery_status_path: "/api/v1/auth/recovery/{id}",
         recovery_resend_path: "/api/v1/auth/recovery/{id}/resend",
         recovery_principal_snapshot_path: "/api/v1/auth/recovery/principal-snapshot",
+        recovery_principal_cache_status_path: "/api/v1/auth/recovery/principal-cache/status",
+        recovery_principal_cache_refresh_path: "/api/v1/auth/recovery/principal-cache/refresh",
         key_backup_rest_base: "/api/v1/keys/backups",
         key_backup_schema: "cx.schema.key_backup.v1",
         device_message_schema: "cx.schema.device_message.v1",
@@ -460,6 +464,8 @@ pub async fn get_recovery_principal_snapshot() -> Json<Value> {
         "contract": "contrix.auth.recovery_principal_snapshot.v1",
         "version": "2026-05-04-scaffold",
         "recovery_describe_path": "/api/v1/auth/recovery/describe",
+        "principal_cache_status_path": "/api/v1/auth/recovery/principal-cache/status",
+        "principal_cache_refresh_path": "/api/v1/auth/recovery/principal-cache/refresh",
         "principal_recovery_contract_stack_path": "/api/v1/recovery/contract-stack",
         "principal_recovery_live_snapshot_path": "/api/v1/recovery/live-snapshot",
         "principal_restore_state_durability_path": "/api/v1/keys/backups/restore-state/durability",
@@ -485,6 +491,40 @@ pub async fn get_recovery_principal_snapshot() -> Json<Value> {
             "TODO(coauth.recovery): replace principal snapshot scaffold with live HTTP fetch, cache, freshness, and audience binding.",
             "TODO(coauth.recovery): add failure taxonomy and degraded-mode semantics for principal snapshot aggregation."
         ]
+    }))
+}
+
+#[endpoint]
+pub async fn get_recovery_principal_cache_status() -> Json<Value> {
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_cache_status.v1",
+        "version": "2026-05-04-scaffold",
+        "cache_mode": "memory_none_scaffold",
+        "fetch_mode": "manual_refresh_passthrough_scaffold",
+        "snapshot_path": "/api/v1/auth/recovery/principal-snapshot",
+        "refresh_path": "/api/v1/auth/recovery/principal-cache/refresh",
+        "upstream_live_snapshot_path": "/api/v1/recovery/live-snapshot",
+        "upstream_contract_stack_path": "/api/v1/recovery/contract-stack",
+        "last_refresh_at": null,
+        "refresh_state": "idle",
+        "todos": [
+            "TODO(coauth.recovery): replace cache status scaffold with real principal fetch/cache metadata and freshness timestamps.",
+            "TODO(coauth.recovery): bind refresh state to audience, tenant, and principal-server identity."
+        ]
+    }))
+}
+
+#[endpoint]
+pub async fn post_recovery_principal_cache_refresh(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_cache_refresh.v1",
+        "version": "2026-05-04-scaffold",
+        "refresh_state": "queued",
+        "refresh_mode": body.get("refresh_mode").cloned().unwrap_or_else(|| json!("manual_scaffold")),
+        "reason": body.get("reason").cloned().unwrap_or_else(|| json!("operator_requested")),
+        "status_path": "/api/v1/auth/recovery/principal-cache/status",
+        "snapshot_path": "/api/v1/auth/recovery/principal-snapshot",
+        "todo": "TODO(coauth.recovery): replace refresh scaffold with live principal fetch, cache population, and failure taxonomy."
     }))
 }
 
