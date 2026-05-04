@@ -31,6 +31,7 @@ use crate::{
         },
         contrix,
     },
+    oidc_client::requests::discovery,
     oidc_client::requests::jose::{JwtVerificationData, verify_signed_jwt},
     oidc_client::types::client_credentials::ClientCredentials,
     salvo_utils::session::SessionInfoExt,
@@ -497,6 +498,45 @@ pub async fn oidc_code_exchange(
     let expected_issuer = url_builder.oidc_issuer();
     let expected_token_endpoint = url_builder.oauth_token_endpoint();
     let expected_userinfo_endpoint = url_builder.oidc_userinfo_endpoint();
+    let discovered_metadata = match if issuer.scheme() == "https" {
+        discovery::discover(&http_client, issuer.as_str()).await
+    } else {
+        discovery::insecure_discover(&http_client, issuer.as_str()).await
+    } {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_discovery_binding"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![format!(
+                    "OIDC exchange could not fetch live discovery metadata for issuer={issuer}: {error}"
+                )],
+            }));
+            return Ok(());
+        }
+    };
+    if discovered_metadata.issuer() != issuer.as_str()
+        || discovered_metadata.token_endpoint() != &token_endpoint
+        || discovered_metadata.userinfo_endpoint() != &userinfo_endpoint
+    {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_discovery_binding"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![format!(
+                "OIDC exchange metadata does not match live discovery for issuer={}: discovered token_endpoint={} userinfo_endpoint={} but received token_endpoint={} userinfo_endpoint={}",
+                discovered_metadata.issuer(),
+                discovered_metadata.token_endpoint(),
+                discovered_metadata.userinfo_endpoint(),
+                token_endpoint,
+                userinfo_endpoint
+            )],
+        }));
+        return Ok(());
+    }
     if issuer != expected_issuer
         || token_endpoint != expected_token_endpoint
         || userinfo_endpoint != expected_userinfo_endpoint
