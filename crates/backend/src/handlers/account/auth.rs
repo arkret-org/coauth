@@ -226,8 +226,10 @@ pub struct OidcExchangeDescribeResponse {
     pub version: &'static str,
     pub exchange_path: &'static str,
     pub upstream_boundary_mode: &'static str,
+    pub upstream_modes_supported: Vec<&'static str>,
     pub required_fields: Vec<&'static str>,
     pub validation_layers: Vec<&'static str>,
+    pub failure_codes: Vec<&'static str>,
     pub example_request: serde_json::Value,
     pub todos: Vec<&'static str>,
 }
@@ -1271,6 +1273,13 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
         exchange_path: "/api/v1/auth/oidc/exchange",
         upstream_boundary_mode:
             "local_http_token_plus_local_introspection_plus_local_userinfo_with_todo_upstream_validation",
+        upstream_modes_supported: vec![
+            "local_http_token_exchange",
+            "local_oauth2_introspection",
+            "local_userinfo_http_validation",
+            "todo_upstream_token_endpoint",
+            "todo_upstream_introspection",
+        ],
         required_fields: vec![
             "authorization_code",
             "code_verifier",
@@ -1291,6 +1300,17 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "local_oauth2_introspection_active_check",
             "local_userinfo_subject_principal_session_binding",
             "contrix_session_grant_issuance",
+        ],
+        failure_codes: vec![
+            "invalid_redirect_uri",
+            "invalid_issuer",
+            "invalid_discovery_binding",
+            "invalid_client_id",
+            "invalid_code_verifier",
+            "invalid_state",
+            "invalid_authorization_code",
+            "invalid_userinfo_binding",
+            "session_grant_denied",
         ],
         example_request: serde_json::json!({
             "authorization_code": "TODO_AUTHORIZATION_CODE",
