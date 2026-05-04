@@ -11,8 +11,12 @@ use coauth_data::{
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::sync::{LazyLock, Mutex};
+use std::{
+    sync::{LazyLock, Mutex},
+    time::Duration,
+};
 use ulid::Ulid;
+use url::Url;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
 use crate::handlers::{
@@ -39,6 +43,7 @@ static PRINCIPAL_RECOVERY_CACHE: LazyLock<Mutex<Value>> = LazyLock::new(|| {
         "queue": [],
         "failure_log": [],
         "last_upstream_probe_at": null,
+        "last_upstream_probe_result": null,
         "upstream_binding": {
             "principal_base_url": null,
             "binding_state": "unbound",
@@ -47,6 +52,81 @@ static PRINCIPAL_RECOVERY_CACHE: LazyLock<Mutex<Value>> = LazyLock::new(|| {
         "cached_snapshot": null
     }))
 });
+
+fn recovery_cache_body_string(body: &Value, key: &str, default: &str) -> String {
+    body.get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(default)
+        .trim()
+        .to_owned()
+}
+
+fn normalize_principal_base_url(value: &str) -> Result<String, String> {
+    let mut url = Url::parse(value).map_err(|_| "invalid_principal_base_url".to_owned())?;
+    match url.scheme() {
+        "http" | "https" => {}
+        _ => return Err("unsupported_principal_base_url_scheme".to_owned()),
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(url.to_string().trim_end_matches('/').to_owned())
+}
+
+async fn probe_principal_recovery_surface(
+    client: &reqwest::Client,
+    principal_base_url: &str,
+    path: &str,
+    expected_contract: &str,
+    bearer_token: Option<&str>,
+) -> Value {
+    let url = match Url::parse(principal_base_url).and_then(|base| base.join(path.trim_start_matches('/'))) {
+        Ok(url) => url,
+        Err(_) => {
+            return json!({
+                "path": path,
+                "expected_contract": expected_contract,
+                "state": "invalid_probe_url"
+            });
+        }
+    };
+    let mut request = client.get(url.clone());
+    if let Some(token) = bearer_token.filter(|value| !value.trim().is_empty()) {
+        request = request.bearer_auth(token);
+    }
+    match request.send().await {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let body = response.json::<Value>().await.unwrap_or(Value::Null);
+            let actual_contract = body.get("contract").and_then(Value::as_str).unwrap_or("");
+            let state = if status == 401 || status == 403 {
+                "auth_required"
+            } else if status >= 400 {
+                "http_error"
+            } else if actual_contract == expected_contract {
+                "contract_ok"
+            } else {
+                "contract_mismatch"
+            };
+            json!({
+                "path": path,
+                "url": url.as_str(),
+                "status": status,
+                "state": state,
+                "expected_contract": expected_contract,
+                "actual_contract": actual_contract,
+                "body": body
+            })
+        }
+        Err(error) => json!({
+            "path": path,
+            "url": url.as_str(),
+            "state": "request_error",
+            "expected_contract": expected_contract,
+            "error": error.to_string()
+        }),
+    }
+}
 
 // ── POST /api/v1/auth/recovery/start ───────────────────────────
 
@@ -600,6 +680,7 @@ pub async fn get_recovery_principal_cache_status() -> Json<Value> {
             "discovery_mode": "static_path_scaffold"
         })),
         "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "last_upstream_probe_result": cache.get("last_upstream_probe_result").cloned().unwrap_or(Value::Null),
         "last_refresh_at": cache.get("last_refresh_at").cloned().unwrap_or(Value::Null),
         "refresh_state": cache.get("refresh_state").cloned().unwrap_or_else(|| json!("idle")),
         "refresh_count": cache.get("refresh_count").cloned().unwrap_or_else(|| json!(0)),
@@ -638,7 +719,7 @@ pub async fn get_recovery_principal_cache_status() -> Json<Value> {
 pub async fn get_recovery_principal_cache_policy() -> Json<Value> {
     Json(json!({
         "contract": "contrix.auth.recovery_principal_cache_policy.v1",
-        "version": "2026-05-04-scaffold",
+        "version": "2026-05-04",
         "status_path": "/api/v1/auth/recovery/principal-cache/status",
         "refresh_path": "/api/v1/auth/recovery/principal-cache/refresh",
         "retry_path": "/api/v1/auth/recovery/principal-cache/retry",
@@ -655,11 +736,16 @@ pub async fn get_recovery_principal_cache_policy() -> Json<Value> {
             "invalidate_on_audience_change": true
         },
         "retry": {
-            "strategy": "bounded_exponential_scaffold",
+            "strategy": "bounded_exponential",
             "initial_delay_ms": 500,
             "max_delay_ms": 30000,
             "max_attempts": 5,
             "jitter": "full"
+        },
+        "state_store": {
+            "kind": "process_memory",
+            "scope": "coauth_process",
+            "durable": false
         },
         "failure_taxonomy": [
             "upstream_unreachable",
@@ -669,7 +755,11 @@ pub async fn get_recovery_principal_cache_policy() -> Json<Value> {
             "audience_binding_changed",
             "manual_invalidation"
         ],
-        "todo": "TODO(coauth.recovery): replace static cache policy scaffold with tenant policy, principal-server ETag binding, and durable retry budget accounting."
+        "remaining_gaps": [
+            "tenant_overrides",
+            "principal_server_etag_binding",
+            "durable_retry_budget_accounting"
+        ]
     }))
 }
 
@@ -688,6 +778,7 @@ pub async fn get_recovery_principal_cache_upstream() -> Json<Value> {
             "discovery_mode": "static_path_scaffold"
         })),
         "last_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "last_probe_result": cache.get("last_upstream_probe_result").cloned().unwrap_or(Value::Null),
         "probe_path": "/api/v1/auth/recovery/principal-cache/upstream/probe",
         "bind_path": "/api/v1/auth/recovery/principal-cache/upstream/bind",
         "expected_principal_paths": {
@@ -700,25 +791,118 @@ pub async fn get_recovery_principal_cache_upstream() -> Json<Value> {
             "restore_state_checkpoints": "/api/v1/keys/backups/restore-state/checkpoints",
             "restore_tickets": "/api/v1/keys/backups/restore-tickets"
         },
-        "todo": "TODO(coauth.recovery): replace upstream binding scaffold with live principal discovery, DID audience checks, TLS policy, and cache invalidation on binding change."
+        "implemented_controls": [
+            "live_http_probe",
+            "operator_bind",
+            "probe_result_cache",
+            "cache_invalidation_on_bind"
+        ],
+        "remaining_gaps": [
+            "service_did_verification",
+            "tenant_tls_policy",
+            "durable_binding_store"
+        ]
     }))
 }
 
 #[endpoint]
 pub async fn post_recovery_principal_cache_upstream_probe(JsonBody(body): JsonBody<Value>) -> Json<Value> {
     let probed_at = Utc::now().to_rfc3339();
-    let principal_base_url = body
-        .get("principal_base_url")
-        .cloned()
-        .unwrap_or_else(|| json!("http://127.0.0.1:8080"));
+    let principal_base_url_input =
+        recovery_cache_body_string(&body, "principal_base_url", "http://127.0.0.1:8080");
+    let principal_base_url = match normalize_principal_base_url(&principal_base_url_input) {
+        Ok(value) => value,
+        Err(error_code) => {
+            return Json(json!({
+                "contract": "contrix.auth.recovery_principal_cache_upstream_probe.v1",
+                "version": "2026-05-04",
+                "principal_base_url": principal_base_url_input,
+                "probe_state": "invalid_principal_base_url",
+                "failure_code": error_code,
+                "probed_at": probed_at
+            }));
+        }
+    };
+    let bearer_token = body
+        .get("bearer_token")
+        .or_else(|| body.get("access_token"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+    let probes = vec![
+        probe_principal_recovery_surface(
+            &client,
+            &principal_base_url,
+            "/api/v1/recovery/discovery",
+            "contrix.rest.recovery_discovery.v1",
+            bearer_token.as_deref(),
+        )
+        .await,
+        probe_principal_recovery_surface(
+            &client,
+            &principal_base_url,
+            "/api/v1/recovery/readiness",
+            "contrix.rest.recovery_readiness.v1",
+            bearer_token.as_deref(),
+        )
+        .await,
+        probe_principal_recovery_surface(
+            &client,
+            &principal_base_url,
+            "/api/v1/recovery/stack-bundle",
+            "contrix.rest.recovery_stack_bundle.v1",
+            bearer_token.as_deref(),
+        )
+        .await,
+        probe_principal_recovery_surface(
+            &client,
+            &principal_base_url,
+            "/api/v1/recovery/live-snapshot",
+            "contrix.rest.recovery_live_snapshot.v1",
+            bearer_token.as_deref(),
+        )
+        .await,
+    ];
+    let contract_ok_count = probes
+        .iter()
+        .filter(|probe| probe.get("state").and_then(Value::as_str) == Some("contract_ok"))
+        .count();
+    let auth_required_count = probes
+        .iter()
+        .filter(|probe| probe.get("state").and_then(Value::as_str) == Some("auth_required"))
+        .count();
+    let probe_state = if contract_ok_count == probes.len() {
+        "contract_ok"
+    } else if contract_ok_count > 0 {
+        "partial_contract_ok"
+    } else if auth_required_count == probes.len() {
+        "auth_required"
+    } else {
+        "probe_failed"
+    };
+    let probe_result = json!({
+        "principal_base_url": principal_base_url,
+        "probe_state": probe_state,
+        "contract_ok_count": contract_ok_count,
+        "auth_required_count": auth_required_count,
+        "probed_at": probed_at,
+        "probes": probes
+    });
     let mut cache = PRINCIPAL_RECOVERY_CACHE
         .lock()
         .expect("principal recovery cache lock");
-    let upstream_binding = cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
-        "principal_base_url": principal_base_url.clone(),
-        "binding_state": "probe_only",
-        "discovery_mode": "static_path_scaffold"
-    }));
+    let upstream_binding = json!({
+        "principal_base_url": principal_base_url,
+        "binding_state": "probe_ok",
+        "probe_state": probe_state,
+        "contract_ok_count": contract_ok_count,
+        "auth_required_count": auth_required_count,
+        "discovery_mode": "live_http_probe"
+    });
     *cache = json!({
         "cache_mode": "memory_snapshot_scaffold",
         "refresh_state": cache.get("refresh_state").cloned().unwrap_or_else(|| json!("idle")),
@@ -731,16 +915,20 @@ pub async fn post_recovery_principal_cache_upstream_probe(JsonBody(body): JsonBo
         "in_flight_job": cache.get("in_flight_job").cloned().unwrap_or(Value::Null),
         "queue": cache.get("queue").cloned().unwrap_or_else(|| json!([])),
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
-        "last_upstream_probe_at": probed_at,
+        "last_upstream_probe_at": probe_result.get("probed_at").cloned().unwrap_or(Value::Null),
+        "last_upstream_probe_result": probe_result.clone(),
         "upstream_binding": upstream_binding,
         "cached_snapshot": cache.get("cached_snapshot").cloned().unwrap_or(Value::Null)
     });
     Json(json!({
         "contract": "contrix.auth.recovery_principal_cache_upstream_probe.v1",
-        "version": "2026-05-04-scaffold",
-        "principal_base_url": principal_base_url,
-        "probe_state": "scaffold_reachable",
-        "probed_at": probed_at,
+        "version": "2026-05-04",
+        "principal_base_url": probe_result["principal_base_url"].clone(),
+        "probe_state": probe_state,
+        "contract_ok_count": contract_ok_count,
+        "auth_required_count": auth_required_count,
+        "probed_at": probe_result["probed_at"].clone(),
+        "probes": probe_result["probes"].clone(),
         "discovered_paths": {
             "contract_stack": "/api/v1/recovery/contract-stack",
             "stack_bundle": "/api/v1/recovery/stack-bundle",
@@ -750,24 +938,49 @@ pub async fn post_recovery_principal_cache_upstream_probe(JsonBody(body): JsonBo
             "restore_tickets": "/api/v1/keys/backups/restore-tickets"
         },
         "bind_path": "/api/v1/auth/recovery/principal-cache/upstream/bind",
-        "todo": "TODO(coauth.recovery): replace probe scaffold with live HTTP discovery, service DID verification, and recovery contract compatibility checks."
+        "remaining_gaps": [
+            "service_did_verification",
+            "durable_probe_history"
+        ]
     }))
 }
 
 #[endpoint]
 pub async fn post_recovery_principal_cache_upstream_bind(JsonBody(body): JsonBody<Value>) -> Json<Value> {
     let bound_at = Utc::now().to_rfc3339();
-    let principal_base_url = body
-        .get("principal_base_url")
-        .cloned()
-        .unwrap_or_else(|| json!("http://127.0.0.1:8080"));
-    let audience = body
-        .get("audience")
-        .cloned()
-        .unwrap_or_else(|| json!("contrix-principal"));
+    let principal_base_url_input =
+        recovery_cache_body_string(&body, "principal_base_url", "http://127.0.0.1:8080");
+    let principal_base_url = match normalize_principal_base_url(&principal_base_url_input) {
+        Ok(value) => value,
+        Err(error_code) => {
+            return Json(json!({
+                "contract": "contrix.auth.recovery_principal_cache_upstream_bind.v1",
+                "version": "2026-05-04",
+                "principal_base_url": principal_base_url_input,
+                "binding_state": "invalid_principal_base_url",
+                "failure_code": error_code,
+                "bound_at": bound_at
+            }));
+        }
+    };
+    let audience = recovery_cache_body_string(&body, "audience", "contrix-principal");
     let mut cache = PRINCIPAL_RECOVERY_CACHE
         .lock()
         .expect("principal recovery cache lock");
+    let last_probe_result = cache.get("last_upstream_probe_result").cloned().unwrap_or(Value::Null);
+    let binding_state = if last_probe_result
+        .get("principal_base_url")
+        .and_then(Value::as_str)
+        == Some(principal_base_url.as_str())
+        && last_probe_result
+            .get("probe_state")
+            .and_then(Value::as_str)
+            .is_some_and(|state| state == "contract_ok" || state == "partial_contract_ok" || state == "auth_required")
+    {
+        "bound_after_probe"
+    } else {
+        "bound_without_current_probe"
+    };
     *cache = json!({
         "cache_mode": "memory_snapshot_scaffold",
         "refresh_state": "upstream_bound",
@@ -781,26 +994,30 @@ pub async fn post_recovery_principal_cache_upstream_bind(JsonBody(body): JsonBod
         "queue": [],
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
         "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "last_upstream_probe_result": last_probe_result,
         "upstream_binding": {
-            "principal_base_url": principal_base_url.clone(),
-            "audience": audience.clone(),
-            "binding_state": "bound_scaffold",
+            "principal_base_url": principal_base_url,
+            "audience": audience,
+            "binding_state": binding_state,
             "bound_at": bound_at,
-            "discovery_mode": "static_path_scaffold"
+            "discovery_mode": "live_probe_or_operator_bind"
         },
         "cached_snapshot": Value::Null
     });
     Json(json!({
         "contract": "contrix.auth.recovery_principal_cache_upstream_bind.v1",
-        "version": "2026-05-04-scaffold",
-        "principal_base_url": principal_base_url,
-        "audience": audience,
-        "binding_state": "bound_scaffold",
+        "version": "2026-05-04",
+        "principal_base_url": cache["upstream_binding"]["principal_base_url"].clone(),
+        "audience": cache["upstream_binding"]["audience"].clone(),
+        "binding_state": binding_state,
         "bound_at": bound_at,
         "status_path": "/api/v1/auth/recovery/principal-cache/status",
         "refresh_path": "/api/v1/auth/recovery/principal-cache/refresh",
         "upstream_path": "/api/v1/auth/recovery/principal-cache/upstream",
-        "todo": "TODO(coauth.recovery): replace upstream bind scaffold with durable tenant binding, DID proof checks, and automatic cache invalidation."
+        "remaining_gaps": [
+            "durable_tenant_config",
+            "principal_service_did_proof"
+        ]
     }))
 }
 
@@ -846,6 +1063,7 @@ pub async fn post_recovery_principal_cache_refresh(JsonBody(body): JsonBody<Valu
         "queue": queue,
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
         "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "last_upstream_probe_result": cache.get("last_upstream_probe_result").cloned().unwrap_or(Value::Null),
         "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
             "principal_base_url": null,
             "binding_state": "unbound",
@@ -930,6 +1148,7 @@ pub async fn post_recovery_principal_cache_retry(JsonBody(body): JsonBody<Value>
         "queue": queue,
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
         "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "last_upstream_probe_result": cache.get("last_upstream_probe_result").cloned().unwrap_or(Value::Null),
         "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
             "principal_base_url": null,
             "binding_state": "unbound",
@@ -978,6 +1197,7 @@ pub async fn post_recovery_principal_cache_invalidate(JsonBody(body): JsonBody<V
         "queue": [],
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
         "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "last_upstream_probe_result": cache.get("last_upstream_probe_result").cloned().unwrap_or(Value::Null),
         "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
             "principal_base_url": null,
             "binding_state": "unbound",
@@ -1042,6 +1262,7 @@ pub async fn post_recovery_principal_cache_complete(JsonBody(body): JsonBody<Val
         "queue": [],
         "failure_log": cache.get("failure_log").cloned().unwrap_or_else(|| json!([])),
         "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "last_upstream_probe_result": cache.get("last_upstream_probe_result").cloned().unwrap_or(Value::Null),
         "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
             "principal_base_url": null,
             "binding_state": "unbound",
@@ -1108,6 +1329,7 @@ pub async fn post_recovery_principal_cache_fail(JsonBody(body): JsonBody<Value>)
         "queue": [],
         "failure_log": failure_log,
         "last_upstream_probe_at": cache.get("last_upstream_probe_at").cloned().unwrap_or(Value::Null),
+        "last_upstream_probe_result": cache.get("last_upstream_probe_result").cloned().unwrap_or(Value::Null),
         "upstream_binding": cache.get("upstream_binding").cloned().unwrap_or_else(|| json!({
             "principal_base_url": null,
             "binding_state": "unbound",
