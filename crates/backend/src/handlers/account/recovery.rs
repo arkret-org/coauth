@@ -217,6 +217,72 @@ pub struct ResendRecoveryResponse {
     pub error: Option<String>,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct RecoveryDescribeResponse {
+    pub contract: &'static str,
+    pub version: &'static str,
+    pub recovery_start_path: &'static str,
+    pub recovery_status_path: &'static str,
+    pub recovery_resend_path: &'static str,
+    pub key_backup_rest_base: &'static str,
+    pub key_backup_schema: &'static str,
+    pub device_message_schema: &'static str,
+    pub verification_event_kinds: Vec<&'static str>,
+    pub recovery_modes: Vec<&'static str>,
+    pub example_backup_payload: Value,
+    pub todos: Vec<&'static str>,
+}
+
+#[endpoint]
+pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
+    Json(RecoveryDescribeResponse {
+        contract: "contrix.auth.recovery_bridge.v1",
+        version: "2026-05-04",
+        recovery_start_path: "/api/v1/auth/recovery/start",
+        recovery_status_path: "/api/v1/auth/recovery/{id}",
+        recovery_resend_path: "/api/v1/auth/recovery/{id}/resend",
+        key_backup_rest_base: "/api/v1/keys/backups",
+        key_backup_schema: "cx.schema.key_backup.v1",
+        device_message_schema: "cx.schema.device_message.v1",
+        verification_event_kinds: vec![
+            "cx.key.verification.request",
+            "cx.key.verification.ready",
+            "cx.key.verification.start",
+            "cx.key.verification.accept",
+            "cx.key.verification.key",
+            "cx.key.verification.mac",
+            "cx.key.verification.done",
+            "cx.key.verification.cancel",
+        ],
+        recovery_modes: vec![
+            "password_recovery",
+            "flow_session_recovery",
+            "key_backup_restore_scaffold",
+        ],
+        example_backup_payload: serde_json::json!({
+            "schema": "cx.schema.key_backup.v1",
+            "backup_id": "backup-scaffold-current-device",
+            "class": "mls_export",
+            "encryption": {
+                "alg": "xchacha20poly1305",
+                "kdf": "argon2id"
+            },
+            "items": [
+                {
+                    "kind": "mls_group_state",
+                    "ref": "group:default",
+                    "todo": "replace scaffold payload with encrypted export blob"
+                }
+            ]
+        }),
+        todos: vec![
+            "TODO: bind key backup restore to durable encrypted blob storage.",
+            "TODO: bind device verification messages to signed device envelopes.",
+            "TODO: add recovery proofing policy and restore approvals.",
+        ],
+    })
+}
+
 #[endpoint]
 pub async fn post_recovery_resend(
     req: &mut Request,

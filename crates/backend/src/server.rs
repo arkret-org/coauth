@@ -637,6 +637,7 @@ fn build_account_api_router(router: Router) -> Router {
                 // Account recovery
                 .push(
                     Router::with_path("recovery")
+                        .push(Router::with_path("describe").get(recovery::get_recovery_describe))
                         .push(Router::with_path("start").post(recovery::post_recovery_start))
                         .push(Router::with_path("{id}").get(recovery::get_recovery).push(
                             Router::with_path("resend").post(recovery::post_recovery_resend),
