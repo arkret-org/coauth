@@ -251,6 +251,7 @@ pub struct RecoveryDescribeResponse {
     pub key_backup_schema: &'static str,
     pub device_message_schema: &'static str,
     pub principal_recovery_contract_stack_path: &'static str,
+    pub principal_recovery_stack_bundle_path: &'static str,
     pub principal_device_messages_describe_path: &'static str,
     pub principal_key_backups_describe_path: &'static str,
     pub principal_restore_state_describe_path: &'static str,
@@ -311,6 +312,7 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
         key_backup_schema: "cx.schema.key_backup.v1",
         device_message_schema: "cx.schema.device_message.v1",
         principal_recovery_contract_stack_path: "/api/v1/recovery/contract-stack",
+        principal_recovery_stack_bundle_path: "/api/v1/recovery/stack-bundle",
         principal_device_messages_describe_path: "/api/v1/device_messages/describe",
         principal_key_backups_describe_path: "/api/v1/keys/backups/describe",
         principal_restore_state_describe_path: "/api/v1/keys/backups/restore-state/describe",
@@ -518,6 +520,12 @@ pub async fn get_recovery_principal_snapshot() -> Json<Value> {
             "path": "/api/v1/recovery/contract-stack",
             "fetch_mode": "coauth_memory_cache_scaffold",
             "todo": "TODO(coauth.recovery): fetch and freeze the live principal recovery contract stack instead of repeating static bridge values."
+        },
+        "principal_stack_bundle": {
+            "contract": "contrix.rest.recovery_stack_bundle.v1",
+            "path": "/api/v1/recovery/stack-bundle",
+            "fetch_mode": "coauth_memory_cache_scaffold",
+            "todo": "TODO(coauth.recovery): fetch the live principal recovery stack bundle instead of reconstructing it from static bridge fields."
         },
         "todos": [
             "TODO(coauth.recovery): replace principal snapshot scaffold with live HTTP fetch, cache freshness, and audience binding.",
