@@ -91,6 +91,9 @@ pub struct AccountRiskActionExecuteRequest {
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionProposalResponse {
+    /// Stable persisted state-record identifier for this risk-action state machine.
+    state_record_id: String,
+
     /// Proposal identifier for tracking and later approval.
     proposal_id: String,
 
@@ -118,14 +121,29 @@ pub struct AccountRiskActionProposalResponse {
     /// Admin username that submitted the proposal scaffold, if available.
     requested_by_username: Option<String>,
 
+    /// Previous lifecycle state before this transition.
+    previous_state: String,
+
     /// Proposal state reported by the scaffold contract.
     proposal_state: String,
+
+    /// Monotonic state-machine revision.
+    state_revision: u64,
+
+    /// Explicit transition kind written by this scaffold.
+    transition_kind: String,
 
     /// Approval mode expected before executing the real mutation endpoint.
     approval_mode: String,
 
+    /// Allowed next transitions from this proposal state.
+    allowed_next_transitions: Vec<String>,
+
     /// Final execution endpoint that would perform the mutation after approval.
     execution_endpoint: String,
+
+    /// How this scaffold persists the state machine today.
+    state_store_kind: String,
 
     /// Remaining implementation work for this scaffold.
     todo: String,
@@ -133,6 +151,9 @@ pub struct AccountRiskActionProposalResponse {
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionApprovalResponse {
+    /// Stable persisted state-record identifier for this risk-action state machine.
+    state_record_id: String,
+
     /// Proposal identifier being approved.
     proposal_id: String,
 
@@ -145,8 +166,17 @@ pub struct AccountRiskActionApprovalResponse {
     /// Optional ticket or incident reference.
     ticket: Option<String>,
 
+    /// Previous lifecycle state before this transition.
+    previous_state: String,
+
     /// Approval state reported by the scaffold contract.
     approval_state: String,
+
+    /// Monotonic state-machine revision.
+    state_revision: u64,
+
+    /// Explicit transition kind written by this scaffold.
+    transition_kind: String,
 
     /// When the approval was recorded.
     approved_at: DateTime<Utc>,
@@ -163,12 +193,21 @@ pub struct AccountRiskActionApprovalResponse {
     /// Final execution endpoint that would perform the mutation after approval.
     execution_endpoint: String,
 
+    /// Allowed next transitions from this approved state.
+    allowed_next_transitions: Vec<String>,
+
+    /// How this scaffold persists the state machine today.
+    state_store_kind: String,
+
     /// Remaining implementation work for this scaffold.
     todo: String,
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionExecuteResponse {
+    /// Stable persisted state-record identifier for this risk-action state machine.
+    state_record_id: String,
+
     /// Proposal identifier being executed.
     proposal_id: String,
 
@@ -181,8 +220,17 @@ pub struct AccountRiskActionExecuteResponse {
     /// Optional ticket or incident reference.
     ticket: Option<String>,
 
+    /// Previous lifecycle state before this transition.
+    previous_state: String,
+
     /// Execution state reported by the scaffold contract.
     execution_state: String,
+
+    /// Monotonic state-machine revision.
+    state_revision: u64,
+
+    /// Explicit transition kind written by this scaffold.
+    transition_kind: String,
 
     /// When the execute step was recorded.
     executed_at: DateTime<Utc>,
@@ -196,6 +244,12 @@ pub struct AccountRiskActionExecuteResponse {
     /// Final mutation endpoint that still has to be called by the controlled execute path.
     mutation_endpoint: String,
 
+    /// Allowed next transitions from this execution state.
+    allowed_next_transitions: Vec<String>,
+
+    /// How this scaffold persists the state machine today.
+    state_store_kind: String,
+
     /// Remaining implementation work for this scaffold.
     todo: String,
 }
@@ -204,6 +258,9 @@ pub struct AccountRiskActionExecuteResponse {
 pub struct AccountRiskActionCurrentResponse {
     /// Account targeted by the current risk-action state machine.
     account_id: String,
+
+    /// Stable persisted state-record identifier, if any.
+    state_record_id: Option<String>,
 
     /// Latest proposal identifier, if any.
     proposal_id: Option<String>,
@@ -216,6 +273,18 @@ pub struct AccountRiskActionCurrentResponse {
 
     /// Latest recorded operation name, if any.
     last_operation: Option<String>,
+
+    /// Explicit transition kind on the current record, if any.
+    transition_kind: Option<String>,
+
+    /// Previous lifecycle state before the current transition, if any.
+    previous_state: Option<String>,
+
+    /// Monotonic state-machine revision, if any.
+    state_revision: Option<u64>,
+
+    /// Allowed next transitions from the current lifecycle state.
+    allowed_next_transitions: Vec<String>,
 
     /// Optional ticket or incident reference.
     ticket: Option<String>,
@@ -235,7 +304,72 @@ pub struct AccountRiskActionCurrentResponse {
     /// Mutation endpoint referenced by the latest execute state.
     mutation_endpoint: Option<String>,
 
+    /// How this scaffold persists the state machine today.
+    state_store_kind: String,
+
     /// Remaining implementation work for this scaffold state.
+    todo: Option<String>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountRiskActionHistoryResponse {
+    data: Vec<AccountRiskActionTransitionRecord>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountRiskActionTransitionRecord {
+    /// Account targeted by the persisted transition record.
+    account_id: String,
+
+    /// Stable persisted state-record identifier.
+    state_record_id: Option<String>,
+
+    /// Proposal identifier associated with the state machine, if any.
+    proposal_id: Option<String>,
+
+    /// Action tracked by the state machine, if any.
+    action: Option<String>,
+
+    /// Explicit transition kind recorded for this transition.
+    transition_kind: String,
+
+    /// Previous lifecycle state before this transition, if any.
+    previous_state: Option<String>,
+
+    /// Lifecycle state after this transition.
+    next_state: String,
+
+    /// Monotonic state-machine revision, if any.
+    state_revision: Option<u64>,
+
+    /// Optional ticket or incident reference.
+    ticket: Option<String>,
+
+    /// When the transition record was written.
+    recorded_at: DateTime<Utc>,
+
+    /// Admin identifier associated with the transition.
+    recorded_by: Option<String>,
+
+    /// Admin username associated with the transition.
+    recorded_by_username: Option<String>,
+
+    /// Execution endpoint referenced by this transition, if any.
+    execution_endpoint: Option<String>,
+
+    /// Mutation endpoint referenced by this transition, if any.
+    mutation_endpoint: Option<String>,
+
+    /// Approval note captured by this transition, if any.
+    approval_note: Option<String>,
+
+    /// Execution note captured by this transition, if any.
+    execution_note: Option<String>,
+
+    /// How this scaffold persists the state machine today.
+    state_store_kind: String,
+
+    /// Remaining implementation work captured on this transition, if any.
     todo: Option<String>,
 }
 
@@ -516,7 +650,9 @@ pub async fn risk_action(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let proposal_id = Ulid::new().to_string();
+    let state_record_id = risk_action_record_id(account.id, &proposal_id);
     let execution_endpoint = risk_action_execution_endpoint(&params.action, account.id)?;
+    let todo = "TODO(contrix): persist proposal records in a dedicated state store, capture requester/approver context, require explicit approval, then route approved proposals into the dedicated /lock, /disable, /erase, or /reset-recovery mutation endpoints.".to_owned();
 
     if let Some(admin_user) = &admin_user {
         let mut rng = crate::handlers::account::make_rng();
@@ -529,11 +665,22 @@ pub async fn risk_action(
                     AdminOperation::Other(format!("account_{}_proposal", params.action).into()),
                     "account",
                     serde_json::json!({
+                        "state_record_id": state_record_id,
+                        "state_store_kind": RISK_ACTION_STATE_STORE_KIND,
+                        "state_revision": 1_u64,
                         "proposal_id": proposal_id,
                         "action": params.action,
+                        "transition_kind": "proposal_requested",
+                        "previous_state": "idle",
+                        "next_state": "draft",
                         "reason": params.reason,
                         "ticket": params.ticket,
                         "approved_by": params.approved_by,
+                        "requested_by": requested_by,
+                        "requested_by_username": requested_by_username,
+                        "execution_endpoint": execution_endpoint,
+                        "allowed_next_transitions": risk_action_allowed_next_transitions("draft"),
+                        "todo": todo,
                     }),
                 )
                 .with_resource_id(account.id),
@@ -545,6 +692,7 @@ pub async fn risk_action(
     }
 
     Ok(Json(AccountRiskActionProposalResponse {
+        state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
         action: params.action,
@@ -554,10 +702,15 @@ pub async fn risk_action(
         requested_at,
         requested_by,
         requested_by_username,
+        previous_state: "idle".to_owned(),
         proposal_state: "draft".to_owned(),
+        state_revision: 1,
+        transition_kind: "proposal_requested".to_owned(),
         approval_mode: "proposal_scaffold_required".to_owned(),
+        allowed_next_transitions: risk_action_allowed_next_transitions("draft"),
         execution_endpoint,
-        todo: "TODO(contrix): persist proposal records, capture requester/approver context, require explicit approval, then route approved proposals into the dedicated /lock, /disable, /erase, or /reset-recovery mutation endpoints.".to_owned(),
+        state_store_kind: RISK_ACTION_STATE_STORE_KIND.to_owned(),
+        todo,
     }))
 }
 
@@ -598,7 +751,9 @@ pub async fn approve_risk_action(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+    let state_record_id = risk_action_record_id(account.id, &proposal_id);
     let execution_endpoint = risk_action_execution_endpoint(&params.action, account.id)?;
+    let todo = "TODO(contrix): replace approval scaffold with a persisted proposal state store, authorization checks, and a controlled execute step that consumes approved proposals.".to_owned();
 
     if let Some(admin_user) = &admin_user {
         let mut rng = crate::handlers::account::make_rng();
@@ -613,11 +768,21 @@ pub async fn approve_risk_action(
                     ),
                     "account",
                     serde_json::json!({
+                        "state_record_id": state_record_id,
+                        "state_store_kind": RISK_ACTION_STATE_STORE_KIND,
+                        "state_revision": 2_u64,
                         "proposal_id": proposal_id,
                         "action": params.action,
+                        "transition_kind": "proposal_approved",
+                        "previous_state": "draft",
+                        "next_state": "approved",
                         "ticket": params.ticket,
                         "approved_by": params.approved_by,
+                        "approved_by_username": admin_user.username,
                         "approval_note": params.approval_note,
+                        "execution_endpoint": execution_endpoint,
+                        "allowed_next_transitions": risk_action_allowed_next_transitions("approved"),
+                        "todo": todo,
                     }),
                 )
                 .with_resource_id(account.id),
@@ -629,11 +794,15 @@ pub async fn approve_risk_action(
     }
 
     Ok(Json(AccountRiskActionApprovalResponse {
+        state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
         action: params.action,
         ticket: params.ticket,
+        previous_state: "draft".to_owned(),
         approval_state: "approved_scaffold".to_owned(),
+        state_revision: 2,
+        transition_kind: "proposal_approved".to_owned(),
         approved_at,
         approved_by: params
             .approved_by
@@ -641,7 +810,9 @@ pub async fn approve_risk_action(
         approved_by_username: admin_user.as_ref().map(|user| user.username.clone()),
         approval_note: params.approval_note,
         execution_endpoint,
-        todo: "TODO(contrix): replace approval scaffold with persisted proposal state transitions, authorization checks, and a controlled execute step that consumes approved proposals.".to_owned(),
+        allowed_next_transitions: risk_action_allowed_next_transitions("approved"),
+        state_store_kind: RISK_ACTION_STATE_STORE_KIND.to_owned(),
+        todo,
     }))
 }
 
@@ -682,7 +853,9 @@ pub async fn execute_risk_action(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+    let state_record_id = risk_action_record_id(account.id, &proposal_id);
     let mutation_endpoint = risk_action_execution_endpoint(&params.action, account.id)?;
+    let todo = "TODO(contrix): replace execute scaffold with a persisted proposal executor that validates approval state, performs the mutation, and records outcome + rollback metadata.".to_owned();
 
     if let Some(admin_user) = &admin_user {
         let mut rng = crate::handlers::account::make_rng();
@@ -697,11 +870,19 @@ pub async fn execute_risk_action(
                     ),
                     "account",
                     serde_json::json!({
+                        "state_record_id": state_record_id,
+                        "state_store_kind": RISK_ACTION_STATE_STORE_KIND,
+                        "state_revision": 3_u64,
                         "proposal_id": proposal_id,
                         "action": params.action,
+                        "transition_kind": "proposal_executed",
+                        "previous_state": "approved",
+                        "next_state": "executed_pending_mutation",
                         "ticket": params.ticket,
                         "execution_note": params.execution_note,
                         "mutation_endpoint": mutation_endpoint,
+                        "allowed_next_transitions": risk_action_allowed_next_transitions("executed_pending_mutation"),
+                        "todo": todo,
                     }),
                 )
                 .with_resource_id(account.id),
@@ -713,16 +894,22 @@ pub async fn execute_risk_action(
     }
 
     Ok(Json(AccountRiskActionExecuteResponse {
+        state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
         action: params.action,
         ticket: params.ticket,
+        previous_state: "approved".to_owned(),
         execution_state: "execute_scaffold_recorded".to_owned(),
+        state_revision: 3,
+        transition_kind: "proposal_executed".to_owned(),
         executed_at,
         execution_mode: "manual_mutation_endpoint_required".to_owned(),
         execution_note: params.execution_note,
         mutation_endpoint,
-        todo: "TODO(contrix): replace execute scaffold with a persisted proposal executor that validates approval state, performs the mutation, and records outcome + rollback metadata.".to_owned(),
+        allowed_next_transitions: risk_action_allowed_next_transitions("executed_pending_mutation"),
+        state_store_kind: RISK_ACTION_STATE_STORE_KIND.to_owned(),
+        todo,
     }))
 }
 
@@ -734,7 +921,7 @@ pub async fn execute_risk_action(
 pub async fn list_risk_action_history(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<crate::handlers::admin::v1::audit_feed::AuditFeedResponse> {
+) -> JsonResult<AccountRiskActionHistoryResponse> {
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } =
         extract_call_context(req, depot).await?;
     let id = extract_ulid_param(req)?;
@@ -757,12 +944,10 @@ pub async fn list_risk_action_history(
     let data = logs
         .into_iter()
         .filter(|log| is_account_risk_action_log(log, id))
-        .map(crate::handlers::admin::v1::audit_feed::AuditEntry::from)
+        .map(|log| risk_action_transition_record(id, &log))
         .collect();
 
-    Ok(Json(
-        crate::handlers::admin::v1::audit_feed::AuditFeedResponse { data },
-    ))
+    Ok(Json(AccountRiskActionHistoryResponse { data }))
 }
 
 #[endpoint]
@@ -799,10 +984,19 @@ pub async fn get_risk_action_current(
         .next()
         .map(|log| AccountRiskActionCurrentResponse {
             account_id: id.to_string(),
+            state_record_id: risk_action_detail_string(&log.details, "state_record_id"),
             proposal_id: risk_action_detail_string(&log.details, "proposal_id"),
             action: risk_action_detail_string(&log.details, "action"),
-            lifecycle_state: risk_action_lifecycle_state(&log.operation).to_owned(),
+            lifecycle_state: risk_action_detail_string(&log.details, "next_state")
+                .unwrap_or_else(|| "idle".to_owned()),
             last_operation: risk_action_operation_name(&log.operation),
+            transition_kind: risk_action_detail_string(&log.details, "transition_kind"),
+            previous_state: risk_action_detail_string(&log.details, "previous_state"),
+            state_revision: risk_action_detail_u64(&log.details, "state_revision"),
+            allowed_next_transitions: risk_action_detail_vec_string(
+                &log.details,
+                "allowed_next_transitions",
+            ),
             ticket: risk_action_detail_string(&log.details, "ticket"),
             recorded_at: Some(log.created_at),
             recorded_by: risk_action_detail_string(&log.details, "requested_by")
@@ -811,22 +1005,30 @@ pub async fn get_risk_action_current(
                 .or_else(|| risk_action_detail_string(&log.details, "approved_by_username")),
             execution_endpoint: risk_action_detail_string(&log.details, "execution_endpoint"),
             mutation_endpoint: risk_action_detail_string(&log.details, "mutation_endpoint"),
+            state_store_kind: risk_action_detail_string(&log.details, "state_store_kind")
+                .unwrap_or_else(|| RISK_ACTION_STATE_STORE_KIND.to_owned()),
             todo: risk_action_detail_string(&log.details, "todo"),
         })
         .unwrap_or(AccountRiskActionCurrentResponse {
             account_id: id.to_string(),
+            state_record_id: None,
             proposal_id: None,
             action: None,
             lifecycle_state: "idle".to_owned(),
             last_operation: None,
+            transition_kind: None,
+            previous_state: None,
+            state_revision: None,
+            allowed_next_transitions: vec!["proposal_requested".to_owned()],
             ticket: None,
             recorded_at: None,
             recorded_by: None,
             recorded_by_username: None,
             execution_endpoint: None,
             mutation_endpoint: None,
+            state_store_kind: RISK_ACTION_STATE_STORE_KIND.to_owned(),
             todo: Some(
-                "No risk-action scaffold state has been recorded for this account yet.".to_owned(),
+                "No risk-action state-machine record has been persisted for this account yet.".to_owned(),
             ),
         });
 
@@ -973,6 +1175,33 @@ fn risk_action_execution_endpoint(action: &str, id: Ulid) -> Result<String, AppE
     Ok(format!("/api/admin/v1/accounts/{id}/{action_path}"))
 }
 
+const RISK_ACTION_STATE_STORE_KIND: &str = "admin_audit_persisted_state_machine_scaffold";
+
+fn risk_action_record_id(account_id: Ulid, proposal_id: &str) -> String {
+    format!("risk-action:{account_id}:{proposal_id}")
+}
+
+fn risk_action_allowed_next_transitions(state: &str) -> Vec<String> {
+    match state {
+        "draft" => vec![
+            "proposal_approved".to_owned(),
+            "proposal_replaced".to_owned(),
+            "proposal_cancelled".to_owned(),
+        ],
+        "approved" => vec![
+            "proposal_executed".to_owned(),
+            "proposal_rejected".to_owned(),
+            "proposal_cancelled".to_owned(),
+        ],
+        "executed_pending_mutation" => vec![
+            "mutation_recorded".to_owned(),
+            "mutation_failed".to_owned(),
+            "rollback_requested".to_owned(),
+        ],
+        _ => vec!["proposal_requested".to_owned()],
+    }
+}
+
 fn is_account_risk_action_log(log: &coauth_data::audit::AdminOperationLog, account_id: Ulid) -> bool {
     if log.resource_type != "account" || log.resource_id != Some(account_id) {
         return false;
@@ -995,24 +1224,34 @@ fn risk_action_operation_name(operation: &coauth_data::audit::AdminOperation) ->
     }
 }
 
-fn risk_action_lifecycle_state(operation: &coauth_data::audit::AdminOperation) -> &'static str {
-    match operation {
-        coauth_data::audit::AdminOperation::Other(operation)
-            if operation.ends_with("_proposal_executed") =>
-        {
-            "execute_scaffold_recorded"
-        }
-        coauth_data::audit::AdminOperation::Other(operation)
-            if operation.ends_with("_proposal_approved") =>
-        {
-            "approval_scaffold_recorded"
-        }
-        coauth_data::audit::AdminOperation::Other(operation)
-            if operation.ends_with("_proposal") =>
-        {
-            "proposal_scaffold_recorded"
-        }
-        _ => "idle",
+fn risk_action_transition_record(
+    account_id: Ulid,
+    log: &coauth_data::audit::AdminOperationLog,
+) -> AccountRiskActionTransitionRecord {
+    AccountRiskActionTransitionRecord {
+        account_id: account_id.to_string(),
+        state_record_id: risk_action_detail_string(&log.details, "state_record_id"),
+        proposal_id: risk_action_detail_string(&log.details, "proposal_id"),
+        action: risk_action_detail_string(&log.details, "action"),
+        transition_kind: risk_action_detail_string(&log.details, "transition_kind")
+            .unwrap_or_else(|| "unknown_transition".to_owned()),
+        previous_state: risk_action_detail_string(&log.details, "previous_state"),
+        next_state: risk_action_detail_string(&log.details, "next_state")
+            .unwrap_or_else(|| "idle".to_owned()),
+        state_revision: risk_action_detail_u64(&log.details, "state_revision"),
+        ticket: risk_action_detail_string(&log.details, "ticket"),
+        recorded_at: log.created_at,
+        recorded_by: risk_action_detail_string(&log.details, "requested_by")
+            .or_else(|| risk_action_detail_string(&log.details, "approved_by")),
+        recorded_by_username: risk_action_detail_string(&log.details, "requested_by_username")
+            .or_else(|| risk_action_detail_string(&log.details, "approved_by_username")),
+        execution_endpoint: risk_action_detail_string(&log.details, "execution_endpoint"),
+        mutation_endpoint: risk_action_detail_string(&log.details, "mutation_endpoint"),
+        approval_note: risk_action_detail_string(&log.details, "approval_note"),
+        execution_note: risk_action_detail_string(&log.details, "execution_note"),
+        state_store_kind: risk_action_detail_string(&log.details, "state_store_kind")
+            .unwrap_or_else(|| RISK_ACTION_STATE_STORE_KIND.to_owned()),
+        todo: risk_action_detail_string(&log.details, "todo"),
     }
 }
 
@@ -1022,6 +1261,24 @@ fn risk_action_detail_string(details: &serde_json::Value, field: &str) -> Option
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned)
         .filter(|value| !value.trim().is_empty())
+}
+
+fn risk_action_detail_u64(details: &serde_json::Value, field: &str) -> Option<u64> {
+    details.get(field).and_then(serde_json::Value::as_u64)
+}
+
+fn risk_action_detail_vec_string(details: &serde_json::Value, field: &str) -> Vec<String> {
+    details
+        .get(field)
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
