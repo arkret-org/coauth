@@ -10,7 +10,8 @@ use coauth_data::{
 };
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
+use std::sync::{LazyLock, Mutex};
 use ulid::Ulid;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
@@ -23,6 +24,17 @@ use crate::handlers::{
     },
     flow::{FlowExecutor, defaults::default_recovery_flow, flow_session_store_write},
 };
+
+static PRINCIPAL_RECOVERY_CACHE: LazyLock<Mutex<Value>> = LazyLock::new(|| {
+    Mutex::new(json!({
+        "cache_mode": "memory_snapshot_scaffold",
+        "refresh_state": "idle",
+        "refresh_count": 0,
+        "last_refresh_at": null,
+        "last_reason": null,
+        "cached_snapshot": null
+    }))
+});
 
 // ── POST /api/v1/auth/recovery/start ───────────────────────────
 
@@ -460,6 +472,10 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
 
 #[endpoint]
 pub async fn get_recovery_principal_snapshot() -> Json<Value> {
+    let cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock")
+        .clone();
     Json(json!({
         "contract": "contrix.auth.recovery_principal_snapshot.v1",
         "version": "2026-05-04-scaffold",
@@ -475,20 +491,22 @@ pub async fn get_recovery_principal_snapshot() -> Json<Value> {
         "principal_restore_activity_path": "/api/v1/keys/backups/restore-tickets/{ticket_id}/activity",
         "principal_restore_timeline_path": "/api/v1/keys/backups/restore-tickets/{ticket_id}/timeline",
         "principal_restore_audit_feed_path": "/api/v1/keys/backups/restore-tickets/{ticket_id}/audit-feed",
+        "cache_state": cache,
         "principal_snapshot": {
             "contract": "contrix.rest.recovery_live_snapshot.v1",
             "path": "/api/v1/recovery/live-snapshot",
-            "fetch_mode": "coauth_passthrough_scaffold",
-            "todo": "TODO(coauth.recovery): fetch and cache the live principal recovery snapshot instead of publishing only a bridge manifest."
+            "fetch_mode": "coauth_memory_cache_scaffold",
+            "cache_hit": cache.get("cached_snapshot").is_some_and(|v| !v.is_null()),
+            "todo": "TODO(coauth.recovery): replace memory cache scaffold with live principal fetch, freshness policy, and tenant-aware invalidation."
         },
         "principal_contract_stack": {
             "contract": "contrix.rest.recovery_contract_stack.v1",
             "path": "/api/v1/recovery/contract-stack",
-            "fetch_mode": "coauth_passthrough_scaffold",
+            "fetch_mode": "coauth_memory_cache_scaffold",
             "todo": "TODO(coauth.recovery): fetch and freeze the live principal recovery contract stack instead of repeating static bridge values."
         },
         "todos": [
-            "TODO(coauth.recovery): replace principal snapshot scaffold with live HTTP fetch, cache, freshness, and audience binding.",
+            "TODO(coauth.recovery): replace principal snapshot scaffold with live HTTP fetch, cache freshness, and audience binding.",
             "TODO(coauth.recovery): add failure taxonomy and degraded-mode semantics for principal snapshot aggregation."
         ]
     }))
@@ -496,17 +514,24 @@ pub async fn get_recovery_principal_snapshot() -> Json<Value> {
 
 #[endpoint]
 pub async fn get_recovery_principal_cache_status() -> Json<Value> {
+    let cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock")
+        .clone();
     Json(json!({
         "contract": "contrix.auth.recovery_principal_cache_status.v1",
         "version": "2026-05-04-scaffold",
-        "cache_mode": "memory_none_scaffold",
-        "fetch_mode": "manual_refresh_passthrough_scaffold",
+        "cache_mode": cache.get("cache_mode").cloned().unwrap_or_else(|| json!("memory_snapshot_scaffold")),
+        "fetch_mode": "manual_refresh_memory_scaffold",
         "snapshot_path": "/api/v1/auth/recovery/principal-snapshot",
         "refresh_path": "/api/v1/auth/recovery/principal-cache/refresh",
         "upstream_live_snapshot_path": "/api/v1/recovery/live-snapshot",
         "upstream_contract_stack_path": "/api/v1/recovery/contract-stack",
-        "last_refresh_at": null,
-        "refresh_state": "idle",
+        "last_refresh_at": cache.get("last_refresh_at").cloned().unwrap_or(Value::Null),
+        "refresh_state": cache.get("refresh_state").cloned().unwrap_or_else(|| json!("idle")),
+        "refresh_count": cache.get("refresh_count").cloned().unwrap_or_else(|| json!(0)),
+        "last_reason": cache.get("last_reason").cloned().unwrap_or(Value::Null),
+        "has_cached_snapshot": cache.get("cached_snapshot").is_some_and(|v| !v.is_null()),
         "todos": [
             "TODO(coauth.recovery): replace cache status scaffold with real principal fetch/cache metadata and freshness timestamps.",
             "TODO(coauth.recovery): bind refresh state to audience, tenant, and principal-server identity."
@@ -516,12 +541,47 @@ pub async fn get_recovery_principal_cache_status() -> Json<Value> {
 
 #[endpoint]
 pub async fn post_recovery_principal_cache_refresh(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+    let refresh_mode = body
+        .get("refresh_mode")
+        .cloned()
+        .unwrap_or_else(|| json!("manual_scaffold"));
+    let reason = body
+        .get("reason")
+        .cloned()
+        .unwrap_or_else(|| json!("operator_requested"));
+    let refreshed_at = Utc::now().to_rfc3339();
+    let mut cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock");
+    let next_refresh_count = cache
+        .get("refresh_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        + 1;
+    *cache = json!({
+        "cache_mode": "memory_snapshot_scaffold",
+        "refresh_state": "ready",
+        "refresh_count": next_refresh_count,
+        "last_refresh_at": refreshed_at,
+        "last_reason": reason.clone(),
+        "cached_snapshot": {
+            "contract": "contrix.auth.recovery_principal_snapshot_cache_entry.v1",
+            "snapshot_contract": "contrix.rest.recovery_live_snapshot.v1",
+            "snapshot_path": "/api/v1/recovery/live-snapshot",
+            "contract_stack_path": "/api/v1/recovery/contract-stack",
+            "ticket_collection_path": "/api/v1/keys/backups/restore-tickets",
+            "refresh_mode": refresh_mode.clone(),
+            "refreshed_at": refreshed_at
+        }
+    });
     Json(json!({
         "contract": "contrix.auth.recovery_principal_cache_refresh.v1",
         "version": "2026-05-04-scaffold",
-        "refresh_state": "queued",
-        "refresh_mode": body.get("refresh_mode").cloned().unwrap_or_else(|| json!("manual_scaffold")),
-        "reason": body.get("reason").cloned().unwrap_or_else(|| json!("operator_requested")),
+        "refresh_state": "ready",
+        "refresh_mode": refresh_mode,
+        "reason": reason,
+        "refresh_count": next_refresh_count,
+        "last_refresh_at": refreshed_at,
         "status_path": "/api/v1/auth/recovery/principal-cache/status",
         "snapshot_path": "/api/v1/auth/recovery/principal-snapshot",
         "todo": "TODO(coauth.recovery): replace refresh scaffold with live principal fetch, cache population, and failure taxonomy."
