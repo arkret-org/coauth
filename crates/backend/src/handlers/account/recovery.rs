@@ -30,8 +30,13 @@ static PRINCIPAL_RECOVERY_CACHE: LazyLock<Mutex<Value>> = LazyLock::new(|| {
         "cache_mode": "memory_snapshot_scaffold",
         "refresh_state": "idle",
         "refresh_count": 0,
+        "failure_count": 0,
         "last_refresh_at": null,
+        "last_failure_at": null,
+        "last_failure_code": null,
         "last_reason": null,
+        "in_flight_job": null,
+        "queue": [],
         "cached_snapshot": null
     }))
 });
@@ -239,6 +244,9 @@ pub struct RecoveryDescribeResponse {
     pub recovery_principal_snapshot_path: &'static str,
     pub recovery_principal_cache_status_path: &'static str,
     pub recovery_principal_cache_refresh_path: &'static str,
+    pub recovery_principal_cache_queue_path: &'static str,
+    pub recovery_principal_cache_complete_path: &'static str,
+    pub recovery_principal_cache_fail_path: &'static str,
     pub key_backup_rest_base: &'static str,
     pub key_backup_schema: &'static str,
     pub device_message_schema: &'static str,
@@ -296,6 +304,9 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
         recovery_principal_snapshot_path: "/api/v1/auth/recovery/principal-snapshot",
         recovery_principal_cache_status_path: "/api/v1/auth/recovery/principal-cache/status",
         recovery_principal_cache_refresh_path: "/api/v1/auth/recovery/principal-cache/refresh",
+        recovery_principal_cache_queue_path: "/api/v1/auth/recovery/principal-cache/queue",
+        recovery_principal_cache_complete_path: "/api/v1/auth/recovery/principal-cache/complete",
+        recovery_principal_cache_fail_path: "/api/v1/auth/recovery/principal-cache/fail",
         key_backup_rest_base: "/api/v1/keys/backups",
         key_backup_schema: "cx.schema.key_backup.v1",
         device_message_schema: "cx.schema.device_message.v1",
@@ -482,6 +493,9 @@ pub async fn get_recovery_principal_snapshot() -> Json<Value> {
         "recovery_describe_path": "/api/v1/auth/recovery/describe",
         "principal_cache_status_path": "/api/v1/auth/recovery/principal-cache/status",
         "principal_cache_refresh_path": "/api/v1/auth/recovery/principal-cache/refresh",
+        "principal_cache_queue_path": "/api/v1/auth/recovery/principal-cache/queue",
+        "principal_cache_complete_path": "/api/v1/auth/recovery/principal-cache/complete",
+        "principal_cache_fail_path": "/api/v1/auth/recovery/principal-cache/fail",
         "principal_recovery_contract_stack_path": "/api/v1/recovery/contract-stack",
         "principal_recovery_live_snapshot_path": "/api/v1/recovery/live-snapshot",
         "principal_restore_state_durability_path": "/api/v1/keys/backups/restore-state/durability",
@@ -525,13 +539,27 @@ pub async fn get_recovery_principal_cache_status() -> Json<Value> {
         "fetch_mode": "manual_refresh_memory_scaffold",
         "snapshot_path": "/api/v1/auth/recovery/principal-snapshot",
         "refresh_path": "/api/v1/auth/recovery/principal-cache/refresh",
+        "queue_path": "/api/v1/auth/recovery/principal-cache/queue",
+        "complete_path": "/api/v1/auth/recovery/principal-cache/complete",
+        "fail_path": "/api/v1/auth/recovery/principal-cache/fail",
         "upstream_live_snapshot_path": "/api/v1/recovery/live-snapshot",
         "upstream_contract_stack_path": "/api/v1/recovery/contract-stack",
         "last_refresh_at": cache.get("last_refresh_at").cloned().unwrap_or(Value::Null),
         "refresh_state": cache.get("refresh_state").cloned().unwrap_or_else(|| json!("idle")),
         "refresh_count": cache.get("refresh_count").cloned().unwrap_or_else(|| json!(0)),
+        "failure_count": cache.get("failure_count").cloned().unwrap_or_else(|| json!(0)),
+        "last_failure_at": cache.get("last_failure_at").cloned().unwrap_or(Value::Null),
+        "last_failure_code": cache.get("last_failure_code").cloned().unwrap_or(Value::Null),
         "last_reason": cache.get("last_reason").cloned().unwrap_or(Value::Null),
+        "queue_depth": cache.get("queue").and_then(Value::as_array).map(|v| v.len()).unwrap_or(0),
+        "in_flight_job": cache.get("in_flight_job").cloned().unwrap_or(Value::Null),
         "has_cached_snapshot": cache.get("cached_snapshot").is_some_and(|v| !v.is_null()),
+        "failure_codes": [
+            "upstream_unreachable",
+            "invalid_discovery_binding",
+            "cache_write_failed",
+            "stale_snapshot"
+        ],
         "todos": [
             "TODO(coauth.recovery): replace cache status scaffold with real principal fetch/cache metadata and freshness timestamps.",
             "TODO(coauth.recovery): bind refresh state to audience, tenant, and principal-server identity."
@@ -549,21 +577,35 @@ pub async fn post_recovery_principal_cache_refresh(JsonBody(body): JsonBody<Valu
         .get("reason")
         .cloned()
         .unwrap_or_else(|| json!("operator_requested"));
+    let job_id = format!("recovery-cache-job-{}", Ulid::new());
     let refreshed_at = Utc::now().to_rfc3339();
     let mut cache = PRINCIPAL_RECOVERY_CACHE
         .lock()
         .expect("principal recovery cache lock");
-    let next_refresh_count = cache
-        .get("refresh_count")
-        .and_then(Value::as_u64)
-        .unwrap_or(0)
-        + 1;
+    let mut queue = cache
+        .get("queue")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let job = json!({
+        "job_id": job_id,
+        "refresh_mode": refresh_mode.clone(),
+        "reason": reason.clone(),
+        "queued_at": refreshed_at
+    });
+    queue.push(job.clone());
+    let in_flight_job = job.clone();
     *cache = json!({
         "cache_mode": "memory_snapshot_scaffold",
-        "refresh_state": "ready",
-        "refresh_count": next_refresh_count,
-        "last_refresh_at": refreshed_at,
+        "refresh_state": "in_flight",
+        "refresh_count": cache.get("refresh_count").and_then(Value::as_u64).unwrap_or(0),
+        "failure_count": cache.get("failure_count").and_then(Value::as_u64).unwrap_or(0),
+        "last_refresh_at": cache.get("last_refresh_at").cloned().unwrap_or(Value::Null),
+        "last_failure_at": cache.get("last_failure_at").cloned().unwrap_or(Value::Null),
+        "last_failure_code": cache.get("last_failure_code").cloned().unwrap_or(Value::Null),
         "last_reason": reason.clone(),
+        "in_flight_job": in_flight_job,
+        "queue": queue,
         "cached_snapshot": {
             "contract": "contrix.auth.recovery_principal_snapshot_cache_entry.v1",
             "snapshot_contract": "contrix.rest.recovery_live_snapshot.v1",
@@ -577,14 +619,119 @@ pub async fn post_recovery_principal_cache_refresh(JsonBody(body): JsonBody<Valu
     Json(json!({
         "contract": "contrix.auth.recovery_principal_cache_refresh.v1",
         "version": "2026-05-04-scaffold",
-        "refresh_state": "ready",
+        "refresh_state": "in_flight",
+        "job_id": job_id,
         "refresh_mode": refresh_mode,
         "reason": reason,
-        "refresh_count": next_refresh_count,
-        "last_refresh_at": refreshed_at,
+        "queue_depth": cache.get("queue").and_then(Value::as_array).map(|v| v.len()).unwrap_or(0),
+        "queued_at": refreshed_at,
         "status_path": "/api/v1/auth/recovery/principal-cache/status",
         "snapshot_path": "/api/v1/auth/recovery/principal-snapshot",
+        "queue_path": "/api/v1/auth/recovery/principal-cache/queue",
+        "complete_path": "/api/v1/auth/recovery/principal-cache/complete",
+        "fail_path": "/api/v1/auth/recovery/principal-cache/fail",
         "todo": "TODO(coauth.recovery): replace refresh scaffold with live principal fetch, cache population, and failure taxonomy."
+    }))
+}
+
+#[endpoint]
+pub async fn get_recovery_principal_cache_queue() -> Json<Value> {
+    let cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock")
+        .clone();
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_cache_queue.v1",
+        "version": "2026-05-04-scaffold",
+        "queue_depth": cache.get("queue").and_then(Value::as_array).map(|v| v.len()).unwrap_or(0),
+        "in_flight_job": cache.get("in_flight_job").cloned().unwrap_or(Value::Null),
+        "jobs": cache.get("queue").cloned().unwrap_or_else(|| json!([])),
+        "complete_path": "/api/v1/auth/recovery/principal-cache/complete",
+        "fail_path": "/api/v1/auth/recovery/principal-cache/fail",
+        "todo": "TODO(coauth.recovery): replace queue scaffold with durable refresh jobs, worker leases, and retry/backoff policy."
+    }))
+}
+
+#[endpoint]
+pub async fn post_recovery_principal_cache_complete(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+    let completed_at = Utc::now().to_rfc3339();
+    let mut cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock");
+    let job_id = body.get("job_id").cloned().unwrap_or_else(|| json!("unknown"));
+    let refresh_count = cache
+        .get("refresh_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        + 1;
+    *cache = json!({
+        "cache_mode": "memory_snapshot_scaffold",
+        "refresh_state": "ready",
+        "refresh_count": refresh_count,
+        "failure_count": cache.get("failure_count").and_then(Value::as_u64).unwrap_or(0),
+        "last_refresh_at": completed_at,
+        "last_failure_at": cache.get("last_failure_at").cloned().unwrap_or(Value::Null),
+        "last_failure_code": cache.get("last_failure_code").cloned().unwrap_or(Value::Null),
+        "last_reason": body.get("reason").cloned().unwrap_or_else(|| json!("manual_complete")),
+        "in_flight_job": Value::Null,
+        "queue": [],
+        "cached_snapshot": {
+            "contract": "contrix.auth.recovery_principal_snapshot_cache_entry.v1",
+            "snapshot_contract": "contrix.rest.recovery_live_snapshot.v1",
+            "snapshot_path": "/api/v1/recovery/live-snapshot",
+            "contract_stack_path": "/api/v1/recovery/contract-stack",
+            "ticket_collection_path": "/api/v1/keys/backups/restore-tickets",
+            "refresh_mode": body.get("refresh_mode").cloned().unwrap_or_else(|| json!("manual_scaffold")),
+            "refreshed_at": completed_at
+        }
+    });
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_cache_complete.v1",
+        "version": "2026-05-04-scaffold",
+        "refresh_state": "ready",
+        "job_id": job_id,
+        "refresh_count": refresh_count,
+        "completed_at": completed_at,
+        "status_path": "/api/v1/auth/recovery/principal-cache/status",
+        "snapshot_path": "/api/v1/auth/recovery/principal-snapshot",
+        "todo": "TODO(coauth.recovery): replace complete scaffold with worker acknowledgements, stale-write protection, and durable cache updates."
+    }))
+}
+
+#[endpoint]
+pub async fn post_recovery_principal_cache_fail(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+    let failed_at = Utc::now().to_rfc3339();
+    let mut cache = PRINCIPAL_RECOVERY_CACHE
+        .lock()
+        .expect("principal recovery cache lock");
+    let failure_count = cache
+        .get("failure_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        + 1;
+    *cache = json!({
+        "cache_mode": "memory_snapshot_scaffold",
+        "refresh_state": "failed",
+        "refresh_count": cache.get("refresh_count").and_then(Value::as_u64).unwrap_or(0),
+        "failure_count": failure_count,
+        "last_refresh_at": cache.get("last_refresh_at").cloned().unwrap_or(Value::Null),
+        "last_failure_at": failed_at,
+        "last_failure_code": body.get("failure_code").cloned().unwrap_or_else(|| json!("upstream_unreachable")),
+        "last_reason": body.get("reason").cloned().unwrap_or_else(|| json!("manual_fail")),
+        "in_flight_job": Value::Null,
+        "queue": [],
+        "cached_snapshot": cache.get("cached_snapshot").cloned().unwrap_or(Value::Null)
+    });
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_cache_fail.v1",
+        "version": "2026-05-04-scaffold",
+        "refresh_state": "failed",
+        "failure_count": failure_count,
+        "failure_code": body.get("failure_code").cloned().unwrap_or_else(|| json!("upstream_unreachable")),
+        "failed_at": failed_at,
+        "status_path": "/api/v1/auth/recovery/principal-cache/status",
+        "queue_path": "/api/v1/auth/recovery/principal-cache/queue",
+        "todo": "TODO(coauth.recovery): replace fail scaffold with durable error records, retry policy, and degraded-mode cache semantics."
     }))
 }
 
