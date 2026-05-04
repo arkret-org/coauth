@@ -707,6 +707,11 @@ fn build_admin_router(router: Router) -> Router {
                 .push(
                     Router::with_path("{id}")
                         .get(accounts::get_account)
+                        .push(Router::with_path("claims").get(accounts::list_account_claims))
+                        .push(
+                            Router::with_path("session-grants")
+                                .get(accounts::list_account_session_grants),
+                        )
                         .push(
                             Router::with_path("risk-action/history")
                                 .get(accounts::list_risk_action_history),

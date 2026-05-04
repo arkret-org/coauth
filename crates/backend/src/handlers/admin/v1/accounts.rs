@@ -336,6 +336,12 @@ pub struct AdminBridgeDescribeResponse {
     /// Template path for DID binding inventory.
     account_dids_path_template: &'static str,
 
+    /// Template path for claim inventory.
+    account_claims_path_template: &'static str,
+
+    /// Template path for session-grant inventory.
+    account_session_grants_path_template: &'static str,
+
     /// Template path for staging a risk action proposal.
     risk_action_path_template: &'static str,
 
@@ -374,6 +380,33 @@ pub struct AdminBridgeRiskActionExamples {
 
     /// Example payload for POST /risk-action/{proposal_id}/execute
     execute_request: serde_json::Value,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountClaimsResponse {
+    data: Vec<AccountClaimRecord>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountClaimRecord {
+    claim_type: String,
+    value: Option<String>,
+    state: String,
+    source: String,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountSessionGrantsResponse {
+    data: Vec<AccountSessionGrantRecord>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AccountSessionGrantRecord {
+    grant_id: String,
+    subject: Option<String>,
+    scope: Option<String>,
+    state: Option<String>,
+    issued_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
@@ -660,6 +693,9 @@ pub async fn admin_bridge_describe() -> JsonResult<AdminBridgeDescribeResponse> 
         accounts_path: "/api/admin/v1/accounts",
         account_detail_path_template: "/api/admin/v1/accounts/{account_id}",
         account_dids_path_template: "/api/admin/v1/accounts/{account_id}/dids",
+        account_claims_path_template: "/api/admin/v1/accounts/{account_id}/claims",
+        account_session_grants_path_template:
+            "/api/admin/v1/accounts/{account_id}/session-grants",
         risk_action_path_template: "/api/admin/v1/accounts/{account_id}/risk-action",
         risk_action_current_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/current",
         risk_action_history_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/history",
@@ -717,6 +753,48 @@ pub async fn get_account(
         account,
         &contrix_config,
     ))))
+}
+
+#[endpoint]
+#[tracing::instrument(name = "handler.admin.v1.accounts.claims", skip_all)]
+pub async fn list_account_claims(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<AccountClaimsResponse> {
+    let call_context = extract_call_context(req, depot).await?;
+    let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
+    let contrix_config = depot.contrix_config()?;
+    let id = extract_ulid_param(req)?;
+    let account = repo
+        .user()
+        .lookup(id)
+        .await?
+        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+    let record = AccountRecord::from_user(account, &contrix_config);
+    Ok(Json(AccountClaimsResponse {
+        data: admin_claim_records(&record),
+    }))
+}
+
+#[endpoint]
+#[tracing::instrument(name = "handler.admin.v1.accounts.session_grants", skip_all)]
+pub async fn list_account_session_grants(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<AccountSessionGrantsResponse> {
+    let call_context = extract_call_context(req, depot).await?;
+    let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
+    let contrix_config = depot.contrix_config()?;
+    let id = extract_ulid_param(req)?;
+    let account = repo
+        .user()
+        .lookup(id)
+        .await?
+        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+    let record = AccountRecord::from_user(account, &contrix_config);
+    Ok(Json(AccountSessionGrantsResponse {
+        data: admin_session_grant_records(&record),
+    }))
 }
 
 #[endpoint]
@@ -1385,6 +1463,51 @@ fn risk_action_detail_vec_string(details: &serde_json::Value, field: &str) -> Ve
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn admin_claim_records(account: &AccountRecord) -> Vec<AccountClaimRecord> {
+    let mut claims = Vec::new();
+    claims.push(AccountClaimRecord {
+        claim_type: "handle".to_owned(),
+        value: Some(account.username.clone()),
+        state: "asserted".to_owned(),
+        source: "coauth_admin_account".to_owned(),
+    });
+    if let Some(value) = account.primary_principal_did.clone() {
+        claims.push(AccountClaimRecord {
+            claim_type: "principal_did".to_owned(),
+            value: Some(value),
+            state: "asserted".to_owned(),
+            source: "coauth_admin_did_binding_scaffold".to_owned(),
+        });
+    }
+    if let Some(value) = account.display_name.clone() {
+        claims.push(AccountClaimRecord {
+            claim_type: "display_name".to_owned(),
+            value: Some(value),
+            state: "asserted".to_owned(),
+            source: "coauth_admin_profile".to_owned(),
+        });
+    }
+    if let Some(value) = account.preferred_locale.clone() {
+        claims.push(AccountClaimRecord {
+            claim_type: "preferred_locale".to_owned(),
+            value: Some(value),
+            state: "asserted".to_owned(),
+            source: "coauth_admin_profile".to_owned(),
+        });
+    }
+    claims
+}
+
+fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGrantRecord> {
+    vec![AccountSessionGrantRecord {
+        grant_id: format!("sg-scaffold-{}", account.id),
+        subject: account.primary_principal_did.clone(),
+        scope: Some("urn:contrix:principal-server:session.bind".to_owned()),
+        state: Some("inventory_scaffold".to_owned()),
+        issued_at: Some(account.updated_at),
+    }]
 }
 
 #[cfg(test)]
