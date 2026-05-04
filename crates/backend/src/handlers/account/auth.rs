@@ -179,6 +179,39 @@ pub struct AuthBridgeAdminDescriptor {
     pub risk_action_history_path_template: &'static str,
 }
 
+#[derive(Serialize)]
+pub struct IntegrationManifestResponse {
+    pub contract: &'static str,
+    pub version: &'static str,
+    pub service: &'static str,
+    pub service_kind: &'static str,
+    pub api_base_path: &'static str,
+    pub describe_path: &'static str,
+    pub dependencies: Vec<IntegrationManifestDependency>,
+    pub surfaces: Vec<IntegrationManifestSurface>,
+    pub examples: serde_json::Value,
+    pub todos: Vec<&'static str>,
+}
+
+#[derive(Serialize)]
+pub struct IntegrationManifestDependency {
+    pub service: &'static str,
+    pub purpose: &'static str,
+    pub required_contract: &'static str,
+    pub discovery_path: &'static str,
+    pub mode: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct IntegrationManifestSurface {
+    pub name: &'static str,
+    pub method: &'static str,
+    pub path: &'static str,
+    pub contract: &'static str,
+    pub stability: &'static str,
+    pub todo: &'static str,
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct LogoutResponse {
     pub status: &'static str,
@@ -1373,6 +1406,121 @@ pub async fn auth_bridge_describe(depot: &Depot) -> Result<Json<AuthBridgeDescri
             "TODO: replace local OAuth bridge validation with true upstream token endpoint and/or upstream introspection verification",
             "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records",
             "TODO: publish formal OpenAPI examples for browser callback, PKCE exchange, and session-grant bridge flows",
+        ],
+    }))
+}
+
+#[endpoint]
+pub async fn integration_describe() -> Result<Json<IntegrationManifestResponse>, RouteError> {
+    Ok(Json(IntegrationManifestResponse {
+        contract: "contrix.rest.integration_manifest.v1",
+        version: "2026-05-04-scaffold",
+        service: "coauth",
+        service_kind: "account_authority",
+        api_base_path: "/api/v1",
+        describe_path: "/api/v1/integration/describe",
+        dependencies: vec![
+            IntegrationManifestDependency {
+                service: "soland",
+                purpose: "principal_server_session_exchange",
+                required_contract: "contrix.rest.principal_bridge.v1",
+                discovery_path: "/api/v1/auth/bridge/describe",
+                mode: "remote_service_contract",
+            },
+            IntegrationManifestDependency {
+                service: "public_did_resolver",
+                purpose: "principal_did_resolution",
+                required_contract: "did_method_resolution",
+                discovery_path: "TODO: external resolver metadata",
+                mode: "remote_public_resolver",
+            },
+        ],
+        surfaces: vec![
+            IntegrationManifestSurface {
+                name: "auth_bridge",
+                method: "GET",
+                path: "/api/v1/auth/bridge/describe",
+                contract: "contrix.rest.auth_bridge.v1",
+                stability: "scaffold",
+                todo: "TODO: keep browser bridge, exchange contract, and downstream grant metadata aligned with real OIDC/passkey flows.",
+            },
+            IntegrationManifestSurface {
+                name: "oidc_browser_bridge_session",
+                method: "POST",
+                path: "/api/v1/auth/oidc/browser-bridge/session",
+                contract: "contrix.rest.oidc_browser_bridge_session.v1",
+                stability: "scaffold",
+                todo: "TODO: replace deterministic scaffold material with persisted browser-bound PKCE/session state.",
+            },
+            IntegrationManifestSurface {
+                name: "oidc_exchange_describe",
+                method: "GET",
+                path: "/api/v1/auth/oidc/exchange/describe",
+                contract: "contrix.rest.oidc_exchange.v1",
+                stability: "scaffold",
+                todo: "TODO: publish upstream-boundary verification modes and failure taxonomy as final contract states.",
+            },
+            IntegrationManifestSurface {
+                name: "oidc_exchange",
+                method: "POST",
+                path: "/api/v1/auth/oidc/exchange",
+                contract: "contrix.rest.oidc_exchange.v1",
+                stability: "scaffold",
+                todo: "TODO: replace local-only HTTP token/introspection/userinfo chain with explicit upstream verification modes.",
+            },
+            IntegrationManifestSurface {
+                name: "admin_bridge",
+                method: "GET",
+                path: "/api/admin/v1/bridge/describe",
+                contract: "contrix.rest.coauth_admin_bridge.v1",
+                stability: "scaffold",
+                todo: "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records.",
+            },
+            IntegrationManifestSurface {
+                name: "account_claims",
+                method: "GET",
+                path: "/api/admin/v1/accounts/{account_id}/claims",
+                contract: "contrix.rest.coauth_account_claims.v1",
+                stability: "scaffold",
+                todo: "TODO: replace scaffold claim inventory with real issuer-backed claim sources and verification state.",
+            },
+            IntegrationManifestSurface {
+                name: "account_session_grants",
+                method: "GET",
+                path: "/api/admin/v1/accounts/{account_id}/session-grants",
+                contract: "contrix.rest.coauth_account_session_grants.v1",
+                stability: "scaffold",
+                todo: "TODO: expose durable grant inventory, revocation state, and audience binding beyond preview records.",
+            },
+        ],
+        examples: serde_json::json!({
+            "compose_flow": {
+                "step_1": {
+                    "service": "coauth",
+                    "path": "/api/v1/auth/oidc/browser-bridge/session",
+                    "method": "POST"
+                },
+                "step_2": {
+                    "service": "coauth",
+                    "path": "/api/v1/auth/oidc/exchange",
+                    "method": "POST"
+                },
+                "step_3": {
+                    "service": "soland",
+                    "path": "/api/v1/auth/session-grant/exchange",
+                    "method": "POST"
+                },
+                "step_4": {
+                    "service": "soland",
+                    "path": "/api/v1/push/register-device",
+                    "method": "POST"
+                }
+            }
+        }),
+        todos: vec![
+            "TODO: finalize a single upstream verification mode story for OIDC bridge exchange.",
+            "TODO: persist browser bridge session state, PKCE material, and approval/risk-action lifecycle records.",
+            "TODO: publish OpenAPI examples that match the integration manifest surfaces exactly.",
         ],
     }))
 }

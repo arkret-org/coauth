@@ -587,6 +587,7 @@ fn build_account_api_router(router: Router) -> Router {
         )
         // User emails
         .push(Router::with_path("user-emails/{id}").delete(emails::remove_email))
+        .push(Router::with_path("integration/describe").get(auth::integration_describe))
         // Auth (login, logout, providers, registration, recovery)
         .push(
             Router::with_path("auth")
