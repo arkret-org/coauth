@@ -126,6 +126,46 @@ pub struct SessionGrantPrincipalServerInfo {
     pub endpoint: String,
 }
 
+#[derive(Serialize)]
+pub struct AuthBridgeDescribeResponse {
+    pub contract: &'static str,
+    pub version: &'static str,
+    pub api_base_path: &'static str,
+    pub oauth: AuthBridgeOAuthDescriptor,
+    pub contrix: AuthBridgeContrixDescriptor,
+    pub admin: AuthBridgeAdminDescriptor,
+    pub todos: Vec<&'static str>,
+}
+
+#[derive(Serialize)]
+pub struct AuthBridgeOAuthDescriptor {
+    pub discovery_path: &'static str,
+    pub exchange_path: &'static str,
+    pub supported_flows: Vec<&'static str>,
+    pub redirect_uri_modes: Vec<&'static str>,
+    pub client_selection_mode: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct AuthBridgeContrixDescriptor {
+    pub login_path: &'static str,
+    pub logout_path: &'static str,
+    pub providers_path: &'static str,
+    pub session_grants_path: &'static str,
+    pub session_grants_introspect_path: &'static str,
+    pub session_grant_scope: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct AuthBridgeAdminDescriptor {
+    pub accounts_path: &'static str,
+    pub account_detail_path_template: &'static str,
+    pub account_dids_path_template: &'static str,
+    pub risk_action_path_template: &'static str,
+    pub risk_action_current_path_template: &'static str,
+    pub risk_action_history_path_template: &'static str,
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct LogoutResponse {
     pub status: &'static str,
@@ -1107,6 +1147,47 @@ pub async fn oidc_code_exchange(
         ],
     }));
     Ok(())
+}
+
+#[endpoint]
+pub async fn auth_bridge_describe(depot: &Depot) -> Result<Json<AuthBridgeDescribeResponse>, RouteError> {
+    let _ = depot.url_builder()?;
+
+    Ok(Json(AuthBridgeDescribeResponse {
+        contract: "contrix.rest.auth_bridge.v1",
+        version: "2026-05-04-scaffold",
+        api_base_path: "/api/v1",
+        oauth: AuthBridgeOAuthDescriptor {
+            discovery_path: "/.well-known/openid-configuration",
+            exchange_path: "/api/v1/auth/oidc/exchange",
+            supported_flows: vec!["authorization_code_pkce_browser"],
+            redirect_uri_modes: vec!["browser_origin_callback", "native_urn_callback"],
+            client_selection_mode: "public_authorization_code_client_with_exact_redirect_match",
+        },
+        contrix: AuthBridgeContrixDescriptor {
+            login_path: "/api/v1/auth/login",
+            logout_path: "/api/v1/auth/logout",
+            providers_path: "/api/v1/auth/providers",
+            session_grants_path: "/api/v1/session-grants",
+            session_grants_introspect_path: "/api/v1/session-grants/introspect",
+            session_grant_scope: contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
+        },
+        admin: AuthBridgeAdminDescriptor {
+            accounts_path: "/api/admin/v1/accounts",
+            account_detail_path_template: "/api/admin/v1/accounts/{account_id}",
+            account_dids_path_template: "/api/admin/v1/accounts/{account_id}/dids",
+            risk_action_path_template: "/api/admin/v1/accounts/{account_id}/risk-action",
+            risk_action_current_path_template:
+                "/api/admin/v1/accounts/{account_id}/risk-action/current",
+            risk_action_history_path_template:
+                "/api/admin/v1/accounts/{account_id}/risk-action/history",
+        },
+        todos: vec![
+            "TODO: replace local OAuth bridge validation with true upstream token endpoint and/or upstream introspection verification",
+            "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records",
+            "TODO: publish formal OpenAPI examples for browser callback, PKCE exchange, and session-grant bridge flows",
+        ],
+    }))
 }
 
 // ── POST /api/v1/auth/logout ───────────────────────────────────

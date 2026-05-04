@@ -590,6 +590,7 @@ fn build_account_api_router(router: Router) -> Router {
         // Auth (login, logout, providers, registration, recovery)
         .push(
             Router::with_path("auth")
+                .push(Router::with_path("bridge/describe").get(auth::auth_bridge_describe))
                 .push(Router::with_path("login").post(auth::login))
                 .push(Router::with_path("oidc/exchange").post(auth::oidc_code_exchange))
                 .push(Router::with_path("logout").post(auth::logout))
