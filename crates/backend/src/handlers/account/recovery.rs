@@ -224,6 +224,7 @@ pub struct RecoveryDescribeResponse {
     pub recovery_start_path: &'static str,
     pub recovery_status_path: &'static str,
     pub recovery_resend_path: &'static str,
+    pub recovery_principal_snapshot_path: &'static str,
     pub key_backup_rest_base: &'static str,
     pub key_backup_schema: &'static str,
     pub device_message_schema: &'static str,
@@ -274,6 +275,7 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
         recovery_start_path: "/api/v1/auth/recovery/start",
         recovery_status_path: "/api/v1/auth/recovery/{id}",
         recovery_resend_path: "/api/v1/auth/recovery/{id}/resend",
+        recovery_principal_snapshot_path: "/api/v1/auth/recovery/principal-snapshot",
         key_backup_rest_base: "/api/v1/keys/backups",
         key_backup_schema: "cx.schema.key_backup.v1",
         device_message_schema: "cx.schema.device_message.v1",
@@ -442,6 +444,36 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
             "TODO: bind recovery bridge to live principal restore-describe endpoint instead of only publishing the path template.",
         ],
     })
+}
+
+#[endpoint]
+pub async fn get_recovery_principal_snapshot() -> Json<Value> {
+    Json(json!({
+        "contract": "contrix.auth.recovery_principal_snapshot.v1",
+        "version": "2026-05-04-scaffold",
+        "recovery_describe_path": "/api/v1/auth/recovery/describe",
+        "principal_recovery_contract_stack_path": "/api/v1/recovery/contract-stack",
+        "principal_recovery_live_snapshot_path": "/api/v1/recovery/live-snapshot",
+        "principal_restore_ticket_collection_path": "/api/v1/keys/backups/restore-tickets",
+        "principal_restore_bundle_path": "/api/v1/keys/backups/restore-tickets/{ticket_id}/bundle",
+        "principal_restore_activity_path": "/api/v1/keys/backups/restore-tickets/{ticket_id}/activity",
+        "principal_snapshot": {
+            "contract": "contrix.rest.recovery_live_snapshot.v1",
+            "path": "/api/v1/recovery/live-snapshot",
+            "fetch_mode": "coauth_passthrough_scaffold",
+            "todo": "TODO(coauth.recovery): fetch and cache the live principal recovery snapshot instead of publishing only a bridge manifest."
+        },
+        "principal_contract_stack": {
+            "contract": "contrix.rest.recovery_contract_stack.v1",
+            "path": "/api/v1/recovery/contract-stack",
+            "fetch_mode": "coauth_passthrough_scaffold",
+            "todo": "TODO(coauth.recovery): fetch and freeze the live principal recovery contract stack instead of repeating static bridge values."
+        },
+        "todos": [
+            "TODO(coauth.recovery): replace principal snapshot scaffold with live HTTP fetch, cache, freshness, and audience binding.",
+            "TODO(coauth.recovery): add failure taxonomy and degraded-mode semantics for principal snapshot aggregation."
+        ]
+    }))
 }
 
 #[endpoint]

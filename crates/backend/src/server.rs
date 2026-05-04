@@ -638,6 +638,7 @@ fn build_account_api_router(router: Router) -> Router {
                 .push(
                     Router::with_path("recovery")
                         .push(Router::with_path("describe").get(recovery::get_recovery_describe))
+                        .push(Router::with_path("principal-snapshot").get(recovery::get_recovery_principal_snapshot))
                         .push(Router::with_path("start").post(recovery::post_recovery_start))
                         .push(Router::with_path("{id}").get(recovery::get_recovery).push(
                             Router::with_path("resend").post(recovery::post_recovery_resend),
