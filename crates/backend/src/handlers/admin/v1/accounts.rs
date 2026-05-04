@@ -357,8 +357,23 @@ pub struct AdminBridgeDescribeResponse {
     /// Approval mode exposed by the current scaffold.
     risk_action_approval_mode: &'static str,
 
+    /// Machine-readable request examples for the risk-action REST workflow.
+    risk_action_examples: AdminBridgeRiskActionExamples,
+
     /// Remaining scaffold tasks.
     todos: Vec<&'static str>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct AdminBridgeRiskActionExamples {
+    /// Example payload for POST /risk-action
+    proposal_request: serde_json::Value,
+
+    /// Example payload for POST /risk-action/{proposal_id}/approve
+    approve_request: serde_json::Value,
+
+    /// Example payload for POST /risk-action/{proposal_id}/execute
+    execute_request: serde_json::Value,
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
@@ -654,6 +669,25 @@ pub async fn admin_bridge_describe() -> JsonResult<AdminBridgeDescribeResponse> 
             "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute",
         risk_action_state_store_kind: RISK_ACTION_STATE_STORE_KIND,
         risk_action_approval_mode: "state_machine_scaffold_required",
+        risk_action_examples: AdminBridgeRiskActionExamples {
+            proposal_request: serde_json::json!({
+                "action": "lock",
+                "reason": "suspicious session recovery detected",
+                "ticket": "INC-2026-0504",
+                "approved_by": null
+            }),
+            approve_request: serde_json::json!({
+                "action": "lock",
+                "ticket": "INC-2026-0504",
+                "approved_by": "did:web:admin.example",
+                "approval_note": "approved for controlled execution"
+            }),
+            execute_request: serde_json::json!({
+                "action": "lock",
+                "ticket": "INC-2026-0504",
+                "execution_note": "execute via controlled mutation worker"
+            }),
+        },
         todos: vec![
             "TODO: replace audit-backed scaffold transitions with dedicated persisted proposal records",
             "TODO: add controlled executor workers for lock, disable, erase, and reset-recovery mutations",
