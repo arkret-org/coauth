@@ -152,6 +152,7 @@ pub struct AuthBridgeDescribeResponse {
 pub struct AuthBridgeOAuthDescriptor {
     pub discovery_path: &'static str,
     pub browser_bridge_session_path: &'static str,
+    pub exchange_describe_path: &'static str,
     pub exchange_path: &'static str,
     pub supported_flows: Vec<&'static str>,
     pub redirect_uri_modes: Vec<&'static str>,
@@ -217,6 +218,18 @@ pub struct OidcBrowserBridgeSessionResponse {
     pub code_challenge_method: &'static str,
     pub principal_audience: String,
     pub todo: &'static str,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct OidcExchangeDescribeResponse {
+    pub contract: &'static str,
+    pub version: &'static str,
+    pub exchange_path: &'static str,
+    pub upstream_boundary_mode: &'static str,
+    pub required_fields: Vec<&'static str>,
+    pub validation_layers: Vec<&'static str>,
+    pub example_request: serde_json::Value,
+    pub todos: Vec<&'static str>,
 }
 
 // ── POST /api/v1/auth/login ────────────────────────────────────
@@ -1251,6 +1264,57 @@ pub async fn oidc_browser_bridge_session(
 }
 
 #[endpoint]
+pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeResponse>, RouteError> {
+    Ok(Json(OidcExchangeDescribeResponse {
+        contract: "contrix.rest.oidc_exchange.v1",
+        version: "2026-05-04-scaffold",
+        exchange_path: "/api/v1/auth/oidc/exchange",
+        upstream_boundary_mode:
+            "local_http_token_plus_local_introspection_plus_local_userinfo_with_todo_upstream_validation",
+        required_fields: vec![
+            "authorization_code",
+            "code_verifier",
+            "redirect_uri",
+            "issuer",
+            "token_endpoint",
+            "userinfo_endpoint",
+            "client_id",
+            "login_hint",
+            "device_id",
+        ],
+        validation_layers: vec![
+            "callback_state_gate_if_expected_state_present",
+            "live_discovery_metadata_match",
+            "local_authorization_code_binding",
+            "public_client_only_for_browser_bridge",
+            "local_http_oauth2_token_exchange",
+            "local_oauth2_introspection_active_check",
+            "local_userinfo_subject_principal_session_binding",
+            "contrix_session_grant_issuance",
+        ],
+        example_request: serde_json::json!({
+            "authorization_code": "TODO_AUTHORIZATION_CODE",
+            "code_verifier": "TODO_PKCE_CODE_VERIFIER",
+            "redirect_uri": "http://localhost:8080/auth/callback",
+            "issuer": "https://coauth.example",
+            "token_endpoint": "https://coauth.example/oauth2/token",
+            "userinfo_endpoint": "https://coauth.example/oauth2/userinfo",
+            "client_id": "yougen",
+            "login_hint": "did:web:alice.example",
+            "device_id": "device-web",
+            "principal_audience": "https://soland.example",
+            "state": "TODO_CALLBACK_STATE",
+            "expected_state": "TODO_EXPECTED_STATE"
+        }),
+        todos: vec![
+            "TODO: replace local-only token/introspection/userinfo validation chain with explicit upstream-boundary verification modes",
+            "TODO: publish machine-readable failure taxonomy for discovery drift, pkce failure, and userinfo/session binding mismatch",
+            "TODO: bind browser bridge sessions to persisted PKCE and OAuth client records instead of deterministic scaffold material",
+        ],
+    }))
+}
+
+#[endpoint]
 pub async fn auth_bridge_describe(depot: &Depot) -> Result<Json<AuthBridgeDescribeResponse>, RouteError> {
     let _ = depot.url_builder()?;
 
@@ -1261,6 +1325,7 @@ pub async fn auth_bridge_describe(depot: &Depot) -> Result<Json<AuthBridgeDescri
         oauth: AuthBridgeOAuthDescriptor {
             discovery_path: "/.well-known/openid-configuration",
             browser_bridge_session_path: "/api/v1/auth/oidc/browser-bridge/session",
+            exchange_describe_path: "/api/v1/auth/oidc/exchange/describe",
             exchange_path: "/api/v1/auth/oidc/exchange",
             supported_flows: vec!["authorization_code_pkce_browser"],
             redirect_uri_modes: vec!["browser_origin_callback", "native_urn_callback"],

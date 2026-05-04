@@ -596,6 +596,10 @@ fn build_account_api_router(router: Router) -> Router {
                     Router::with_path("oidc/browser-bridge/session")
                         .post(auth::oidc_browser_bridge_session),
                 )
+                .push(
+                    Router::with_path("oidc/exchange/describe")
+                        .get(auth::oidc_exchange_describe),
+                )
                 .push(Router::with_path("oidc/exchange").post(auth::oidc_code_exchange))
                 .push(Router::with_path("logout").post(auth::logout))
                 .push(Router::with_path("providers").get(auth::providers))
