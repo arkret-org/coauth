@@ -227,6 +227,7 @@ pub struct RecoveryDescribeResponse {
     pub key_backup_rest_base: &'static str,
     pub key_backup_schema: &'static str,
     pub device_message_schema: &'static str,
+    pub principal_restore_describe_path: &'static str,
     pub principal_authz_check_path: &'static str,
     pub principal_policy_collection_path: &'static str,
     pub principal_policy_item_path: &'static str,
@@ -248,6 +249,7 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
         key_backup_rest_base: "/api/v1/keys/backups",
         key_backup_schema: "cx.schema.key_backup.v1",
         device_message_schema: "cx.schema.device_message.v1",
+        principal_restore_describe_path: "/api/v1/keys/backups/{backup_id}/restore/describe",
         principal_authz_check_path: "/api/v1/authz/check",
         principal_policy_collection_path: "/api/v1/policies",
         principal_policy_item_path: "/api/v1/policies/{policy_id}",
@@ -350,6 +352,7 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
             "TODO: bind device verification messages to signed device envelopes.",
             "TODO: add recovery proofing policy and restore approvals.",
             "TODO: bind recovery bridge examples to live principal authz/policy endpoints instead of static scaffold paths.",
+            "TODO: bind recovery bridge to live principal restore-describe endpoint instead of only publishing the path template.",
         ],
     })
 }
