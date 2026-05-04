@@ -227,9 +227,13 @@ pub struct RecoveryDescribeResponse {
     pub key_backup_rest_base: &'static str,
     pub key_backup_schema: &'static str,
     pub device_message_schema: &'static str,
+    pub principal_authz_check_path: &'static str,
+    pub principal_policy_collection_path: &'static str,
+    pub principal_policy_item_path: &'static str,
     pub verification_event_kinds: Vec<&'static str>,
     pub recovery_modes: Vec<&'static str>,
     pub example_backup_payload: Value,
+    pub recovery_authz_examples: Value,
     pub todos: Vec<&'static str>,
 }
 
@@ -244,6 +248,9 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
         key_backup_rest_base: "/api/v1/keys/backups",
         key_backup_schema: "cx.schema.key_backup.v1",
         device_message_schema: "cx.schema.device_message.v1",
+        principal_authz_check_path: "/api/v1/authz/check",
+        principal_policy_collection_path: "/api/v1/policies",
+        principal_policy_item_path: "/api/v1/policies/{policy_id}",
         verification_event_kinds: vec![
             "cx.key.verification.request",
             "cx.key.verification.ready",
@@ -275,10 +282,74 @@ pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
                 }
             ]
         }),
+        recovery_authz_examples: serde_json::json!({
+            "authz_check_request": {
+                "actor": "did:web:alice.example",
+                "action": "keys.backups.restore",
+                "space_id": "cx:space:01JS0SP000000000000000000",
+                "resources": [
+                    {
+                        "kind": "blob",
+                        "space_id": "cx:space:01JS0SP000000000000000000",
+                        "blob_ref": "cx:blob:sha256:0123456789abcdef",
+                        "object_type": "encrypted_backup",
+                        "object_ref": "backup-scaffold-current-device",
+                        "scope": "exact"
+                    }
+                ],
+                "constraints": [
+                    {
+                        "constraint_type": "claim_based",
+                        "effect": "allow",
+                        "object_type_allow": ["key_backup"],
+                        "facet_allow": ["recovery"],
+                        "requires_claims": [
+                            {
+                                "claim_type": "recovery_operator",
+                                "issuer": "did:web:coauth.example",
+                                "organization": "example-org",
+                                "status": "active",
+                                "roles": ["backup_admin"]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "policy_upsert_request": {
+                "scope": "space",
+                "subject_ref": "did:web:alice.example",
+                "policy_type": "keys.backups.restore",
+                "effect": "require_review",
+                "payload": {
+                    "actions": ["keys.backups.restore"],
+                    "resource": {
+                        "kind": "blob",
+                        "space_id": "cx:space:01JS0SP000000000000000000",
+                        "blob_ref": "cx:blob:sha256:0123456789abcdef",
+                        "object_type": "encrypted_backup",
+                        "object_ref": "backup-scaffold-current-device"
+                    },
+                    "constraints": [
+                        {
+                            "constraint_type": "approval_workflow",
+                            "effect": "require_review",
+                            "approval_required": true,
+                            "approval_mode": "two_man_rule",
+                            "approval_actor_refs": [
+                                "did:web:controller.example",
+                                "did:web:guardian.example"
+                            ],
+                            "approval_relation": "controller"
+                        }
+                    ]
+                }
+            }
+        }),
         todos: vec![
             "TODO: bind key backup restore to durable encrypted blob storage.",
             "TODO: bind device verification messages to signed device envelopes.",
             "TODO: add recovery proofing policy and restore approvals.",
+            "TODO: bind recovery bridge examples to live principal authz/policy endpoints instead of static scaffold paths.",
         ],
     })
 }
