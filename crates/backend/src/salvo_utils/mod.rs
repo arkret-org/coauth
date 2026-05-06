@@ -1,4 +1,4 @@
-//! Salvo web-framework utilities for the Pasion authentication service.
+//! Salvo web-framework utilities for the coauth authentication service.
 //!
 //! Provides middleware, extractors, and helpers that sit between the Salvo
 //! framework and the handler logic in [`coauth_backend::handlers`].

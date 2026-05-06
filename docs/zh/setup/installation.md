@@ -7,13 +7,13 @@
 ### x86_64 (amd64)
 
 ```bash
-curl -sL https://github.com/taidge/coauth/releases/latest/download/coauth-x86_64-linux.tar.gz | tar xz
+curl -sL https://github.com/contrix-dev/coauth/releases/latest/download/coauth-x86_64-linux.tar.gz | tar xz
 ```
 
 ### aarch64 (arm64)
 
 ```bash
-curl -sL https://github.com/taidge/coauth/releases/latest/download/coauth-aarch64-linux.tar.gz | tar xz
+curl -sL https://github.com/contrix-dev/coauth/releases/latest/download/coauth-aarch64-linux.tar.gz | tar xz
 ```
 
 解压后会得到 `coauth` 可执行文件。建议将其移动到 `/usr/local/bin/` 或其他在 `PATH` 中的目录。
@@ -23,13 +23,13 @@ curl -sL https://github.com/taidge/coauth/releases/latest/download/coauth-aarch6
 Docker 镜像发布在 GitHub Container Registry：
 
 ```bash
-docker pull ghcr.io/taidge/coauth:latest
+docker pull ghcr.io/contrix-dev/coauth:latest
 ```
 
 运行容器：
 
 ```bash
-docker run -v $(pwd)/config.yaml:/config.yaml ghcr.io/taidge/coauth:latest \
+docker run -v $(pwd)/config.yaml:/config.yaml ghcr.io/contrix-dev/coauth:latest \
   server -c /config.yaml
 ```
 
@@ -44,7 +44,7 @@ docker run -v $(pwd)/config.yaml:/config.yaml ghcr.io/taidge/coauth:latest \
 ### 编译步骤
 
 ```bash
-git clone https://github.com/taidge/coauth.git
+git clone https://github.com/contrix-dev/coauth.git
 cd coauth
 
 # 编译前端资源

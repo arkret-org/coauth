@@ -7,8 +7,9 @@ coauth config generate > config.yaml
 ```
 
 The generated schema in `docs/config.schema.json` is derived from
-`coauth_config::RootConfig`. Environment overrides still use the legacy
-`PASION_` prefix.
+`coauth_config::RootConfig`. Environment overrides use the `COAUTH_` prefix
+(the legacy `PASION_` prefix is still honoured for backwards compatibility;
+when both are set, `COAUTH_*` wins).
 
 ## `http`
 
@@ -45,6 +46,15 @@ Common resource names:
 - `compat` for legacy Matrix compatibility routes
 - `adminapi` for `/api/admin/v1/*`
 - `health` and `prometheus` for internal operations
+
+### Request limits and timeouts
+
+| Key | Default | Purpose |
+| --- | --- | --- |
+| `http.max_body_bytes` | `1048576` (1 MiB) | Maximum accepted request-body size. Matches the Contrix `cx.server.describe.limits.max_body_bytes` advertisement. |
+| `http.request_timeout_seconds` | `30` | Per-request handling deadline. Set to `0` to disable. |
+| `http.shutdown_grace_seconds` | `30` | Grace period granted to in-flight requests on SIGTERM/SIGINT. |
+| `http.trusted_proxies` | RFC1918 + loopback | CIDR ranges trusted to set `X-Forwarded-For`. See [reverse-proxy](../setup/reverse-proxy.md). |
 
 ## `database`
 

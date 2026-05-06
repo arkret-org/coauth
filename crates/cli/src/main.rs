@@ -1,4 +1,4 @@
-//! Pasion CLI -- entry point for the authentication service binary.
+//! coauth CLI -- entry point for the Contrix Auth/Account Server binary.
 //!
 //! Provides sub-commands for the HTTP server, background worker, user
 //! management, database operations, and diagnostics.

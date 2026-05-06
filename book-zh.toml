@@ -1,5 +1,5 @@
 [book]
-title = "Pasion 文档"
+title = "coauth 文档"
 authors = ["chris@sonc.ai"]
 language = "zh"
 
@@ -10,10 +10,10 @@ build-dir = "target/book-zh"
 
 [output.html]
 # The URL visitors will be directed to when they try to edit a page
-edit-url-template = "https://github.com/taidge/coauth/edit/main/{path}"
+edit-url-template = "https://github.com/contrix-dev/coauth/edit/main/{path}"
 
 # The source code URL of the repository
-git-repository-url = "https://github.com/taidge/coauth"
+git-repository-url = "https://github.com/contrix-dev/coauth"
 
 # The path that the docs are hosted on
 site-url = "/coauth/zh/"

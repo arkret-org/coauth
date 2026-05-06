@@ -112,7 +112,7 @@ launches the background worker unless disabled with flags.
 `coauth` is a Rust workspace. The frontend is a Dioxus app.
 
 ```bash
-git clone https://github.com/meldry-com/coauth.git
+git clone https://github.com/contrix-dev/coauth.git
 cd coauth
 
 # Backend binary only

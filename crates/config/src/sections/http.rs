@@ -330,6 +330,71 @@ pub struct HttpConfig {
     /// OIDC issuer identifier. Falls back to `public_base` when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub issuer: Option<Url>,
+
+    /// Maximum accepted request-body size, in bytes. Requests exceeding this
+    /// limit are rejected with `413 Payload Too Large` before they reach a
+    /// handler. Defaults to 1 MiB to match the Contrix
+    /// `cx.server.describe.limits.max_body_bytes` advertisement.
+    #[serde(default = "default_max_body_bytes")]
+    pub max_body_bytes: u64,
+
+    /// Per-request handling deadline, in seconds. Long-running upstream calls
+    /// have their own timeouts; this guards against accidentally unbounded
+    /// handlers. Defaults to 30 seconds. Set to 0 to disable.
+    #[serde(default = "default_request_timeout_seconds")]
+    pub request_timeout_seconds: u64,
+
+    /// Grace period (seconds) granted to in-flight requests when the process
+    /// receives SIGTERM/SIGINT before the listener is forcibly closed.
+    /// Defaults to 30 seconds.
+    #[serde(default = "default_shutdown_grace_seconds")]
+    pub shutdown_grace_seconds: u64,
+
+    /// Browser HTTP Strict-Transport-Security policy. Disabled by default
+    /// because TLS frequently terminates upstream and HSTS has cache
+    /// semantics that can lock operators out of an HTTP-only host if
+    /// emitted by mistake. Opt in only when this process or the trusted
+    /// edge serves HTTPS to end users.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hsts: Option<HstsConfig>,
+}
+
+/// HTTP Strict-Transport-Security policy.
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+pub struct HstsConfig {
+    /// `max-age` directive, in seconds. The IETF baseline is 6 months
+    /// (`15_552_000`); production deployments often raise this to 1
+    /// year (`31_536_000`) once they are confident TLS will stay on.
+    #[serde(default = "default_hsts_max_age_seconds")]
+    pub max_age_seconds: u64,
+
+    /// Whether to include the `includeSubDomains` directive. Off by
+    /// default — turning it on commits every subdomain of the public
+    /// host to HTTPS.
+    #[serde(default)]
+    pub include_subdomains: bool,
+
+    /// Whether to include the `preload` directive. Off by default —
+    /// only set when you have read and intend to follow the
+    /// hstspreload.org submission policy.
+    #[serde(default)]
+    pub preload: bool,
+}
+
+const fn default_hsts_max_age_seconds() -> u64 {
+    15_552_000
+}
+
+const fn default_max_body_bytes() -> u64 {
+    1_048_576
+}
+
+const fn default_request_timeout_seconds() -> u64 {
+    30
+}
+
+const fn default_shutdown_grace_seconds() -> u64 {
+    30
 }
 
 impl Default for HttpConfig {
@@ -374,6 +439,10 @@ impl Default for HttpConfig {
             trusted_proxies: rfc_private_networks(),
             issuer: Some(base.clone()),
             public_base: base,
+            max_body_bytes: default_max_body_bytes(),
+            request_timeout_seconds: default_request_timeout_seconds(),
+            shutdown_grace_seconds: default_shutdown_grace_seconds(),
+            hsts: None,
         }
     }
 }

@@ -109,6 +109,9 @@ pub async fn config_sync(
 ) -> anyhow::Result<()> {
     // Grab an advisory lock on the connection
     tracing::info!("Acquiring configuration lock");
+    // Note: this string is hashed into a pg advisory-lock key. Do not rename
+    // without a coordinated upgrade — it would let an old and a new process
+    // hold different locks and step on each other.
     let lock_key = advisory_lock_key("Pasion config sync");
 
     // pg_advisory_lock blocks until the lock is acquired (returns void/true)

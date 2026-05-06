@@ -28,6 +28,25 @@ pub struct RateLimitingConfig {
     /// Phone authentication-specific rate limits
     #[serde(default)]
     pub phone_authentication: PhoneAuthenticationRateLimitingConfig,
+
+    /// DID-binding rate limits. Applies to admin-driven attach/remove
+    /// of principal DIDs on accounts.
+    #[serde(default)]
+    pub did_binding: DidBindingRateLimitingConfig,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct DidBindingRateLimitingConfig {
+    /// Controls how many DID-binding mutations are permitted from a
+    /// single source IP. Tuned conservatively — admin tooling is the
+    /// expected caller, not end-user traffic.
+    #[serde(default = "default_did_binding_per_ip")]
+    pub per_ip: RateLimiterConfiguration,
+
+    /// Controls how many DID-binding mutations are permitted against a
+    /// single target account, regardless of source.
+    #[serde(default = "default_did_binding_per_account")]
+    pub per_account: RateLimiterConfiguration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -242,6 +261,13 @@ impl ConfigurationSection for RateLimitingConfig {
             .into());
         }
 
+        if let Some(error) = error_on_limiter(&self.did_binding.per_ip) {
+            return Err(error_on_nested_field(error, "did_binding", "per_ip").into());
+        }
+        if let Some(error) = error_on_limiter(&self.did_binding.per_account) {
+            return Err(error_on_nested_field(error, "did_binding", "per_account").into());
+        }
+
         Ok(())
     }
 }
@@ -360,6 +386,20 @@ fn default_phone_authentication_attempt_per_session() -> RateLimiterConfiguratio
     }
 }
 
+fn default_did_binding_per_ip() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(5).unwrap(),
+        per_second: 5.0 / 60.0,
+    }
+}
+
+fn default_did_binding_per_account() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(3).unwrap(),
+        per_second: 3.0 / 300.0,
+    }
+}
+
 impl Default for RateLimitingConfig {
     fn default() -> Self {
         RateLimitingConfig {
@@ -368,6 +408,16 @@ impl Default for RateLimitingConfig {
             account_recovery: AccountRecoveryRateLimitingConfig::default(),
             email_authentication: EmailauthenticationRateLimitingConfig::default(),
             phone_authentication: PhoneAuthenticationRateLimitingConfig::default(),
+            did_binding: DidBindingRateLimitingConfig::default(),
+        }
+    }
+}
+
+impl Default for DidBindingRateLimitingConfig {
+    fn default() -> Self {
+        DidBindingRateLimitingConfig {
+            per_ip: default_did_binding_per_ip(),
+            per_account: default_did_binding_per_account(),
         }
     }
 }

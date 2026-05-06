@@ -74,6 +74,114 @@ impl From<RouteError> for ContrixRouteError {
     }
 }
 
+impl From<coauth_data::RepositoryError> for ContrixRouteError {
+    fn from(value: coauth_data::RepositoryError) -> Self {
+        Self::Internal(Box::new(value))
+    }
+}
+
+/// Authorization decision for a session-grant administrative endpoint.
+#[derive(Debug, Clone, Copy)]
+enum SessionGrantAuthz {
+    /// The caller presented an admin scope. Allowed for read and write.
+    Admin,
+    /// The caller presented the Principal Server `session.bind` scope.
+    /// Allowed for read-only paths (list / introspect).
+    PrincipalServer,
+}
+
+/// Resolve the bearer token on the request and require either an admin
+/// scope or the Principal Server session-bind scope. Used by the
+/// session-grant admin surface to gate access without going through the
+/// heavier admin call-context extractor.
+async fn require_session_grant_caller(
+    req: &Request,
+    depot: &Depot,
+) -> Result<SessionGrantAuthz, ContrixRouteError> {
+    use coauth_data::{RepositoryAccess, TokenType};
+
+    let auth_header = req
+        .headers()
+        .get(http::header::AUTHORIZATION)
+        .ok_or_else(|| {
+            ContrixRouteError::BadRequest("missing authorization header".to_owned())
+        })?;
+    let auth_str = auth_header
+        .to_str()
+        .map_err(|_| ContrixRouteError::BadRequest("invalid authorization header".to_owned()))?;
+    let token = auth_str
+        .strip_prefix("Bearer ")
+        .or_else(|| auth_str.strip_prefix("bearer "))
+        .ok_or_else(|| {
+            ContrixRouteError::BadRequest("invalid authorization header".to_owned())
+        })?;
+
+    let token_type = TokenType::check(token)
+        .map_err(|_| ContrixRouteError::BadRequest("invalid bearer token".to_owned()))?;
+
+    let mut repo = depot.repo().await?;
+    let scope = match token_type {
+        TokenType::AccessToken => {
+            let access = repo
+                .oauth2_access_token()
+                .find_by_token(token)
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::BadRequest("unknown access token".to_owned())
+                })?;
+            let session = repo
+                .oauth2_session()
+                .lookup(access.session_id)
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        "access token references missing session",
+                    ))
+                })?;
+            session.scope.clone()
+        }
+        TokenType::PersonalAccessToken => {
+            let access = repo
+                .personal_access_token()
+                .find_by_token(token)
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::BadRequest("unknown access token".to_owned())
+                })?;
+            let session = repo
+                .personal_session()
+                .lookup(access.session_id)
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        "access token references missing session",
+                    ))
+                })?;
+            session.scope.clone()
+        }
+        _ => {
+            return Err(ContrixRouteError::BadRequest(
+                "unsupported access token type".to_owned(),
+            ));
+        }
+    };
+    repo.cancel().await?;
+
+    if crate::handlers::admin::has_admin_scope(&scope) {
+        Ok(SessionGrantAuthz::Admin)
+    } else if scope.contains(PRINCIPAL_SERVER_SESSION_BIND_SCOPE) {
+        Ok(SessionGrantAuthz::PrincipalServer)
+    } else {
+        Err(ContrixRouteError::BadRequest(
+            "missing admin or principal-server scope".to_owned(),
+        ))
+    }
+}
+
 impl Scribe for ContrixRouteError {
     fn render(self, res: &mut Response) {
         let (status, code, message) = match self {
@@ -1318,8 +1426,7 @@ pub async fn list_session_grants(
         filter = filter.active_at(clock.now());
     }
 
-    // TODO(contrix-authz): require Principal Server/admin authentication before
-    // exposing this beyond trusted deployment boundaries.
+    let _ = require_session_grant_caller(req, depot).await?;
     let mut repo = depot.repo().await?;
     let page = repo
         .oauth2_session_grant()
@@ -1350,6 +1457,17 @@ pub async fn revoke_session_grant(
         .ok_or_else(|| ContrixRouteError::BadRequest("missing session grant id".into()))?;
     let id = Ulid::from_string(&raw_id)
         .map_err(|_| ContrixRouteError::BadRequest("invalid session grant id".into()))?;
+
+    // Revocation is destructive — Principal Server scope is not enough.
+    match require_session_grant_caller(req, depot).await? {
+        SessionGrantAuthz::Admin => {}
+        SessionGrantAuthz::PrincipalServer => {
+            return Err(ContrixRouteError::BadRequest(
+                "session-grant revocation requires admin scope".to_owned(),
+            ));
+        }
+    }
+
     let mut repo = depot.repo().await?;
     let grant = repo
         .oauth2_session_grant()
@@ -1358,8 +1476,6 @@ pub async fn revoke_session_grant(
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
         .ok_or(ContrixRouteError::NotFound)?;
 
-    // TODO(contrix-authz): require admin/Principal Server authorization and
-    // write audit actor/reason before enabling broad revoke access.
     let grant = repo
         .oauth2_session_grant()
         .revoke(&clock, grant)
@@ -1444,6 +1560,7 @@ pub async fn introspect_session_grant(
         ));
     }
 
+    let _ = require_session_grant_caller(req, depot).await?;
     let clock = crate::handlers::make_clock();
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;

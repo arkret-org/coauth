@@ -1,5 +1,8 @@
-# cargo-deny configuration for Pasion
-# See https://embarkstudios.github.io/cargo-deny/
+# cargo-deny configuration for coauth.
+# See https://embarkstudios.github.io/cargo-deny/.
+# `cargo deny check advisories` is the project's `cargo audit` equivalent;
+# the same advisory-db source is used. CI runs it on every push and on the
+# scheduled job in `.github/workflows/ci.yaml`.
 
 # ── Target platforms ─────────────────────────────────────────────────────────
 

@@ -240,6 +240,78 @@ pub async fn cache_control_middleware(
     res.headers_mut().typed_insert(cache_control);
 }
 
+/// Cap the time a single request handler may run.
+///
+/// We materialise this as a per-request middleware rather than a
+/// listener-level setting so it composes with the rest of the Salvo
+/// pipeline (cookies, CORS, auth) and so operators can disable it by
+/// setting `http.request_timeout_seconds = 0`.
+#[derive(Clone, Copy)]
+struct RequestTimeout {
+    duration: Duration,
+}
+
+#[salvo::async_trait]
+impl Handler for RequestTimeout {
+    async fn handle(
+        &self,
+        req: &mut Request,
+        depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        let next = ctrl.call_next(req, depot, res);
+        if tokio::time::timeout(self.duration, next).await.is_err() {
+            // Replace any partial response written by an aborted handler
+            // with a fresh `503 Service Unavailable`. This is the standard
+            // status for "I gave up waiting on myself".
+            *res = Response::new();
+            res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+            res.render(Text::Plain("request timed out"));
+            ctrl.skip_rest();
+        }
+    }
+}
+
+/// Apply baseline browser security headers to every response.
+///
+/// `Strict-Transport-Security` is emitted only when `http.hsts` is set:
+/// HSTS has long-lived caching semantics and can lock operators out of
+/// an HTTP-only host if sent by mistake. Operators that terminate TLS
+/// upstream typically prefer to set HSTS at the edge instead.
+#[handler]
+pub async fn security_headers_middleware(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    let hsts_header = depot
+        .get::<AppState>("app_state")
+        .ok()
+        .and_then(|state| state.hsts_header.as_deref())
+        .and_then(|value| HeaderValue::from_str(value).ok());
+
+    ctrl.call_next(req, depot, res).await;
+
+    let headers = res.headers_mut();
+    headers
+        .entry("x-content-type-options")
+        .or_insert(HeaderValue::from_static("nosniff"));
+    headers
+        .entry("x-frame-options")
+        .or_insert(HeaderValue::from_static("DENY"));
+    headers
+        .entry("referrer-policy")
+        .or_insert(HeaderValue::from_static("strict-origin-when-cross-origin"));
+    headers
+        .entry("cross-origin-opener-policy")
+        .or_insert(HeaderValue::from_static("same-origin"));
+    if let Some(value) = hsts_header {
+        headers.entry("strict-transport-security").or_insert(value);
+    }
+}
+
 /// A Salvo handler that injects [`AppState`] into the depot for every request.
 #[derive(Clone)]
 struct InjectAppState(AppState);
@@ -308,12 +380,21 @@ pub fn build_router(
     _name: Option<&str>,
 ) -> Router {
     let templates = state.templates.clone();
+    let max_body_bytes = usize::try_from(state.max_body_bytes).unwrap_or(usize::MAX);
+    let request_timeout = (state.request_timeout_seconds > 0)
+        .then(|| Duration::from_secs(state.request_timeout_seconds));
 
     // Create the base router with the AppState in depot
     let mut router = Router::new();
 
     // Add state injection middleware at the top level
-    router = router.hoop(InjectAppState(state));
+    router = router
+        .hoop(InjectAppState(state))
+        .hoop(salvo::http::request::SecureMaxSize::new(max_body_bytes));
+
+    if let Some(duration) = request_timeout {
+        router = router.hoop(RequestTimeout { duration });
+    }
 
     // Build sub-routers for each resource
     use crate::handlers::{
@@ -391,6 +472,7 @@ pub fn build_router(
     // Add middleware layers
     router
         .hoop(inject_app_state)
+        .hoop(security_headers_middleware)
         .hoop(log_response_middleware)
         .hoop(tracing_middleware)
         .hoop(sentry_middleware)
@@ -1033,10 +1115,18 @@ async fn connection_info_handler(req: &Request) -> String {
 pub fn build_tls_server_config(config: &HttpTlsConfig) -> Result<ServerConfig, anyhow::Error> {
     let (key, chain) = config.load()?;
 
-    let mut config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(chain, key)
-        .context("failed to build TLS server config")?;
+    // Pin the protocol-version floor to TLS 1.2. rustls 0.23 already
+    // refuses TLS 1.0/1.1 by default, but stating it explicitly makes
+    // the policy reviewable and prevents a silent downgrade if a
+    // future rustls release widens its default range. TLS 1.3 is
+    // preferred and negotiated automatically by the provider.
+    let mut config = rustls::ServerConfig::builder_with_protocol_versions(&[
+        &rustls::version::TLS13,
+        &rustls::version::TLS12,
+    ])
+    .with_no_client_auth()
+    .with_single_cert(chain, key)
+    .context("failed to build TLS server config")?;
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
     Ok(config)

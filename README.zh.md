@@ -100,7 +100,7 @@ coauth server -c config.yaml
 `coauth` 是 Rust workspace，前端使用 Dioxus。
 
 ```bash
-git clone https://github.com/meldry-com/coauth.git
+git clone https://github.com/contrix-dev/coauth.git
 cd coauth
 
 # 仅构建后端二进制

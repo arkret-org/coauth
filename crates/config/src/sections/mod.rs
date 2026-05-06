@@ -50,8 +50,9 @@ pub use self::{
     },
     experimental::ExperimentalConfig,
     http::{
-        BindConfig as HttpBindConfig, HttpConfig, ListenerConfig as HttpListenerConfig,
-        Resource as HttpResource, TlsConfig as HttpTlsConfig, UnixOrTcp,
+        BindConfig as HttpBindConfig, HstsConfig as HttpHstsConfig, HttpConfig,
+        ListenerConfig as HttpListenerConfig, Resource as HttpResource,
+        TlsConfig as HttpTlsConfig, UnixOrTcp,
     },
     matrix::{HomeserverKind, MatrixConfig},
     passwords::{

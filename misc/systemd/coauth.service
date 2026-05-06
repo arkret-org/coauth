@@ -1,0 +1,43 @@
+[Unit]
+Description=coauth (Contrix Auth/Account Server)
+Documentation=https://github.com/contrix-dev/coauth
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=coauth
+Group=coauth
+ExecStart=/usr/local/bin/coauth server --config /etc/coauth/config.yaml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+# Writable state for cached templates, key material rotation, etc.
+StateDirectory=coauth
+RuntimeDirectory=coauth
+ReadWritePaths=/var/lib/coauth /run/coauth
+
+# Resource limits — tune for the deployment.
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

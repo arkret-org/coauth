@@ -54,7 +54,30 @@ Once the configuration is done, the service can be started with the [`coauth ser
 coauth server
 ```
 
-It is advised to run the service as a non-root user, using a tool like [`systemd`](https://www.freedesktop.org/wiki/Software/systemd/) to manage the service lifecycle.
+It is advised to run the service as a non-root user, using a tool like [`systemd`](https://www.freedesktop.org/wiki/Software/systemd/) to manage the service lifecycle. A sample unit is provided at [`misc/systemd/coauth.service`](../../../misc/systemd/coauth.service):
+
+```sh
+sudo install -m 0644 misc/systemd/coauth.service /etc/systemd/system/coauth.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now coauth
+```
+
+For container deployments see [Running with Docker](./docker.md).
+
+
+## Liveness / readiness probes
+
+The service exposes `/health` and `/healthz` on the internal listener
+(default `localhost:8091`). Both return `200 OK` with body `ok` when
+the configured Postgres pool is reachable.
+
+```sh
+curl --fail http://localhost:8091/health
+```
+
+In Kubernetes, point both `livenessProbe.httpGet.path` and
+`readinessProbe.httpGet.path` at `/healthz` on the internal listener
+(see [Running with Docker](./docker.md) for a full example).
 
 
 ## Troubleshoot common issues

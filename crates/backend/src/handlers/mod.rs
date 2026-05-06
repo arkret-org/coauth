@@ -1,4 +1,4 @@
-//! HTTP request handlers for the Pasion authentication service.
+//! HTTP request handlers for the coauth authentication service.
 //!
 //! This module contains all the HTTP handler logic, organized by protocol and
 //! concern area:

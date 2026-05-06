@@ -6,6 +6,7 @@ use coauth_data::{RepositoryAccess, User};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use ulid::Ulid;
 
 use crate::{
     AppError, CreatedJsonResult, JsonResult,
@@ -221,6 +222,8 @@ pub async fn add_account_did(
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
+    let id = extract_ulid_param(req)?;
+    enforce_did_binding_rate_limit(req, depot, id).await?;
     let ctx = extract_call_context(req, depot).await?;
     ctx.repo.cancel().await?;
     // TODO(contrix): validate control_proof with delegated/public DID resolver before persisting.
@@ -236,12 +239,39 @@ pub async fn remove_account_did(
     depot: &Depot,
 ) -> JsonResult<AccountDidBindingsResponse> {
     let _body: RemoveAccountDidBindingRequest = req.parse_json().await.unwrap_or_default();
+    let id = extract_ulid_param(req)?;
+    enforce_did_binding_rate_limit(req, depot, id).await?;
     let ctx = extract_call_context(req, depot).await?;
     ctx.repo.cancel().await?;
     // TODO(contrix): revoke DID binding with audit trail, not hard-delete.
     Err(AppError::not_implemented(
         "account DID binding removal is not implemented yet",
     ))
+}
+
+/// Apply the DID-binding rate limit (per source IP and per target
+/// account) before any expensive work runs. Surfaces a 429 with the
+/// configured limiter's reason, and degrades to "no limiter
+/// configured" by allowing the request.
+async fn enforce_did_binding_rate_limit(
+    req: &Request,
+    depot: &Depot,
+    account_id: Ulid,
+) -> Result<(), AppError> {
+    let limiter = match depot.limiter() {
+        Ok(limiter) => limiter,
+        Err(_) => return Ok(()),
+    };
+    let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
+    let requester = activity_tracker
+        .ip()
+        .map(crate::handlers::RequesterFingerprint::new)
+        .unwrap_or(crate::handlers::RequesterFingerprint::EMPTY);
+
+    limiter
+        .check_did_binding(requester, account_id)
+        .await
+        .map_err(|error| AppError::too_many_requests(error.to_string()))
 }
 
 pub(crate) fn preview_bindings_for_user(

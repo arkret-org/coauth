@@ -806,7 +806,8 @@ pub async fn get_recovery_principal_cache_upstream() -> Json<Value> {
 }
 
 #[endpoint]
-pub async fn post_recovery_principal_cache_upstream_probe(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+pub async fn post_recovery_principal_cache_upstream_probe(req: &mut Request) -> Json<Value> {
+    let body: Value = req.parse_json().await.unwrap_or(Value::Null);
     let probed_at = Utc::now().to_rfc3339();
     let principal_base_url_input =
         recovery_cache_body_string(&body, "principal_base_url", "http://127.0.0.1:8080");
@@ -946,7 +947,8 @@ pub async fn post_recovery_principal_cache_upstream_probe(JsonBody(body): JsonBo
 }
 
 #[endpoint]
-pub async fn post_recovery_principal_cache_upstream_bind(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+pub async fn post_recovery_principal_cache_upstream_bind(req: &mut Request) -> Json<Value> {
+    let body: Value = req.parse_json().await.unwrap_or(Value::Null);
     let bound_at = Utc::now().to_rfc3339();
     let principal_base_url_input =
         recovery_cache_body_string(&body, "principal_base_url", "http://127.0.0.1:8080");
@@ -1022,7 +1024,8 @@ pub async fn post_recovery_principal_cache_upstream_bind(JsonBody(body): JsonBod
 }
 
 #[endpoint]
-pub async fn post_recovery_principal_cache_refresh(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+pub async fn post_recovery_principal_cache_refresh(req: &mut Request) -> Json<Value> {
+    let body: Value = req.parse_json().await.unwrap_or(Value::Null);
     let refresh_mode = body
         .get("refresh_mode")
         .cloned()
@@ -1101,7 +1104,8 @@ pub async fn post_recovery_principal_cache_refresh(JsonBody(body): JsonBody<Valu
 }
 
 #[endpoint]
-pub async fn post_recovery_principal_cache_retry(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+pub async fn post_recovery_principal_cache_retry(req: &mut Request) -> Json<Value> {
+    let body: Value = req.parse_json().await.unwrap_or(Value::Null);
     let retry_at = Utc::now().to_rfc3339();
     let retry_mode = body
         .get("retry_mode")
@@ -1174,7 +1178,8 @@ pub async fn post_recovery_principal_cache_retry(JsonBody(body): JsonBody<Value>
 }
 
 #[endpoint]
-pub async fn post_recovery_principal_cache_invalidate(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+pub async fn post_recovery_principal_cache_invalidate(req: &mut Request) -> Json<Value> {
+    let body: Value = req.parse_json().await.unwrap_or(Value::Null);
     let invalidated_at = Utc::now().to_rfc3339();
     let reason = body
         .get("reason")
@@ -1238,7 +1243,8 @@ pub async fn get_recovery_principal_cache_queue() -> Json<Value> {
 }
 
 #[endpoint]
-pub async fn post_recovery_principal_cache_complete(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+pub async fn post_recovery_principal_cache_complete(req: &mut Request) -> Json<Value> {
+    let body: Value = req.parse_json().await.unwrap_or(Value::Null);
     let completed_at = Utc::now().to_rfc3339();
     let mut cache = PRINCIPAL_RECOVERY_CACHE
         .lock()
@@ -1292,7 +1298,8 @@ pub async fn post_recovery_principal_cache_complete(JsonBody(body): JsonBody<Val
 }
 
 #[endpoint]
-pub async fn post_recovery_principal_cache_fail(JsonBody(body): JsonBody<Value>) -> Json<Value> {
+pub async fn post_recovery_principal_cache_fail(req: &mut Request) -> Json<Value> {
+    let body: Value = req.parse_json().await.unwrap_or(Value::Null);
     let failed_at = Utc::now().to_rfc3339();
     let mut cache = PRINCIPAL_RECOVERY_CACHE
         .lock()

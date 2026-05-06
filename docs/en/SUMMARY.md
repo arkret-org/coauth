@@ -14,6 +14,7 @@
 - [Configuring a reverse proxy](./setup/reverse-proxy.md)
 - [Configure an upstream SSO provider](./setup/sso.md)
 - [Running the service](./setup/running.md)
+- [Running with Docker](./setup/docker.md)
 
 # Topics
 
@@ -22,6 +23,11 @@
 - [Use the Admin API](./topics/admin-api.md)
 - [Get an access token](./topics/access-token.md)
 - [Legacy compatibility routes](./topics/legacy-compatibility.md)
+
+# Operations
+
+- [Backup and restore](./operations/backup-restore.md)
+- [Upgrades](./operations/upgrades.md)
 
 # Reference
 

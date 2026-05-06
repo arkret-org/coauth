@@ -1,0 +1,131 @@
+# Running with Docker / Docker Compose
+
+`coauth` ships an OCI image at
+`ghcr.io/contrix-dev/coauth`. Two variants are published per release:
+
+- `:latest` / `:vX.Y.Z` — distroless `nonroot` image, suitable for production.
+- `:latest-debug` / `:vX.Y.Z-debug` — distroless `debug-nonroot` image with
+  a busybox shell, useful for poking at a deployment.
+
+The image is multi-arch (`linux/amd64` and `linux/arm64`) and is signed
+with [Sigstore Cosign](https://docs.sigstore.dev/cosign/overview/) on
+the canonical owner identity.
+
+## Minimal `docker-compose.yaml`
+
+```yaml
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: coauth
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: coauth
+    volumes:
+      - coauth-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coauth -d coauth"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  coauth:
+    image: ghcr.io/contrix-dev/coauth:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["server", "--config", "/etc/coauth/config.yaml"]
+    volumes:
+      - ./config.yaml:/etc/coauth/config.yaml:ro
+      - coauth-state:/var/lib/coauth
+    ports:
+      - "7080:7080"   # public HTTP listener
+      - "8091:8091"   # internal listener (health, metrics)
+    # The container declares its own HEALTHCHECK that smoke-tests the
+    # binary. For real liveness / readiness the orchestrator should
+    # probe the /health endpoint on the internal listener.
+    restart: unless-stopped
+
+volumes:
+  coauth-pg:
+  coauth-state:
+```
+
+A minimal `config.yaml` to pair with this stack:
+
+```yaml
+http:
+  public_base: http://localhost:7080/
+  listeners:
+    - name: public
+      resources: [discovery, human, oauth, rest_api, assets]
+      binds:
+        - address: "[::]:7080"
+    - name: internal
+      resources: [health, prometheus]
+      binds:
+        - host: localhost
+          port: 8091
+
+database:
+  uri: postgresql://coauth:change-me@postgres/coauth
+
+contrix:
+  service_did: did:web:auth.example.com
+  issuer_did: did:web:auth.example.com
+  admin_audience: http://localhost:7080/api/v1
+
+secrets:
+  encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  keys:
+    - key_file: /var/lib/coauth/signing.pem
+
+passwords:
+  enabled: true
+```
+
+## Health probes
+
+The internal listener exposes `/health` (and `/healthz`) with a 200 OK
+when the database connection pool is reachable.
+
+For Kubernetes:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8091
+  initialDelaySeconds: 15
+  periodSeconds: 30
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8091
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
+For Docker Compose users that want to override the built-in HEALTHCHECK
+with a real `/health` probe, a sidecar container with `curl` is the
+simplest path; the distroless `coauth` image intentionally does not
+ship `curl` or `wget`.
+
+## Verifying image signatures
+
+```sh
+cosign verify \
+  --certificate-identity-regexp 'https://github\.com/contrix-dev/coauth/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/contrix-dev/coauth:latest
+```
+
+## See also
+
+- [Installation](installation.md) — pre-built binaries and source builds.
+- [Running the service](running.md) — systemd, configuration, doctor.
+- [Reverse proxy](reverse-proxy.md) — `X-Forwarded-For` /
+  `trusted_proxies` setup, PROXY protocol.
+- [`misc/systemd/coauth.service`](../../../misc/systemd/coauth.service)
+  — sample systemd unit for non-Docker deployments.

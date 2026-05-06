@@ -1,7 +1,7 @@
 # `manage`
 
 
-The Pasion CLI provides several subcommands for managing users and configurations
+The coauth CLI provides several subcommands for managing users and configurations.
 
 Global options:
 - `--config <config>`: Path to the configuration file.

@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你对 Pasion 项目的贡献兴趣！
+感谢你对 coauth 项目的贡献兴趣！
 
 ## 开发环境
 
@@ -14,7 +14,7 @@
 ### 克隆和构建
 
 ```bash
-git clone https://github.com/taidge/coauth.git
+git clone https://github.com/contrix-dev/coauth.git
 cd coauth
 
 # 编译前端资源

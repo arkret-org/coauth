@@ -13,8 +13,8 @@ resolver = "3"
 version = "1.8.0"
 authors = ["Meldry Team"]
 edition = "2024"
-homepage = "https://meldry.com/docs/"
-repository = "https://github.com/meldry-com/coauth/"
+homepage = "https://contrix.dev/docs/"
+repository = "https://github.com/contrix-dev/coauth/"
 license = "AGPL-3.0-only"
 publish = false
 

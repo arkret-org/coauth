@@ -236,4 +236,12 @@ COPY --from=share /share /usr/local/share/coauth
 COPY --from=runtime-rootfs --chown=65532:65532 /var/lib/coauth /var/lib/coauth
 
 WORKDIR /var/lib/coauth
+
+# `coauth healthcheck` issues a real HTTP GET against the configured
+# `/health` listener and exits non-zero on failure, so the same probe
+# protects against binary corruption AND a wedged server. Operators
+# can still wire a separate orchestrator probe directly to /health.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD ["/usr/local/bin/coauth", "healthcheck"]
+
 ENTRYPOINT ["/usr/local/bin/coauth"]

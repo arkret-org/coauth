@@ -538,6 +538,7 @@ impl AccountRecord {
             .iter()
             .map(|binding| binding.did.clone())
             .collect();
+        let primary_principal_did = Some(primary_did_for_user(&user));
 
         Self {
             id: user.id,
@@ -548,10 +549,10 @@ impl AccountRecord {
             locked_at: user.locked_at,
             disabled_at: user.deactivated_at,
             admin: user.can_request_admin,
+            primary_principal_did,
             display_name: user.display_name,
             avatar_url: user.avatar_url,
             preferred_locale: user.preferred_locale,
-            primary_principal_did: Some(primary_did_for_user(&user)),
             principal_dids,
             primary_principal_binding,
             principal_did_bindings,
@@ -565,6 +566,21 @@ impl Resource for AccountRecord {
 
     fn id(&self) -> Ulid {
         self.id
+    }
+}
+
+impl Resource for AccountRiskActionCurrentResponse {
+    const KIND: &'static str = "account_risk_action_current";
+    const PATH: &'static str = "/api/admin/v1/accounts";
+
+    fn id(&self) -> Ulid {
+        // `account_id` is constructed from `Ulid::to_string`; if it cannot
+        // be parsed (e.g. an explicit fallback value), fall back to nil.
+        self.account_id.parse().unwrap_or(Ulid::nil())
+    }
+
+    fn path(&self) -> String {
+        format!("{}/{}/risk-action/current", Self::PATH, self.account_id)
     }
 }
 

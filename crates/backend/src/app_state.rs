@@ -49,6 +49,21 @@ pub struct AppState {
     pub limiter: Limiter,
     pub frontend_script_src: String,
     pub email_webhook_service: Option<EmailWebhookService>,
+    /// Maximum accepted request-body size, in bytes. Wired into Salvo's
+    /// `SecureMaxSize` middleware on the public router.
+    pub max_body_bytes: u64,
+
+    /// Per-request handling deadline, in seconds. `0` disables the
+    /// timeout middleware. Wired into [`request_timeout_middleware`].
+    pub request_timeout_seconds: u64,
+
+    /// Grace period (seconds) to drain in-flight requests on
+    /// SIGTERM/SIGINT before listeners are forcibly closed.
+    pub shutdown_grace_seconds: u64,
+
+    /// Pre-rendered `Strict-Transport-Security` header value.
+    /// `None` disables HSTS emission (the default).
+    pub hsts_header: Option<String>,
 }
 
 impl AppState {

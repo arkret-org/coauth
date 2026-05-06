@@ -1,0 +1,74 @@
+# 升级
+
+`coauth` 在 HTTP 契约上遵循 [SemVer](https://semver.org/)。Patch / minor
+升级永远不会破坏 OIDC / OAuth2 / Contrix 已有 surface；major 升级会在至少
+一个 minor 版本之前预先标记 deprecation。
+
+## 常规升级流程
+
+适用于同一 major 上的就地升级。
+
+1. 阅读 [`CHANGELOG.md`](../../../CHANGELOG.md) 中目标版本对应的条目，
+   关注 `BREAKING:` 标记。
+2. 用 `pg_dump` 做数据库快照（见 [备份与恢复](backup-restore.md)）。
+3. 在 staging 环境拉取新镜像 / 二进制。
+4. 显式跑迁移：
+
+   ```sh
+   coauth database migrate --config /etc/coauth/config.yaml
+   ```
+
+   迁移是幂等且仅向前的：旧二进制无法连接新 schema。
+5. 先用新二进制启动一个副本，观察 `coauth doctor`、`/health` 与访问日志。
+6. 滚动替换其余节点。
+7. **保留上一版本的镜像 tag 至少 24 小时**，以便回滚只需要切 tag。
+
+`coauth` 设计为水平扩展，所有 minor 升级都支持滚动重启。
+
+## 兼容性范围
+
+跟踪的兼容契约：
+
+- `/.well-known/openid-configuration`
+- `/.well-known/did.json`
+- `/.well-known/contrix/openapi.yaml`
+- `/api/admin/v1/openapi.yaml`
+- `/api/v1/server/describe` 与 `/api/v1/*` 其余路径
+- CLI 子命令（`server`、`worker`、`manage`、`database`、`config`、
+  `templates`、`doctor`）
+
+minor 之间**可能**变化的：
+
+- 内部 listener 路由（`/connection-info`、`/metrics`）。
+- 模板变量；自定义模板需要在每次升级时 rebase。
+- Cedar / OPA policy bundle。
+
+## 从 Pasion / Palpo 老部署迁移
+
+1. 进入维护模式，停止新写入。
+2. 完整 `pg_dump`。
+3. 上线新二进制；除非确实仍需 Matrix 兼容流程，否则**关闭 legacy
+   compatibility adapter**。
+4. 重新发布 OAuth client metadata，迁移到 `urn:contrix:client:*` 与
+   `urn:contrix:admin:*`；旧的 `urn:matrix:*` scope 仅 legacy adapter 接受。
+5. 反向代理规则改为新的 `/api/v1/*`（Contrix）与 `/api/admin/v1/*`（管理 API），
+   不再使用 `/_palpo/*`。
+6. 重新跑 `coauth doctor`，把输出存进运维 runbook。
+
+## 环境变量迁移
+
+老的 `PASION_CONFIG` / `PASION_*` 仍然兼容，但已被标记为 deprecated。
+下次部署时：
+
+- `PASION_CONFIG` → `COAUTH_CONFIG`。
+- `PASION_FOO__BAR` → `COAUTH_FOO__BAR`（`__` 分隔符与大小写规则不变）。
+
+如果同一变量两侧都设置了，`COAUTH_*` 优先。`1.x` 之后新增的变量只在
+`COAUTH_*` 前缀下读取。
+
+## 回滚
+
+升级成功后**不一定能安全回滚** —— 新 schema 的 NOT NULL 列旧二进制可能
+不认。受支持的回滚路径是从升级前的 `pg_dump` 还原数据库。
+
+每次 major 升级前都应当文档化一次回滚 runbook，并在 staging 上 dry-run。

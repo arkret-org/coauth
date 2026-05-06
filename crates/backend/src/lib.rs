@@ -1,8 +1,8 @@
-//! Pasion backend — HTTP server, state management, lifecycle, and telemetry.
+//! coauth backend — HTTP server, state management, lifecycle, and telemetry.
 //!
-//! This crate provides the runtime infrastructure for the Pasion platform.
-//! It is consumed by the CLI binary (`coauth`) and can also be used to
-//! embed Pasion as a library.
+//! This crate provides the runtime infrastructure for the Contrix Auth /
+//! Account Server. It is consumed by the CLI binary (`coauth`) and can
+//! also be embedded as a library.
 
 pub mod app_state;
 pub mod error;

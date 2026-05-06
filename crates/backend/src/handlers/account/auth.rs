@@ -137,7 +137,7 @@ pub struct SessionGrantPrincipalServerInfo {
     pub endpoint: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AuthBridgeDescribeResponse {
     pub contract: &'static str,
     pub version: &'static str,
@@ -148,7 +148,7 @@ pub struct AuthBridgeDescribeResponse {
     pub todos: Vec<&'static str>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AuthBridgeOAuthDescriptor {
     pub discovery_path: &'static str,
     pub browser_bridge_session_path: &'static str,
@@ -159,7 +159,7 @@ pub struct AuthBridgeOAuthDescriptor {
     pub client_selection_mode: &'static str,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AuthBridgeContrixDescriptor {
     pub login_path: &'static str,
     pub logout_path: &'static str,
@@ -169,7 +169,7 @@ pub struct AuthBridgeContrixDescriptor {
     pub session_grant_scope: &'static str,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AuthBridgeAdminDescriptor {
     pub accounts_path: &'static str,
     pub account_detail_path_template: &'static str,
@@ -179,7 +179,7 @@ pub struct AuthBridgeAdminDescriptor {
     pub risk_action_history_path_template: &'static str,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct IntegrationManifestResponse {
     pub contract: &'static str,
     pub version: &'static str,
@@ -193,7 +193,7 @@ pub struct IntegrationManifestResponse {
     pub todos: Vec<&'static str>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct IntegrationManifestDependency {
     pub service: &'static str,
     pub purpose: &'static str,
@@ -202,7 +202,7 @@ pub struct IntegrationManifestDependency {
     pub mode: &'static str,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct IntegrationManifestSurface {
     pub name: &'static str,
     pub method: &'static str,
@@ -490,7 +490,7 @@ pub async fn oidc_code_exchange(
     let http_client = depot
         .get::<reqwest::Client>("http_client")
         .cloned()
-        .ok_or_else(|| {
+        .map_err(|_| {
             RouteError::Internal(Box::new(std::io::Error::other(
                 "http_client not found in depot",
             )))
@@ -498,7 +498,7 @@ pub async fn oidc_code_exchange(
     let service_activity_tracker = depot
         .get::<crate::handlers::ActivityTracker>("activity_tracker")
         .cloned()
-        .ok_or_else(|| {
+        .map_err(|_| {
             RouteError::Internal(Box::new(std::io::Error::other(
                 "activity_tracker not found in depot",
             )))

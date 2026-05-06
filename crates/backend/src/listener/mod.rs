@@ -1,4 +1,4 @@
-//! Network listener infrastructure for the Pasion authentication service.
+//! Network listener infrastructure for the coauth authentication service.
 //!
 //! Provides TCP/Unix socket binding, optional TLS termination, and PROXY
 //! protocol v1 support.  The [`server`] module drives the accept loop and
