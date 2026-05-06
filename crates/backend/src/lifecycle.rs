@@ -4,7 +4,7 @@ use coauth_templates::Templates;
 use futures_util::future::{BoxFuture, Either};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-use crate::handlers::ActivityTracker;
+use crate::routing::ActivityTracker;
 
 /// A helper to manage the lifecycle of the service, inclusing handling graceful
 /// shutdowns and configuration reloads.

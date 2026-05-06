@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::Parser;
 use coauth_backend::{
     app_state::AppState,
-    handlers::{ActivityTracker, CookieManager, Limiter, MetadataCache},
+    routing::{ActivityTracker, CookieManager, Limiter, MetadataCache},
     lifecycle::LifecycleManager,
     listener::server::Server,
     services::email_webhook::EmailWebhookService,

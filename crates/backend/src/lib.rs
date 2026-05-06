@@ -22,7 +22,7 @@ pub mod telemetry;
 pub mod totp;
 pub mod util;
 
-/// HTTP request handlers, service modules, and flow engine.
+/// HTTP request endpoints, service modules, and flow engine.
 #[allow(
     // Some salvo handlers need that
     clippy::unused_async,
@@ -32,7 +32,7 @@ pub mod util;
     // See https://github.com/tokio-rs/tracing/issues/2613
     clippy::let_with_type_underscore,
 )]
-pub mod handlers;
+pub mod routing;
 
 use std::sync::OnceLock;
 

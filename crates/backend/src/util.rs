@@ -25,7 +25,7 @@ use diesel_async::{
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::Instrument;
 
-use crate::handlers::passwords::PasswordManager;
+use crate::routing::passwords::PasswordManager;
 
 fn cleanup_pooled_postgres_connection() -> DieselPoolHook<AsyncPgConnection> {
     DieselPoolHook::async_fn(|conn: &mut AsyncPgConnection, _metrics| {
@@ -86,7 +86,7 @@ pub async fn password_manager_from_config(
 
     let schemes = config.load().await?.into_iter().map(
         |(version, algorithm, cost, secret, unicode_normalization)| {
-            use crate::handlers::passwords::Hasher;
+            use crate::routing::passwords::Hasher;
             let hasher = match algorithm {
                 coauth_config::PasswordAlgorithm::Pbkdf2 => {
                     Hasher::pbkdf2(secret, unicode_normalization)

@@ -18,7 +18,7 @@ use salvo::prelude::*;
 use tracing::Instrument;
 
 use crate::{
-    handlers::{
+    routing::{
         ActivityTracker, CookieManager, Limiter, MetadataCache, passwords::PasswordManager,
     },
     services::email_webhook::EmailWebhookService,
@@ -121,7 +121,7 @@ impl AppState {
 /// Salvo middleware that extracts [`AppState`] from the depot and fans it out
 /// into individual typed depot entries (one per component). This allows
 /// handler functions to pull only the specific dependency they need.
-#[handler]
+#[endpoint]
 pub async fn inject_app_state(
     req: &mut Request,
     depot: &mut Depot,

@@ -11,7 +11,7 @@ use coauth_matrix::HomeserverAdmin;
 use rand_core::RngCore;
 use thiserror::Error;
 
-use crate::handlers::account::Requester;
+use crate::routing::account::Requester;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewerProfile {

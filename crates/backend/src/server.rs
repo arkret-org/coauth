@@ -94,7 +94,7 @@ fn otel_url_scheme(req: &Request) -> &'static str {
 }
 
 /// Middleware for logging responses
-#[handler]
+#[endpoint]
 pub async fn log_response_middleware(
     req: &mut Request,
     depot: &mut Depot,
@@ -128,7 +128,7 @@ pub async fn log_response_middleware(
 }
 
 /// Middleware for OpenTelemetry tracing
-#[handler]
+#[endpoint]
 pub async fn tracing_middleware(
     req: &mut Request,
     depot: &mut Depot,
@@ -197,7 +197,7 @@ pub async fn tracing_middleware(
 }
 
 /// Middleware for Sentry integration
-#[handler]
+#[endpoint]
 pub async fn sentry_middleware(
     req: &mut Request,
     depot: &mut Depot,
@@ -215,7 +215,7 @@ pub async fn sentry_middleware(
 }
 
 /// Cache control middleware for static files
-#[handler]
+#[endpoint]
 pub async fn cache_control_middleware(
     req: &mut Request,
     depot: &mut Depot,
@@ -258,35 +258,7 @@ impl Handler for InjectAppState {
     }
 }
 
-#[derive(Clone)]
-struct OpenApiYaml {
-    yaml: String,
-}
-
-impl OpenApiYaml {
-    fn from_doc(doc: &salvo::oapi::OpenApi) -> Self {
-        Self {
-            yaml: serde_yaml::to_string(doc).expect("admin OpenAPI document should serialize"),
-        }
-    }
-}
-
-#[salvo::async_trait]
-impl Handler for OpenApiYaml {
-    async fn handle(
-        &self,
-        _req: &mut Request,
-        _depot: &mut Depot,
-        res: &mut Response,
-        _ctrl: &mut FlowCtrl,
-    ) {
-        res.headers_mut().insert(
-            CONTENT_TYPE,
-            HeaderValue::from_static("application/yaml; charset=utf-8"),
-        );
-        res.render(Text::Plain(self.yaml.clone()));
-    }
-}
+use crate::routing::openapi::OpenApiYaml;
 
 fn public_oidc_browser_cors() -> impl Handler {
     Cors::new()
@@ -296,7 +268,7 @@ fn public_oidc_browser_cors() -> impl Handler {
         .into_handler()
 }
 
-#[handler]
+#[endpoint]
 async fn oidc_preflight_handler() -> StatusCode {
     StatusCode::NO_CONTENT
 }
@@ -316,7 +288,7 @@ pub fn build_router(
     router = router.hoop(InjectAppState(state));
 
     // Build sub-routers for each resource
-    use crate::handlers::{
+    use crate::routing::{
         contrix, health,
         oauth2::{discovery, webfinger},
     };
@@ -381,6 +353,11 @@ pub fn build_router(
         }
     }
 
+    // Build the unified OpenAPI document over the *entire* router and mount
+    // the JSON spec, YAML spec, and Swagger UI artefacts onto it.
+    let unified_doc = crate::routing::openapi::build_openapi_doc(&router);
+    router = crate::routing::openapi::mount_openapi(router, &unified_doc);
+
     // Apply prefix if specified
     let prefix = format!("{}/", prefix.unwrap_or_default().trim_end_matches('/'));
     if !prefix.is_empty() && prefix != "/" {
@@ -397,7 +374,7 @@ pub fn build_router(
 }
 
 fn build_human_router(router: Router, _templates: Templates) -> Router {
-    use crate::handlers::{email_webhooks, oauth2::authorization, spa, upstream_oauth2};
+    use crate::routing::{email_webhooks, oauth2::authorization, spa, upstream_oauth2};
 
     router
         .push(Router::with_path("/webhooks/email/{provider}").post(email_webhooks::post))
@@ -465,7 +442,7 @@ fn build_human_router(router: Router, _templates: Templates) -> Router {
 }
 
 fn build_oauth_router(router: Router) -> Router {
-    use crate::handlers::oauth2::{
+    use crate::routing::oauth2::{
         device, introspection, keys, registration, revoke, token, userinfo,
     };
 
@@ -517,7 +494,7 @@ fn build_oauth_router(router: Router) -> Router {
 }
 
 fn build_account_api_router(router: Router) -> Router {
-    use crate::handlers::{account::*, contrix};
+    use crate::routing::{account::*, contrix};
 
     let api_router = Router::with_path("/api/v1")
         // Contrix service surface
@@ -701,13 +678,13 @@ fn build_account_api_router(router: Router) -> Router {
                         .push(Router::with_path("respond").post(flow::respond_flow)),
                 ),
         );
-    let docs_router = openapi::build_openapi_router(&api_router);
-
-    router.push(api_router).push(docs_router)
+    // The account REST API is now folded into the unified OpenAPI spec built
+    // by `routing::openapi::build_openapi_doc` — no per-surface docs router.
+    router.push(api_router)
 }
 
 fn build_admin_router(router: Router) -> Router {
-    use crate::handlers::admin::v1::*;
+    use crate::routing::admin::v1::*;
 
     let admin_router = Router::with_path("/api/admin/v1")
         // Version
@@ -924,8 +901,9 @@ fn build_admin_router(router: Router) -> Router {
                 .push(Router::with_path("{id}").get(policy_checks::get_signed_decision_audit)),
         );
 
-    // Generate OpenAPI spec and Swagger UI for the admin API
-    let admin_doc = build_admin_openapi_doc(&admin_router);
+    // Generate the admin-only OpenAPI spec & Swagger UI (kept alongside the
+    // unified spec for integrators that consume the admin surface alone).
+    let admin_doc = crate::routing::openapi::build_admin_openapi_doc(&admin_router);
     let admin_doc_yaml = OpenApiYaml::from_doc(&admin_doc);
 
     router
@@ -935,36 +913,32 @@ fn build_admin_router(router: Router) -> Router {
         .push(Router::with_path("/.well-known/contrix/openapi.yaml").get(admin_doc_yaml))
         .push(
             salvo::oapi::swagger_ui::SwaggerUi::new("/api-doc/admin/openapi.json")
-                .into_router("admin-swagger-ui"),
+                .into_router("/admin-swagger-ui"),
         )
 }
 
-fn build_admin_openapi_doc(admin_router: &Router) -> salvo::oapi::OpenApi {
-    salvo::oapi::OpenApi::new("coauth Admin API", env!("CARGO_PKG_VERSION"))
-        .merge_router(admin_router)
-}
-
-#[handler]
-async fn account_redirect_handler(depot: &Depot) -> impl Writer + use<> {
+#[endpoint]
+async fn account_redirect_handler(depot: &Depot, res: &mut Response) {
     use crate::app_state::DepotExt;
 
     let url_builder = depot.get_url_builder().cloned();
-    if let Some(url_builder) = url_builder {
+    let redirect = if let Some(url_builder) = url_builder {
         Redirect::found(url_builder.relative_url("/account/"))
     } else {
         Redirect::found("/account/")
-    }
+    };
+    res.render(redirect);
 }
 
-#[handler]
-async fn change_password_redirect_handler(depot: &Depot) -> impl Writer + use<> {
+#[endpoint]
+async fn change_password_redirect_handler(depot: &Depot, res: &mut Response) {
     use crate::app_state::DepotExt;
 
     let url_builder = depot.get_url_builder().cloned();
-    Redirect::found(absolute_redirect_location(
+    res.render(Redirect::found(absolute_redirect_location(
         url_builder.as_ref(),
         "/password/change",
-    ))
+    )));
 }
 
 fn absolute_redirect_location(url_builder: Option<&UrlBuilder>, path: &str) -> String {
@@ -992,24 +966,26 @@ fn relative_redirect_location(
     location
 }
 
-#[handler]
+#[endpoint]
 async fn account_password_change_redirect_handler(
     req: &Request,
     depot: &Depot,
-) -> impl Writer + use<> {
+    res: &mut Response,
+) {
     use crate::app_state::DepotExt;
 
     let url_builder = depot.get_url_builder().cloned();
     let location =
         relative_redirect_location(url_builder.as_ref(), "/password/change", req.uri().query());
-    Redirect::found(location)
+    res.render(Redirect::found(location));
 }
 
-#[handler]
+#[endpoint]
 async fn account_password_recovery_redirect_handler(
     req: &Request,
     depot: &Depot,
-) -> impl Writer + use<> {
+    res: &mut Response,
+) {
     use crate::app_state::DepotExt;
 
     let url_builder = depot.get_url_builder().cloned();
@@ -1018,10 +994,10 @@ async fn account_password_recovery_redirect_handler(
         "/password/recovery",
         req.uri().query(),
     );
-    Redirect::found(location)
+    res.render(Redirect::found(location));
 }
 
-#[handler]
+#[endpoint]
 async fn connection_info_handler(req: &Request) -> String {
     if let Some(conn_info) = req.extensions().get::<ConnectionInfo>() {
         format!("{conn_info:?}")

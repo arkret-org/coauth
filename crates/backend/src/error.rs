@@ -7,7 +7,7 @@ use salvo::{
 };
 
 use crate::{
-    handlers::{
+    routing::{
         admin::{
             CallContextRejection as AdminCallContextRejection, CreatedJson, ErrorResponse,
             InconsistentPersonalSession, PaginationRejection, UlidPathParamRejection,

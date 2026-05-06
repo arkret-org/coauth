@@ -16,7 +16,7 @@ use thiserror::Error;
 use ulid::Ulid;
 
 use crate::{
-    handlers::admin::audit_helper::record_admin_operation,
+    routing::admin::audit_helper::record_admin_operation,
     services::user_profile::{sync_display_name_patch, validate_display_name_patch},
 };
 
