@@ -152,8 +152,16 @@ return 501 or use scaffolded state.
 ## Cross-project registration
 
 - [~] **Root C3 · coauth → soland session grant**: grant id is returned,
-      authenticated introspection works. Remaining coauth-side work:
-      durable PKCE / state / nonce material and formal proof semantics.
+      authenticated introspection works. PKCE / state / nonce material is
+      durable (`oauth2_authorization_grants`, schema
+      `crates/data/src/pg/schema.rs:299-303`). Formal session-key JWS
+      proof verification is wired into introspection
+      (`crates/backend/src/handlers/contrix.rs:1692-1730` →
+      `introspect_session_grant`). Hourly cleanup worker for expired
+      `oauth2_session_grants` is registered
+      (`CleanupExpiredSessionGrantsJob`, cron `0 27 * * * *`).
+      Remaining coauth-side work: explicit per-request audience selection
+      beyond the configured admin / principal allowlist.
 - [~] **Root C5 · recovery bridge**: principal-cache contract surface
       and scaffold handlers available. Remaining: durable upstream
       snapshot / cache records plus real refresh / complete / fail worker.

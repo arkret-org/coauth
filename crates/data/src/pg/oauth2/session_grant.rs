@@ -272,4 +272,56 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
             .revoke(revoked_at)
             .map_err(DatabaseError::to_invalid_operation)
     }
+
+    #[tracing::instrument(
+        name = "db.oauth2_session_grant.cleanup_expired",
+        skip_all,
+        fields(
+            since = since.map(tracing::field::display),
+            until = %until,
+            limit = limit,
+        ),
+        err,
+    )]
+    async fn cleanup_expired(
+        &mut self,
+        since: Option<DateTime<Utc>>,
+        until: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error> {
+        let res: SessionGrantCleanupResult = diesel::sql_query(
+            r#"
+                WITH to_delete AS (
+                    SELECT id, expires_at
+                    FROM oauth2_session_grants
+                    WHERE ($1::timestamptz IS NULL OR expires_at >= $1)
+                      AND expires_at < $2
+                    ORDER BY expires_at ASC
+                    LIMIT $3
+                    FOR UPDATE
+                ),
+                deleted AS (
+                    DELETE FROM oauth2_session_grants USING to_delete
+                    WHERE oauth2_session_grants.id = to_delete.id
+                    RETURNING oauth2_session_grants.expires_at
+                )
+                SELECT COUNT(*) as count, MAX(expires_at) as last_ts FROM deleted
+            "#,
+        )
+        .bind::<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, _>(since)
+        .bind::<diesel::sql_types::Timestamptz, _>(until)
+        .bind::<diesel::sql_types::BigInt, _>(i64::try_from(limit).unwrap_or(i64::MAX))
+        .get_result(self.conn)
+        .await?;
+
+        Ok((res.count.try_into().unwrap_or(usize::MAX), res.last_ts))
+    }
+}
+
+#[derive(Debug, diesel::QueryableByName)]
+struct SessionGrantCleanupResult {
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    count: i64,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    last_ts: Option<DateTime<Utc>>,
 }

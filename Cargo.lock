@@ -1164,6 +1164,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "coauth-admin-types"
+version = "1.8.0"
+dependencies = [
+ "chrono",
+ "salvo",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "coauth-backend"
 version = "1.8.0"
 dependencies = [
@@ -1175,6 +1186,7 @@ dependencies = [
  "bytes",
  "camino",
  "chrono",
+ "coauth-admin-types",
  "coauth-config",
  "coauth-data",
  "coauth-i18n",

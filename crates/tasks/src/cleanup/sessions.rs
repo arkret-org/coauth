@@ -1,8 +1,9 @@
 //! Session cleanup tasks
 
 use coauth_data::queue::{
-    CleanupFinishedOAuth2SessionsJob, CleanupFinishedUserSessionsJob,
-    CleanupInactiveOAuth2SessionIpsJob, CleanupInactiveUserSessionIpsJob,
+    CleanupExpiredSessionGrantsJob, CleanupFinishedOAuth2SessionsJob,
+    CleanupFinishedUserSessionsJob, CleanupInactiveOAuth2SessionIpsJob,
+    CleanupInactiveUserSessionIpsJob,
 };
 
 cleanup_time_cursor_job!(
@@ -47,4 +48,21 @@ cleanup_time_cursor_job!(
     timeout_secs = 10 * 60,
     empty = "no user session IPs to clean up",
     done = "cleaned up inactive user session IPs",
+);
+
+// Contrix session grants have a short TTL (5 min in
+// `handlers::contrix::SESSION_GRANT_TTL_MINUTES`) and are revoked on
+// successful introspection — but invalid-proof / unexchanged grants
+// still accumulate. Drop anything that's been expired for more than
+// an hour so introspection-side replay/audit windows still work but
+// the table doesn't grow unbounded.
+cleanup_time_cursor_job!(
+    job = CleanupExpiredSessionGrantsJob,
+    span = "job.cleanup_expired_session_grants",
+    repo = oauth2_session_grant,
+    method = cleanup_expired,
+    cutoff = |state: &crate::State| state.clock().now() - chrono::Duration::hours(1),
+    timeout_secs = 10 * 60,
+    empty = "no expired session grants to clean up",
+    done = "cleaned up expired session grants",
 );

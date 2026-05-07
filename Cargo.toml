@@ -36,6 +36,7 @@ broken_intra_doc_links = "deny"
 
 # Workspace crates
 coauth = { path = "./crates/cli/", version = "=1.8.0" }
+coauth-admin-types = { path = "./crates/admin-types/", version = "=1.8.0" }
 coauth-backend = { path = "./crates/backend/", version = "=1.8.0" }
 coauth-config = { path = "./crates/config/", version = "=1.8.0" }
 coauth-data = { path = "./crates/data/", version = "=1.8.0" }

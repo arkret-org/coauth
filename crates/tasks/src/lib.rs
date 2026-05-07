@@ -142,6 +142,7 @@ fn register_all_handlers(w: &mut QueueWorker) {
     w.register_handler::<queue::CleanupConsumedOAuthRefreshTokensJob>();
     w.register_handler::<queue::CleanupFinishedOAuth2SessionsJob>();
     w.register_handler::<queue::CleanupFinishedUserSessionsJob>();
+    w.register_handler::<queue::CleanupExpiredSessionGrantsJob>();
 
     // Grant & device-code cleanup
     w.register_handler::<queue::CleanupOAuthAuthorizationGrantsJob>();
@@ -249,6 +250,12 @@ fn attach_recurring_schedules(w: &mut QueueWorker) -> Result<(), QueueRunnerErro
         "cleanup-inactive-user-session-ips",
         "0 25 * * * *".parse()?,
         queue::CleanupInactiveUserSessionIpsJob,
+    );
+    w.add_schedule(
+        "cleanup-expired-session-grants",
+        // Hourly at minute 27, just ahead of the auth-grant slot.
+        "0 27 * * * *".parse()?,
+        queue::CleanupExpiredSessionGrantsJob,
     );
 
     // -- Hourly grant cleanup (minutes 30-35) -----------------------------

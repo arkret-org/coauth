@@ -60,6 +60,7 @@ opentelemetry_sdk.workspace = true
 sentry.workspace = true
 sentry-tracing.workspace = true
 
+coauth-admin-types = { workspace = true, features = ["schema"] }
 coauth-config.workspace = true
 coauth-data.workspace = true
 coauth-messaging.workspace = true

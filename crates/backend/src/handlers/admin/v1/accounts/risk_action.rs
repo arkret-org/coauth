@@ -5,11 +5,15 @@
 //! `_todos.md`.
 
 use chrono::{DateTime, Utc};
+use coauth_admin_types::{
+    AccountRiskActionApprovalRequest, AccountRiskActionExecuteRequest,
+    AccountRiskActionProposalRequest,
+};
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_data::{AdminUserPatch, RepositoryAccess};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use ulid::Ulid;
 
 use crate::{
@@ -23,53 +27,6 @@ use crate::{
     },
     services::risk_action_state::RiskActionStateService,
 };
-
-#[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "AccountRiskActionProposalRequest")]
-pub struct AccountRiskActionProposalRequest {
-    /// Risk action to stage for approval: `lock`, `disable`, `erase`, or
-    /// `reset_recovery`.
-    action: String,
-
-    /// Human reason for the requested action.
-    reason: Option<String>,
-
-    /// Optional ticket or incident reference.
-    ticket: Option<String>,
-
-    /// Optional approver identifier. Leave empty while the request is still a
-    /// draft proposal.
-    approved_by: Option<String>,
-}
-
-#[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "AccountRiskActionApprovalRequest")]
-pub struct AccountRiskActionApprovalRequest {
-    /// Risk action being approved.
-    action: String,
-
-    /// Optional ticket or incident reference.
-    ticket: Option<String>,
-
-    /// Optional approver identifier override.
-    approved_by: Option<String>,
-
-    /// Human approval note for the scaffold audit trail.
-    approval_note: Option<String>,
-}
-
-#[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "AccountRiskActionExecuteRequest")]
-pub struct AccountRiskActionExecuteRequest {
-    /// Risk action being executed.
-    action: String,
-
-    /// Optional ticket or incident reference.
-    ticket: Option<String>,
-
-    /// Human execution note for the scaffold trail.
-    execution_note: Option<String>,
-}
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionProposalResponse {

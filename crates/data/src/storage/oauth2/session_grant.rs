@@ -148,6 +148,27 @@ pub trait SessionGrantRepository: Send + Sync {
         clock: &dyn Clock,
         grant: SessionGrant,
     ) -> Result<SessionGrant, Self::Error>;
+
+    /// Delete session grants whose `expires_at` is strictly before `until`.
+    ///
+    /// Mirrors the time-cursor cleanup contract used elsewhere
+    /// (e.g. `oauth2_session.cleanup_finished`): paginates through
+    /// matching rows in `expires_at` ascending order, returns the count
+    /// deleted in this batch and the latest `expires_at` processed so a
+    /// later call can resume from `since = next_cursor`.
+    ///
+    /// # Parameters
+    ///
+    /// * `since`: Only delete grants with `expires_at` at or after this
+    ///   timestamp. `None` starts from the beginning.
+    /// * `until`: Latest `expires_at` to delete (exclusive).
+    /// * `limit`: Maximum number of grants to delete in this batch.
+    async fn cleanup_expired(
+        &mut self,
+        since: Option<DateTime<Utc>>,
+        until: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
 }
 
 repository_impl!(SessionGrantRepository:
@@ -176,4 +197,11 @@ repository_impl!(SessionGrantRepository:
         clock: &dyn Clock,
         grant: SessionGrant,
     ) -> Result<SessionGrant, Self::Error>;
+
+    async fn cleanup_expired(
+        &mut self,
+        since: Option<DateTime<Utc>>,
+        until: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
 );
