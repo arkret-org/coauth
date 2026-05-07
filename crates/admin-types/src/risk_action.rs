@@ -12,6 +12,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::envelope::Resource;
+
 /// Stage a new risk-action proposal against an account.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(
@@ -327,6 +329,22 @@ pub struct AccountRiskActionCurrentResponse {
     /// Remaining implementation work for this scaffold state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub todo: Option<String>,
+}
+
+impl Resource for AccountRiskActionCurrentResponse {
+    const KIND: &'static str = "account-risk-action-current";
+    const PATH: &'static str = "/api/admin/v1/accounts";
+
+    fn id(&self) -> String {
+        self.account_id.clone()
+    }
+
+    fn path(&self) -> String {
+        format!(
+            "/api/admin/v1/accounts/{}/risk-action/current",
+            self.account_id
+        )
+    }
 }
 
 /// Page of risk-action transitions for an account.

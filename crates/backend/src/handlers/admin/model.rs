@@ -17,24 +17,11 @@ use thiserror::Error;
 use ulid::Ulid;
 use url::Url;
 
-/// A resource, with a type and an ID
-pub trait Resource {
-    /// The type of the resource
-    const KIND: &'static str;
-
-    /// The canonical path prefix for this kind of resource
-    const PATH: &'static str;
-
-    /// The ID of the resource
-    fn id(&self) -> Ulid;
-
-    /// The canonical path for this resource
-    ///
-    /// This is the concatenation of the canonical path prefix and the ID
-    fn path(&self) -> String {
-        format!("{}/{}", Self::PATH, self.id())
-    }
-}
+// `Resource` lives in `coauth_admin_types::envelope` so admin DTOs and
+// their wrappers stay in lock-step on both server and client. Re-exported
+// here for the historical `crate::handlers::admin::model::Resource` path
+// that existing handlers depend on.
+pub use coauth_admin_types::Resource;
 
 /// A user
 #[derive(Serialize, JsonSchema, ToSchema)]

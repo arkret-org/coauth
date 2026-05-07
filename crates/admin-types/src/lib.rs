@@ -15,6 +15,8 @@
 //! gated behind the `schema` feature so that pure clients like `sodmin`
 //! do not transitively pull salvo + schemars.
 
+pub mod envelope;
 pub mod risk_action;
 
+pub use envelope::*;
 pub use risk_action::*;
