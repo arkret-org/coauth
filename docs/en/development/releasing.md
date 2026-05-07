@@ -1,10 +1,10 @@
 # Releasing
 
-Pasion follows the same release cadence as Palpo, meaning usually one full release cycle every two weeks, with one week of release candidates.
+coauth follows a two-week release cadence: one full release cycle every two weeks, with one week of release candidates beforehand.
 
 ## GitHub Action workflows
 
-There are four main GitHub Action workflows involved in releasing Pasion:
+There are four main GitHub Action workflows involved in releasing coauth:
 
 ### [`translations-download` workflow]
 
@@ -58,7 +58,7 @@ For `v*` tags:
 On the main branch:
 
  - It will push the container image with the `sha-HASH` and `main` tags.
- - It will update the [`unstable`](https://github.com/taidge/coauth/releases/tag/unstable) GitHub release with the built container image and pre-built binaries.
+ - It will update the [`unstable`](https://github.com/contrix-dev/coauth/releases/tag/unstable) GitHub release with the built container image and pre-built binaries.
 
 When a PR is tagged with the `Z-Build-Workflow` label:
 
@@ -82,6 +82,21 @@ The configuration for those can be found in the `.github/release.yml`, but the m
  - `A-Dependencies`: Dependency updates
 
 They are calculated based on the previous release. For release candidates, this includes the previous release candidate.
+
+## Container image signing
+
+Published container images are signed with [Sigstore Cosign](https://docs.sigstore.dev/cosign/overview/) using GitHub OIDC keyless signing. **Signing only runs on tagged `v*` releases and on `main`** (see [`.github/workflows/release.yaml`](https://github.com/contrix-dev/coauth/blob/main/.github/workflows/release.yaml)). PR / branch builds are intentionally unsigned because the GitHub OIDC identity is not stable for short-lived builds and would create a forest of single-use Rekor entries.
+
+Operators can verify a release like this:
+
+```sh
+cosign verify \
+  --certificate-identity-regexp 'https://github\.com/contrix-dev/coauth/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/contrix-dev/coauth:vX.Y.Z
+```
+
+If you need to verify a per-PR build, fall back to `docker pull` + the recorded digest from the workflow run.
 
 ## Undrafting releases
 
@@ -114,10 +129,10 @@ At this point, the releaser should check the changelog and ensure the "Set as pr
    1. Check the "Set as latest release" checkbox and publish the release.
 
 [Localazy]: https://localazy.com/p/coauth
-[`translations-download` workflow]: https://github.com/taidge/coauth/actions/workflows/translations-download.yaml
-[`release-branch` workflow]: https://github.com/taidge/coauth/actions/workflows/release-branch.yaml
-[`release-bump` workflow]: https://github.com/taidge/coauth/actions/workflows/release-bump.yaml
-[`release` workflow]: https://github.com/taidge/coauth/actions/workflows/release.yaml
-[translation download PR]: https://github.com/taidge/coauth/pulls?q=is%3Apr+label%3AA-I18n
-[CI to churn]: https://github.com/taidge/coauth/actions/workflows/release.yaml?query=event%3Apush+actor%3Amatrixbot
-[draft release to appear]: https://github.com/taidge/coauth/releases
+[`translations-download` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/translations-download.yaml
+[`release-branch` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/release-branch.yaml
+[`release-bump` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/release-bump.yaml
+[`release` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/release.yaml
+[translation download PR]: https://github.com/contrix-dev/coauth/pulls?q=is%3Apr+label%3AA-I18n
+[CI to churn]: https://github.com/contrix-dev/coauth/actions/workflows/release.yaml?query=event%3Apush+actor%3Amatrixbot
+[draft release to appear]: https://github.com/contrix-dev/coauth/releases

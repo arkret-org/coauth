@@ -14,6 +14,7 @@
 - [配置反向代理](./setup/reverse-proxy.md)
 - [配置上游 SSO 提供商](./setup/sso.md)
 - [运行服务](./setup/running.md)
+- [使用 Docker 运行](./setup/docker.md)
 
 # 专题
 
@@ -22,6 +23,11 @@
 - [使用管理 API](./topics/admin-api.md)
 - [获取访问令牌](./topics/access-token.md)
 - [Legacy 兼容路由](./topics/legacy-compatibility.md)
+
+# 运维
+
+- [备份与恢复](./operations/backup-restore.md)
+- [升级](./operations/upgrades.md)
 
 # 参考
 

@@ -4,7 +4,7 @@
 //
 // Portions based on mas-cli by The Matrix.org Foundation C.I.C.
 
-//! CLI subcommands for managing the Pasion instance (users, tokens, sessions,
+//! CLI subcommands for managing the coauth instance (users, tokens, sessions,
 //! etc.).
 
 mod command_handlers;

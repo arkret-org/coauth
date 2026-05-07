@@ -1,23 +1,23 @@
 # Contributing
 
-This document aims to get you started with contributing to the Pasion!
+This document aims to get you started with contributing to the coauth!
 
-## 1. Who can contribute to Pasion?
+## 1. Who can contribute to coauth?
 
-Everyone is welcome to contribute code to [Pasion](https://github.com/taidge/coauth), provided that they are willing to license their contributions to Element under a [Contributor License Agreement](https://cla-assistant.io/palpo-im/coauth) (CLA). This ensures that their contribution will be made available under an OSI-approved open-source license, currently Affero General Public License v3 (AGPLv3).
+Everyone is welcome to contribute code to [coauth](https://github.com/contrix-dev/coauth), provided that they are willing to license their contributions to Element under a [Contributor License Agreement](https://cla-assistant.io/contrix-dev/coauth) (CLA). This ensures that their contribution will be made available under an OSI-approved open-source license, currently Affero General Public License v3 (AGPLv3).
 
 Please see the [Element blog post](https://element.io/blog/palpo-now-lives-at-github-com-palpo-im-palpo/) for the full rationale.
 
 ## 2. What can I contribute?
 
-There are two main ways to contribute to Pasion:
+There are two main ways to contribute to coauth:
 
-- **Code and documentation**: You can contribute code to the Pasion and help improve its documentation by submitting pull requests to the [GitHub repository](https://github.com/taidge/coauth).
-- **Translations**: You can contribute translations to the Pasion through [Localazy](https://localazy.com/p/coauth).
+- **Code and documentation**: You can contribute code to coauth and help improve its documentation by submitting pull requests to the [GitHub repository](https://github.com/contrix-dev/coauth).
+- **Translations**: You can contribute translations to the coauth through [Localazy](https://localazy.com/p/coauth).
 
 ## 3. What do I need?
 
-To get Pasion running locally from source you will need to:
+To get coauth running locally from source you will need to:
 
 - [Install Rust and Cargo](https://www.rust-lang.org/learn/get-started). We recommend using the latest stable version of Rust.
 - [Install Node.js and npm](https://nodejs.org/). We recommend using the latest LTS version of Node.js.
@@ -37,7 +37,7 @@ git checkout main
 
 If you need help getting started with git, this is beyond the scope of the document, but you can find many good git tutorials on the web.
 
-## 5. Build and run Pasion
+## 5. Build and run coauth
 
 - Build the frontend
   ```sh
@@ -119,4 +119,4 @@ From this point, you should:
  1. Back to 1.
  1. Once the pull request is ready for review again, please **re-request review** from whichever developer did your initial review (or leave a comment in the pull request that you believe all required changes have been made).
 
-Once both the CI and the developers are happy, the patch will be merged into Pasion and released shortly!
+Once both the CI and the developers are happy, the patch will be merged into coauth and released shortly!

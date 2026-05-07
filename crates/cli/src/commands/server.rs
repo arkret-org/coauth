@@ -48,8 +48,9 @@ pub(super) struct Options {
 impl Options {
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
         let span = info_span!("cli.run.init").entered();
-        let mut shutdown = LifecycleManager::new()?;
         let config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
+        let mut shutdown = LifecycleManager::new()?
+            .with_timeout(Duration::from_secs(config.http.shutdown_grace_seconds));
 
         info!(version = crate::VERSION, "Starting up");
 
@@ -222,6 +223,19 @@ impl Options {
         shutdown.register_reloadable(&activity_tracker);
 
         let trusted_proxies = config.http.trusted_proxies.clone();
+        let max_body_bytes = config.http.max_body_bytes;
+        let request_timeout_seconds = config.http.request_timeout_seconds;
+        let shutdown_grace_seconds = config.http.shutdown_grace_seconds;
+        let hsts_header = config.http.hsts.as_ref().map(|hsts| {
+            let mut value = format!("max-age={}", hsts.max_age_seconds);
+            if hsts.include_subdomains {
+                value.push_str("; includeSubDomains");
+            }
+            if hsts.preload {
+                value.push_str("; preload");
+            }
+            value
+        });
 
         // Build a rate limiter.
         // This should not raise an error here as the config should already have been
@@ -264,6 +278,10 @@ impl Options {
                 limiter,
                 frontend_script_src,
                 email_webhook_service,
+                max_body_bytes,
+                request_timeout_seconds,
+                shutdown_grace_seconds,
+                hsts_header,
             };
             s.init_metrics();
             s.init_metadata_cache();

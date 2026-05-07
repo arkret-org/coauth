@@ -62,7 +62,7 @@ WantedBy=multi-user.target
 ```yaml
 services:
   coauth:
-    image: ghcr.io/taidge/coauth:latest
+    image: ghcr.io/contrix-dev/coauth:latest
     command: server -c /config.yaml
     volumes:
       - ./config.yaml:/config.yaml:ro

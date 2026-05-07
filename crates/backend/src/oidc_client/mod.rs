@@ -30,7 +30,7 @@
 //!
 //! [OpenID Connect]: https://openid.net/connect/
 //! [Matrix]: https://matrix.org/
-//! [Pasion]: https://github.com/taidge/coauth
+//! [Pasion]: https://github.com/contrix-dev/coauth
 //! [MSC3861]: https://github.com/matrix-org/matrix-spec-proposals/pull/3861
 //! [OAuth 2.0]: https://oauth.net/2/
 

@@ -108,12 +108,12 @@ server {
 
 ## Preserve the client IP
 
-For rate-limiting and logging purposes, Pasion needs to know the client IP address, which can be lost when using a reverse proxy.
+For rate-limiting and logging purposes, coauth needs to know the client IP address, which can be lost when using a reverse proxy.
 There are two ways to preserve the client IP address
 
 ### `X-Forwarded-For` header
 
-Pasion can infer the client IP address from the `X-Forwarded-For` header.
+coauth can infer the client IP address from the `X-Forwarded-For` header.
 It will trust the value for this header only if the request comes from a trusted reverse proxy.
 
 The range of IPs that can be trusted is configured using the `trusted_proxies` configuration option, which has the default private IP ranges.
@@ -131,9 +131,15 @@ http:
 
 With nginx, this can be achieved by setting the `proxy_set_header` directive to `X-Forwarded-For $proxy_add_x_forwarded_for`.
 
+> **Do not** widen `trusted_proxies` to `0.0.0.0/0` or `::/0`. Anything
+> in the trust list can spoof the client IP, which directly defeats
+> rate limiting and account-enumeration controls. List the smallest
+> CIDR set that covers the actual proxy fleet — and prefer running
+> the proxy on a private network so the fleet is bounded by routing.
+
 ### Proxy protocol
 
-Pasion supports the [PROXY protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) to preserve the client IP address.
+coauth supports the [PROXY protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) to preserve the client IP address.
 To enable it, enable the `proxy_protocol` option on the listener:
 
 ```yaml
@@ -168,7 +174,7 @@ http:
         - name: oauth
         - name: compat
         - name: restapi
-        # Pasion doesn't need to serve the assets anymore
+        # coauth doesn't need to serve the assets anymore
         #- name: assets
       binds:
         - address: "[::]:8080"

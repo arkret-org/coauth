@@ -67,6 +67,15 @@ pub enum PhoneAuthenticationLimitedError {
     Phone(String),
 }
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum DidBindingLimitedError {
+    #[error("Too many DID-binding mutations for requester {0}")]
+    Requester(RequesterFingerprint),
+
+    #[error("Too many DID-binding mutations for account {0}")]
+    Account(Ulid),
+}
+
 // ---------------------------------------------------------------------------
 // RequesterFingerprint (unchanged)
 // ---------------------------------------------------------------------------
@@ -162,6 +171,8 @@ struct LimiterInner {
     phone_authentication_per_phone: KeyedLimiter<String>,
     phone_authentication_sms_per_session: KeyedLimiter<Ulid>,
     phone_authentication_attempt_per_session: KeyedLimiter<Ulid>,
+    did_binding_per_requester: KeyedLimiter<RequesterFingerprint>,
+    did_binding_per_account: KeyedLimiter<Ulid>,
 }
 
 impl LimiterInner {
@@ -200,6 +211,8 @@ impl LimiterInner {
             phone_authentication_attempt_per_session: KeyedLimiter::from_config(
                 &config.phone_authentication.attempt_per_session,
             )?,
+            did_binding_per_requester: KeyedLimiter::from_config(&config.did_binding.per_ip)?,
+            did_binding_per_account: KeyedLimiter::from_config(&config.did_binding.per_account)?,
         })
     }
 }
@@ -444,6 +457,28 @@ impl Limiter {
             return Err(PhoneAuthenticationLimitedError::Authentication(
                 authentication.id,
             ));
+        }
+
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // DID binding
+    // -----------------------------------------------------------------------
+
+    /// Check whether a DID-binding mutation (attach / remove) may proceed
+    /// for the given source IP and target account.
+    pub async fn check_did_binding(
+        &self,
+        requester: RequesterFingerprint,
+        account_id: Ulid,
+    ) -> Result<(), DidBindingLimitedError> {
+        if !self.inner.did_binding_per_requester.check(&requester).await {
+            return Err(DidBindingLimitedError::Requester(requester));
+        }
+
+        if !self.inner.did_binding_per_account.check(&account_id).await {
+            return Err(DidBindingLimitedError::Account(account_id));
         }
 
         Ok(())

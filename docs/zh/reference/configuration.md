@@ -45,6 +45,15 @@ http:
 - `adminapi`：`/api/admin/v1/*`
 - `health`、`prometheus`：运维端点
 
+### 请求体限制与超时
+
+| 键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `http.max_body_bytes` | `1048576` (1 MiB) | 请求体最大字节数；与 Contrix `cx.server.describe.limits.max_body_bytes` 对齐。 |
+| `http.request_timeout_seconds` | `30` | 每请求处理超时；填 `0` 表示关闭。 |
+| `http.shutdown_grace_seconds` | `30` | 收到 SIGTERM/SIGINT 后给在途请求的完成时间。 |
+| `http.trusted_proxies` | RFC1918 + 回环 | 允许设置 `X-Forwarded-For` 的 CIDR 段，详见 [反向代理](../setup/reverse-proxy.md)。 |
+
 ## `database`
 
 PostgreSQL 连接配置。

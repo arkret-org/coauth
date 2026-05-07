@@ -101,6 +101,10 @@ impl AppError {
         Self::new(StatusCode::NOT_IMPLEMENTED, message)
     }
 
+    pub fn too_many_requests(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::TOO_MANY_REQUESTS, message)
+    }
+
     pub fn status(&self) -> StatusCode {
         self.status
     }
