@@ -70,35 +70,35 @@ return 501 or use scaffolded state.
 
 ---
 
-## P1: v1 wire model rework — invite / consent gate
+## P1: Move / Anchor / Lattice — invite / consent gate
 
-> Source: `contrix-spec` 2026-05-07 finished Phase 1-5. See root [`../_todos.md` C10.E](../_todos.md).
+> Source: `contrix-spec` 2026-05-08 用 Move/Anchor/Lattice 替换旧 state slot 模型。See root [`../_todos.md` C10.E](../_todos.md) and [`../contrix-spec/_state_todos.md`](../contrix-spec/_state_todos.md).
 >
-> Coauth impact is small (mainly invite flow + holder-private consent gate). DID
-> binding write paths are unaffected because consent is orthogonal to DID
-> control proofs.
+> Coauth impact is still small. The legacy Phase 1-5 "host endorsement when coauth is Space Host" item is **整体作废** — host endorsement is gone; an anchorer cell governs Anchor signing instead. If coauth ever runs as anchorer, see the new `anchorer signer (rare)` item below.
 
-- [ ] **Invite consent gate** (spec Phase 5 §6.1): before issuing or relaying
-      an invite to a target principal, query holder consent in their principal
-      control Space (`(peer=requester, scope="invite" OR scope="any")`). Match
-      cases:
+- [ ] **Invite consent gate** (spec consent-model §6.1, rebased onto Move): before
+      issuing or relaying an invite to a target principal, query the holder's
+      consent cell (`cx:cell:cx.component.consent.v1:<consent_id>`) in their
+      principal control Space and read its or-set join value to determine
+      whether `(peer=requester, scope="invite" OR scope="any")` is currently
+      granted. Match cases:
   - granted + active window → continue normal invite flow
   - revoked or absent + `cx.space.policy_components.preauth.require_consent`
     is true → reject with `consent_required`
   - revoked or absent + default profile → route to holder's quarantine inbox
-    (deliver as a "stranger invite" candidate awaiting review)
-- [ ] **MIMI consent interop** (spec Phase 5 §7): when accepting incoming
+- [ ] **MIMI consent interop** (rebased onto Move): when accepting incoming
       MIMI `request_consent` / `update_consent`, validate the actor is the
-      declared holder or an authorized controller, then map to
-      `cx.consent.grant` / `cx.consent.revoke` event written to that holder's
-      principal control Space; preserve `consent_id` as inter-protocol
-      correlation.
-- [ ] **Host endorsement when coauth runs as Space Host (rare)**: typical
-      deployments have soland as host, but if coauth controls a principal
-      control Space and acts as its host, the same `host_endorsement` proof
-      issuance applies (spec Phase 4 §3.3). This is mostly a configuration /
-      operational concern, not a wire change inside coauth's existing OIDC /
-      session-grant surface.
+      declared holder or an authorized controller, then construct a Move on
+      the holder's consent cell (or-set: grant=add tag, revoke=remove tag)
+      written into that holder's principal control Space; preserve
+      `consent_id` as inter-protocol correlation.
+- [ ] **Anchorer signer (rare deployment mode)**: typical deployments have
+      soland as anchorer for principal control Spaces; if coauth controls a
+      principal control Space and acts as its anchorer, coauth needs a light
+      anchorer signer (single_did profile) — share the contrix-rust-sdk
+      lattice + anchor crate rather than reimplementing. (Replaces the legacy
+      "host endorsement when coauth runs as Space Host" item, which is
+      作废 under the new model.)
 
 ---
 
