@@ -236,6 +236,12 @@ impl Options {
             }
             value
         });
+        let csp_html_header = config
+            .http
+            .csp_html
+            .as_ref()
+            .map(|raw| raw.trim().to_owned())
+            .filter(|value| !value.is_empty());
 
         // Build a rate limiter.
         // This should not raise an error here as the config should already have been
@@ -282,6 +288,7 @@ impl Options {
                 request_timeout_seconds,
                 shutdown_grace_seconds,
                 hsts_header,
+                csp_html_header,
             };
             s.init_metrics();
             s.init_metadata_cache();

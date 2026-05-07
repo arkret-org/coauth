@@ -584,6 +584,21 @@ pub async fn homeserver_connection_from_config(
 ) -> anyhow::Result<(Arc<dyn HomeserverAdmin>, ConnectorRegistry)> {
     let mut registry = ConnectorRegistry::new();
 
+    if !config.enabled {
+        // Legacy Matrix / Palpo adapter retired for this deployment.
+        // Wire a no-op stub for any code path that still reaches for
+        // `homeserver_admin`, and leave the connector registry empty so
+        // the connector-health surface honestly reports "no connector".
+        // The handshake against a real homeserver is skipped entirely.
+        tracing::info!(
+            "Matrix homeserver adapter disabled (matrix.enabled = false); using no-op stub"
+        );
+        let stub: Arc<dyn HomeserverAdmin> = Arc::new(
+            coauth_matrix::MockHomeserverAdmin::new(config.homeserver.clone()),
+        );
+        return Ok((stub, registry));
+    }
+
     Ok(match config.kind {
         HomeserverKind::Palpo | HomeserverKind::PalpoModern => {
             let palpo = Arc::new(PalpoAdmin::new(

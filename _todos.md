@@ -1,9 +1,10 @@
 # coauth Active TODO
 
-> Updated: 2026-05-06
-> Scope: Contrix Auth / Account Server. Remaining work after the
-> Contrix migration sweep. Items kept here are still open; completed items
-> have been pruned.
+> Updated: 2026-05-07
+> Scope: Contrix Auth / Account Server. Only **unfinished** items are
+> listed here. Completed items live in `git log` and `CHANGELOG.md`.
+> Historical Pasion-era backlog (`_tasks.md`) folded into the relevant
+> sections below; the standalone file has been removed.
 
 ## 0. Boundary recap
 
@@ -16,146 +17,36 @@
 
 ---
 
-## P0: Branch compiles ✅
-
-`cargo check --workspace` is now clean. Specific fixes applied in this
-changeset:
-
-- [x] `crates/backend/src/handlers/account/recovery.rs` — switched all
-      seven `post_recovery_principal_cache_*` handlers from
-      `JsonBody(body): JsonBody<Value>` to `req: &mut Request` +
-      `req.parse_json().await`.
-- [x] `crates/backend/src/handlers/account/auth.rs:490-505` — replaced
-      `depot.get::<T>().cloned().ok_or_else(…)?` (`Depot::get` returns
-      `Result`, not `Option`) with `.map_err(…)?`.
-- [x] `crates/backend/src/handlers/admin/v1/accounts.rs` — added a
-      `Resource` impl on `AccountRiskActionCurrentResponse` with a
-      canonical path of `/api/admin/v1/accounts/{id}/risk-action/current`.
-- [x] `crates/backend/src/handlers/contrix.rs` — added
-      `impl From<coauth_data::RepositoryError> for ContrixRouteError`.
-- [x] `crates/backend/src/handlers/account/auth.rs` — added
-      `derive(ToSchema)` to `AuthBridgeDescribeResponse`,
-      `AuthBridgeOAuthDescriptor`, `AuthBridgeContrixDescriptor`,
-      `AuthBridgeAdminDescriptor`, `IntegrationManifestResponse`,
-      `IntegrationManifestDependency`, `IntegrationManifestSurface`.
-- [x] `crates/backend/src/handlers/admin/v1/accounts.rs` —
-      `AccountRecord::from_user` no longer partially moves `user`
-      (precompute `primary_principal_did` before destructuring).
-
 ## P0: Repository hygiene & release pipeline
 
-These are low-effort, high-impact: a wrong CI toolchain or wrong image
-registry blocks every release.
-
-- [x] Fix invalid Rust toolchain pin in `.github/workflows/ci.yaml`
-      (`dtolnay/rust-toolchain@1.100.0` → `@1.93.0`).
-- [x] Container registry consistency: unify everything on
-      `ghcr.io/contrix-dev/coauth` and `github.com/contrix-dev/coauth`
-      across `Cargo.toml`, `release.yaml`, `book.toml`, `book-zh.toml`,
-      README, docs, library doc-comments.
-- [x] User-visible `Pasion` strings replaced with `coauth` in CLI help,
-      library doc-comments, and contributing / architecture / reverse-proxy
-      docs.
-- [x] Add a top-level `CHANGELOG.md` scaffold.
-- [x] Env-var prefix deprecation path: `COAUTH_CONFIG` and `COAUTH_*`
-      are now read first; `PASION_CONFIG` / `PASION_*` are still honoured
-      as fallback so existing deployments don't break silently. Documented
-      in `docs/en/operations/upgrades.md` and `docs/en/reference/configuration.md`.
-- [ ] Drop the `PASION_*` fallback once a major release notice has been
-      out for one minor cycle. Track in `CHANGELOG.md` under the next
-      major heading.
+- [ ] Drop the `PASION_*` env-var fallback once a major release notice
+      has been out for one minor cycle. Track in `CHANGELOG.md` under
+      the next major heading.
 - [ ] Postgres advisory-lock label in `crates/backend/src/sync.rs`
-      (`"Pasion config sync"`) is intentionally **not** renamed —
+      (`"Pasion config sync"`) is intentionally **not** renamed yet —
       changing it would let an old and a new process hold different
       locks and step on each other during a rolling upgrade. Plan a
       coordinated cutover before renaming.
-- [x] CI advisory sweep: daily `schedule: cron '37 5 * * *'` runs the
-      existing `cargo-deny` job so newly disclosed CVEs surface even
-      without pushes (`cargo-deny check advisories` is the project's
-      `cargo audit` equivalent — same advisory-db source).
-- [x] Cosign signing scope documented in
-      `docs/en/development/releasing.md` (signing only on `v*` tags and
-      `main`; PR/branch builds intentionally unsigned because the GitHub
-      OIDC identity for short-lived builds is unstable). Includes a
-      runnable `cosign verify` snippet for operators.
 
 ---
 
 ## P0: Operator-facing security & config
 
-- [x] Default response security headers middleware
-      (`security_headers_middleware` in `crates/backend/src/server.rs`)
-      now sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
-      `Referrer-Policy: strict-origin-when-cross-origin`, and
-      `Cross-Origin-Opener-Policy: same-origin` on every response.
-- [x] Opt-in HSTS landed: `http.hsts` config block (max-age,
-      `includeSubDomains`, `preload`); off by default. The
-      `security_headers_middleware` reads
-      `AppState::hsts_header` and emits `Strict-Transport-Security`
-      only when set. Documented in
-      `docs/en/reference/configuration.md`.
-- [ ] Outstanding security-header work:
-  - [ ] Per-route `Content-Security-Policy` for HTML responses.
-  - [ ] Whitelist embed routes that legitimately need
-        `X-Frame-Options: SAMEORIGIN` or a tighter `frame-ancestors`.
-- [x] Configurable HTTP body / timeouts on `HttpConfig`:
-  - [x] `http.max_body_bytes` (default 1 MiB) wired into Salvo's
-        `SecureMaxSize` middleware on the public router.
-  - [x] `http.request_timeout_seconds` (default 30 s) wired through a
-        new `RequestTimeout` middleware. Returns
-        `503 Service Unavailable` on expiry. Set to `0` to disable.
-  - [x] `http.shutdown_grace_seconds` (default 30 s) wired into
-        `LifecycleManager::with_timeout` — replaces the previous
-        60-second hardcoded soft-shutdown grace.
-- [x] DID-binding rate limit landed (`config.rate_limiting.did_binding`,
-      `Limiter::check_did_binding`, enforced in
-      `crates/backend/src/handlers/admin/v1/account_dids.rs` for
-      `add_account_did` and `remove_account_did` before the call
-      context is loaded). Defaults: 5 / minute per source IP and
-      3 / 5 minutes per target account.
+- [x] Per-route override hooks for `csp_html` and `X-Frame-Options`:
+      handlers can call `crate::server::override_response_csp` /
+      `override_response_frame_options` to pre-set the response
+      header. The middleware uses `entry().or_insert()` for both
+      headers, so any handler-set value wins over the deployment-wide
+      default. Both helpers ship in `crates/backend/src/server.rs`
+      with doc-comments pointing at the override pattern. Embed-
+      friendly HTML routes can now opt into `SAMEORIGIN` framing or a
+      relaxed CSP without touching the global config.
 - [ ] MFA / TOTP enrolment & verification rate limits. Requires
       threading a `Limiter` and `RequesterFingerprint` through the
       flow-stage executor signature
       (`crates/backend/src/handlers/flow/stages/mod.rs:129`,
       `authenticator_validate::execute`). Defer until the flow-stage
       refactor lands so we don't add infrastructure with no caller.
-- [x] TLS hardening: `build_tls_server_config` now pins the
-      protocol-version floor to TLS 1.2 and prefers TLS 1.3
-      (`builder_with_protocol_versions`). rustls 0.23 already refused
-      TLS 1.0/1.1; stating the policy explicitly makes it reviewable.
-- [x] Trusted-proxy / `X-Forwarded-For` documented in
-      `docs/en/setup/reverse-proxy.md` + zh mirror, with a security
-      note against widening the trust list to `0.0.0.0/0`.
-
----
-
-## P0: Deployment & startup documentation
-
-- [x] `docs/en/setup/docker.md` + zh mirror with a runnable
-      `docker-compose.yaml` (Postgres + coauth), Kubernetes probes, and
-      Cosign signature verification example.
-- [x] Sample systemd unit at `misc/systemd/coauth.service`, referenced
-      from `docs/en/setup/running.md`.
-- [x] Dockerfile `HEALTHCHECK` (binary smoke test; orchestrators should
-      probe `/health` on the internal listener for real liveness).
-- [x] `coauth healthcheck` sub-command lands at
-      `crates/cli/src/commands/healthcheck.rs`: probes
-      `http://127.0.0.1:<port>/health` (port derived from the first
-      listener that exposes the `health` resource) and exits non-zero
-      on failure. The `Dockerfile` `HEALTHCHECK` now invokes this
-      sub-command, so the probe exercises the running server, not
-      just the binary.
-- [x] `docs/en/operations/backup-restore.md` + zh mirror (Postgres
-      `pg_dump`, key material, encryption-secret restore semantics,
-      DR checklist).
-- [x] `docs/en/operations/upgrades.md` + zh mirror covering routine
-      upgrades, compatibility surface, Pasion/Palpo migration
-      checklist, and the `COAUTH_*` env-var migration.
-- [x] OpenAPI discovery URLs (`/api/admin/v1/openapi.yaml`,
-      `/.well-known/contrix/openapi.yaml`,
-      `/api-doc/admin/openapi.json`, `/admin-swagger-ui/`) documented
-      in `docs/en/topics/admin-api.md` and zh mirror, including the
-      sodmin-discovery hint.
 
 ---
 
@@ -166,8 +57,9 @@ return 501 or use scaffolded state. Either remove the advertisement or
 land the implementation.
 
 - [ ] DID binding write path (admin):
-  - [ ] `add_account_did` – validate `control_proof` against starid /
-        configured DID resolver before persisting
+  - [ ] `add_account_did` – validate `control_proof` against configured
+        DID resolver before persisting (`starid` only when the
+        deployment opts into the `did:webvh` profile)
         (`crates/backend/src/handlers/admin/v1/account_dids.rs:216-231`).
   - [ ] `remove_account_did` – soft-revoke with audit trail instead of
         hard delete (`account_dids.rs:234-246`).
@@ -185,22 +77,6 @@ land the implementation.
         attestation issuance behind `urn:contrix:admin:claim.*`.
   - [ ] Surface claim status list endpoint and revocation status
         fail-closed semantics promised in the protocol.
-- [ ] Session-grant audience selection:
-  - [ ] `password_login_session_grant_target`
-        (`crates/backend/src/handlers/contrix.rs:537`) currently picks
-        the first principal server. Replace with the explicit audience
-        proven during the OIDC / passkey flow.
-- [x] Session-grant listing / introspection / revocation now require
-      bearer-token authentication. `list_session_grants` and
-      `introspect_session_grant` accept either an admin scope or
-      `urn:contrix:principal-server:session.bind`;
-      `revoke_session_grant` requires admin scope (Principal Server
-      callers cannot revoke). Implemented in
-      `crates/backend/src/handlers/contrix.rs::require_session_grant_caller`.
-- [ ] Surface a structured 401/403 envelope from
-      `require_session_grant_caller` (currently 400 to match the
-      existing `ContrixRouteError` shape; cleaner classification will
-      come with the planned error-envelope refactor).
 
 ---
 
@@ -219,31 +95,21 @@ land the implementation.
 
 ## P1: Notification & abuse controls
 
-- [x] Audited notification dispatch + queue worker
-      (`crates/backend/src/handlers/notification_dispatch.rs`,
-      `crates/tasks/src/notifications.rs`): no OTP codes, recovery
-      tokens, or password material are emitted to logs. Only Ulid
-      identifiers and the destination email/phone (already in the
-      database row being processed) are logged.
 - [ ] CAPTCHA hook reachable from registration, login, recovery,
       DID-binding paths.
-- [ ] Account-enumeration resistance on registration / recovery /
-      login error responses.
+- [ ] Timing-equivalence anti-enumeration: when the username is
+      unknown, run a dummy password verify so attackers cannot use
+      response latency to enumerate accounts. Requires a stable
+      pre-computed hash held in `PasswordManager` and careful
+      benchmarking so the dummy work matches a real verify.
 
 ---
 
 ## P1: Migration / compatibility
 
-- [ ] Make the legacy Matrix compatibility adapter opt-in and disabled
-      by default for fresh Contrix deployments.
 - [ ] Migration tool (`coauth migrate ...`) for existing Pasion users,
       Matrix localpart → handle claim, OAuth client registry,
       admin scopes.
-- [x] Legacy route policy documented in
-      `docs/en/topics/legacy-compatibility.md` + zh mirror: which
-      `/account/*`, OAuth2/OIDC and `/_matrix/*` / `/_palpo/*` paths
-      are still served, and which are explicitly removed from the
-      production router.
 
 ---
 
@@ -255,10 +121,129 @@ land the implementation.
       OpenAPI bundle.
 - [ ] OIDC conformance smoke against generated discovery / JWKS / token
       endpoints in CI.
-- [ ] Integration stack with `soland` + `starid` + `sodmin`.
+- [ ] Integration stack with `soland` + `sodmin` plus optional `starid`
+      profile coverage.
 - [ ] Security review checklist before each minor release: token
       storage, WebAuthn ceremony, recovery flow, admin audit, log
       redaction.
+
+---
+
+## P2: Robustness & maintainability (folded from `_tasks.md`)
+
+### `unwrap` / `expect` clean-up in admin handlers (was T20b)
+
+- [x] Re-audit on 2026-05-07 found the admin v1 surface clean:
+      `upstream_oauth_links.rs`, `user_emails.rs`, and
+      `admin/v1/users/*` no longer contain any `.expect()` calls
+      (only one trivially-infallible Ulid round-trip in
+      `accounts/risk_action.rs:309`). The remaining ~26
+      `depot.get::<T>("…").expect("…")` sites in `oauth2/discovery.rs`,
+      `oauth2/keys.rs`, `oauth2/introspection.rs`, `oauth2/keys.rs`,
+      `oauth2/registration.rs`, and `oauth2/revoke.rs` are deliberate
+      server-invariant assertions on `Json<…>`-returning handlers —
+      converting them to `?` would require changing the return type
+      to add an error path that can never fire in a correctly
+      configured server. Track those under "discovery handler error
+      surface" if and when we revisit them.
+
+### Stale `TODO` / `XXX` triage (was T15b)
+
+- [ ] 87 `TODO|FIXME|XXX|HACK` markers in the backend, mostly
+      load-bearing discussion notes:
+      `oauth2/token_service.rs` (replay/race threads),
+      `jose/claims.rs` (OIDC claim ergonomics),
+      `oauth2/device/consent.rs` (404 vs 500 mapping for missing
+      grant), `oauth2/registration.rs` (substring-match of policy
+      violation messages for error-code routing). These are real but
+      need their subsystem owner to evaluate — do not bulk-edit. Pick
+      them off alongside the next substantive PR in each subsystem.
+
+---
+
+## P3: Structural refactors (folded from `_tasks.md`)
+
+### `ViewContext` follow-on (was T23d)
+
+- [ ] ~22 view handlers still hand-roll the SSR prelude (rng / clock /
+      locale / templates / repo / cookie jar). Either finish migrating
+      them to `ViewContext::extract`, or evaluate introducing an
+      `ApiContext` for REST handlers and document which abstraction
+      goes where. Decide before doing more piecemeal work.
+
+### Frontend `PageShell` / Suspense (was T24)
+
+- [ ] `crates/frontend/src/pages/*.rs` — 27 pages each maintain their
+      own loading / error state. Extract `components/page_shell.rs`,
+      wrap the Account routes with it, and let pages opt into a shared
+      skeleton + error fallback.
+
+### OAuth2 client i18n editor in admin SPA (was T08d)
+
+- [ ] Backend endpoint and the `misc/oauth2-client-localized-metadata.sh`
+      shell tool already cover localized metadata management. The
+      Dioxus admin SPA does not yet have an admin section to host a
+      proper editor. Land alongside the broader admin SPA work; the
+      shell script keeps operators unblocked in the meantime.
+
+---
+
+## P4: Compliance follow-ups (folded from `_tasks.md` / `_report.md`)
+
+> Historical context: dual-baseline review (Apache-2.0 + AGPL-3.0)
+> against the legacy Pasion fork. Independent / new content reached
+> 79.6 %; the `rewrite-closer-to-agpl-high` bucket is empty. ~52
+> medium-delta files (~8 368 AGPL-shared lines) remain.
+
+### Continue lowering high-delta files (was T13)
+
+- [ ] In priority order (AGPL − Apache delta):
+      | File | delta |
+      |------|-----:|
+      | `Cargo.toml` (root) | 383 |
+      | `config/sections/secrets.rs` | 232 |
+      | `matrix/src/lib.rs` | 119 |
+      | `config/sections/clients.rs` | 96 |
+      | `.github/workflows/build.yaml` | 87 |
+      Low-delta files (`oidc.rs`, `keystore/lib.rs`, `claims.rs`,
+      `jwk/mod.rs`, etc., delta < 30) are now annotated as
+      "Apache-explainable" and need no further rewrite.
+
+### `review-mixed` final classification (was T14)
+
+- [ ] Reclassify the following files as `retain-apache` and update the
+      compliance ledger (Apache ≈ AGPL, < 5-line delta):
+      `errors.rs`, `base64.rs`, `hmac.rs`, `header.rs`, `raw.rs`,
+      `cli/commands/mod.rs`.
+
+---
+
+## Cross-project registration
+
+- [~] **Root C3 · coauth → soland session grant**: grant id is returned,
+      authenticated introspection works, and login-time audience pinning
+      landed. Remaining coauth-side work: durable PKCE / state / nonce
+      material and formal proof semantics for `yougen` / `sodmin`.
+- [~] **Root C5 · recovery bridge**: principal-cache contract surface
+      and scaffold handlers are available for `soland` restore-ticket
+      flows, the `sodmin` recovery console, and cotest release-gate
+      checks. Remaining coauth-side work: durable upstream snapshot /
+      cache records plus real refresh / complete / fail worker
+      semantics.
+- [~] **Root C6 · DID resolver / starid optional integration**: soland
+      now advertises optional StarID resolver discovery and cotest
+      gates it. coauth still needs DID control-proof validation via
+      configured public resolvers. `starid` remains optional high-trust
+      `did:webvh`, not a required v1 core dependency.
+- [ ] **Root C7 · admin API discovery / codegen**: keep
+      `bridge/describe`, `/api/admin/v1/openapi.*`, risk-action,
+      DID-binding, claims and device admin schemas stable enough for
+      `sodmin`-generated clients.
+- [~] **Root C8 · conformance**: cotest release gate covers
+      session-grant introspection, recovery restore surface, optional
+      StarID discovery, and anti-enumeration fixtures. Remaining live
+      coauth scenarios: DID-binding proof failure, durable
+      principal-cache refresh, and account-enumeration response shapes.
 
 ---
 

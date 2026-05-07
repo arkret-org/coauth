@@ -21,7 +21,12 @@ use crate::{
     handlers::{
         ActivityTracker, CookieManager, Limiter, MetadataCache, passwords::PasswordManager,
     },
-    services::email_webhook::EmailWebhookService,
+    services::{
+        account_claims::account_claims_service, did_resolver::default_did_resolver_service,
+        email_webhook::EmailWebhookService, principal_cache::durable_principal_cache_service,
+        risk_action_state::default_risk_action_state_service,
+        upstream_oidc::default_upstream_oidc_service,
+    },
     telemetry::METER,
 };
 
@@ -49,6 +54,26 @@ pub struct AppState {
     pub limiter: Limiter,
     pub frontend_script_src: String,
     pub email_webhook_service: Option<EmailWebhookService>,
+    /// Maximum accepted request-body size, in bytes. Wired into Salvo's
+    /// `SecureMaxSize` middleware on the public router.
+    pub max_body_bytes: u64,
+
+    /// Per-request handling deadline, in seconds. `0` disables the
+    /// timeout middleware. Wired into the `RequestTimeout` hoop in
+    /// [`crate::server::build_router`].
+    pub request_timeout_seconds: u64,
+
+    /// Grace period (seconds) to drain in-flight requests on
+    /// SIGTERM/SIGINT before listeners are forcibly closed.
+    pub shutdown_grace_seconds: u64,
+
+    /// Pre-rendered `Strict-Transport-Security` header value.
+    /// `None` disables HSTS emission (the default).
+    pub hsts_header: Option<String>,
+
+    /// `Content-Security-Policy` value emitted on HTML responses.
+    /// `None` (or an empty configured string) suppresses the header.
+    pub csp_html_header: Option<String>,
 }
 
 impl AppState {
@@ -164,6 +189,20 @@ pub async fn inject_app_state(
     depot.insert("activity_tracker", state.activity_tracker.clone());
     depot.insert("trusted_proxies", state.trusted_proxies.clone());
     depot.insert("frontend_script_src", state.frontend_script_src.clone());
+    depot.insert(
+        "risk_action_state_service",
+        default_risk_action_state_service(),
+    );
+    depot.insert(
+        "principal_cache_service",
+        durable_principal_cache_service(state.repository_factory.pool().clone()),
+    );
+    depot.insert(
+        "account_claims_service",
+        account_claims_service(state.repository_factory.pool().clone()),
+    );
+    depot.insert("upstream_oidc_service", default_upstream_oidc_service());
+    depot.insert("did_resolver_service", default_did_resolver_service());
     if let Some(email_webhook_service) = state.email_webhook_service.clone() {
         depot.insert("email_webhook_service", email_webhook_service);
     }

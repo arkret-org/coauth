@@ -73,6 +73,13 @@ pub async fn login_with_password(
         return Ok(PasswordLoginOutcome::Disabled);
     }
 
+    // Anti-enumeration: when the username or email is unknown we return
+    // the same `InvalidCredentials` outcome the caller would see for a
+    // wrong password. Do NOT introduce a more specific "user_not_found"
+    // signal — the HTTP response shape is the only thing exposed to the
+    // attacker, and giving them a way to distinguish "user exists but
+    // bad password" from "no such user" is exactly the leak we are
+    // trying to avoid.
     let Some(user) = find_user_by_login_identifier(
         site_config,
         homeserver,

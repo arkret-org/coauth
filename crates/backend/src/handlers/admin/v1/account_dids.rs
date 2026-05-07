@@ -13,6 +13,7 @@ use crate::{
         admin::{call_context::extract_call_context, params::extract_ulid_param},
         common::DepotExt,
     },
+    services::did_resolver::DidResolverService,
 };
 
 #[derive(Clone, Copy, Deserialize, Serialize, JsonSchema, ToSchema)]
@@ -191,6 +192,7 @@ pub async fn list_account_dids(
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let id = extract_ulid_param(req)?;
     let contrix_config = depot.contrix_config()?;
+    let did_resolver = depot.did_resolver_service()?;
     let user = repo
         .user()
         .lookup(id)
@@ -198,9 +200,9 @@ pub async fn list_account_dids(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     Ok(Json(AccountDidBindingsResponse {
-        data: binding_records_for_user(&user, &contrix_config),
+        data: binding_records_for_user(&user, &contrix_config, did_resolver.as_ref()),
         meta: AccountDidBindingsMeta {
-            resolver: resolver_descriptor(&contrix_config),
+            resolver: resolver_descriptor(&contrix_config, did_resolver.as_ref()),
             supported_verification_methods: vec![
                 "did_controller_key".to_owned(),
                 "passkey".to_owned(),
@@ -221,6 +223,8 @@ pub async fn add_account_did(
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
+    let id = extract_ulid_param(req)?;
+    enforce_did_binding_rate_limit(req, depot, id).await?;
     let ctx = extract_call_context(req, depot).await?;
     ctx.repo.cancel().await?;
     // TODO(contrix): validate control_proof with delegated/public DID resolver before persisting.
@@ -236,6 +240,8 @@ pub async fn remove_account_did(
     depot: &Depot,
 ) -> JsonResult<AccountDidBindingsResponse> {
     let _body: RemoveAccountDidBindingRequest = req.parse_json().await.unwrap_or_default();
+    let id = extract_ulid_param(req)?;
+    enforce_did_binding_rate_limit(req, depot, id).await?;
     let ctx = extract_call_context(req, depot).await?;
     ctx.repo.cancel().await?;
     // TODO(contrix): revoke DID binding with audit trail, not hard-delete.
@@ -244,11 +250,37 @@ pub async fn remove_account_did(
     ))
 }
 
+/// Apply the DID-binding rate limit (per source IP and per target
+/// account) before any expensive work runs. Surfaces a 429 with the
+/// configured limiter's reason, and degrades to "no limiter
+/// configured" by allowing the request.
+async fn enforce_did_binding_rate_limit(
+    req: &Request,
+    depot: &Depot,
+    account_id: ulid::Ulid,
+) -> Result<(), AppError> {
+    let limiter = match depot.limiter() {
+        Ok(limiter) => limiter,
+        Err(_) => return Ok(()),
+    };
+    let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
+    let requester = activity_tracker
+        .ip()
+        .map(crate::handlers::RequesterFingerprint::new)
+        .unwrap_or(crate::handlers::RequesterFingerprint::EMPTY);
+
+    limiter
+        .check_did_binding(requester, account_id)
+        .await
+        .map_err(|error| AppError::too_many_requests(error.to_string()))
+}
+
 pub(crate) fn preview_bindings_for_user(
     user: &User,
     contrix_config: &ContrixConfig,
+    did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBindingPreview> {
-    binding_records_for_user(user, contrix_config)
+    binding_records_for_user(user, contrix_config, did_resolver)
         .into_iter()
         .map(|binding| AccountDidBindingPreview {
             did: binding.did,
@@ -260,12 +292,16 @@ pub(crate) fn preview_bindings_for_user(
         .collect()
 }
 
-pub(crate) fn primary_did_for_user(user: &User) -> String {
-    format!("did:web:coauth.invalid:accounts:{}", binding_slug(&user.id.to_string()))
+pub(crate) fn primary_did_for_user(user: &User, did_resolver: &dyn DidResolverService) -> String {
+    did_resolver.primary_did_for_user(user)
 }
 
-fn binding_records_for_user(user: &User, contrix_config: &ContrixConfig) -> Vec<AccountDidBinding> {
-    let primary_did = primary_did_for_user(user);
+fn binding_records_for_user(
+    user: &User,
+    contrix_config: &ContrixConfig,
+    did_resolver: &dyn DidResolverService,
+) -> Vec<AccountDidBinding> {
+    let primary_did = primary_did_for_user(user, did_resolver);
     let created_at = user.created_at;
     let last_verified_at = Some(user.updated_at);
     let revoked_at = user.deactivated_at;
@@ -280,7 +316,7 @@ fn binding_records_for_user(user: &User, contrix_config: &ContrixConfig) -> Vec<
     } else {
         DidBindingVerificationStatus::Rejected
     };
-    let resolver = resolver_descriptor(contrix_config);
+    let resolver = resolver_descriptor(contrix_config, did_resolver);
 
     vec![AccountDidBinding {
         id: format!("acctdid-{}", binding_slug(&user.id.to_string())),
@@ -294,17 +330,23 @@ fn binding_records_for_user(user: &User, contrix_config: &ContrixConfig) -> Vec<
         resolver,
         created_at,
         last_verified_at,
-        last_resolver_receipt_id: Some(format!("resolver-preview-{}", binding_slug(&user.id.to_string()))),
+        last_resolver_receipt_id: Some(format!(
+            "resolver-preview-{}",
+            binding_slug(&user.id.to_string())
+        )),
         revoked_at,
     }]
 }
 
-fn resolver_descriptor(contrix_config: &ContrixConfig) -> DidBindingResolverDescriptor {
-    match contrix_config.identity_registry.as_ref() {
-        Some(registry) => DidBindingResolverDescriptor {
+fn resolver_descriptor(
+    contrix_config: &ContrixConfig,
+    did_resolver: &dyn DidResolverService,
+) -> DidBindingResolverDescriptor {
+    match did_resolver.delegated_resolver(contrix_config) {
+        Some(resolver) => DidBindingResolverDescriptor {
             mode: DidBindingResolverMode::DelegatedResolver,
-            resolver: Some(registry.resolver.to_string()),
-            proof_required_for_pairwise: registry.proof_required_for_pairwise,
+            resolver: Some(resolver),
+            proof_required_for_pairwise: did_resolver.proof_required_for_pairwise(contrix_config),
         },
         None => DidBindingResolverDescriptor {
             mode: DidBindingResolverMode::LocalBindings,

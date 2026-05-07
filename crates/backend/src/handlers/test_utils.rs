@@ -61,6 +61,12 @@ use crate::{
         upstream_oauth2::cache::MetadataCache,
     },
     salvo_utils::cookies::{CookieJar, CookieManager},
+    services::{
+        account_claims::account_claims_service, did_resolver::default_did_resolver_service,
+        principal_cache::default_principal_cache_service,
+        risk_action_state::default_risk_action_state_service,
+        upstream_oidc::default_upstream_oidc_service,
+    },
 };
 
 static UNIQUE_TEST_NONCE: AtomicU64 = AtomicU64::new(0);
@@ -216,6 +222,17 @@ impl Handler for InjectTestState {
         depot.insert("app_version", AppVersion("v0.0.0-test"));
         depot.insert("activity_tracker", state.activity_tracker.clone());
         depot.insert("trusted_proxies", Vec::<ipnetwork::IpNetwork>::new());
+        depot.insert(
+            "risk_action_state_service",
+            default_risk_action_state_service(),
+        );
+        depot.insert("principal_cache_service", default_principal_cache_service());
+        depot.insert(
+            "account_claims_service",
+            account_claims_service(state.repository_factory.pool().clone()),
+        );
+        depot.insert("upstream_oidc_service", default_upstream_oidc_service());
+        depot.insert("did_resolver_service", default_did_resolver_service());
         ctrl.call_next(req, depot, res).await;
     }
 }

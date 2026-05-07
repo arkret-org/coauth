@@ -97,6 +97,16 @@ impl From<Secret> for SecretRaw {
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MatrixConfig {
+    /// Whether the legacy Matrix / Palpo compatibility adapter is active.
+    ///
+    /// Fresh Contrix deployments default to `false` — coauth will not
+    /// reach out to any homeserver and the `_matrix`/`_palpo` legacy
+    /// surface stays inert. Existing deployments that omit this field
+    /// keep the historical behaviour (`true`) for compatibility; set
+    /// `enabled: false` explicitly to retire the adapter.
+    #[serde(default = "default_matrix_enabled")]
+    pub enabled: bool,
+
     /// Which homeserver variant is running
     #[serde(default)]
     pub kind: HomeserverKind,
@@ -114,6 +124,17 @@ pub struct MatrixConfig {
     /// Base URL of the homeserver's client-server API
     #[serde(default = "endpoint_fallback")]
     pub endpoint: Url,
+}
+
+/// Default for an existing deployment that does not specify `enabled`.
+///
+/// We must default to `true` so that pre-existing config files (which
+/// already carry a `matrix:` block from before this field existed) keep
+/// the homeserver connector wired up. Newly generated configs from
+/// [`MatrixConfig::generate`] explicitly set `enabled: false` so fresh
+/// Contrix deployments start with the legacy adapter retired.
+fn default_matrix_enabled() -> bool {
+    true
 }
 
 impl ConfigurationSection for MatrixConfig {
@@ -144,6 +165,7 @@ impl MatrixConfig {
         R: Rng + Send,
     {
         Self {
+            enabled: false,
             kind: HomeserverKind::default(),
             homeserver: homeserver_fallback(),
             secret: Secret::Value({
@@ -162,6 +184,7 @@ impl MatrixConfig {
 
     pub(crate) fn test() -> Self {
         Self {
+            enabled: true,
             kind: HomeserverKind::default(),
             homeserver: homeserver_fallback(),
             secret: Secret::Value("test".to_owned()),

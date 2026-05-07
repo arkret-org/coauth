@@ -357,6 +357,33 @@ pub struct HttpConfig {
     /// edge serves HTTPS to end users.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hsts: Option<HstsConfig>,
+
+    /// `Content-Security-Policy` value emitted on every HTML response.
+    /// JSON / asset responses are unaffected. Set to an empty string to
+    /// suppress the header entirely (for example, when a downstream CDN
+    /// injects its own policy). When omitted, a conservative default
+    /// scoped to `'self'` is applied — no third-party scripts, no
+    /// inline scripts, no framing. Tighten or relax via this field.
+    #[serde(default = "default_csp_html", skip_serializing_if = "Option::is_none")]
+    pub csp_html: Option<String>,
+}
+
+fn default_csp_html() -> Option<String> {
+    Some(
+        concat!(
+            "default-src 'self'; ",
+            "script-src 'self'; ",
+            "style-src 'self' 'unsafe-inline'; ",
+            "img-src 'self' data:; ",
+            "font-src 'self' data:; ",
+            "connect-src 'self'; ",
+            "frame-ancestors 'none'; ",
+            "form-action 'self'; ",
+            "base-uri 'self'; ",
+            "object-src 'none'",
+        )
+        .to_owned(),
+    )
 }
 
 /// HTTP Strict-Transport-Security policy.
@@ -443,6 +470,7 @@ impl Default for HttpConfig {
             request_timeout_seconds: default_request_timeout_seconds(),
             shutdown_grace_seconds: default_shutdown_grace_seconds(),
             hsts: None,
+            csp_html: default_csp_html(),
         }
     }
 }

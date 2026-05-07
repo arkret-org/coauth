@@ -140,6 +140,13 @@ pub async fn start_account_recovery(
     ip_address: Option<IpAddr>,
     locale: String,
 ) -> Result<UserRecoverySession, StartAccountRecoveryError> {
+    // Anti-enumeration: we deliberately do NOT short-circuit on
+    // "no user with this email" here. A recovery session row is created
+    // for any syntactically valid address, and the schedule_notification
+    // step below silently no-ops downstream when the address is unknown.
+    // From the caller's perspective the success response is identical
+    // for registered and unregistered emails, so an attacker cannot use
+    // this endpoint to enumerate accounts.
     if Address::from_str(&email).is_err() {
         return Err(StartAccountRecoveryError::InvalidEmail);
     }

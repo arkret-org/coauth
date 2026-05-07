@@ -39,7 +39,7 @@ pub(crate) use self::cookie::UpstreamSessions as UpstreamSessionsCookie;
 
 #[derive(Debug, Error)]
 #[allow(clippy::enum_variant_names)]
-enum ProviderCredentialsError {
+pub(crate) enum ProviderCredentialsError {
     #[error("Provider doesn't have a client secret")]
     MissingClientSecret,
 
@@ -75,7 +75,7 @@ pub struct SignInWithApple {
     pub key_id: String,
 }
 
-fn client_credentials_for_provider(
+pub(crate) fn client_credentials_for_provider(
     provider: &UpstreamOAuthProvider,
     token_endpoint: &Url,
     keystore: &Keystore,

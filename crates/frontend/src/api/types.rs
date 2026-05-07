@@ -596,6 +596,8 @@ pub struct LoginViewerInfo {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SessionGrantInfo {
+    #[serde(default)]
+    pub id: Option<String>,
     pub grant_jwt: String,
     pub session_public_key: String,
     pub session_private_key_pem: String,

@@ -240,6 +240,143 @@ pub async fn cache_control_middleware(
     res.headers_mut().typed_insert(cache_control);
 }
 
+/// Cap the time a single request handler may run.
+///
+/// Materialised as a per-request middleware so it composes with cookies,
+/// CORS, and auth, and so operators can disable it via
+/// `http.request_timeout_seconds = 0`.
+#[derive(Clone, Copy)]
+struct RequestTimeout {
+    duration: Duration,
+}
+
+#[salvo::async_trait]
+impl Handler for RequestTimeout {
+    async fn handle(
+        &self,
+        req: &mut Request,
+        depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        let next = ctrl.call_next(req, depot, res);
+        if tokio::time::timeout(self.duration, next).await.is_err() {
+            *res = Response::new();
+            res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+            res.render(Text::Plain("request timed out"));
+            ctrl.skip_rest();
+        }
+    }
+}
+
+/// Override the deployment-wide `Content-Security-Policy` for the
+/// current response. Call this from a handler **before** the security
+/// middleware runs its post-flight pass; the middleware uses
+/// `entry().or_insert()`, so any value placed on the response wins
+/// over the configured default.
+///
+/// Returns an error only if `value` is not a syntactically valid HTTP
+/// header value (control bytes / non-ASCII).
+pub fn override_response_csp(
+    res: &mut Response,
+    value: &str,
+) -> Result<(), http::header::InvalidHeaderValue> {
+    let header_value = HeaderValue::from_str(value)?;
+    res.headers_mut()
+        .insert("content-security-policy", header_value);
+    Ok(())
+}
+
+/// Override the deployment-wide `X-Frame-Options` for the current
+/// response. Pre-emptively sets the header so the security middleware's
+/// `entry().or_insert()` no-ops. Useful for embed-friendly routes that
+/// must allow `SAMEORIGIN` framing.
+///
+/// Returns an error only if `value` is not a syntactically valid HTTP
+/// header value.
+pub fn override_response_frame_options(
+    res: &mut Response,
+    value: &str,
+) -> Result<(), http::header::InvalidHeaderValue> {
+    let header_value = HeaderValue::from_str(value)?;
+    res.headers_mut().insert("x-frame-options", header_value);
+    Ok(())
+}
+
+/// Apply baseline browser security headers to every response.
+///
+/// `Strict-Transport-Security` is emitted only when `http.hsts` is set:
+/// HSTS has long-lived caching semantics and can lock operators out of an
+/// HTTP-only host if sent by mistake.
+///
+/// `Content-Security-Policy` is emitted only on HTML responses and only
+/// when `http.csp_html` is configured (the default is a conservative
+/// `'self'`-only policy). Non-HTML responses (JSON APIs, assets) are
+/// left untouched so a JSON error envelope cannot accidentally fall
+/// under a script-src directive.
+///
+/// **Per-route overrides** — handlers that need a different policy can
+/// pre-set the header on the response before the middleware runs its
+/// post-flight pass. The middleware uses `entry().or_insert()`, so any
+/// header already on the response is preserved as-is. Use the
+/// [`override_response_csp`] / [`override_response_frame_options`]
+/// helpers to do this safely.
+#[handler]
+pub async fn security_headers_middleware(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    let (hsts_header, csp_html_header) = depot
+        .get::<AppState>("app_state")
+        .ok()
+        .map(|state| {
+            (
+                state
+                    .hsts_header
+                    .as_deref()
+                    .and_then(|value| HeaderValue::from_str(value).ok()),
+                state
+                    .csp_html_header
+                    .as_deref()
+                    .and_then(|value| HeaderValue::from_str(value).ok()),
+            )
+        })
+        .unwrap_or((None, None));
+
+    ctrl.call_next(req, depot, res).await;
+
+    let response_is_html = res
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim_start().to_ascii_lowercase().starts_with("text/html"))
+        .unwrap_or(false);
+
+    let headers = res.headers_mut();
+    headers
+        .entry("x-content-type-options")
+        .or_insert(HeaderValue::from_static("nosniff"));
+    headers
+        .entry("x-frame-options")
+        .or_insert(HeaderValue::from_static("DENY"));
+    headers
+        .entry("referrer-policy")
+        .or_insert(HeaderValue::from_static("strict-origin-when-cross-origin"));
+    headers
+        .entry("cross-origin-opener-policy")
+        .or_insert(HeaderValue::from_static("same-origin"));
+    if let Some(value) = hsts_header {
+        headers.entry("strict-transport-security").or_insert(value);
+    }
+    if response_is_html {
+        if let Some(value) = csp_html_header {
+            headers.entry("content-security-policy").or_insert(value);
+        }
+    }
+}
+
 /// A Salvo handler that injects [`AppState`] into the depot for every request.
 #[derive(Clone)]
 struct InjectAppState(AppState);
@@ -308,12 +445,21 @@ pub fn build_router(
     _name: Option<&str>,
 ) -> Router {
     let templates = state.templates.clone();
+    let max_body_bytes = usize::try_from(state.max_body_bytes).unwrap_or(usize::MAX);
+    let request_timeout = (state.request_timeout_seconds > 0)
+        .then(|| Duration::from_secs(state.request_timeout_seconds));
 
     // Create the base router with the AppState in depot
     let mut router = Router::new();
 
     // Add state injection middleware at the top level
-    router = router.hoop(InjectAppState(state));
+    router = router
+        .hoop(InjectAppState(state))
+        .hoop(salvo::http::request::SecureMaxSize::new(max_body_bytes));
+
+    if let Some(duration) = request_timeout {
+        router = router.hoop(RequestTimeout { duration });
+    }
 
     // Build sub-routers for each resource
     use crate::handlers::{
@@ -391,6 +537,7 @@ pub fn build_router(
     // Add middleware layers
     router
         .hoop(inject_app_state)
+        .hoop(security_headers_middleware)
         .hoop(log_response_middleware)
         .hoop(tracing_middleware)
         .hoop(sentry_middleware)
@@ -597,10 +744,7 @@ fn build_account_api_router(router: Router) -> Router {
                     Router::with_path("oidc/browser-bridge/session")
                         .post(auth::oidc_browser_bridge_session),
                 )
-                .push(
-                    Router::with_path("oidc/exchange/describe")
-                        .get(auth::oidc_exchange_describe),
-                )
+                .push(Router::with_path("oidc/exchange/describe").get(auth::oidc_exchange_describe))
                 .push(Router::with_path("oidc/exchange").post(auth::oidc_code_exchange))
                 .push(Router::with_path("logout").post(auth::logout))
                 .push(Router::with_path("providers").get(auth::providers))
@@ -638,27 +782,61 @@ fn build_account_api_router(router: Router) -> Router {
                 .push(
                     Router::with_path("recovery")
                         .push(Router::with_path("describe").get(recovery::get_recovery_describe))
-                        .push(Router::with_path("principal-snapshot").get(recovery::get_recovery_principal_snapshot))
+                        .push(
+                            Router::with_path("principal-snapshot")
+                                .get(recovery::get_recovery_principal_snapshot),
+                        )
                         .push(
                             Router::with_path("principal-cache")
-                                .push(Router::with_path("status").get(recovery::get_recovery_principal_cache_status))
-                                .push(Router::with_path("policy").get(recovery::get_recovery_principal_cache_policy))
-                                .push(Router::with_path("refresh").post(recovery::post_recovery_principal_cache_refresh))
-                                .push(Router::with_path("retry").post(recovery::post_recovery_principal_cache_retry))
-                                .push(Router::with_path("invalidate").post(recovery::post_recovery_principal_cache_invalidate))
+                                .push(
+                                    Router::with_path("status")
+                                        .get(recovery::get_recovery_principal_cache_status),
+                                )
+                                .push(
+                                    Router::with_path("policy")
+                                        .get(recovery::get_recovery_principal_cache_policy),
+                                )
+                                .push(
+                                    Router::with_path("refresh")
+                                        .post(recovery::post_recovery_principal_cache_refresh),
+                                )
+                                .push(
+                                    Router::with_path("retry")
+                                        .post(recovery::post_recovery_principal_cache_retry),
+                                )
+                                .push(
+                                    Router::with_path("invalidate")
+                                        .post(recovery::post_recovery_principal_cache_invalidate),
+                                )
                                 .push(
                                     Router::with_path("upstream")
                                         .get(recovery::get_recovery_principal_cache_upstream)
-                                        .push(Router::with_path("probe").post(recovery::post_recovery_principal_cache_upstream_probe))
-                                        .push(Router::with_path("bind").post(recovery::post_recovery_principal_cache_upstream_bind)),
+                                        .push(Router::with_path("probe").post(
+                                            recovery::post_recovery_principal_cache_upstream_probe,
+                                        ))
+                                        .push(Router::with_path("bind").post(
+                                            recovery::post_recovery_principal_cache_upstream_bind,
+                                        )),
                                 ),
                         )
                         .push(
                             Router::with_path("principal-cache")
-                                .push(Router::with_path("queue").get(recovery::get_recovery_principal_cache_queue))
-                                .push(Router::with_path("complete").post(recovery::post_recovery_principal_cache_complete))
-                                .push(Router::with_path("fail").post(recovery::post_recovery_principal_cache_fail))
-                                .push(Router::with_path("failures").get(recovery::get_recovery_principal_cache_failures)),
+                                .push(
+                                    Router::with_path("queue")
+                                        .get(recovery::get_recovery_principal_cache_queue),
+                                )
+                                .push(
+                                    Router::with_path("complete")
+                                        .post(recovery::post_recovery_principal_cache_complete),
+                                )
+                                .push(
+                                    Router::with_path("fail")
+                                        .post(recovery::post_recovery_principal_cache_fail),
+                                )
+                                .push(
+                                    Router::with_path("failures")
+                                        .get(recovery::get_recovery_principal_cache_failures),
+                                ),
                         )
                         .push(Router::with_path("start").post(recovery::post_recovery_start))
                         .push(Router::with_path("{id}").get(recovery::get_recovery).push(
@@ -726,9 +904,7 @@ fn build_admin_router(router: Router) -> Router {
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
         // Contrix accounts
-        .push(
-            Router::with_path("bridge/describe").get(accounts::admin_bridge_describe),
-        )
+        .push(Router::with_path("bridge/describe").get(accounts::admin_bridge_describe))
         .push(
             Router::with_path("accounts")
                 .get(accounts::list_accounts)
@@ -742,20 +918,20 @@ fn build_admin_router(router: Router) -> Router {
                         )
                         .push(
                             Router::with_path("risk-action/history")
-                                .get(accounts::list_risk_action_history),
+                                .get(accounts::risk_action::list_history),
                         )
                         .push(
                             Router::with_path("risk-action/current")
-                                .get(accounts::get_risk_action_current),
+                                .get(accounts::risk_action::get_current),
                         )
-                        .push(Router::with_path("risk-action").post(accounts::risk_action))
+                        .push(Router::with_path("risk-action").post(accounts::risk_action::propose))
                         .push(
                             Router::with_path("risk-action/{proposal_id}/approve")
-                                .post(accounts::approve_risk_action),
+                                .post(accounts::risk_action::approve),
                         )
                         .push(
                             Router::with_path("risk-action/{proposal_id}/execute")
-                                .post(accounts::execute_risk_action),
+                                .post(accounts::risk_action::execute),
                         )
                         .push(Router::with_path("lock").post(accounts::lock_account))
                         .push(Router::with_path("disable").post(accounts::disable_account))
@@ -1033,10 +1209,18 @@ async fn connection_info_handler(req: &Request) -> String {
 pub fn build_tls_server_config(config: &HttpTlsConfig) -> Result<ServerConfig, anyhow::Error> {
     let (key, chain) = config.load()?;
 
-    let mut config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(chain, key)
-        .context("failed to build TLS server config")?;
+    // Pin the protocol-version floor to TLS 1.2 (TLS 1.3 preferred and
+    // negotiated automatically). rustls 0.23 already refuses TLS 1.0/1.1
+    // by default, but stating the policy explicitly makes it reviewable
+    // and prevents a silent downgrade if a future rustls release widens
+    // its default range.
+    let mut config = rustls::ServerConfig::builder_with_protocol_versions(&[
+        &rustls::version::TLS13,
+        &rustls::version::TLS12,
+    ])
+    .with_no_client_auth()
+    .with_single_cert(chain, key)
+    .context("failed to build TLS server config")?;
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
     Ok(config)

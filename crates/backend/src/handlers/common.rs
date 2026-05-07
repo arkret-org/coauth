@@ -239,6 +239,21 @@ pub trait DepotExt {
     fn encrypter(&self) -> Result<coauth_keystore::Encrypter, RouteError>;
     fn key_store(&self) -> Result<coauth_keystore::Keystore, RouteError>;
     fn app_version(&self) -> Result<coauth_data::AppVersion, RouteError>;
+    fn risk_action_state_service(
+        &self,
+    ) -> Result<crate::services::risk_action_state::RiskActionStateServiceHandle, RouteError>;
+    fn principal_cache_service(
+        &self,
+    ) -> Result<crate::services::principal_cache::PrincipalCacheServiceHandle, RouteError>;
+    fn account_claims_service(
+        &self,
+    ) -> Result<crate::services::account_claims::AccountClaimsServiceHandle, RouteError>;
+    fn upstream_oidc_service(
+        &self,
+    ) -> Result<crate::services::upstream_oidc::UpstreamOidcServiceHandle, RouteError>;
+    fn did_resolver_service(
+        &self,
+    ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError>;
     fn cookie_jar(&self, req: &Request) -> Result<CookieJar, RouteError>;
 }
 
@@ -332,6 +347,36 @@ impl DepotExt for Depot {
 
     fn app_version(&self) -> Result<coauth_data::AppVersion, RouteError> {
         depot_get(self, "app_version")
+    }
+
+    fn risk_action_state_service(
+        &self,
+    ) -> Result<crate::services::risk_action_state::RiskActionStateServiceHandle, RouteError> {
+        depot_get(self, "risk_action_state_service")
+    }
+
+    fn principal_cache_service(
+        &self,
+    ) -> Result<crate::services::principal_cache::PrincipalCacheServiceHandle, RouteError> {
+        depot_get(self, "principal_cache_service")
+    }
+
+    fn account_claims_service(
+        &self,
+    ) -> Result<crate::services::account_claims::AccountClaimsServiceHandle, RouteError> {
+        depot_get(self, "account_claims_service")
+    }
+
+    fn upstream_oidc_service(
+        &self,
+    ) -> Result<crate::services::upstream_oidc::UpstreamOidcServiceHandle, RouteError> {
+        depot_get(self, "upstream_oidc_service")
+    }
+
+    fn did_resolver_service(
+        &self,
+    ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError> {
+        depot_get(self, "did_resolver_service")
     }
 
     fn cookie_jar(&self, req: &Request) -> Result<CookieJar, RouteError> {

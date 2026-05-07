@@ -8,7 +8,7 @@ use coauth_data::{
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::{
     constraints::Constrainable,
-    jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey},
+    jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey, PublicJsonWebKeySet},
     jwt::{JsonWebSignatureHeader, Jwt, JwtSignatureError},
 };
 use coauth_keystore::{Keystore, PrivateKey, WrongAlgorithmError};
@@ -62,6 +62,15 @@ pub enum ContrixRouteError {
 
     #[error("{0}")]
     BadRequest(String),
+
+    /// Caller did not present a usable bearer token. Renders as `401`.
+    #[error("{0}")]
+    Unauthorized(String),
+
+    /// Caller presented a token, but it lacks the scope required for the
+    /// requested operation. Renders as `403`.
+    #[error("{0}")]
+    Forbidden(String),
 }
 
 impl From<RouteError> for ContrixRouteError {
@@ -71,6 +80,114 @@ impl From<RouteError> for ContrixRouteError {
             RouteError::NotFound => Self::NotFound,
             other => Self::Internal(Box::new(other)),
         }
+    }
+}
+
+impl From<coauth_data::RepositoryError> for ContrixRouteError {
+    fn from(value: coauth_data::RepositoryError) -> Self {
+        Self::Internal(Box::new(value))
+    }
+}
+
+/// Authorization decision for a session-grant administrative endpoint.
+#[derive(Debug, Clone, Copy)]
+enum SessionGrantAuthz {
+    /// The caller presented an admin scope. Allowed for read and write.
+    Admin,
+    /// The caller presented the Principal Server `session.bind` scope.
+    /// Allowed for read-only paths (list / introspect).
+    PrincipalServer,
+}
+
+/// Resolve the bearer token on the request and require either an admin
+/// scope or the Principal Server session-bind scope. Used by the
+/// session-grant admin surface to gate access without going through the
+/// heavier admin call-context extractor.
+async fn require_session_grant_caller(
+    req: &Request,
+    depot: &Depot,
+) -> Result<SessionGrantAuthz, ContrixRouteError> {
+    use coauth_data::{RepositoryAccess, TokenType};
+
+    let auth_header = req
+        .headers()
+        .get(http::header::AUTHORIZATION)
+        .ok_or_else(|| {
+            ContrixRouteError::Unauthorized("missing authorization header".to_owned())
+        })?;
+    let auth_str = auth_header
+        .to_str()
+        .map_err(|_| ContrixRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+    let token = auth_str
+        .strip_prefix("Bearer ")
+        .or_else(|| auth_str.strip_prefix("bearer "))
+        .ok_or_else(|| {
+            ContrixRouteError::Unauthorized("invalid authorization header".to_owned())
+        })?;
+
+    let token_type = TokenType::check(token)
+        .map_err(|_| ContrixRouteError::Unauthorized("invalid bearer token".to_owned()))?;
+
+    let mut repo = depot.repo().await?;
+    let scope = match token_type {
+        TokenType::AccessToken => {
+            let access = repo
+                .oauth2_access_token()
+                .find_by_token(token)
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::Unauthorized("unknown access token".to_owned())
+                })?;
+            let session = repo
+                .oauth2_session()
+                .lookup(access.session_id)
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        "access token references missing session",
+                    ))
+                })?;
+            session.scope.clone()
+        }
+        TokenType::PersonalAccessToken => {
+            let access = repo
+                .personal_access_token()
+                .find_by_token(token)
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::Unauthorized("unknown access token".to_owned())
+                })?;
+            let session = repo
+                .personal_session()
+                .lookup(access.session_id)
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        "access token references missing session",
+                    ))
+                })?;
+            session.scope.clone()
+        }
+        _ => {
+            return Err(ContrixRouteError::Unauthorized(
+                "unsupported access token type".to_owned(),
+            ));
+        }
+    };
+    repo.cancel().await?;
+
+    if crate::handlers::admin::has_admin_scope(&scope) {
+        Ok(SessionGrantAuthz::Admin)
+    } else if scope.contains(PRINCIPAL_SERVER_SESSION_BIND_SCOPE) {
+        Ok(SessionGrantAuthz::PrincipalServer)
+    } else {
+        Err(ContrixRouteError::Forbidden(
+            "missing admin or principal-server scope".to_owned(),
+        ))
     }
 }
 
@@ -84,7 +201,22 @@ impl Scribe for ContrixRouteError {
             ),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "not found".to_owned()),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "bad_json", message),
+            Self::Unauthorized(message) => {
+                (StatusCode::UNAUTHORIZED, "unauthorized", message)
+            }
+            Self::Forbidden(message) => (StatusCode::FORBIDDEN, "forbidden", message),
         };
+
+        if status == StatusCode::UNAUTHORIZED {
+            // RFC 7235 says 401 responses MUST include a WWW-Authenticate
+            // challenge so the caller can negotiate.
+            res.headers_mut().insert(
+                http::header::WWW_AUTHENTICATE,
+                http::HeaderValue::from_static(
+                    "Bearer realm=\"contrix\", error=\"invalid_token\"",
+                ),
+            );
+        }
 
         res.status_code(status);
         res.render(Json(serde_json::json!({
@@ -94,6 +226,21 @@ impl Scribe for ContrixRouteError {
                 "message": message,
             }
         })));
+    }
+}
+
+fn map_did_resolve_error(
+    error: crate::services::did_resolver::DidResolveError,
+) -> ContrixRouteError {
+    match error {
+        crate::services::did_resolver::DidResolveError::NotFound
+        | crate::services::did_resolver::DidResolveError::UnsupportedMethod => {
+            ContrixRouteError::NotFound
+        }
+        crate::services::did_resolver::DidResolveError::InvalidDid(message) => {
+            ContrixRouteError::BadRequest(format!("invalid did: {message}"))
+        }
+        other => ContrixRouteError::Internal(Box::new(other)),
     }
 }
 
@@ -118,7 +265,7 @@ pub(crate) struct SessionGrantTarget {
     pub principal_server_endpoint: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DidDocument {
     pub id: String,
 
@@ -141,12 +288,12 @@ pub struct DidDocument {
     pub service: Vec<DidService>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationMethod {
     pub id: String,
 
     #[serde(rename = "type")]
-    pub kind: &'static str,
+    pub kind: String,
 
     pub controller: String,
 
@@ -154,12 +301,12 @@ pub struct VerificationMethod {
     pub public_key_jwk: PublicJsonWebKey,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DidService {
     pub id: String,
 
     #[serde(rename = "type")]
-    pub kind: &'static str,
+    pub kind: String,
 
     #[serde(rename = "serviceEndpoint")]
     pub service_endpoint: String,
@@ -256,8 +403,27 @@ struct ServiceBoundaryDescriptor {
 struct StandardErrorEnvelopeDescriptor {
     schema: &'static str,
     content_type: &'static str,
-    example: serde_json::Value,
+    example: StandardErrorEnvelopeExample,
     codes: Vec<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+struct StandardErrorEnvelopeExample {
+    ok: bool,
+    error: StandardErrorExampleBody,
+}
+
+#[derive(Debug, Serialize)]
+struct StandardErrorExampleBody {
+    code: &'static str,
+    message: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct ServiceLimitsDescriptor {
+    max_body_bytes: u64,
+    max_page_size: u32,
+    session_grant_ttl_seconds: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -305,7 +471,7 @@ struct ServiceDescribeResponse {
     identity_registry_resolver: IdentityRegistryResolverDescriptor,
     service_boundary: ServiceBoundaryDescriptor,
     auth_metadata: AuthMetadata,
-    limits: serde_json::Value,
+    limits: ServiceLimitsDescriptor,
     standard_error_envelope: StandardErrorEnvelopeDescriptor,
 }
 
@@ -397,6 +563,25 @@ struct SessionGrantIntrospectionRequest {
     id: Option<String>,
     grant_jwt: Option<String>,
     audience: Option<String>,
+    proof: Option<SessionGrantIntrospectionProofInput>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionGrantIntrospectionProofInput {
+    challenge: String,
+    proof_jwt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SessionGrantIntrospectionProofClaims {
+    #[serde(rename = "type")]
+    kind: String,
+    grant_id: String,
+    grant_jwt_hash: String,
+    audience: String,
+    challenge: String,
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -408,6 +593,8 @@ enum SessionGrantIntrospectionStatus {
     Locked,
     Suspended,
     AudienceMismatch,
+    ProofRequired,
+    InvalidProof,
     NotFound,
 }
 
@@ -429,6 +616,8 @@ struct SessionGrantIntrospectionGrant {
 struct SessionGrantIntrospectionResponse {
     active: bool,
     status: SessionGrantIntrospectionStatus,
+    proof_required: bool,
+    one_time_use_consumed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     grant: Option<SessionGrantIntrospectionGrant>,
 }
@@ -529,24 +718,84 @@ pub(crate) fn required_audience_for(
         .unwrap_or_else(|| required_audience(url_builder))
 }
 
+pub(crate) fn is_allowed_session_grant_audience(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    audience: &str,
+) -> bool {
+    let audience = audience.trim();
+    if audience.is_empty() {
+        return false;
+    }
+
+    audience == required_audience_for(url_builder, contrix_config)
+        || contrix_config
+            .principal_servers
+            .iter()
+            .any(|server| server.audience == audience)
+}
+
+/// Reasons why a caller-supplied principal-server audience could not be
+/// honoured. Distinct error variants let the HTTP layer return precise
+/// 4xx codes instead of a generic "bad request".
+#[derive(Debug, Clone, thiserror::Error)]
+pub(crate) enum SessionGrantTargetError {
+    #[error("requested audience is not configured for this coauth service")]
+    UnknownAudience,
+    #[error(
+        "audience resolves to the local admin surface; specify a principal_server audience instead"
+    )]
+    LocalAudienceNotAllowed,
+}
+
+/// Resolve the principal-server target for a password login session grant.
+///
+/// `requested_audience` is the audience the client proved during the login
+/// ceremony (e.g. carried in a request body field or audience-bound state).
+/// When supplied, only an exact match against a configured principal server
+/// is accepted — falling back to "first principal server wins" silently
+/// would let any caller mint a grant for an audience they never asked for.
+///
+/// When `requested_audience` is `None` and exactly one principal server is
+/// configured, that single server is used. With zero or multiple principal
+/// servers and no explicit choice, returns `UnknownAudience` so the caller
+/// must disambiguate.
 pub(crate) fn password_login_session_grant_target(
     url_builder: &UrlBuilder,
     contrix_config: &ContrixConfig,
-) -> SessionGrantTarget {
-    if let Some(server) = contrix_config.principal_servers.first() {
-        // TODO(contrix): replace this scaffold default with the exact
-        // principal-server audience proven during the real OIDC/passkey flow.
-        SessionGrantTarget {
+    requested_audience: Option<&str>,
+) -> Result<SessionGrantTarget, SessionGrantTargetError> {
+    if let Some(audience) = requested_audience.map(str::trim).filter(|a| !a.is_empty()) {
+        if let Some(server) = contrix_config
+            .principal_servers
+            .iter()
+            .find(|server| server.audience == audience)
+        {
+            return Ok(SessionGrantTarget {
+                audience: server.audience.clone(),
+                principal_server_name: Some(server.name.clone()),
+                principal_server_endpoint: Some(server.endpoint.to_string()),
+            });
+        }
+
+        // The local admin audience is allowed for OIDC bridge flows, but
+        // not for password login session grants — there is no principal
+        // server to bind the grant to.
+        if audience == required_audience_for(url_builder, contrix_config) {
+            return Err(SessionGrantTargetError::LocalAudienceNotAllowed);
+        }
+
+        return Err(SessionGrantTargetError::UnknownAudience);
+    }
+
+    match contrix_config.principal_servers.as_slice() {
+        [server] => Ok(SessionGrantTarget {
             audience: server.audience.clone(),
             principal_server_name: Some(server.name.clone()),
             principal_server_endpoint: Some(server.endpoint.to_string()),
-        }
-    } else {
-        SessionGrantTarget {
-            audience: required_audience_for(url_builder, contrix_config),
-            principal_server_name: None,
-            principal_server_endpoint: None,
-        }
+        }),
+        [] => Err(SessionGrantTargetError::UnknownAudience),
+        _ => Err(SessionGrantTargetError::UnknownAudience),
     }
 }
 
@@ -612,13 +861,13 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
     StandardErrorEnvelopeDescriptor {
         schema: "cx.error.envelope.v1",
         content_type: "application/json",
-        example: serde_json::json!({
-            "ok": false,
-            "error": {
-                "code": "machine_readable_code",
-                "message": "human-readable message"
-            }
-        }),
+        example: StandardErrorEnvelopeExample {
+            ok: false,
+            error: StandardErrorExampleBody {
+                code: "machine_readable_code",
+                message: "human-readable message",
+            },
+        },
         codes: vec!["bad_json", "not_found", "internal_error"],
     }
 }
@@ -675,9 +924,6 @@ fn service_describe_response(
             "cx.identity.get_document",
             "cx.directory.describe",
             "cx.directory.resolve_handle",
-            "cx.session_grant.list",
-            "cx.session_grant.introspect",
-            "cx.session_grant.revoke",
         ],
         admin_audience: admin_audience.clone(),
         principal_servers: principal_servers.clone(),
@@ -715,11 +961,11 @@ fn service_describe_response(
             session_grant_scope: PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
             oidc_clients: Vec::new(),
         },
-        limits: serde_json::json!({
-            "max_body_bytes": 1_048_576,
-            "max_page_size": 100,
-            "session_grant_ttl_seconds": SESSION_GRANT_TTL_MINUTES * 60,
-        }),
+        limits: ServiceLimitsDescriptor {
+            max_body_bytes: 1_048_576,
+            max_page_size: 100,
+            session_grant_ttl_seconds: SESSION_GRANT_TTL_MINUTES * 60,
+        },
         standard_error_envelope: standard_error_envelope_descriptor(),
     }
 }
@@ -825,7 +1071,7 @@ pub(crate) fn service_did_document(
         let key_id = format!("{did}#key-1");
         verification_method.push(VerificationMethod {
             id: key_id.clone(),
-            kind: "JsonWebKey2020",
+            kind: "JsonWebKey2020".to_owned(),
             controller: did.clone(),
             public_key_jwk: public_key,
         });
@@ -842,14 +1088,14 @@ pub(crate) fn service_did_document(
         service: vec![
             DidService {
                 id: format!("{did}#auth-server"),
-                kind: "ContrixAuthServer",
+                kind: "ContrixAuthServer".to_owned(),
                 service_endpoint: url_builder
                     .absolute_url("/api/v1/server/describe")
                     .to_string(),
             },
             DidService {
                 id: format!("{did}#openid-configuration"),
-                kind: "OpenIdConnectConfiguration",
+                kind: "OpenIdConnectConfiguration".to_owned(),
                 service_endpoint: url_builder.oidc_discovery().to_string(),
             },
         ],
@@ -871,7 +1117,7 @@ pub(crate) fn user_did_document(
         assertion_method: Vec::new(),
         service: vec![DidService {
             id: format!("{did}#auth-server"),
-            kind: "ContrixAuthServer",
+            kind: "ContrixAuthServer".to_owned(),
             service_endpoint: url_builder
                 .absolute_url("/api/v1/server/describe")
                 .to_string(),
@@ -1051,7 +1297,7 @@ fn preferred_signing_key(
     })
 }
 
-fn preferred_public_signing_key(key_store: &Keystore) -> Option<PublicJsonWebKey> {
+pub(crate) fn preferred_public_signing_key(key_store: &Keystore) -> Option<PublicJsonWebKey> {
     let (alg, key) = preferred_signing_key(key_store)?;
     let public_jwks = key_store.public_jwks();
 
@@ -1113,7 +1359,11 @@ pub async fn server_describe(
             id: client.id.to_string(),
             client_id: client.client_id.clone(),
             client_name: client.client_name.clone(),
-            redirect_uris: client.redirect_uris.iter().map(ToString::to_string).collect(),
+            redirect_uris: client
+                .redirect_uris
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
             grant_types: client.grant_types.iter().map(ToString::to_string).collect(),
             token_endpoint_auth_method: client
                 .token_endpoint_auth_method
@@ -1162,33 +1412,30 @@ pub async fn identity_resolve(
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
-
-    let did_document = if body.did == service_did_for(&url_builder, &contrix_config) {
-        service_did_document(&url_builder, &contrix_config, &key_store)
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
-    } else {
-        let mut repo = depot.repo().await?;
-        let Some(user_id) = parse_local_user_did_for(&url_builder, &contrix_config, &body.did)
-        else {
-            return Err(ContrixRouteError::NotFound);
-        };
-        let Some(user) = repo
-            .user()
-            .lookup(user_id)
-            .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
-        else {
-            return Err(ContrixRouteError::NotFound);
-        };
-        user_did_document(&url_builder, &contrix_config, &user)
-    };
+    let http_client = depot.http_client()?;
+    let did_resolver = depot.did_resolver_service()?;
+    let mut repo = depot.repo().await?;
+    let resolution = did_resolver
+        .resolve_did_document(
+            &http_client,
+            &url_builder,
+            &contrix_config,
+            &key_store,
+            &mut repo,
+            &body.did,
+        )
+        .await
+        .map_err(map_did_resolve_error)?;
+    repo.cancel()
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityResolveResponse {
-        did_document,
+        did_document: resolution.document,
         key_log_head: None,
         seq: None,
         receipts: None,
-        method_evidence: None,
+        method_evidence: Some(resolution.method_evidence),
     }))
 }
 
@@ -1203,28 +1450,26 @@ pub async fn identity_document(
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
-
-    let did_document = if did == service_did_for(&url_builder, &contrix_config) {
-        service_did_document(&url_builder, &contrix_config, &key_store)
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
-    } else {
-        let mut repo = depot.repo().await?;
-        let Some(user_id) = parse_local_user_did_for(&url_builder, &contrix_config, &did) else {
-            return Err(ContrixRouteError::NotFound);
-        };
-        let Some(user) = repo
-            .user()
-            .lookup(user_id)
-            .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
-        else {
-            return Err(ContrixRouteError::NotFound);
-        };
-        user_did_document(&url_builder, &contrix_config, &user)
-    };
+    let http_client = depot.http_client()?;
+    let did_resolver = depot.did_resolver_service()?;
+    let mut repo = depot.repo().await?;
+    let resolution = did_resolver
+        .resolve_did_document(
+            &http_client,
+            &url_builder,
+            &contrix_config,
+            &key_store,
+            &mut repo,
+            &did,
+        )
+        .await
+        .map_err(map_did_resolve_error)?;
+    repo.cancel()
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityDocumentResponse {
-        did_document,
+        did_document: resolution.document,
         head_event_hash: None,
         seq: None,
         receipts: None,
@@ -1257,6 +1502,7 @@ pub async fn directory_resolve_handle(
         .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
+    let did_resolver = depot.did_resolver_service()?;
     let Some(username) = parse_local_handle(&url_builder, &body.handle) else {
         return Err(ContrixRouteError::NotFound);
     };
@@ -1271,11 +1517,11 @@ pub async fn directory_resolve_handle(
         return Err(ContrixRouteError::NotFound);
     };
 
-    let did = user_did_for(&url_builder, &contrix_config, &user);
-    let verified = body
-        .expected_did
-        .as_deref()
-        .is_none_or(|expected| expected == did);
+    let did = did_resolver.user_did(&url_builder, &contrix_config, &user);
+    let verified = body.expected_did.as_deref().is_none_or(|expected| {
+        did_resolver.verify_user_binding(&url_builder, &contrix_config, &user, expected)
+            == crate::services::did_resolver::DidBindingVerification::Verified
+    });
 
     Ok(Json(ResolveHandleResponse {
         did,
@@ -1318,8 +1564,7 @@ pub async fn list_session_grants(
         filter = filter.active_at(clock.now());
     }
 
-    // TODO(contrix-authz): require Principal Server/admin authentication before
-    // exposing this beyond trusted deployment boundaries.
+    let _ = require_session_grant_caller(req, depot).await?;
     let mut repo = depot.repo().await?;
     let page = repo
         .oauth2_session_grant()
@@ -1350,6 +1595,17 @@ pub async fn revoke_session_grant(
         .ok_or_else(|| ContrixRouteError::BadRequest("missing session grant id".into()))?;
     let id = Ulid::from_string(&raw_id)
         .map_err(|_| ContrixRouteError::BadRequest("invalid session grant id".into()))?;
+
+    // Revocation is destructive — Principal Server scope is not enough.
+    match require_session_grant_caller(req, depot).await? {
+        SessionGrantAuthz::Admin => {}
+        SessionGrantAuthz::PrincipalServer => {
+            return Err(ContrixRouteError::Forbidden(
+                "session-grant revocation requires admin scope".to_owned(),
+            ));
+        }
+    }
+
     let mut repo = depot.repo().await?;
     let grant = repo
         .oauth2_session_grant()
@@ -1358,8 +1614,6 @@ pub async fn revoke_session_grant(
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
         .ok_or(ContrixRouteError::NotFound)?;
 
-    // TODO(contrix-authz): require admin/Principal Server authorization and
-    // write audit actor/reason before enabling broad revoke access.
     let grant = repo
         .oauth2_session_grant()
         .revoke(&clock, grant)
@@ -1428,6 +1682,53 @@ fn introspection_status(
     SessionGrantIntrospectionStatus::Active
 }
 
+fn session_grant_jwt_hash(grant_jwt: &str) -> String {
+    format!(
+        "sha256:{}",
+        hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
+    )
+}
+
+fn verify_session_grant_introspection_proof(
+    grant: &SessionGrant,
+    proof: Option<&SessionGrantIntrospectionProofInput>,
+    now: DateTime<Utc>,
+) -> SessionGrantIntrospectionStatus {
+    let Some(proof) = proof else {
+        return SessionGrantIntrospectionStatus::ProofRequired;
+    };
+    if proof.challenge.trim().is_empty() || proof.proof_jwt.trim().is_empty() {
+        return SessionGrantIntrospectionStatus::InvalidProof;
+    }
+
+    let Ok(jwt) = Jwt::<SessionGrantIntrospectionProofClaims>::try_from(proof.proof_jwt.as_str())
+    else {
+        return SessionGrantIntrospectionStatus::InvalidProof;
+    };
+    let Ok(public_key) = serde_json::from_str::<PublicJsonWebKey>(&grant.session_public_key) else {
+        return SessionGrantIntrospectionStatus::InvalidProof;
+    };
+    let jwks = PublicJsonWebKeySet::new(vec![public_key]);
+    if jwt.verify_with_jwks(&jwks).is_err() {
+        return SessionGrantIntrospectionStatus::InvalidProof;
+    }
+
+    let claims = jwt.payload();
+    let max_future_skew = Duration::try_seconds(30).unwrap();
+    if claims.kind != "cx.session_grant.introspection_proof.v1"
+        || claims.grant_id != grant.id.to_string()
+        || claims.grant_jwt_hash != session_grant_jwt_hash(&grant.grant_jwt)
+        || claims.audience != grant.audience
+        || claims.challenge != proof.challenge
+        || claims.expires_at <= now
+        || claims.issued_at > now + max_future_skew
+    {
+        return SessionGrantIntrospectionStatus::InvalidProof;
+    }
+
+    SessionGrantIntrospectionStatus::Active
+}
+
 #[handler]
 pub async fn introspect_session_grant(
     req: &mut Request,
@@ -1444,6 +1745,7 @@ pub async fn introspect_session_grant(
         ));
     }
 
+    let _ = require_session_grant_caller(req, depot).await?;
     let clock = crate::handlers::make_clock();
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
@@ -1472,6 +1774,8 @@ pub async fn introspect_session_grant(
         return Ok(Json(SessionGrantIntrospectionResponse {
             active: false,
             status: SessionGrantIntrospectionStatus::NotFound,
+            proof_required: true,
+            one_time_use_consumed: false,
             grant: None,
         }));
     };
@@ -1486,20 +1790,38 @@ pub async fn introspect_session_grant(
     } else {
         None
     };
-    let status = introspection_status(&grant, user.as_ref(), clock.now(), body.audience.as_deref());
+    let mut status =
+        introspection_status(&grant, user.as_ref(), clock.now(), body.audience.as_deref());
+    let proof_required = status == SessionGrantIntrospectionStatus::Active;
+    if proof_required {
+        status = verify_session_grant_introspection_proof(&grant, body.proof.as_ref(), clock.now());
+    }
     let active = status == SessionGrantIntrospectionStatus::Active;
-    let grant = (status != SessionGrantIntrospectionStatus::NotFound
+    let grant_record = (status != SessionGrantIntrospectionStatus::NotFound
         && status != SessionGrantIntrospectionStatus::AudienceMismatch)
         .then(|| introspection_grant_record(&grant));
 
-    repo.cancel()
-        .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    let one_time_use_consumed = active;
+    if active {
+        repo.oauth2_session_grant()
+            .revoke(&*clock, grant.clone())
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        repo.save()
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    } else {
+        repo.cancel()
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    }
 
     Ok(Json(SessionGrantIntrospectionResponse {
         active,
         status,
-        grant,
+        proof_required,
+        one_time_use_consumed,
+        grant: grant_record,
     }))
 }
 
@@ -1508,8 +1830,10 @@ pub async fn service_did_json(depot: &Depot) -> Result<Json<DidDocument>, Contri
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
+    let did_resolver = depot.did_resolver_service()?;
 
-    service_did_document(&url_builder, &contrix_config, &key_store)
+    did_resolver
+        .service_did_document(&url_builder, &contrix_config, &key_store)
         .map(Json)
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))
 }
@@ -1526,6 +1850,7 @@ pub async fn user_did_json(
         .map_err(|_| ContrixRouteError::BadRequest("invalid user id".into()))?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
+    let did_resolver = depot.did_resolver_service()?;
     let mut repo = depot.repo().await?;
     let Some(user) = repo
         .user()
@@ -1536,7 +1861,7 @@ pub async fn user_did_json(
         return Err(ContrixRouteError::NotFound);
     };
 
-    Ok(Json(user_did_document(
+    Ok(Json(did_resolver.user_did_document(
         &url_builder,
         &contrix_config,
         &user,
@@ -1880,6 +2205,29 @@ mod tests {
         (browser_session, grant, material)
     }
 
+    fn session_grant_introspection_proof(
+        grant: &SessionGrant,
+        material: &SessionGrantMaterial,
+        challenge: &str,
+    ) -> String {
+        let now = Utc::now();
+        let key = PrivateKey::load_pem(&material.session_private_key_pem).unwrap();
+        let signer = key
+            .signing_key_for_alg(&JsonWebSignatureAlg::EdDsa)
+            .unwrap();
+        let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa);
+        let claims = SessionGrantIntrospectionProofClaims {
+            kind: "cx.session_grant.introspection_proof.v1".to_owned(),
+            grant_id: grant.id.to_string(),
+            grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
+            audience: grant.audience.clone(),
+            challenge: challenge.to_owned(),
+            issued_at: now,
+            expires_at: now + Duration::try_minutes(1).unwrap(),
+        };
+        Jwt::sign(header, claims, &signer).unwrap().into_string()
+    }
+
     #[tokio::test]
     async fn session_grant_http_list_and_filter_work() {
         setup();
@@ -1931,12 +2279,18 @@ mod tests {
         let pool = coauth_data::test_utils::setup_test_pool().await;
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let (_browser_session, grant, material) = seed_persisted_session_grant(&state).await;
+        let challenge = format!("introspect-{}", grant.id);
+        let proof_jwt = session_grant_introspection_proof(&grant, &material, &challenge);
 
         let response = state
             .request(
                 Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
                     "audience": grant.audience,
+                    "proof": {
+                        "challenge": challenge,
+                        "proof_jwt": proof_jwt,
+                    }
                 })),
             )
             .await;
@@ -1944,12 +2298,27 @@ mod tests {
         let body: serde_json::Value = response.json();
         assert_eq!(body["active"], true);
         assert_eq!(body["status"], "active");
+        assert_eq!(body["proof_required"], true);
+        assert_eq!(body["one_time_use_consumed"], true);
         assert_eq!(body["grant"]["id"], grant.id.to_string());
         assert_eq!(body["grant"]["subject"], grant.subject);
         assert_eq!(body["grant"]["audience"], grant.audience);
         assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
         assert!(body["grant"].get("grant_jwt").is_none());
         assert!(body["grant"].get("session_public_key").is_none());
+
+        let response = state
+            .request(
+                Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
+                    "id": grant.id,
+                    "audience": grant.audience,
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["active"], false);
+        assert_eq!(body["status"], "revoked");
 
         let response = state
             .request(

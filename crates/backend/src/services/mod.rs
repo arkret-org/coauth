@@ -1,3 +1,8 @@
+pub mod account_claims;
+pub mod did_resolver;
 pub mod email_webhook;
+pub mod principal_cache;
+pub mod risk_action_state;
+pub mod upstream_oidc;
 pub mod user_admin;
 pub mod user_profile;
