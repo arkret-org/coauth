@@ -348,7 +348,7 @@ pub async fn list_accounts(
         IncludeCount::True => {
             let page = repo.user().list(filter, pagination).await?;
             let count = repo.user().count(filter).await?;
-            PaginatedResponse::for_page(
+            paginated_response_for_page(
                 page.map(|user| {
                     AccountRecord::from_user(user, &contrix_config, did_resolver.as_ref())
                 }),
@@ -359,7 +359,7 @@ pub async fn list_accounts(
         }
         IncludeCount::False => {
             let page = repo.user().list(filter, pagination).await?;
-            PaginatedResponse::for_page(
+            paginated_response_for_page(
                 page.map(|user| {
                     AccountRecord::from_user(user, &contrix_config, did_resolver.as_ref())
                 }),
@@ -370,7 +370,7 @@ pub async fn list_accounts(
         }
         IncludeCount::Only => {
             let count = repo.user().count(filter).await?;
-            PaginatedResponse::for_count_only(count, &base)
+            paginated_response_for_count_only(count, &base)
         }
     };
 

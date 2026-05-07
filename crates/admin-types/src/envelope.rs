@@ -262,7 +262,76 @@ impl<T> PaginatedResponse<T> {
 // backend made before this crate existed.
 #[cfg(feature = "schema")]
 mod schema_impls {
+    use std::borrow::Cow;
+
     use super::{PaginatedResponse, SingleResponse};
+
+    impl<T> schemars::JsonSchema for PaginatedResponse<T> {
+        fn schema_name() -> Cow<'static, str> {
+            Cow::Borrowed("PaginatedResponse")
+        }
+
+        fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+            // Wrapper-only schema; the `attributes` slot is left untyped
+            // because we don't want to force `T: JsonSchema` on every
+            // concrete inner type.
+            schemars::json_schema!({
+                "type": "object",
+                "properties": {
+                    "meta": {
+                        "type": "object",
+                        "properties": { "count": { "type": "integer" } }
+                    },
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string" },
+                            "id": { "type": "string" },
+                            "attributes": { "type": "object" }
+                        }
+                    },
+                    "links": {
+                        "type": "object",
+                        "properties": {
+                            "self": { "type": "string" },
+                            "first": { "type": "string" },
+                            "last": { "type": "string" },
+                            "next": { "type": "string" },
+                            "prev": { "type": "string" }
+                        }
+                    }
+                },
+                "required": ["links"]
+            })
+        }
+    }
+
+    impl<T> schemars::JsonSchema for SingleResponse<T> {
+        fn schema_name() -> Cow<'static, str> {
+            Cow::Borrowed("SingleResponse")
+        }
+
+        fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+            schemars::json_schema!({
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string" },
+                            "id": { "type": "string" },
+                            "attributes": { "type": "object" }
+                        }
+                    },
+                    "links": {
+                        "type": "object",
+                        "properties": { "self": { "type": "string" } }
+                    }
+                },
+                "required": ["data", "links"]
+            })
+        }
+    }
 
     impl<T: 'static> salvo::oapi::ToSchema for PaginatedResponse<T> {
         fn to_schema(

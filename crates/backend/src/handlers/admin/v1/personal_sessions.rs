@@ -26,7 +26,10 @@ use crate::{
             call_context::{CallerSession, extract_call_context},
             model::{PersonalSession, Resource},
             params::{IncludeCount, extract_pagination, extract_ulid_param},
-            response::{PaginatedResponse, SingleResponse},
+            response::{
+                PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+                paginated_response_for_page,
+            },
         },
         common::DepotExt,
     },
@@ -397,7 +400,7 @@ pub async fn list_sessions(
         IncludeCount::True => {
             let page = repo.personal_session().list(filter, pagination).await?;
             let total = repo.personal_session().count(filter).await?;
-            PaginatedResponse::for_page(
+            paginated_response_for_page(
                 page.try_map(PersonalSession::try_from)?,
                 pagination,
                 Some(total),
@@ -406,7 +409,7 @@ pub async fn list_sessions(
         }
         IncludeCount::False => {
             let page = repo.personal_session().list(filter, pagination).await?;
-            PaginatedResponse::for_page(
+            paginated_response_for_page(
                 page.try_map(PersonalSession::try_from)?,
                 pagination,
                 None,
@@ -415,7 +418,7 @@ pub async fn list_sessions(
         }
         IncludeCount::Only => {
             let total = repo.personal_session().count(filter).await?;
-            PaginatedResponse::for_count_only(total, &base_url)
+            paginated_response_for_count_only(total, &base_url)
         }
     };
 

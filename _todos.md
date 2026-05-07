@@ -70,6 +70,38 @@ return 501 or use scaffolded state.
 
 ---
 
+## P1: v1 wire model rework — invite / consent gate
+
+> Source: `contrix-spec` 2026-05-07 finished Phase 1-5. See root [`../_todos.md` C10.E](../_todos.md).
+>
+> Coauth impact is small (mainly invite flow + holder-private consent gate). DID
+> binding write paths are unaffected because consent is orthogonal to DID
+> control proofs.
+
+- [ ] **Invite consent gate** (spec Phase 5 §6.1): before issuing or relaying
+      an invite to a target principal, query holder consent in their principal
+      control Space (`(peer=requester, scope="invite" OR scope="any")`). Match
+      cases:
+  - granted + active window → continue normal invite flow
+  - revoked or absent + `cx.space.policy_components.preauth.require_consent`
+    is true → reject with `consent_required`
+  - revoked or absent + default profile → route to holder's quarantine inbox
+    (deliver as a "stranger invite" candidate awaiting review)
+- [ ] **MIMI consent interop** (spec Phase 5 §7): when accepting incoming
+      MIMI `request_consent` / `update_consent`, validate the actor is the
+      declared holder or an authorized controller, then map to
+      `cx.consent.grant` / `cx.consent.revoke` event written to that holder's
+      principal control Space; preserve `consent_id` as inter-protocol
+      correlation.
+- [ ] **Host endorsement when coauth runs as Space Host (rare)**: typical
+      deployments have soland as host, but if coauth controls a principal
+      control Space and acts as its host, the same `host_endorsement` proof
+      issuance applies (spec Phase 4 §3.3). This is mostly a configuration /
+      operational concern, not a wire change inside coauth's existing OIDC /
+      session-grant surface.
+
+---
+
 ## P1: Notification & abuse controls
 
 - [ ] CAPTCHA hook reachable from registration, login, recovery,
@@ -176,6 +208,10 @@ return 501 or use scaffolded state.
       session-grant introspection, recovery restore surface, optional
       StarID discovery. Remaining: DID-binding proof failure, durable
       principal-cache refresh, account-enumeration response shapes.
+- [ ] **Root C10.E · invite + consent gate from spec Phase 5**: see
+      "P1: v1 wire model rework — invite / consent gate" section above.
+      Coauth's footprint here is small (no SDK rewrite needed); main work
+      is invite handler integration with `cx.consent.*` queries.
 
 ---
 

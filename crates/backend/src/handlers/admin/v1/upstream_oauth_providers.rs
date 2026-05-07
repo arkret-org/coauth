@@ -26,7 +26,10 @@ use crate::{
             call_context::extract_call_context,
             model::{Resource, UpstreamOAuthProvider},
             params::{IncludeCount, extract_pagination, extract_ulid_param},
-            response::{PaginatedResponse, SingleResponse},
+            response::{
+                PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+                paginated_response_for_page,
+            },
         },
         common::DepotExt as _,
     },
@@ -108,7 +111,7 @@ pub async fn list_providers(
                 .await?
                 .map(UpstreamOAuthProvider::from);
             let total = repo.upstream_oauth_provider().count(filter).await?;
-            PaginatedResponse::for_page(page, pagination, Some(total), &base_url)
+            paginated_response_for_page(page, pagination, Some(total), &base_url)
         }
         IncludeCount::False => {
             let page = repo
@@ -116,11 +119,11 @@ pub async fn list_providers(
                 .list(filter, pagination)
                 .await?
                 .map(UpstreamOAuthProvider::from);
-            PaginatedResponse::for_page(page, pagination, None, &base_url)
+            paginated_response_for_page(page, pagination, None, &base_url)
         }
         IncludeCount::Only => {
             let total = repo.upstream_oauth_provider().count(filter).await?;
-            PaginatedResponse::for_count_only(total, &base_url)
+            paginated_response_for_count_only(total, &base_url)
         }
     };
 

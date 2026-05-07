@@ -16,7 +16,10 @@ use crate::{
         call_context::extract_call_context,
         model::{Resource, User},
         params::{IncludeCount, extract_pagination, extract_ulid_param},
-        response::{PaginatedResponse, SingleResponse},
+        response::{
+            PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+            paginated_response_for_page,
+        },
     },
 };
 
@@ -177,15 +180,15 @@ pub async fn list_users(req: &mut Request, depot: &Depot) -> JsonResult<Paginate
         IncludeCount::True => {
             let page = repo.user().list(filter, pagination).await?;
             let count = repo.user().count(filter).await?;
-            PaginatedResponse::for_page(page.map(User::from), pagination, Some(count), &base)
+            paginated_response_for_page(page.map(User::from), pagination, Some(count), &base)
         }
         IncludeCount::False => {
             let page = repo.user().list(filter, pagination).await?;
-            PaginatedResponse::for_page(page.map(User::from), pagination, None, &base)
+            paginated_response_for_page(page.map(User::from), pagination, None, &base)
         }
         IncludeCount::Only => {
             let count = repo.user().count(filter).await?;
-            PaginatedResponse::for_count_only(count, &base)
+            paginated_response_for_count_only(count, &base)
         }
     };
 
