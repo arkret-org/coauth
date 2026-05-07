@@ -166,6 +166,13 @@ pub struct AddAccountDidBindingRequest {
 
     /// Optional operator note for audit and admin UI surfaces.
     operator_note: Option<String>,
+
+    /// Solved CAPTCHA token. Verified when the deployment has a CAPTCHA
+    /// provider configured (`site.captcha`) so admin-on-behalf-of-user
+    /// or self-service binding flows can be abuse-gated. Optional and
+    /// ignored when no provider is configured.
+    #[serde(default)]
+    captcha_token: Option<String>,
 }
 
 #[derive(Default, Deserialize, JsonSchema, ToSchema)]
@@ -180,6 +187,12 @@ pub struct RemoveAccountDidBindingRequest {
 
     /// Whether active sessions tied to the DID should be revoked as follow-up.
     revoke_related_sessions: Option<bool>,
+
+    /// Solved CAPTCHA token. Verified when the deployment has a CAPTCHA
+    /// provider configured (`site.captcha`). Optional and ignored when
+    /// no provider is configured.
+    #[serde(default)]
+    captcha_token: Option<String>,
 }
 
 #[endpoint]
@@ -219,12 +232,13 @@ pub async fn add_account_did(
     req: &mut Request,
     depot: &Depot,
 ) -> CreatedJsonResult<AccountDidBindingsResponse> {
-    let _body: AddAccountDidBindingRequest = req
+    let body: AddAccountDidBindingRequest = req
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
     let id = extract_ulid_param(req)?;
     enforce_did_binding_rate_limit(req, depot, id).await?;
+    enforce_captcha(req, depot, body.captcha_token.as_deref()).await?;
     let ctx = extract_call_context(req, depot).await?;
     ctx.repo.cancel().await?;
     // TODO(contrix): validate control_proof with delegated/public DID resolver before persisting.
@@ -239,15 +253,48 @@ pub async fn remove_account_did(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<AccountDidBindingsResponse> {
-    let _body: RemoveAccountDidBindingRequest = req.parse_json().await.unwrap_or_default();
+    let body: RemoveAccountDidBindingRequest = req.parse_json().await.unwrap_or_default();
     let id = extract_ulid_param(req)?;
     enforce_did_binding_rate_limit(req, depot, id).await?;
+    enforce_captcha(req, depot, body.captcha_token.as_deref()).await?;
     let ctx = extract_call_context(req, depot).await?;
     ctx.repo.cancel().await?;
     // TODO(contrix): revoke DID binding with audit trail, not hard-delete.
     Err(AppError::not_implemented(
         "account DID binding removal is not implemented yet",
     ))
+}
+
+/// Verify the supplied CAPTCHA token, if the deployment has a CAPTCHA
+/// provider configured. Returns `400` on failure so the admin / client
+/// surface gets a clear signal rather than the generic 501 the
+/// downstream stub returns. No-op when no provider is configured (the
+/// helper itself short-circuits).
+async fn enforce_captcha(
+    req: &Request,
+    depot: &Depot,
+    captcha_token: Option<&str>,
+) -> Result<(), AppError> {
+    let site_config = depot.site_config().map_err(AppError::internal)?;
+    if site_config.captcha.is_none() && captcha_token.is_none() {
+        return Ok(());
+    }
+    let url_builder = depot.url_builder().map_err(AppError::internal)?;
+    let http_client = depot.http_client().map_err(AppError::internal)?;
+    let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
+
+    crate::handlers::captcha::verify_token(
+        activity_tracker.ip(),
+        &http_client,
+        url_builder.public_hostname(),
+        site_config.captcha.as_ref(),
+        captcha_token,
+    )
+    .await
+    .map_err(|error| {
+        tracing::warn!(error = %error, "CAPTCHA verification failed on DID-binding admin write");
+        AppError::bad_request(format!("captcha_failed: {error}"))
+    })
 }
 
 /// Apply the DID-binding rate limit (per source IP and per target

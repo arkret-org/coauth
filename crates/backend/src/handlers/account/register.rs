@@ -48,6 +48,11 @@ pub struct RegisterInput {
     pub phone: Option<String>,
     pub password: String,
     pub password_confirm: String,
+    /// Solved CAPTCHA token, supplied when the deployment has a CAPTCHA
+    /// provider configured (`site.captcha`). Verified before the
+    /// registration policy / availability checks run.
+    #[serde(default)]
+    pub captcha_token: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -82,6 +87,7 @@ pub async fn post_register(
     let policy_factory = depot.policy_factory()?;
     let limiter = depot.limiter()?;
     let repo_factory = depot.repo_factory()?;
+    let url_builder = depot.url_builder()?;
     let notification_language = crate::handlers::notification_language(req, depot, None);
 
     let clock = make_clock();
@@ -98,6 +104,28 @@ pub async fn post_register(
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_owned());
     let ip_address = activity_tracker.ip();
+
+    if site_config.captcha.is_some() {
+        let http_client = depot.http_client()?;
+        if let Err(error) = crate::handlers::captcha::verify_token(
+            activity_tracker.ip(),
+            &http_client,
+            url_builder.public_hostname(),
+            site_config.captcha.as_ref(),
+            input.captcha_token.as_deref(),
+        )
+        .await
+        {
+            tracing::warn!(error = %error, "CAPTCHA verification failed on registration");
+            return Ok(Json(RegisterResponse {
+                status: "error",
+                id: None,
+                next_step: None,
+                error: Some("captcha_failed".into()),
+                flow_session_id: None,
+            }));
+        }
+    }
 
     let repo = repo_factory.create().await?;
 

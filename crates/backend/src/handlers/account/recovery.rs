@@ -60,6 +60,7 @@ pub async fn post_recovery_start(
     let site_config = depot.site_config()?;
     let repo_factory = depot.repo_factory()?;
     let limiter = depot.limiter()?;
+    let url_builder = depot.url_builder()?;
     let notification_language = crate::handlers::notification_language(req, depot, None);
 
     let clock = make_clock();
@@ -85,6 +86,27 @@ pub async fn post_recovery_start(
             error: Some("recovery_disabled".into()),
             flow_session_id: None,
         }));
+    }
+
+    if site_config.captcha.is_some() {
+        let http_client = depot.http_client()?;
+        if let Err(error) = crate::handlers::captcha::verify_token(
+            activity_tracker.ip(),
+            &http_client,
+            url_builder.public_hostname(),
+            site_config.captcha.as_ref(),
+            input.captcha_token.as_deref(),
+        )
+        .await
+        {
+            tracing::warn!(error = %error, "CAPTCHA verification failed on recovery start");
+            return Ok(Json(StartRecoveryResponse {
+                status: "error",
+                id: None,
+                error: Some("captcha_failed".into()),
+                flow_session_id: None,
+            }));
+        }
     }
 
     let repo = repo_factory.create().await?;

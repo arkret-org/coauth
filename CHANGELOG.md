@@ -12,6 +12,40 @@ for the full release process.
 
 ## [Unreleased]
 
+### Security
+
+- Anti-enumeration timing equivalence on the password-login path. When
+  the supplied identifier does not match an account, or the matched
+  account has no active password (e.g. SSO-only), `login_with_password`
+  now runs a dummy verify with the supplied password through the
+  current hashing scheme (`PasswordManager::dummy_verify`). This makes
+  response latency for `InvalidCredentials` independent of whether the
+  account exists, blocking the username/email enumeration oracle.
+- CAPTCHA verification is now reachable from every abuse-sensitive
+  REST surface. New `handlers::captcha::verify_token` helper dispatches
+  a single string token to the configured provider's `siteverify`
+  endpoint (reCAPTCHA v2, hCaptcha, Cloudflare Turnstile) and is
+  fail-closed when a token is supplied without `site.captcha` being
+  configured. Wired into:
+  - `POST /api/v1/auth/login` — `LoginRequest.captcha_token` is
+    verified before credentials are checked when `site.captcha` is set.
+  - `POST /api/v1/auth/register` — `RegisterInput.captcha_token` is
+    verified before policy / availability checks.
+  - `POST /api/v1/auth/recovery/start` — `StartRecoveryInput.captcha_token`
+    is verified before a rate-limited recovery session is allocated.
+  - `POST /api/admin/v1/accounts/{id}/dids` and
+    `DELETE /api/admin/v1/accounts/{id}/dids/{binding_id}` —
+    `AddAccountDidBindingRequest.captcha_token` /
+    `RemoveAccountDidBindingRequest.captcha_token` are verified after
+    the DID-binding rate limit. The underlying handlers still return
+    `501 Not Implemented`, so the gate is dormant until the binding
+    write logic lands.
+- Flow-engine CAPTCHA verification (`POST /api/v1/flow/.../respond`)
+  no longer hardcodes `site_hostname = "localhost"` and now threads
+  the requester IP through `remote_ip`. The hostname mismatch check
+  was effectively disabled before, so deployments with a CAPTCHA stage
+  could accept tokens issued for any hostname.
+
 ### Added
 
 - `_todos.md` consolidates the remaining Contrix migration work and

@@ -151,6 +151,40 @@ impl PasswordManager {
         Ok(u8::from(score.score()) >= inner.minimum_complexity)
     }
 
+    /// Run a dummy hash with the supplied password to produce timing
+    /// equivalent to a real [`PasswordManager::verify`] call against the
+    /// current scheme.
+    ///
+    /// Use this on login paths where the username is unknown or has no
+    /// active password, so attackers cannot use response latency to
+    /// distinguish "user exists but bad password" from "no such user".
+    /// The hash output is discarded.
+    ///
+    /// Silently returns `Ok(())` if the password manager is disabled, so
+    /// the caller does not need to special-case that path.
+    #[tracing::instrument(name = "passwords.dummy_verify", skip_all)]
+    pub async fn dummy_verify<R: CryptoRng + RngCore + Send>(
+        &self,
+        rng: R,
+        password: Zeroizing<String>,
+    ) -> Result<(), anyhow::Error> {
+        let Some(inner) = self.inner.clone() else {
+            return Ok(());
+        };
+
+        // Seed a future-local RNG so the RNG passed in parameters doesn't have to be
+        // 'static
+        let rng = rand_chacha::ChaChaRng::from_rng(rng)?;
+        let span = tracing::Span::current();
+
+        tokio::task::spawn_blocking(move || {
+            span.in_scope(move || inner.current_hasher.hash_blocking(rng, password))
+        })
+        .await??;
+
+        Ok(())
+    }
+
     /// Hash a password with the default hashing scheme.
     /// Returns the version of the hashing scheme used and the hashed password.
     ///
@@ -626,6 +660,24 @@ mod tests {
                 .expect("Verification failed"),
             PasswordVerificationResult::NotMatched
         );
+    }
+
+    #[tokio::test]
+    async fn dummy_verify_succeeds_and_is_disabled_safe() {
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(7);
+        let password = Zeroizing::new("hunter2".to_owned());
+
+        let manager = PasswordManager::new(0, [(1, Hasher::argon2id(None, false))]).unwrap();
+        manager
+            .dummy_verify(&mut rng, password.clone())
+            .await
+            .expect("dummy verify should succeed when enabled");
+
+        let disabled = PasswordManager::disabled();
+        disabled
+            .dummy_verify(&mut rng, password)
+            .await
+            .expect("dummy verify on a disabled manager is a no-op");
     }
 
     #[tokio::test]

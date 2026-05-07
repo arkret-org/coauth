@@ -53,6 +53,11 @@ pub struct LoginRequest {
     /// principal servers will reject the request.
     #[serde(default)]
     pub audience: Option<String>,
+    /// Solved CAPTCHA token, supplied when the deployment has a CAPTCHA
+    /// provider configured (`site.captcha`). The token is verified with
+    /// the configured provider before the credentials are checked.
+    #[serde(default)]
+    pub captcha_token: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -172,6 +177,30 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             warnings: Vec::new(),
         }));
         return Ok(());
+    }
+
+    if site_config.captcha.is_some() {
+        let http_client = depot.http_client()?;
+        if let Err(error) = crate::handlers::captcha::verify_token(
+            activity_tracker.ip(),
+            &http_client,
+            url_builder.public_hostname(),
+            site_config.captcha.as_ref(),
+            input.captcha_token.as_deref(),
+        )
+        .await
+        {
+            tracing::warn!(error = %error, "CAPTCHA verification failed on login");
+            PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("captcha_failed"),
+                viewer: None,
+                session_grant: None,
+                warnings: Vec::new(),
+            }));
+            return Ok(());
+        }
     }
 
     let requested_audience = input.audience.clone();

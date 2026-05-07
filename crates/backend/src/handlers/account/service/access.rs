@@ -79,7 +79,8 @@ pub async fn login_with_password(
     // signal — the HTTP response shape is the only thing exposed to the
     // attacker, and giving them a way to distinguish "user exists but
     // bad password" from "no such user" is exactly the leak we are
-    // trying to avoid.
+    // trying to avoid. We also run a dummy password verify so the
+    // response latency matches the real-verify path.
     let Some(user) = find_user_by_login_identifier(
         site_config,
         homeserver,
@@ -90,6 +91,10 @@ pub async fn login_with_password(
     )
     .await?
     else {
+        password_manager
+            .dummy_verify(&mut *rng, request.password)
+            .await
+            .map_err(PasswordLoginError::Password)?;
         return Ok(PasswordLoginOutcome::InvalidCredentials);
     };
 
@@ -102,6 +107,12 @@ pub async fn login_with_password(
     }
 
     let Some(user_password) = repo.user_password().active(&user).await? else {
+        // The account exists but has no active password (e.g. SSO-only).
+        // Match the real-verify timing for the same anti-enumeration reason.
+        password_manager
+            .dummy_verify(&mut *rng, request.password)
+            .await
+            .map_err(PasswordLoginError::Password)?;
         return Ok(PasswordLoginOutcome::InvalidCredentials);
     };
 

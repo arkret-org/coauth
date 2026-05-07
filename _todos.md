@@ -104,11 +104,29 @@ return 501 or use scaffolded state.
 
 ## P1: Notification & abuse controls
 
-- [ ] CAPTCHA hook reachable from registration, login, recovery,
+- [x] CAPTCHA hook reachable from registration, login, recovery,
       DID-binding paths.
-- [ ] Timing-equivalence anti-enumeration: when the username is
+      Helper: `handlers::captcha::verify_token` (single-token,
+      provider-agnostic, fail-closed when a token is supplied without
+      configured CAPTCHA). Wired into:
+        * `POST /api/v1/auth/login` — `LoginRequest.captcha_token`
+        * `POST /api/v1/auth/register` — `RegisterInput.captcha_token`
+        * `POST /api/v1/auth/recovery/start` — `StartRecoveryInput.captcha_token`
+        * `POST /api/admin/v1/accounts/{id}/dids` and
+          `DELETE /api/admin/v1/accounts/{id}/dids/{binding_id}` —
+          `AddAccountDidBindingRequest.captcha_token` /
+          `RemoveAccountDidBindingRequest.captcha_token` (admin write
+          paths still return 501; CAPTCHA gating runs before the stub
+          so it lights up automatically when the binding logic lands).
+      Bug fix on the legacy flow-engine path: `site_hostname` no
+      longer hardcoded to `"localhost"` and `remote_ip` is now
+      threaded through from the bound activity tracker.
+- [x] Timing-equivalence anti-enumeration: when the username is
       unknown, run a dummy password verify so attackers cannot use
       response latency to enumerate accounts.
+      Implemented via `PasswordManager::dummy_verify`, called from
+      `login_with_password` on both the user-not-found and no-active-
+      password branches.
 
 ---
 

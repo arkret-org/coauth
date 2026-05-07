@@ -149,6 +149,93 @@ pub enum ErrorCode {
     InternalError,
 }
 
+/// Verify a single CAPTCHA token, regardless of which provider issued it.
+///
+/// Use this from REST endpoints (login, registration, recovery,
+/// DID-binding admin write paths) where the request body carries one
+/// `captcha_token` string instead of a per-provider field. The token is
+/// dispatched to the configured provider's `siteverify` endpoint.
+///
+/// When `config` is `None` and `token` is `None` the call is a no-op and
+/// returns `Ok(())`. When `config` is `None` but a token is supplied the
+/// call returns [`Error::NoCaptchaConfigured`], so misconfigured
+/// deployments can't silently accept attacker-supplied tokens.
+#[tracing::instrument(
+    skip_all,
+    name = "captcha.verify_token",
+    fields(captcha.hostname, captcha.challenge_ts, captcha.service),
+)]
+pub async fn verify_token(
+    remote_ip: Option<IpAddr>,
+    http_client: &reqwest::Client,
+    site_hostname: &str,
+    config: Option<&CaptchaConfig>,
+    token: Option<&str>,
+) -> Result<(), Error> {
+    let Some(config) = config else {
+        if token.is_some() {
+            return Err(Error::NoCaptchaConfigured);
+        }
+        return Ok(());
+    };
+
+    let token = token.ok_or(Error::MissingCaptchaResponse)?;
+    if token.is_empty() {
+        return Err(Error::MissingCaptchaResponse);
+    }
+
+    let remoteip = remote_ip;
+    let secret = &config.secret_key;
+
+    let span = tracing::Span::current();
+    span.record("captcha.service", tracing::field::debug(config.service));
+
+    let verify_url = match config.service {
+        CaptchaService::RecaptchaV2 => RECAPTCHA_VERIFY_URL,
+        CaptchaService::HCaptcha => HCAPTCHA_VERIFY_URL,
+        CaptchaService::CloudflareTurnstile => CF_TURNSTILE_VERIFY_URL,
+    };
+
+    let response: VerificationResponse = http_client
+        .post(verify_url)
+        .form(&VerificationRequest {
+            secret,
+            response: token,
+            remoteip,
+        })
+        .send_traced()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    if !response.success {
+        return Err(Error::InvalidCaptcha(
+            response.error_codes.unwrap_or_default(),
+        ));
+    }
+
+    let Some(hostname) = response.hostname else {
+        return Err(Error::InvalidResponse);
+    };
+
+    let Some(challenge_ts) = response.challenge_ts else {
+        return Err(Error::InvalidResponse);
+    };
+
+    span.record("captcha.hostname", &hostname);
+    span.record("captcha.challenge_ts", &challenge_ts);
+
+    if hostname != site_hostname {
+        return Err(Error::HostnameMismatch {
+            expected: site_hostname.to_owned(),
+            got: hostname,
+        });
+    }
+
+    Ok(())
+}
+
 impl Form {
     #[tracing::instrument(
         skip_all,
@@ -251,5 +338,36 @@ impl Form {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn http_client() -> reqwest::Client {
+        crate::handlers::test_utils::setup();
+        reqwest::Client::builder()
+            .build()
+            .expect("reqwest client builds")
+    }
+
+    #[tokio::test]
+    async fn verify_token_no_config_no_token_is_noop() {
+        let client = http_client();
+
+        verify_token(None, &client, "example.com", None, None)
+            .await
+            .expect("no-config + no-token must succeed without making a network call");
+    }
+
+    #[tokio::test]
+    async fn verify_token_no_config_with_token_rejects() {
+        let client = http_client();
+
+        let err = verify_token(None, &client, "example.com", None, Some("attacker-token"))
+            .await
+            .expect_err("supplying a token without configured CAPTCHA must error fail-closed");
+        assert!(matches!(err, Error::NoCaptchaConfigured));
     }
 }

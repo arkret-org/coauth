@@ -493,16 +493,24 @@ pub async fn respond_flow(
         ));
     }
 
-    // Build CAPTCHA verification context from depot if available
+    // Build CAPTCHA verification context from depot if available. The
+    // verifier needs the actual deployment hostname (so reCAPTCHA /
+    // Turnstile / hCaptcha hostname checks succeed) and the requester IP
+    // (for the optional `remoteip` parameter).
     let http_client = depot.get::<reqwest::Client>("http_client").ok();
     let site_config = depot.get_site_config();
+    let url_builder = depot.get_url_builder();
+    let activity_tracker = super::extract_bound_activity_tracker(req, depot);
     let captcha_verify = http_client.map(|client| {
         let captcha_config = site_config.and_then(|sc| sc.captcha.as_ref());
+        let site_hostname = url_builder
+            .map(coauth_data::UrlBuilder::public_hostname)
+            .unwrap_or("localhost");
         CaptchaVerifyContext {
             http_client: client,
             captcha_config,
-            site_hostname: "localhost",
-            remote_ip: None,
+            site_hostname,
+            remote_ip: activity_tracker.ip(),
         }
     });
 

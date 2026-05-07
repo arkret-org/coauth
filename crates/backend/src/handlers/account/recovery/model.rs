@@ -4,6 +4,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, ToSchema)]
 pub struct StartRecoveryInput {
     pub email: String,
+    /// Solved CAPTCHA token, supplied when the deployment has a CAPTCHA
+    /// provider configured (`site.captcha`). Verified before the
+    /// rate-limited recovery session is allocated.
+    #[serde(default)]
+    pub captcha_token: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
