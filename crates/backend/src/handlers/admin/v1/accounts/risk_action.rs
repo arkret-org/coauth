@@ -6,8 +6,10 @@
 
 use chrono::{DateTime, Utc};
 use coauth_admin_types::{
-    AccountRiskActionApprovalRequest, AccountRiskActionExecuteRequest,
-    AccountRiskActionProposalRequest,
+    AccountRiskActionApprovalRequest, AccountRiskActionApprovalResponse,
+    AccountRiskActionCurrentResponse, AccountRiskActionExecuteRequest,
+    AccountRiskActionHistoryResponse, AccountRiskActionProposalRequest,
+    AccountRiskActionProposalResponse, AccountRiskActionTransitionRecord,
 };
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_data::{AdminUserPatch, RepositoryAccess};
@@ -27,120 +29,6 @@ use crate::{
     },
     services::risk_action_state::RiskActionStateService,
 };
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountRiskActionProposalResponse {
-    /// Stable persisted state-record identifier for this risk-action state machine.
-    state_record_id: String,
-
-    /// Proposal identifier for tracking and later approval.
-    proposal_id: String,
-
-    /// Account targeted by the proposal.
-    account_id: String,
-
-    /// Requested action.
-    action: String,
-
-    /// Human reason supplied by the caller.
-    reason: Option<String>,
-
-    /// Optional ticket or incident reference.
-    ticket: Option<String>,
-
-    /// Optional approver identifier.
-    approved_by: Option<String>,
-
-    /// When the proposal was requested.
-    requested_at: DateTime<Utc>,
-
-    /// Admin identifier that submitted the proposal scaffold, if available.
-    requested_by: Option<String>,
-
-    /// Admin username that submitted the proposal scaffold, if available.
-    requested_by_username: Option<String>,
-
-    /// Previous lifecycle state before this transition.
-    previous_state: String,
-
-    /// Proposal state reported by the scaffold contract.
-    proposal_state: String,
-
-    /// Monotonic state-machine revision.
-    state_revision: u64,
-
-    /// Explicit transition kind written by this scaffold.
-    transition_kind: String,
-
-    /// Approval mode expected before executing the real mutation endpoint.
-    approval_mode: String,
-
-    /// Allowed next transitions from this proposal state.
-    allowed_next_transitions: Vec<String>,
-
-    /// Final execution endpoint that would perform the mutation after approval.
-    execution_endpoint: String,
-
-    /// How this scaffold persists the state machine today.
-    state_store_kind: String,
-
-    /// Remaining implementation work for this scaffold.
-    todo: String,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountRiskActionApprovalResponse {
-    /// Stable persisted state-record identifier for this risk-action state machine.
-    state_record_id: String,
-
-    /// Proposal identifier being approved.
-    proposal_id: String,
-
-    /// Account targeted by the proposal.
-    account_id: String,
-
-    /// Approved action.
-    action: String,
-
-    /// Optional ticket or incident reference.
-    ticket: Option<String>,
-
-    /// Previous lifecycle state before this transition.
-    previous_state: String,
-
-    /// Approval state reported by the scaffold contract.
-    approval_state: String,
-
-    /// Monotonic state-machine revision.
-    state_revision: u64,
-
-    /// Explicit transition kind written by this scaffold.
-    transition_kind: String,
-
-    /// When the approval was recorded.
-    approved_at: DateTime<Utc>,
-
-    /// Admin identifier that approved the proposal, if available.
-    approved_by: Option<String>,
-
-    /// Admin username that approved the proposal, if available.
-    approved_by_username: Option<String>,
-
-    /// Human approval note for the scaffold trail.
-    approval_note: Option<String>,
-
-    /// Final execution endpoint that would perform the mutation after approval.
-    execution_endpoint: String,
-
-    /// Allowed next transitions from this approved state.
-    allowed_next_transitions: Vec<String>,
-
-    /// How this scaffold persists the state machine today.
-    state_store_kind: String,
-
-    /// Remaining implementation work for this scaffold.
-    todo: String,
-}
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionExecuteResponse {
@@ -199,63 +87,6 @@ pub struct AccountRiskActionExecuteResponse {
     todo: String,
 }
 
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountRiskActionCurrentResponse {
-    /// Account targeted by the current risk-action state machine.
-    account_id: String,
-
-    /// Stable persisted state-record identifier, if any.
-    state_record_id: Option<String>,
-
-    /// Latest proposal identifier, if any.
-    proposal_id: Option<String>,
-
-    /// Latest recorded action, if any.
-    action: Option<String>,
-
-    /// Current lifecycle state derived from the latest scaffold record.
-    lifecycle_state: String,
-
-    /// Latest recorded operation name, if any.
-    last_operation: Option<String>,
-
-    /// Explicit transition kind on the current record, if any.
-    transition_kind: Option<String>,
-
-    /// Previous lifecycle state before the current transition, if any.
-    previous_state: Option<String>,
-
-    /// Monotonic state-machine revision, if any.
-    state_revision: Option<u64>,
-
-    /// Allowed next transitions from the current lifecycle state.
-    allowed_next_transitions: Vec<String>,
-
-    /// Optional ticket or incident reference.
-    ticket: Option<String>,
-
-    /// When the current state record was written.
-    recorded_at: Option<DateTime<Utc>>,
-
-    /// Admin identifier associated with the latest state record.
-    recorded_by: Option<String>,
-
-    /// Admin username associated with the latest state record.
-    recorded_by_username: Option<String>,
-
-    /// Execution endpoint referenced by the latest proposal/approval state.
-    execution_endpoint: Option<String>,
-
-    /// Mutation endpoint referenced by the latest execute state.
-    mutation_endpoint: Option<String>,
-
-    /// How this scaffold persists the state machine today.
-    state_store_kind: String,
-
-    /// Remaining implementation work for this scaffold state.
-    todo: Option<String>,
-}
-
 impl Resource for AccountRiskActionCurrentResponse {
     const KIND: &'static str = "account-risk-action-current";
     const PATH: &'static str = "/api/admin/v1/accounts";
@@ -272,68 +103,6 @@ impl Resource for AccountRiskActionCurrentResponse {
             self.account_id
         )
     }
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountRiskActionHistoryResponse {
-    data: Vec<AccountRiskActionTransitionRecord>,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountRiskActionTransitionRecord {
-    /// Account targeted by the persisted transition record.
-    account_id: String,
-
-    /// Stable persisted state-record identifier.
-    state_record_id: Option<String>,
-
-    /// Proposal identifier associated with the state machine, if any.
-    proposal_id: Option<String>,
-
-    /// Action tracked by the state machine, if any.
-    action: Option<String>,
-
-    /// Explicit transition kind recorded for this transition.
-    transition_kind: String,
-
-    /// Previous lifecycle state before this transition, if any.
-    previous_state: Option<String>,
-
-    /// Lifecycle state after this transition.
-    next_state: String,
-
-    /// Monotonic state-machine revision, if any.
-    state_revision: Option<u64>,
-
-    /// Optional ticket or incident reference.
-    ticket: Option<String>,
-
-    /// When the transition record was written.
-    recorded_at: DateTime<Utc>,
-
-    /// Admin identifier associated with the transition.
-    recorded_by: Option<String>,
-
-    /// Admin username associated with the transition.
-    recorded_by_username: Option<String>,
-
-    /// Execution endpoint referenced by this transition, if any.
-    execution_endpoint: Option<String>,
-
-    /// Mutation endpoint referenced by this transition, if any.
-    mutation_endpoint: Option<String>,
-
-    /// Approval note captured by this transition, if any.
-    approval_note: Option<String>,
-
-    /// Execution note captured by this transition, if any.
-    execution_note: Option<String>,
-
-    /// How this scaffold persists the state machine today.
-    state_store_kind: String,
-
-    /// Remaining implementation work captured on this transition, if any.
-    todo: Option<String>,
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
@@ -533,7 +302,7 @@ pub async fn propose(
         reason: params.reason,
         ticket: params.ticket,
         approved_by: params.approved_by,
-        requested_at,
+        requested_at: Some(requested_at),
         requested_by,
         requested_by_username,
         previous_state: "idle".to_owned(),
@@ -661,7 +430,7 @@ pub async fn approve(
         approval_state: "approved_scaffold".to_owned(),
         state_revision: 2,
         transition_kind: "proposal_approved".to_owned(),
-        approved_at,
+        approved_at: Some(approved_at),
         approved_by: params
             .approved_by
             .or_else(|| admin_user.as_ref().map(|user| user.id.to_string())),
@@ -964,7 +733,7 @@ fn risk_action_transition_record(
             .unwrap_or_else(|| "idle".to_owned()),
         state_revision: risk_action_detail_u64(&log.details, "state_revision"),
         ticket: risk_action_detail_string(&log.details, "ticket"),
-        recorded_at: log.created_at,
+        recorded_at: Some(log.created_at),
         recorded_by: risk_action_detail_string(&log.details, "requested_by")
             .or_else(|| risk_action_detail_string(&log.details, "approved_by"))
             .or_else(|| risk_action_detail_string(&log.details, "executed_by")),
