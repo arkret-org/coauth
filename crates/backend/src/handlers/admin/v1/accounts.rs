@@ -22,7 +22,10 @@ use crate::{
             call_context::extract_call_context,
             model::Resource,
             params::{IncludeCount, extract_pagination, extract_ulid_param},
-            response::{PaginatedResponse, SingleResponse},
+            response::{
+                PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+                paginated_response_for_page,
+            },
         },
         common::DepotExt,
     },
@@ -249,8 +252,8 @@ impl Resource for AccountRecord {
     const KIND: &'static str = "account";
     const PATH: &'static str = "/api/admin/v1/accounts";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 

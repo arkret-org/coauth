@@ -87,23 +87,9 @@ pub struct AccountRiskActionExecuteResponse {
     todo: String,
 }
 
-impl Resource for AccountRiskActionCurrentResponse {
-    const KIND: &'static str = "account-risk-action-current";
-    const PATH: &'static str = "/api/admin/v1/accounts";
-
-    fn id(&self) -> Ulid {
-        self.account_id
-            .parse()
-            .expect("account risk-action current response stores a valid Ulid")
-    }
-
-    fn path(&self) -> String {
-        format!(
-            "/api/admin/v1/accounts/{}/risk-action/current",
-            self.account_id
-        )
-    }
-}
+// `impl Resource for AccountRiskActionCurrentResponse` lives next to the
+// type in `coauth_admin_types::risk_action` — both moved together to
+// satisfy the orphan rule.
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AdminBridgeRiskActionExamples {

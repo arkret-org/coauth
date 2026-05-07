@@ -129,8 +129,8 @@ impl Resource for User {
     const KIND: &'static str = "user";
     const PATH: &'static str = "/api/admin/v1/users";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -164,8 +164,8 @@ impl Resource for UserEmail {
     const KIND: &'static str = "user-email";
     const PATH: &'static str = "/api/admin/v1/user-emails";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -306,8 +306,8 @@ impl Resource for OAuth2Session {
     const KIND: &'static str = "oauth2-session";
     const PATH: &'static str = "/api/admin/v1/oauth2-sessions";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -390,8 +390,8 @@ impl Resource for UserSession {
     const KIND: &'static str = "user-session";
     const PATH: &'static str = "/api/admin/v1/user-sessions";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -426,8 +426,8 @@ impl Resource for UpstreamOAuthLink {
     const KIND: &'static str = "upstream-oauth-link";
     const PATH: &'static str = "/api/admin/v1/upstream-oauth-links";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -507,8 +507,8 @@ impl Resource for PolicyData {
     const KIND: &'static str = "policy-data";
     const PATH: &'static str = "/api/admin/v1/policy-data";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -578,8 +578,8 @@ impl Resource for UserRegistrationToken {
     const KIND: &'static str = "user-registration_token";
     const PATH: &'static str = "/api/admin/v1/user-registration-tokens";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -661,8 +661,8 @@ impl Resource for UpstreamOAuthProvider {
     const KIND: &'static str = "upstream-oauth-provider";
     const PATH: &'static str = "/api/admin/v1/upstream-oauth-providers";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -813,8 +813,8 @@ impl Resource for PersonalSession {
     const KIND: &'static str = "personal-session";
     const PATH: &'static str = "/api/admin/v1/personal-sessions";
 
-    fn id(&self) -> Ulid {
-        self.id
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 

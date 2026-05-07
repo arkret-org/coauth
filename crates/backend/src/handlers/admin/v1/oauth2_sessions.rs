@@ -22,7 +22,10 @@ use crate::{
         call_context::extract_call_context,
         model::{OAuth2Session, Resource},
         params::{IncludeCount, extract_pagination, extract_ulid_param},
-        response::{PaginatedResponse, SingleResponse},
+        response::{
+            PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+            paginated_response_for_page,
+        },
     },
 };
 
@@ -325,7 +328,7 @@ pub async fn list_sessions(
                 .await?
                 .map(OAuth2Session::from);
             let count = repo.oauth2_session().count(filter).await?;
-            PaginatedResponse::for_page(page, pagination, Some(count), &base)
+            paginated_response_for_page(page, pagination, Some(count), &base)
         }
         IncludeCount::False => {
             let page = repo
@@ -333,11 +336,11 @@ pub async fn list_sessions(
                 .list(filter, pagination)
                 .await?
                 .map(OAuth2Session::from);
-            PaginatedResponse::for_page(page, pagination, None, &base)
+            paginated_response_for_page(page, pagination, None, &base)
         }
         IncludeCount::Only => {
             let count = repo.oauth2_session().count(filter).await?;
-            PaginatedResponse::for_count_only(count, &base)
+            paginated_response_for_count_only(count, &base)
         }
     };
 
