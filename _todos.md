@@ -74,7 +74,7 @@ return 501 or use scaffolded state.
 
 > Source: `contrix-spec` 2026-05-08 用 Move/Anchor/Lattice 替换旧 state slot 模型。See root [`../_todos.md` C10.E](../_todos.md) and [`../contrix-spec/_state_todos.md`](../contrix-spec/_state_todos.md).
 >
-> Coauth impact is still small. The legacy Phase 1-5 "host endorsement when coauth is Space Host" item is **整体作废** — host endorsement is gone; an anchorer cell governs Anchor signing instead. If coauth ever runs as anchorer, see the new `anchorer signer (rare)` item below.
+> Coauth impact is small: invite consent gate + MIMI consent interop + (rare) anchorer signer. No host endorsement work anywhere.
 
 - [ ] **Invite consent gate** (spec consent-model §6.1, rebased onto Move): before
       issuing or relaying an invite to a target principal, query the holder's
@@ -96,9 +96,7 @@ return 501 or use scaffolded state.
       soland as anchorer for principal control Spaces; if coauth controls a
       principal control Space and acts as its anchorer, coauth needs a light
       anchorer signer (single_did profile) — share the contrix-rust-sdk
-      lattice + anchor crate rather than reimplementing. (Replaces the legacy
-      "host endorsement when coauth runs as Space Host" item, which is
-      作废 under the new model.)
+      lattice + anchor crate rather than reimplementing.
 
 ---
 
