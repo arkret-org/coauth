@@ -83,6 +83,12 @@ data-encoding = "2.10"
 chacha20poly1305 = { version = "0.10.1", features = ["std"] }
 compact_str = "0.9.0"
 console = "0.16.3"
+# Contrix v1 protocol SDK pieces — `contrix-core` exposes the typed
+# identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
+# `contrix-signatures` (with the `signer` feature) provides the production
+# Ed25519 backend used by `anchor_pending_move`.
+contrix-core = { version = "0.5.0", path = "../contrix-rust-sdk/crates/core", default-features = false }
+contrix-signatures = { version = "0.5.0", path = "../contrix-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
 cookie_store = { version = "0.22.1", default-features = false, features = [
     "serde_json",
 ] }

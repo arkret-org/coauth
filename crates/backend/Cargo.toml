@@ -62,6 +62,12 @@ sentry-tracing.workspace = true
 
 coauth-admin-types = { workspace = true, features = ["schema"] }
 coauth-config.workspace = true
+# Contrix v1 SDK: typed Move builder + Ed25519 signer used by
+# `handlers::account::mimi_consent::anchor_pending_move`. `signer` feature
+# pulls in the production Ed25519MoveSigner; `contrix-core` carries the
+# trait + UnsignedMove + identifier types.
+contrix-core.workspace = true
+contrix-signatures = { workspace = true, features = ["signer"] }
 coauth-data.workspace = true
 coauth-messaging.workspace = true
 coauth-i18n.workspace = true

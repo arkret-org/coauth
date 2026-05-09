@@ -2,11 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! MIMI `request_consent` / `update_consent` → consent-cell **Move** mapping
-//! (scaffolding only).
+//! MIMI `request_consent` / `update_consent` → consent-cell **Move** mapping.
 //!
 //! Per the Move/Anchor/Lattice spec (`contrix-spec` 2026-05-08,
-//! `consent-model.md` §3-§9), incoming MIMI consent operations must be
+//! `consent-model.md` §3-§9), incoming MIMI consent operations are
 //! translated into Moves on the holder's consent cell:
 //!
 //! ```text
@@ -14,62 +13,51 @@
 //! ```
 //!
 //! - `request_consent` → no Move yet (the holder hasn't decided); coauth
-//!   should surface this to yougen as a pending-consent UI prompt and
-//!   correlate with `consent_id`.
+//!   surfaces this to yougen as a pending-consent UI prompt and correlates
+//!   with `consent_id`.
 //! - `update_consent { granted = true }` → `or-set add tag` Move with
 //!   `peer=<actor>;scope=<scope>` written to the holder's principal
 //!   control Space.
 //! - `update_consent { granted = false }` → `or-set remove tag` Move
 //!   that revokes the same `(peer, scope)` tag.
 //!
-//! ## Scope of this scaffolding
+//! ## Round 22 (2026-05-09)
 //!
-//! This module exposes the **type signatures** so the handler layer (and
-//! downstream tests) can compile against the eventual integration. The
-//! Move-construction and signing path requires a real anchorer signer
-//! (single_did profile) and is intentionally still a `TODO`. See the
-//! inline `TODO(c10e-mimi-move)` markers — implementing them is a hard
-//! dependency on the SDK's `lattice` + `anchor` crate, which is out of
-//! scope for this round.
+//! `contrix-rust-sdk` 0.5.0 now exposes the public `MoveSigner` trait,
+//! `UnsignedMove` builder, ergonomic `Move::sign(&unsigned, signer)` entry
+//! point and `Ed25519MoveSigner` impl (behind the `signer` feature). This
+//! module wires the full MIMI → SignedMove → soland POST path:
 //!
-//! Current behaviour: every entrypoint returns
-//! `Err(MimiConsentError::NotImplemented)`. The caller (typically a MIMI
-//! gateway adapter) gets a stable error shape so it can degrade
-//! gracefully until the signer wiring lands.
+//! 1. Caller hands an `UpdateConsent` (with `space_id`, `anchor_ref`, `hlc`
+//!    threaded in from upstream — typically populated either from the MIMI
+//!    envelope or from a `consent_cell_query` + `anchor_view_query`
+//!    round-trip).
+//! 2. `update_consent_to_pending_move(...)` produces a `PendingMove`
+//!    carrying everything needed to construct an `UnsignedMove`.
+//! 3. `anchor_pending_move(...)` builds the `UnsignedMove`, calls
+//!    `Move::sign(&unsigned, signer)` against the deployment's
+//!    `AnchorerSigner` (an `Ed25519MoveSigner` wrapper), and POSTs the
+//!    resulting `Move` envelope to soland's `/api/v1/moves` endpoint.
 
 use serde::{Deserialize, Serialize};
 
+use contrix_core::move_event::{Effect, LatticeOp, LatticeOpType};
+use contrix_core::{AnchorId, CellRef, Did, Hlc, Move, SpaceId, UnsignedMove};
+use contrix_signatures::Ed25519MoveSigner;
+
 /// Inbound MIMI `request_consent` payload (subset).
-///
-/// Mirrors the MIMI spec's `request_consent` envelope, narrowed to the
-/// fields coauth actually needs to correlate. Unknown fields are
-/// preserved at the transport layer; this struct is `non_exhaustive` so
-/// future fields can be added without a wire break.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct RequestConsent {
-    /// MIMI correlation id, preserved across the inter-protocol boundary
-    /// as the cell's `consent_id`.
     pub consent_id: String,
-
-    /// DID of the actor (peer) requesting consent.
     pub actor_did: String,
-
-    /// DID of the holder whose cell is the target.
     pub holder_did: String,
-
-    /// Scope being requested (`invite`, `messaging`, ...). Matches the
-    /// or-set tag `scope=<...>` slot.
     pub scope: String,
-
-    /// Optional human-readable reason supplied by the actor; shown in
-    /// the holder's consent UI.
     #[serde(default)]
     pub reason: Option<String>,
 }
 
 impl RequestConsent {
-    /// Construct a fresh request payload for tests / call-site stubs.
     #[must_use]
     pub fn new(
         consent_id: impl Into<String>,
@@ -88,43 +76,56 @@ impl RequestConsent {
 }
 
 /// Inbound MIMI `update_consent` payload (subset).
+///
+/// Round 22: `space_id`, `anchor_ref` and `hlc` are **required** so the
+/// downstream `anchor_pending_move` can build a real `UnsignedMove`. They
+/// are populated either by the MIMI gateway adapter (when those fields
+/// ride on the MIMI envelope) or by an upstream `anchor_view_query`
+/// fetch keyed by the holder's principal control Space.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct UpdateConsent {
-    /// MIMI correlation id, must match an existing `request_consent`.
     pub consent_id: String,
-
-    /// DID of the actor whose consent the holder is granting / revoking.
     pub actor_did: String,
-
-    /// DID of the holder.
     pub holder_did: String,
-
-    /// Scope being granted / revoked.
     pub scope: String,
-
-    /// `true` = grant (add tag), `false` = revoke (remove tag).
     pub granted: bool,
+    /// `cx:space:<uuidv7>` — holder's principal control Space (per spec
+    /// §6 the consent cell lives here). Resolve from `holder_did` via
+    /// `anchor_view_query::holder_principal_space_for_did` if the wire
+    /// envelope does not carry it.
+    pub space_id: String,
+    /// `cx:anchor:sha256:<hex>` — latest anchor leaf the issuer was
+    /// working from. Fetch via
+    /// `anchor_view_query::query_latest_anchor`.
+    pub anchor_ref: String,
+    /// HLC string `<unix-ms-hex>-<logical-hex>-<node-hex>` — populated by
+    /// the upstream caller (typically `anchor_view_query::query_latest_anchor`
+    /// returns one suitable for first use).
+    pub hlc: String,
 }
 
-/// Pending Move, in coauth-land, that has not yet been signed and posted
-/// to the holder's principal server. Held by the caller during the
-/// scaffold phase so tests can assert on shape without signing.
+/// Pending Move: typed bundle ready for `anchor_pending_move` to sign and
+/// submit. Decoupled from the SDK types only so unit tests can construct
+/// one in a single literal expression — `anchor_pending_move` validates
+/// each field through the SDK's `*::new` constructors.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingMove {
-    /// The cell id (`cx:cell:cx.component.consent.grant.v1:<consent_id>`).
+    /// `cx:space:<uuidv7>` — holder's principal control Space.
+    pub space_id: String,
+    /// `cx:cell:cx.component.consent.grant.v1:<consent_id>`.
     pub cell_id: String,
-
     /// Either `or_set_add` or `or_set_remove` per spec §6.1.
     pub op: PendingMoveOp,
-
     /// The OrSet tag to add or remove.
     pub tag: String,
+    /// Latest anchor leaf the issuer references (`cx:anchor:sha256:<hex>`).
+    pub anchor_ref: String,
+    /// HLC `<unix-ms-hex>-<logical-hex>-<node-hex>`.
+    pub hlc: String,
 }
 
-/// Pending Move operation kind. Mirrors the SDK's lattice op surface,
-/// but kept independent so this module stays decoupled from the
-/// not-yet-imported SDK types.
+/// Pending Move operation kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PendingMoveOp {
     /// Grant: append the `(peer, scope)` tag to the cell's OrSet.
@@ -136,28 +137,12 @@ pub enum PendingMoveOp {
 /// Errors produced by the MIMI consent → Move bridge.
 #[derive(Debug, thiserror::Error)]
 pub enum MimiConsentError {
-    /// The signing path requires the contrix-rust-sdk `MoveSigner` API,
-    /// which is not yet exposed on the SDK surface this build links
-    /// against. Returned by `anchor_pending_move` *before* any HTTP
-    /// call so a misconfigured deployment never POSTs an unsigned
-    /// envelope. See `anchor_pending_move` doc-comment for the SDK
-    /// contract we need.
-    #[error(
-        "mimi consent → move: signer SDK surface (MoveSigner + Ed25519MoveSigner + \
-         Anchor::sign_single) is not yet exposed by contrix-rust-sdk; signing path \
-         disabled until that lands"
-    )]
-    SignerSdkUnavailable,
-
     /// `anchor_pending_move` was called without a configured principal
-    /// server URL. Anchorer deployments must configure
-    /// `ContrixConfig::principal_server_url`; non-anchorer deployments
-    /// should never call this entrypoint.
+    /// server URL.
     #[error("mimi consent → move: principal server url not configured")]
     PrincipalServerNotConfigured,
 
     /// `PASION_CONTRIX__ANCHORER_SIGNING_KEY` was set but malformed.
-    /// The absent case does *not* error — see `AnchorerSigner::from_env`.
     #[error("mimi consent: anchorer signing key invalid: {reason}")]
     InvalidAnchorerKey { reason: String },
 
@@ -165,6 +150,19 @@ pub enum MimiConsentError {
     /// invalid URL).
     #[error("mimi consent → move: principal server forward failed: {reason}")]
     PrincipalServerForwardFailed { reason: String },
+
+    /// One of the typed identifier inputs (`space_id`, `anchor_ref`,
+    /// `hlc`, `cell_id`, `issuer_did`) failed strict validation by the
+    /// SDK constructors. Surfaces the field name + the underlying message
+    /// so the caller / operator can tell whether the bug is upstream or
+    /// in the wiring here.
+    #[error("mimi consent → move: invalid typed id for {field}: {reason}")]
+    InvalidTypedId { field: &'static str, reason: String },
+
+    /// `Move::sign(...)` rejected the `UnsignedMove` (issuer / signer
+    /// mismatch, canonical-bytes hashing failure, etc.).
+    #[error("mimi consent → move: signing failed: {reason}")]
+    SigningFailed { reason: String },
 
     /// The actor on the MIMI envelope does not match the holder DID
     /// (and is not a registered controller). Spec §6.2 fail-closed.
@@ -192,32 +190,26 @@ pub fn build_consent_tag(peer_did: &str, scope: &str) -> String {
 
 /// Translate an `update_consent` envelope into a `PendingMove`. Pure
 /// function — no I/O, no signing.
-///
-/// This is the "mostly-typed" first half of the bridge. The second half
-/// (`anchor_pending_move`) hands the `PendingMove` to the anchorer
-/// signer; that path stays `Err(NotImplemented)` until the signer is
-/// available.
 pub fn update_consent_to_pending_move(
     update: &UpdateConsent,
 ) -> Result<PendingMove, MimiConsentError> {
-    if update.consent_id.is_empty() {
-        return Err(MimiConsentError::MissingField {
-            field: "consent_id",
-        });
+    macro_rules! require {
+        ($field:expr, $name:expr) => {
+            if $field.is_empty() {
+                return Err(MimiConsentError::MissingField { field: $name });
+            }
+        };
     }
-    if update.actor_did.is_empty() {
-        return Err(MimiConsentError::MissingField { field: "actor_did" });
-    }
-    if update.holder_did.is_empty() {
-        return Err(MimiConsentError::MissingField {
-            field: "holder_did",
-        });
-    }
-    if update.scope.is_empty() {
-        return Err(MimiConsentError::MissingField { field: "scope" });
-    }
+    require!(update.consent_id, "consent_id");
+    require!(update.actor_did, "actor_did");
+    require!(update.holder_did, "holder_did");
+    require!(update.scope, "scope");
+    require!(update.space_id, "space_id");
+    require!(update.anchor_ref, "anchor_ref");
+    require!(update.hlc, "hlc");
 
     Ok(PendingMove {
+        space_id: update.space_id.clone(),
         cell_id: consent_cell_id(&update.consent_id),
         op: if update.granted {
             PendingMoveOp::OrSetAdd
@@ -225,85 +217,115 @@ pub fn update_consent_to_pending_move(
             PendingMoveOp::OrSetRemove
         },
         tag: build_consent_tag(&update.actor_did, &update.scope),
+        anchor_ref: update.anchor_ref.clone(),
+        hlc: update.hlc.clone(),
     })
 }
 
-/// How the anchorer signing key was obtained at process start. Surfaced
-/// on `AnchorerSigner` so call-sites can log a sticky warning when an
-/// ephemeral key is in use (anything signed with it is unverifiable
-/// across restarts).
+/// How the anchorer signing key was obtained at process start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnchorerSigningKeyOrigin {
     /// Loaded from `PASION_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
-    /// Stable across restarts.
     Configured,
     /// No env var present — generated at process start. Anything signed
-    /// with this key is unverifiable across restarts; production
-    /// deployments must configure a real key.
+    /// with this key is unverifiable across restarts.
     Ephemeral,
 }
 
-/// Anchorer signer handle used by `anchor_pending_move`. Holds the
-/// 32-byte ed25519 signing seed and an `origin` marker that distinguishes
-/// configured vs. ephemerally generated keys.
+/// Anchorer signer handle used by `anchor_pending_move`. Wraps an
+/// SDK `Ed25519MoveSigner` plus the origin marker for warn-log gating.
 ///
-/// **SDK gap**: this is a *placeholder* type. Once
-/// `contrix-rust-sdk` lands the public `MoveSigner` trait + the
-/// `Ed25519MoveSigner` impl + `Anchor::sign_single(...)`, this struct
-/// holds (or wraps) the SDK's signer; until then the seed is stored raw
-/// and the actual `sign_move(...)` call returns `NotImplemented`.
-///
-/// See `anchor_pending_move` doc-comment for the full SDK contract we
-/// need exposed.
-#[derive(Clone)]
+/// Round 22 (2026-05-09): the SDK now publishes `MoveSigner` +
+/// `Ed25519MoveSigner` so this is no longer a placeholder — `from_seed`
+/// constructs the production signer directly. `from_env` is the
+/// ergonomic variant that loads the seed from
+/// `PASION_CONTRIX__ANCHORER_SIGNING_KEY` and falls back to an ephemeral
+/// key with a warn log.
 pub struct AnchorerSigner {
-    /// Raw 32-byte ed25519 signing seed. Once the SDK lands its
-    /// `Ed25519MoveSigner::from_seed(...)` constructor, this becomes
-    /// the input to that ctor; today it's stored opaquely so the rest
-    /// of the wiring (env-var parsing, ephemeral fallback, key origin
-    /// marker) is unblocked.
+    inner: Ed25519MoveSigner,
+    /// Held for clone semantics + debug logging — `Ed25519MoveSigner` is
+    /// not `Clone`, so coauth keeps a copy of the seed and rebuilds the
+    /// inner signer on demand inside `clone()`.
     seed: [u8; 32],
+    issuer_did: String,
+    verification_method_id: String,
     origin: AnchorerSigningKeyOrigin,
+}
+
+impl Clone for AnchorerSigner {
+    fn clone(&self) -> Self {
+        let did = Did::new(self.issuer_did.clone()).expect("did was already validated");
+        Self {
+            inner: Ed25519MoveSigner::from_did_key_seed(
+                self.seed,
+                did,
+                self.verification_method_id.clone(),
+            ),
+            seed: self.seed,
+            issuer_did: self.issuer_did.clone(),
+            verification_method_id: self.verification_method_id.clone(),
+            origin: self.origin,
+        }
+    }
 }
 
 impl std::fmt::Debug for AnchorerSigner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AnchorerSigner")
             .field("seed", &"<redacted>")
+            .field("issuer_did", &self.issuer_did)
+            .field("verification_method_id", &self.verification_method_id)
             .field("origin", &self.origin)
             .finish()
     }
 }
 
 impl AnchorerSigner {
-    /// Construct a signer from a raw 32-byte ed25519 seed. The `origin`
-    /// marker is intended for warn-log gating (see `from_env`).
-    #[must_use]
-    pub fn from_seed(seed: [u8; 32], origin: AnchorerSigningKeyOrigin) -> Self {
-        Self { seed, origin }
+    /// Construct a signer from a raw 32-byte ed25519 seed + the issuer
+    /// DID + verification method id.
+    pub fn from_seed(
+        seed: [u8; 32],
+        issuer_did: impl Into<String>,
+        verification_method_id: impl Into<String>,
+        origin: AnchorerSigningKeyOrigin,
+    ) -> Result<Self, MimiConsentError> {
+        let issuer_did = issuer_did.into();
+        let did = Did::new(issuer_did.clone()).map_err(|error| {
+            MimiConsentError::InvalidTypedId {
+                field: "issuer_did",
+                reason: format!("{error}"),
+            }
+        })?;
+        let kid = verification_method_id.into();
+        let inner = Ed25519MoveSigner::from_did_key_seed(seed, did, kid.clone());
+        Ok(Self {
+            inner,
+            seed,
+            issuer_did,
+            verification_method_id: kid,
+            origin,
+        })
     }
 
-    /// Load the configured anchorer signing key from the
-    /// `PASION_CONTRIX__ANCHORER_SIGNING_KEY` environment variable
-    /// (base64 32-byte seed). When absent, fall back to a freshly
-    /// generated ephemeral seed and emit a warn log; production
-    /// deployments that actually anchor must configure a real key
-    /// because anything signed with the ephemeral seed is unverifiable
-    /// across restarts.
+    /// Load the configured anchorer signing key from
+    /// `PASION_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
+    /// Falls back to an ephemeral key with a warn log when the env var
+    /// is absent.
     ///
-    /// Returns `Err(MimiConsentError::InvalidAnchorerKey)` only when
-    /// the env var is *present* but malformed; the absent case yields
-    /// `Ok(<ephemeral>)` so callers can degrade gracefully in
-    /// non-anchorer deployments.
-    pub fn from_env() -> Result<Self, MimiConsentError> {
+    /// `issuer_did` is the DID coauth signs Moves under (the deployment's
+    /// anchorer DID). `verification_method_id` is the `<did>#<frag>`
+    /// published as `MoveSignature.verification_method`.
+    pub fn from_env(
+        issuer_did: impl Into<String>,
+        verification_method_id: impl Into<String>,
+    ) -> Result<Self, MimiConsentError> {
         use base64ct::{Base64, Encoding as _};
+        let issuer_did = issuer_did.into();
+        let kid = verification_method_id.into();
         match std::env::var("PASION_CONTRIX__ANCHORER_SIGNING_KEY") {
             Ok(raw) => {
                 let trimmed = raw.trim();
-                // base64ct returns the decoded length on success; size
-                // a fixed 32-byte buf and decode in place so we can
-                // distinguish "wrong length" from "malformed alphabet".
-                let mut buf = [0u8; 48]; // 32 bytes encodes to 44 chars, leave headroom
+                let mut buf = [0u8; 48];
                 let decoded = Base64::decode(trimmed, &mut buf).map_err(|error| {
                     MimiConsentError::InvalidAnchorerKey {
                         reason: format!("base64 decode failed: {error:?}"),
@@ -319,7 +341,7 @@ impl AnchorerSigner {
                 }
                 let mut seed = [0_u8; 32];
                 seed.copy_from_slice(decoded);
-                Ok(Self::from_seed(seed, AnchorerSigningKeyOrigin::Configured))
+                Self::from_seed(seed, issuer_did, kid, AnchorerSigningKeyOrigin::Configured)
             }
             Err(_) => {
                 let mut seed = [0_u8; 32];
@@ -330,96 +352,42 @@ impl AnchorerSigner {
                      anchorer key (anything signed will be unverifiable across \
                      restarts — configure a real key for production anchoring)"
                 );
-                Ok(Self::from_seed(seed, AnchorerSigningKeyOrigin::Ephemeral))
+                Self::from_seed(seed, issuer_did, kid, AnchorerSigningKeyOrigin::Ephemeral)
             }
         }
     }
 
-    /// Origin of the underlying signing key. Useful for warn-log gating.
+    /// Origin of the underlying signing key.
     #[must_use]
     pub fn origin(&self) -> AnchorerSigningKeyOrigin {
         self.origin
     }
 
-    /// Raw 32-byte seed accessor. Crate-private to keep the seed from
-    /// leaking outside the bridge layer.
-    #[allow(dead_code)]
-    pub(crate) fn seed(&self) -> &[u8; 32] {
-        &self.seed
+    /// Issuer DID this signer signs Moves under.
+    #[must_use]
+    pub fn issuer_did(&self) -> &str {
+        &self.issuer_did
+    }
+
+    /// Borrow the inner SDK signer (e.g. for `Move::sign(...)` callers
+    /// that already hold an `UnsignedMove`).
+    #[must_use]
+    pub fn inner(&self) -> &Ed25519MoveSigner {
+        &self.inner
     }
 }
 
-/// Sign and submit a `PendingMove` to the holder's principal server.
+/// Build, sign, and POST a `PendingMove` to the holder's principal server.
 ///
-/// On success the signed Move has been POSTed to soland's
-/// `/api/v1/moves` endpoint and accepted with 2xx; on any failure the
-/// caller gets a typed `MimiConsentError`.
+/// On success the SignedMove envelope returned by `Move::sign` has been
+/// POSTed to soland's `/api/v1/moves` endpoint and accepted with 2xx.
 ///
-/// ### SDK gap — still partially blocked at round 21
+/// ### Wire shape
 ///
-/// Round 21 lands the *non-signing* half of this entrypoint:
-///
-/// - `AnchorerSigner::from_env()` parses
-///   `PASION_CONTRIX__ANCHORER_SIGNING_KEY` and falls back to an
-///   ephemeral key with a warn log (see that constructor for details).
-/// - The HTTP forward to soland's `/api/v1/moves` endpoint is
-///   structured the same way as `consent_cell_query::query_consent_cell`
-///   — caller-supplied `reqwest::Client`, 5s timeout,
-///   `X-Contrix-Holder-Did` echo header.
-///
-/// What is **still SDK-blocked**: the parallel contrix-rust-sdk round
-/// 21 agent is exposing a public `MoveSigner` trait + an
-/// `Ed25519MoveSigner` impl, plus `Anchor::sign_single(...)` constructors.
-/// Until those land in `contrix-rust-sdk/crates/sdk/src/lib.rs`, this
-/// function returns `MimiConsentError::SignerSdkUnavailable` *before*
-/// any HTTP call so we don't post unsigned envelopes by accident.
-///
-/// SDK contract we depend on (when it lands, drop into this file):
-///
-/// ```ignore
-/// // from contrix-rust-sdk:
-/// pub trait MoveSigner {
-///     fn sign_move(&self, unsigned: UnsignedMove)
-///         -> Result<SignedMove, contrix::Error>;
-///     fn signer_did(&self) -> &Did;
-/// }
-///
-/// pub struct Ed25519MoveSigner { /* ... */ }
-/// impl Ed25519MoveSigner {
-///     pub fn from_seed(seed: [u8; 32], did: Did) -> Self;
-/// }
-/// impl MoveSigner for Ed25519MoveSigner { /* ... */ }
-///
-/// pub struct Anchor;
-/// impl Anchor {
-///     pub fn sign_single<S: MoveSigner>(
-///         signer: &S,
-///         unsigned: UnsignedMove,
-///     ) -> Result<SignedMove, contrix::Error>;
-/// }
-/// ```
-///
-/// Once that contract is published from `contrix-rust-sdk`, the inline
-/// `// SDK-WIRE` block below becomes:
-///
-/// ```ignore
-/// let signer = Ed25519MoveSigner::from_seed(*signer.seed(), anchorer_did.clone());
-/// let unsigned = UnsignedMove {
-///     cell_id: pending.cell_id.clone(),
-///     op: match pending.op {
-///         PendingMoveOp::OrSetAdd => MoveOp::OrSetAdd { tag: pending.tag.clone() },
-///         PendingMoveOp::OrSetRemove => MoveOp::OrSetRemove { tag: pending.tag.clone() },
-///     },
-///     /* hlc, parents, anchorer_did populated by the SDK builder */
-/// };
-/// let signed = Anchor::sign_single(&signer, unsigned)
-///     .map_err(MimiConsentError::sdk_error)?;
-/// // POST signed to soland (already wired below).
-/// ```
-///
-/// Tracked under `TODO(c10e-mimi-move)` and the §"P1: Move / Anchor /
-/// Lattice — anchorer signer (rare deployment mode)" subtask of
-/// `coauth/_todos.md`.
+/// The body is `serde_json::to_value(&signed_move)` directly — i.e.
+/// the canonical `Move` envelope from `contrix-core::move_event::Move`,
+/// not the legacy `{cell_id, op, tag}` placeholder. `X-Contrix-Holder-Did`
+/// echoes the holder DID for soland's per-Space routing.
 pub async fn anchor_pending_move(
     pending: &PendingMove,
     principal_server_url: Option<&url::Url>,
@@ -431,71 +399,103 @@ pub async fn anchor_pending_move(
         return Err(MimiConsentError::PrincipalServerNotConfigured);
     };
 
-    // ── SDK-WIRE ──────────────────────────────────────────────────
-    // TODO(c10e-mimi-move): once `contrix-rust-sdk` exposes the public
-    // `MoveSigner` + `Ed25519MoveSigner` + `Anchor::sign_single(...)`
-    // surface (see doc-comment above for the contract), replace this
-    // early-return with the build-and-sign block. Today we fail closed
-    // with SignerSdkUnavailable so a misconfigured deployment never
-    // POSTs an unsigned envelope.
-    let _ = (signer, anchorer_holder_did);
-    if true {
-        return Err(MimiConsentError::SignerSdkUnavailable);
-    }
-    // ── /SDK-WIRE ─────────────────────────────────────────────────
+    let signed_move = build_and_sign_move(pending, signer)?;
 
-    // The HTTP forward below is unreachable until the SDK lands; keeping
-    // it in source so the diff for the SDK-wire is small and the request
-    // shape is reviewable now. Mirrors `consent_cell_query.rs` patterns.
-    #[allow(unreachable_code)]
-    {
-        let url = base.join("api/v1/moves").map_err(|error| {
-            MimiConsentError::PrincipalServerForwardFailed {
-                reason: format!("invalid principal server url: {error}"),
-            }
+    let url = base.join("api/v1/moves").map_err(|error| {
+        MimiConsentError::PrincipalServerForwardFailed {
+            reason: format!("invalid principal server url: {error}"),
+        }
+    })?;
+
+    let body = serde_json::to_value(&signed_move).map_err(|error| {
+        MimiConsentError::PrincipalServerForwardFailed {
+            reason: format!("failed to serialize SignedMove: {error}"),
+        }
+    })?;
+
+    let response = http_client
+        .post(url)
+        .header("X-Contrix-Holder-Did", anchorer_holder_did)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+        .map_err(|error| MimiConsentError::PrincipalServerForwardFailed {
+            reason: format!("HTTP send failed: {error}"),
         })?;
 
-        // The body shape echoes the spec §6 SignedMove envelope; once the
-        // SDK lands, this becomes a `serde_json::to_value(&signed_move)`.
-        let body = serde_json::json!({
-            "cell_id": pending.cell_id,
-            "op": match pending.op {
-                PendingMoveOp::OrSetAdd => "or_set_add",
-                PendingMoveOp::OrSetRemove => "or_set_remove",
-            },
-            "tag": pending.tag,
+    let status = response.status();
+    if !status.is_success() {
+        return Err(MimiConsentError::PrincipalServerForwardFailed {
+            reason: format!("soland returned non-success status {status}"),
         });
-
-        let response = http_client
-            .post(url)
-            .header("X-Contrix-Holder-Did", anchorer_holder_did)
-            .json(&body)
-            .timeout(std::time::Duration::from_secs(5))
-            .send()
-            .await
-            .map_err(|error| MimiConsentError::PrincipalServerForwardFailed {
-                reason: format!("HTTP send failed: {error}"),
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            return Err(MimiConsentError::PrincipalServerForwardFailed {
-                reason: format!("soland returned non-success status {status}"),
-            });
-        }
-        Ok(())
     }
+    Ok(())
+}
+
+/// Build a fully-signed `Move` from a `PendingMove`. Splits out of
+/// `anchor_pending_move` so unit tests can assert on the wire body without
+/// needing a wiremock server.
+pub(crate) fn build_and_sign_move(
+    pending: &PendingMove,
+    signer: &AnchorerSigner,
+) -> Result<Move, MimiConsentError> {
+    let space = SpaceId::new(pending.space_id.clone()).map_err(|error| {
+        MimiConsentError::InvalidTypedId {
+            field: "space_id",
+            reason: format!("{error}"),
+        }
+    })?;
+    let cell = CellRef::new(pending.cell_id.clone()).map_err(|error| {
+        MimiConsentError::InvalidTypedId {
+            field: "cell_id",
+            reason: format!("{error}"),
+        }
+    })?;
+    let anchor = AnchorId::new(pending.anchor_ref.clone()).map_err(|error| {
+        MimiConsentError::InvalidTypedId {
+            field: "anchor_ref",
+            reason: format!("{error}"),
+        }
+    })?;
+    let hlc = Hlc::new(pending.hlc.clone()).map_err(|error| {
+        MimiConsentError::InvalidTypedId {
+            field: "hlc",
+            reason: format!("{error}"),
+        }
+    })?;
+    let issuer = Did::new(signer.issuer_did().to_owned()).map_err(|error| {
+        MimiConsentError::InvalidTypedId {
+            field: "issuer_did",
+            reason: format!("{error}"),
+        }
+    })?;
+
+    let op_type = match pending.op {
+        PendingMoveOp::OrSetAdd => LatticeOpType::Add,
+        PendingMoveOp::OrSetRemove => LatticeOpType::Remove,
+    };
+    let effect = Effect {
+        cell,
+        op: LatticeOp {
+            op_type,
+            tag: Some(pending.tag.clone()),
+            value: None,
+            from: None,
+            to: None,
+            reason: None,
+            issuer_seq: None,
+        },
+    };
+    let unsigned = UnsignedMove::new(issuer, space, anchor, vec![effect], hlc);
+    Move::sign(&unsigned, signer.inner()).map_err(|error| MimiConsentError::SigningFailed {
+        reason: format!("{error}"),
+    })
 }
 
 /// Authorize a MIMI envelope's actor against the holder. Returns
-/// `Ok(())` when `actor_did == holder_did` (self-update — common case)
-/// or when the actor is in the controller allowlist supplied by the
-/// caller.
-///
-/// The spec also permits delegated controllers from the holder's
-/// principal control Space, but resolving those requires a soland round
-/// trip; that's left to the caller for now. This helper covers the
-/// "self" case which is enough for unit-testable scaffolding.
+/// `Ok(())` when `actor_did == holder_did` (self-update) or when the
+/// actor is in the controller allowlist supplied by the caller.
 pub fn authorize_actor(
     actor_did: &str,
     holder_did: &str,
@@ -514,6 +514,29 @@ pub fn authorize_actor(
 mod tests {
     use super::*;
 
+    fn sample_pending() -> PendingMove {
+        PendingMove {
+            space_id: "cx:space:0196419b-0000-7000-8000-00000000014a".to_owned(),
+            cell_id: consent_cell_id("c-1"),
+            op: PendingMoveOp::OrSetAdd,
+            tag: build_consent_tag("did:web:peer", "invite"),
+            anchor_ref:
+                "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_owned(),
+            hlc: "0189c4d2af00-00000000-aabbccdd".to_owned(),
+        }
+    }
+
+    fn sample_signer() -> AnchorerSigner {
+        AnchorerSigner::from_seed(
+            [7u8; 32],
+            "did:web:anchorer.example",
+            "did:web:anchorer.example#key-1",
+            AnchorerSigningKeyOrigin::Configured,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn cell_id_uses_grant_family() {
         assert_eq!(
@@ -530,52 +553,88 @@ mod tests {
         );
     }
 
-    #[test]
-    fn update_consent_grant_maps_to_or_set_add() {
-        let update = UpdateConsent {
+    fn sample_update(granted: bool) -> UpdateConsent {
+        UpdateConsent {
             consent_id: "c-1".into(),
             actor_did: "did:web:peer".into(),
             holder_did: "did:web:holder".into(),
             scope: "invite".into(),
-            granted: true,
-        };
-        let pending = update_consent_to_pending_move(&update).unwrap();
+            granted,
+            space_id: "cx:space:0196419b-0000-7000-8000-00000000014a".into(),
+            anchor_ref:
+                "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                    .into(),
+            hlc: "0189c4d2af00-00000000-aabbccdd".into(),
+        }
+    }
+
+    #[test]
+    fn update_consent_grant_maps_to_or_set_add() {
+        let pending = update_consent_to_pending_move(&sample_update(true)).unwrap();
         assert_eq!(
             pending.cell_id,
             "cx:cell:cx.component.consent.grant.v1:c-1"
         );
         assert_eq!(pending.op, PendingMoveOp::OrSetAdd);
         assert_eq!(pending.tag, "peer=did:web:peer;scope=invite");
+        assert_eq!(
+            pending.space_id,
+            "cx:space:0196419b-0000-7000-8000-00000000014a"
+        );
+        assert_eq!(pending.hlc, "0189c4d2af00-00000000-aabbccdd");
     }
 
     #[test]
     fn update_consent_revoke_maps_to_or_set_remove() {
-        let update = UpdateConsent {
-            consent_id: "c-1".into(),
-            actor_did: "did:web:peer".into(),
-            holder_did: "did:web:holder".into(),
-            scope: "invite".into(),
-            granted: false,
-        };
-        let pending = update_consent_to_pending_move(&update).unwrap();
+        let pending = update_consent_to_pending_move(&sample_update(false)).unwrap();
         assert_eq!(pending.op, PendingMoveOp::OrSetRemove);
     }
 
     #[test]
-    fn update_consent_rejects_empty_fields() {
-        let update = UpdateConsent {
-            consent_id: String::new(),
-            actor_did: "x".into(),
-            holder_did: "y".into(),
-            scope: "invite".into(),
-            granted: true,
-        };
+    fn update_consent_rejects_empty_consent_id() {
+        let mut update = sample_update(true);
+        update.consent_id = String::new();
         let err = update_consent_to_pending_move(&update).unwrap_err();
         assert!(matches!(
             err,
             MimiConsentError::MissingField {
                 field: "consent_id"
             }
+        ));
+    }
+
+    #[test]
+    fn update_consent_rejects_empty_space_id() {
+        let mut update = sample_update(true);
+        update.space_id = String::new();
+        let err = update_consent_to_pending_move(&update).unwrap_err();
+        assert!(matches!(
+            err,
+            MimiConsentError::MissingField { field: "space_id" }
+        ));
+    }
+
+    #[test]
+    fn update_consent_rejects_empty_anchor_ref() {
+        let mut update = sample_update(true);
+        update.anchor_ref = String::new();
+        let err = update_consent_to_pending_move(&update).unwrap_err();
+        assert!(matches!(
+            err,
+            MimiConsentError::MissingField {
+                field: "anchor_ref"
+            }
+        ));
+    }
+
+    #[test]
+    fn update_consent_rejects_empty_hlc() {
+        let mut update = sample_update(true);
+        update.hlc = String::new();
+        let err = update_consent_to_pending_move(&update).unwrap_err();
+        assert!(matches!(
+            err,
+            MimiConsentError::MissingField { field: "hlc" }
         ));
     }
 
@@ -609,65 +668,224 @@ mod tests {
     #[tokio::test]
     async fn anchor_pending_move_without_principal_url_returns_typed_error() {
         crate::handlers::test_utils::setup();
-        let pending = PendingMove {
-            cell_id: consent_cell_id("c-1"),
-            op: PendingMoveOp::OrSetAdd,
-            tag: build_consent_tag("did:web:p", "invite"),
-        };
+        let pending = sample_pending();
         let client = reqwest::Client::new();
-        let signer = AnchorerSigner::from_seed([0u8; 32], AnchorerSigningKeyOrigin::Ephemeral);
-        let err =
-            anchor_pending_move(&pending, None, &client, &signer, "did:web:anchorer")
-                .await
-                .unwrap_err();
+        let signer = sample_signer();
+        let err = anchor_pending_move(
+            &pending,
+            None,
+            &client,
+            &signer,
+            "did:web:anchorer.example",
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, MimiConsentError::PrincipalServerNotConfigured));
     }
 
+    #[test]
+    fn anchorer_signer_from_seed_marks_origin() {
+        let s = AnchorerSigner::from_seed(
+            [0u8; 32],
+            "did:web:anchorer.example",
+            "did:web:anchorer.example#key-1",
+            AnchorerSigningKeyOrigin::Configured,
+        )
+        .unwrap();
+        assert_eq!(s.origin(), AnchorerSigningKeyOrigin::Configured);
+        assert_eq!(s.issuer_did(), "did:web:anchorer.example");
+    }
+
+    #[test]
+    fn anchorer_signer_from_seed_ephemeral_origin_is_ephemeral() {
+        let s = AnchorerSigner::from_seed(
+            [42u8; 32],
+            "did:web:anchorer.example",
+            "did:web:anchorer.example#key-1",
+            AnchorerSigningKeyOrigin::Ephemeral,
+        )
+        .unwrap();
+        assert_eq!(s.origin(), AnchorerSigningKeyOrigin::Ephemeral);
+    }
+
+    #[test]
+    fn anchorer_signer_rejects_malformed_did() {
+        let err = AnchorerSigner::from_seed(
+            [0u8; 32],
+            "not-a-did",
+            "not-a-did#key-1",
+            AnchorerSigningKeyOrigin::Configured,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            MimiConsentError::InvalidTypedId {
+                field: "issuer_did",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn build_and_sign_move_produces_valid_signed_envelope() {
+        let pending = sample_pending();
+        let signer = sample_signer();
+        let signed = build_and_sign_move(&pending, &signer).unwrap();
+        // SDK validators run on the wire envelope.
+        signed.validate_id().unwrap();
+        signed.validate_structural().unwrap();
+        // Issuer + verification_method match the signer.
+        assert_eq!(signed.issuer.as_str(), "did:web:anchorer.example");
+        assert_eq!(
+            signed.sig.verification_method,
+            "did:web:anchorer.example#key-1"
+        );
+        // Single effect carrying the OrSet add tag.
+        assert_eq!(signed.effects.len(), 1);
+        let effect = &signed.effects[0];
+        assert_eq!(effect.cell.as_str(), pending.cell_id);
+        assert!(matches!(
+            effect.op.op_type,
+            contrix_core::move_event::LatticeOpType::Add
+        ));
+        assert_eq!(effect.op.tag.as_deref(), Some(pending.tag.as_str()));
+    }
+
+    #[test]
+    fn build_and_sign_move_rejects_malformed_anchor_ref() {
+        let mut pending = sample_pending();
+        pending.anchor_ref = "not-an-anchor".into();
+        let signer = sample_signer();
+        let err = build_and_sign_move(&pending, &signer).unwrap_err();
+        assert!(matches!(
+            err,
+            MimiConsentError::InvalidTypedId {
+                field: "anchor_ref",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn build_and_sign_move_rejects_malformed_hlc() {
+        let mut pending = sample_pending();
+        pending.hlc = "not-an-hlc".into();
+        let signer = sample_signer();
+        let err = build_and_sign_move(&pending, &signer).unwrap_err();
+        assert!(matches!(
+            err,
+            MimiConsentError::InvalidTypedId { field: "hlc", .. }
+        ));
+    }
+
+    #[test]
+    fn build_and_sign_move_emits_or_set_remove_for_revoke() {
+        let mut pending = sample_pending();
+        pending.op = PendingMoveOp::OrSetRemove;
+        let signer = sample_signer();
+        let signed = build_and_sign_move(&pending, &signer).unwrap();
+        assert!(matches!(
+            signed.effects[0].op.op_type,
+            contrix_core::move_event::LatticeOpType::Remove
+        ));
+    }
+
     #[tokio::test]
-    async fn anchor_pending_move_with_principal_url_returns_sdk_unavailable() {
+    async fn anchor_pending_move_posts_signed_move_envelope_to_soland() {
+        use wiremock::matchers::{header, method, path};
+        use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+
         crate::handlers::test_utils::setup();
-        let pending = PendingMove {
-            cell_id: consent_cell_id("c-1"),
-            op: PendingMoveOp::OrSetAdd,
-            tag: build_consent_tag("did:web:p", "invite"),
-        };
+        let server = MockServer::start().await;
+        let pending = sample_pending();
+        let signer = sample_signer();
+
+        Mock::given(method("POST"))
+            .and(path("/api/v1/moves"))
+            .and(header("x-contrix-holder-did", "did:web:holder.example"))
+            .respond_with(move |req: &Request| {
+                // Body must be a serialized SDK Move envelope, not the
+                // legacy `{cell_id, op, tag}` placeholder. Round-trip
+                // through serde to assert the wire shape — if any field
+                // changes in the SDK, this fails loudly.
+                let body: serde_json::Value =
+                    serde_json::from_slice(&req.body).expect("valid JSON body");
+                let m: contrix_core::Move =
+                    serde_json::from_value(body.clone()).expect("body deserializes as Move");
+                assert_eq!(m.issuer.as_str(), "did:web:anchorer.example");
+                assert_eq!(m.effects.len(), 1);
+                assert_eq!(
+                    m.effects[0].cell.as_str(),
+                    "cx:cell:cx.component.consent.grant.v1:c-1"
+                );
+                // No legacy keys allowed at the top level.
+                assert!(body.get("cell_id").is_none(), "legacy cell_id must be absent");
+                assert!(body.get("op").is_none(), "legacy op must be absent");
+                assert!(body.get("tag").is_none(), "legacy tag must be absent");
+                ResponseTemplate::new(202)
+            })
+            .expect(1)
+            .mount(&server)
+            .await;
+
         let client = reqwest::Client::new();
-        let signer = AnchorerSigner::from_seed([1u8; 32], AnchorerSigningKeyOrigin::Configured);
-        let base = url::Url::parse("https://example.invalid/").unwrap();
+        let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
+        anchor_pending_move(
+            &pending,
+            Some(&base),
+            &client,
+            &signer,
+            "did:web:holder.example",
+        )
+        .await
+        .expect("anchor_pending_move succeeds against mock soland");
+    }
+
+    #[tokio::test]
+    async fn anchor_pending_move_surfaces_non_success_status() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        crate::handlers::test_utils::setup();
+        let server = MockServer::start().await;
+        let pending = sample_pending();
+        let signer = sample_signer();
+
+        Mock::given(method("POST"))
+            .and(path("/api/v1/moves"))
+            .respond_with(ResponseTemplate::new(503))
+            .mount(&server)
+            .await;
+
+        let client = reqwest::Client::new();
+        let base = url::Url::parse(&format!("{}/", server.uri())).unwrap();
         let err = anchor_pending_move(
             &pending,
             Some(&base),
             &client,
             &signer,
-            "did:web:anchorer",
+            "did:web:holder.example",
         )
         .await
         .unwrap_err();
-        // Expected: until contrix-rust-sdk lands the public MoveSigner
-        // trait, the signing path early-returns SignerSdkUnavailable
-        // *before* any HTTP call so we never POST an unsigned envelope.
-        assert!(matches!(err, MimiConsentError::SignerSdkUnavailable));
+        assert!(matches!(
+            err,
+            MimiConsentError::PrincipalServerForwardFailed { .. }
+        ));
     }
 
     #[test]
-    fn anchorer_signer_from_seed_marks_origin() {
-        let s = AnchorerSigner::from_seed([0u8; 32], AnchorerSigningKeyOrigin::Configured);
-        assert_eq!(s.origin(), AnchorerSigningKeyOrigin::Configured);
-        assert_eq!(s.seed(), &[0u8; 32]);
+    fn anchorer_signer_clone_round_trips() {
+        let s = sample_signer();
+        let s2 = s.clone();
+        assert_eq!(s.issuer_did(), s2.issuer_did());
+        assert_eq!(s.origin(), s2.origin());
+        // Both clones must be able to sign — verifies the cloned inner
+        // Ed25519MoveSigner is functional.
+        let pending = sample_pending();
+        let m1 = build_and_sign_move(&pending, &s).unwrap();
+        let m2 = build_and_sign_move(&pending, &s2).unwrap();
+        // Same seed + same canonical body → identical move id.
+        assert_eq!(m1.id, m2.id);
     }
-
-    #[test]
-    fn anchorer_signer_from_seed_ephemeral_origin_is_ephemeral() {
-        let s = AnchorerSigner::from_seed([42u8; 32], AnchorerSigningKeyOrigin::Ephemeral);
-        assert_eq!(s.origin(), AnchorerSigningKeyOrigin::Ephemeral);
-    }
-
-    // `AnchorerSigner::from_env` is intentionally not unit-tested for
-    // its env-mutation cases — Rust 2024 marks `std::env::set_var` /
-    // `remove_var` as `unsafe`, and the workspace lint config enforces
-    // `-D unsafe-code`. The structural cases (seed-from-explicit, seed
-    // origin marker, error-shape on bad seed length) cover the
-    // important branches; the env-parsing branch itself is short and
-    // straight-line. Integration coverage will catch a regression
-    // there once an anchorer profile lands.
 }

@@ -4,6 +4,84 @@
 > Scope: Contrix Auth / Account Server. Only **unfinished** items are
 > listed here. Completed items live in `git log` and `CHANGELOG.md`.
 
+## C10.E 续⁵ — anchor_pending_move SDK wire-in + anchor-view fetcher + signed-Move POST (2026-05-09 二十二轮)
+
+Round 22 finishes the MIMI consent → Move bridge: contrix-rust-sdk 0.5.0
+now exposes the public `MoveSigner` trait + `UnsignedMove` builder +
+`Move::sign(...)` ergonomic entry + `Ed25519MoveSigner` (feature
+`signer`), so coauth's `anchor_pending_move` can build, sign, and POST a
+real `Move` envelope to soland's `/api/v1/moves`.
+
+Landed:
+- Workspace deps: `contrix-core` (0.5.0, path
+  `../contrix-rust-sdk/crates/core`) and `contrix-signatures` (with the
+  `signer` feature) added to `[workspace.dependencies]` in
+  `Cargo.toml`. `crates/backend/Cargo.toml` consumes both.
+- `crates/backend/src/handlers/account/mimi_consent.rs`:
+  - `PendingMove` extended with `space_id`, `anchor_ref`, `hlc` so it
+    carries everything `UnsignedMove::new` needs. `UpdateConsent` gains
+    the same three fields (required, validated by
+    `update_consent_to_pending_move`).
+  - `AnchorerSigner` rewritten to **wrap** `Ed25519MoveSigner` from the
+    SDK (instead of holding a raw seed). `from_seed`/`from_env` now
+    accept the issuer DID + verification method id (`<did>#<frag>`) so
+    the Ed25519 backend can be constructed at load time. Manual `Clone`
+    impl rebuilds the inner SDK signer (which is not `Clone`) from the
+    cached seed.
+  - New `build_and_sign_move(...)` (crate-private) constructs a real
+    `UnsignedMove` from a `PendingMove` (via the SDK's strict
+    `SpaceId`/`CellRef`/`AnchorId`/`Hlc`/`Did` validators) and returns
+    a `contrix_core::Move` via `Move::sign`. Used by
+    `anchor_pending_move` and unit-testable in isolation.
+  - `anchor_pending_move(...)` now does the real work: build →
+    `Move::sign` → `serde_json::to_value(&signed_move)` → POST to
+    `{principal}/api/v1/moves` with `X-Contrix-Holder-Did`. The
+    legacy `{cell_id, op, tag}` placeholder body is gone.
+  - **Removed** `MimiConsentError::SignerSdkUnavailable` entirely —
+    the SDK is here, the variant was unreachable. Replaced with
+    `InvalidTypedId { field, reason }` (for SDK constructor failures
+    on `space_id` / `anchor_ref` / `hlc` / `cell_id` / `issuer_did`)
+    and `SigningFailed { reason }` (for `Move::sign` failures).
+- New helper `crates/backend/src/handlers/account/anchor_view_query.rs`:
+  - `query_latest_anchor(principal_url, space_id, http_client)` calls
+    `GET /api/admin/v1/spaces/{id}/anchor-dag`, picks the latest leaf
+    by `created_at` (descending; falls back to first non-empty leaf
+    when no entries carry a timestamp), and returns
+    `LatestAnchorView { leaf_anchor_id, hlc }`. Mirrors
+    `consent_cell_query.rs` shape (5 s timeout, caller-supplied
+    `reqwest::Client`).
+  - `holder_principal_space_for_did(did)` is the deterministic DID →
+    `cx:space:<uuidv7>` mapping (`sha256("cx:space:principal-control:v1:" + did)`,
+    first 16 bytes, version-7 + RFC-9562 variant nibbles forced). Note
+    in the docstring spells out the swap-in point if soland later
+    publishes a real lookup endpoint.
+  - `fresh_hlc()` generates a `<unix-ms-12hex>-<8hex-zero>-<8hex-rand>`
+    HLC string that round-trips through `contrix_core::Hlc::new`.
+  - 7 unit tests (4 wiremock-driven HTTP scenarios + 3 pure-fn cases
+    for HLC validity, deterministic-mapping, and SDK SpaceId
+    round-trip).
+- `crates/backend/src/handlers/account/mod.rs` registers
+  `pub mod anchor_view_query;`.
+
+Test counts: `cargo check --workspace` clean. `cargo test -p
+coauth-backend --lib`: 250 tests, 134 pass, 115 fail with the
+pre-existing `DATABASE_URL` baseline (unchanged from round 21), 1
+ignored. Specifically:
+- `mimi_consent` tests: 22 pass (was 12 in round 21, +10 covering the
+  new field validators, `build_and_sign_move` wire shape, `Move::sign`
+  round-trip, signed-Move POST body assertion, `AnchorerSigner` clone,
+  malformed-DID rejection).
+- `anchor_view_query` tests: 7 pass (new module).
+
+Deferred (intentional):
+- soland's `account/{did}/principal-space` endpoint isn't published —
+  `holder_principal_space_for_did` covers the deterministic offline
+  path with a clear note in its docstring for the eventual swap-in.
+- `is_typed_uuid7` admin-handler call-sites: no demand yet.
+  Helper stays staged ahead of demand.
+- Delegated-controller resolution in `authorize_actor` — still requires
+  a soland round trip; static-list path covers the scaffolding.
+
 ## C10.E 续⁴ — anchor_pending_move HTTP wiring + quarantine approve auto-replay + mint helper extraction (2026-05-09 二十一轮)
 
 Round 21 finishes the *non-signing* half of the MIMI consent → Move
@@ -468,41 +546,42 @@ return 501 or use scaffolded state.
   `batch_invite`. Reject is still flag-flip-only. ~46 tests across
   5 modules. Remaining: real soland cell-read endpoint
   (`TODO(soland-cell-query)`).
-- [~] **MIMI consent interop** (rebased onto Move): when accepting incoming
+- [x] **MIMI consent interop** (rebased onto Move): when accepting incoming
       MIMI `request_consent` / `update_consent`, validate the actor is the
       declared holder or an authorized controller, then construct a Move on
       the holder's consent cell (or-set: grant=add tag, revoke=remove tag)
       written into that holder's principal control Space; preserve
       `consent_id` as inter-protocol correlation.
 
-  Status (2026-05-09 二十一轮): typed envelopes + pure
-  `update_consent_to_pending_move(...)` mapping landed (round 19).
-  `anchor_pending_move(...)` now wires the env-var-driven anchorer
-  signing key (`AnchorerSigner::from_env`) + structured POST to soland
-  `/api/v1/moves` (round 21). The signing call itself is still SDK-
-  blocked: the function early-returns `SignerSdkUnavailable` until
-  contrix-rust-sdk exposes the public `MoveSigner` /
-  `Ed25519MoveSigner` / `Anchor::sign_single(...)` surface. See the
-  anchorer-signer subtask below for the precise SDK contract.
-- [~] **Anchorer signer (rare deployment mode)**: typical deployments have
+  Status (2026-05-09 二十二轮): full bridge landed. Typed envelopes +
+  pure `update_consent_to_pending_move(...)` mapping (round 19);
+  env-var-driven `AnchorerSigner` + structured POST to soland
+  `/api/v1/moves` (round 21); `Move::sign` wire-in via SDK 0.5.0's
+  public `MoveSigner` + `UnsignedMove` + `Ed25519MoveSigner` + the
+  ergonomic `Move::sign(&unsigned, signer)` entry (round 22). The
+  function now builds an `UnsignedMove`, signs it, serializes the
+  resulting `Move` via `serde_json::to_value`, and POSTs the canonical
+  envelope to soland with `X-Contrix-Holder-Did`. `PendingMove` /
+  `UpdateConsent` carry `space_id` + `anchor_ref` + `hlc` so the
+  upstream MIMI gateway (or `anchor_view_query::query_latest_anchor`)
+  populates the fields the SDK needs. Caller wire-in into a real MIMI
+  ingress handler is a follow-on item (no MIMI gateway in coauth yet).
+- [x] **Anchorer signer (rare deployment mode)**: typical deployments have
       soland as anchorer for principal control Spaces; if coauth controls a
       principal control Space and acts as its anchorer, coauth needs a light
       anchorer signer (single_did profile) — share the contrix-rust-sdk
       lattice + anchor crate rather than reimplementing.
 
-      Status (2026-05-09 二十一轮): non-signing wiring landed.
-      `AnchorerSigner` parses
-      `PASION_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed) with
-      ephemeral fallback + warn log. `anchor_pending_move(...)` now
-      takes the signer + holder DID and structures the soland
-      `/api/v1/moves` POST identically to the existing
-      `consent_cell_query.rs` pattern. Until contrix-rust-sdk
-      publishes the `MoveSigner` + `Ed25519MoveSigner` +
-      `Anchor::sign_single(...)` trait/impl, the function early-returns
-      `SignerSdkUnavailable` before any HTTP call so a misconfigured
-      deployment never POSTs an unsigned envelope. The SDK contract is
-      spelled out in the `mimi_consent.rs` doc-comment; round-22 will
-      drop into the `// SDK-WIRE` block.
+      Status (2026-05-09 二十二轮): production wiring landed.
+      `AnchorerSigner` now wraps `contrix_signatures::Ed25519MoveSigner`
+      (feature `signer`). `from_seed` / `from_env` accept the issuer
+      DID + verification method id and validate them through the SDK's
+      strict `Did` constructor, so a misconfigured deployment fails at
+      load time rather than at first sign. `anchor_pending_move(...)`
+      drives the SDK's `Move::sign(&unsigned, signer)` and POSTs the
+      resulting `Move` envelope to soland. The
+      `MimiConsentError::SignerSdkUnavailable` variant is removed —
+      the SDK is published.
 
 ---
 

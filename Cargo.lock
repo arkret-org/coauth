@@ -1199,6 +1199,8 @@ dependencies = [
  "coauth-policy",
  "coauth-tasks",
  "coauth-templates",
+ "contrix-core",
+ "contrix-signatures",
  "cookie",
  "cookie_store",
  "crc",
@@ -1784,6 +1786,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7bda66e858c683005a53a9a60c69a4aca7eeaa45d124526e389f7aec8e62f38"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "contrix-core"
+version = "0.5.0"
+dependencies = [
+ "base64",
+ "chrono",
+ "contrix-identifiers",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "contrix-identifiers"
+version = "0.5.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "serde",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "contrix-signatures"
+version = "0.5.0"
+dependencies = [
+ "base64",
+ "chrono",
+ "contrix-core",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
