@@ -31,6 +31,7 @@ pub mod emails;
 pub mod flow;
 pub mod invite_relay;
 pub mod linked_accounts;
+pub mod mimi_consent;
 pub mod notification_prefs;
 pub mod oauth2_clients;
 pub mod openapi;

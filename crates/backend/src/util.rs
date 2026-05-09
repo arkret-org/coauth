@@ -77,6 +77,65 @@ pub fn username_valid(username: &str) -> bool {
     true
 }
 
+/// Validate that a string is a Contrix typed wire id of shape
+/// `cx:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
+///
+/// This is the Move/Anchor/Lattice typed-id surface (spec `wire-ids.md` —
+/// rebased onto UUIDv7 in 2026-05). coauth's internal admin tokens and
+/// personal session ids stay ULID; this helper is for the few admin /
+/// session-grant handler call-sites that consume Contrix wire ids
+/// (`cx:device:<uuid7>`, `cx:space:<uuid7>`, `cx:cell:<family>:<id>`,
+/// etc.) from external requests.
+///
+/// Wire-rejection of legacy ULID is intentional — v1 is unreleased so
+/// there is no compatibility burden. Callers that must accept ULID for
+/// some other reason should not use this helper.
+///
+/// # Examples
+/// ```
+/// use coauth_backend::util::is_typed_uuid7;
+/// // valid v7 uuid (timestamp + version bits)
+/// assert!(is_typed_uuid7(
+///     "cx:device:0190a3c0-0000-7000-8000-000000000000",
+///     "device"
+/// ));
+/// // wrong prefix → false
+/// assert!(!is_typed_uuid7(
+///     "cx:space:0190a3c0-0000-7000-8000-000000000000",
+///     "device"
+/// ));
+/// // ULID body → false (legacy rejected)
+/// assert!(!is_typed_uuid7(
+///     "cx:device:01JS0SP000000000000000000",
+///     "device"
+/// ));
+/// ```
+#[must_use]
+pub fn is_typed_uuid7(s: &str, prefix: &str) -> bool {
+    let Some(rest) = s.strip_prefix("cx:") else {
+        return false;
+    };
+    let Some(rest) = rest.strip_prefix(prefix) else {
+        return false;
+    };
+    let Some(body) = rest.strip_prefix(':') else {
+        return false;
+    };
+
+    // Cell-family ids (`cx:cell:<family>:<uuid>`) are intentionally
+    // rejected here — pass `prefix = "cell:<family>"` if you need a
+    // cell-family-specific check, or use a dedicated parser.
+    if body.contains(':') {
+        return false;
+    }
+
+    // `Uuid::parse_str` accepts any version; we further require v7.
+    match uuid::Uuid::parse_str(body) {
+        Ok(u) => u.get_version_num() == 7,
+        Err(_) => false,
+    }
+}
+
 pub async fn password_manager_from_config(
     config: &PasswordsConfig,
 ) -> Result<PasswordManager, anyhow::Error> {
@@ -778,5 +837,53 @@ mod tests {
 
         let drop_sql = format!("DROP TABLE IF EXISTS {table_name}");
         sql_query(&drop_sql).execute(&mut *conn).await.unwrap();
+    }
+
+    #[test]
+    fn typed_uuid7_accepts_valid_v7_with_matching_prefix() {
+        let id = Uuid::now_v7();
+        let s = format!("cx:device:{id}");
+        assert!(super::is_typed_uuid7(&s, "device"));
+    }
+
+    #[test]
+    fn typed_uuid7_rejects_wrong_prefix() {
+        let id = Uuid::now_v7();
+        let s = format!("cx:space:{id}");
+        assert!(!super::is_typed_uuid7(&s, "device"));
+    }
+
+    #[test]
+    fn typed_uuid7_rejects_legacy_ulid() {
+        // ULID format (Crockford base32), no compatibility expected.
+        let s = "cx:device:01JS0SP000000000000000000";
+        assert!(!super::is_typed_uuid7(s, "device"));
+    }
+
+    #[test]
+    fn typed_uuid7_rejects_v4_uuid() {
+        // Random v4 — must be rejected since the spec mandates v7.
+        let s = "cx:device:550e8400-e29b-41d4-a716-446655440000";
+        assert!(!super::is_typed_uuid7(s, "device"));
+    }
+
+    #[test]
+    fn typed_uuid7_rejects_missing_cx_namespace() {
+        let id = Uuid::now_v7();
+        let s = format!("device:{id}");
+        assert!(!super::is_typed_uuid7(&s, "device"));
+    }
+
+    #[test]
+    fn typed_uuid7_rejects_extra_segments() {
+        // Cell-family ids have more colons; the basic helper rejects them.
+        let id = Uuid::now_v7();
+        let s = format!("cx:cell:cx.component.consent.grant.v1:{id}");
+        assert!(!super::is_typed_uuid7(&s, "cell"));
+    }
+
+    #[test]
+    fn typed_uuid7_rejects_empty_body() {
+        assert!(!super::is_typed_uuid7("cx:device:", "device"));
     }
 }

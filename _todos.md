@@ -4,6 +4,81 @@
 > Scope: Contrix Auth / Account Server. Only **unfinished** items are
 > listed here. Completed items live in `git log` and `CHANGELOG.md`.
 
+## C10.E 续² — batch_invite consent gate + MIMI scaffolding + typed-uuid7 helper (2026-05-09 十九轮)
+
+Aggressive follow-on round: wires the consent gate into the existing
+`batch_invite` admin endpoint, scaffolds the MIMI consent → Move bridge,
+and adds a typed-uuid7 validator for future Contrix wire-id call-sites.
+
+Landed:
+- `crates/backend/src/handlers/admin/v1/users/create.rs`:
+  - `BatchInviteRequest` gains an optional nested `consent_gate` field
+    (`BatchInviteConsentGate { peer_did, target_holder_did, consent_id,
+    scope, target_principal_url?, require_consent }`). Legacy callers
+    that omit the field skip the gate entirely (registration-token-only
+    behaviour preserved).
+  - New pure helper `evaluate_batch_invite_gate(...)` calls
+    `consent_cell_query::query_consent_cell` + `evaluate_invite_gate` and
+    returns `BatchInviteGateOutcome::{Allow, ConsentRequired, Quarantined}`.
+    Mirrors the relay handler's split-concern shape so both the Salvo
+    handler and unit tests can share the logic.
+  - `batch_invite` now consults the gate before minting tokens. The
+    previous `let _ = ... evaluate_invite_gate;` dead anchor is gone.
+    `ConsentRequired` → 422 + `consent_required`; `Quarantined` → 422 +
+    `quarantined` (distinct reasons preserved on the wire). Real
+    quarantine-outbox persistence remains
+    `TODO(c10e-quarantine-outbox)`.
+  - 6 wiremock-driven unit tests (`consent_gate_tests`):
+    `batch_invite_gate_allows_when_metadata_absent`,
+    `batch_invite_gate_allows_when_consent_granted`,
+    `batch_invite_gate_returns_consent_required_when_missing`,
+    `batch_invite_gate_quarantines_when_unknown_and_not_required`,
+    `batch_invite_gate_rejects_when_peer_mismatch`,
+    `batch_invite_gate_fails_closed_when_no_principal_url`.
+- `crates/backend/src/util.rs` — new `is_typed_uuid7(s, prefix)` helper
+  that validates `cx:<prefix>:<uuid-v7-strict>` strings. Rejects legacy
+  ULIDs, v4 UUIDs, missing `cx:` namespace, wrong prefix, extra
+  segments, and empty bodies. 7 unit tests under `util::tests`. Coauth
+  has no current `cx:device:`/`cx:space:` parsing call-sites, so this
+  is staged ahead of demand — the next admin handler that consumes a
+  Contrix wire id should call this rather than rolling its own check.
+- New `crates/backend/src/handlers/account/mimi_consent.rs` —
+  scaffolding for MIMI `request_consent` / `update_consent` → consent
+  cell **Move** mapping:
+  - Typed envelopes `RequestConsent` / `UpdateConsent` (subset of
+    MIMI spec, `non_exhaustive` for forward-compat).
+  - Pure helpers `consent_cell_id(consent_id)` and
+    `build_consent_tag(peer, scope)` matching spec §6.1 wire format.
+  - `update_consent_to_pending_move(...)` translates an envelope into a
+    `PendingMove { cell_id, op: OrSetAdd|OrSetRemove, tag }` without
+    touching I/O.
+  - `authorize_actor(actor, holder, controllers)` covers self-update +
+    static-controller-list cases. Delegated-controller resolution
+    (requires soland round trip) deferred.
+  - `anchor_pending_move(...)` is the eventual signer call-site;
+    intentionally returns `MimiConsentError::NotImplemented` until the
+    SDK lattice + anchor crate is wired in. Tracked under
+    `TODO(c10e-mimi-move)`.
+  - 9 unit tests (cell-id format, tag form, grant→add / revoke→remove
+    mapping, missing-field rejection, actor-authorization variants,
+    NotImplemented stub).
+- `crates/backend/src/handlers/account/mod.rs` — `pub mod mimi_consent;`.
+
+Test counts: `cargo test -p coauth-backend --lib` exercises 22 new
+tests on top of the 17 from earlier C10.E rounds. All consent /
+mimi / typed_uuid7 tests pass; the workspace's pre-existing Postgres
+failures (115) are unrelated — they require `DATABASE_URL` env var.
+
+Deferred (intentional):
+- Quarantine outbox persistence + admin-review UI (`TODO(c10e-
+  quarantine-outbox)` in `users/create.rs`). Current 422 +
+  `quarantined` body lets sodmin / yougen poll for the signal.
+- Real anchorer signer for `anchor_pending_move` — depends on the SDK
+  lattice + anchor crate's `sign_move` API surface; tracked alongside
+  the §"P1: Move / Anchor / Lattice" anchorer signer subtask below.
+- Delegated-controller resolution in `authorize_actor` — needs a
+  soland round trip; static-list path is enough for the scaffolding.
+
 ## C10.E 续 — invite-relay handler (2026-05-09 十八轮 并行)
 
 Per-recipient invite-relay handler that consumes the `consent_cell_query`
@@ -170,7 +245,7 @@ return 501 or use scaffolded state.
 >
 > Coauth impact is small: invite consent gate + MIMI consent interop + (rare) anchorer signer. No host endorsement work anywhere.
 
-- [ ] **Invite consent gate** (spec consent-model §6.1, rebased onto Move): before
+- [~] **Invite consent gate** (spec consent-model §6.1, rebased onto Move): before
       issuing or relaying an invite to a target principal, query the holder's
       consent cell (`cx:cell:cx.component.consent.v1:<consent_id>`) in their
       principal control Space and read its or-set join value to determine
@@ -180,12 +255,26 @@ return 501 or use scaffolded state.
   - revoked or absent + `cx.space.policy_components.preauth.require_consent`
     is true → reject with `consent_required`
   - revoked or absent + default profile → route to holder's quarantine inbox
-- [ ] **MIMI consent interop** (rebased onto Move): when accepting incoming
+
+  Status (2026-05-09): handler-level gate **wired** for both
+  `POST /api/v1/account/invites/relay` (per-recipient, full forward path)
+  and `POST /api/admin/v1/users/batch-invite` (token-mint, opt-in via
+  `consent_gate` body field). Helper + decision tree fully unit-tested
+  (28 tests across 4 modules). Remaining: real soland cell-read endpoint
+  (`TODO(soland-cell-query)`) and quarantine-outbox persistence
+  (`TODO(c10e-quarantine-outbox)`).
+- [~] **MIMI consent interop** (rebased onto Move): when accepting incoming
       MIMI `request_consent` / `update_consent`, validate the actor is the
       declared holder or an authorized controller, then construct a Move on
       the holder's consent cell (or-set: grant=add tag, revoke=remove tag)
       written into that holder's principal control Space; preserve
       `consent_id` as inter-protocol correlation.
+
+  Status (2026-05-09): typed envelopes + pure
+  `update_consent_to_pending_move(...)` mapping landed at
+  `crates/backend/src/handlers/account/mimi_consent.rs`. The signer
+  call-site (`anchor_pending_move`) returns `NotImplemented` pending the
+  SDK lattice + anchor crate; see anchorer-signer subtask below.
 - [ ] **Anchorer signer (rare deployment mode)**: typical deployments have
       soland as anchorer for principal control Spaces; if coauth controls a
       principal control Space and acts as its anchorer, coauth needs a light

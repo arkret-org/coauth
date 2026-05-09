@@ -5,17 +5,22 @@
 //! Creation endpoints: `POST /users` and `POST /users/batch-invite`.
 
 use chrono::Duration;
+use coauth_config::ContrixConfig;
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_matrix::ProvisionRequest;
 use rand::distr::{Alphanumeric, SampleString};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, warn};
+use url::Url;
 
 use crate::{
     AppError, CreatedJsonResult,
     handlers::{
+        account::consent_cell_query::{
+            InviteGateDecision, evaluate_invite_gate, query_consent_cell,
+        },
         admin::{
             call_context::extract_call_context,
             model::{User, UserRegistrationToken},
@@ -120,6 +125,62 @@ pub struct BatchInviteRequest {
     /// Number of hours until each token expires. If not provided, the tokens
     /// never expire.
     expires_in_hours: Option<u64>,
+
+    /// Optional Contrix consent-gate metadata (Move/Anchor/Lattice spec
+    /// `consent-model.md` §6.1). When `peer_did` is supplied **and** a
+    /// principal server URL is configured, coauth queries the holder's
+    /// consent-grant cell on `soland` before minting registration tokens
+    /// and rejects / quarantines the batch when the holder has not granted
+    /// the requesting peer.
+    ///
+    /// Legacy callers that don't address a specific holder DID omit this
+    /// field; the gate is then a no-op (preserves the historical
+    /// "registration-tokens only" behaviour).
+    #[serde(default)]
+    consent_gate: Option<BatchInviteConsentGate>,
+}
+
+/// Inline consent-gate metadata for `BatchInviteRequest`.
+///
+/// Mirrors the fields on `account::invite_relay::RelayRequest`, just
+/// without `inviter_did` / `invite_payload` (admin batch-invite mints
+/// fresh tokens — there is no inviter-signed payload to forward).
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct BatchInviteConsentGate {
+    /// DID of the requesting peer (the admin / service issuing this
+    /// batch on behalf of someone). Triggers the gate when set.
+    pub peer_did: String,
+
+    /// DID of the target holder whose consent cell governs the invite.
+    pub target_holder_did: String,
+
+    /// Consent-cell identifier per spec §6.
+    pub consent_id: String,
+
+    /// Tag scope to match against the holder's OrSet tags. Defaults to
+    /// `invite` (matches `peer=...;scope=invite` and `peer=...;scope=any`).
+    #[serde(default = "default_invite_scope")]
+    pub scope: String,
+
+    /// Override `ContrixConfig::principal_server_url` per request. Useful
+    /// when a deployment fans out across multiple principal servers and
+    /// the global config points at a different one.
+    #[serde(default)]
+    pub target_principal_url: Option<Url>,
+
+    /// Mirror of the holder's
+    /// `cx.space.policy_components.preauth.require_consent` policy bit.
+    /// Defaults to `true` (fail closed: missing / revoked consent → 422).
+    #[serde(default = "default_require_consent")]
+    pub require_consent: bool,
+}
+
+fn default_invite_scope() -> String {
+    "invite".to_owned()
+}
+
+fn default_require_consent() -> bool {
+    true
 }
 
 /// Response containing the list of created registration tokens
@@ -127,6 +188,79 @@ pub struct BatchInviteRequest {
 pub struct BatchInviteResponse {
     /// The list of created registration tokens
     data: Vec<SingleResponse<UserRegistrationToken>>,
+}
+
+/// Pure-function gate evaluation for `batch_invite`. Returns
+/// `Ok(GateOutcome::Allow)` when token minting should proceed, or one of
+/// the rejection variants — caller decides how to render those into HTTP
+/// (the Salvo handler maps `ConsentRequired` → 422 and `Quarantined` →
+/// 202; the existing `RouteError`/`AppError` shapes keep that
+/// stringly-typed for now).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BatchInviteGateOutcome {
+    /// Either the request did not include a peer DID (gate disabled) or
+    /// the cell read + scope match returned `Allow`.
+    Allow,
+    /// Holder explicitly revoked or never granted; policy requires
+    /// consent. Caller maps to HTTP 422 + `consent_required` body.
+    ConsentRequired,
+    /// Lookup was inconclusive and policy did not require consent.
+    /// Caller routes to a holder-side quarantine outbox; HTTP 202.
+    Quarantined,
+}
+
+/// Evaluate the consent gate for `batch_invite`. Pure helper; isolates the
+/// I/O so unit tests can inject a wiremock-backed `reqwest::Client`.
+///
+/// `gate_url_override` lets the caller supply a per-request URL that wins
+/// over the global `ContrixConfig::principal_server_url`. Both `None` →
+/// gate is skipped (returns `Allow`) — same behaviour as omitting
+/// `peer_did` entirely. This keeps the no-config / no-peer paths
+/// indistinguishable, which matches the spec note that the gate is
+/// optional infrastructure.
+pub async fn evaluate_batch_invite_gate(
+    gate: Option<&BatchInviteConsentGate>,
+    contrix_config: &ContrixConfig,
+    http_client: &reqwest::Client,
+) -> BatchInviteGateOutcome {
+    let Some(gate) = gate else {
+        return BatchInviteGateOutcome::Allow;
+    };
+
+    let principal_url = gate
+        .target_principal_url
+        .as_ref()
+        .or(contrix_config.principal_server_url.as_ref());
+
+    let Some(principal_url) = principal_url else {
+        // Gate metadata supplied, but no server to query. Mirror the
+        // relay handler: when require_consent is on, fail closed; when
+        // off, treat as quarantine. (We never silently allow.)
+        debug!(
+            consent_id = %gate.consent_id,
+            "batch_invite consent gate: no principal server URL — falling back per require_consent",
+        );
+        return if gate.require_consent {
+            BatchInviteGateOutcome::ConsentRequired
+        } else {
+            BatchInviteGateOutcome::Quarantined
+        };
+    };
+
+    let lookup = query_consent_cell(
+        Some(principal_url),
+        &gate.target_holder_did,
+        &gate.consent_id,
+        http_client,
+    )
+    .await;
+
+    let decision = evaluate_invite_gate(&lookup, &gate.peer_did, &gate.scope, gate.require_consent);
+    match decision {
+        InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
+        InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,
+        InviteGateDecision::Quarantine => BatchInviteGateOutcome::Quarantined,
+    }
 }
 
 #[endpoint]
@@ -149,26 +283,55 @@ pub async fn batch_invite(
         return Err(AppError::bad_request("Count must be between 1 and 100"));
     }
 
-    // ── C10.E consent gate hook (Move/Anchor/Lattice) ────────────
+    // ── C10.E consent gate (Move/Anchor/Lattice) ─────────────────
     //
-    // The spec (`contrix-spec` 2026-05-08, consent-model §6.1) requires
-    // that before *issuing or relaying* an invite to a target principal,
-    // we consult the holder's consent cell on their principal server.
-    // `batch_invite` here only mints registration tokens — it does not
-    // address a target principal — so the gate is a no-op for this path.
-    // Per-recipient invite relay (the path that actually targets a
-    // holder DID) is the right call-site; the helper is wired up so it
-    // can be threaded in when that handler lands.
+    // Per `contrix-spec` 2026-05-08 `consent-model.md` §6.1, when an
+    // invite addresses a specific holder DID we must query the holder's
+    // consent-grant cell on their principal server (`soland`) before
+    // proceeding. The gate is opt-in via `BatchInviteConsentGate` —
+    // legacy callers that just want bulk registration tokens omit the
+    // metadata and skip the network round-trip entirely.
     //
-    // The per-recipient relay handler now lives at
-    // `account::invite_relay::post_invite_relay` (mounted as
-    // `POST /api/v1/account/invites/relay`). When `batch_invite` grows to
-    // address specific holder DIDs, it should delegate to
-    // `account::invite_relay::relay_invite_with(...)` rather than
-    // re-implementing the gate here. Keeping the helper-import alive to
-    // anchor the module reference at this call-site.
-    let _ = crate::handlers::account::consent_cell_query::evaluate_invite_gate;
-    let _ = crate::handlers::account::invite_relay::relay_invite_with;
+    // For per-recipient relay (the path that forwards an inviter-signed
+    // payload), see `account::invite_relay::post_invite_relay`. This
+    // handler only mints registration tokens, so we don't forward a
+    // payload — we simply gate the mint.
+    let contrix_config = depot.contrix_config()?;
+    let http_client = depot.http_client()?;
+    let gate_outcome =
+        evaluate_batch_invite_gate(params.consent_gate.as_ref(), &contrix_config, &http_client)
+            .await;
+    let consent_id_for_log = params
+        .consent_gate
+        .as_ref()
+        .map(|g| g.consent_id.clone())
+        .unwrap_or_default();
+    match gate_outcome {
+        BatchInviteGateOutcome::Allow => {}
+        BatchInviteGateOutcome::ConsentRequired => {
+            warn!(
+                consent_id = %consent_id_for_log,
+                "batch_invite: consent gate rejected with consent_required",
+            );
+            return Err(AppError::unprocessable_entity("consent_required"));
+        }
+        BatchInviteGateOutcome::Quarantined => {
+            // Spec §6.1 default-profile path: no consent + no
+            // require_consent flag → would route to the holder's
+            // quarantine outbox. Persistence + admin-review UI remain
+            // TODO (`TODO(c10e-quarantine-outbox)`); for now we surface
+            // the signal as a 422 with reason `quarantined` so the
+            // ConsentRequired vs Quarantine paths stay distinguishable
+            // on the wire while still rejecting the mint. Callers
+            // (sodmin, yougen) can poll the holder's quarantine inbox
+            // separately when that surface lands.
+            warn!(
+                consent_id = %consent_id_for_log,
+                "batch_invite: consent gate routed to quarantine (no-op outbox)",
+            );
+            return Err(AppError::unprocessable_entity("quarantined"));
+        }
+    }
 
     let expires_at = params
         .expires_in_hours
@@ -216,4 +379,161 @@ pub async fn batch_invite(
     Ok(crate::handlers::admin::CreatedJson(BatchInviteResponse {
         data: tokens,
     }))
+}
+
+#[cfg(test)]
+mod consent_gate_tests {
+    //! Unit tests for the `batch_invite` consent gate (Allow /
+    //! ConsentRequired / Quarantine). Exercises
+    //! `evaluate_batch_invite_gate` end-to-end with a wiremock-backed
+    //! soland stub, mirroring the per-recipient relay tests.
+    //!
+    //! The full Salvo handler is covered by integration tests in
+    //! `users::tests`; here we only need to confirm the gate logic
+    //! routes the three outcomes correctly given the principal-server
+    //! response.
+    use super::*;
+    use crate::handlers::test_utils::setup;
+    use coauth_config::ContrixConfig;
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{method, path_regex},
+    };
+
+    fn empty_config() -> ContrixConfig {
+        ContrixConfig::default()
+    }
+
+    fn gate_for(consent_id: &str, peer: &str, holder: &str) -> BatchInviteConsentGate {
+        BatchInviteConsentGate {
+            peer_did: peer.to_owned(),
+            target_holder_did: holder.to_owned(),
+            consent_id: consent_id.to_owned(),
+            scope: "invite".to_owned(),
+            target_principal_url: None,
+            require_consent: true,
+        }
+    }
+
+    /// No gate metadata at all → Allow (legacy registration-token path).
+    #[tokio::test]
+    async fn batch_invite_gate_allows_when_metadata_absent() {
+        setup();
+        let client = reqwest::Client::new();
+        let outcome = evaluate_batch_invite_gate(None, &empty_config(), &client).await;
+        assert_eq!(outcome, BatchInviteGateOutcome::Allow);
+    }
+
+    /// Gate metadata + matching consent tag → Allow.
+    #[tokio::test]
+    async fn batch_invite_gate_allows_when_consent_granted() {
+        setup();
+        let server = MockServer::start().await;
+        let client = reqwest::Client::new();
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-allow",
+                "tags": ["peer=did:web:peer;scope=invite"],
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
+        let mut gate = gate_for("c-allow", "did:web:peer", "did:web:holder");
+        gate.target_principal_url = Some(base);
+
+        let outcome =
+            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        assert_eq!(outcome, BatchInviteGateOutcome::Allow);
+    }
+
+    /// Cell missing (404) + require_consent=true → ConsentRequired.
+    #[tokio::test]
+    async fn batch_invite_gate_returns_consent_required_when_missing() {
+        setup();
+        let server = MockServer::start().await;
+        let client = reqwest::Client::new();
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
+        let mut gate = gate_for("c-missing", "did:web:peer", "did:web:holder");
+        gate.target_principal_url = Some(base);
+        gate.require_consent = true;
+
+        let outcome =
+            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
+    }
+
+    /// soland 500 (Unknown) + require_consent=false → Quarantined.
+    #[tokio::test]
+    async fn batch_invite_gate_quarantines_when_unknown_and_not_required() {
+        setup();
+        let server = MockServer::start().await;
+        let client = reqwest::Client::new();
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
+        let mut gate = gate_for("c-unknown", "did:web:peer", "did:web:holder");
+        gate.target_principal_url = Some(base);
+        gate.require_consent = false;
+
+        let outcome =
+            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        assert_eq!(outcome, BatchInviteGateOutcome::Quarantined);
+    }
+
+    /// Tag present but peer DID mismatch → ConsentRequired (require=true).
+    #[tokio::test]
+    async fn batch_invite_gate_rejects_when_peer_mismatch() {
+        setup();
+        let server = MockServer::start().await;
+        let client = reqwest::Client::new();
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-other",
+                "tags": ["peer=did:web:other;scope=invite"],
+            })))
+            .mount(&server)
+            .await;
+
+        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
+        let mut gate = gate_for("c-other", "did:web:peer", "did:web:holder");
+        gate.target_principal_url = Some(base);
+
+        let outcome =
+            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
+    }
+
+    /// Gate metadata supplied but no principal URL anywhere +
+    /// require_consent=true → ConsentRequired (fail closed). No HTTP.
+    #[tokio::test]
+    async fn batch_invite_gate_fails_closed_when_no_principal_url() {
+        setup();
+        let client = reqwest::Client::new();
+        let mut gate = gate_for("c-none", "did:web:peer", "did:web:holder");
+        gate.target_principal_url = None;
+        gate.require_consent = true;
+
+        let outcome =
+            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
+    }
 }
