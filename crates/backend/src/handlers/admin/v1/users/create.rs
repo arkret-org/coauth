@@ -149,6 +149,27 @@ pub async fn batch_invite(
         return Err(AppError::bad_request("Count must be between 1 and 100"));
     }
 
+    // ── C10.E consent gate hook (Move/Anchor/Lattice) ────────────
+    //
+    // The spec (`contrix-spec` 2026-05-08, consent-model §6.1) requires
+    // that before *issuing or relaying* an invite to a target principal,
+    // we consult the holder's consent cell on their principal server.
+    // `batch_invite` here only mints registration tokens — it does not
+    // address a target principal — so the gate is a no-op for this path.
+    // Per-recipient invite relay (the path that actually targets a
+    // holder DID) is the right call-site; the helper is wired up so it
+    // can be threaded in when that handler lands.
+    //
+    // The per-recipient relay handler now lives at
+    // `account::invite_relay::post_invite_relay` (mounted as
+    // `POST /api/v1/account/invites/relay`). When `batch_invite` grows to
+    // address specific holder DIDs, it should delegate to
+    // `account::invite_relay::relay_invite_with(...)` rather than
+    // re-implementing the gate here. Keeping the helper-import alive to
+    // anchor the module reference at this call-site.
+    let _ = crate::handlers::account::consent_cell_query::evaluate_invite_gate;
+    let _ = crate::handlers::account::invite_relay::relay_invite_with;
+
     let expires_at = params
         .expires_in_hours
         .and_then(|h| Duration::try_hours(h as i64))

@@ -850,6 +850,10 @@ fn build_account_api_router(router: Router) -> Router {
                 .get(consent::oauth2_consent_get)
                 .post(consent::oauth2_consent_post),
         )
+        // Invite relay (consent-gated forward to target principal)
+        .push(
+            Router::with_path("account/invites/relay").post(invite_relay::post_invite_relay),
+        )
         // Device code link & consent
         .push(Router::with_path("device-link").get(consent::device_link_get))
         .push(

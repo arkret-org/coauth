@@ -35,6 +35,15 @@ pub struct ContrixConfig {
     /// When omitted, the backend falls back to the local `/api/v1` endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_audience: Option<String>,
+
+    /// Base URL of the principal server (`soland`) used for cross-service
+    /// consent-cell queries (Move/Anchor/Lattice model — see consent-model
+    /// spec §3-§9). When omitted, the consent gate degrades to a
+    /// `consent_unknown` result and the caller decides the policy outcome.
+    ///
+    /// Override at runtime via `COAUTH_PRINCIPAL_SERVER_URL`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub principal_server_url: Option<Url>,
 }
 
 impl ContrixConfig {
@@ -46,6 +55,7 @@ impl ContrixConfig {
             && self.service_did.is_none()
             && self.issuer_did.is_none()
             && self.admin_audience.is_none()
+            && self.principal_server_url.is_none()
     }
 }
 

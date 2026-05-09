@@ -1930,6 +1930,7 @@ mod tests {
                 resolver: "https://resolver.example.com/resolve".parse().unwrap(),
                 proof_required_for_pairwise: true,
             }),
+            principal_server_url: None,
         };
 
         let body =

@@ -1,8 +1,102 @@
 # coauth Active TODO
 
-> Updated: 2026-05-07
+> Updated: 2026-05-09
 > Scope: Contrix Auth / Account Server. Only **unfinished** items are
 > listed here. Completed items live in `git log` and `CHANGELOG.md`.
+
+## C10.E 续 — invite-relay handler (2026-05-09 十八轮 并行)
+
+Per-recipient invite-relay handler that consumes the `consent_cell_query`
+helper from the previous round.
+
+Landed:
+- New `crates/backend/src/handlers/account/invite_relay.rs`:
+  - `relay_invite_with(...)` — pure async helper. Calls
+    `query_consent_cell` + `evaluate_invite_gate`, then on `Allow`
+    forwards the inviter-signed payload via `reqwest::post`. Returns
+    `RelayOutcome::Forwarded { forwarded_ok } | ConsentRequired |
+    Quarantined`. Designed for wiremock-driven unit tests (no DB / no
+    Salvo Service plumbing).
+  - `relay_outcome_to_response(...)` — pure mapper from `RelayOutcome`
+    to `(StatusCode, RelayResponse)`: 200 + `forwarded`, 403 +
+    `consent_required`, 202 + `quarantined`.
+  - `post_invite_relay` (Salvo `#[endpoint]`) — handler at
+    `POST /api/v1/account/invites/relay`. Body validation rejects empty
+    `inviter_did / target_holder_did / consent_id / scope` with 400
+    `missing_required_fields`. Body's `target_principal_url` overrides
+    `ContrixConfig::principal_server_url`; if neither is set, returns
+    400 `config_required`. The forward target is computed as
+    `{principal_url}/api/v1/invites/intake` (placeholder path tracked
+    under `TODO(c10e-invite-intake)`).
+- `crates/backend/src/handlers/account/mod.rs` — `pub mod invite_relay;`.
+- `crates/backend/src/server.rs` — route registered alongside the OAuth2
+  consent block: `Router::with_path("account/invites/relay")
+  .post(invite_relay::post_invite_relay)`.
+- 6 unit tests in `invite_relay.rs#tests`, all wiremock-backed:
+  - `relay_allows_when_consent_granted` (cell granted + forward 200 →
+    `Forwarded { forwarded_ok: true }`).
+  - `relay_returns_consent_required_when_no_consent` (cell 404 +
+    `require_consent=true` → `ConsentRequired`, 403).
+  - `relay_quarantines_when_consent_unknown_and_not_required` (soland
+    500 + `require_consent=false` → `Quarantined`, 202).
+  - `relay_rejects_when_target_principal_url_missing` (no URL anywhere
+    → 400 `config_required`).
+  - `relay_reports_forward_failure_as_forwarded_ok_false` (Allow but
+    forward target returns 503 → 200 with `forwarded_ok: false`,
+    caller-retry signal).
+  - `relay_allow_without_forward_target_is_gate_only_success`
+    (gate-only mode for callers like yougen that forward themselves).
+
+Deferred (intentional):
+- The forward path `/api/v1/invites/intake` is a placeholder until
+  soland exposes the canonical invite-intake endpoint
+  (`TODO(c10e-invite-intake)` in the handler).
+- `Quarantine` currently only returns 202 with status `quarantined`; the
+  holder-side queue persistence + admin-review UI are separate items.
+- Auth on the relay route reuses the surrounding API auth chain
+  (cookie + bearer); per-route DID-binding/audit-log refinements are
+  tracked alongside the broader consent-gate work below.
+
+## C10.E (2026-05-09 十七轮 并行)
+
+Coauth-side scaffolding for the Move/Anchor/Lattice invite consent gate.
+
+Landed:
+- New `crates/backend/src/handlers/account/consent_cell_query.rs`:
+  - `query_consent_cell(principal_server_url, holder_did, consent_id, http_client)`
+    issues a GET against
+    `{principal_server_url}/api/v1/admin/cells/<cell_id>` and parses the
+    OrSet tag list. Returns `ConsentLookup::Known(...)` on success,
+    `ConsentLookup::Unknown { reason }` on missing config / network / parse
+    error. Marked `TODO(soland-cell-query)` because soland does not yet
+    expose this admin endpoint.
+  - `evaluate_invite_gate(lookup, peer_did, scope, require_consent)` is a
+    pure function that translates a lookup result to one of
+    `Allow / ConsentRequired / Quarantine`, matching spec §6.1's
+    `peer=…;scope=invite|any` tag pattern.
+  - 11 unit tests (5 wiremock-driven HTTP scenarios + 6 pure-fn gate cases).
+- `ContrixConfig::principal_server_url: Option<Url>` added in
+  `crates/config/src/sections/contrix.rs`. Loadable today via figment as
+  `PASION_CONTRIX__PRINCIPAL_SERVER_URL`; the helper docstring also
+  notes the spec-suggested `COAUTH_PRINCIPAL_SERVER_URL` override path.
+- Hook-point comment + `TODO(c10e-invite-relay)` added to
+  `crates/backend/src/handlers/admin/v1/users/create.rs::batch_invite`,
+  documenting where the per-recipient relay handler should call the gate
+  once it lands. `batch_invite` itself only mints registration tokens,
+  so it has no peer DID to gate on — the comment explains why this stub
+  is intentional.
+
+Deferred (intentional, per task scope):
+- Cross-service wire integration: soland needs a public admin cell-read
+  endpoint. Until then `query_consent_cell` returns `Unknown` from the
+  network call. The hook-point comment leaves a `TODO(soland-cell-query)`.
+- Per-recipient invite relay handler (the "real" call-site) is not in
+  this PR; the helper is in place so it's a one-liner to wire when it
+  lands.
+- MIMI `request_consent` / `update_consent` interop and rare-mode
+  anchorer signer remain in §"P1: Move / Anchor / Lattice" below.
+
+
 
 ## 0. Boundary recap
 
