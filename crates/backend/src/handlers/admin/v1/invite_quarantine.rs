@@ -36,12 +36,19 @@ use coauth_data::audit::AdminOperation;
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::{
     AppError, JsonResult,
     handlers::{
-        admin::{audit_helper::record_admin_operation, call_context::extract_call_context},
+        admin::{
+            audit_helper::record_admin_operation,
+            call_context::extract_call_context,
+            model::UserRegistrationToken,
+            response::SingleResponse,
+            v1::users::create::{MintRegistrationTokensParams, mint_registration_tokens},
+        },
         common::DepotExt,
     },
     services::invite_quarantine::{
@@ -130,6 +137,22 @@ pub struct ResolveRequest {
     pub note: Option<String>,
 }
 
+/// Response from `resolve_invite_quarantine`. On `approve`, the queue
+/// row is marked resolved *and* the original batch_invite is re-run
+/// (round 21) — the freshly minted registration tokens are returned in
+/// `minted_tokens`. On `reject`, only the entry is updated and
+/// `minted_tokens` is empty.
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct ResolveResponse {
+    pub entry: InviteQuarantineEntry,
+
+    /// Empty when `decision = reject` or when the original payload had
+    /// no mintable parameters. Each element matches the shape returned
+    /// by `POST /api/admin/v1/users/batch-invite`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub minted_tokens: Vec<SingleResponse<UserRegistrationToken>>,
+}
+
 // ── Helpers ────────────────────────────────────────────────────
 
 fn map_quarantine_error(error: InviteQuarantineError) -> AppError {
@@ -177,12 +200,22 @@ pub async fn list_invite_quarantine(
 }
 
 /// `POST /api/admin/v1/invite-quarantine/{id}/resolve`
+///
+/// Round-21 update: `approve` now actually re-runs the original
+/// batch_invite using the parameters captured in `payload` at enqueue
+/// time. The minted tokens are returned in `ResolveResponse.minted_tokens`
+/// so the caller (sodmin / yougen) doesn't need a follow-up call. The
+/// consent gate is not re-evaluated — the operator approving the queue
+/// row has explicitly vouched for the consent decision out of band.
+///
+/// `reject` is unchanged: marks the row resolved and records an audit
+/// op without minting anything.
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.invite_quarantine.resolve", skip_all)]
 pub async fn resolve_invite_quarantine(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<InviteQuarantineEntry> {
+) -> JsonResult<ResolveResponse> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -211,8 +244,51 @@ pub async fn resolve_invite_quarantine(
             ))
         })?;
 
-    // Note: Approve is intentionally a *flag flip* — it does not
-    // auto-replay the original `batch_invite`. See module docs.
+    // ── Approve auto-replay (round 21) ───────────────────────────
+    //
+    // batch_invite enqueues the original mint params (count /
+    // usage_limit / expires_in_hours) into `payload` at quarantine
+    // time. On approve, re-mint the same number of tokens against
+    // `repo` and return them in the response. We deliberately do NOT
+    // re-run the consent gate here — the operator approving the queue
+    // row has already vouched for the consent decision.
+    //
+    // If `payload` has no recognisable mint params (legacy enqueue
+    // shapes, manual queue inserts), we log a warning and fall through
+    // to the flag-flip-only path. Reject always falls through.
+    let mut minted_tokens: Vec<SingleResponse<UserRegistrationToken>> = Vec::new();
+    if matches!(body.decision, ResolveDecision::Approve) {
+        if let Some(params) = mint_params_from_payload(&record.payload) {
+            match mint_registration_tokens(
+                &mut repo,
+                &clock,
+                &mut rng,
+                &params,
+                admin_user.as_ref().map(|u| u.id),
+            )
+            .await
+            {
+                Ok(tokens) => minted_tokens = tokens,
+                Err(error) => {
+                    // Don't fail the resolve — the queue row is already
+                    // flipped to Approved and the operator has expressed
+                    // intent. Log loudly and surface an empty token list
+                    // so they can re-issue manually if needed.
+                    warn!(
+                        quarantine_id = %record.id,
+                        ?error,
+                        "invite_quarantine.approve: token mint failed; row resolved without tokens",
+                    );
+                }
+            }
+        } else {
+            warn!(
+                quarantine_id = %record.id,
+                "invite_quarantine.approve: payload has no mint params; row resolved without minting",
+            );
+        }
+    }
+
     let op_label = match body.decision {
         ResolveDecision::Approve => "invite_quarantine.approve",
         ResolveDecision::Reject => "invite_quarantine.reject",
@@ -237,13 +313,46 @@ pub async fn resolve_invite_quarantine(
             "consent_id": &record.consent_id,
             "scope": &record.scope,
             "note": body.note,
+            "minted_token_count": minted_tokens.len(),
         }),
     )
     .await?;
 
     repo.save().await?;
 
-    Ok(Json(InviteQuarantineEntry::from(record)))
+    Ok(Json(ResolveResponse {
+        entry: InviteQuarantineEntry::from(record),
+        minted_tokens,
+    }))
+}
+
+/// Pull mint parameters out of the queue row's `payload` JSON. The
+/// shape is the one written in
+/// `handlers::admin::v1::users::create::batch_invite` at quarantine
+/// time:
+///
+/// ```json
+/// {"count": <u32>, "usage_limit": <u32?>, "expires_in_hours": <u64?>}
+/// ```
+///
+/// Returns `None` when `count` is missing or out of range — the
+/// resolve handler then falls through to the legacy flag-flip-only
+/// behaviour.
+fn mint_params_from_payload(payload: &serde_json::Value) -> Option<MintRegistrationTokensParams> {
+    let count = payload.get("count")?.as_u64()?;
+    if count == 0 || count > 100 {
+        return None;
+    }
+    let usage_limit = payload
+        .get("usage_limit")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u32);
+    let expires_in_hours = payload.get("expires_in_hours").and_then(|v| v.as_u64());
+    Some(MintRegistrationTokensParams {
+        count: count as u32,
+        usage_limit,
+        expires_in_hours,
+    })
 }
 
 // ── Tests ──────────────────────────────────────────────────────
@@ -320,5 +429,42 @@ mod tests {
         let res: Result<ResolveRequest, _> =
             serde_json::from_str(r#"{"decision": "maybe"}"#);
         assert!(res.is_err(), "unknown decision must not parse");
+    }
+
+    #[test]
+    fn mint_params_from_payload_round_trips() {
+        let v = serde_json::json!({
+            "count": 5,
+            "usage_limit": 1,
+            "expires_in_hours": 24,
+        });
+        let params = mint_params_from_payload(&v).expect("should parse");
+        assert_eq!(params.count, 5);
+        assert_eq!(params.usage_limit, Some(1));
+        assert_eq!(params.expires_in_hours, Some(24));
+    }
+
+    #[test]
+    fn mint_params_from_payload_handles_partial() {
+        let v = serde_json::json!({"count": 3});
+        let params = mint_params_from_payload(&v).expect("count alone is enough");
+        assert_eq!(params.count, 3);
+        assert_eq!(params.usage_limit, None);
+        assert_eq!(params.expires_in_hours, None);
+    }
+
+    #[test]
+    fn mint_params_from_payload_rejects_zero_count() {
+        assert!(mint_params_from_payload(&serde_json::json!({"count": 0})).is_none());
+    }
+
+    #[test]
+    fn mint_params_from_payload_rejects_overlimit_count() {
+        assert!(mint_params_from_payload(&serde_json::json!({"count": 101})).is_none());
+    }
+
+    #[test]
+    fn mint_params_from_payload_rejects_missing_count() {
+        assert!(mint_params_from_payload(&serde_json::json!({"reason": "x"})).is_none());
     }
 }

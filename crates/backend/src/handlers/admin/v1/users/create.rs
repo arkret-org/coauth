@@ -6,7 +6,10 @@
 
 use chrono::Duration;
 use coauth_config::ContrixConfig;
-use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
+use coauth_data::{
+    BoxClock, BoxRepository,
+    audit::{AdminOperation, NewAdminOperationLog},
+};
 use coauth_matrix::ProvisionRequest;
 use rand::distr::{Alphanumeric, SampleString};
 use salvo::{oapi::ToSchema, prelude::*};
@@ -188,7 +191,33 @@ fn default_require_consent() -> bool {
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct BatchInviteResponse {
     /// The list of created registration tokens
-    data: Vec<SingleResponse<UserRegistrationToken>>,
+    pub data: Vec<SingleResponse<UserRegistrationToken>>,
+}
+
+/// Pure parameter struct for the underlying `mint_registration_tokens`
+/// helper. Mirrors the wire fields on `BatchInviteRequest` but without
+/// the consent-gate metadata — the gate is the caller's responsibility
+/// (see `batch_invite` and `invite_quarantine::resolve_invite_quarantine`).
+///
+/// Exposed so the quarantine-approve flow can re-mint tokens with the
+/// same parameters that were originally enqueued, without re-parsing
+/// the request body or re-running the consent gate (the operator
+/// approving the quarantine has already vouched for it).
+#[derive(Debug, Clone)]
+pub struct MintRegistrationTokensParams {
+    pub count: u32,
+    pub usage_limit: Option<u32>,
+    pub expires_in_hours: Option<u64>,
+}
+
+impl MintRegistrationTokensParams {
+    /// Validate count bounds. Mirrors the inline check in `batch_invite`.
+    pub fn validate(&self) -> Result<(), AppError> {
+        if self.count == 0 || self.count > 100 {
+            return Err(AppError::bad_request("Count must be between 1 and 100"));
+        }
+        Ok(())
+    }
 }
 
 /// Pure-function gate evaluation for `batch_invite`. Returns
@@ -264,6 +293,62 @@ pub async fn evaluate_batch_invite_gate(
     }
 }
 
+/// Mint registration tokens against an open `BoxRepository`. Pure
+/// helper — no consent gate, no JSON parsing, no audit-log assumptions
+/// about the call-site.
+///
+/// `admin_user_id` is the Ulid of the admin who *initiated* the action
+/// (the audit log slot for "who" — for the resolve-quarantine path this
+/// is the operator approving the queue row, *not* the original
+/// requesting admin who got quarantined). When `None`, no admin op is
+/// recorded (matches the pre-round-21 behaviour for unauthenticated
+/// internal call-sites).
+///
+/// The caller is responsible for `repo.save()` after this returns.
+pub async fn mint_registration_tokens(
+    repo: &mut BoxRepository,
+    clock: &BoxClock,
+    rng: &mut coauth_data::BoxRng,
+    params: &MintRegistrationTokensParams,
+    admin_user_id: Option<ulid::Ulid>,
+) -> Result<Vec<SingleResponse<UserRegistrationToken>>, AppError> {
+    params.validate()?;
+
+    let expires_at = params
+        .expires_in_hours
+        .and_then(|h| Duration::try_hours(h as i64))
+        .map(|d| clock.now() + d);
+
+    let mut tokens = Vec::with_capacity(params.count as usize);
+    for _ in 0..params.count {
+        let token_string = Alphanumeric.sample_string(&mut rand::rng(), 12);
+        let registration_token = repo
+            .user_registration_token()
+            .add(rng, clock, token_string, params.usage_limit, expires_at)
+            .await?;
+
+        if let Some(admin_id) = admin_user_id {
+            repo.audit()
+                .add_admin_operation(
+                    rng,
+                    clock,
+                    NewAdminOperationLog::new(
+                        admin_id,
+                        AdminOperation::RegistrationTokenCreated,
+                        "registration_token",
+                        serde_json::json!({}),
+                    )
+                    .with_resource_id(registration_token.id),
+                )
+                .await?;
+        }
+
+        let model = UserRegistrationToken::new(registration_token, clock.now());
+        tokens.push(SingleResponse::new_canonical(model));
+    }
+    Ok(tokens)
+}
+
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.users.batch_invite", skip_all)]
 pub async fn batch_invite(
@@ -280,9 +365,12 @@ pub async fn batch_invite(
     let mut rng = crate::handlers::account::make_rng();
     let params: BatchInviteRequest = req.parse_json().await.map_err(AppError::internal)?;
 
-    if params.count == 0 || params.count > 100 {
-        return Err(AppError::bad_request("Count must be between 1 and 100"));
-    }
+    let mint_params = MintRegistrationTokensParams {
+        count: params.count,
+        usage_limit: params.usage_limit,
+        expires_in_hours: params.expires_in_hours,
+    };
+    mint_params.validate()?;
 
     // ── C10.E consent gate (Move/Anchor/Lattice) ─────────────────
     //
@@ -372,46 +460,14 @@ pub async fn batch_invite(
         }
     }
 
-    let expires_at = params
-        .expires_in_hours
-        .and_then(|h| Duration::try_hours(h as i64))
-        .map(|d| clock.now() + d);
-
-    let mut tokens = Vec::with_capacity(params.count as usize);
-
-    for _ in 0..params.count {
-        let token_string = Alphanumeric.sample_string(&mut rand::rng(), 12);
-
-        let registration_token = repo
-            .user_registration_token()
-            .add(
-                &mut rng,
-                &clock,
-                token_string,
-                params.usage_limit,
-                expires_at,
-            )
-            .await?;
-
-        if let Some(admin_user) = &admin_user {
-            repo.audit()
-                .add_admin_operation(
-                    &mut rng,
-                    &clock,
-                    NewAdminOperationLog::new(
-                        admin_user.id,
-                        AdminOperation::RegistrationTokenCreated,
-                        "registration_token",
-                        serde_json::json!({}),
-                    )
-                    .with_resource_id(registration_token.id),
-                )
-                .await?;
-        }
-
-        let model = UserRegistrationToken::new(registration_token, clock.now());
-        tokens.push(SingleResponse::new_canonical(model));
-    }
+    let tokens = mint_registration_tokens(
+        &mut repo,
+        &clock,
+        &mut rng,
+        &mint_params,
+        admin_user.as_ref().map(|u| u.id),
+    )
+    .await?;
 
     repo.save().await?;
 

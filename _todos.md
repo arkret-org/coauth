@@ -4,6 +4,104 @@
 > Scope: Contrix Auth / Account Server. Only **unfinished** items are
 > listed here. Completed items live in `git log` and `CHANGELOG.md`.
 
+## C10.E 续⁴ — anchor_pending_move HTTP wiring + quarantine approve auto-replay + mint helper extraction (2026-05-09 二十一轮)
+
+Round 21 finishes the *non-signing* half of the MIMI consent → Move
+bridge, lands the long-pending quarantine-approve auto-replay, and
+extracts the registration-token mint loop so both call-sites (the
+admin handler and the queue-resolve handler) share one path.
+
+Landed:
+- `crates/backend/src/handlers/account/mimi_consent.rs::anchor_pending_move`:
+  - New public `AnchorerSigner` + `AnchorerSigningKeyOrigin` types.
+    `AnchorerSigner::from_env()` parses
+    `PASION_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed),
+    falls back to a freshly generated ephemeral seed + warn log when
+    the env var is absent, and rejects malformed seeds with a typed
+    `MimiConsentError::InvalidAnchorerKey`. base64 decode goes through
+    `base64ct` so the dep graph stays unchanged.
+  - `anchor_pending_move(...)` now takes `(pending, principal_url,
+    http_client, signer, anchorer_holder_did)`. The HTTP forward to
+    soland's `/api/v1/moves` endpoint is wired in the same shape as
+    `consent_cell_query.rs` (caller-supplied `reqwest::Client`, 5 s
+    timeout, `X-Contrix-Holder-Did` echo header). The body shape is
+    a serde_json placeholder for the eventual `SignedMove` envelope.
+  - Until contrix-rust-sdk publishes the `MoveSigner` /
+    `Ed25519MoveSigner` / `Anchor::sign_single(...)` surface, a
+    `// SDK-WIRE` block early-returns
+    `MimiConsentError::SignerSdkUnavailable` *before* any HTTP call so
+    a misconfigured deployment never POSTs an unsigned envelope. The
+    SDK contract that needs to land is spelled out in the
+    doc-comment so the round-22 swap-in is a localized diff. `coauth`
+    Cargo deps are unchanged this round (the SDK trait isn't there yet).
+  - New error variants: `SignerSdkUnavailable`,
+    `PrincipalServerNotConfigured`, `InvalidAnchorerKey { reason }`,
+    `PrincipalServerForwardFailed { reason }`. The legacy
+    `NotImplemented` variant is removed (v1 unreleased — no compat).
+  - 3 new unit tests (`anchor_pending_move_without_principal_url_…`,
+    `anchor_pending_move_with_principal_url_returns_sdk_unavailable`,
+    `anchorer_signer_from_seed_marks_origin`,
+    `anchorer_signer_from_seed_ephemeral_origin_is_ephemeral`). The
+    env-var parse path is intentionally not unit-tested — Rust 2024
+    marks `std::env::set_var` / `remove_var` `unsafe`, and the
+    workspace lint config enforces `-D unsafe-code`.
+- `crates/backend/src/handlers/admin/v1/users/create.rs`:
+  - New `MintRegistrationTokensParams` (count + usage_limit +
+    expires_in_hours + `validate()` count-bounds check) and pure
+    `mint_registration_tokens(...)` helper. `batch_invite` now
+    delegates the mint loop to it; the handler shrinks by ~35 lines.
+  - The `users` mod is promoted from `mod create` to `pub mod create`
+    so the queue-resolve handler can import the helper.
+- `crates/backend/src/handlers/admin/v1/invite_quarantine.rs`:
+  - `resolve_invite_quarantine` now actually re-runs the original
+    `batch_invite` on `decision = approve`. Mint params are pulled
+    from the queue row's `payload` (`count` / `usage_limit` /
+    `expires_in_hours`) via the new `mint_params_from_payload` helper,
+    then `mint_registration_tokens` runs against the same `repo`
+    transaction as the queue update. Returned tokens land in
+    `ResolveResponse.minted_tokens`; reject is unchanged (flag-flip
+    only).
+  - New response wrapper `ResolveResponse { entry, minted_tokens }`
+    replaces the bare `InviteQuarantineEntry` return shape — the
+    minted_tokens list is `skip_serializing_if = "Vec::is_empty"` so
+    reject responses don't grow a noise field.
+  - Mint failures during approve don't fail the resolve (the row is
+    already flipped to Approved); they emit a warn log and surface
+    an empty `minted_tokens` list so the operator can re-issue
+    manually if needed.
+  - Audit metadata gains a `minted_token_count` slot so audit-feed
+    consumers can correlate.
+  - 5 new unit tests for `mint_params_from_payload`:
+    `…round_trips`, `…handles_partial`, `…rejects_zero_count`,
+    `…rejects_overlimit_count`, `…rejects_missing_count`.
+- `crates/backend/src/handlers/admin/v1/users/mod.rs`: `pub mod create`.
+
+Test counts: `cargo check --workspace` clean (61 pre-existing
+warnings, no new ones from this round). `cargo test -p coauth-backend
+--lib` runs 233 tests; 117 pass, 115 fail with the pre-existing
+`DATABASE_URL must be set for tests: NotPresent` baseline (unchanged
+from round 20), 1 ignored. Specifically:
+- `mimi_consent` tests: 12 pass (was 9, +3 new for AnchorerSigner +
+  the two anchor_pending_move error-path scenarios).
+- `invite_quarantine` tests: 14 pass (was 9, +5 new for the
+  `mint_params_from_payload` parsing surface).
+- `consent_gate_tests` (in `users::create`): 6 pass (unchanged).
+
+Deferred (intentional):
+- Real `MoveSigner::sign_move(...)` call inside `anchor_pending_move`.
+  Blocked on contrix-rust-sdk round 21 exposing the public trait /
+  impl / `Anchor::sign_single` constructors. The HTTP forward + key
+  loading are landed; the swap-in is a localized 10-line diff in the
+  `// SDK-WIRE` block once the SDK is ready. Contract is spelled out
+  in the doc-comment.
+- `is_typed_uuid7` admin-handler call-sites: re-confirmed no
+  `cx:device:` / `cx:space:` / `cx:event:` request-body parsing in
+  the admin surface (the only `urn:matrix:client:device:` parse in
+  `admin/v1/personal_sessions.rs` is the legacy Matrix scope token —
+  not a Contrix typed wire id). Helper stays staged ahead of demand.
+- Delegated-controller resolution in `authorize_actor` — still needs
+  a soland round trip; static-list path covers the scaffolding.
+
 ## C10.E 续³ — invite-quarantine outbox persistence + admin review surface + MIMI SDK-gap audit (2026-05-09 二十轮)
 
 Round 20 lands the persistence + review side of the consent-gate
@@ -356,13 +454,18 @@ return 501 or use scaffolded state.
     is true → reject with `consent_required`
   - revoked or absent + default profile → route to holder's quarantine inbox
 
-  Status (2026-05-09 二十轮): handler-level gate **wired** for both
+  Status (2026-05-09 二十一轮): handler-level gate **wired** for both
   `POST /api/v1/account/invites/relay` (per-recipient, full forward
   path) and `POST /api/admin/v1/users/batch-invite` (token-mint, opt-in
   via `consent_gate` body field). On `Quarantined`, `batch_invite` now
   persists to the new `invite_quarantine_queue` table and exposes admin
   review via `GET /api/admin/v1/invite-quarantine` and
-  `POST /api/admin/v1/invite-quarantine/{id}/resolve`. 37 tests across
+  `POST /api/admin/v1/invite-quarantine/{id}/resolve`. As of round 21
+  the resolve endpoint actually re-runs the original `batch_invite`
+  on `decision = approve` (using the mint params persisted in the
+  queue row's `payload`), via the new shared
+  `mint_registration_tokens(...)` helper extracted out of
+  `batch_invite`. Reject is still flag-flip-only. ~46 tests across
   5 modules. Remaining: real soland cell-read endpoint
   (`TODO(soland-cell-query)`).
 - [~] **MIMI consent interop** (rebased onto Move): when accepting incoming
@@ -372,16 +475,34 @@ return 501 or use scaffolded state.
       written into that holder's principal control Space; preserve
       `consent_id` as inter-protocol correlation.
 
-  Status (2026-05-09): typed envelopes + pure
-  `update_consent_to_pending_move(...)` mapping landed at
-  `crates/backend/src/handlers/account/mimi_consent.rs`. The signer
-  call-site (`anchor_pending_move`) returns `NotImplemented` pending the
-  SDK lattice + anchor crate; see anchorer-signer subtask below.
-- [ ] **Anchorer signer (rare deployment mode)**: typical deployments have
+  Status (2026-05-09 二十一轮): typed envelopes + pure
+  `update_consent_to_pending_move(...)` mapping landed (round 19).
+  `anchor_pending_move(...)` now wires the env-var-driven anchorer
+  signing key (`AnchorerSigner::from_env`) + structured POST to soland
+  `/api/v1/moves` (round 21). The signing call itself is still SDK-
+  blocked: the function early-returns `SignerSdkUnavailable` until
+  contrix-rust-sdk exposes the public `MoveSigner` /
+  `Ed25519MoveSigner` / `Anchor::sign_single(...)` surface. See the
+  anchorer-signer subtask below for the precise SDK contract.
+- [~] **Anchorer signer (rare deployment mode)**: typical deployments have
       soland as anchorer for principal control Spaces; if coauth controls a
       principal control Space and acts as its anchorer, coauth needs a light
       anchorer signer (single_did profile) — share the contrix-rust-sdk
       lattice + anchor crate rather than reimplementing.
+
+      Status (2026-05-09 二十一轮): non-signing wiring landed.
+      `AnchorerSigner` parses
+      `PASION_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed) with
+      ephemeral fallback + warn log. `anchor_pending_move(...)` now
+      takes the signer + holder DID and structures the soland
+      `/api/v1/moves` POST identically to the existing
+      `consent_cell_query.rs` pattern. Until contrix-rust-sdk
+      publishes the `MoveSigner` + `Ed25519MoveSigner` +
+      `Anchor::sign_single(...)` trait/impl, the function early-returns
+      `SignerSdkUnavailable` before any HTTP call so a misconfigured
+      deployment never POSTs an unsigned envelope. The SDK contract is
+      spelled out in the `mimi_consent.rs` doc-comment; round-22 will
+      drop into the `// SDK-WIRE` block.
 
 ---
 

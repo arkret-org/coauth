@@ -19,7 +19,7 @@
 //! `set_password`) is re-exported here so the router wiring in
 //! `server.rs` does not need to know about the layout.
 
-mod create;
+pub mod create;
 mod read;
 mod security;
 mod update;
