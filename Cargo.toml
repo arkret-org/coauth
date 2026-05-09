@@ -15,7 +15,7 @@ authors = ["Meldry Team"]
 edition = "2024"
 homepage = "https://contrix.dev/docs/"
 repository = "https://github.com/contrix-dev/coauth/"
-license = "AGPL-3.0-only"
+license = "Apache-2.0"
 publish = false
 
 [workspace.lints.rust]

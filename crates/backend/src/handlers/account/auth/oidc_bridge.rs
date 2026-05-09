@@ -25,6 +25,7 @@ use crate::{
     handlers::contrix, oidc_client::requests::discovery,
     oidc_client::types::client_credentials::ClientCredentials,
     services::upstream_oidc::UpstreamOidcExchangeMode,
+    services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token},
 };
 
 #[derive(Deserialize, ToSchema)]
@@ -491,6 +492,43 @@ pub async fn oidc_code_exchange(
                 return Ok(());
             }
         };
+        // Trusted-issuer mapping (round 25): if the deployment has registered
+        // a `TrustedIssuerPolicy` for this issuer, validate the upstream
+        // id_token against the policy set and emit a tracing event with the
+        // typed `MappedUpstreamIdentity`. Failures are advisory at this stage
+        // — the existing `find_by_subject` flow remains the source of truth.
+        if let (Ok(trusted_issuers), Some(id_token)) = (
+            depot.get::<TrustedIssuerPolicySet>("upstream_oidc_trusted_issuers"),
+            federated_exchange.token_response.id_token.as_deref(),
+        ) {
+            if !trusted_issuers.is_empty() {
+                match map_upstream_id_token(
+                    issuer.as_str(),
+                    id_token,
+                    trusted_issuers,
+                    clock.now(),
+                ) {
+                    Ok(mapped) => {
+                        tracing::debug!(
+                            target: "coauth.upstream_oidc_mapping",
+                            issuer = %issuer,
+                            sub = %mapped.sub,
+                            role = %mapped.role,
+                            "trusted-issuer mapping applied",
+                        );
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            target: "coauth.upstream_oidc_mapping",
+                            issuer = %issuer,
+                            error = %error,
+                            "trusted-issuer mapping failed",
+                        );
+                    }
+                }
+            }
+        }
+
         let upstream_subject = federated_exchange.userinfo.sub.clone();
         let Some(upstream_link) = repo
             .upstream_oauth_link()

@@ -116,9 +116,15 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
     let userinfo_endpoint = Some(url_builder.oidc_userinfo_endpoint());
     let registration_endpoint = Some(url_builder.oauth_registration_endpoint());
 
+    // `scopes_supported`: only advertise scopes whose backing claim is
+    // actually emitted by `/oidc/userinfo`. The `email` standard scope is
+    // intentionally NOT advertised here — coauth's userinfo response does
+    // not include `email` / `email_verified`, so advertising them would
+    // surface always-null claims to relying parties (round 25 OIDC
+    // discovery production-stability audit).
     let scopes_supported = Some(vec![
         scope::OPENID.to_string(),
-        scope::EMAIL.to_string(),
+        scope::PROFILE.to_string(),
         scope::COAUTH_ADMIN.to_string(),
         scope::CONTRIX_ADMIN.to_string(),
         scope::CONTRIX_CLIENT.to_string(),
@@ -172,6 +178,11 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
 
     let claim_types_supported = Some(vec![ClaimType::Normal]);
 
+    // `claims_supported`: every entry here MUST be backed by an actual
+    // emit-site (id_token, /oidc/userinfo, or signed userinfo JWT). Round
+    // 25 audit removed `email` / `email_verified` since coauth does not
+    // surface email claims today; if email backing is added later, the
+    // claims (and the `email` scope above) come back together.
     let claims_supported = Some(vec![
         "iss".to_owned(),
         "sub".to_owned(),
@@ -182,6 +193,11 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
         "auth_time".to_owned(),
         "at_hash".to_owned(),
         "c_hash".to_owned(),
+        // Profile claims emitted by /oidc/userinfo.
+        "preferred_username".to_owned(),
+        "name".to_owned(),
+        "picture".to_owned(),
+        "locale".to_owned(),
         contrix::CLAIM_PRINCIPAL_DID.to_owned(),
         contrix::CLAIM_DEVICE_ID.to_owned(),
         contrix::CLAIM_SESSION_ID.to_owned(),
@@ -390,6 +406,69 @@ mod tests {
             claims
                 .iter()
                 .any(|claim| claim == contrix::CLAIM_SESSION_ID)
+        );
+    }
+
+    /// Round 25 production-stability audit: `email` scope and
+    /// `email_verified` claim must NOT appear, because no emit site backs
+    /// them. Tightening keeps the discovery contract honest.
+    #[tokio::test]
+    async fn discovery_does_not_advertise_unbacked_email_claims() {
+        crate::handlers::test_utils::setup();
+
+        let Json(response) = get_inner(&test_depot());
+        let body = serde_json::to_value(response).unwrap();
+
+        let scopes = body["scopes_supported"].as_array().unwrap();
+        assert!(
+            scopes.iter().all(|scope| scope != "email"),
+            "discovery must not advertise the `email` scope when no userinfo backing exists"
+        );
+
+        let claims = body["claims_supported"].as_array().unwrap();
+        for forbidden in ["email", "email_verified"] {
+            assert!(
+                claims.iter().all(|claim| claim != forbidden),
+                "discovery must not advertise `{forbidden}` without an emit site"
+            );
+        }
+    }
+
+    /// Snapshot the full set of scopes and claims so accidental drift in
+    /// either direction surfaces as a test diff. Endpoint URLs / signing
+    /// algorithms are intentionally excluded — they are environment- and
+    /// keystore-specific and covered by other tests.
+    #[tokio::test]
+    async fn discovery_scopes_and_claims_snapshot() {
+        crate::handlers::test_utils::setup();
+
+        let Json(response) = get_inner(&test_depot());
+        let body = serde_json::to_value(response).unwrap();
+
+        let mut scopes: Vec<String> = body["scopes_supported"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect();
+        scopes.sort();
+
+        let mut claims: Vec<String> = body["claims_supported"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect();
+        claims.sort();
+
+        let snapshot = serde_json::json!({
+            "scopes_supported": scopes,
+            "claims_supported": claims,
+        });
+
+        insta::assert_json_snapshot!(
+            "discovery_scopes_and_claims",
+            snapshot,
         );
     }
 }

@@ -1,0 +1,120 @@
+# Integration stack: Postgres + coauth + soland + sodmin (+ optional starid).
+#
+# This compose is intended for local bring-up smoke / e2e harness work; it
+# deliberately keeps secrets, ports, and images close to defaults so that
+# `scripts/integration-up.sh` and `scripts/integration-smoke.sh` can hit each
+# service's `/health` endpoint without bespoke configuration.
+#
+# Image strategy:
+#   - coauth : built from the local Dockerfile (this repository).
+#   - soland / sodmin / starid : pulled by tag. Override with the matching
+#     `*_IMAGE` env var when iterating against locally-built images, e.g.
+#         SOLAND_IMAGE=soland:dev SODMIN_IMAGE=sodmin:dev \
+#             docker compose -f docker-compose.integration.yaml up
+#
+# Profiles:
+#   - default      : postgres + coauth + soland + sodmin
+#   - did-webvh    : adds starid (use `--profile did-webvh`)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: contrix-pg
+    environment:
+      POSTGRES_USER: contrix
+      POSTGRES_PASSWORD: contrix
+      POSTGRES_DB: contrix
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contrix -d contrix"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  coauth:
+    image: ${COAUTH_IMAGE:-coauth:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: contrix-coauth
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      COAUTH_DATABASE_URI: postgresql://contrix:contrix@postgres:5432/contrix
+      COAUTH_HTTP_BIND: 0.0.0.0:7080
+      COAUTH_HTTP_PUBLIC_BASE: http://coauth:7080/
+      COAUTH_HTTP_ISSUER: http://coauth:7080/
+      RUST_LOG: info
+    ports:
+      - "57080:7080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7080/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  soland:
+    image: ${SOLAND_IMAGE:-soland:dev}
+    container_name: contrix-soland
+    depends_on:
+      coauth:
+        condition: service_healthy
+    environment:
+      SERVERX_DATABASE_URL: postgresql://contrix:contrix@postgres:5432/contrix
+      SERVERX_BIND: 0.0.0.0:8008
+      SERVERX_COAUTH_ISSUER: http://coauth:7080/
+      RUST_LOG: info
+    ports:
+      - "58008:8008"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8008/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  sodmin:
+    image: ${SODMIN_IMAGE:-sodmin:dev}
+    container_name: contrix-sodmin
+    depends_on:
+      coauth:
+        condition: service_healthy
+      soland:
+        condition: service_healthy
+    environment:
+      SODMIN_BIND: 0.0.0.0:9090
+      SODMIN_COAUTH_BASE: http://coauth:7080/
+      SODMIN_SOLAND_BASE: http://soland:8008/
+      RUST_LOG: info
+    ports:
+      - "59090:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:9090/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Optional did:webvh resolver. Enable with `--profile did-webvh`.
+  starid:
+    image: ${STARID_IMAGE:-starid:dev}
+    container_name: contrix-starid
+    profiles: ["did-webvh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      STARID_BIND: 0.0.0.0:7180
+      RUST_LOG: info
+    ports:
+      - "57180:7180"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7180/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:

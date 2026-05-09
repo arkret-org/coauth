@@ -166,6 +166,58 @@ fn requires_client_secret(method: &OAuthClientAuthenticationMethod) -> bool {
     )
 }
 
+/// Validate, normalise, and dedupe the request's `redirect_uris`. Pure
+/// function so the test harness can exercise it without a live DB.
+///
+/// RFC 7591 doesn't strictly require an https scheme, but BCP 240 (the
+/// IETF OAuth security topics draft) recommends rejecting plain `http://`
+/// for anything but loopback dev URLs. The admin endpoint is the most
+/// trusted registration entry point, so it enforces the strict rule:
+/// only `https://` is accepted, with an exception for `http://localhost`
+/// / `http://127.0.0.1` so local-dev workflows still work.
+fn validate_redirect_uris(raw: &[String]) -> Result<Vec<Url>, AppError> {
+    let mut out: Vec<Url> = Vec::with_capacity(raw.len());
+    for entry in raw {
+        let url = Url::parse(entry.trim())
+            .map_err(|e| AppError::bad_request(format!("invalid redirect_uri {entry:?}: {e}")))?;
+        if url.fragment().is_some() {
+            return Err(AppError::bad_request(format!(
+                "redirect_uri must not contain a fragment: {entry}"
+            )));
+        }
+        let scheme = url.scheme();
+        let host = url.host_str().unwrap_or_default();
+        let is_loopback = matches!(host, "localhost" | "127.0.0.1" | "[::1]");
+        if scheme != "https" && !(scheme == "http" && is_loopback) {
+            return Err(AppError::bad_request(format!(
+                "redirect_uri must use the https:// scheme (got `{scheme}://` for `{entry}`)"
+            )));
+        }
+        out.push(url);
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+/// Pure-function counterpart of the redirect requirement logic in
+/// [`register`]. Returns `Err` if the supplied grant types include a
+/// flow that needs a redirect_uri but none were supplied.
+fn ensure_redirect_for_grants(
+    grants: &[GrantType],
+    redirect_uris: &[Url],
+) -> Result<(), AppError> {
+    let needs_redirect = grants
+        .iter()
+        .any(|g| matches!(g, GrantType::AuthorizationCode | GrantType::Implicit));
+    if needs_redirect && redirect_uris.is_empty() {
+        return Err(AppError::bad_request(
+            "at least one redirect_uri is required for code/implicit grants",
+        ));
+    }
+    Ok(())
+}
+
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.oauth2_clients.register", skip_all)]
 pub async fn register(
@@ -187,32 +239,10 @@ pub async fn register(
     };
 
     // Parse + dedupe redirect URIs.
-    let mut redirect_uris: Vec<Url> = Vec::with_capacity(body.redirect_uris.len());
-    for raw in &body.redirect_uris {
-        let url = Url::parse(raw.trim())
-            .map_err(|e| AppError::bad_request(format!("invalid redirect_uri {raw:?}: {e}")))?;
-        if url.fragment().is_some() {
-            return Err(AppError::bad_request(format!(
-                "redirect_uri must not contain a fragment: {raw}"
-            )));
-        }
-        redirect_uris.push(url);
-    }
-    redirect_uris.sort();
-    redirect_uris.dedup();
+    let redirect_uris = validate_redirect_uris(&body.redirect_uris)?;
 
     // Authorisation-code style grants require at least one redirect_uri.
-    let needs_redirect = grant_types_input.iter().any(|g| {
-        matches!(
-            g,
-            GrantType::AuthorizationCode | GrantType::Implicit
-        )
-    });
-    if needs_redirect && redirect_uris.is_empty() {
-        return Err(AppError::bad_request(
-            "at least one redirect_uri is required for code/implicit grants",
-        ));
-    }
+    ensure_redirect_for_grants(&grant_types_input, &redirect_uris)?;
 
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
@@ -348,5 +378,127 @@ mod tests {
         assert!(matches!(parse_grant_type("refresh_token").unwrap(), GrantType::RefreshToken));
         assert!(matches!(parse_grant_type("client_credentials").unwrap(), GrantType::ClientCredentials));
         assert!(parse_grant_type("not_a_grant").is_err());
+    }
+
+    // ── Round-26: dynamic client registration coverage (3 happy + 2 negative) ──
+
+    #[test]
+    fn happy_validate_redirect_uris_dedupes_and_sorts() {
+        let raw = vec![
+            "https://b.example/cb".to_owned(),
+            "https://a.example/cb".to_owned(),
+            "https://b.example/cb".to_owned(),
+        ];
+        let out = validate_redirect_uris(&raw).expect("valid redirects");
+        assert_eq!(out.len(), 2, "duplicates must be removed");
+        assert_eq!(out[0].host_str(), Some("a.example"));
+        assert_eq!(out[1].host_str(), Some("b.example"));
+    }
+
+    #[test]
+    fn happy_device_code_grant_urn_parses() {
+        let g = parse_grant_type("urn:ietf:params:oauth:grant-type:device_code").unwrap();
+        assert!(matches!(g, GrantType::DeviceCode));
+    }
+
+    #[test]
+    fn happy_machine_to_machine_does_not_need_redirect_uri() {
+        // client_credentials has no redirect_uri requirement.
+        ensure_redirect_for_grants(&[GrantType::ClientCredentials], &[])
+            .expect("client_credentials should not require redirect_uri");
+        ensure_redirect_for_grants(&[GrantType::RefreshToken], &[])
+            .expect("refresh_token should not require redirect_uri");
+    }
+
+    #[test]
+    fn negative_redirect_uri_with_fragment_rejected() {
+        let raw = vec!["https://example.com/cb#fragment".to_owned()];
+        let err = validate_redirect_uris(&raw).unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("fragment"),
+            "expected fragment-rejection error, got {msg}"
+        );
+    }
+
+    #[test]
+    fn negative_authorization_code_without_redirect_uri_rejected() {
+        let err =
+            ensure_redirect_for_grants(&[GrantType::AuthorizationCode], &[]).unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("redirect_uri"),
+            "expected redirect_uri requirement error, got {msg}"
+        );
+    }
+
+    // ── Round-27: extra negative coverage for the RFC 7591 helpers ──
+
+    /// `validate_redirect_uris` enforces https:// only (plus localhost
+    /// loopback exception). Plain `http://example.com` must be rejected.
+    #[test]
+    fn negative_redirect_uri_non_https_scheme_rejected() {
+        let raw = vec!["http://example.com/cb".to_owned()];
+        let err = validate_redirect_uris(&raw).unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("https"),
+            "expected https-only enforcement error, got {msg}"
+        );
+
+        // Other non-https schemes (custom URI scheme without loopback
+        // host) must also be rejected. RFC 8252 native-app callbacks go
+        // through the public registration endpoint, not the admin one.
+        let raw = vec!["app://callback".to_owned()];
+        let err = validate_redirect_uris(&raw).unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("https"),
+            "custom-scheme redirect must be rejected by admin endpoint, got {msg}"
+        );
+
+        // Loopback dev URLs over plain http are still allowed — the
+        // exception that keeps `cargo run` workflows usable.
+        let raw = vec!["http://localhost:3000/cb".to_owned()];
+        let out = validate_redirect_uris(&raw).expect("loopback http exception");
+        assert_eq!(out.len(), 1);
+        let raw = vec!["http://127.0.0.1:3000/cb".to_owned()];
+        let out = validate_redirect_uris(&raw).expect("loopback http exception");
+        assert_eq!(out.len(), 1);
+    }
+
+    /// `parse_auth_method` is allowlist-driven. Anything outside the
+    /// curated set must hit the 400 path with an "unsupported" message,
+    /// regardless of how plausible the value looks.
+    #[test]
+    fn negative_token_endpoint_auth_method_not_allowlisted() {
+        // Plausibly-named but not in the allowlist (typo / future RFC
+        // method that we haven't audited).
+        for bogus in [
+            "tls_client_auth",
+            "self_signed_tls_client_auth",
+            "client_secret_basics", // common typo
+            "BASIC",                // uppercase; allowlist is lowercase
+            "  ",                   // whitespace, falls through to default? — ensure not silently accepted
+        ] {
+            // Whitespace-only intentionally falls through to the
+            // default ("client_secret_basic") because `parse_auth_method`
+            // strips and uses the default for empty input — that's by
+            // design (RFC 7591 §2). The other four must error.
+            if bogus.trim().is_empty() {
+                let m = parse_auth_method(Some(bogus)).expect("blank ⇒ default");
+                assert!(matches!(
+                    m,
+                    OAuthClientAuthenticationMethod::ClientSecretBasic
+                ));
+                continue;
+            }
+            let err = parse_auth_method(Some(bogus)).unwrap_err();
+            let msg = format!("{err:?}");
+            assert!(
+                msg.contains("unsupported"),
+                "expected 'unsupported' for {bogus:?}, got {msg}"
+            );
+        }
     }
 }

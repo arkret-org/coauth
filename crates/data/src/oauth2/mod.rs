@@ -1,6 +1,7 @@
 mod authorization_grant;
 mod client;
 mod device_code_grant;
+mod i18n;
 mod session;
 mod session_grant;
 
@@ -12,6 +13,7 @@ pub use self::{
         Client, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField, LocalizedClientMetadata,
     },
     device_code_grant::{DeviceCodeGrant, DeviceCodeGrantState},
+    i18n::{OAuth2ClientI18n, OAuth2ClientI18nEntry},
     session::{Session, SessionState},
     session_grant::SessionGrant,
 };

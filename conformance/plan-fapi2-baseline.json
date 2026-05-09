@@ -1,0 +1,31 @@
+{
+  "_comment": "FAPI 2.0 baseline plan config — PAR + DPoP-bound access tokens. Subset of the OpenID Foundation FAPI conformance suite that we expect coauth to pass before a major release.",
+  "alias": "coauth-fapi2-baseline",
+  "description": "FAPI 2.0 baseline: PAR-required auth, private_key_jwt client auth, DPoP-sender-constrained access tokens.",
+  "publish": "summary",
+  "server": {
+    "discoveryUrl": "http://127.0.0.1:8080/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "coauth-fapi2-client",
+    "scope": "openid",
+    "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+    "jwks": {
+      "_comment": "Replace with the actual JWKS the harness should use. The runner injects it from target/conformance-keys/client.jwks at run time."
+    }
+  },
+  "profile": "fapi2-security-profile-id2",
+  "variant": {
+    "client_auth_type": "private_key_jwt",
+    "fapi_auth_request_method": "pushed",
+    "fapi_response_mode": "plain_response",
+    "fapi_profile": "plain_fapi",
+    "sender_constrain": "dpop"
+  },
+  "_test_modules": [
+    "fapi2-baseline-id2-discovery-end-point-verification",
+    "fapi2-baseline-id2-happy-path",
+    "fapi2-baseline-id2-ensure-pkce-required",
+    "fapi2-baseline-id2-ensure-request-object-with-different-redirect-uri-fails"
+  ]
+}

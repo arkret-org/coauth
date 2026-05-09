@@ -1042,6 +1042,12 @@ fn build_admin_router(router: Router) -> Router {
             Router::with_path("oauth2/clients/register")
                 .post(oauth2_clients_register::register),
         )
+        // Admin-curated OAuth2 client display name + description per locale.
+        .push(
+            Router::with_path("oauth2/clients/{id}/i18n")
+                .get(oauth2_clients_i18n::get_i18n)
+                .post(oauth2_clients_i18n::upsert_i18n),
+        )
         // Personal sessions
         .push(
             Router::with_path("personal-sessions")

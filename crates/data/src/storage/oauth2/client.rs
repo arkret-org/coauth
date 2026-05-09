@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use coauth_data::{Client, Clock, LocalizedClientMetadata};
+use coauth_data::oauth2::OAuth2ClientI18n;
 use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use oauth2_types::{oidc::ApplicationType, requests::GrantType};
@@ -220,6 +221,32 @@ pub trait OAuth2ClientRepository: Send + Sync {
         id: Ulid,
         metadata: &LocalizedClientMetadata,
     ) -> Result<(), Self::Error>;
+
+    /// Load the admin-curated display name + description map for a
+    /// client. Returns an empty map when none has been set.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] if the underlying repository fails.
+    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuth2ClientI18n, Self::Error>;
+
+    /// Upsert a single (locale, display_name, description) entry into the
+    /// client's `i18n` JSONB column. Other locales are left untouched.
+    ///
+    /// Pass `description = None` to clear the description for that
+    /// locale; the entry is removed entirely when `display_name` is empty
+    /// after trim.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] if the underlying repository fails.
+    async fn set_i18n_entry(
+        &mut self,
+        id: Ulid,
+        locale: String,
+        display_name: String,
+        description: Option<String>,
+    ) -> Result<OAuth2ClientI18n, Self::Error>;
 }
 
 repository_impl!(OAuth2ClientRepository:
@@ -285,4 +312,14 @@ repository_impl!(OAuth2ClientRepository:
         id: Ulid,
         metadata: &LocalizedClientMetadata,
     ) -> Result<(), Self::Error>;
+
+    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuth2ClientI18n, Self::Error>;
+
+    async fn set_i18n_entry(
+        &mut self,
+        id: Ulid,
+        locale: String,
+        display_name: String,
+        description: Option<String>,
+    ) -> Result<OAuth2ClientI18n, Self::Error>;
 );

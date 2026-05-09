@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
+
 // ── OAuth 2.0 Client Configuration ──
 //
 // Defines configuration for statically-registered OAuth 2.0 clients,

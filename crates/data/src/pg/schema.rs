@@ -289,6 +289,7 @@ diesel::table! {
         is_static -> Nullable<Bool>,
         created_at -> Nullable<Timestamptz>,
         metadata_digest -> Nullable<Text>,
+        i18n -> Jsonb,
     }
 }
 

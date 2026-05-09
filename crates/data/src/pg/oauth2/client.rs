@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use async_trait::async_trait;
 use coauth_data::{
     Client, Clock, JwksOrJwksUri, LocalizableField, LocalizedClientMetadata, new_id,
-    oauth2::OAuth2ClientRepository,
+    oauth2::{OAuth2ClientI18n, OAuth2ClientI18nEntry, OAuth2ClientRepository},
 };
 use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
@@ -827,5 +827,74 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
             .await?;
 
         Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "db.oauth2_client.load_i18n",
+        skip_all,
+        fields(client.id = %id),
+        err,
+    )]
+    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuth2ClientI18n, Self::Error> {
+        let client_uuid = Uuid::from(id);
+
+        let raw: Option<serde_json::Value> = oauth2_clients::table
+            .find(client_uuid)
+            .select(oauth2_clients::i18n)
+            .first::<serde_json::Value>(self.conn)
+            .await
+            .optional()?;
+
+        let Some(raw) = raw else {
+            return Ok(OAuth2ClientI18n::default());
+        };
+
+        // Tolerate corrupt rows by treating bad shape as "no entries". The
+        // admin UI can always overwrite via `set_i18n_entry` afterwards.
+        let parsed: OAuth2ClientI18n = serde_json::from_value(raw).unwrap_or_default();
+        Ok(parsed)
+    }
+
+    #[tracing::instrument(
+        name = "db.oauth2_client.set_i18n_entry",
+        skip_all,
+        fields(client.id = %id, locale = %locale),
+        err,
+    )]
+    async fn set_i18n_entry(
+        &mut self,
+        id: Ulid,
+        locale: String,
+        display_name: String,
+        description: Option<String>,
+    ) -> Result<OAuth2ClientI18n, Self::Error> {
+        let client_uuid = Uuid::from(id);
+        let mut current = self.load_i18n(id).await?;
+
+        let trimmed_name = display_name.trim().to_owned();
+        if trimmed_name.is_empty() {
+            current.remove(&locale);
+        } else {
+            current.insert(
+                locale.clone(),
+                OAuth2ClientI18nEntry {
+                    display_name: trimmed_name,
+                    description: description.and_then(|d| {
+                        let t = d.trim().to_owned();
+                        if t.is_empty() { None } else { Some(t) }
+                    }),
+                },
+            );
+        }
+
+        let new_value =
+            serde_json::to_value(&current).map_err(crate::DatabaseError::to_invalid_operation)?;
+
+        diesel::update(oauth2_clients::table.find(client_uuid))
+            .set(oauth2_clients::i18n.eq(new_value))
+            .execute(self.conn)
+            .await?;
+
+        Ok(current)
     }
 }

@@ -1,0 +1,57 @@
+{
+  "_comment": "RFC 8705 Mutual TLS Client Authentication baseline plan — covers PKI-bound mTLS client auth, self-signed mTLS client auth, and the certificate-bound access-token (`x5t#S256`) confirmation claim. Targets the same coauth instance the basic-OP plan uses, but with an mTLS-enabled client profile. The harness consumes this file via `--config`; field names match the conformance-suite test-plan schema.",
+  "alias": "coauth-mtls-baseline",
+  "description": "RFC 8705 Mutual TLS Client Authentication: PKI-bound auth, self-signed auth, certificate-bound access tokens (x5t#S256).",
+  "publish": "summary",
+  "server": {
+    "discoveryUrl": "http://127.0.0.1:8080/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "coauth-mtls-client",
+    "scope": "openid profile",
+    "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+    "_comment_certs": "The runner injects the leaf cert + key from target/conformance-keys/mtls-client.{crt,key} at run time; the harness expects PEM via the `cert` / `key` fields when client_auth_type=mtls.",
+    "cert": {
+      "_comment": "Replace with PEM-encoded leaf certificate body."
+    },
+    "key": {
+      "_comment": "Replace with PEM-encoded private key body."
+    }
+  },
+  "client2": {
+    "client_id": "coauth-mtls-client-2",
+    "scope": "openid",
+    "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+    "cert": {
+      "_comment": "Second leaf certificate — required by the harness for negative cross-binding tests (Section 3 of RFC 8705)."
+    },
+    "key": {
+      "_comment": "Second private key paired with cert above."
+    }
+  },
+  "mtls": {
+    "cert": {
+      "_comment": "Top-level mTLS endpoint cert — same shape as client.cert; consumed for the certificate-bound access-token confirmation claim path."
+    },
+    "key": {
+      "_comment": "Top-level mTLS endpoint key — same shape as client.key."
+    }
+  },
+  "profile": "openid-connect-core-mtls",
+  "variant": {
+    "client_auth_type": "mtls",
+    "request_type": "plain_http_request",
+    "response_mode": "default",
+    "response_type": "code",
+    "client_registration": "static_client",
+    "sender_constrain": "mtls"
+  },
+  "_test_modules": [
+    "oidcc-server-mtls",
+    "oidcc-mtls-client-auth",
+    "oidcc-mtls-self-signed-client-auth",
+    "oidcc-mtls-certificate-bound-access-token",
+    "oidcc-mtls-cross-binding-rejected",
+    "oidcc-mtls-token-introspection-x5t-s256"
+  ]
+}

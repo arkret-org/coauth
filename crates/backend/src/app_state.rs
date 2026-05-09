@@ -29,6 +29,7 @@ use crate::{
         risk_action_proposals::risk_action_proposals_service,
         risk_action_state::default_risk_action_state_service,
         upstream_oidc::default_upstream_oidc_service,
+        upstream_oidc_mapping::TrustedIssuerPolicySet,
         webauthn::webauthn_service,
     },
     telemetry::METER,
@@ -214,6 +215,13 @@ pub async fn inject_app_state(
         invite_quarantine_service(state.repository_factory.pool().clone()),
     );
     depot.insert("upstream_oidc_service", default_upstream_oidc_service());
+    // Trusted-issuer mapping policy set; default-empty until config wires
+    // entries from `contrix_config.trusted_issuers`. Round 25 introduces
+    // the registry in-process; production wiring follows later.
+    depot.insert(
+        "upstream_oidc_trusted_issuers",
+        TrustedIssuerPolicySet::default(),
+    );
     depot.insert("did_resolver_service", default_did_resolver_service());
     // Build the WebAuthn service from the current URL builder. We only
     // insert the service if construction succeeds; a misconfigured RP

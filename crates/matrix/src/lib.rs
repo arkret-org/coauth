@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
+// Originally developed for the Matrix project.
+
 mod mock;
 mod readonly;
 pub mod registry;

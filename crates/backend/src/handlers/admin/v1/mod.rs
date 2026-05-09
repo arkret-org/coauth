@@ -8,6 +8,7 @@ pub mod invite_quarantine;
 pub mod notification_channels;
 pub mod notification_templates;
 pub mod oauth2_clients;
+pub mod oauth2_clients_i18n;
 pub mod oauth2_clients_register;
 pub mod oauth2_sessions;
 pub mod passkeys;

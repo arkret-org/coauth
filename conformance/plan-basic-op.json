@@ -1,0 +1,40 @@
+{
+  "_comment": "Plan config for the OpenID Foundation conformance suite (openid/conformance-suite). Targets a localhost coauth instance brought up by scripts/oidc-conformance.sh. The harness consumes this file via --config; field names match the conformance-suite test-plan schema.",
+  "alias": "coauth-basic-op",
+  "description": "Basic OP profile: discovery, authorization_code, userinfo, id_token verification, refresh, RP-initiated logout.",
+  "publish": "summary",
+  "server": {
+    "discoveryUrl": "http://127.0.0.1:8080/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "coauth-conformance-client",
+    "client_secret": "coauth-conformance-secret",
+    "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+    "scope": "openid profile email"
+  },
+  "client2": {
+    "client_id": "coauth-conformance-client-2",
+    "client_secret": "coauth-conformance-secret-2",
+    "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+    "scope": "openid profile email"
+  },
+  "profile": "openid-connect-basic",
+  "variant": {
+    "client_auth_type": "client_secret_basic",
+    "request_type": "plain_http_request",
+    "response_mode": "default",
+    "response_type": "code",
+    "client_registration": "static_client"
+  },
+  "_test_modules": [
+    "oidcc-server",
+    "oidcc-discovery-endpoint-verification",
+    "oidcc-userinfo-get",
+    "oidcc-userinfo-post-header",
+    "oidcc-userinfo-post-body",
+    "oidcc-id-token-rs256",
+    "oidcc-codereuse",
+    "oidcc-refresh-token",
+    "oidcc-rp-initiated-logout"
+  ]
+}

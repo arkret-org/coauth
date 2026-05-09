@@ -1,0 +1,87 @@
+name: Integration e2e
+
+# Round 28: bring up the docker-compose integration stack
+# (Postgres + coauth + soland + sodmin) and run the smoke + e2e harness
+# scripts against it. Captures container logs as artefacts on failure so
+# a red CI surface is debuggable without re-spinning the stack locally.
+#
+#   - integration-up.sh --wait : compose up -d --wait
+#   - integration-smoke.sh     : 200-OK probes on each /health
+#   - integration-e2e.sh       : 3 protocol-level scenarios (S1/S2/S3)
+#
+# The smoke + e2e scripts are 404-tolerant for surfaces that aren't
+# wired in the published soland/sodmin tags, so this job goes green
+# when the wire is reachable even if the higher-level scenarios skip.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: integration-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-e2e:
+    name: docker-compose integration e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v6
+
+      - name: Install jq + curl
+        run: |
+          if ! command -v jq >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y jq curl
+          fi
+
+      - name: Bring up integration stack
+        env:
+          # Build coauth from the local Dockerfile (compose handles this
+          # via the build: clause); soland/sodmin/starid fall through to
+          # their default :dev tags. The smoke+e2e harnesses are
+          # 404-tolerant when those tags don't ship the surfaces yet.
+          COAUTH_IMAGE: coauth:ci
+        run: bash scripts/integration-up.sh
+
+      - name: Run integration smoke (probes /health)
+        run: bash scripts/integration-smoke.sh
+
+      - name: Run integration e2e scenarios (S1 / S2 / S3)
+        run: bash scripts/integration-e2e.sh
+
+      - name: Capture container logs on failure
+        if: ${{ failure() }}
+        run: |
+          mkdir -p target/integration-logs
+          docker compose -f docker-compose.integration.yaml logs --no-color postgres > target/integration-logs/postgres.log || true
+          docker compose -f docker-compose.integration.yaml logs --no-color coauth   > target/integration-logs/coauth.log   || true
+          docker compose -f docker-compose.integration.yaml logs --no-color soland   > target/integration-logs/soland.log   || true
+          docker compose -f docker-compose.integration.yaml logs --no-color sodmin   > target/integration-logs/sodmin.log   || true
+          docker compose -f docker-compose.integration.yaml ps > target/integration-logs/ps.txt || true
+
+      - name: Upload integration diagnostic logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: integration-e2e-logs
+          path: target/integration-logs/
+          if-no-files-found: ignore
+
+      - name: Tear down integration stack
+        if: ${{ always() }}
+        run: bash scripts/integration-up.sh --down

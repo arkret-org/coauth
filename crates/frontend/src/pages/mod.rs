@@ -1,6 +1,7 @@
 pub mod account;
 pub mod account_overview;
 pub mod account_settings;
+pub mod admin_oauth2_client_i18n;
 pub mod browser_sessions;
 pub mod client_detail;
 pub mod consent;
@@ -30,6 +31,7 @@ pub mod workflow_inbox;
 // Re-export page components for the router
 use account_overview::AccountOverview;
 use account_settings::AccountSettings;
+use admin_oauth2_client_i18n::AdminOAuth2ClientI18n;
 use browser_sessions::BrowserSessions;
 use client_detail::ClientDetail;
 use consent::Consent;
@@ -129,6 +131,8 @@ pub enum Route {
     ResetCrossSigning {},
     #[route("/clients/:id")]
     ClientDetail { id: String },
+    #[route("/admin/oauth2-clients/:id/i18n")]
+    AdminOAuth2ClientI18n { id: String },
     #[route("/devices/:..route")]
     DeviceRedirect { route: Vec<String> },
 
