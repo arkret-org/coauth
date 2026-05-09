@@ -907,6 +907,15 @@ fn build_admin_router(router: Router) -> Router {
         )
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
+        // Invite-quarantine outbox (C10.E §6.1 default-profile path)
+        .push(
+            Router::with_path("invite-quarantine")
+                .get(invite_quarantine::list_invite_quarantine)
+                .push(
+                    Router::with_path("{id}/resolve")
+                        .post(invite_quarantine::resolve_invite_quarantine),
+                ),
+        )
         // Contrix accounts
         .push(Router::with_path("bridge/describe").get(accounts::admin_bridge_describe))
         .push(

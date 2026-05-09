@@ -23,7 +23,9 @@ use crate::{
     },
     services::{
         account_claims::account_claims_service, did_resolver::default_did_resolver_service,
-        email_webhook::EmailWebhookService, principal_cache::durable_principal_cache_service,
+        email_webhook::EmailWebhookService,
+        invite_quarantine::invite_quarantine_service,
+        principal_cache::durable_principal_cache_service,
         risk_action_state::default_risk_action_state_service,
         upstream_oidc::default_upstream_oidc_service,
     },
@@ -200,6 +202,10 @@ pub async fn inject_app_state(
     depot.insert(
         "account_claims_service",
         account_claims_service(state.repository_factory.pool().clone()),
+    );
+    depot.insert(
+        "invite_quarantine_service",
+        invite_quarantine_service(state.repository_factory.pool().clone()),
     );
     depot.insert("upstream_oidc_service", default_upstream_oidc_service());
     depot.insert("did_resolver_service", default_did_resolver_service());

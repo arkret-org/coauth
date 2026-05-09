@@ -28,6 +28,7 @@ use crate::{
         },
         common::DepotExt,
     },
+    services::invite_quarantine::EnqueueInviteQuarantine,
     util::username_valid,
 };
 
@@ -317,17 +318,55 @@ pub async fn batch_invite(
         }
         BatchInviteGateOutcome::Quarantined => {
             // Spec §6.1 default-profile path: no consent + no
-            // require_consent flag → would route to the holder's
-            // quarantine outbox. Persistence + admin-review UI remain
-            // TODO (`TODO(c10e-quarantine-outbox)`); for now we surface
-            // the signal as a 422 with reason `quarantined` so the
-            // ConsentRequired vs Quarantine paths stay distinguishable
-            // on the wire while still rejecting the mint. Callers
-            // (sodmin, yougen) can poll the holder's quarantine inbox
-            // separately when that surface lands.
+            // require_consent flag → route to the holder's quarantine
+            // outbox. As of round 20 we persist the intent to
+            // `invite_quarantine_queue` so admins (sodmin / yougen)
+            // can review and either re-run the invite or reject it.
+            //
+            // The outcome on the wire is still 422 + `quarantined`:
+            // the immediate batch_invite call did NOT mint tokens,
+            // and the caller should treat the gate decision as a
+            // soft-reject pending admin review. The queue id is
+            // surfaced via the `quarantine_id` slot in the audit log
+            // and admin-list endpoint at
+            // `GET /api/admin/v1/invite-quarantine`.
+            let quarantine_id = if let Some(gate) = params.consent_gate.as_ref() {
+                let queue = depot.invite_quarantine_service()?;
+                let payload = serde_json::json!({
+                    "count": params.count,
+                    "usage_limit": params.usage_limit,
+                    "expires_in_hours": params.expires_in_hours,
+                });
+                let enqueue_result = queue
+                    .enqueue(EnqueueInviteQuarantine {
+                        peer_did: gate.peer_did.clone(),
+                        target_holder_did: gate.target_holder_did.clone(),
+                        consent_id: gate.consent_id.clone(),
+                        scope: gate.scope.clone(),
+                        requesting_admin_did: admin_user.as_ref().map(|u| u.username.clone()),
+                        payload,
+                    })
+                    .await;
+                match enqueue_result {
+                    Ok(rec) => Some(rec.id),
+                    Err(error) => {
+                        warn!(
+                            consent_id = %consent_id_for_log,
+                            ?error,
+                            "batch_invite: consent gate quarantine enqueue failed; surfacing quarantined-without-id",
+                        );
+                        None
+                    }
+                }
+            } else {
+                // Should not happen — gate outcome is Quarantined only
+                // when metadata was supplied — but guard defensively.
+                None
+            };
             warn!(
                 consent_id = %consent_id_for_log,
-                "batch_invite: consent gate routed to quarantine (no-op outbox)",
+                quarantine_id = ?quarantine_id,
+                "batch_invite: consent gate routed to quarantine outbox",
             );
             return Err(AppError::unprocessable_entity("quarantined"));
         }

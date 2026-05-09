@@ -4,6 +4,7 @@ pub mod audit_feed;
 pub mod claims;
 pub mod connector_health;
 pub mod devices;
+pub mod invite_quarantine;
 pub mod notification_channels;
 pub mod notification_templates;
 pub mod oauth2_clients;

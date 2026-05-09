@@ -39,6 +39,22 @@ diesel::table! {
 }
 
 diesel::table! {
+    invite_quarantine_queue (id) {
+        id -> Uuid,
+        created_at -> Timestamptz,
+        peer_did -> Text,
+        target_holder_did -> Text,
+        consent_id -> Text,
+        scope -> Text,
+        requesting_admin_did -> Nullable<Text>,
+        payload -> Jsonb,
+        status -> Text,
+        resolved_at -> Nullable<Timestamptz>,
+        resolution_note -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
     user_passwords (id) {
         id -> Uuid,
         user_id -> Uuid,
@@ -755,6 +771,7 @@ diesel::joinable!(workflow_audit_logs -> workflow_steps (workflow_step_id));
 diesel::allow_tables_to_appear_in_same_query!(
     users,
     account_claims,
+    invite_quarantine_queue,
     user_passwords,
     user_totp_configs,
     user_emails,

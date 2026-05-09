@@ -204,22 +204,47 @@ pub fn update_consent_to_pending_move(
 
 /// Sign and submit a `PendingMove` to the holder's principal server.
 ///
-/// **Scaffold only.** Always returns `Err(MimiConsentError::NotImplemented)`.
-/// The real implementation depends on:
+/// **Scaffold only — SDK gap blocks real wiring.** Always returns
+/// `Err(MimiConsentError::NotImplemented)`.
 ///
-/// 1. A loaded anchorer signing key (single_did profile).
-/// 2. The SDK's `lattice` + `anchor` crate exposing a `sign_move(...)` API.
-/// 3. A POST to soland's `/api/v1/moves` endpoint with the signed
-///    envelope.
+/// ### SDK gap (round 20 audit, contrix-rust-sdk 0.4.0)
 ///
-/// All three are tracked under `TODO(c10e-mimi-move)` and the §"P1: Move /
-/// Anchor / Lattice" section of `coauth/_todos.md`.
+/// `crates/lattice` exposes the OrSet/OrderedLog CRDT primitives but
+/// **no `Move` envelope type or signer surface** is published from the
+/// SDK at 0.4.0. Specifically:
+///
+/// - There is no `contrix-anchor` (or equivalent) crate in
+///   `D:/Works/contrix-dev/contrix-rust-sdk/crates/`. The lattice crate
+///   ships only the CRDT data types (`or_set`, `mv_register`, `counter`,
+///   `ordered_log`); it does not expose a `Move`/`Anchor` envelope or
+///   a `sign_move(...)` API that this layer can call.
+/// - `contrix-signatures` exposes detached signing primitives but no
+///   anchor-envelope schema; we'd be hand-rolling the canonical encoding
+///   without spec backing.
+/// - `coauth` does not currently depend on `contrix-lattice`,
+///   `contrix-operations`, `contrix-signatures`, or `contrix-core` (see
+///   `coauth/Cargo.toml` dependency list — none of those crates appear).
+///
+/// Wiring this entrypoint therefore requires (in order):
+///
+/// 1. Land an anchor envelope + `sign_move(...)` API in
+///    `contrix-rust-sdk/crates/lattice` (or a new `contrix-anchor` crate).
+/// 2. Load an anchorer signing key (single_did profile) into
+///    `coauth_keystore::Keystore` and surface it to handlers.
+/// 3. Add the SDK crates as workspace dependencies and POST the signed
+///    envelope to soland's `/api/v1/moves` endpoint.
+///
+/// Tracked under `TODO(c10e-mimi-move)` and the
+/// §"P1: Move / Anchor / Lattice — anchorer signer (rare deployment
+/// mode)" subtask of `coauth/_todos.md`.
 pub async fn anchor_pending_move(
     _pending: &PendingMove,
     _principal_server_url: Option<&url::Url>,
     _http_client: &reqwest::Client,
 ) -> Result<(), MimiConsentError> {
-    // TODO(c10e-mimi-move): wire the real signer here.
+    // TODO(c10e-mimi-move): wire the real signer here once the SDK
+    // exposes a `Move` envelope + `sign_move(...)` API. See the
+    // doc-comment above for the precise SDK gap.
     Err(MimiConsentError::NotImplemented)
 }
 

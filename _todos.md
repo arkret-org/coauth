@@ -4,6 +4,105 @@
 > Scope: Contrix Auth / Account Server. Only **unfinished** items are
 > listed here. Completed items live in `git log` and `CHANGELOG.md`.
 
+## C10.E 续³ — invite-quarantine outbox persistence + admin review surface + MIMI SDK-gap audit (2026-05-09 二十轮)
+
+Round 20 lands the persistence + review side of the consent-gate
+quarantine path, and locks down the SDK-gap story for the MIMI
+anchor-signer that was left as a stub in round 19.
+
+Landed:
+- New Diesel migration
+  `crates/data/migrations/20260509000100_invite_quarantine_queue/{up,down}.sql`
+  + matching `diesel::table!` + `allow_tables_to_appear_in_same_query!`
+  entry in `crates/data/src/pg/schema.rs`. Schema:
+  `(id uuid pk default gen_random_uuid(), created_at, peer_did,
+  target_holder_did, consent_id, scope, requesting_admin_did, payload
+  jsonb, status text default 'pending', resolved_at, resolution_note)`.
+  CHECKs constrain non-empty DIDs and a closed `pending|approved|rejected`
+  status set; indexes on `(status, created_at desc)`,
+  `target_holder_did`, and `consent_id`.
+- New service module
+  `crates/backend/src/services/invite_quarantine.rs` exposing the
+  `InviteQuarantineService` trait + `PgInviteQuarantineService` impl
+  (mirrors the round-18 `account_claims` style — raw `sql_query` against
+  the shared `DieselPool<AsyncPgConnection>`, no full repo abstraction).
+  Methods: `enqueue / list_pending / get / mark_resolved`. The status
+  transition on `mark_resolved` is intentionally narrow (only `pending`
+  rows can move forward, returns `None` on already-resolved). Wired
+  into `app_state.rs` + `test_utils.rs` and exposed as
+  `DepotExt::invite_quarantine_service()`.
+- `crates/backend/src/handlers/admin/v1/users/create.rs`:
+  - `Quarantined` branch now persists the gate intent to the queue via
+    `invite_quarantine_service.enqueue(...)`. Audit log records
+    `quarantine_id` so sodmin / yougen can correlate the admin op back
+    to the queue row. The wire response is still 422 + `quarantined`
+    (the immediate batch_invite call did not mint tokens; admin must
+    resolve via the new endpoints below). If the enqueue itself fails
+    (DB hiccup), the gate decision still wins — we surface
+    quarantined-without-id rather than swallowing the gate.
+- New admin handler module
+  `crates/backend/src/handlers/admin/v1/invite_quarantine.rs`:
+  - `GET /api/admin/v1/invite-quarantine?limit=N` — paged list of
+    `pending` rows, oldest first.
+  - `POST /api/admin/v1/invite-quarantine/{id}/resolve` — body
+    `{decision: "approve"|"reject", note?: ...}`. Returns 404 if the
+    row does not exist or is already resolved. Approve is intentionally
+    a *flag flip* (not auto-replay) — sodmin re-issues `batch-invite`
+    with confirmed parameters once consent has been re-anchored.
+  - Auth via the same `extract_call_context` chain as the rest of the
+    admin v1 surface (admin scope check, oauth2 / personal session).
+  - Wire-status enum (`pending|approved|rejected`) decoupled from the
+    service-layer enum so the admin OpenAPI is stable across future
+    service-level renames.
+  - Wired into `crates/backend/src/server.rs` admin router beside
+    `audit-feed`.
+- `crates/backend/src/handlers/account/mimi_consent.rs::anchor_pending_move`:
+  re-audited the SDK surface (`contrix-rust-sdk` 0.4.0 at
+  `D:/Works/contrix-dev/contrix-rust-sdk/crates/`). Confirmed there is
+  **no** `Move` envelope or `sign_move(...)` API exposed from
+  `crates/lattice` (only the CRDT primitives `or_set`, `mv_register`,
+  `counter`, `ordered_log`); coauth does not currently depend on
+  `contrix-lattice`, `contrix-operations`, `contrix-signatures`, or
+  `contrix-core` either. The doc-comment now spells out the precise
+  three-step gap (envelope/signer landing in SDK → keystore wiring →
+  POST to soland's `/api/v1/moves`) so the next round either lands the
+  SDK piece or has a clear reason not to. The handler still returns
+  `MimiConsentError::NotImplemented`; behaviour unchanged.
+- 9 new unit tests:
+  `services::invite_quarantine::tests` (4):
+  `status_round_trips`, `status_parse_unknown_returns_none`,
+  `row_into_record_falls_back_to_pending_on_unknown_status`,
+  `enqueue_dto_carries_payload`.
+  `handlers::admin::v1::invite_quarantine::tests` (5):
+  `wire_status_round_trip`, `entry_from_record_preserves_fields`,
+  `resolve_request_parses_approve`,
+  `resolve_request_parses_reject_with_note`,
+  `resolve_request_rejects_unknown_decision`.
+  All pure (no DB / no HTTP); the existing wiremock + test-db
+  integration patterns cover the enqueue→list→resolve loop end-to-end
+  via the batch_invite gate test once `DATABASE_URL` is present
+  (DB-pool failures unrelated to this round are left as-is, per task
+  scope).
+
+Test counts: `cargo check --workspace` clean. `cargo test -p
+coauth-backend --lib` exercises 9 new tests on top of the 22 from round
+19 (and the 17 before that) — all consent-gate / mimi /
+invite-quarantine / typed_uuid7 tests pass; the workspace's
+pre-existing 115 Postgres-pool test failures are unrelated and bounded
+by `DATABASE_URL`.
+
+Deferred (intentional):
+- Auto-replay of the original invite on `approve`: out of scope per the
+  module docstring rationale (sodmin re-issues `batch-invite` with
+  confirmed parameters; the queue stores enough context to render the
+  decision UI).
+- `is_typed_uuid7` admin-handler call-sites: still no incoming
+  `cx:device:` / `cx:space:` / `cx:event:` parsing on the wire (admin
+  surface uses ULIDs for resource IDs). The helper stays staged ahead
+  of demand; will be wired the moment the first admin handler accepts
+  one of those typed wire ids.
+- `anchor_pending_move` real-wire: blocked on SDK surface (see above).
+
 ## C10.E 续² — batch_invite consent gate + MIMI scaffolding + typed-uuid7 helper (2026-05-09 十九轮)
 
 Aggressive follow-on round: wires the consent gate into the existing
@@ -70,12 +169,13 @@ mimi / typed_uuid7 tests pass; the workspace's pre-existing Postgres
 failures (115) are unrelated — they require `DATABASE_URL` env var.
 
 Deferred (intentional):
-- Quarantine outbox persistence + admin-review UI (`TODO(c10e-
-  quarantine-outbox)` in `users/create.rs`). Current 422 +
-  `quarantined` body lets sodmin / yougen poll for the signal.
+- ~~Quarantine outbox persistence + admin-review UI~~ — landed in
+  round 20 (see top of file).
 - Real anchorer signer for `anchor_pending_move` — depends on the SDK
-  lattice + anchor crate's `sign_move` API surface; tracked alongside
-  the §"P1: Move / Anchor / Lattice" anchorer signer subtask below.
+  lattice + anchor crate's `sign_move` API surface; round-20 audit
+  confirms `contrix-rust-sdk` 0.4.0 does not expose this. Tracked
+  alongside the §"P1: Move / Anchor / Lattice" anchorer signer subtask
+  below.
 - Delegated-controller resolution in `authorize_actor` — needs a
   soland round trip; static-list path is enough for the scaffolding.
 
@@ -256,13 +356,15 @@ return 501 or use scaffolded state.
     is true → reject with `consent_required`
   - revoked or absent + default profile → route to holder's quarantine inbox
 
-  Status (2026-05-09): handler-level gate **wired** for both
-  `POST /api/v1/account/invites/relay` (per-recipient, full forward path)
-  and `POST /api/admin/v1/users/batch-invite` (token-mint, opt-in via
-  `consent_gate` body field). Helper + decision tree fully unit-tested
-  (28 tests across 4 modules). Remaining: real soland cell-read endpoint
-  (`TODO(soland-cell-query)`) and quarantine-outbox persistence
-  (`TODO(c10e-quarantine-outbox)`).
+  Status (2026-05-09 二十轮): handler-level gate **wired** for both
+  `POST /api/v1/account/invites/relay` (per-recipient, full forward
+  path) and `POST /api/admin/v1/users/batch-invite` (token-mint, opt-in
+  via `consent_gate` body field). On `Quarantined`, `batch_invite` now
+  persists to the new `invite_quarantine_queue` table and exposes admin
+  review via `GET /api/admin/v1/invite-quarantine` and
+  `POST /api/admin/v1/invite-quarantine/{id}/resolve`. 37 tests across
+  5 modules. Remaining: real soland cell-read endpoint
+  (`TODO(soland-cell-query)`).
 - [~] **MIMI consent interop** (rebased onto Move): when accepting incoming
       MIMI `request_consent` / `update_consent`, validate the actor is the
       declared holder or an authorized controller, then construct a Move on

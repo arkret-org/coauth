@@ -1,6 +1,7 @@
 pub mod account_claims;
 pub mod did_resolver;
 pub mod email_webhook;
+pub mod invite_quarantine;
 pub mod principal_cache;
 pub mod risk_action_state;
 pub mod upstream_oidc;
