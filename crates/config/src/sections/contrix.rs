@@ -6,7 +6,7 @@ use super::ConfigurationSection;
 
 /// Contrix-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ContrixConfig {
     /// Principal Server audiences trusted to consume session grants and admin
     /// tokens emitted by coauth.
@@ -44,6 +44,33 @@ pub struct ContrixConfig {
     /// Override at runtime via `COAUTH_PRINCIPAL_SERVER_URL`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub principal_server_url: Option<Url>,
+
+    /// Minimum number of distinct admin DID approvals required to execute a
+    /// high-risk risk-action proposal. Defaults to `2`.
+    ///
+    /// "High-risk" actions today are `disable`, `erase`, and `reset_recovery`;
+    /// the action `lock` is treated as low-risk and only needs the proposer's
+    /// own approval.
+    #[serde(default = "default_high_risk_threshold")]
+    pub high_risk_threshold: u32,
+}
+
+fn default_high_risk_threshold() -> u32 {
+    2
+}
+
+impl Default for ContrixConfig {
+    fn default() -> Self {
+        Self {
+            principal_servers: Vec::new(),
+            identity_registry: None,
+            service_did: None,
+            issuer_did: None,
+            admin_audience: None,
+            principal_server_url: None,
+            high_risk_threshold: default_high_risk_threshold(),
+        }
+    }
 }
 
 impl ContrixConfig {
@@ -56,6 +83,7 @@ impl ContrixConfig {
             && self.issuer_did.is_none()
             && self.admin_audience.is_none()
             && self.principal_server_url.is_none()
+            && self.high_risk_threshold == default_high_risk_threshold()
     }
 }
 

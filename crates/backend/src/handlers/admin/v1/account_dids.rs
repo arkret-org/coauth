@@ -13,7 +13,10 @@ use crate::{
         admin::{call_context::extract_call_context, params::extract_ulid_param},
         common::DepotExt,
     },
-    services::did_resolver::DidResolverService,
+    services::{
+        did_binding_proof::{DidBindingProofError, validate_control_proof},
+        did_resolver::DidResolverService,
+    },
 };
 
 #[derive(Clone, Copy, Deserialize, Serialize, JsonSchema, ToSchema)]
@@ -144,35 +147,55 @@ pub struct AccountDidBindingsMeta {
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "AddAccountDidBindingRequest")]
-#[allow(dead_code)]
 pub struct AddAccountDidBindingRequest {
     /// DID to bind to the account.
-    did: String,
+    pub did: String,
 
     /// Binding purpose.
-    kind: DidBindingKind,
+    pub kind: DidBindingKind,
 
-    /// Proof that the account holder controls the DID.
-    control_proof: serde_json::Value,
+    /// Proof that the account holder controls the DID. The proof MUST be a
+    /// detached JWS signed by one of the DID's verification-method keys
+    /// over the canonical binding statement (see
+    /// [`crate::services::did_binding_proof`]).
+    pub control_proof: ControlProofPayload,
 
     /// Whether the new binding should become the primary DID when accepted.
-    make_primary: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub make_primary: Option<bool>,
 
     /// Hint about the proof type, for example `did_controller_key` or `passkey`.
-    verification_method: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_method: Option<String>,
 
     /// Optional delegated resolver submission payload or receipt seed.
-    resolver_submission: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[allow(dead_code)]
+    pub resolver_submission: Option<serde_json::Value>,
 
     /// Optional operator note for audit and admin UI surfaces.
-    operator_note: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operator_note: Option<String>,
 
     /// Solved CAPTCHA token. Verified when the deployment has a CAPTCHA
     /// provider configured (`site.captcha`) so admin-on-behalf-of-user
     /// or self-service binding flows can be abuse-gated. Optional and
     /// ignored when no provider is configured.
-    #[serde(default)]
-    captcha_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub captcha_token: Option<String>,
+}
+
+/// Compact-serialised JWS string + the nonce that was embedded in the
+/// canonical binding statement. We accept both `{"jws": "...", "nonce":
+/// "..."}` and a bare string (legacy admin clients) for ergonomics.
+#[derive(Deserialize, JsonSchema, ToSchema)]
+pub struct ControlProofPayload {
+    /// The detached JWS in compact serialisation.
+    pub jws: String,
+
+    /// Nonce that was included in the canonical binding statement signed
+    /// by `jws`.
+    pub nonce: String,
 }
 
 #[derive(Default, Deserialize, JsonSchema, ToSchema)]
@@ -239,12 +262,74 @@ pub async fn add_account_did(
     let id = extract_ulid_param(req)?;
     enforce_did_binding_rate_limit(req, depot, id).await?;
     enforce_captcha(req, depot, body.captcha_token.as_deref()).await?;
+
+    let did = body.did.trim();
+    if did.is_empty() || !did.starts_with("did:") {
+        return Err(AppError::bad_request("did must be a non-empty DID URI"));
+    }
+    let did = did.to_owned();
+
     let ctx = extract_call_context(req, depot).await?;
-    ctx.repo.cancel().await?;
-    // TODO(contrix): validate control_proof with delegated/public DID resolver before persisting.
+    let crate::handlers::admin::call_context::CallContext {
+        mut repo, clock, ..
+    } = ctx;
+
+    // Verify the account exists before doing the (expensive) resolver call.
+    repo.user()
+        .lookup(id)
+        .await?
+        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+
+    let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
+    let key_store = depot.key_store()?;
+    let http_client = depot.http_client()?;
+    let did_resolver = depot.did_resolver_service()?;
+    let now = clock.now();
+
+    validate_control_proof(
+        &http_client,
+        &url_builder,
+        &contrix_config,
+        &key_store,
+        &mut repo,
+        did_resolver.as_ref(),
+        body.control_proof.jws.as_str(),
+        &did,
+        id,
+        body.control_proof.nonce.as_str(),
+        now,
+    )
+    .await
+    .map_err(map_did_binding_proof_error)?;
+
+    // Today there is no `account_dids` table; binding storage is tracked
+    // separately. We've validated the proof, so the next layer (write
+    // path) can persist with confidence. Surface a 501 with the precise
+    // reason so downstream contracts stay clear.
+    repo.cancel().await?;
     Err(AppError::not_implemented(
-        "account DID binding creation is not implemented yet",
+        "account DID binding control_proof validated, but persistence layer (account_dids table) is not landed yet",
     ))
+}
+
+fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
+    match error {
+        DidBindingProofError::EmptyProof
+        | DidBindingProofError::InvalidJws(_)
+        | DidBindingProofError::NoVerificationKey
+        | DidBindingProofError::SignatureMismatch
+        | DidBindingProofError::StatementKindMismatch
+        | DidBindingProofError::AccountDidMismatch
+        | DidBindingProofError::CxAccountIdMismatch
+        | DidBindingProofError::NonceMismatch
+        | DidBindingProofError::IatOutOfRange => {
+            AppError::bad_request(format!("control_proof_invalid: {error}"))
+        }
+        DidBindingProofError::Resolve(inner) => {
+            AppError::bad_request(format!("did_resolver_failed: {inner}"))
+        }
+    }
 }
 
 #[endpoint]

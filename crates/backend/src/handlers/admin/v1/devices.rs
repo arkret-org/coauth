@@ -1,11 +1,18 @@
 //! Contrix device administration endpoints.
 
 use chrono::{DateTime, Utc};
+use coauth_data::{RepositoryAccess, audit::AdminOperation};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{AppError, JsonResult, handlers::admin::call_context::extract_call_context};
+use crate::{
+    AppError, JsonResult,
+    handlers::admin::{
+        audit_helper::record_admin_operation, call_context::extract_call_context,
+    },
+    services::device_revoke::cascade_revoke_session_grants,
+};
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -58,13 +65,22 @@ pub struct DeviceListResponse {
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "RevokeDeviceRequest")]
-#[allow(dead_code)]
 pub struct RevokeDeviceRequest {
     /// Operator-supplied reason for audit.
-    reason: String,
+    pub reason: String,
 
     /// Optional approval proof for high-risk revocations.
-    approval_proof: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_proof: Option<String>,
+}
+
+#[derive(Serialize, JsonSchema, ToSchema)]
+pub struct DeviceRevokeResponse {
+    /// The device that was revoked.
+    pub device: DeviceRecord,
+
+    /// How many active session grants were cascade-revoked atomically.
+    pub revoked_session_grants: usize,
 }
 
 #[endpoint]
@@ -81,11 +97,67 @@ pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<Device
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.devices.revoke", skip_all)]
-pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<DeviceRecord> {
+pub async fn revoke_device(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<DeviceRevokeResponse> {
+    let device_id = req
+        .param::<String>("id")
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| AppError::bad_request("missing device id"))?;
+    let body: RevokeDeviceRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let reason = body.reason.trim().to_owned();
+    if reason.is_empty() {
+        return Err(AppError::bad_request("reason is required"));
+    }
+
     let ctx = extract_call_context(req, depot).await?;
-    ctx.repo.cancel().await?;
-    // TODO(contrix): revoke device binding and cascade active session grants.
-    Err(AppError::not_implemented(
-        "device revocation is not implemented yet",
-    ))
+    let crate::handlers::admin::call_context::CallContext {
+        mut repo,
+        clock,
+        user: admin_user,
+        ..
+    } = ctx;
+    let mut rng = crate::handlers::account::make_rng();
+
+    // Cascade-revoke every active session grant tied to this device, in
+    // the same repository transaction as the audit-log entry. Either both
+    // succeed (`repo.save()` below) or both roll back.
+    let outcome = cascade_revoke_session_grants(&mut repo, &*clock, &device_id)
+        .await
+        .map_err(AppError::internal)?;
+
+    record_admin_operation(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        admin_user.as_ref(),
+        AdminOperation::Other("device.revoke".to_owned()),
+        "device",
+        None,
+        serde_json::json!({
+            "device_id": device_id,
+            "reason": reason,
+            "approval_proof_present": body.approval_proof.is_some(),
+            "revoked_session_grants": outcome.revoked_session_grants,
+            "revoked_at": outcome.revoked_at,
+        }),
+    )
+    .await?;
+    repo.save().await?;
+
+    Ok(Json(DeviceRevokeResponse {
+        device: DeviceRecord {
+            id: device_id.clone(),
+            account_id: None,
+            device_did: Some(device_id),
+            display_name: None,
+            risk_level: DeviceRiskLevel::Unknown,
+            mfa_state: DeviceMfaState::Unknown,
+            registered_at: None,
+            revoked_at: Some(outcome.revoked_at),
+        },
+        revoked_session_grants: outcome.revoked_session_grants,
+    }))
 }

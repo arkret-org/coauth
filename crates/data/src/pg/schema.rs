@@ -39,6 +39,44 @@ diesel::table! {
 }
 
 diesel::table! {
+    webauthn_credentials (id) {
+        id -> Uuid,
+        account_id -> Uuid,
+        credential_id -> Bytea,
+        public_key -> Jsonb,
+        sign_count -> Int8,
+        transports -> Array<Text>,
+        aaguid -> Nullable<Uuid>,
+        backup_eligible -> Bool,
+        backup_state -> Bool,
+        user_verified -> Bool,
+        label -> Nullable<Text>,
+        created_at -> Timestamptz,
+        last_used_at -> Nullable<Timestamptz>,
+        revoked_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    risk_action_proposals (id) {
+        id -> Uuid,
+        account_id -> Uuid,
+        action -> Text,
+        proposer_did -> Text,
+        reason -> Text,
+        ticket -> Nullable<Text>,
+        state -> Text,
+        approval_proofs -> Jsonb,
+        required_approvals -> Int4,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        approved_at -> Nullable<Timestamptz>,
+        executed_at -> Nullable<Timestamptz>,
+        cancelled_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
     invite_quarantine_queue (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -771,6 +809,8 @@ diesel::joinable!(workflow_audit_logs -> workflow_steps (workflow_step_id));
 diesel::allow_tables_to_appear_in_same_query!(
     users,
     account_claims,
+    risk_action_proposals,
+    webauthn_credentials,
     invite_quarantine_queue,
     user_passwords,
     user_totp_configs,

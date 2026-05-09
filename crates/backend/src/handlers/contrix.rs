@@ -1931,6 +1931,7 @@ mod tests {
                 proof_required_for_pairwise: true,
             }),
             principal_server_url: None,
+            high_risk_threshold: 2,
         };
 
         let body =

@@ -65,6 +65,7 @@ use crate::{
         account_claims::account_claims_service, did_resolver::default_did_resolver_service,
         invite_quarantine::invite_quarantine_service,
         principal_cache::default_principal_cache_service,
+        risk_action_proposals::risk_action_proposals_service,
         risk_action_state::default_risk_action_state_service,
         upstream_oidc::default_upstream_oidc_service,
     },
@@ -226,6 +227,10 @@ impl Handler for InjectTestState {
         depot.insert(
             "risk_action_state_service",
             default_risk_action_state_service(),
+        );
+        depot.insert(
+            "risk_action_proposals_service",
+            risk_action_proposals_service(state.repository_factory.pool().clone()),
         );
         depot.insert("principal_cache_service", default_principal_cache_service());
         depot.insert(

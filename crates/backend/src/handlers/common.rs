@@ -242,6 +242,12 @@ pub trait DepotExt {
     fn risk_action_state_service(
         &self,
     ) -> Result<crate::services::risk_action_state::RiskActionStateServiceHandle, RouteError>;
+    fn risk_action_proposals_service(
+        &self,
+    ) -> Result<
+        crate::services::risk_action_proposals::RiskActionProposalsServiceHandle,
+        RouteError,
+    >;
     fn principal_cache_service(
         &self,
     ) -> Result<crate::services::principal_cache::PrincipalCacheServiceHandle, RouteError>;
@@ -356,6 +362,15 @@ impl DepotExt for Depot {
         &self,
     ) -> Result<crate::services::risk_action_state::RiskActionStateServiceHandle, RouteError> {
         depot_get(self, "risk_action_state_service")
+    }
+
+    fn risk_action_proposals_service(
+        &self,
+    ) -> Result<
+        crate::services::risk_action_proposals::RiskActionProposalsServiceHandle,
+        RouteError,
+    > {
+        depot_get(self, "risk_action_proposals_service")
     }
 
     fn principal_cache_service(

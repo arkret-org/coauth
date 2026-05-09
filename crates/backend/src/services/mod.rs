@@ -1,8 +1,11 @@
 pub mod account_claims;
+pub mod device_revoke;
+pub mod did_binding_proof;
 pub mod did_resolver;
 pub mod email_webhook;
 pub mod invite_quarantine;
 pub mod principal_cache;
+pub mod risk_action_proposals;
 pub mod risk_action_state;
 pub mod upstream_oidc;
 pub mod user_admin;

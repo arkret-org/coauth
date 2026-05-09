@@ -26,6 +26,7 @@ use crate::{
         email_webhook::EmailWebhookService,
         invite_quarantine::invite_quarantine_service,
         principal_cache::durable_principal_cache_service,
+        risk_action_proposals::risk_action_proposals_service,
         risk_action_state::default_risk_action_state_service,
         upstream_oidc::default_upstream_oidc_service,
     },
@@ -194,6 +195,10 @@ pub async fn inject_app_state(
     depot.insert(
         "risk_action_state_service",
         default_risk_action_state_service(),
+    );
+    depot.insert(
+        "risk_action_proposals_service",
+        risk_action_proposals_service(state.repository_factory.pool().clone()),
     );
     depot.insert(
         "principal_cache_service",
