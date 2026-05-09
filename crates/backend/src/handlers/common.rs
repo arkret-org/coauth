@@ -263,6 +263,9 @@ pub trait DepotExt {
     fn did_resolver_service(
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError>;
+    fn webauthn_service(
+        &self,
+    ) -> Result<crate::services::webauthn::WebauthnServiceHandle, RouteError>;
     fn cookie_jar(&self, req: &Request) -> Result<CookieJar, RouteError>;
 }
 
@@ -401,6 +404,12 @@ impl DepotExt for Depot {
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError> {
         depot_get(self, "did_resolver_service")
+    }
+
+    fn webauthn_service(
+        &self,
+    ) -> Result<crate::services::webauthn::WebauthnServiceHandle, RouteError> {
+        depot_get(self, "webauthn_service")
     }
 
     fn cookie_jar(&self, req: &Request) -> Result<CookieJar, RouteError> {

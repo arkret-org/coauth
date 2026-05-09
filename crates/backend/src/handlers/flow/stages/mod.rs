@@ -21,6 +21,8 @@ use coauth_data::{
 use rand_core::RngCore;
 use thiserror::Error;
 
+use crate::handlers::Limiter;
+
 /// Errors that can occur during stage side-effect execution.
 #[derive(Debug, Error)]
 pub enum StageExecutionError {
@@ -60,6 +62,7 @@ pub async fn execute_stage(
     stage: &StageKind,
     response: &StageResponse,
     context: &mut serde_json::Value,
+    limiter: Option<&Limiter>,
 ) -> Result<StageOutcome, StageExecutionError> {
     match (stage, response) {
         (
@@ -126,7 +129,7 @@ pub async fn execute_stage(
         (
             StageKind::AuthenticatorValidate { .. },
             StageResponse::AuthenticatorValidate { code, .. },
-        ) => authenticator_validate::execute(repo, code, context).await,
+        ) => authenticator_validate::execute(repo, code, context, limiter).await,
 
         (StageKind::Consent, StageResponse::Consent { granted }) => {
             consent::execute(*granted, context).await

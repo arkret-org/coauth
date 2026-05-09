@@ -11,16 +11,23 @@ use tracing::warn;
 use ulid::Ulid;
 
 use super::StageExecutionError;
-use crate::totp;
+use crate::{handlers::Limiter, totp};
 
 /// Execute the authenticator validation stage.
 ///
 /// Looks up the user's TOTP configuration from the database, then verifies
 /// the submitted code against the stored secret using HMAC-SHA1.
+///
+/// When `limiter` is provided, applies the per-account TOTP rate limit
+/// (default: 5 attempts per 15 minutes). The limiter check happens
+/// *before* the TOTP code is verified — failed attempts and successful
+/// attempts both consume one quota unit, which is what RFC 6238 §5.2
+/// recommends for OTP throttling.
 pub async fn execute(
     repo: &mut BoxRepository,
     code: &str,
     context: &mut serde_json::Value,
+    limiter: Option<&Limiter>,
 ) -> Result<StageOutcome, StageExecutionError> {
     // The identification stage must have run first and stored the user_id.
     let user_id_str = context
@@ -45,6 +52,16 @@ pub async fn execute(
                 code: "invalid_totp_code".into(),
             }],
         });
+    }
+
+    // Apply per-account rate limit before any DB lookup. A locked-out
+    // account returns `RateLimited` rather than a Retry so the handler
+    // can surface the standard 429 response.
+    if let Some(limiter) = limiter
+        && limiter.check_mfa_totp(user_id).await.is_err()
+    {
+        warn!(user.id = %user_id, "TOTP attempt rate-limited");
+        return Err(StageExecutionError::RateLimited);
     }
 
     // Look up the user to pass to the repository.

@@ -76,6 +76,12 @@ pub enum DidBindingLimitedError {
     Account(Ulid),
 }
 
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+pub enum MfaTotpLimitedError {
+    #[error("Too many TOTP attempts for account {0}")]
+    Account(Ulid),
+}
+
 // ---------------------------------------------------------------------------
 // RequesterFingerprint (unchanged)
 // ---------------------------------------------------------------------------
@@ -173,6 +179,7 @@ struct LimiterInner {
     phone_authentication_attempt_per_session: KeyedLimiter<Ulid>,
     did_binding_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_account: KeyedLimiter<Ulid>,
+    mfa_totp_per_account: KeyedLimiter<Ulid>,
 }
 
 impl LimiterInner {
@@ -213,6 +220,7 @@ impl LimiterInner {
             )?,
             did_binding_per_requester: KeyedLimiter::from_config(&config.did_binding.per_ip)?,
             did_binding_per_account: KeyedLimiter::from_config(&config.did_binding.per_account)?,
+            mfa_totp_per_account: KeyedLimiter::from_config(&config.mfa_totp.per_account)?,
         })
     }
 }
@@ -481,6 +489,24 @@ impl Limiter {
             return Err(DidBindingLimitedError::Account(account_id));
         }
 
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // MFA / TOTP attempts
+    // -----------------------------------------------------------------------
+
+    /// Check whether another TOTP verification attempt may proceed for
+    /// `account_id`. Tightened (5 attempts / 15 min by default) to make
+    /// brute-forcing the 6-digit code infeasible — at one attempt every
+    /// 3 minutes the expected time-to-guess is 200 days.
+    pub async fn check_mfa_totp(
+        &self,
+        account_id: Ulid,
+    ) -> Result<(), MfaTotpLimitedError> {
+        if !self.inner.mfa_totp_per_account.check(&account_id).await {
+            return Err(MfaTotpLimitedError::Account(account_id));
+        }
         Ok(())
     }
 }

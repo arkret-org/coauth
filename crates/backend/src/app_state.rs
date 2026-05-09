@@ -29,6 +29,7 @@ use crate::{
         risk_action_proposals::risk_action_proposals_service,
         risk_action_state::default_risk_action_state_service,
         upstream_oidc::default_upstream_oidc_service,
+        webauthn::webauthn_service,
     },
     telemetry::METER,
 };
@@ -214,6 +215,30 @@ pub async fn inject_app_state(
     );
     depot.insert("upstream_oidc_service", default_upstream_oidc_service());
     depot.insert("did_resolver_service", default_did_resolver_service());
+    // Build the WebAuthn service from the current URL builder. We only
+    // insert the service if construction succeeds; a misconfigured RP
+    // origin should not bring the rest of the request pipeline down.
+    {
+        let rp_id = state.url_builder.public_hostname().to_owned();
+        let rp_origin = state.url_builder.http_base();
+        let rp_name = "Contrix";
+        match webauthn_service(
+            &rp_id,
+            &rp_origin,
+            rp_name,
+            state.repository_factory.pool().clone(),
+        ) {
+            Ok(svc) => {
+                depot.insert("webauthn_service", svc);
+            }
+            Err(err) => {
+                tracing::warn!(
+                    %err,
+                    "WebAuthn service unavailable (rp_id={rp_id}, rp_origin={rp_origin})",
+                );
+            }
+        }
+    }
     if let Some(email_webhook_service) = state.email_webhook_service.clone() {
         depot.insert("email_webhook_service", email_webhook_service);
     }

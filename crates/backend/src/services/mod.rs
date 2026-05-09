@@ -8,5 +8,6 @@ pub mod principal_cache;
 pub mod risk_action_proposals;
 pub mod risk_action_state;
 pub mod upstream_oidc;
+pub mod webauthn;
 pub mod user_admin;
 pub mod user_profile;

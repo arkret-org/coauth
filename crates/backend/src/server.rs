@@ -958,6 +958,25 @@ fn build_admin_router(router: Router) -> Router {
                                     Router::with_path("{did_id}")
                                         .delete(account_dids::remove_account_did),
                                 ),
+                        )
+                        .push(
+                            Router::with_path("passkeys")
+                                .push(
+                                    Router::with_path("register/start")
+                                        .post(passkeys::register_start),
+                                )
+                                .push(
+                                    Router::with_path("register/finish")
+                                        .post(passkeys::register_finish),
+                                )
+                                .push(
+                                    Router::with_path("auth/start")
+                                        .post(passkeys::auth_start),
+                                )
+                                .push(
+                                    Router::with_path("auth/finish")
+                                        .post(passkeys::auth_finish),
+                                ),
                         ),
                 ),
         )
@@ -1017,6 +1036,11 @@ fn build_admin_router(router: Router) -> Router {
                         .put(oauth2_clients::replace_localized_metadata),
                 ),
             ),
+        )
+        // RFC 7591 admin dynamic client registration
+        .push(
+            Router::with_path("oauth2/clients/register")
+                .post(oauth2_clients_register::register),
         )
         // Personal sessions
         .push(
