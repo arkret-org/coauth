@@ -1848,7 +1848,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-core"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1861,7 +1861,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-identifiers"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "getrandom 0.3.4",
  "serde",
@@ -1872,7 +1872,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-signatures"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
