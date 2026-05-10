@@ -30,7 +30,9 @@ mod tests {
     #[tokio::test]
     async fn test_add_user() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -67,7 +69,9 @@ mod tests {
     #[tokio::test]
     async fn test_add_user_invalid_username() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -87,7 +91,9 @@ mod tests {
     #[tokio::test]
     async fn test_add_user_exists() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -120,7 +126,9 @@ mod tests {
     #[tokio::test]
     async fn test_add_user_reserved() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -171,7 +179,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_users() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -386,7 +396,9 @@ mod tests {
     #[tokio::test]
     async fn test_set_password() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -435,7 +447,9 @@ mod tests {
     #[tokio::test]
     async fn test_weak_password() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -496,7 +510,9 @@ mod tests {
     #[tokio::test]
     async fn test_unknown_user() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -520,7 +536,9 @@ mod tests {
     #[tokio::test]
     async fn test_disabled() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         state.password_manager = PasswordManager::disabled();
         let token = state.token_with_scope("urn:coauth:admin").await;
@@ -541,7 +559,9 @@ mod tests {
     #[tokio::test]
     async fn test_patch_user_profile_and_state() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let unique = unique_test_nonce();
         state.clock.advance(Duration::seconds(unique as i64));
@@ -587,7 +607,9 @@ mod tests {
     #[tokio::test]
     async fn test_patch_user_reactivate() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let unique = unique_test_nonce();
         state.clock.advance(Duration::seconds(unique as i64));

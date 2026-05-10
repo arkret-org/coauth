@@ -226,7 +226,7 @@ mod tests {
                         type: twilio
                         account_sid: AC123
                         auth_token: secret
-                        from_number: +12065550123
+                        from_number: "+12065550123"
                 "#,
             )?;
 

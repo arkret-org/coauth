@@ -290,12 +290,11 @@ impl AnchorerSigner {
         origin: AnchorerSigningKeyOrigin,
     ) -> Result<Self, MimiConsentError> {
         let issuer_did = issuer_did.into();
-        let did = Did::new(issuer_did.clone()).map_err(|error| {
-            MimiConsentError::InvalidTypedId {
+        let did =
+            Did::new(issuer_did.clone()).map_err(|error| MimiConsentError::InvalidTypedId {
                 field: "issuer_did",
                 reason: format!("{error}"),
-            }
-        })?;
+            })?;
         let kid = verification_method_id.into();
         let inner = Ed25519MoveSigner::from_did_key_seed(seed, did, kid.clone());
         Ok(Self {
@@ -458,11 +457,9 @@ pub(crate) fn build_and_sign_move(
             reason: format!("{error}"),
         }
     })?;
-    let hlc = Hlc::new(pending.hlc.clone()).map_err(|error| {
-        MimiConsentError::InvalidTypedId {
-            field: "hlc",
-            reason: format!("{error}"),
-        }
+    let hlc = Hlc::new(pending.hlc.clone()).map_err(|error| MimiConsentError::InvalidTypedId {
+        field: "hlc",
+        reason: format!("{error}"),
     })?;
     let issuer = Did::new(signer.issuer_did().to_owned()).map_err(|error| {
         MimiConsentError::InvalidTypedId {
@@ -571,10 +568,7 @@ mod tests {
     #[test]
     fn update_consent_grant_maps_to_or_set_add() {
         let pending = update_consent_to_pending_move(&sample_update(true)).unwrap();
-        assert_eq!(
-            pending.cell_id,
-            "cx:cell:cx.component.consent.grant.v1:c-1"
-        );
+        assert_eq!(pending.cell_id, "cx:cell:cx.component.consent.grant.v1:c-1");
         assert_eq!(pending.op, PendingMoveOp::OrSetAdd);
         assert_eq!(pending.tag, "peer=did:web:peer;scope=invite");
         assert_eq!(
@@ -659,10 +653,7 @@ mod tests {
     fn authorize_unrelated_actor_is_rejected() {
         let err = authorize_actor("did:web:stranger", "did:web:holder", &[])
             .expect_err("should reject unrelated actor");
-        assert!(matches!(
-            err,
-            MimiConsentError::ActorNotAuthorized { .. }
-        ));
+        assert!(matches!(err, MimiConsentError::ActorNotAuthorized { .. }));
     }
 
     #[tokio::test]
@@ -671,16 +662,13 @@ mod tests {
         let pending = sample_pending();
         let client = reqwest::Client::new();
         let signer = sample_signer();
-        let err = anchor_pending_move(
-            &pending,
-            None,
-            &client,
-            &signer,
-            "did:web:anchorer.example",
-        )
-        .await
-        .unwrap_err();
-        assert!(matches!(err, MimiConsentError::PrincipalServerNotConfigured));
+        let err = anchor_pending_move(&pending, None, &client, &signer, "did:web:anchorer.example")
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            MimiConsentError::PrincipalServerNotConfigured
+        ));
     }
 
     #[test]
@@ -819,7 +807,10 @@ mod tests {
                     "cx:cell:cx.component.consent.grant.v1:c-1"
                 );
                 // No legacy keys allowed at the top level.
-                assert!(body.get("cell_id").is_none(), "legacy cell_id must be absent");
+                assert!(
+                    body.get("cell_id").is_none(),
+                    "legacy cell_id must be absent"
+                );
                 assert!(body.get("op").is_none(), "legacy op must be absent");
                 assert!(body.get("tag").is_none(), "legacy tag must be absent");
                 ResponseTemplate::new(202)

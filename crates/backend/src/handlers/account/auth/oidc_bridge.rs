@@ -22,7 +22,8 @@ use super::{
     SessionGrantPrincipalServerInfo, ViewerInfo, make_clock, make_rng,
 };
 use crate::{
-    handlers::contrix, oidc_client::requests::discovery,
+    handlers::contrix,
+    oidc_client::requests::discovery,
     oidc_client::types::client_credentials::ClientCredentials,
     services::upstream_oidc::UpstreamOidcExchangeMode,
     services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token},
@@ -100,38 +101,16 @@ pub struct AuthBridgeAdminDescriptor {
     pub risk_action_history_path_template: &'static str,
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct IntegrationManifestResponse {
-    pub contract: &'static str,
-    pub version: &'static str,
-    pub service: &'static str,
-    pub service_kind: &'static str,
-    pub api_base_path: &'static str,
-    pub describe_path: &'static str,
-    pub dependencies: Vec<IntegrationManifestDependency>,
-    pub surfaces: Vec<IntegrationManifestSurface>,
-    pub examples: serde_json::Value,
-    pub todos: Vec<&'static str>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct IntegrationManifestDependency {
-    pub service: &'static str,
-    pub purpose: &'static str,
-    pub required_contract: &'static str,
-    pub discovery_path: &'static str,
-    pub mode: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct IntegrationManifestSurface {
-    pub name: &'static str,
-    pub method: &'static str,
-    pub path: &'static str,
-    pub contract: &'static str,
-    pub stability: &'static str,
-    pub todo: &'static str,
-}
+// `IntegrationManifestResponse` (and the nested `IntegrationManifestDependency`
+// / `IntegrationManifestSurface`) used to live inline here. They moved to
+// `coauth_admin_types::integration_manifest_admin` in C34.2 so the sodmin
+// admin SPA decodes them through the same typed shape — the prior shim
+// was missing the `examples` field entirely, silently dropping the
+// multi-step compose-flow example block on every call. The endpoint
+// below now returns the shared `IntegrationManifest` directly.
+use coauth_admin_types::{
+    IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
+};
 #[derive(Serialize, ToSchema)]
 pub struct OidcBrowserBridgeSessionResponse {
     pub contract: &'static str,
@@ -502,12 +481,8 @@ pub async fn oidc_code_exchange(
             federated_exchange.token_response.id_token.as_deref(),
         ) {
             if !trusted_issuers.is_empty() {
-                match map_upstream_id_token(
-                    issuer.as_str(),
-                    id_token,
-                    trusted_issuers,
-                    clock.now(),
-                ) {
+                match map_upstream_id_token(issuer.as_str(), id_token, trusted_issuers, clock.now())
+                {
                     Ok(mapped) => {
                         tracing::debug!(
                             target: "coauth.upstream_oidc_mapping",
@@ -1514,86 +1489,86 @@ pub async fn auth_bridge_describe(
 }
 
 #[endpoint]
-pub async fn integration_describe() -> Result<Json<IntegrationManifestResponse>, RouteError> {
-    Ok(Json(IntegrationManifestResponse {
-        contract: "contrix.rest.integration_manifest.v1",
-        version: "2026-05-04-scaffold",
-        service: "coauth",
-        service_kind: "account_authority",
-        api_base_path: "/api/v1",
-        describe_path: "/api/v1/integration/describe",
+pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteError> {
+    Ok(Json(IntegrationManifest {
+        contract: "contrix.rest.integration_manifest.v1".to_string(),
+        version: "2026-05-04-scaffold".to_string(),
+        service: "coauth".to_string(),
+        service_kind: "account_authority".to_string(),
+        api_base_path: "/api/v1".to_string(),
+        describe_path: "/api/v1/integration/describe".to_string(),
         dependencies: vec![
             IntegrationManifestDependency {
-                service: "soland",
-                purpose: "principal_server_session_exchange",
-                required_contract: "contrix.rest.principal_bridge.v1",
-                discovery_path: "/api/v1/auth/bridge/describe",
-                mode: "remote_service_contract",
+                service: "soland".to_string(),
+                purpose: "principal_server_session_exchange".to_string(),
+                required_contract: "contrix.rest.principal_bridge.v1".to_string(),
+                discovery_path: "/api/v1/auth/bridge/describe".to_string(),
+                mode: "remote_service_contract".to_string(),
             },
             IntegrationManifestDependency {
-                service: "public_did_resolver",
-                purpose: "principal_did_resolution",
-                required_contract: "did_method_resolution",
-                discovery_path: "TODO: external resolver metadata",
-                mode: "remote_public_resolver",
+                service: "public_did_resolver".to_string(),
+                purpose: "principal_did_resolution".to_string(),
+                required_contract: "did_method_resolution".to_string(),
+                discovery_path: "TODO: external resolver metadata".to_string(),
+                mode: "remote_public_resolver".to_string(),
             },
         ],
         surfaces: vec![
             IntegrationManifestSurface {
-                name: "auth_bridge",
-                method: "GET",
-                path: "/api/v1/auth/bridge/describe",
-                contract: "contrix.rest.auth_bridge.v1",
-                stability: "scaffold",
-                todo: "TODO: keep browser bridge, exchange contract, and downstream grant metadata aligned with real OIDC/passkey flows.",
+                name: "auth_bridge".to_string(),
+                method: "GET".to_string(),
+                path: "/api/v1/auth/bridge/describe".to_string(),
+                contract: "contrix.rest.auth_bridge.v1".to_string(),
+                stability: "scaffold".to_string(),
+                todo: "TODO: keep browser bridge, exchange contract, and downstream grant metadata aligned with real OIDC/passkey flows.".to_string(),
             },
             IntegrationManifestSurface {
-                name: "oidc_browser_bridge_session",
-                method: "POST",
-                path: "/api/v1/auth/oidc/browser-bridge/session",
-                contract: "contrix.rest.oidc_browser_bridge_session.v1",
-                stability: "scaffold",
-                todo: "TODO: persist browser-bound PKCE/session state.",
+                name: "oidc_browser_bridge_session".to_string(),
+                method: "POST".to_string(),
+                path: "/api/v1/auth/oidc/browser-bridge/session".to_string(),
+                contract: "contrix.rest.oidc_browser_bridge_session.v1".to_string(),
+                stability: "scaffold".to_string(),
+                todo: "TODO: persist browser-bound PKCE/session state.".to_string(),
             },
             IntegrationManifestSurface {
-                name: "oidc_exchange_describe",
-                method: "GET",
-                path: "/api/v1/auth/oidc/exchange/describe",
-                contract: "contrix.rest.oidc_exchange.v1",
-                stability: "scaffold",
-                todo: "TODO: publish upstream-boundary verification modes and failure taxonomy as final contract states.",
+                name: "oidc_exchange_describe".to_string(),
+                method: "GET".to_string(),
+                path: "/api/v1/auth/oidc/exchange/describe".to_string(),
+                contract: "contrix.rest.oidc_exchange.v1".to_string(),
+                stability: "scaffold".to_string(),
+                todo: "TODO: publish upstream-boundary verification modes and failure taxonomy as final contract states.".to_string(),
             },
             IntegrationManifestSurface {
-                name: "oidc_exchange",
-                method: "POST",
-                path: "/api/v1/auth/oidc/exchange",
-                contract: "contrix.rest.oidc_exchange.v1",
-                stability: "scaffold",
-                todo: "TODO: publish final failure taxonomy and examples for local_coauth and federated modes.",
+                name: "oidc_exchange".to_string(),
+                method: "POST".to_string(),
+                path: "/api/v1/auth/oidc/exchange".to_string(),
+                contract: "contrix.rest.oidc_exchange.v1".to_string(),
+                stability: "scaffold".to_string(),
+                todo: "TODO: publish final failure taxonomy and examples for local_coauth and federated modes.".to_string(),
             },
             IntegrationManifestSurface {
-                name: "admin_bridge",
-                method: "GET",
-                path: "/api/admin/v1/bridge/describe",
-                contract: "contrix.rest.coauth_admin_bridge.v1",
-                stability: "scaffold",
-                todo: "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records.",
+                name: "admin_bridge".to_string(),
+                method: "GET".to_string(),
+                path: "/api/admin/v1/bridge/describe".to_string(),
+                contract: "contrix.rest.coauth_admin_bridge.v1".to_string(),
+                stability: "scaffold".to_string(),
+                todo: "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records.".to_string(),
             },
             IntegrationManifestSurface {
-                name: "account_claims",
-                method: "GET",
-                path: "/api/admin/v1/accounts/{account_id}/claims",
-                contract: "contrix.rest.coauth_account_claims.v1",
-                stability: "scaffold",
-                todo: "TODO: replace scaffold claim inventory with real issuer-backed claim sources and verification state.",
+                name: "account_claims".to_string(),
+                method: "GET".to_string(),
+                path: "/api/admin/v1/accounts/{account_id}/claims".to_string(),
+                contract: "contrix.rest.coauth_account_claims.v1".to_string(),
+                stability: "scaffold".to_string(),
+                todo: "TODO: replace scaffold claim inventory with real issuer-backed claim sources and verification state.".to_string(),
             },
             IntegrationManifestSurface {
-                name: "account_session_grants",
-                method: "GET",
-                path: "/api/admin/v1/accounts/{account_id}/session-grants",
-                contract: "contrix.rest.coauth_account_session_grants.v1",
-                stability: "scaffold",
-                todo: "TODO: expose durable grant inventory, revocation state, and audience binding beyond preview records.",
+                name: "account_session_grants".to_string(),
+                method: "GET".to_string(),
+                path: "/api/admin/v1/accounts/{account_id}/session-grants".to_string(),
+                contract: "contrix.rest.coauth_account_session_grants.v1".to_string(),
+                stability: "scaffold".to_string(),
+                todo: "TODO: expose durable grant inventory, revocation state, and audience binding beyond preview records.".to_string(),
             },
         ],
         examples: serde_json::json!({
@@ -1621,8 +1596,8 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifestResponse>,
             }
         }),
         todos: vec![
-            "TODO: persist browser bridge session state, PKCE material, and approval/risk-action lifecycle records.",
-            "TODO: publish OpenAPI examples that match the integration manifest surfaces exactly.",
+            "TODO: persist browser bridge session state, PKCE material, and approval/risk-action lifecycle records.".to_string(),
+            "TODO: publish OpenAPI examples that match the integration manifest surfaces exactly.".to_string(),
         ],
     }))
 }

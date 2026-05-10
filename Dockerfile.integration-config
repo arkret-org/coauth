@@ -1,0 +1,2 @@
+FROM coauth:dev
+COPY conformance/test-config.yaml /etc/coauth/config.yaml

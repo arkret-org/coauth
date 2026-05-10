@@ -38,7 +38,10 @@ pub use self::{
     branding::BrandingConfig,
     captcha::{CaptchaConfig, CaptchaServiceKind},
     clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig},
-    contrix::{ContrixConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig},
+    contrix::{
+        ContrixConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
+        StaridConfig,
+    },
     database::{DatabaseConfig, PgSslMode},
     email::{
         AwsSesEmailProviderConfig, AwsSesWebhookConfig, BrevoEmailProviderConfig,
@@ -51,8 +54,8 @@ pub use self::{
     experimental::ExperimentalConfig,
     http::{
         BindConfig as HttpBindConfig, HstsConfig as HttpHstsConfig, HttpConfig,
-        ListenerConfig as HttpListenerConfig, Resource as HttpResource,
-        TlsConfig as HttpTlsConfig, UnixOrTcp,
+        ListenerConfig as HttpListenerConfig, Resource as HttpResource, TlsConfig as HttpTlsConfig,
+        UnixOrTcp,
     },
     matrix::{HomeserverKind, MatrixConfig},
     passwords::{

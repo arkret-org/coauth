@@ -201,9 +201,7 @@ impl Scribe for ContrixRouteError {
             ),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "not found".to_owned()),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "bad_json", message),
-            Self::Unauthorized(message) => {
-                (StatusCode::UNAUTHORIZED, "unauthorized", message)
-            }
+            Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, "unauthorized", message),
             Self::Forbidden(message) => (StatusCode::FORBIDDEN, "forbidden", message),
         };
 
@@ -212,9 +210,7 @@ impl Scribe for ContrixRouteError {
             // challenge so the caller can negotiate.
             res.headers_mut().insert(
                 http::header::WWW_AUTHENTICATE,
-                http::HeaderValue::from_static(
-                    "Bearer realm=\"contrix\", error=\"invalid_token\"",
-                ),
+                http::HeaderValue::from_static("Bearer realm=\"contrix\", error=\"invalid_token\""),
             );
         }
 
@@ -1930,6 +1926,7 @@ mod tests {
                 resolver: "https://resolver.example.com/resolve".parse().unwrap(),
                 proof_required_for_pairwise: true,
             }),
+            starid: None,
             principal_server_url: None,
             high_risk_threshold: 2,
         };
@@ -2233,7 +2230,9 @@ mod tests {
     #[tokio::test]
     async fn session_grant_http_list_and_filter_work() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let (browser_session, grant, _material) = seed_persisted_session_grant(&state).await;
 
@@ -2278,7 +2277,9 @@ mod tests {
     #[tokio::test]
     async fn session_grant_http_introspection_returns_minimal_metadata() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let (_browser_session, grant, material) = seed_persisted_session_grant(&state).await;
         let challenge = format!("introspect-{}", grant.id);
@@ -2340,7 +2341,9 @@ mod tests {
     #[tokio::test]
     async fn session_grant_http_revoke_updates_followup_introspection() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let (_browser_session, grant, _material) = seed_persisted_session_grant(&state).await;
 

@@ -87,8 +87,8 @@ console = "0.16.3"
 # identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
 # `contrix-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
-contrix-core = { version = "0.6.0", path = "../contrix-rust-sdk/crates/core", default-features = false }
-contrix-signatures = { version = "0.6.0", path = "../contrix-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
+contrix-core = { version = "0.7.0", path = "../contrix-rust-sdk/crates/core", default-features = false }
+contrix-signatures = { version = "0.7.0", path = "../contrix-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
 cookie_store = { version = "0.22.1", default-features = false, features = [
     "serde_json",
 ] }

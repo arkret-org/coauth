@@ -83,8 +83,7 @@ fn is_valid_locale(tag: &str) -> bool {
     if !(2..=35).contains(&len) {
         return false;
     }
-    tag.chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 /// `GET /api/admin/v1/oauth2/clients/{id}/i18n`
@@ -178,9 +177,7 @@ mod tests {
 
     #[test]
     fn locale_validation_accepts_common_bcp47() {
-        for tag in [
-            "en", "en-US", "zh-CN", "zh-Hant-TW", "ja-Jpan-JP", "es-419",
-        ] {
+        for tag in ["en", "en-US", "zh-CN", "zh-Hant-TW", "ja-Jpan-JP", "es-419"] {
             assert!(is_valid_locale(tag), "should accept {tag}");
         }
     }

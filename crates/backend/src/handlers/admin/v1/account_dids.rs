@@ -1,11 +1,17 @@
 //! Account DID binding administration endpoints.
 
-use chrono::{DateTime, Utc};
+use coauth_admin_types::{
+    AccountDidBindingPreview, AdminAccountDidBinding as AccountDidBinding,
+    AdminAccountDidBindingsMeta as AccountDidBindingsMeta,
+    AdminAccountDidBindingsResponse as AccountDidBindingsResponse, DidBindingKind,
+    DidBindingResolverDescriptor, DidBindingResolverMode, DidBindingState,
+    DidBindingVerificationStatus,
+};
 use coauth_config::ContrixConfig;
 use coauth_data::{RepositoryAccess, User};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{
     AppError, CreatedJsonResult, JsonResult,
@@ -18,132 +24,6 @@ use crate::{
         did_resolver::DidResolverService,
     },
 };
-
-#[derive(Clone, Copy, Deserialize, Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DidBindingKind {
-    Primary,
-    Recovery,
-    Pairwise,
-}
-
-#[derive(Clone, Copy, Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DidBindingState {
-    PendingProof,
-    Active,
-    Revoked,
-    Rejected,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DidBindingVerificationStatus {
-    Pending,
-    Verified,
-    Rejected,
-    NotRequested,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DidBindingResolverMode {
-    LocalBindings,
-    DelegatedResolver,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct DidBindingResolverDescriptor {
-    /// Whether coauth resolves locally or delegates to a public DID service.
-    mode: DidBindingResolverMode,
-
-    /// Delegated/public DID resolver endpoint when coauth is not authoritative.
-    resolver: Option<String>,
-
-    /// Whether pairwise bindings require resolver-side proof validation.
-    proof_required_for_pairwise: bool,
-}
-
-#[derive(Clone, Serialize, JsonSchema, ToSchema)]
-pub struct AccountDidBindingPreview {
-    /// Bound principal DID.
-    pub(crate) did: String,
-
-    /// Binding purpose.
-    pub(crate) kind: DidBindingKind,
-
-    /// High-level lifecycle state for downstream admin/UI surfaces.
-    pub(crate) state: DidBindingState,
-
-    /// Whether this binding is the account's current primary DID.
-    pub(crate) primary: bool,
-
-    /// Whether this binding is currently active.
-    pub(crate) active: bool,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountDidBinding {
-    /// Binding identifier.
-    id: String,
-
-    /// Account ULID.
-    account_id: String,
-
-    /// Bound principal DID.
-    did: String,
-
-    /// Binding purpose.
-    kind: DidBindingKind,
-
-    /// High-level lifecycle state.
-    state: DidBindingState,
-
-    /// Whether this binding is the account's primary DID.
-    primary: bool,
-
-    /// Whether this binding is currently active.
-    active: bool,
-
-    /// Verification status of the delegated/public DID control proof.
-    verification_status: DidBindingVerificationStatus,
-
-    /// Resolver/delegation metadata for this binding.
-    resolver: DidBindingResolverDescriptor,
-
-    /// When the binding was created.
-    created_at: DateTime<Utc>,
-
-    /// When the resolver/control proof was last verified, if available.
-    last_verified_at: Option<DateTime<Utc>>,
-
-    /// Resolver receipt or operation identifier, when delegated publication exists.
-    last_resolver_receipt_id: Option<String>,
-
-    /// When the binding was revoked, if applicable.
-    revoked_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountDidBindingsResponse {
-    data: Vec<AccountDidBinding>,
-
-    /// Placeholder contract metadata so downstream consumers can bind before
-    /// storage and resolver wiring lands.
-    meta: AccountDidBindingsMeta,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountDidBindingsMeta {
-    /// Resolver/delegation mode for this deployment.
-    resolver: DidBindingResolverDescriptor,
-
-    /// Supported proof shapes that coauth intends to accept for DID binding.
-    supported_verification_methods: Vec<String>,
-
-    /// Stable signal that the surface exists but write logic is not complete yet.
-    supports_write_operations: bool,
-}
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "AddAccountDidBindingRequest")]
@@ -236,7 +116,7 @@ pub async fn list_account_dids(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     Ok(Json(AccountDidBindingsResponse {
-        data: binding_records_for_user(&user, &contrix_config, did_resolver.as_ref()),
+        data: binding_records_for_user(&user, &contrix_config, did_resolver.as_ref()).await,
         meta: AccountDidBindingsMeta {
             resolver: resolver_descriptor(&contrix_config, did_resolver.as_ref()),
             supported_verification_methods: vec![
@@ -407,12 +287,13 @@ async fn enforce_did_binding_rate_limit(
         .map_err(|error| AppError::too_many_requests(error.to_string()))
 }
 
-pub(crate) fn preview_bindings_for_user(
+pub(crate) async fn preview_bindings_for_user(
     user: &User,
     contrix_config: &ContrixConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBindingPreview> {
     binding_records_for_user(user, contrix_config, did_resolver)
+        .await
         .into_iter()
         .map(|binding| AccountDidBindingPreview {
             did: binding.did,
@@ -424,17 +305,23 @@ pub(crate) fn preview_bindings_for_user(
         .collect()
 }
 
-pub(crate) fn primary_did_for_user(user: &User, did_resolver: &dyn DidResolverService) -> String {
-    did_resolver.primary_did_for_user(user)
+pub(crate) async fn primary_did_for_user(
+    user: &User,
+    contrix_config: &ContrixConfig,
+    did_resolver: &dyn DidResolverService,
+) -> String {
+    did_resolver
+        .primary_did_for_user(contrix_config, user)
+        .await
 }
 
-fn binding_records_for_user(
+async fn binding_records_for_user(
     user: &User,
     contrix_config: &ContrixConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBinding> {
-    let primary_did = primary_did_for_user(user, did_resolver);
-    let created_at = user.created_at;
+    let primary_did = primary_did_for_user(user, contrix_config, did_resolver).await;
+    let created_at = Some(user.created_at);
     let last_verified_at = Some(user.updated_at);
     let revoked_at = user.deactivated_at;
     let active = revoked_at.is_none();

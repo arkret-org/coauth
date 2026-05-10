@@ -182,6 +182,9 @@ mod tests {
         assert_eq!(back.providers.len(), 2);
         assert!(back.providers[0].is_healthy());
         assert!(!back.providers[1].is_healthy());
-        assert_eq!(back.providers[1].error.as_deref(), Some("connection refused"));
+        assert_eq!(
+            back.providers[1].error.as_deref(),
+            Some("connection refused")
+        );
     }
 }

@@ -78,6 +78,11 @@ readonly COAUTH_SKIP_BOOT="${COAUTH_SKIP_BOOT:-0}"
 # ─────────────────────────────────────────────────────────────────────
 COAUTH_PID=""
 COAUTH_LOG=""
+WORK_DIR=""
+# Single cleanup hook responsible for *every* teardown action. Layer 2
+# previously installed its own `trap … EXIT` for the WORK_DIR which
+# silently overwrote this trap and left orphaned coauth processes; we
+# consolidate both responsibilities here so the hook is composable.
 cleanup() {
     if [[ -n "${COAUTH_PID}" ]] && kill -0 "${COAUTH_PID}" 2>/dev/null; then
         kill -INT "${COAUTH_PID}" 2>/dev/null || true
@@ -92,6 +97,7 @@ cleanup() {
         cat "${COAUTH_LOG}"
     fi
     [[ -n "${COAUTH_LOG}" ]] && rm -f "${COAUTH_LOG}"
+    [[ -n "${WORK_DIR}" ]] && rm -rf "${WORK_DIR}"
 }
 trap cleanup EXIT
 
@@ -101,8 +107,18 @@ if [[ "${COAUTH_SKIP_BOOT}" != "1" ]]; then
         echo "    cargo build --release -p coauth-cli" >&2
         exit 2
     fi
+    if [[ -z "${COAUTH_CONFIG:-}" ]]; then
+        echo "[oidc-conformance] COAUTH_CONFIG is unset; coauth needs a config file with valid signing keys." >&2
+        echo "    Generate one with: ${COAUTH_BINARY} config generate -o /tmp/coauth-conformance.yaml" >&2
+        echo "    Then re-run with: COAUTH_CONFIG=/tmp/coauth-conformance.yaml $0" >&2
+        exit 2
+    fi
     COAUTH_LOG="$(mktemp)"
-    "${COAUTH_BINARY}" server --no-config &
+    # NOTE: the legacy `--no-config` flag does not exist in the server
+    # subcommand. The server reads its config from $COAUTH_CONFIG (or
+    # the default `config.yaml`); pass `--config <path>` if you want a
+    # specific file outside that lookup chain.
+    "${COAUTH_BINARY}" server --config "${COAUTH_CONFIG}" >"${COAUTH_LOG}" 2>&1 &
     COAUTH_PID=$!
 else
     echo "[oidc-conformance] COAUTH_SKIP_BOOT=1 — assuming coauth is already running at ${COAUTH_BIND}"
@@ -193,18 +209,35 @@ fi
 
 mkdir -p "${RESULTS_DIR}"
 
-echo "[oidc-conformance] pulling openid/conformance-suite:latest"
-if ! docker pull openid/conformance-suite:latest; then
-    echo "[oidc-conformance] failed to pull openid/conformance-suite:latest; skipping run" >&2
+# Image pull. The OpenID Foundation does not publish a Docker Hub image
+# under `openid/conformance-suite:latest` — the conformance harness has
+# always shipped as a self-built Java + MongoDB stack from
+# https://gitlab.com/openid/conformance-suite. CI / local runs that want
+# the full suite should:
+#
+#   git clone https://gitlab.com/openid/conformance-suite
+#   cd conformance-suite
+#   ./builder-compose.sh
+#
+# and then point COAUTH_CONFORMANCE_IMAGE at the local tag. We honour an
+# override env var so the script keeps working in environments that have
+# a private mirror or a local build.
+CONFORMANCE_IMAGE="${COAUTH_CONFORMANCE_IMAGE:-openid/conformance-suite:latest}"
+echo "[oidc-conformance] pulling ${CONFORMANCE_IMAGE}"
+if ! docker pull "${CONFORMANCE_IMAGE}"; then
+    echo "[oidc-conformance] failed to pull ${CONFORMANCE_IMAGE}; skipping run" >&2
+    echo "[oidc-conformance] (the OIDF does NOT publish a public Docker image — see " >&2
+    echo "   https://gitlab.com/openid/conformance-suite — clone + build then set " >&2
+    echo "   COAUTH_CONFORMANCE_IMAGE=<local-tag> to wire the run.)" >&2
     exit 0
 fi
 
 # When COAUTH_BIND is non-default, rewrite each plan into a temp working
 # copy with the discoveryUrl pointing at the actual bind address. The
 # canonical configs in `conformance/` always declare 127.0.0.1:8080
-# because that's the local-dev default.
+# because that's the local-dev default. WORK_DIR is teardown by the
+# unified `cleanup` trap installed near the top of this script.
 WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "${WORK_DIR}"' EXIT
 declare -a PREPARED_PLANS=()
 for cfg in "${PLAN_FILES[@]}"; do
     name="$(basename "${cfg}")"
@@ -229,7 +262,7 @@ for cfg in "${PREPARED_PLANS[@]}"; do
         --network host \
         -v "$(dirname "${cfg}"):/server/configs:ro" \
         -v "$(pwd)/${RESULTS_DIR}:/server/results:rw" \
-        openid/conformance-suite:latest \
+        "${CONFORMANCE_IMAGE}" \
         --config "/server/configs/$(basename "${cfg}")" \
         --output "/server/results/${plan_name}.json" \
         || {

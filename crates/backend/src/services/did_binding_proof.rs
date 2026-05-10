@@ -24,10 +24,7 @@
 use chrono::{DateTime, Utc};
 use coauth_config::ContrixConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
-use coauth_jose::{
-    jwk::PublicJsonWebKeySet,
-    jwt::Jwt,
-};
+use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
 use coauth_keystore::Keystore;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -116,8 +113,8 @@ pub async fn validate_control_proof(
     }
 
     // Parse JWS
-    let jwt: Jwt<'_, BindingStatementClaims> = Jwt::try_from(proof_jws)
-        .map_err(|e| DidBindingProofError::InvalidJws(e.to_string()))?;
+    let jwt: Jwt<'_, BindingStatementClaims> =
+        Jwt::try_from(proof_jws).map_err(|e| DidBindingProofError::InvalidJws(e.to_string()))?;
 
     // Resolve DID document
     let resolution = did_resolver

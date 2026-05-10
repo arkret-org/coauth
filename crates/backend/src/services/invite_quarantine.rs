@@ -118,10 +118,7 @@ pub trait InviteQuarantineService: Send + Sync {
         limit: i64,
     ) -> Result<Vec<InviteQuarantineRecord>, InviteQuarantineError>;
 
-    async fn get(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<InviteQuarantineRecord>, InviteQuarantineError>;
+    async fn get(&self, id: Uuid) -> Result<Option<InviteQuarantineRecord>, InviteQuarantineError>;
 
     /// Mark a row as resolved (`approved` or `rejected`). Returns `Ok(None)`
     /// when the row does not exist or is already resolved.
@@ -162,8 +159,8 @@ struct InviteQuarantineRow {
 
 impl InviteQuarantineRow {
     fn into_record(self) -> InviteQuarantineRecord {
-        let status = InviteQuarantineStatus::parse(&self.status)
-            .unwrap_or(InviteQuarantineStatus::Pending);
+        let status =
+            InviteQuarantineStatus::parse(&self.status).unwrap_or(InviteQuarantineStatus::Pending);
         InviteQuarantineRecord {
             id: self.id,
             created_at: self.created_at,
@@ -238,10 +235,7 @@ impl PgInviteQuarantineService {
             .ok_or_else(|| anyhow::anyhow!("invite_quarantine_queue insert returned no row"))
     }
 
-    async fn list_pending_inner(
-        &self,
-        limit: i64,
-    ) -> anyhow::Result<Vec<InviteQuarantineRecord>> {
+    async fn list_pending_inner(&self, limit: i64) -> anyhow::Result<Vec<InviteQuarantineRecord>> {
         let limit = limit.clamp(1, 1000);
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
@@ -268,13 +262,13 @@ impl PgInviteQuarantineService {
         .get_results::<InviteQuarantineRow>(&mut *conn)
         .await?;
 
-        Ok(rows.into_iter().map(InviteQuarantineRow::into_record).collect())
+        Ok(rows
+            .into_iter()
+            .map(InviteQuarantineRow::into_record)
+            .collect())
     }
 
-    async fn get_inner(
-        &self,
-        id: Uuid,
-    ) -> anyhow::Result<Option<InviteQuarantineRecord>> {
+    async fn get_inner(&self, id: Uuid) -> anyhow::Result<Option<InviteQuarantineRecord>> {
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
             r#"
@@ -298,7 +292,10 @@ impl PgInviteQuarantineService {
         .get_results::<InviteQuarantineRow>(&mut *conn)
         .await?;
 
-        Ok(rows.into_iter().next().map(InviteQuarantineRow::into_record))
+        Ok(rows
+            .into_iter()
+            .next()
+            .map(InviteQuarantineRow::into_record))
     }
 
     async fn mark_resolved_inner(
@@ -340,7 +337,10 @@ impl PgInviteQuarantineService {
         .get_results::<InviteQuarantineRow>(&mut *conn)
         .await?;
 
-        Ok(rows.into_iter().next().map(InviteQuarantineRow::into_record))
+        Ok(rows
+            .into_iter()
+            .next()
+            .map(InviteQuarantineRow::into_record))
     }
 }
 
@@ -364,11 +364,10 @@ impl InviteQuarantineService for PgInviteQuarantineService {
             .map_err(InviteQuarantineError::from)
     }
 
-    async fn get(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<InviteQuarantineRecord>, InviteQuarantineError> {
-        self.get_inner(id).await.map_err(InviteQuarantineError::from)
+    async fn get(&self, id: Uuid) -> Result<Option<InviteQuarantineRecord>, InviteQuarantineError> {
+        self.get_inner(id)
+            .await
+            .map_err(InviteQuarantineError::from)
     }
 
     async fn mark_resolved(

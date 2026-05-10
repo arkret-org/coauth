@@ -64,17 +64,21 @@ jobs:
         # weekly runs on the same hosted runner pool.
         run: docker pull openid/conformance-suite:latest
 
+      - name: Preflight (catch obvious misconfig before the build)
+        run: bash scripts/preflight-check.sh
+
       - name: Bring up integration stack (Postgres + coauth)
         env:
           # Build the coauth image locally inside compose; soland/sodmin
-          # default to placeholder tags but are not required for the
-          # OIDC conformance run — only coauth is exercised here.
+          # are profile-gated and not pulled here — only coauth is
+          # exercised by the OIDC harness.
           COAUTH_IMAGE: coauth:ci
         run: |
-          # Start only the postgres + coauth services so we don't pay the
-          # cost of pulling soland/sodmin tags that aren't needed for the
-          # OIDC harness.
-          docker compose -f docker-compose.integration.yaml up -d --wait postgres coauth
+          # integration-up.sh handles: build coauth → generate a fresh
+          # test-config (with real signing keys) via an ephemeral coauth
+          # container → compose up --wait postgres + coauth. soland/sodmin
+          # remain off because they're behind --profile downstream.
+          bash scripts/integration-up.sh
 
       - name: Wait for coauth /health
         run: |

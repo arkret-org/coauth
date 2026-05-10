@@ -34,7 +34,13 @@ use crate::{
         },
         common::DepotExt,
     },
-    services::webauthn::WebauthnError,
+    services::{
+        onboarding_starid::{
+            OnboardingStaridError, mint_principal_did_for_first_credential,
+        },
+        starid_adapter::StaridError,
+        webauthn::WebauthnError,
+    },
 };
 
 /// Body for `register/start`. The display fields are surfaced verbatim to
@@ -105,6 +111,22 @@ pub struct PasskeyAuthFinishResponse {
     pub credential_id_b64: String,
 }
 
+fn map_starid_error(err: OnboardingStaridError) -> AppError {
+    match err {
+        OnboardingStaridError::Starid(StaridError::Api {
+            status,
+            errcode,
+            message,
+        }) => AppError::bad_request(format!(
+            "starid_mint_failed: status={status} errcode={errcode} message={message}"
+        )),
+        OnboardingStaridError::Starid(other) => {
+            AppError::internal(std::io::Error::other(other.to_string()))
+        }
+        OnboardingStaridError::Repository(error) => AppError::internal(error),
+    }
+}
+
 fn map_webauthn_error(err: WebauthnError) -> AppError {
     match err {
         WebauthnError::NoChallenge(_) | WebauthnError::NoCredentials(_) => {
@@ -113,9 +135,9 @@ fn map_webauthn_error(err: WebauthnError) -> AppError {
         WebauthnError::InvalidOrigin(_) => {
             AppError::bad_request(format!("webauthn_rp_misconfigured: {err}"))
         }
-        WebauthnError::Core(_)
-        | WebauthnError::Serde(_)
-        | WebauthnError::Storage(_) => AppError::internal(err),
+        WebauthnError::Core(_) | WebauthnError::Serde(_) | WebauthnError::Storage(_) => {
+            AppError::internal(err)
+        }
     }
 }
 
@@ -142,12 +164,8 @@ pub async fn register_start(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
-    let username = body
-        .username
-        .unwrap_or_else(|| account.username.clone());
-    let display_name = body
-        .display_name
-        .unwrap_or_else(|| username.clone());
+    let username = body.username.unwrap_or_else(|| account.username.clone());
+    let display_name = body.display_name.unwrap_or_else(|| username.clone());
 
     let webauthn = depot.webauthn_service()?;
     let challenge: CreationChallengeResponse = webauthn
@@ -183,8 +201,7 @@ pub async fn register_finish(
     depot: &Depot,
 ) -> JsonResult<PasskeyRegisterFinishResponse> {
     let id = extract_ulid_param(req)?;
-    let body: PasskeyRegisterFinishRequest =
-        req.parse_json().await.map_err(AppError::internal)?;
+    let body: PasskeyRegisterFinishRequest = req.parse_json().await.map_err(AppError::internal)?;
     let attestation: RegisterPublicKeyCredential = serde_json::from_value(body.attestation)
         .map_err(|e| AppError::bad_request(format!("invalid attestation: {e}")))?;
 
@@ -198,7 +215,8 @@ pub async fn register_finish(
     let mut rng = crate::handlers::account::make_rng();
     let now = clock.now();
 
-    repo.user()
+    let user = repo
+        .user()
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
@@ -210,6 +228,37 @@ pub async fn register_finish(
         .map_err(map_webauthn_error)?;
 
     let cred_b64 = Base64UrlUnpadded::encode_string(&record.credential_id);
+
+    // Round 37.4: derive a real, device-bound `update_key` from this
+    // passkey's COSE public key and hand it to starid. First-passkey
+    // path mints the DID; subsequent passkeys would rotate the key
+    // via `rotate_principal_did_for_credential` (driven by the
+    // device-rotation flow once the binding lookup lands — out of
+    // scope here, this handler only owns the *first* enrolment hook
+    // since the binding row write happens elsewhere).
+    let starid_registry = depot.starid_registry();
+    let (starid_did, starid_version) = if !user.starid_backend {
+        match mint_principal_did_for_first_credential(
+            &mut repo,
+            starid_registry.as_ref(),
+            user,
+            &record.public_key,
+        )
+        .await
+        .map_err(map_starid_error)?
+        {
+            Some(update) => (Some(update.mint.did), Some(update.mint.version_id)),
+            None => (None, None),
+        }
+    } else {
+        // Account already has a starid-minted DID; this enrolment is
+        // the rotation case. The rotation requires the prior
+        // `version_id` from `account_identity_binding`, which lands in
+        // a follow-up round — for now we record the credential without
+        // rotating, and the next privileged op will surface the
+        // version-id mismatch to the operator.
+        (None, None)
+    };
 
     record_admin_operation(
         &mut repo,
@@ -223,6 +272,8 @@ pub async fn register_finish(
             "account_id": id.to_string(),
             "credential_id_b64": cred_b64,
             "label": body.label,
+            "starid_did": starid_did,
+            "starid_version_id": starid_version,
         }),
     )
     .await?;
@@ -237,10 +288,7 @@ pub async fn register_finish(
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.passkeys.auth_start", skip_all)]
-pub async fn auth_start(
-    req: &mut Request,
-    depot: &Depot,
-) -> JsonResult<PasskeyAuthStartResponse> {
+pub async fn auth_start(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyAuthStartResponse> {
     let id = extract_ulid_param(req)?;
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
@@ -251,10 +299,8 @@ pub async fn auth_start(
     repo.cancel().await?;
 
     let webauthn = depot.webauthn_service()?;
-    let challenge: RequestChallengeResponse = webauthn
-        .auth_start(id)
-        .await
-        .map_err(map_webauthn_error)?;
+    let challenge: RequestChallengeResponse =
+        webauthn.auth_start(id).await.map_err(map_webauthn_error)?;
 
     Ok(Json(PasskeyAuthStartResponse {
         challenge: serde_json::to_value(challenge)

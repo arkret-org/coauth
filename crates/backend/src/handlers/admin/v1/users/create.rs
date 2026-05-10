@@ -91,6 +91,13 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
 
     let user = repo.user().add(&mut rng, &clock, params.username).await?;
 
+    // Round 37.4: the starid wire-in is deferred to the first passkey
+    // enrolment (see `services::onboarding_starid` +
+    // `passkeys::register_finish`). At admin-create time we only
+    // persist the local user record; `starid_backend` stays false
+    // until the device-bound `update_key` is derived from the first
+    // attested credential.
+
     homeserver
         .provision_user(&ProvisionRequest::new(&user.username, &user.sub))
         .await
@@ -540,8 +547,7 @@ mod consent_gate_tests {
         let mut gate = gate_for("c-allow", "did:web:peer", "did:web:holder");
         gate.target_principal_url = Some(base);
 
-        let outcome =
-            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::Allow);
     }
 
@@ -564,8 +570,7 @@ mod consent_gate_tests {
         gate.target_principal_url = Some(base);
         gate.require_consent = true;
 
-        let outcome =
-            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
     }
 
@@ -587,8 +592,7 @@ mod consent_gate_tests {
         gate.target_principal_url = Some(base);
         gate.require_consent = false;
 
-        let outcome =
-            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::Quarantined);
     }
 
@@ -612,8 +616,7 @@ mod consent_gate_tests {
         let mut gate = gate_for("c-other", "did:web:peer", "did:web:holder");
         gate.target_principal_url = Some(base);
 
-        let outcome =
-            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
     }
 
@@ -627,8 +630,7 @@ mod consent_gate_tests {
         gate.target_principal_url = None;
         gate.require_consent = true;
 
-        let outcome =
-            evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
+        let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
         assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
     }
 }

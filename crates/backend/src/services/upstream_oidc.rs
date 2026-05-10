@@ -286,13 +286,16 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             ));
         }
 
-        let grant_target =
-            contrix::password_login_session_grant_target(url_builder, contrix_config, None)
-                .map_err(|error| {
-                    format!(
-                        "no principal_audience supplied and the deployment cannot pick a default: {error}"
-                    )
-                })?;
+        let grant_target = contrix::password_login_session_grant_target(
+            url_builder,
+            contrix_config,
+            None,
+        )
+        .map_err(|error| {
+            format!(
+                "no principal_audience supplied and the deployment cannot pick a default: {error}"
+            )
+        })?;
         Ok(UpstreamOidcSessionGrantTarget {
             audience: grant_target.audience,
             principal_server_name: grant_target.principal_server_name,

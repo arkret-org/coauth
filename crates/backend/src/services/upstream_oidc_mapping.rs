@@ -105,9 +105,7 @@ impl TrustedIssuerPolicySet {
     /// Find the policy matching the given issuer string, if any.
     #[must_use]
     pub fn find(&self, issuer: &str) -> Option<&TrustedIssuerPolicy> {
-        self.policies
-            .iter()
-            .rfind(|policy| policy.issuer == issuer)
+        self.policies.iter().rfind(|policy| policy.issuer == issuer)
     }
 
     /// Whether the set is empty.
@@ -233,8 +231,8 @@ pub fn map_upstream_id_token(
 
     let mapping = &policy.claims_mapping;
 
-    let sub = string_claim(&claims, &mapping.sub_claim)?
-        .ok_or(MappingError::MissingClaim("sub"))?;
+    let sub =
+        string_claim(&claims, &mapping.sub_claim)?.ok_or(MappingError::MissingClaim("sub"))?;
     let email = mapping
         .email_claim
         .as_deref()

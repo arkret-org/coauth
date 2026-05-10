@@ -3,6 +3,11 @@
 pub mod risk_action;
 
 use chrono::{DateTime, Utc};
+use coauth_admin_types::{
+    AdminAccountAttributes, AdminAccountClaimRecord as AccountClaimRecord,
+    AdminAccountClaimsResponse as AccountClaimsResponse, AdminAccountStatus as AccountStatus,
+    AdminBridgeDescribe,
+};
 use coauth_data::{AdminUserPatch, RepositoryAccess, user::UserFilter};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -11,12 +16,8 @@ use ulid::Ulid;
 
 use crate::{
     AppError, JsonResult,
-    handlers::admin::v1::account_dids::{
-        AccountDidBindingPreview, preview_bindings_for_user, primary_did_for_user,
-    },
-    handlers::admin::v1::accounts::risk_action::{
-        AdminBridgeRiskActionExamples, admin_bridge_risk_action_examples,
-    },
+    handlers::admin::v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
+    handlers::admin::v1::accounts::risk_action::admin_bridge_risk_action_examples,
     handlers::{
         admin::{
             call_context::extract_call_context,
@@ -32,104 +33,18 @@ use crate::{
     services::account_claims::{
         AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord,
     },
-    services::did_resolver::{DidResolverService, default_did_resolver_service},
+    services::did_resolver::DidResolverService,
 };
 
-#[derive(Serialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum AccountStatus {
-    Active,
-    Locked,
-    Disabled,
-}
-
-impl std::fmt::Display for AccountStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Active => f.write_str("active"),
-            Self::Locked => f.write_str("locked"),
-            Self::Disabled => f.write_str("disabled"),
-        }
-    }
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AdminBridgeDescribeResponse {
-    /// Scaffold contract identifier for coauth admin integration discovery.
-    contract: &'static str,
-
-    /// Scaffold contract version.
-    version: &'static str,
-
-    /// Base path for this admin REST surface.
-    api_base_path: &'static str,
-
-    /// Collection path for account administration.
-    accounts_path: &'static str,
-
-    /// Template path for one account.
-    account_detail_path_template: &'static str,
-
-    /// Template path for DID binding inventory.
-    account_dids_path_template: &'static str,
-
-    /// Template path for claim inventory.
-    account_claims_path_template: &'static str,
-
-    /// Template path for session-grant inventory.
-    account_session_grants_path_template: &'static str,
-
-    /// Template path for staging a risk action proposal.
-    risk_action_path_template: &'static str,
-
-    /// Template path for current risk-action state.
-    risk_action_current_path_template: &'static str,
-
-    /// Template path for risk-action transition history.
-    risk_action_history_path_template: &'static str,
-
-    /// Template path for approving a proposal.
-    risk_action_approve_path_template: &'static str,
-
-    /// Template path for executing an approved proposal.
-    risk_action_execute_path_template: &'static str,
-
-    /// How the current scaffold persists risk-action state.
-    risk_action_state_store_kind: &'static str,
-
-    /// Approval mode exposed by the current scaffold.
-    risk_action_approval_mode: &'static str,
-
-    /// Machine-readable request examples for the risk-action REST workflow.
-    risk_action_examples: AdminBridgeRiskActionExamples,
-
-    /// Remaining scaffold tasks.
-    todos: Vec<&'static str>,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountClaimsResponse {
-    data: Vec<AccountClaimRecord>,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountClaimRecord {
-    id: String,
-    account_id: Option<String>,
-    claim_type: String,
-    value: Option<String>,
-    state: String,
-    source: String,
-    subject: String,
-    issuer: String,
-    verifier_did: String,
-    represented_org: String,
-    payload: serde_json::Value,
-    issued_at: DateTime<Utc>,
-    expires_at: Option<DateTime<Utc>>,
-    revoked_at: Option<DateTime<Utc>>,
-    revoked_reason: Option<String>,
-}
+// `AdminBridgeDescribeResponse` (and the nested `AdminBridgeRiskAction*Example`
+// triple) used to live inline here and in `risk_action.rs`. They moved
+// to `coauth_admin_types::bridge_admin` in C34.2 so the sodmin admin SPA
+// decodes them through the same typed shape — the prior client-side
+// shim collapsed the three example payloads down to opaque
+// `serde_json::Value`, silently dropping the structured `action`/
+// `reason`/`ticket`/`approved_by`/`approval_note`/`execution_note`
+// fields the SPA wants to render. The endpoint below now returns the
+// shared `AdminBridgeDescribe` directly.
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountSessionGrantsResponse {
@@ -145,67 +60,33 @@ pub struct AccountSessionGrantRecord {
     issued_at: Option<DateTime<Utc>>,
 }
 
+/// Backend wrapper that owns the resource ID + JSON:API attributes. The
+/// attributes block is the shared `AdminAccountAttributes` from
+/// `coauth-admin-types` so any field rename / reorder shows up as a
+/// rustc error in both the backend and `sodmin` client at the same time.
+///
+/// The `id` is `#[serde(skip)]` because it lives on the JSON:API
+/// envelope (`data.id`), not in the `attributes` block. The
+/// `#[serde(flatten)]` makes the on-wire shape exactly match what the
+/// shared crate documents — `Serialize` of `AccountRecord` produces the
+/// same `username` / `status` / `created_at` / ... keys at the top
+/// level of the attributes object.
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRecord {
     #[serde(skip)]
     id: Ulid,
 
-    /// Stable account handle/localpart.
-    username: String,
-
-    /// Contrix account lifecycle state.
-    status: AccountStatus,
-
-    /// When the account was created.
-    created_at: DateTime<Utc>,
-
-    /// When the account was last updated.
-    updated_at: DateTime<Utc>,
-
-    /// When the account was locked, if applicable.
-    locked_at: Option<DateTime<Utc>>,
-
-    /// When the account was disabled, if applicable.
-    disabled_at: Option<DateTime<Utc>>,
-
-    /// Whether the account can request coauth admin privileges.
-    admin: bool,
-
-    /// Human-facing display name.
-    display_name: Option<String>,
-
-    /// Optional avatar URL.
-    avatar_url: Option<String>,
-
-    /// Preferred locale for account-facing UX.
-    preferred_locale: Option<String>,
-
-    /// Primary principal DID once DID binding storage is available.
-    primary_principal_did: Option<String>,
-
-    /// Bound principal DIDs. Empty until the DID binding model lands.
-    principal_dids: Vec<String>,
-
-    /// Richer placeholder contract for the primary DID binding.
-    primary_principal_binding: Option<AccountDidBindingPreview>,
-
-    /// Richer placeholder contract for downstream admin/OpenAPI integrations.
-    principal_did_bindings: Vec<AccountDidBindingPreview>,
-}
-
-impl From<coauth_data::User> for AccountRecord {
-    fn from(user: coauth_data::User) -> Self {
-        let did_resolver = default_did_resolver_service();
-        Self::from_user(
-            user,
-            &coauth_config::ContrixConfig::default(),
-            did_resolver.as_ref(),
-        )
-    }
+    #[serde(flatten)]
+    attributes: AdminAccountAttributes,
 }
 
 impl AccountRecord {
-    fn from_user(
+    /// Build an `AccountRecord` from a freshly-fetched `User` row. Async
+    /// because the primary-DID derivation goes through the
+    /// `DidResolverService` trait, whose `primary_did_for_user` is
+    /// `async` so a starid-backed deployment can route through the
+    /// configured registry without blocking the runtime.
+    pub(crate) async fn from_user(
         user: coauth_data::User,
         contrix_config: &coauth_config::ContrixConfig,
         did_resolver: &dyn DidResolverService,
@@ -217,7 +98,8 @@ impl AccountRecord {
         } else {
             AccountStatus::Active
         };
-        let principal_did_bindings = preview_bindings_for_user(&user, contrix_config, did_resolver);
+        let principal_did_bindings =
+            preview_bindings_for_user(&user, contrix_config, did_resolver).await;
         let primary_principal_binding = principal_did_bindings
             .iter()
             .find(|binding| binding.primary)
@@ -226,25 +108,38 @@ impl AccountRecord {
             .iter()
             .map(|binding| binding.did.clone())
             .collect();
-        let primary_principal_did = Some(primary_did_for_user(&user, did_resolver));
+        let primary_principal_did =
+            Some(primary_did_for_user(&user, contrix_config, did_resolver).await);
 
         Self {
             id: user.id,
-            username: user.username,
-            status,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-            locked_at: user.locked_at,
-            disabled_at: user.deactivated_at,
-            admin: user.can_request_admin,
-            display_name: user.display_name,
-            avatar_url: user.avatar_url,
-            preferred_locale: user.preferred_locale,
-            primary_principal_did,
-            principal_dids,
-            primary_principal_binding,
-            principal_did_bindings,
+            attributes: AdminAccountAttributes {
+                username: user.username,
+                status,
+                created_at: Some(user.created_at),
+                updated_at: Some(user.updated_at),
+                locked_at: user.locked_at,
+                disabled_at: user.deactivated_at,
+                admin: user.can_request_admin,
+                display_name: user.display_name,
+                avatar_url: user.avatar_url,
+                preferred_locale: user.preferred_locale,
+                primary_principal_did,
+                principal_dids,
+                primary_principal_binding,
+                principal_did_bindings,
+            },
         }
+    }
+
+    /// Convenience accessor used by mutation paths that need to peek at
+    /// the primary DID after rebuilding from a fresh `User`.
+    pub(crate) fn primary_principal_did(&self) -> Option<&str> {
+        self.attributes.primary_principal_did.as_deref()
+    }
+
+    pub(crate) fn updated_at(&self) -> Option<DateTime<Utc>> {
+        self.attributes.updated_at
     }
 }
 
@@ -348,25 +243,13 @@ pub async fn list_accounts(
         IncludeCount::True => {
             let page = repo.user().list(filter, pagination).await?;
             let count = repo.user().count(filter).await?;
-            paginated_response_for_page(
-                page.map(|user| {
-                    AccountRecord::from_user(user, &contrix_config, did_resolver.as_ref())
-                }),
-                pagination,
-                Some(count),
-                &base,
-            )
+            let page = map_page_async(page, &contrix_config, did_resolver.as_ref()).await;
+            paginated_response_for_page(page, pagination, Some(count), &base)
         }
         IncludeCount::False => {
             let page = repo.user().list(filter, pagination).await?;
-            paginated_response_for_page(
-                page.map(|user| {
-                    AccountRecord::from_user(user, &contrix_config, did_resolver.as_ref())
-                }),
-                pagination,
-                None,
-                &base,
-            )
+            let page = map_page_async(page, &contrix_config, did_resolver.as_ref()).await;
+            paginated_response_for_page(page, pagination, None, &base)
         }
         IncludeCount::Only => {
             let count = repo.user().count(filter).await?;
@@ -379,30 +262,30 @@ pub async fn list_accounts(
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.accounts.admin_bridge_describe", skip_all)]
-pub async fn admin_bridge_describe(depot: &Depot) -> JsonResult<AdminBridgeDescribeResponse> {
+pub async fn admin_bridge_describe(depot: &Depot) -> JsonResult<AdminBridgeDescribe> {
     let risk_action_state = depot.risk_action_state_service()?;
 
-    Ok(Json(AdminBridgeDescribeResponse {
-        contract: "cx.contract.coauth_admin_bridge.v1",
-        version: "0.1.0-scaffold",
-        api_base_path: "/api/admin/v1",
-        accounts_path: "/api/admin/v1/accounts",
-        account_detail_path_template: "/api/admin/v1/accounts/{account_id}",
-        account_dids_path_template: "/api/admin/v1/accounts/{account_id}/dids",
-        account_claims_path_template: "/api/admin/v1/accounts/{account_id}/claims",
-        account_session_grants_path_template: "/api/admin/v1/accounts/{account_id}/session-grants",
-        risk_action_path_template: "/api/admin/v1/accounts/{account_id}/risk-action",
-        risk_action_current_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/current",
-        risk_action_history_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/history",
-        risk_action_approve_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve",
-        risk_action_execute_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute",
-        risk_action_state_store_kind: risk_action_state.state_store_kind(),
-        risk_action_approval_mode: "state_machine_scaffold_required",
+    Ok(Json(AdminBridgeDescribe {
+        contract: "cx.contract.coauth_admin_bridge.v1".to_string(),
+        version: "0.1.0-scaffold".to_string(),
+        api_base_path: "/api/admin/v1".to_string(),
+        accounts_path: "/api/admin/v1/accounts".to_string(),
+        account_detail_path_template: "/api/admin/v1/accounts/{account_id}".to_string(),
+        account_dids_path_template: "/api/admin/v1/accounts/{account_id}/dids".to_string(),
+        account_claims_path_template: "/api/admin/v1/accounts/{account_id}/claims".to_string(),
+        account_session_grants_path_template: "/api/admin/v1/accounts/{account_id}/session-grants".to_string(),
+        risk_action_path_template: "/api/admin/v1/accounts/{account_id}/risk-action".to_string(),
+        risk_action_current_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/current".to_string(),
+        risk_action_history_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/history".to_string(),
+        risk_action_approve_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve".to_string(),
+        risk_action_execute_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute".to_string(),
+        risk_action_state_store_kind: risk_action_state.state_store_kind().to_string(),
+        risk_action_approval_mode: "state_machine_scaffold_required".to_string(),
         risk_action_examples: admin_bridge_risk_action_examples(),
         todos: vec![
-            "TODO: replace audit-backed scaffold transitions with dedicated persisted proposal records",
-            "TODO: enforce persisted approval-state consumption before executing risk-action mutations",
-            "TODO: publish formal OpenAPI examples for admin bridge discovery and risk-action workflows",
+            "TODO: replace audit-backed scaffold transitions with dedicated persisted proposal records".to_string(),
+            "TODO: enforce persisted approval-state consumption before executing risk-action mutations".to_string(),
+            "TODO: publish formal OpenAPI examples for admin bridge discovery and risk-action workflows".to_string(),
         ],
     }))
 }
@@ -426,7 +309,7 @@ pub async fn get_account(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     Ok(Json(SingleResponse::new_canonical(
-        AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref()),
+        AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref()).await,
     )))
 }
 
@@ -454,7 +337,7 @@ pub async fn list_account_claims(
         .await
         .map_err(AppError::internal)?
         .into_iter()
-        .map(AccountClaimRecord::from_service)
+        .map(account_claim_record_from_service)
         .collect();
 
     Ok(Json(AccountClaimsResponse { data }))
@@ -476,7 +359,7 @@ pub async fn list_account_session_grants(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let record = AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref());
+    let record = AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref()).await;
     Ok(Json(AccountSessionGrantsResponse {
         data: admin_session_grant_records(&record),
     }))
@@ -591,8 +474,34 @@ async fn patch_account(
     repo.save().await?;
 
     Ok(Json(SingleResponse::new_canonical(
-        AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref()),
+        AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref()).await,
     )))
+}
+
+/// Map a `Page<User>` into a `Page<AccountRecord>` honouring the now-async
+/// `AccountRecord::from_user`. The synchronous `Page::map` helper can't
+/// drive an async closure, so we walk the edges by hand.
+async fn map_page_async(
+    page: coauth_data::Page<coauth_data::User>,
+    contrix_config: &coauth_config::ContrixConfig,
+    did_resolver: &dyn DidResolverService,
+) -> coauth_data::Page<AccountRecord> {
+    let coauth_data::Page {
+        has_next_page,
+        has_previous_page,
+        edges,
+    } = page;
+    let mut mapped_edges = Vec::with_capacity(edges.len());
+    for edge in edges {
+        let cursor = edge.cursor;
+        let node = AccountRecord::from_user(edge.node, contrix_config, did_resolver).await;
+        mapped_edges.push(coauth_data::pagination::Edge { cursor, node });
+    }
+    coauth_data::Page {
+        has_next_page,
+        has_previous_page,
+        edges: mapped_edges,
+    }
 }
 
 fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) -> AppError {
@@ -613,28 +522,26 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
     }
 }
 
-impl AccountClaimRecord {
-    fn from_service(record: StoredAccountClaimRecord) -> Self {
-        let value = account_claim_value(&record.payload);
-        let state = record.status.as_str().to_owned();
+fn account_claim_record_from_service(record: StoredAccountClaimRecord) -> AccountClaimRecord {
+    let value = account_claim_value(&record.payload);
+    let state = record.status.as_str().to_owned();
 
-        Self {
-            id: record.id.to_string(),
-            account_id: record.account_id.map(|id| id.to_string()),
-            claim_type: record.claim_type,
-            value,
-            state,
-            source: "coauth_claim_repository".to_owned(),
-            subject: record.subject,
-            issuer: record.issuer,
-            verifier_did: record.verifier_did,
-            represented_org: record.represented_org,
-            payload: record.payload,
-            issued_at: record.issued_at,
-            expires_at: record.expires_at,
-            revoked_at: record.revoked_at,
-            revoked_reason: record.revoked_reason,
-        }
+    AccountClaimRecord {
+        id: record.id.to_string(),
+        account_id: record.account_id.map(|id| id.to_string()),
+        claim_type: record.claim_type,
+        value,
+        state,
+        source: "coauth_claim_repository".to_owned(),
+        subject: record.subject,
+        issuer: record.issuer,
+        verifier_did: record.verifier_did,
+        represented_org: record.represented_org,
+        payload: record.payload,
+        issued_at: Some(record.issued_at),
+        expires_at: record.expires_at,
+        revoked_at: record.revoked_at,
+        revoked_reason: record.revoked_reason,
     }
 }
 
@@ -652,10 +559,10 @@ fn account_claim_value(payload: &serde_json::Value) -> Option<String> {
 fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGrantRecord> {
     vec![AccountSessionGrantRecord {
         grant_id: format!("sg-scaffold-{}", account.id),
-        subject: account.primary_principal_did.clone(),
+        subject: account.primary_principal_did().map(str::to_owned),
         scope: Some("urn:contrix:principal-server:session.bind".to_owned()),
         state: Some("inventory_scaffold".to_owned()),
-        issued_at: Some(account.updated_at),
+        issued_at: account.updated_at(),
     }]
 }
 
@@ -669,7 +576,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_and_get_accounts() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -723,7 +632,9 @@ mod tests {
     #[tokio::test]
     async fn test_lock_and_disable_account() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -769,7 +680,9 @@ mod tests {
     #[tokio::test]
     async fn test_risk_action_execute_requires_approval_and_locks_account() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -877,7 +790,9 @@ mod tests {
     #[tokio::test]
     async fn test_account_dids_contract_is_stubbed_with_not_implemented() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 

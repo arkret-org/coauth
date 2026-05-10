@@ -23,14 +23,13 @@ use crate::{
     },
     services::{
         account_claims::account_claims_service, did_resolver::default_did_resolver_service,
-        email_webhook::EmailWebhookService,
-        invite_quarantine::invite_quarantine_service,
+        email_webhook::EmailWebhookService, invite_quarantine::invite_quarantine_service,
         principal_cache::durable_principal_cache_service,
         risk_action_proposals::risk_action_proposals_service,
         risk_action_state::default_risk_action_state_service,
+        starid_adapter::{StaridRegistryHandle, StaridResolver},
         upstream_oidc::default_upstream_oidc_service,
-        upstream_oidc_mapping::TrustedIssuerPolicySet,
-        webauthn::webauthn_service,
+        upstream_oidc_mapping::TrustedIssuerPolicySet, webauthn::webauthn_service,
     },
     telemetry::METER,
 };
@@ -223,6 +222,29 @@ pub async fn inject_app_state(
         TrustedIssuerPolicySet::default(),
     );
     depot.insert("did_resolver_service", default_did_resolver_service());
+    // C35.0: when `[contrix.starid]` is configured, build a single
+    // `StaridResolver` per request from the shared http_client. The
+    // handle is `Option<StaridRegistryHandle>` in the depot — handlers
+    // that need it (today: the onboarding `user_write` flow stage) read
+    // via `DepotExt::starid_registry()` and skip the wire-up when it
+    // returns `None`. The async did_resolver still works without a
+    // handle: it falls back to the local `did:web:coauth.invalid:…`
+    // form for accounts whose `starid_backend` flag is `false`.
+    if let Some(starid_config) = state.contrix_config.starid.as_ref() {
+        match StaridResolver::with_http_client(starid_config, state.http_client.clone()) {
+            Ok(resolver) => {
+                let handle: StaridRegistryHandle = Arc::new(resolver);
+                depot.insert("starid_registry", handle);
+            }
+            Err(err) => {
+                tracing::warn!(
+                    %err,
+                    "starid registry unavailable (base_url={}); onboarding flows will fall back to the local did:web derivation",
+                    starid_config.base_url,
+                );
+            }
+        }
+    }
     // Build the WebAuthn service from the current URL builder. We only
     // insert the service if construction succeeds; a misconfigured RP
     // origin should not bring the rest of the request pipeline down.

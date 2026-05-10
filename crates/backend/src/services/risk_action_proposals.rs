@@ -361,8 +361,8 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         } else {
             None
         };
-        let proofs_json =
-            serde_json::to_value(&proofs).map_err(|e| RiskActionProposalsError::Storage(e.into()))?;
+        let proofs_json = serde_json::to_value(&proofs)
+            .map_err(|e| RiskActionProposalsError::Storage(e.into()))?;
 
         let mut conn = self
             .pool
@@ -455,7 +455,10 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         if existing.state == ProposalState::Executed {
             return Err(RiskActionProposalsError::AlreadyExecuted);
         }
-        if matches!(existing.state, ProposalState::Cancelled | ProposalState::Rejected) {
+        if matches!(
+            existing.state,
+            ProposalState::Cancelled | ProposalState::Rejected
+        ) {
             return Err(RiskActionProposalsError::AlreadyCancelled);
         }
 

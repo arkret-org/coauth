@@ -38,7 +38,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_repositories() {
-        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
         let mut repo = PgRepositoryFactory::new(pool.clone())
@@ -375,7 +377,9 @@ mod tests {
     /// [`OAuth2SessionRepository::count`] methods.
     #[tokio::test]
     async fn test_list_sessions() {
-        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
         let mut repo = PgRepositoryFactory::new(pool.clone())
@@ -727,7 +731,9 @@ mod tests {
     /// Test the [`OAuth2DeviceCodeGrantRepository`] implementation
     #[tokio::test]
     async fn test_device_code_grant_repository() {
-        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
         let mut repo = PgRepositoryFactory::new(pool.clone())

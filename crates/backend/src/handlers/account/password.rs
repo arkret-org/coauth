@@ -444,7 +444,9 @@ mod tests {
         }
 
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool).await.unwrap();
 
         let (_session, ticket) =
@@ -468,7 +470,9 @@ mod tests {
         }
 
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool).await.unwrap();
 
         let (session, ticket) = create_recovery_ticket(&state, "bob@example.com".to_string()).await;

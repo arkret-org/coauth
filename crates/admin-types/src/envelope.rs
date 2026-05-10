@@ -341,8 +341,7 @@ mod schema_impls {
             Object::new()
                 .property(
                     "meta",
-                    Object::new()
-                        .property("count", Object::new().schema_type(BasicType::Integer)),
+                    Object::new().property("count", Object::new().schema_type(BasicType::Integer)),
                 )
                 .property(
                     "data",
@@ -380,8 +379,7 @@ mod schema_impls {
                 )
                 .property(
                     "links",
-                    Object::new()
-                        .property("self", Object::new().schema_type(BasicType::String)),
+                    Object::new().property("self", Object::new().schema_type(BasicType::String)),
                 )
                 .required("data")
                 .required("links")

@@ -1,6 +1,27 @@
 use salvo::oapi::ToSchema;
 use serde::{Deserialize, Serialize};
 
+// `RecoveryDescribeResponse` (and the entire `Recovery*Example` family
+// it nests) used to live inline here. They moved to
+// `coauth_admin_types::recovery_bridge_admin` in C34.2 so the sodmin
+// admin SPA decodes them through the same typed shape — the prior
+// sodmin shim was decoding the three `example_*` blocks as opaque
+// `serde_json::Value`, silently dropping the typed structure of
+// `RecoveryBackupPayloadExample` / `RecoveryRestoreExamples` /
+// `RecoveryAuthzExamples`. The shared crate is the source of truth from
+// here forward; this module re-exports them under the original names so
+// the rest of the backend handler keeps compiling without touching every
+// `use super::model::…` import site.
+pub use coauth_admin_types::{
+    RecoveryApprovalConstraintExample, RecoveryAuthzCheckRequestExample, RecoveryAuthzExamples,
+    RecoveryAuthzResourceExample, RecoveryBackupEncryptionExample, RecoveryBackupItemExample,
+    RecoveryBackupPayloadExample, RecoveryBridgeDescribe as RecoveryDescribeResponse,
+    RecoveryClaimConstraintExample, RecoveryPolicyPayloadExample,
+    RecoveryPolicyUpsertRequestExample, RecoveryRequiredClaimExample, RecoveryRestoreExamples,
+    RecoveryRestoreStartRequestExample, RecoveryRestoreTicketAdvanceRequestExample,
+    RecoveryRestoreTicketResponseShapeExample,
+};
+
 #[derive(Deserialize, ToSchema)]
 pub struct StartRecoveryInput {
     pub email: String,
@@ -39,303 +60,120 @@ pub struct ResendRecoveryResponse {
     pub error: Option<String>,
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryDescribeResponse {
-    pub contract: &'static str,
-    pub version: &'static str,
-    pub recovery_start_path: &'static str,
-    pub recovery_status_path: &'static str,
-    pub recovery_resend_path: &'static str,
-    pub recovery_principal_snapshot_path: &'static str,
-    pub recovery_principal_cache_status_path: &'static str,
-    pub recovery_principal_cache_refresh_path: &'static str,
-    pub recovery_principal_cache_queue_path: &'static str,
-    pub recovery_principal_cache_complete_path: &'static str,
-    pub recovery_principal_cache_fail_path: &'static str,
-    pub recovery_principal_cache_policy_path: &'static str,
-    pub recovery_principal_cache_retry_path: &'static str,
-    pub recovery_principal_cache_invalidate_path: &'static str,
-    pub recovery_principal_cache_failures_path: &'static str,
-    pub recovery_principal_cache_upstream_path: &'static str,
-    pub recovery_principal_cache_upstream_probe_path: &'static str,
-    pub recovery_principal_cache_upstream_bind_path: &'static str,
-    pub key_backup_rest_base: &'static str,
-    pub key_backup_schema: &'static str,
-    pub device_message_schema: &'static str,
-    pub principal_recovery_contract_stack_path: &'static str,
-    pub principal_recovery_stack_bundle_path: &'static str,
-    pub principal_recovery_discovery_path: &'static str,
-    pub principal_recovery_readiness_path: &'static str,
-    pub principal_device_messages_describe_path: &'static str,
-    pub principal_key_backups_describe_path: &'static str,
-    pub principal_restore_state_describe_path: &'static str,
-    pub principal_restore_state_export_path: &'static str,
-    pub principal_restore_state_import_path: &'static str,
-    pub principal_restore_state_durability_path: &'static str,
-    pub principal_restore_state_checkpoint_collection_path: &'static str,
-    pub principal_restore_start_path: &'static str,
-    pub principal_restore_describe_path: &'static str,
-    pub principal_restore_ticket_collection_path: &'static str,
-    pub principal_restore_ticket_path: &'static str,
-    pub principal_restore_ticket_advance_path: &'static str,
-    pub principal_restore_ticket_resume_path: &'static str,
-    pub principal_restore_ticket_cancel_path: &'static str,
-    pub principal_restore_ticket_retry_path: &'static str,
-    pub principal_restore_approval_status_path: &'static str,
-    pub principal_restore_approval_submit_path: &'static str,
-    pub principal_restore_executor_status_path: &'static str,
-    pub principal_restore_executor_enqueue_path: &'static str,
-    pub principal_restore_executor_start_path: &'static str,
-    pub principal_restore_executor_complete_path: &'static str,
-    pub principal_restore_result_path: &'static str,
-    pub principal_restore_receipt_path: &'static str,
-    pub principal_restore_materialized_device_handoff_path: &'static str,
-    pub principal_restore_bundle_path: &'static str,
-    pub principal_restore_activity_path: &'static str,
-    pub principal_restore_timeline_path: &'static str,
-    pub principal_restore_audit_feed_path: &'static str,
-    pub principal_recovery_live_snapshot_path: &'static str,
-    pub principal_authz_describe_path: &'static str,
-    pub principal_authz_check_path: &'static str,
-    pub principal_policy_describe_path: &'static str,
-    pub principal_policy_collection_path: &'static str,
-    pub principal_policy_item_path: &'static str,
-    pub verification_event_kinds: Vec<&'static str>,
-    pub recovery_modes: Vec<&'static str>,
-    pub example_backup_payload: RecoveryBackupPayloadExample,
-    pub recovery_restore_examples: RecoveryRestoreExamples,
-    pub recovery_authz_examples: RecoveryAuthzExamples,
-    pub todos: Vec<&'static str>,
+/// Trait extension that produces the canonical scaffold payloads. The
+/// inherent `scaffold()` constructors used to live on the inline backend
+/// types; they cannot live on the shared `coauth_admin_types` shapes
+/// (orphan rule), so they get promoted to a backend-side trait that the
+/// recovery describe handler already imports through the prelude.
+pub trait RecoveryExampleScaffold: Sized {
+    fn scaffold() -> Self;
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryBackupPayloadExample {
-    pub schema: &'static str,
-    pub backup_id: &'static str,
-    #[serde(rename = "class")]
-    pub backup_class: &'static str,
-    pub encryption: RecoveryBackupEncryptionExample,
-    pub items: Vec<RecoveryBackupItemExample>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryBackupEncryptionExample {
-    pub alg: &'static str,
-    pub kdf: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryBackupItemExample {
-    pub kind: &'static str,
-    #[serde(rename = "ref")]
-    pub item_ref: &'static str,
-    pub todo: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryRestoreExamples {
-    pub restore_start_request: RecoveryRestoreStartRequestExample,
-    pub restore_ticket_response_shape: RecoveryRestoreTicketResponseShapeExample,
-    pub restore_ticket_advance_request: RecoveryRestoreTicketAdvanceRequestExample,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryRestoreStartRequestExample {
-    pub backup_id: &'static str,
-    pub actor: &'static str,
-    pub device_id: &'static str,
-    pub verification_event_kind: &'static str,
-    pub todo: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryRestoreTicketResponseShapeExample {
-    pub contract: &'static str,
-    pub lifecycle_state: &'static str,
-    pub allowed_next_transitions: Vec<&'static str>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryRestoreTicketAdvanceRequestExample {
-    pub transition: &'static str,
-    pub note: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryAuthzExamples {
-    pub authz_check_request: RecoveryAuthzCheckRequestExample,
-    pub policy_upsert_request: RecoveryPolicyUpsertRequestExample,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryAuthzCheckRequestExample {
-    pub actor: &'static str,
-    pub action: &'static str,
-    pub space_id: &'static str,
-    pub resources: Vec<RecoveryAuthzResourceExample>,
-    pub constraints: Vec<RecoveryClaimConstraintExample>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryAuthzResourceExample {
-    pub kind: &'static str,
-    pub space_id: &'static str,
-    pub blob_ref: &'static str,
-    pub object_type: &'static str,
-    pub object_ref: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scope: Option<&'static str>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryClaimConstraintExample {
-    pub constraint_type: &'static str,
-    pub subtype: &'static str,
-    pub effect: &'static str,
-    pub object_type_allow: Vec<&'static str>,
-    pub facet_allow: Vec<&'static str>,
-    pub requires_claims: Vec<RecoveryRequiredClaimExample>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryRequiredClaimExample {
-    pub claim_type: &'static str,
-    pub issuer: &'static str,
-    pub organization: &'static str,
-    pub status: &'static str,
-    pub roles: Vec<&'static str>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryPolicyUpsertRequestExample {
-    pub scope: &'static str,
-    pub subject_ref: &'static str,
-    pub policy_type: &'static str,
-    pub effect: &'static str,
-    pub payload: RecoveryPolicyPayloadExample,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryPolicyPayloadExample {
-    pub actions: Vec<&'static str>,
-    pub resource: RecoveryAuthzResourceExample,
-    pub constraints: Vec<RecoveryApprovalConstraintExample>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct RecoveryApprovalConstraintExample {
-    pub constraint_type: &'static str,
-    pub subtype: &'static str,
-    pub effect: &'static str,
-    pub approval_required: bool,
-    pub approval_mode: &'static str,
-    pub approval_actor_refs: Vec<&'static str>,
-    pub approval_relation: &'static str,
-}
-
-impl RecoveryBackupPayloadExample {
-    pub fn scaffold() -> Self {
+impl RecoveryExampleScaffold for RecoveryBackupPayloadExample {
+    fn scaffold() -> Self {
         Self {
-            schema: "cx.schema.key_backup.v1",
-            backup_id: "backup-scaffold-current-device",
-            backup_class: "mls_export",
+            schema: "cx.schema.key_backup.v1".to_string(),
+            backup_id: "backup-scaffold-current-device".to_string(),
+            backup_class: "mls_export".to_string(),
             encryption: RecoveryBackupEncryptionExample {
-                alg: "xchacha20poly1305",
-                kdf: "argon2id",
+                alg: "xchacha20poly1305".to_string(),
+                kdf: "argon2id".to_string(),
             },
             items: vec![RecoveryBackupItemExample {
-                kind: "mls_group_state",
-                item_ref: "group:default",
-                todo: "replace scaffold payload with encrypted export blob",
+                kind: "mls_group_state".to_string(),
+                item_ref: "group:default".to_string(),
+                todo: "replace scaffold payload with encrypted export blob".to_string(),
             }],
         }
     }
 }
 
-impl RecoveryRestoreExamples {
-    pub fn scaffold() -> Self {
+impl RecoveryExampleScaffold for RecoveryRestoreExamples {
+    fn scaffold() -> Self {
         Self {
             restore_start_request: RecoveryRestoreStartRequestExample {
-                backup_id: "backup-scaffold-current-device",
-                actor: "did:web:alice.example",
-                device_id: "device-web",
-                verification_event_kind: "cx.key.verification.done",
-                todo: "replace scaffold restore start with verified restore ticket handoff",
+                backup_id: "backup-scaffold-current-device".to_string(),
+                actor: "did:web:alice.example".to_string(),
+                device_id: "device-web".to_string(),
+                verification_event_kind: "cx.key.verification.done".to_string(),
+                todo: "replace scaffold restore start with verified restore ticket handoff"
+                    .to_string(),
             },
             restore_ticket_response_shape: RecoveryRestoreTicketResponseShapeExample {
-                contract: "contrix.rest.key_backup_restore_ticket.v1",
-                lifecycle_state: "authz_pending",
+                contract: "contrix.rest.key_backup_restore_ticket.v1".to_string(),
+                lifecycle_state: "authz_pending".to_string(),
                 allowed_next_transitions: vec![
-                    "authz_checked",
-                    "policy_checked",
-                    "approved",
-                    "materialized",
+                    "authz_checked".to_string(),
+                    "policy_checked".to_string(),
+                    "approved".to_string(),
+                    "materialized".to_string(),
                 ],
             },
             restore_ticket_advance_request: RecoveryRestoreTicketAdvanceRequestExample {
-                transition: "authz_checked",
-                note: "replace scaffold transition with policy-backed approval state machine",
+                transition: "authz_checked".to_string(),
+                note: "replace scaffold transition with policy-backed approval state machine"
+                    .to_string(),
             },
         }
     }
 }
 
-impl RecoveryAuthzExamples {
-    pub fn scaffold() -> Self {
+impl RecoveryExampleScaffold for RecoveryAuthzExamples {
+    fn scaffold() -> Self {
         Self {
             authz_check_request: RecoveryAuthzCheckRequestExample {
-                actor: "did:web:alice.example",
-                action: "keys.backups.restore",
-                space_id: "cx:space:01JS0SP000000000000000000",
+                actor: "did:web:alice.example".to_string(),
+                action: "keys.backups.restore".to_string(),
+                space_id: "cx:space:01JS0SP000000000000000000".to_string(),
                 resources: vec![RecoveryAuthzResourceExample {
-                    kind: "blob",
-                    space_id: "cx:space:01JS0SP000000000000000000",
-                    blob_ref: "cx:blob:sha256:0123456789abcdef",
-                    object_type: "encrypted_backup",
-                    object_ref: "backup-scaffold-current-device",
-                    scope: Some("exact"),
+                    kind: "blob".to_string(),
+                    space_id: "cx:space:01JS0SP000000000000000000".to_string(),
+                    blob_ref: "cx:blob:sha256:0123456789abcdef".to_string(),
+                    object_type: "encrypted_backup".to_string(),
+                    object_ref: "backup-scaffold-current-device".to_string(),
+                    scope: Some("exact".to_string()),
                 }],
                 constraints: vec![RecoveryClaimConstraintExample {
-                    constraint_type: "claim_based",
-                    subtype: "claim",
-                    effect: "allow",
-                    object_type_allow: vec!["key_backup"],
-                    facet_allow: vec!["recovery"],
+                    constraint_type: "claim_based".to_string(),
+                    subtype: "claim".to_string(),
+                    effect: "allow".to_string(),
+                    object_type_allow: vec!["key_backup".to_string()],
+                    facet_allow: vec!["recovery".to_string()],
                     requires_claims: vec![RecoveryRequiredClaimExample {
-                        claim_type: "recovery_operator",
-                        issuer: "did:web:coauth.example",
-                        organization: "example-org",
-                        status: "active",
-                        roles: vec!["backup_admin"],
+                        claim_type: "recovery_operator".to_string(),
+                        issuer: "did:web:coauth.example".to_string(),
+                        organization: "example-org".to_string(),
+                        status: "active".to_string(),
+                        roles: vec!["backup_admin".to_string()],
                     }],
                 }],
             },
             policy_upsert_request: RecoveryPolicyUpsertRequestExample {
-                scope: "space",
-                subject_ref: "did:web:alice.example",
-                policy_type: "keys.backups.restore",
-                effect: "require_review",
+                scope: "space".to_string(),
+                subject_ref: "did:web:alice.example".to_string(),
+                policy_type: "keys.backups.restore".to_string(),
+                effect: "require_review".to_string(),
                 payload: RecoveryPolicyPayloadExample {
-                    actions: vec!["keys.backups.restore"],
+                    actions: vec!["keys.backups.restore".to_string()],
                     resource: RecoveryAuthzResourceExample {
-                        kind: "blob",
-                        space_id: "cx:space:01JS0SP000000000000000000",
-                        blob_ref: "cx:blob:sha256:0123456789abcdef",
-                        object_type: "encrypted_backup",
-                        object_ref: "backup-scaffold-current-device",
+                        kind: "blob".to_string(),
+                        space_id: "cx:space:01JS0SP000000000000000000".to_string(),
+                        blob_ref: "cx:blob:sha256:0123456789abcdef".to_string(),
+                        object_type: "encrypted_backup".to_string(),
+                        object_ref: "backup-scaffold-current-device".to_string(),
                         scope: None,
                     },
                     constraints: vec![RecoveryApprovalConstraintExample {
-                        constraint_type: "claim_based",
-                        subtype: "approval",
-                        effect: "require_review",
+                        constraint_type: "claim_based".to_string(),
+                        subtype: "approval".to_string(),
+                        effect: "require_review".to_string(),
                         approval_required: true,
-                        approval_mode: "two_man_rule",
+                        approval_mode: "two_man_rule".to_string(),
                         approval_actor_refs: vec![
-                            "did:web:controller.example",
-                            "did:web:guardian.example",
+                            "did:web:controller.example".to_string(),
+                            "did:web:guardian.example".to_string(),
                         ],
-                        approval_relation: "controller",
+                        approval_relation: "controller".to_string(),
                     }],
                 },
             },

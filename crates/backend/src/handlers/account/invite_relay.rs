@@ -183,8 +183,13 @@ pub async fn relay_invite_with(
         return Err(RouteError::BadRequest("config_required".into()));
     };
 
-    let lookup =
-        query_consent_cell(Some(principal_url), target_holder_did, consent_id, http_client).await;
+    let lookup = query_consent_cell(
+        Some(principal_url),
+        target_holder_did,
+        consent_id,
+        http_client,
+    )
+    .await;
 
     let decision = evaluate_invite_gate(&lookup, peer_did, scope, require_consent);
     debug!(
@@ -356,10 +361,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            outcome,
-            RelayOutcome::Forwarded { forwarded_ok: true }
-        );
+        assert_eq!(outcome, RelayOutcome::Forwarded { forwarded_ok: true });
         let (status, body) = relay_outcome_to_response(&outcome);
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body.status, "forwarded");
@@ -566,9 +568,6 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            outcome,
-            RelayOutcome::Forwarded { forwarded_ok: true }
-        );
+        assert_eq!(outcome, RelayOutcome::Forwarded { forwarded_ok: true });
     }
 }

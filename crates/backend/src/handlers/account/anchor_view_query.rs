@@ -109,9 +109,11 @@ pub async fn query_latest_anchor(
         "api/admin/v1/spaces/{}/anchor-dag",
         urlencoding::encode_path(space_id)
     );
-    let url = base.join(&path).map_err(|error| AnchorViewError::InvalidUrl {
-        reason: format!("{error}"),
-    })?;
+    let url = base
+        .join(&path)
+        .map_err(|error| AnchorViewError::InvalidUrl {
+            reason: format!("{error}"),
+        })?;
 
     let response = http_client
         .get(url)

@@ -103,10 +103,7 @@ pub async fn query_consent_cell(
     // surface. Once soland adds the read endpoint, update this path and
     // align the response struct with the official schema.
     let cell_id = build_cell_id(consent_id);
-    let path = format!(
-        "api/v1/admin/cells/{}",
-        urlencoding::encode_path(&cell_id)
-    );
+    let path = format!("api/v1/admin/cells/{}", urlencoding::encode_path(&cell_id));
     let url = match base.join(&path) {
         Ok(u) => u,
         Err(error) => {
@@ -307,8 +304,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result =
-            query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
+        let result = query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
 
         match result {
             ConsentLookup::Known(state) => {
@@ -336,8 +332,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result =
-            query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
+        let result = query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
 
         match result {
             ConsentLookup::Known(state) => {
@@ -361,8 +356,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result =
-            query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
+        let result = query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
 
         match result {
             ConsentLookup::Unknown { reason } => {
@@ -385,8 +379,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result =
-            query_consent_cell(Some(&base), "did:web:holder", "c-404", &client).await;
+        let result = query_consent_cell(Some(&base), "did:web:holder", "c-404", &client).await;
 
         match result {
             ConsentLookup::Known(state) => {

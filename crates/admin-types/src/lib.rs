@@ -15,20 +15,32 @@
 //! gated behind the `schema` feature so that pure clients like `sodmin`
 //! do not transitively pull salvo + schemars.
 
+pub mod account_admin;
+pub mod account_claims_admin;
 pub mod applets_admin;
+pub mod bridge_admin;
 pub mod connector_health;
+pub mod did_binding_admin;
 pub mod envelope;
 pub mod federation_admin;
+pub mod integration_manifest_admin;
 pub mod notification_admin;
 pub mod recovery_admin;
+pub mod recovery_bridge_admin;
 pub mod risk_action;
 pub mod space_policy_admin;
 
+pub use account_admin::*;
+pub use account_claims_admin::*;
 pub use applets_admin::*;
+pub use bridge_admin::*;
 pub use connector_health::*;
+pub use did_binding_admin::*;
 pub use envelope::*;
 pub use federation_admin::*;
+pub use integration_manifest_admin::*;
 pub use notification_admin::*;
 pub use recovery_admin::*;
+pub use recovery_bridge_admin::*;
 pub use risk_action::*;
 pub use space_policy_admin::*;

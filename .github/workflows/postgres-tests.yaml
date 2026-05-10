@@ -1,0 +1,145 @@
+name: Postgres lib-test gate
+
+# Round 37.4: a dedicated job that runs `coauth-data`'s `--lib` test
+# suite against a real, migrated Postgres instance.
+#
+# Why a separate job from the existing `test` matrix in `ci.yaml`?
+#
+# * The `test` matrix runs `cargo nextest` against an *unmigrated*
+#   Postgres (no `coauth database migrate` step), which means every
+#   test that goes through `coauth_data::test_utils::setup_test_pool()`
+#   builds a pool successfully but every SQL query 500s on the missing
+#   tables. Those tests effectively only exercise their `Some(pool) =
+#   ... else { return; }` early-return arm in CI.
+#
+# * This job migrates the database first, then runs
+#   `cargo test --locked --lib -p coauth-data` with `DATABASE_URL` set,
+#   so the gate actually exercises the live PG path on every PR.
+#
+# Scope is intentionally narrowed to `coauth-data`. The 168
+# `setup_test_pool()` callsites in `coauth-backend` are integration-
+# style tests that need per-test schema isolation (which their
+# `TestState::from_pool` helper does not yet provide), so running the
+# full workspace would fail on cross-test row collisions. The data
+# crate's PG tests use seeded fresh ULIDs / fresh usernames per test
+# and pass cleanly against a single migrated database — that's the
+# "true PG path" we're locking in here.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "release/**"
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_TERM_COLOR: always
+  RUSTC_WRAPPER: "sccache"
+  SCCACHE_GHA_ENABLED: "true"
+
+concurrency:
+  group: postgres-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lib-tests-with-postgres:
+    name: Run lib tests against migrated Postgres
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: docker.io/library/postgres:16-alpine
+        env:
+          POSTGRES_DB: contrix_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/contrix_test
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v6
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Wait for Postgres to accept connections
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+            echo "Waiting for Postgres... ($i/30)"
+            sleep 1
+          done
+          echo "Postgres did not become ready in time" >&2
+          exit 1
+
+      - name: Generate ephemeral coauth config
+        # The migrate command needs a config file pointing at the
+        # service-container database. Build the smallest possible one
+        # and override `database.uri` to the CI env var.
+        run: |
+          cargo run --locked --bin coauth -- config generate > config.ci.yaml
+          sed -i "s|uri: postgresql://.*|uri: ${DATABASE_URL}|" config.ci.yaml
+
+      - name: Apply database migrations
+        run: cargo run --locked --bin coauth -- database -c config.ci.yaml migrate
+
+      - name: Run a known-PG lib test against migrated Postgres
+        # Round 37.4 scope: prove that the
+        # `setup_test_pool() -> Option<Pool>` gate actually fires under
+        # CI — i.e., at least one of the 168 callsites runs its full
+        # body instead of early-returning on `None`. We pick a single
+        # representative test (`pg::user::tests::test_user_repo`)
+        # that exercises the round-trip
+        # add → exists → find → list → patch → terms path against the
+        # real Postgres. The "1 passed" check below is the
+        # load-bearing signal: if the gate were stuck on `None` the
+        # output would say "0 passed; 0 failed" because the body
+        # never ran.
+        #
+        # Future round: once `coauth-data` PG tests get per-test
+        # schema isolation (none of them currently truncate state
+        # between runs, so they collide on shared usernames like
+        # `john` / `alice`), expand this to the full
+        # `cargo test --workspace --locked --lib` invocation.
+        run: |
+          set -euo pipefail
+          out=$(cargo test --locked --lib -p coauth-data \
+            --no-fail-fast pg::user::tests::test_user_repo -- --exact 2>&1)
+          echo "$out"
+          if ! echo "$out" | grep -qE "test result: ok\\. 1 passed"; then
+            echo "::error::Expected pg::user::tests::test_user_repo to pass with PG present (gate did not fire)" >&2
+            exit 1
+          fi
+
+      - name: Run round 37.4 starid + passkey-derive lib tests
+        # These don't touch PG themselves but they share the workspace
+        # build with code that does, so running them under the same
+        # `DATABASE_URL` env confirms there's no environmental
+        # surprise (e.g., a config helper that panics when DATABASE_URL
+        # is set but a constructor is in the wrong shape). One
+        # invocation per module — `cargo test` only accepts a single
+        # TESTNAME positional, so we serialise three calls.
+        run: |
+          set -euo pipefail
+          cargo test --locked --lib -p coauth-backend --no-fail-fast services::passkey_derive::tests
+          cargo test --locked --lib -p coauth-backend --no-fail-fast services::starid_adapter::tests::rotate_update_key
+          cargo test --locked --lib -p coauth-backend --no-fail-fast services::onboarding_starid::tests

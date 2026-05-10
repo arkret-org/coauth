@@ -1549,7 +1549,22 @@ mod tests {
         }
     }
 
+    fn install_default_crypto_provider_once() {
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            // When this crate's tests are linked into a workspace test
+            // binary that doesn't pre-install a rustls CryptoProvider,
+            // `ClientConfig::with_platform_verifier()` panics. Installing
+            // the aws-lc-rs default once per process is idempotent and safe
+            // to share with any other test that already installed one — the
+            // call returns Err in that case, which we ignore.
+            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        });
+    }
+
     fn test_client() -> Client {
+        install_default_crypto_provider_once();
         let tls_config: rustls::ClientConfig =
             rustls::ClientConfig::with_platform_verifier().unwrap();
 

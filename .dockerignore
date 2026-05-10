@@ -1,11 +1,32 @@
+# Top-level build artefacts (cargo + dx).
 target/
 dist/
-crates/*/target
-crates/*/node_modules
-docs/
-.devcontainer/
+
+# Nested target/ wherever it lives — workspace member targets, claude
+# worktree targets, etc. The glob `target/` alone only matches the
+# root; `**/target` catches every directory tree.
+**/target/
+**/node_modules/
+**/.sqlx/
+
+# Local dev workspaces / IDE / env state that bloat the build context.
+.claude/
 .github/
-.gitignore
-Dockerfile
+.gitea/
+.devcontainer/
+.git/
+.codex-*.log
+*.log
+
+# Files dockerignore'd to avoid invalidating image layer caches.
 .dockerignore
 docker-bake.hcl
+docker-compose*.yaml
+
+# Repo docs / standalone tooling that the image doesn't need.
+docs/
+docs-zh/
+
+# Generated test scaffolds + secrets.
+conformance/test-config.yaml
+conformance/test-config.yaml.raw

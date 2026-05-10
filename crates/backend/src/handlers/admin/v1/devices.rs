@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppError, JsonResult,
-    handlers::admin::{
-        audit_helper::record_admin_operation, call_context::extract_call_context,
-    },
+    handlers::admin::{audit_helper::record_admin_operation, call_context::extract_call_context},
     services::device_revoke::cascade_revoke_session_grants,
 };
 
@@ -97,10 +95,7 @@ pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<Device
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.devices.revoke", skip_all)]
-pub async fn revoke_device(
-    req: &mut Request,
-    depot: &Depot,
-) -> JsonResult<DeviceRevokeResponse> {
+pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<DeviceRevokeResponse> {
     let device_id = req
         .param::<String>("id")
         .map(|s| s.trim().to_owned())

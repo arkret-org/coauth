@@ -47,7 +47,11 @@ use serde_json::json;
 /// The happy body MUST round-trip; the invalid body MUST be rejected.
 /// Panics with a contextual message on failure so test output points at
 /// the offending endpoint.
-fn check_pair<T: DeserializeOwned>(label: &str, happy: serde_json::Value, invalid: serde_json::Value) {
+fn check_pair<T: DeserializeOwned>(
+    label: &str,
+    happy: serde_json::Value,
+    invalid: serde_json::Value,
+) {
     let happy_result: Result<T, _> = serde_json::from_value(happy.clone());
     assert!(
         happy_result.is_ok(),
@@ -417,8 +421,7 @@ fn add_user_request_contract() {
 fn update_user_request_contract() {
     use replicas::UpdateUser;
     let happy = json!({ "display_name": "Alice", "admin": true });
-    serde_json::from_value::<UpdateUser>(happy)
-        .expect("happy-path update_user must deserialize");
+    serde_json::from_value::<UpdateUser>(happy).expect("happy-path update_user must deserialize");
     serde_json::from_value::<UpdateUser>(json!({ "admin": "yes" }))
         .expect_err("non-bool `admin` must be rejected");
 }

@@ -18,6 +18,13 @@ pub struct ContrixConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_registry: Option<IdentityRegistryConfig>,
 
+    /// `starid` registry endpoint used by onboarding / recovery flows to
+    /// mint and verify managed `did:webvh` identifiers for principals.
+    /// When omitted, principal-DID minting falls back to the local
+    /// `did:web` derivation in [`crate::services::did_resolver`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starid: Option<StaridConfig>,
+
     /// Optional explicit service DID for the coauth deployment.
     ///
     /// When omitted, the backend derives a `did:web` identifier from
@@ -64,6 +71,7 @@ impl Default for ContrixConfig {
         Self {
             principal_servers: Vec::new(),
             identity_registry: None,
+            starid: None,
             service_did: None,
             issuer_did: None,
             admin_audience: None,
@@ -79,6 +87,7 @@ impl ContrixConfig {
     pub fn is_default(&self) -> bool {
         self.principal_servers.is_empty()
             && self.identity_registry.is_none()
+            && self.starid.is_none()
             && self.service_did.is_none()
             && self.issuer_did.is_none()
             && self.admin_audience.is_none()
@@ -134,4 +143,43 @@ pub enum IdentityRegistryKind {
     PublicDidResolver,
     /// Generic external resolver.
     External,
+}
+
+/// `starid` registry endpoint configuration.
+///
+/// The principal-server (coauth) calls into starid during onboarding and
+/// recovery to mint a managed `did:webvh` for the principal and to
+/// verify control-proofs on subsequent privileged operations. The
+/// adapter implementation lives in
+/// [`crate::services::starid_adapter::StaridResolver`].
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct StaridConfig {
+    /// Base URL of the starid deployment, for example
+    /// `https://starid.example.com`. Path segments are ignored — the
+    /// adapter joins `/api/v1/webvh/...` itself.
+    pub base_url: Url,
+
+    /// `host` value passed to starid's `POST /api/v1/webvh/dids`. Defaults
+    /// to the host of `base_url` when omitted. Override when starid is
+    /// fronted by a different public-facing hostname than the URL coauth
+    /// reaches it on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub did_host: Option<String>,
+
+    /// Path prefix for minted principal DIDs (e.g. `accounts`). The
+    /// adapter appends the account's stable id, so the final path is
+    /// `<path_prefix>/<account_id>`.
+    #[serde(default = "default_path_prefix")]
+    pub path_prefix: String,
+
+    /// Optional bearer token for starid's admin endpoints. When set,
+    /// the adapter prefers `POST /admin/api/v1/dids` over the public
+    /// `POST /api/v1/webvh/dids` — both produce the same DID but the
+    /// admin route bypasses public-rate-limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_token: Option<String>,
+}
+
+fn default_path_prefix() -> String {
+    "accounts".to_owned()
 }

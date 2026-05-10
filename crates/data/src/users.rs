@@ -20,6 +20,7 @@ type UserSqlType = (
     sql_types::Nullable<sql_types::Text>,
     sql_types::Nullable<sql_types::Text>,
     sql_types::Nullable<sql_types::Text>,
+    sql_types::Bool,
 );
 
 type UserSqlRow = (
@@ -34,6 +35,7 @@ type UserSqlRow = (
     Option<String>,
     Option<String>,
     Option<String>,
+    bool,
 );
 
 /// A Matrix user stored locally in Pasion.
@@ -62,6 +64,17 @@ pub struct User {
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
     pub preferred_locale: Option<String>,
+    /// True when this account's primary principal DID is a managed
+    /// `did:webvh:…` minted by `starid` during onboarding (see
+    /// [`crate::services::starid_adapter::StaridRegistry::create_principal_did`]).
+    /// False for accounts that pre-date the starid integration or were
+    /// created when `[contrix.starid]` config was absent — those still
+    /// resolve to the local `did:web:coauth.invalid:…` derivation.
+    ///
+    /// Backfill: migration `20260510000200_account_starid_backend_marker`
+    /// adds this column with `DEFAULT FALSE`, so every historical row
+    /// stays on the local derivation.
+    pub starid_backend: bool,
 }
 
 impl Queryable<UserSqlType, Pg> for User {
@@ -80,6 +93,7 @@ impl Queryable<UserSqlType, Pg> for User {
             display_name,
             avatar_url,
             preferred_locale,
+            starid_backend,
         ) = row;
         let id = Ulid::from(id);
 
@@ -96,6 +110,7 @@ impl Queryable<UserSqlType, Pg> for User {
             display_name,
             avatar_url,
             preferred_locale,
+            starid_backend,
         })
     }
 }
@@ -155,6 +170,7 @@ impl User {
             display_name: Some("John".to_owned()),
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
+            starid_backend: false,
         }]
     }
 }

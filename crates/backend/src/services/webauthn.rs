@@ -110,10 +110,8 @@ pub trait WebauthnService: Send + Sync {
 
     /// Start an authentication ceremony. Loads the account's existing
     /// passkeys; returns the assertion challenge.
-    async fn auth_start(
-        &self,
-        account_id: Ulid,
-    ) -> Result<RequestChallengeResponse, WebauthnError>;
+    async fn auth_start(&self, account_id: Ulid)
+    -> Result<RequestChallengeResponse, WebauthnError>;
 
     /// Finish an authentication ceremony. Updates the matched credential's
     /// `sign_count` + `last_used_at`. Returns the credential id used.
@@ -246,8 +244,7 @@ impl WebauthnService for PgWebauthnService {
     ) -> Result<CreationChallengeResponse, WebauthnError> {
         // Load existing credential ids so the browser excludes them.
         let existing = self.load_passkeys(account_id).await?;
-        let exclude: Vec<CredentialID> =
-            existing.iter().map(|pk| pk.cred_id().clone()).collect();
+        let exclude: Vec<CredentialID> = existing.iter().map(|pk| pk.cred_id().clone()).collect();
 
         let exclude_opt = if exclude.is_empty() {
             None
@@ -263,10 +260,7 @@ impl WebauthnService for PgWebauthnService {
             exclude_opt,
         )?;
 
-        self.register_states
-            .lock()
-            .await
-            .insert(account_id, state);
+        self.register_states.lock().await.insert(account_id, state);
         Ok(challenge)
     }
 
@@ -392,7 +386,9 @@ pub fn webauthn_service(
     rp_name: &str,
     pool: DieselPool<AsyncPgConnection>,
 ) -> Result<WebauthnServiceHandle, WebauthnError> {
-    Ok(Arc::new(PgWebauthnService::new(rp_id, rp_origin, rp_name, pool)?))
+    Ok(Arc::new(PgWebauthnService::new(
+        rp_id, rp_origin, rp_name, pool,
+    )?))
 }
 
 #[cfg(test)]

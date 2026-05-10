@@ -64,6 +64,7 @@ macro_rules! select_user_columns {
             users::display_name,
             users::avatar_url,
             users::preferred_locale,
+            users::starid_backend,
         )
     };
 }
@@ -172,6 +173,10 @@ impl UserRepository for PgUserRepository<'_> {
             display_name: None,
             avatar_url: None,
             preferred_locale: None,
+            // Defaults to `false`; onboarding flips this to `true`
+            // immediately after `StaridRegistry::create_principal_did`
+            // succeeds via [`UserRepository::set_starid_backend`].
+            starid_backend: false,
         })
     }
 
@@ -406,6 +411,32 @@ impl UserRepository for PgUserRepository<'_> {
         let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
             .set((
                 users::can_request_admin.eq(can_request_admin),
+                users::updated_at.eq(user.updated_at),
+            ))
+            .execute(self.conn)
+            .await?;
+
+        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
+        Ok(user)
+    }
+
+    #[tracing::instrument(
+        name = "db.user.set_starid_backend",
+        skip_all,
+        fields(%user.id, user.starid_backend = starid_backend),
+        err,
+    )]
+    async fn set_starid_backend(
+        &mut self,
+        mut user: User,
+        starid_backend: bool,
+    ) -> Result<User, Self::Error> {
+        user.starid_backend = starid_backend;
+        user.updated_at = Utc::now();
+
+        let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
+            .set((
+                users::starid_backend.eq(starid_backend),
                 users::updated_at.eq(user.updated_at),
             ))
             .execute(self.conn)

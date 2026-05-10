@@ -509,10 +509,7 @@ impl Limiter {
     /// `account_id`. Tightened (5 attempts / 15 min by default) to make
     /// brute-forcing the 6-digit code infeasible — at one attempt every
     /// 3 minutes the expected time-to-guess is 200 days.
-    pub async fn check_mfa_totp(
-        &self,
-        account_id: Ulid,
-    ) -> Result<(), MfaTotpLimitedError> {
+    pub async fn check_mfa_totp(&self, account_id: Ulid) -> Result<(), MfaTotpLimitedError> {
         if !self.inner.mfa_totp_per_account.check(&account_id).await {
             return Err(MfaTotpLimitedError::Account(account_id));
         }
@@ -551,6 +548,7 @@ mod tests {
             display_name: Some("alice".to_owned()),
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
+            starid_backend: false,
         };
 
         let bob = User {
@@ -566,6 +564,7 @@ mod tests {
             display_name: Some("bob".to_owned()),
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
+            starid_backend: false,
         };
 
         // Three times the same IP should be allowed (burst=3 for per_ip)

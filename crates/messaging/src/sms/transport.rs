@@ -417,8 +417,20 @@ mod tests {
         matchers::{body_partial_json, header, header_exists, method, path},
     };
 
+    fn install_default_crypto_provider_once() {
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            // reqwest pulls in rustls; under workspace test runs no other
+            // binary has installed a `CryptoProvider` so the default lookup
+            // panics. Install aws-lc-rs once per process. Idempotent.
+            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        });
+    }
+
     #[tokio::test]
     async fn paloud_internal_transport_signs_request() {
+        install_default_crypto_provider_once();
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))

@@ -10,6 +10,8 @@ use coauth_admin_types::{
     AccountRiskActionCurrentResponse, AccountRiskActionExecuteRequest,
     AccountRiskActionHistoryResponse, AccountRiskActionProposalRequest,
     AccountRiskActionProposalResponse, AccountRiskActionTransitionRecord,
+    AdminBridgeRiskActionApprovalExample, AdminBridgeRiskActionExamples,
+    AdminBridgeRiskActionExecuteExample, AdminBridgeRiskActionProposalExample,
 };
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_data::{AdminUserPatch, RepositoryAccess};
@@ -90,41 +92,13 @@ pub struct AccountRiskActionExecuteResponse {
 // `impl Resource for AccountRiskActionCurrentResponse` lives next to the
 // type in `coauth_admin_types::risk_action` — both moved together to
 // satisfy the orphan rule.
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AdminBridgeRiskActionExamples {
-    /// Example payload for POST /risk-action
-    proposal_request: AdminBridgeRiskActionProposalExample,
-
-    /// Example payload for POST /risk-action/{proposal_id}/approve
-    approve_request: AdminBridgeRiskActionApprovalExample,
-
-    /// Example payload for POST /risk-action/{proposal_id}/execute
-    execute_request: AdminBridgeRiskActionExecuteExample,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AdminBridgeRiskActionProposalExample {
-    action: &'static str,
-    reason: &'static str,
-    ticket: &'static str,
-    approved_by: Option<&'static str>,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AdminBridgeRiskActionApprovalExample {
-    action: &'static str,
-    ticket: &'static str,
-    approved_by: &'static str,
-    approval_note: &'static str,
-}
-
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AdminBridgeRiskActionExecuteExample {
-    action: &'static str,
-    ticket: &'static str,
-    execution_note: &'static str,
-}
+//
+// The bridge risk-action example structs (`AdminBridgeRiskActionExamples`
+// + the three per-verb example payloads) used to live inline here. They
+// moved to `coauth_admin_types::bridge_admin` in C34.2 so the sodmin
+// admin SPA decodes them with the same typed shape (rather than the
+// previous `serde_json::Value` shim that silently dropped the example
+// structure on the floor).
 
 struct AccountRiskActionMutation {
     patch: AdminUserPatch,
@@ -180,21 +154,21 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
 pub(super) fn admin_bridge_risk_action_examples() -> AdminBridgeRiskActionExamples {
     AdminBridgeRiskActionExamples {
         proposal_request: AdminBridgeRiskActionProposalExample {
-            action: "lock",
-            reason: "suspicious session recovery detected",
-            ticket: "INC-2026-0504",
+            action: "lock".to_string(),
+            reason: "suspicious session recovery detected".to_string(),
+            ticket: "INC-2026-0504".to_string(),
             approved_by: None,
         },
         approve_request: AdminBridgeRiskActionApprovalExample {
-            action: "lock",
-            ticket: "INC-2026-0504",
-            approved_by: "did:web:admin.example",
-            approval_note: "approved for controlled execution",
+            action: "lock".to_string(),
+            ticket: "INC-2026-0504".to_string(),
+            approved_by: "did:web:admin.example".to_string(),
+            approval_note: "approved for controlled execution".to_string(),
         },
         execute_request: AdminBridgeRiskActionExecuteExample {
-            action: "lock",
-            ticket: "INC-2026-0504",
-            execution_note: "execute via controlled mutation worker",
+            action: "lock".to_string(),
+            ticket: "INC-2026-0504".to_string(),
+            execution_note: "execute via controlled mutation worker".to_string(),
         },
     }
 }
@@ -528,11 +502,10 @@ pub async fn execute(
     }
     repo.save().await?;
 
-    let account_response = SingleResponse::new_canonical(super::AccountRecord::from_user(
-        updated_account,
-        &contrix_config,
-        did_resolver.as_ref(),
-    ));
+    let account_response = SingleResponse::new_canonical(
+        super::AccountRecord::from_user(updated_account, &contrix_config, did_resolver.as_ref())
+            .await,
+    );
 
     Ok(Json(AccountRiskActionExecuteResponse {
         state_record_id,

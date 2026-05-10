@@ -1,0 +1,6 @@
+services:
+  postgres:
+    ports: !reset []
+  coauth:
+    image: coauth:dev-int
+    volumes: !override []

@@ -16,6 +16,7 @@ diesel::table! {
         display_name -> Nullable<Text>,
         avatar_url -> Nullable<Text>,
         preferred_locale -> Nullable<Text>,
+        starid_backend -> Bool,
     }
 }
 

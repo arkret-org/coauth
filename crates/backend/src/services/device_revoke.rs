@@ -13,8 +13,7 @@
 
 use chrono::{DateTime, Utc};
 use coauth_data::{
-    BoxClock, BoxRepository, Pagination, RepositoryAccess,
-    oauth2::SessionGrantFilter,
+    BoxClock, BoxRepository, Pagination, RepositoryAccess, oauth2::SessionGrantFilter,
 };
 use thiserror::Error;
 

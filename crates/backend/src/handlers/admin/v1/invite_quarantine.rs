@@ -410,8 +410,7 @@ mod tests {
 
     #[test]
     fn resolve_request_parses_approve() {
-        let body: ResolveRequest =
-            serde_json::from_str(r#"{"decision": "approve"}"#).unwrap();
+        let body: ResolveRequest = serde_json::from_str(r#"{"decision": "approve"}"#).unwrap();
         assert_eq!(body.decision, ResolveDecision::Approve);
         assert!(body.note.is_none());
     }
@@ -426,8 +425,7 @@ mod tests {
 
     #[test]
     fn resolve_request_rejects_unknown_decision() {
-        let res: Result<ResolveRequest, _> =
-            serde_json::from_str(r#"{"decision": "maybe"}"#);
+        let res: Result<ResolveRequest, _> = serde_json::from_str(r#"{"decision": "maybe"}"#);
         assert!(res.is_err(), "unknown decision must not parse");
     }
 

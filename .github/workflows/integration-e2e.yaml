@@ -49,12 +49,16 @@ jobs:
             sudo apt-get update -y && sudo apt-get install -y jq curl
           fi
 
+      - name: Preflight (catch obvious misconfig before the 5min build)
+        run: bash scripts/preflight-check.sh
+
       - name: Bring up integration stack
         env:
           # Build coauth from the local Dockerfile (compose handles this
-          # via the build: clause); soland/sodmin/starid fall through to
-          # their default :dev tags. The smoke+e2e harnesses are
-          # 404-tolerant when those tags don't ship the surfaces yet.
+          # via the build: clause). soland / sodmin are profile-gated
+          # (--profile downstream) and not pulled by default — the e2e
+          # harness is 404-tolerant for those surfaces and skips the
+          # corresponding scenarios when they aren't reachable.
           COAUTH_IMAGE: coauth:ci
         run: bash scripts/integration-up.sh
 
@@ -68,11 +72,22 @@ jobs:
         if: ${{ failure() }}
         run: |
           mkdir -p target/integration-logs
-          docker compose -f docker-compose.integration.yaml logs --no-color postgres > target/integration-logs/postgres.log || true
-          docker compose -f docker-compose.integration.yaml logs --no-color coauth   > target/integration-logs/coauth.log   || true
-          docker compose -f docker-compose.integration.yaml logs --no-color soland   > target/integration-logs/soland.log   || true
-          docker compose -f docker-compose.integration.yaml logs --no-color sodmin   > target/integration-logs/sodmin.log   || true
-          docker compose -f docker-compose.integration.yaml ps > target/integration-logs/ps.txt || true
+          # The default profile only runs postgres + coauth; soland/sodmin
+          # only exist under --profile downstream, but we collect them
+          # unconditionally and tolerate misses so the same job is useful
+          # for both profile sets.
+          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
+            logs --no-color postgres > target/integration-logs/postgres.log 2>&1 || true
+          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
+            logs --no-color coauth   > target/integration-logs/coauth.log   2>&1 || true
+          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
+            logs --no-color soland   > target/integration-logs/soland.log   2>&1 || true
+          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
+            logs --no-color sodmin   > target/integration-logs/sodmin.log   2>&1 || true
+          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
+            ps > target/integration-logs/ps.txt 2>&1 || true
+          # Also dump the generated test config so we can see what coauth booted with.
+          cp conformance/test-config.yaml target/integration-logs/test-config.yaml 2>/dev/null || true
 
       - name: Upload integration diagnostic logs
         if: ${{ failure() }}

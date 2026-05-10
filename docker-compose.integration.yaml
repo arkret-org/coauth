@@ -1,4 +1,4 @@
-# Integration stack: Postgres + coauth + soland + sodmin (+ optional starid).
+# Integration stack: Postgres + coauth (+ optional soland/sodmin/starid).
 #
 # This compose is intended for local bring-up smoke / e2e harness work; it
 # deliberately keeps secrets, ports, and images close to defaults so that
@@ -6,15 +6,31 @@
 # service's `/health` endpoint without bespoke configuration.
 #
 # Image strategy:
-#   - coauth : built from the local Dockerfile (this repository).
-#   - soland / sodmin / starid : pulled by tag. Override with the matching
-#     `*_IMAGE` env var when iterating against locally-built images, e.g.
-#         SOLAND_IMAGE=soland:dev SODMIN_IMAGE=sodmin:dev \
-#             docker compose -f docker-compose.integration.yaml up
+#   - coauth : built from the local Dockerfile (this repository). The runtime
+#              base is gcr.io/distroless/cc-debian12:nonroot, which has NO
+#              shell and NO wget/curl. Healthchecks therefore call the
+#              `coauth healthcheck` subcommand directly via CMD (not
+#              CMD-SHELL) — the binary issues an HTTP probe to the
+#              configured /health listener and exits 0 on 200.
+#   - soland / sodmin / starid : pulled by tag. No `:dev` tags are published
+#              yet, so these services are gated behind profiles. Override
+#              with the matching `*_IMAGE` env var when iterating against
+#              locally-built images, e.g.
+#                  SOLAND_IMAGE=soland:dev SODMIN_IMAGE=sodmin:dev \
+#                      docker compose -f docker-compose.integration.yaml \
+#                          --profile downstream up
 #
 # Profiles:
-#   - default      : postgres + coauth + soland + sodmin
-#   - did-webvh    : adds starid (use `--profile did-webvh`)
+#   - default       : postgres + coauth                  (always-runnable)
+#   - downstream    : adds soland + sodmin               (requires :dev images)
+#   - did-webvh     : adds starid                        (requires :dev image)
+#
+# Config strategy:
+#   The coauth container expects a config at /etc/coauth/config.yaml. The
+#   `scripts/integration-up.sh` wrapper generates one via an ephemeral
+#   `coauth config generate` invocation before bringing the stack up. The
+#   generated file lives at conformance/test-config.yaml — gitignored so
+#   secrets aren't committed.
 
 services:
   postgres:
@@ -37,29 +53,55 @@ services:
   coauth:
     image: ${COAUTH_IMAGE:-coauth:dev}
     build:
-      context: .
-      dockerfile: Dockerfile
+      # The build context is the *parent* directory because the workspace
+      # `Cargo.toml` references sibling crates via `../contrix-rust-sdk/...`
+      # (path deps). Building with `context: .` would fail at
+      # `cargo chef prepare` because the sibling crates would be missing
+      # from the container's filesystem. We use the parent + an explicit
+      # dockerfile path so both the coauth tree and contrix-rust-sdk
+      # land under one root inside the build sandbox.
+      context: ..
+      dockerfile: coauth/Dockerfile
     container_name: contrix-coauth
     depends_on:
       postgres:
         condition: service_healthy
+    # The runtime image is gcr.io/distroless/cc-debian12:nonroot — no shell,
+    # no wget, no curl. We mount a minimal test config and let the binary
+    # default subcommand (server) take over. The healthcheck below uses
+    # `coauth healthcheck` which is shipped in the image specifically so
+    # the distroless runtime doesn't need extra binaries.
+    command: ["server", "--config", "/etc/coauth/config.yaml"]
+    volumes:
+      - ./conformance/test-config.yaml:/etc/coauth/config.yaml:ro
     environment:
-      COAUTH_DATABASE_URI: postgresql://contrix:contrix@postgres:5432/contrix
-      COAUTH_HTTP_BIND: 0.0.0.0:7080
-      COAUTH_HTTP_PUBLIC_BASE: http://coauth:7080/
-      COAUTH_HTTP_ISSUER: http://coauth:7080/
+      # Override only the DB URI so the same test config works against the
+      # compose postgres without baking host-specific values into the file.
+      COAUTH_DATABASE__URI: postgresql://contrix:contrix@postgres:5432/contrix
+      COAUTH_CONFIG: /etc/coauth/config.yaml
       RUST_LOG: info
     ports:
       - "57080:7080"
+    # `coauth healthcheck` reads the same config the server is using, picks
+    # the listener that exposes the `health` resource, and probes loopback.
+    # It exits 0 on 200 and non-zero otherwise — exactly what compose wants.
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7080/health || exit 1"]
+      test: ["CMD", "/usr/local/bin/coauth", "healthcheck", "--config", "/etc/coauth/config.yaml"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 30
+      start_period: 15s
 
+  # soland / sodmin are gated behind `--profile downstream` because no
+  # `:dev` tags are published yet. Bring them up with explicitly-built
+  # local images via `SOLAND_IMAGE=soland:dev SODMIN_IMAGE=sodmin:dev
+  # docker compose ... --profile downstream up`. The e2e harness is
+  # 404-tolerant for these surfaces, so the default profile (coauth-only)
+  # still exercises every wired path.
   soland:
     image: ${SOLAND_IMAGE:-soland:dev}
     container_name: contrix-soland
+    profiles: ["downstream"]
     depends_on:
       coauth:
         condition: service_healthy
@@ -70,15 +112,20 @@ services:
       RUST_LOG: info
     ports:
       - "58008:8008"
+    # Same distroless reasoning as coauth — assume soland ships its own
+    # `healthcheck` subcommand. If a deployment uses a different image
+    # without one, override via `SOLAND_HEALTHCHECK_CMD`.
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8008/health || exit 1"]
+      test: ["CMD", "/usr/local/bin/soland", "healthcheck"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 30
+      start_period: 15s
 
   sodmin:
     image: ${SODMIN_IMAGE:-sodmin:dev}
     container_name: contrix-sodmin
+    profiles: ["downstream"]
     depends_on:
       coauth:
         condition: service_healthy
@@ -92,10 +139,11 @@ services:
     ports:
       - "59090:9090"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:9090/health || exit 1"]
+      test: ["CMD", "/usr/local/bin/sodmin", "healthcheck"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 30
+      start_period: 15s
 
   # Optional did:webvh resolver. Enable with `--profile did-webvh`.
   starid:
@@ -110,11 +158,15 @@ services:
       RUST_LOG: info
     ports:
       - "57180:7180"
+    # Same distroless reasoning as coauth — assume starid ships its own
+    # `healthcheck` subcommand. Override via STARID_HEALTHCHECK_CMD if
+    # the deployment uses a non-distroless image with shell + wget.
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:7180/health || exit 1"]
+      test: ["CMD", "/usr/local/bin/starid", "healthcheck"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 30
+      start_period: 15s
 
 volumes:
   pgdata:

@@ -244,10 +244,7 @@ pub trait DepotExt {
     ) -> Result<crate::services::risk_action_state::RiskActionStateServiceHandle, RouteError>;
     fn risk_action_proposals_service(
         &self,
-    ) -> Result<
-        crate::services::risk_action_proposals::RiskActionProposalsServiceHandle,
-        RouteError,
-    >;
+    ) -> Result<crate::services::risk_action_proposals::RiskActionProposalsServiceHandle, RouteError>;
     fn principal_cache_service(
         &self,
     ) -> Result<crate::services::principal_cache::PrincipalCacheServiceHandle, RouteError>;
@@ -263,6 +260,14 @@ pub trait DepotExt {
     fn did_resolver_service(
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError>;
+    /// `Some(handle)` when `[contrix.starid]` is configured and the
+    /// adapter constructed cleanly during `inject_app_state`. `None`
+    /// otherwise — handlers should treat the absence as "starid
+    /// integration disabled" rather than an error, so onboarding can
+    /// degrade to the legacy local-derivation path.
+    fn starid_registry(
+        &self,
+    ) -> Option<crate::services::starid_adapter::StaridRegistryHandle>;
     fn webauthn_service(
         &self,
     ) -> Result<crate::services::webauthn::WebauthnServiceHandle, RouteError>;
@@ -369,10 +374,8 @@ impl DepotExt for Depot {
 
     fn risk_action_proposals_service(
         &self,
-    ) -> Result<
-        crate::services::risk_action_proposals::RiskActionProposalsServiceHandle,
-        RouteError,
-    > {
+    ) -> Result<crate::services::risk_action_proposals::RiskActionProposalsServiceHandle, RouteError>
+    {
         depot_get(self, "risk_action_proposals_service")
     }
 
@@ -404,6 +407,14 @@ impl DepotExt for Depot {
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError> {
         depot_get(self, "did_resolver_service")
+    }
+
+    fn starid_registry(
+        &self,
+    ) -> Option<crate::services::starid_adapter::StaridRegistryHandle> {
+        self.get::<crate::services::starid_adapter::StaridRegistryHandle>("starid_registry")
+            .ok()
+            .cloned()
     }
 
     fn webauthn_service(

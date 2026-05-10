@@ -83,9 +83,7 @@ fn derive_health_url(listeners: &[HttpListenerConfig]) -> Option<String> {
 /// about the default and survives operator port overrides.
 fn bind_to_local_url(bind: &HttpBindConfig) -> Option<String> {
     match bind {
-        HttpBindConfig::Listen { port, .. } => {
-            Some(format!("http://127.0.0.1:{port}/health"))
-        }
+        HttpBindConfig::Listen { port, .. } => Some(format!("http://127.0.0.1:{port}/health")),
         HttpBindConfig::Address { address } => {
             // Resolve the configured socket address to extract the port,
             // then probe loopback on that port. Wildcard binds

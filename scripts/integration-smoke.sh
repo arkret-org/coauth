@@ -33,15 +33,35 @@ probe() {
     return 1
 }
 
+# Bases are env-overridable so the same smoke runs against either the
+# docker-compose-mapped ports (default: 57080 etc.) or a coauth bound
+# locally on its native port (e.g. COAUTH_BASE=http://127.0.0.1:7080).
+COAUTH_BASE="${COAUTH_BASE:-http://127.0.0.1:57080}"
+SOLAND_BASE="${SOLAND_BASE:-http://127.0.0.1:58008}"
+SODMIN_BASE="${SODMIN_BASE:-http://127.0.0.1:59090}"
+STARID_BASE="${STARID_BASE:-http://127.0.0.1:57180}"
+
 probes=(
-    "coauth http://127.0.0.1:57080/health"
-    "soland http://127.0.0.1:58008/health"
-    "sodmin http://127.0.0.1:59090/health"
+    "coauth ${COAUTH_BASE}/health"
 )
 
-if [[ "${1:-}" == "--with-starid" ]]; then
-    probes+=("starid http://127.0.0.1:57180/health")
-fi
+# Add downstream / starid probes based on flags. The default profile
+# only brings up postgres + coauth, so probing soland/sodmin would fail
+# even on a healthy stack — they're gated behind --with-downstream now
+# to match the integration-up.sh profile semantics.
+for arg in "$@"; do
+    case "${arg}" in
+        --with-downstream)
+            probes+=(
+                "soland ${SOLAND_BASE}/health"
+                "sodmin ${SODMIN_BASE}/health"
+            )
+            ;;
+        --with-starid)
+            probes+=("starid ${STARID_BASE}/health")
+            ;;
+    esac
+done
 
 failures=0
 for entry in "${probes[@]}"; do

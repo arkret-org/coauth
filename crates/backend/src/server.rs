@@ -351,7 +351,12 @@ pub async fn security_headers_middleware(
         .headers()
         .get(http::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
-        .map(|value| value.trim_start().to_ascii_lowercase().starts_with("text/html"))
+        .map(|value| {
+            value
+                .trim_start()
+                .to_ascii_lowercase()
+                .starts_with("text/html")
+        })
         .unwrap_or(false);
 
     let headers = res.headers_mut();
@@ -851,9 +856,7 @@ fn build_account_api_router(router: Router) -> Router {
                 .post(consent::oauth2_consent_post),
         )
         // Invite relay (consent-gated forward to target principal)
-        .push(
-            Router::with_path("account/invites/relay").post(invite_relay::post_invite_relay),
-        )
+        .push(Router::with_path("account/invites/relay").post(invite_relay::post_invite_relay))
         // Device code link & consent
         .push(Router::with_path("device-link").get(consent::device_link_get))
         .push(
@@ -969,14 +972,8 @@ fn build_admin_router(router: Router) -> Router {
                                     Router::with_path("register/finish")
                                         .post(passkeys::register_finish),
                                 )
-                                .push(
-                                    Router::with_path("auth/start")
-                                        .post(passkeys::auth_start),
-                                )
-                                .push(
-                                    Router::with_path("auth/finish")
-                                        .post(passkeys::auth_finish),
-                                ),
+                                .push(Router::with_path("auth/start").post(passkeys::auth_start))
+                                .push(Router::with_path("auth/finish").post(passkeys::auth_finish)),
                         ),
                 ),
         )
@@ -1038,10 +1035,7 @@ fn build_admin_router(router: Router) -> Router {
             ),
         )
         // RFC 7591 admin dynamic client registration
-        .push(
-            Router::with_path("oauth2/clients/register")
-                .post(oauth2_clients_register::register),
-        )
+        .push(Router::with_path("oauth2/clients/register").post(oauth2_clients_register::register))
         // Admin-curated OAuth2 client display name + description per locale.
         .push(
             Router::with_path("oauth2/clients/{id}/i18n")

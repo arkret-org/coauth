@@ -466,9 +466,6 @@ mod tests {
             "claims_supported": claims,
         });
 
-        insta::assert_json_snapshot!(
-            "discovery_scopes_and_claims",
-            snapshot,
-        );
+        insta::assert_json_snapshot!("discovery_scopes_and_claims", snapshot,);
     }
 }

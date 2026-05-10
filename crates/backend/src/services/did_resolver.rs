@@ -100,7 +100,16 @@ pub trait DidResolverService: Send + Sync {
         contrix_config: &ContrixConfig,
         did: &str,
     ) -> Option<Ulid>;
-    fn primary_did_for_user(&self, user: &User) -> String;
+    /// Resolve the primary principal DID for a user.
+    ///
+    /// Async because the starid-backed branch may need to call into the
+    /// `starid` registry to look up the canonical `did:webvh:…` head.
+    /// The default implementation only consults `user.starid_backend` +
+    /// `contrix_config.starid` and returns a deterministic
+    /// `did:web:<host>:<path_prefix>:<slug>` form for starid accounts —
+    /// a bare network round-trip happens at *onboarding* time
+    /// (`StaridRegistry::create_principal_did`), not on every read.
+    async fn primary_did_for_user(&self, contrix_config: &ContrixConfig, user: &User) -> String;
     fn delegated_resolver(&self, contrix_config: &ContrixConfig) -> Option<String>;
     fn proof_required_for_pairwise(&self, contrix_config: &ContrixConfig) -> bool;
     fn service_did_document(
@@ -166,7 +175,43 @@ impl DidResolverService for DefaultDidResolverService {
         did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
     }
 
-    fn primary_did_for_user(&self, user: &User) -> String {
+    async fn primary_did_for_user(&self, contrix_config: &ContrixConfig, user: &User) -> String {
+        // C35.0: when this account was onboarded against a configured
+        // `[contrix.starid]` deployment, return the deterministic
+        // `did:web:<host>:<path_prefix>:<slug>` form that the webvh DID
+        // minted at onboarding aliases via its `alsoKnownAs` set. The
+        // SCID-bearing `did:webvh:zXXXX:…` form is what `starid` returns
+        // from `POST /api/v1/webvh/dids` — coauth doesn't persist it
+        // separately because the deterministic alias is sufficient as a
+        // *primary* identifier (subject of session grants, audit logs,
+        // etc.). Verification & log-tail reads still go through
+        // `StaridRegistry::verify_control_proof` which takes the full
+        // webvh DID — those callers look up the alias from starid on
+        // demand.
+        //
+        // For accounts without `starid_backend` (everything created
+        // before the C35.0 backfill, or any account created while
+        // `[contrix.starid]` was unset), fall back to the historical
+        // local `did:web:coauth.invalid:…` derivation. The boolean acts
+        // as the toggle so a deployment that turns starid on later
+        // doesn't accidentally retroactively rewrite DIDs for
+        // already-issued accounts.
+        if user.starid_backend
+            && let Some(starid) = contrix_config.starid.as_ref()
+        {
+            let host = starid
+                .did_host
+                .clone()
+                .or_else(|| starid.base_url.host_str().map(ToOwned::to_owned))
+                .unwrap_or_else(|| "starid.local".to_owned());
+            let path_prefix = starid.path_prefix.trim_matches('/');
+            let slug = binding_slug(&user.id.to_string());
+            return if path_prefix.is_empty() {
+                format!("did:web:{host}:{slug}")
+            } else {
+                format!("did:web:{host}:{path_prefix}:{slug}")
+            };
+        }
         format!(
             "did:web:coauth.invalid:accounts:{}",
             binding_slug(&user.id.to_string())

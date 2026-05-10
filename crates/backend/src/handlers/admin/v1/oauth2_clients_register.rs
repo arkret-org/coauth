@@ -19,10 +19,7 @@
 //! still served by [`crate::handlers::oauth2::registration`].
 
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    audit::AdminOperation,
-    oauth2::OAuth2ClientRepository,
-};
+use coauth_data::{audit::AdminOperation, oauth2::OAuth2ClientRepository};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use oauth2_types::requests::GrantType;
 use rand::distr::{Alphanumeric, SampleString};
@@ -35,8 +32,7 @@ use crate::{
     AppError, CreatedJsonResult,
     handlers::{
         admin::{
-            CreatedJson, audit_helper::record_admin_operation,
-            call_context::extract_call_context,
+            CreatedJson, audit_helper::record_admin_operation, call_context::extract_call_context,
         },
         common::DepotExt,
     },
@@ -150,9 +146,7 @@ fn grant_type_to_str(value: &GrantType) -> String {
         GrantType::ClientCredentials => "client_credentials".to_owned(),
         GrantType::Implicit => "implicit".to_owned(),
         GrantType::Password => "password".to_owned(),
-        GrantType::DeviceCode => {
-            "urn:ietf:params:oauth:grant-type:device_code".to_owned()
-        }
+        GrantType::DeviceCode => "urn:ietf:params:oauth:grant-type:device_code".to_owned(),
         _ => format!("{value:?}").to_lowercase(),
     }
 }
@@ -203,10 +197,7 @@ fn validate_redirect_uris(raw: &[String]) -> Result<Vec<Url>, AppError> {
 /// Pure-function counterpart of the redirect requirement logic in
 /// [`register`]. Returns `Err` if the supplied grant types include a
 /// flow that needs a redirect_uri but none were supplied.
-fn ensure_redirect_for_grants(
-    grants: &[GrantType],
-    redirect_uris: &[Url],
-) -> Result<(), AppError> {
+fn ensure_redirect_for_grants(grants: &[GrantType], redirect_uris: &[Url]) -> Result<(), AppError> {
     let needs_redirect = grants
         .iter()
         .any(|g| matches!(g, GrantType::AuthorizationCode | GrantType::Implicit));
@@ -338,7 +329,10 @@ mod tests {
     #[test]
     fn parse_default_auth_method_is_basic() {
         let m = parse_auth_method(None).unwrap();
-        assert!(matches!(m, OAuthClientAuthenticationMethod::ClientSecretBasic));
+        assert!(matches!(
+            m,
+            OAuthClientAuthenticationMethod::ClientSecretBasic
+        ));
     }
 
     #[test]
@@ -365,18 +359,37 @@ mod tests {
 
     #[test]
     fn requires_client_secret_for_confidential_clients() {
-        assert!(requires_client_secret(&OAuthClientAuthenticationMethod::ClientSecretBasic));
-        assert!(requires_client_secret(&OAuthClientAuthenticationMethod::ClientSecretPost));
-        assert!(requires_client_secret(&OAuthClientAuthenticationMethod::ClientSecretJwt));
-        assert!(!requires_client_secret(&OAuthClientAuthenticationMethod::None));
-        assert!(!requires_client_secret(&OAuthClientAuthenticationMethod::PrivateKeyJwt));
+        assert!(requires_client_secret(
+            &OAuthClientAuthenticationMethod::ClientSecretBasic
+        ));
+        assert!(requires_client_secret(
+            &OAuthClientAuthenticationMethod::ClientSecretPost
+        ));
+        assert!(requires_client_secret(
+            &OAuthClientAuthenticationMethod::ClientSecretJwt
+        ));
+        assert!(!requires_client_secret(
+            &OAuthClientAuthenticationMethod::None
+        ));
+        assert!(!requires_client_secret(
+            &OAuthClientAuthenticationMethod::PrivateKeyJwt
+        ));
     }
 
     #[test]
     fn parse_known_grant_types() {
-        assert!(matches!(parse_grant_type("authorization_code").unwrap(), GrantType::AuthorizationCode));
-        assert!(matches!(parse_grant_type("refresh_token").unwrap(), GrantType::RefreshToken));
-        assert!(matches!(parse_grant_type("client_credentials").unwrap(), GrantType::ClientCredentials));
+        assert!(matches!(
+            parse_grant_type("authorization_code").unwrap(),
+            GrantType::AuthorizationCode
+        ));
+        assert!(matches!(
+            parse_grant_type("refresh_token").unwrap(),
+            GrantType::RefreshToken
+        ));
+        assert!(matches!(
+            parse_grant_type("client_credentials").unwrap(),
+            GrantType::ClientCredentials
+        ));
         assert!(parse_grant_type("not_a_grant").is_err());
     }
 
@@ -423,8 +436,7 @@ mod tests {
 
     #[test]
     fn negative_authorization_code_without_redirect_uri_rejected() {
-        let err =
-            ensure_redirect_for_grants(&[GrantType::AuthorizationCode], &[]).unwrap_err();
+        let err = ensure_redirect_for_grants(&[GrantType::AuthorizationCode], &[]).unwrap_err();
         let msg = format!("{err:?}");
         assert!(
             msg.contains("redirect_uri"),
@@ -479,7 +491,7 @@ mod tests {
             "self_signed_tls_client_auth",
             "client_secret_basics", // common typo
             "BASIC",                // uppercase; allowlist is lowercase
-            "  ",                   // whitespace, falls through to default? — ensure not silently accepted
+            "  ", // whitespace, falls through to default? — ensure not silently accepted
         ] {
             // Whitespace-only intentionally falls through to the
             // default ("client_secret_basic") because `parse_auth_method`
