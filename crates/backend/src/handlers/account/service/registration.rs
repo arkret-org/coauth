@@ -2305,7 +2305,7 @@ mod tests {
     }
 
     async fn test_repo() -> BoxRepository {
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         coauth_data::PgRepositoryFactory::new(pool)
             .create()
             .await

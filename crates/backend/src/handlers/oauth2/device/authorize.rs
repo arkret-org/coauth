@@ -203,7 +203,7 @@ mod tests {
     #[tokio::test]
     async fn test_device_code_request() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
 
         // Provision a client

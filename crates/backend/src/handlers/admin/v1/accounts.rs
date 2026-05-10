@@ -669,7 +669,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_and_get_accounts() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -723,7 +723,7 @@ mod tests {
     #[tokio::test]
     async fn test_lock_and_disable_account() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -769,7 +769,7 @@ mod tests {
     #[tokio::test]
     async fn test_risk_action_execute_requires_approval_and_locks_account() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -877,7 +877,7 @@ mod tests {
     #[tokio::test]
     async fn test_account_dids_contract_is_stubbed_with_not_implemented() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 

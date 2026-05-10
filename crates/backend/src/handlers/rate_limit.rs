@@ -8,11 +8,12 @@
 //! wraps them all and exposes `check_*` methods that mirror the old
 //! governor-based API.
 
-use std::{hash::Hash, net::IpAddr, sync::Arc};
+use std::{collections::HashMap, hash::Hash, net::IpAddr, sync::Arc};
 
 use coauth_config::{RateLimiterConfiguration, RateLimitingConfig};
 use coauth_data::{User, UserEmailAuthentication, UserPhoneAuthentication};
-use salvo::rate_limiter::{CelledQuota, MokaStore, RateGuard, RateStore, SlidingGuard};
+use salvo::rate_limiter::{CelledQuota, RateGuard, SlidingGuard};
+use tokio::sync::Mutex;
 use ulid::Ulid;
 
 // ---------------------------------------------------------------------------
@@ -118,14 +119,17 @@ impl RequesterFingerprint {
 // Keyed rate limiter backed by Salvo components
 // ---------------------------------------------------------------------------
 
-/// A single keyed rate limiter using [`SlidingGuard`] and [`MokaStore`].
+/// A single keyed rate limiter using [`SlidingGuard`].
 ///
-/// Each tracked key gets its own sliding-window guard stored in the
-/// [`MokaStore`] cache (which handles expiry automatically).
+/// Each tracked key gets its own sliding-window guard kept in an in-memory
+/// hash map guarded by a [`tokio::sync::Mutex`]. We previously used Salvo's
+/// `MokaStore`, but its load/save semantics are eventually consistent — under
+/// rapid sequential calls (microsecond-spaced) the second `load_guard` would
+/// observe the pre-insert state and the limit would not be enforced. Holding
+/// the map mutex across the verify call gives us the atomic
+/// read-modify-write semantics rate limiting requires.
 struct KeyedLimiter<K: Clone + Eq + Hash + Send + Sync + 'static> {
-    store: MokaStore<K, SlidingGuard>,
-    /// Template guard cloned for new keys.
-    template: SlidingGuard,
+    guards: Mutex<HashMap<K, SlidingGuard>>,
     quota: CelledQuota,
 }
 
@@ -134,22 +138,27 @@ impl<K: Clone + Eq + Hash + Send + Sync + 'static> KeyedLimiter<K> {
     fn from_config(cfg: &RateLimiterConfiguration) -> Option<Self> {
         let (limit, period) = cfg.to_limit_and_period()?;
         let period_secs = period.as_secs_f64();
-        // Use 10 cells for sliding window granularity (period / 10 per cell)
-        let cells = 10;
+        // Use up to 10 cells for sliding-window granularity. We MUST clamp
+        // `cells` to `limit` ourselves: SlidingGuard internally clamps the
+        // stored quota's `cells` to `limit`, but then compares the stored
+        // (clamped) quota against the caller-supplied (unclamped) one for
+        // equality. If they differ — which is the case whenever `limit < 10`
+        // — the guard treats every call as a fresh quota and resets its
+        // sliding window, effectively disabling the limiter. Pre-clamping
+        // keeps both sides equal so the window persists across calls.
+        let cells = limit.min(10);
         let quota = CelledQuota::new(limit, cells, time::Duration::seconds_f64(period_secs));
         Some(Self {
-            store: MokaStore::new(),
-            template: SlidingGuard::default(),
+            guards: Mutex::new(HashMap::new()),
             quota,
         })
     }
 
     /// Check whether `key` is allowed. Returns `true` if within limits.
     async fn check(&self, key: &K) -> bool {
-        let mut guard = self.store.load_guard(key, &self.template).await.unwrap();
-        let allowed = guard.verify(&self.quota).await;
-        self.store.save_guard(key.clone(), guard).await.unwrap();
-        allowed
+        let mut map = self.guards.lock().await;
+        let guard = map.entry(key.clone()).or_default();
+        guard.verify(&self.quota).await
     }
 }
 

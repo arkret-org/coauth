@@ -3,32 +3,18 @@
 //! Returns a list of configured notification channels and their status.
 //! Since the [`NotificationCenter`] is not available in the HTTP depot,
 //! channel availability is inferred from the site configuration flags.
+//!
+//! Wire shape lives in `coauth-admin-types::notification_admin` so sodmin
+//! and any other admin client deserialize against the same typed
+//! definition rustc enforces here.
 
-use salvo::{oapi::ToSchema, prelude::*};
-use schemars::JsonSchema;
-use serde::Serialize;
+use coauth_admin_types::{NotificationChannelStatus, NotificationChannelsResponse};
+use salvo::prelude::*;
 
 use crate::{
     JsonResult,
     handlers::{admin::call_context::extract_call_context, common::DepotExt},
 };
-
-/// Status of an individual notification channel.
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct ChannelStatus {
-    /// Channel name, e.g. `"email"` or `"sms"`.
-    channel: String,
-
-    /// Whether this channel is considered configured based on site config.
-    configured: bool,
-}
-
-/// Response listing all known notification channels.
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct NotificationChannelsResponse {
-    /// The list of notification channels and their configuration status.
-    channels: Vec<ChannelStatus>,
-}
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.notification_channels", skip_all)]
@@ -46,11 +32,11 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<Notificatio
     let sms_configured = site_config.password_registration_contact_required && !email_configured;
 
     let channels = vec![
-        ChannelStatus {
+        NotificationChannelStatus {
             channel: "email".to_string(),
             configured: email_configured,
         },
-        ChannelStatus {
+        NotificationChannelStatus {
             channel: "sms".to_string(),
             configured: sms_configured,
         },

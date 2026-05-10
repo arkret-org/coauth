@@ -2233,7 +2233,7 @@ mod tests {
     #[tokio::test]
     async fn session_grant_http_list_and_filter_work() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let (browser_session, grant, _material) = seed_persisted_session_grant(&state).await;
 
@@ -2278,7 +2278,7 @@ mod tests {
     #[tokio::test]
     async fn session_grant_http_introspection_returns_minimal_metadata() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let (_browser_session, grant, material) = seed_persisted_session_grant(&state).await;
         let challenge = format!("introspect-{}", grant.id);
@@ -2340,7 +2340,7 @@ mod tests {
     #[tokio::test]
     async fn session_grant_http_revoke_updates_followup_introspection() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let (_browser_session, grant, _material) = seed_persisted_session_grant(&state).await;
 

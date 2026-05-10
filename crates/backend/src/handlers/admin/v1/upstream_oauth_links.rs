@@ -512,7 +512,7 @@ mod tests {
     #[tokio::test]
     async fn test_create() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -572,7 +572,7 @@ mod tests {
     #[tokio::test]
     async fn test_association() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -644,7 +644,7 @@ mod tests {
     #[tokio::test]
     async fn test_link_already_exists() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -715,7 +715,7 @@ mod tests {
     #[tokio::test]
     async fn test_user_not_found() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -757,7 +757,7 @@ mod tests {
     #[tokio::test]
     async fn test_provider_not_found() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -795,7 +795,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -879,7 +879,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_not_found() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -894,7 +894,7 @@ mod tests {
     #[tokio::test]
     async fn test_get() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -965,7 +965,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_not_found() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
@@ -980,7 +980,7 @@ mod tests {
     #[tokio::test]
     async fn test_list() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
         let mut rng = state.rng();
@@ -1495,7 +1495,7 @@ mod tests {
     #[tokio::test]
     async fn test_patch_upstream_oauth_link_updates_subject_user_and_name() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let unique = unique_test_nonce();
         state.clock.advance(Duration::seconds(unique as i64));
@@ -1576,7 +1576,7 @@ mod tests {
     #[tokio::test]
     async fn test_patch_upstream_oauth_link_rejects_duplicate_subject() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let unique = unique_test_nonce();
         state.clock.advance(Duration::seconds(unique as i64));

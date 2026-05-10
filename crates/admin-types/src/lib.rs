@@ -16,15 +16,19 @@
 //! do not transitively pull salvo + schemars.
 
 pub mod applets_admin;
+pub mod connector_health;
 pub mod envelope;
 pub mod federation_admin;
+pub mod notification_admin;
 pub mod recovery_admin;
 pub mod risk_action;
 pub mod space_policy_admin;
 
 pub use applets_admin::*;
+pub use connector_health::*;
 pub use envelope::*;
 pub use federation_admin::*;
+pub use notification_admin::*;
 pub use recovery_admin::*;
 pub use risk_action::*;
 pub use space_policy_admin::*;

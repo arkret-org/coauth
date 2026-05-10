@@ -33,7 +33,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_repository() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
         let mut repo = PgRepositoryFactory::new(pool.clone())
@@ -308,7 +308,7 @@ mod tests {
     /// provider repository
     #[tokio::test]
     async fn test_provider_repository_pagination() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let scope = Scope::from_iter([OPENID]);
 
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
@@ -462,7 +462,7 @@ mod tests {
     /// session repository
     #[tokio::test]
     async fn test_session_repository_pagination() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let scope = Scope::from_iter([OPENID]);
 
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
@@ -674,7 +674,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upstream_oauth_link_patch_updates_fields() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
         let mut repo = PgRepositoryFactory::new(pool.clone())

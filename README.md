@@ -32,7 +32,7 @@ The primary Contrix paths already include:
 - `/api/v1/directory/resolve-handle`
 
 Some legacy naming and compatibility code still exists in non-primary paths.
-Track the remaining work in [`_todos.md`](_todos.md).
+Track the remaining work in the cross-project [`../_todos.md`](../_todos.md).
 
 ## Features
 

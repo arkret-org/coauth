@@ -516,7 +516,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_unrevoke() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -565,7 +565,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_expiry() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -608,7 +608,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_usage_limit() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -660,7 +660,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_and_count() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 

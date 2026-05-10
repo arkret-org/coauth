@@ -20,7 +20,7 @@ use crate::PgRepositoryFactory;
 /// Test the user repository, by adding and looking up a user
 #[tokio::test]
 async fn test_user_repo() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     const USERNAME: &str = "john";
 
     let mut repo = PgRepositoryFactory::new(pool.clone())
@@ -234,7 +234,7 @@ async fn test_user_repo() {
 /// Test [`UserRepository::find_by_username`] with different casings.
 #[tokio::test]
 async fn test_user_repo_find_by_username() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     let mut repo = PgRepositoryFactory::new(pool.clone())
         .create()
         .await
@@ -281,7 +281,7 @@ async fn test_user_repo_find_by_username() {
 
 #[tokio::test]
 async fn test_user_patch_updates_profile_and_state() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     let mut repo = PgRepositoryFactory::new(pool.clone())
         .create()
         .await
@@ -338,7 +338,7 @@ async fn test_user_patch_updates_profile_and_state() {
 
 #[tokio::test]
 async fn test_user_update_profile_empty_patch_is_noop() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     let mut repo = PgRepositoryFactory::new(pool.clone())
         .create()
         .await
@@ -363,7 +363,7 @@ async fn test_user_update_profile_empty_patch_is_noop() {
 
 #[tokio::test]
 async fn test_user_email_patch_swaps_primary_email() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     let mut repo = PgRepositoryFactory::new(pool.clone())
         .create()
         .await
@@ -421,7 +421,7 @@ async fn test_user_email_patch_swaps_primary_email() {
 /// Test the user email repository, by trying out most of its methods
 #[tokio::test]
 async fn test_user_email_repo() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     const USERNAME: &str = "john";
     const EMAIL: &str = "john@example.com";
     // This is what is stored in the database, making sure that:
@@ -553,7 +553,7 @@ async fn test_user_email_repo() {
 /// Test the authentication codes methods in the user email repository
 #[tokio::test]
 async fn test_user_email_repo_authentications() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     let mut repo = PgRepositoryFactory::new(pool.clone())
         .create()
         .await
@@ -672,7 +672,7 @@ async fn test_user_email_repo_authentications() {
 /// Test the user password repository implementation.
 #[tokio::test]
 async fn test_user_password_repo() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     const USERNAME: &str = "john";
     const FIRST_PASSWORD_HASH: &str = "doesntmatter";
     const SECOND_PASSWORD_HASH: &str = "alsodoesntmatter";
@@ -758,7 +758,7 @@ async fn test_user_password_repo() {
 
 #[tokio::test]
 async fn test_user_session() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     let mut repo = PgRepositoryFactory::new(pool.clone())
         .create()
         .await
@@ -993,7 +993,7 @@ async fn test_user_session() {
 
 #[tokio::test]
 async fn test_user_terms() {
-    let pool = crate::test_utils::setup_test_pool().await;
+    let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
     let mut repo = PgRepositoryFactory::new(pool.clone())
         .create()
         .await

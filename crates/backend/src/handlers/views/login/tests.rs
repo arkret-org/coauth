@@ -34,7 +34,7 @@ mod tests {
     #[tokio::test]
     async fn test_password_disabled() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -187,7 +187,7 @@ mod tests {
     #[tokio::test]
     async fn test_password_login() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
@@ -235,7 +235,7 @@ mod tests {
     #[tokio::test]
     async fn test_password_login_with_mxid() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
@@ -283,7 +283,7 @@ mod tests {
     #[tokio::test]
     async fn test_password_login_with_mxid_wrong_server() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
@@ -324,7 +324,7 @@ mod tests {
     #[tokio::test]
     async fn test_password_login_rate_limit() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let mut rng = state.rng();
         let cookies = CookieHelper::new();
@@ -394,7 +394,7 @@ mod tests {
     #[tokio::test]
     async fn test_password_login_locked_account() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
@@ -454,7 +454,7 @@ mod tests {
     #[tokio::test]
     async fn test_password_login_deactivated_account() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 

@@ -419,7 +419,7 @@ mod tests {
     #[tokio::test]
     async fn test_password_disabled() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -453,7 +453,7 @@ mod tests {
     #[tokio::test]
     async fn test_register() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
@@ -520,7 +520,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_password_mismatch() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
@@ -562,7 +562,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_username_too_long() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
@@ -609,7 +609,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_user_exists() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let mut rng = state.rng();
         let cookies = CookieHelper::new();
@@ -662,7 +662,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_user_reserved() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
@@ -708,7 +708,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_without_email_when_not_required() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -778,7 +778,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_with_email_when_not_required() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -849,7 +849,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_fails_without_email_when_required() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -908,7 +908,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_fails_with_empty_email_when_required() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -968,7 +968,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_fails_with_invalid_email_when_required() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {

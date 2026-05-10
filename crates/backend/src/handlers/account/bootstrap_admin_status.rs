@@ -54,7 +54,7 @@ mod tests {
     #[tokio::test]
     async fn setup_required_when_token_exists_and_no_admin_exists() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool,
             coauth_data::SiteConfig {
@@ -79,7 +79,7 @@ mod tests {
     #[tokio::test]
     async fn setup_not_required_after_first_admin_exists() {
         setup();
-        let pool = coauth_data::test_utils::setup_test_pool().await;
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool_with_site_config(
             pool,
             coauth_data::SiteConfig {

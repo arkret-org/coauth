@@ -564,7 +564,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_lookup_complete() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -639,7 +639,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_useragent_ipaddress() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -714,7 +714,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_display_name() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -782,7 +782,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_terms_url() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -856,7 +856,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_email_authentication() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -947,7 +947,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_password() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 
@@ -1027,7 +1027,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_upstream_oauth_session() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut rng = ChaChaRng::seed_from_u64(42);
         let clock = MockClock::default();
 

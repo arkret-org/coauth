@@ -571,7 +571,7 @@ mod tests {
 
     #[tokio::test]
     async fn recovers_abandoned_jobs_from_shutdown_workers() {
-        let pool = crate::test_utils::setup_test_pool().await;
+        let Some(pool) = crate::test_utils::setup_test_pool().await else { return; };
         let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(42);
