@@ -12,10 +12,10 @@ default:
 
 # One-click: start PostgreSQL + backend with dev config
 dev:
-    docker compose -f .devcontainer/docker-compose.yml up -d postgres
-    @echo "Waiting for PostgreSQL..."
-    @until docker compose -f .devcontainer/docker-compose.yml exec -T postgres pg_isready -U coauth > /dev/null 2>&1; do sleep 1; done
-    @if [ ! -f config.dev.yaml ]; then just config-dev-generate; fi
+    # docker compose -f .devcontainer/compose.yml up -d postgres
+    # @echo "Waiting for PostgreSQL..."
+    # @until docker compose -f .devcontainer/compose.yml exec -T postgres pg_isready -U coauth > /dev/null 2>&1; do sleep 1; done
+    # @if [ ! -f config.dev.yaml ]; then just config-dev-generate; fi
     cargo run -p coauth -- server -c config.dev.yaml
 
 # Stop dev services (PostgreSQL)
