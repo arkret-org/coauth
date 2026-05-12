@@ -355,12 +355,13 @@ pub async fn policy_factory_from_config(
         PolicyEngine::Cedar => {
             #[cfg(feature = "cedar")]
             {
-                let default_path =
-                    camino::Utf8PathBuf::from("/usr/local/share/coauth/cedar/default.cedar");
-                let path = config.cedar_policy_file.as_ref().unwrap_or(&default_path);
+                let path = config
+                    .cedar_policy_file
+                    .clone()
+                    .unwrap_or_else(default_cedar_policy_path);
                 PolicyFactory::load_cedar_from_file(path.as_str())
                     .await
-                    .context("failed to load Cedar policy")
+                    .with_context(|| format!("failed to load Cedar policy from {path}"))
             }
 
             #[cfg(not(feature = "cedar"))]
@@ -389,6 +390,22 @@ pub async fn policy_factory_from_config(
             )
         }
     }
+}
+
+#[cfg(feature = "cedar")]
+fn default_cedar_policy_path() -> camino::Utf8PathBuf {
+    let installed_path = camino::Utf8PathBuf::from("/usr/local/share/coauth/cedar/default.cedar");
+    if installed_path.exists() {
+        return installed_path;
+    }
+
+    let checkout_path = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../policies/cedar/default.cedar");
+    if checkout_path.exists() {
+        return checkout_path;
+    }
+
+    installed_path
 }
 
 pub fn captcha_config_from_config(
