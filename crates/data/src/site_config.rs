@@ -68,6 +68,11 @@ pub struct SiteConfig {
     /// required for password registrations.
     pub password_registration_contact_required: bool,
 
+    /// coauth extension: whether dev/test registration clients may skip
+    /// outbound verification email delivery. This keeps delivery policy and
+    /// recovery/contact business logic in coauth instead of soland.
+    pub registration_email_delivery_bypass_allowed: bool,
+
     /// coauth extension: whether registration tokens are required for password
     /// registrations.
     pub registration_token_required: bool,

@@ -171,6 +171,7 @@ pub fn test_site_config() -> SiteConfig {
         displayname_change_allowed: true,
         password_change_allowed: true,
         password_registration_contact_required: true,
+        registration_email_delivery_bypass_allowed: true,
         account_recovery_allowed: true,
         account_deactivation_allowed: true,
         captcha: None,

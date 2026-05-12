@@ -12,6 +12,7 @@ pub struct SiteConfigResponse {
     pub account_deactivation_allowed: bool,
     pub display_name_change_allowed: bool,
     pub password_registration_enabled: bool,
+    pub registration_email_delivery_bypass_allowed: bool,
     pub bootstrap_admin_token_enabled: bool,
     pub minimum_password_complexity: u8,
     pub imprint: Option<String>,
@@ -30,6 +31,8 @@ pub fn from_site_config(config: &SiteConfig) -> SiteConfigResponse {
         account_deactivation_allowed: config.account_deactivation_allowed,
         display_name_change_allowed: config.displayname_change_allowed,
         password_registration_enabled: config.password_registration_enabled,
+        registration_email_delivery_bypass_allowed: config
+            .registration_email_delivery_bypass_allowed,
         bootstrap_admin_token_enabled: config.bootstrap_admin_token.is_some(),
         minimum_password_complexity: config.minimum_password_complexity,
         imprint: config.imprint.clone(),

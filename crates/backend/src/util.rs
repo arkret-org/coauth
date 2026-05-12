@@ -465,6 +465,8 @@ pub fn site_config_from_config(
             && account_config.password_registration_enabled,
         password_registration_contact_required: account_config
             .password_registration_contact_required,
+        registration_email_delivery_bypass_allowed: account_config
+            .registration_email_delivery_bypass_allowed,
         registration_token_required: account_config.registration_token_required,
         bootstrap_admin_token: account_config.bootstrap_admin_token.clone(),
         email_change_allowed: account_config.email_change_allowed,

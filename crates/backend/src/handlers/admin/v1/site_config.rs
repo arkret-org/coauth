@@ -28,6 +28,9 @@ pub struct SiteConfig {
     /// password-based sign-up
     pub password_registration_contact_required: bool,
 
+    /// Whether dev/test clients may skip outbound verification email delivery
+    pub registration_email_delivery_bypass_allowed: bool,
+
     /// Whether a registration token is mandatory for sign-up
     pub registration_token_required: bool,
 
@@ -72,6 +75,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> Result<Json<SiteConfig
         password_login_enabled: cfg.password_login_enabled,
         password_registration_enabled: cfg.password_registration_enabled,
         password_registration_contact_required: cfg.password_registration_contact_required,
+        registration_email_delivery_bypass_allowed: cfg.registration_email_delivery_bypass_allowed,
         registration_token_required: cfg.registration_token_required,
         bootstrap_admin_token_enabled: cfg.bootstrap_admin_token.is_some(),
         email_change_allowed: cfg.email_change_allowed,

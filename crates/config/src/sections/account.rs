@@ -54,6 +54,12 @@ pub struct AccountConfig {
     )]
     pub password_registration_contact_required: bool,
 
+    /// Allow registration flows to bypass delivery of verification email in
+    /// dev/test deployments (default: `false`). Verification/recovery policy
+    /// remains in coauth; soland only provides DID/webvh primitives.
+    #[serde(default = "disabled_default", skip_serializing_if = "matches_disabled")]
+    pub registration_email_delivery_bypass_allowed: bool,
+
     /// Allow users to change their password (default: `true`). Irrelevant when
     /// password login is disabled.
     #[serde(default = "enabled_default", skip_serializing_if = "matches_enabled")]
@@ -98,6 +104,7 @@ impl Default for AccountConfig {
             displayname_change_allowed: ENABLED_BY_DEFAULT,
             password_registration_enabled: DISABLED_BY_DEFAULT,
             password_registration_contact_required: ENABLED_BY_DEFAULT,
+            registration_email_delivery_bypass_allowed: DISABLED_BY_DEFAULT,
             password_change_allowed: ENABLED_BY_DEFAULT,
             password_recovery_enabled: DISABLED_BY_DEFAULT,
             account_deactivation_allowed: ENABLED_BY_DEFAULT,
@@ -115,6 +122,8 @@ impl AccountConfig {
         matches_disabled(&self.password_registration_enabled)
             && matches_enabled(&self.email_change_allowed)
             && matches_enabled(&self.displayname_change_allowed)
+            && matches_enabled(&self.password_registration_contact_required)
+            && matches_disabled(&self.registration_email_delivery_bypass_allowed)
             && matches_enabled(&self.password_change_allowed)
             && matches_disabled(&self.password_recovery_enabled)
             && matches_enabled(&self.account_deactivation_allowed)
@@ -177,6 +186,26 @@ mod tests {
                 config.admin_portal_url.as_ref().map(Url::as_str),
                 Some("https://admin.example.com/")
             );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn loads_registration_email_delivery_bypass_from_env() {
+        figment::Jail::expect_with(|jail| {
+            jail.set_env(
+                "PASION_ACCOUNT__REGISTRATION_EMAIL_DELIVERY_BYPASS_ALLOWED",
+                "true",
+            );
+
+            let figment = Figment::new()
+                .merge(Env::prefixed("PASION_").split("__"))
+                .merge(Yaml::string(""));
+
+            let config = figment.extract_inner::<AccountConfig>("account")?;
+
+            assert!(config.registration_email_delivery_bypass_allowed);
 
             Ok(())
         });

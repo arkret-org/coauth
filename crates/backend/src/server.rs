@@ -750,6 +750,28 @@ fn build_account_api_router(router: Router) -> Router {
                     Router::with_path("register")
                         .post(register::post_register)
                         .push(
+                            Router::with_path("webvh")
+                                .push(Router::with_path("start").post(register::post_webvh_start))
+                                .push(
+                                    Router::with_path("{id}")
+                                        .push(
+                                            Router::with_path("email")
+                                                .post(register::post_webvh_email),
+                                        )
+                                        .push(
+                                            Router::with_path("verify-email")
+                                                .post(register::post_webvh_verify_email),
+                                        )
+                                        .push(
+                                            Router::with_path("finish")
+                                                .post(register::post_webvh_finish),
+                                        ),
+                                ),
+                        )
+                        .push(Router::with_path("did").push(
+                            Router::with_path("start").post(register::post_existing_did_start),
+                        ))
+                        .push(
                             Router::with_path("{id}")
                                 .get(register::get_registration)
                                 .push(

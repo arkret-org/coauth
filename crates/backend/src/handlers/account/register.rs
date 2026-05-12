@@ -5,15 +5,22 @@
 //! check config/policy constraints, delegate to service functions, and map
 //! results to JSON responses.
 
-use chrono::Utc;
+use std::{str::FromStr, time::Duration as StdDuration};
+
+use chrono::{Duration, Utc};
 use coauth_data::{
+    RepositoryAccess as _,
     flow::{FlowSession, FlowSessionStatus},
     new_id,
+    user::{UserEmailRepository as _, UserRegistrationRepository as _, UserRepository as _},
 };
+use lettre::Address;
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use ulid::Ulid;
+use url::Url;
+use zeroize::Zeroizing;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
 use crate::{
@@ -33,6 +40,7 @@ use crate::{
             submit_registration_phone_code,
         },
         flow::{FlowExecutor, defaults::default_registration_flow, flow_session_store_write},
+        notification_dispatch::{NotificationIntent, schedule_notification},
     },
     salvo_utils::SessionInfoExt,
 };
@@ -234,6 +242,679 @@ pub async fn post_register(
         error: None,
         flow_session_id,
     }))
+}
+
+// ── POST /api/v1/auth/register/webvh/start ────────────────────
+
+#[derive(Deserialize, ToSchema)]
+pub struct WebvhRegistrationStartInput {
+    pub username: String,
+    #[serde(default)]
+    pub principal_server_url: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct WebvhRegistrationStartResponse {
+    pub status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registration_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_step: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<&'static str>,
+    pub email_verification_bypass_allowed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[endpoint]
+pub async fn post_webvh_start(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<WebvhRegistrationStartResponse>, RouteError> {
+    let input: WebvhRegistrationStartInput = req
+        .parse_json()
+        .await
+        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
+
+    let site_config = depot.site_config()?;
+    if !site_config.password_registration_enabled {
+        return Ok(Json(WebvhRegistrationStartResponse {
+            status: "error",
+            registration_id: None,
+            next_step: None,
+            provider_id: None,
+            email_verification_bypass_allowed: site_config
+                .registration_email_delivery_bypass_allowed,
+            error: Some("registration_disabled".into()),
+        }));
+    }
+
+    let username = input.username.trim().to_owned();
+    if username.is_empty() {
+        return Ok(Json(WebvhRegistrationStartResponse {
+            status: "error",
+            registration_id: None,
+            next_step: None,
+            provider_id: None,
+            email_verification_bypass_allowed: site_config
+                .registration_email_delivery_bypass_allowed,
+            error: Some("username_required".into()),
+        }));
+    }
+
+    let principal_server = depot.principal_server()?;
+    let repo_factory = depot.repo_factory()?;
+    let clock = make_clock();
+    let mut rng = make_rng();
+    let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let user_agent = req
+        .headers()
+        .get("user-agent")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_owned());
+    let ip_address = activity_tracker.ip();
+    let mut repo = repo_factory.create().await?;
+
+    if repo.user().exists(&username).await? {
+        return Ok(Json(WebvhRegistrationStartResponse {
+            status: "error",
+            registration_id: None,
+            next_step: None,
+            provider_id: None,
+            email_verification_bypass_allowed: site_config
+                .registration_email_delivery_bypass_allowed,
+            error: Some("username_exists".into()),
+        }));
+    }
+    if matches!(
+        principal_server.is_username_available(&username).await,
+        Ok(false)
+    ) {
+        return Ok(Json(WebvhRegistrationStartResponse {
+            status: "error",
+            registration_id: None,
+            next_step: None,
+            provider_id: None,
+            email_verification_bypass_allowed: site_config
+                .registration_email_delivery_bypass_allowed,
+            error: Some("username_exists".into()),
+        }));
+    }
+
+    let mut registration = repo
+        .user_registration()
+        .add(
+            &mut *rng,
+            &clock,
+            username.clone(),
+            ip_address,
+            user_agent,
+            Some(json!({
+                "kind": "coauth.webvh_registration.v1",
+                "principal_server_url": input.principal_server_url,
+            })),
+        )
+        .await?;
+    registration = repo
+        .user_registration()
+        .set_display_name(registration, username)
+        .await?;
+    if let Some(tos_uri) = site_config.tos_uri.clone() {
+        registration = repo
+            .user_registration()
+            .set_terms_url(registration, tos_uri)
+            .await?;
+    }
+    repo.save().await?;
+
+    Ok(Json(WebvhRegistrationStartResponse {
+        status: "success",
+        registration_id: Some(registration.id.to_string()),
+        next_step: Some("email"),
+        provider_id: Some("soland.embedded"),
+        email_verification_bypass_allowed: site_config.registration_email_delivery_bypass_allowed,
+        error: None,
+    }))
+}
+
+// ── POST /api/v1/auth/register/webvh/:id/email ────────────────
+
+#[derive(Deserialize, ToSchema)]
+pub struct WebvhRegistrationEmailInput {
+    pub email: String,
+    #[serde(default)]
+    pub skip_email_delivery: bool,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct WebvhRegistrationEmailResponse {
+    pub status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_step: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dev_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[endpoint]
+pub async fn post_webvh_email(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<WebvhRegistrationEmailResponse>, RouteError> {
+    let id: Ulid = req
+        .param::<String>("id")
+        .ok_or(RouteError::BadRequest("missing id".into()))?
+        .parse()
+        .map_err(|_| RouteError::BadRequest("invalid id".into()))?;
+    let input: WebvhRegistrationEmailInput = req
+        .parse_json()
+        .await
+        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
+    let site_config = depot.site_config()?;
+    let email = input.email.trim();
+    if Address::from_str(email).is_err() {
+        return Ok(Json(WebvhRegistrationEmailResponse {
+            status: "error",
+            next_step: None,
+            delivery: None,
+            dev_code: None,
+            error: Some("email_invalid".into()),
+        }));
+    }
+    if input.skip_email_delivery && !site_config.registration_email_delivery_bypass_allowed {
+        return Ok(Json(WebvhRegistrationEmailResponse {
+            status: "error",
+            next_step: None,
+            delivery: None,
+            dev_code: None,
+            error: Some("email_delivery_bypass_not_allowed".into()),
+        }));
+    }
+
+    let repo_factory = depot.repo_factory()?;
+    let limiter = depot.limiter()?;
+    let clock = make_clock();
+    let mut rng = make_rng();
+    let notification_language = crate::handlers::notification_language(req, depot, None);
+    let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let requester = activity_tracker
+        .ip()
+        .map(RequesterFingerprint::new)
+        .unwrap_or(RequesterFingerprint::EMPTY);
+    let mut repo = repo_factory.create().await?;
+
+    let Some(registration) = repo.user_registration().lookup(id).await? else {
+        return Err(RouteError::NotFound);
+    };
+    if registration.completed_at.is_some() {
+        return Ok(Json(WebvhRegistrationEmailResponse {
+            status: "error",
+            next_step: None,
+            delivery: None,
+            dev_code: None,
+            error: Some("registration_already_completed".into()),
+        }));
+    }
+    if repo.user_email().find_by_email(email).await?.is_some() {
+        return Ok(Json(WebvhRegistrationEmailResponse {
+            status: "error",
+            next_step: None,
+            delivery: None,
+            dev_code: None,
+            error: Some("email_in_use".into()),
+        }));
+    }
+    if limiter
+        .check_email_authentication_email(requester, email)
+        .await
+        .is_err()
+    {
+        return Ok(Json(WebvhRegistrationEmailResponse {
+            status: "error",
+            next_step: None,
+            delivery: None,
+            dev_code: None,
+            error: Some("rate_limited".into()),
+        }));
+    }
+
+    let authentication = repo
+        .user_email()
+        .add_authentication_for_registration(&mut *rng, &clock, email.to_owned(), &registration)
+        .await?;
+    let _registration = repo
+        .user_registration()
+        .set_email_authentication(registration, &authentication)
+        .await?;
+
+    let (delivery, dev_code) = if input.skip_email_delivery {
+        let code = "123456".to_owned();
+        let _ = repo
+            .user_email()
+            .add_authentication_code(
+                &mut *rng,
+                &clock,
+                Duration::minutes(15),
+                &authentication,
+                code.clone(),
+            )
+            .await?;
+        ("skipped", Some(code))
+    } else {
+        schedule_notification(
+            &mut repo,
+            &mut *rng,
+            &clock,
+            NotificationIntent::verify_email(&authentication, notification_language),
+        )
+        .await?;
+        ("email", None)
+    };
+    repo.save().await?;
+
+    Ok(Json(WebvhRegistrationEmailResponse {
+        status: "sent",
+        next_step: Some("verify_email"),
+        delivery: Some(delivery),
+        dev_code,
+        error: None,
+    }))
+}
+
+// ── POST /api/v1/auth/register/webvh/:id/verify-email ─────────
+
+#[endpoint]
+pub async fn post_webvh_verify_email(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<VerifyEmailResponse>, RouteError> {
+    let id: Ulid = req
+        .param::<String>("id")
+        .ok_or(RouteError::BadRequest("missing id".into()))?
+        .parse()
+        .map_err(|_| RouteError::BadRequest("invalid id".into()))?;
+
+    let input: VerifyEmailInput = req
+        .parse_json()
+        .await
+        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
+
+    let repo_factory = depot.repo_factory()?;
+    let limiter = depot.limiter()?;
+    let clock = make_clock();
+    let repo = repo_factory.create().await?;
+
+    let outcome =
+        match submit_registration_email_code(repo, &limiter, &clock, id, &input.code).await {
+            Ok(outcome) => outcome,
+            Err(RegistrationVerificationError::NotFound) => return Err(RouteError::NotFound),
+            Err(RegistrationVerificationError::NotAvailable) => {
+                return Err(RouteError::BadRequest(
+                    "no email authentication for this registration".into(),
+                ));
+            }
+            Err(RegistrationVerificationError::Repository(error)) => return Err(error.into()),
+        };
+
+    let (status, next_step, error) = match outcome {
+        RegistrationVerificationOutcome::Advanced { next_step } => {
+            ("success", Some(next_step), None)
+        }
+        RegistrationVerificationOutcome::RegistrationCompleted => {
+            ("error", None, Some("registration_already_completed".into()))
+        }
+        RegistrationVerificationOutcome::AlreadyVerified => {
+            ("error", None, Some("email_already_verified".into()))
+        }
+        RegistrationVerificationOutcome::InvalidCode => {
+            ("error", None, Some("invalid_code".into()))
+        }
+        RegistrationVerificationOutcome::RateLimited => {
+            ("error", None, Some("rate_limited".into()))
+        }
+    };
+
+    Ok(Json(VerifyEmailResponse {
+        status,
+        next_step,
+        error,
+    }))
+}
+
+// ── POST /api/v1/auth/register/webvh/:id/finish ───────────────
+
+#[derive(Deserialize, ToSchema)]
+pub struct WebvhRegistrationFinishInput {
+    pub public_key_multibase: String,
+    #[serde(default)]
+    pub key_id: Option<String>,
+    #[serde(default)]
+    pub device_id: Option<String>,
+    pub password: String,
+    pub password_confirm: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct WebvhRegistrationFinishResponse {
+    pub status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    pub did: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_log_head: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub did_document: Value,
+    #[serde(default)]
+    pub did_log: Vec<Value>,
+}
+
+#[endpoint]
+pub async fn post_webvh_finish(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<WebvhRegistrationFinishResponse>, RouteError> {
+    let id: Ulid = req
+        .param::<String>("id")
+        .ok_or(RouteError::BadRequest("missing id".into()))?
+        .parse()
+        .map_err(|_| RouteError::BadRequest("invalid id".into()))?;
+    let input: WebvhRegistrationFinishInput = req
+        .parse_json()
+        .await
+        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
+    if input.password != input.password_confirm {
+        return Ok(Json(webvh_finish_error("password_mismatch")));
+    }
+    if input.public_key_multibase.trim().is_empty() {
+        return Ok(Json(webvh_finish_error("public_key_required")));
+    }
+
+    let site_config = depot.site_config()?;
+    let password_manager = depot.password_manager()?;
+    if !site_config.password_registration_enabled || !site_config.password_login_enabled {
+        return Ok(Json(webvh_finish_error("registration_disabled")));
+    }
+    if !password_manager
+        .is_password_complex_enough(&input.password)
+        .map_err(|error| RouteError::Internal(error.into()))?
+    {
+        return Ok(Json(webvh_finish_error("password_too_weak")));
+    }
+
+    let repo_factory = depot.repo_factory()?;
+    let principal_server = depot.principal_server()?;
+    let contrix_config = depot.contrix_config()?;
+    let http_client = depot.http_client()?;
+    let clock = make_clock();
+    let mut rng = make_rng();
+    let user_agent = req
+        .headers()
+        .get("user-agent")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_owned());
+
+    let mut repo = repo_factory.create().await?;
+    let Some(registration) = repo.user_registration().lookup(id).await? else {
+        return Err(RouteError::NotFound);
+    };
+    let principal_url = registration_webvh_principal_url(&registration.post_auth_action);
+    let target = resolve_webvh_target(&contrix_config, principal_url.as_deref())
+        .map_err(RouteError::BadRequest)?;
+    let (version, password_hash) = password_manager
+        .hash(&mut *rng, Zeroizing::new(input.password))
+        .await
+        .map_err(|error| RouteError::Internal(error.into()))?;
+    let registration = repo
+        .user_registration()
+        .set_password(registration, password_hash, version)
+        .await?;
+    repo.save().await?;
+
+    let webvh = register_soland_webvh(
+        http_client,
+        &target,
+        registration.username.as_str(),
+        input.public_key_multibase.trim(),
+        input.key_id.as_deref().unwrap_or("key-1"),
+    )
+    .await
+    .map_err(RouteError::BadRequest)?;
+
+    let repo = repo_factory.create().await?;
+    let outcome = finish_registration(
+        repo,
+        &mut rng,
+        &clock,
+        principal_server.as_ref(),
+        id,
+        None,
+        PrincipalServerCheckMode::BestEffort,
+        site_config.registration_token_required,
+        site_config.bootstrap_admin_token.as_deref(),
+        None,
+        user_agent,
+    )
+    .await
+    .map_err(|error| match error {
+        RegistrationFinishError::NotFound => RouteError::NotFound,
+        RegistrationFinishError::Repository(error) => RouteError::from(error),
+        RegistrationFinishError::Internal(error) => RouteError::Internal(error.into()),
+    })?;
+
+    let completed = match outcome {
+        RegistrationFinishOutcome::Completed(completed) => completed,
+        RegistrationFinishOutcome::Rejected { error } => {
+            return Ok(Json(webvh_finish_error(error)));
+        }
+    };
+
+    Ok(Json(WebvhRegistrationFinishResponse {
+        status: "success",
+        error: None,
+        username: Some(completed.user.username),
+        did: webvh.did,
+        key_id: webvh.key_id,
+        key_log_head: webvh.key_log_head,
+        document_url: webvh.document_url,
+        log_url: webvh.log_url,
+        provider_id: webvh.provider_id,
+        did_document: webvh.did_document,
+        did_log: webvh.did_log,
+    }))
+}
+
+// ── POST /api/v1/auth/register/did/start ──────────────────────
+
+#[derive(Deserialize, ToSchema)]
+pub struct ExistingDidRegistrationInput {
+    pub did: String,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub device_id: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ExistingDidRegistrationResponse {
+    pub status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub did: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_step: Option<&'static str>,
+}
+
+#[endpoint]
+pub async fn post_existing_did_start(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<ExistingDidRegistrationResponse>, RouteError> {
+    let input: ExistingDidRegistrationInput = req
+        .parse_json()
+        .await
+        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
+    let did = input.did.trim();
+    if !did.starts_with("did:") {
+        return Ok(Json(ExistingDidRegistrationResponse {
+            status: "error",
+            error: Some("invalid_did".into()),
+            did: None,
+            proof_url: None,
+            next_step: None,
+        }));
+    }
+    let proof_url = depot
+        .url_builder()?
+        .absolute_url("/register/did/proof")
+        .to_string();
+    Ok(Json(ExistingDidRegistrationResponse {
+        status: "proof_required",
+        error: None,
+        did: Some(did.to_owned()),
+        proof_url: Some(proof_url),
+        next_step: Some("did_proof"),
+    }))
+}
+
+fn webvh_finish_error(error: impl Into<String>) -> WebvhRegistrationFinishResponse {
+    WebvhRegistrationFinishResponse {
+        status: "error",
+        error: Some(error.into()),
+        username: None,
+        did: String::new(),
+        key_id: None,
+        key_log_head: None,
+        document_url: None,
+        log_url: None,
+        provider_id: None,
+        did_document: Value::Null,
+        did_log: Vec::new(),
+    }
+}
+
+fn registration_webvh_principal_url(post_auth_action: &Option<Value>) -> Option<String> {
+    post_auth_action
+        .as_ref()
+        .and_then(|value| value.get("principal_server_url"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+#[derive(Clone)]
+struct WebvhTarget {
+    endpoint: Url,
+    bearer: String,
+}
+
+fn resolve_webvh_target(
+    config: &coauth_config::ContrixConfig,
+    requested: Option<&str>,
+) -> Result<WebvhTarget, String> {
+    let requested = requested.and_then(|value| Url::parse(value).ok());
+    let candidate = config
+        .principal_servers
+        .iter()
+        .filter(|server| {
+            server
+                .embedded_webvh_registration_bearer
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty())
+        })
+        .find(|server| {
+            requested
+                .as_ref()
+                .map(|requested| urls_match(requested, &server.endpoint))
+                .unwrap_or(true)
+        });
+    let Some(server) = candidate else {
+        return Err("embedded_webvh_provider_not_configured".to_owned());
+    };
+    let endpoint = server
+        .endpoint
+        .join("api/v1/identity/webvh/register")
+        .map_err(|_| "embedded_webvh_provider_url_invalid".to_owned())?;
+    let bearer = server
+        .embedded_webvh_registration_bearer
+        .clone()
+        .unwrap_or_default();
+    Ok(WebvhTarget { endpoint, bearer })
+}
+
+fn urls_match(left: &Url, right: &Url) -> bool {
+    left.as_str().trim_end_matches('/') == right.as_str().trim_end_matches('/')
+}
+
+#[derive(Deserialize)]
+struct SolandEmbeddedWebvhResponse {
+    pub did: String,
+    #[serde(default)]
+    pub key_id: Option<String>,
+    #[serde(default)]
+    pub key_log_head: Option<String>,
+    #[serde(default)]
+    pub document_url: Option<String>,
+    #[serde(default)]
+    pub log_url: Option<String>,
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub did_document: Value,
+    #[serde(default)]
+    pub did_log: Vec<Value>,
+}
+
+async fn register_soland_webvh(
+    http_client: reqwest::Client,
+    target: &WebvhTarget,
+    username: &str,
+    public_key_multibase: &str,
+    key_id: &str,
+) -> Result<SolandEmbeddedWebvhResponse, String> {
+    let response = http_client
+        .post(target.endpoint.clone())
+        .bearer_auth(target.bearer.as_str())
+        .timeout(StdDuration::from_secs(10))
+        .json(&json!({
+            "local_id": username,
+            "public_key_multibase": public_key_multibase,
+            "key_id": key_id,
+            "also_known_as": [format!("acct:{username}")],
+        }))
+        .send()
+        .await
+        .map_err(|error| format!("embedded_webvh_provider_unreachable:{error}"))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("embedded_webvh_provider_body:{error}"))?;
+    if !status.is_success() {
+        return Err(format!(
+            "embedded_webvh_provider_error:{status}:{}",
+            body.chars().take(256).collect::<String>()
+        ));
+    }
+    serde_json::from_str(&body).map_err(|error| format!("embedded_webvh_provider_json:{error}"))
 }
 
 // ── GET /api/v1/auth/register/:id ──────────────────────────────
