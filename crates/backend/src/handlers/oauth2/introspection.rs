@@ -203,10 +203,11 @@ async fn handle_post(
     if let Some(token) = credentials.bearer_token() {
         // If the client presented a bearer token, we check with the PrincipalServer
         // configuration if it is allowed to use the introspection endpoint
-        if !principal_server
-            .verify_token(token)
-            .await
-            .map_err(RouteError::FailedToVerifyToken)?
+        if !principal_server_static_oauth_bearer_matches(&contrix_config, token)
+            && !principal_server
+                .verify_token(token)
+                .await
+                .map_err(RouteError::FailedToVerifyToken)?
         {
             return Err(RouteError::InvalidBearerToken);
         }
@@ -270,6 +271,18 @@ async fn handle_post(
     repo.save().await?;
 
     Ok(reply)
+}
+
+fn principal_server_static_oauth_bearer_matches(
+    contrix_config: &ContrixConfig,
+    token: &str,
+) -> bool {
+    !token.trim().is_empty()
+        && contrix_config
+            .principal_servers
+            .iter()
+            .filter_map(|server| server.oauth_introspection_bearer.as_deref())
+            .any(|configured| configured == token)
 }
 
 #[cfg(test)]

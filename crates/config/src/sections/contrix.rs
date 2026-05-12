@@ -116,6 +116,23 @@ pub struct PrincipalServerConfig {
     /// Optional DID advertised for this Principal Server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub did: Option<String>,
+
+    /// Optional static bearer token accepted when this Principal Server calls
+    /// coauth's OAuth 2.0 introspection endpoint. This is intended for
+    /// server-to-server resource-server authentication, not for browser
+    /// clients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth_introspection_bearer: Option<String>,
+
+    /// Optional static bearer token accepted when this Principal Server calls
+    /// coauth's legacy Contrix session-grant introspection endpoint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_grant_introspection_bearer: Option<String>,
+
+    /// Optional static bearer token coauth should send when writing embedded
+    /// `did:webvh` registration records into this Principal Server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedded_webvh_registration_bearer: Option<String>,
 }
 
 /// External identity-registry resolver configuration.
