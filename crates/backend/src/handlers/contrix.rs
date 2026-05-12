@@ -94,13 +94,13 @@ impl From<coauth_data::RepositoryError> for ContrixRouteError {
 enum SessionGrantAuthz {
     /// The caller presented an admin scope. Allowed for read and write.
     Admin,
-    /// The caller presented the Principal Server `session.bind` scope.
+    /// The caller presented the server_name `session.bind` scope.
     /// Allowed for read-only paths (list / introspect).
     PrincipalServer,
 }
 
 /// Resolve the bearer token on the request and require either an admin
-/// scope or the Principal Server session-bind scope. Used by the
+/// scope or the server_name session-bind scope. Used by the
 /// session-grant admin surface to gate access without going through the
 /// heavier admin call-context extractor.
 async fn require_session_grant_caller(
@@ -750,8 +750,8 @@ pub(crate) enum SessionGrantTargetError {
 ///
 /// `requested_audience` is the audience the client proved during the login
 /// ceremony (e.g. carried in a request body field or audience-bound state).
-/// When supplied, only an exact match against a configured principal server
-/// is accepted — falling back to "first principal server wins" silently
+/// When supplied, only an exact match against a configured server_name
+/// is accepted — falling back to "first server_name wins" silently
 /// would let any caller mint a grant for an audience they never asked for.
 ///
 /// When `requested_audience` is `None` and exactly one principal server is
@@ -851,7 +851,7 @@ fn service_boundary_descriptor() -> ServiceBoundaryDescriptor {
             "principal_server_write_authorization",
         ],
         delegated_to: vec!["identity_registry", "principal_server_authorization_engine"],
-        principal_server_authorization: "Principal Server writes are decided by the downstream authorization engine from session grants, capabilities, and Space policy.",
+        principal_server_authorization: "server_name writes are decided by the downstream authorization engine from session grants, capabilities, and Space policy.",
     }
 }
 
@@ -1038,8 +1038,6 @@ fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) 
     tokens.into_iter().find_map(|token| {
         token
             .strip_prefix("urn:contrix:client:device:")
-            .or_else(|| token.strip_prefix("urn:matrix:client:device:"))
-            .or_else(|| token.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:"))
             .map(ToOwned::to_owned)
     })
 }
@@ -1322,7 +1320,7 @@ pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Opti
     let suffix = format!("@{}", url_builder.public_hostname().to_lowercase());
     handle
         .strip_suffix(&suffix)
-        .filter(|localpart| !localpart.is_empty())
+        .filter(|username| !username.is_empty())
         .map(ToOwned::to_owned)
 }
 
@@ -1587,7 +1585,7 @@ pub async fn revoke_session_grant(
     let id = Ulid::from_string(&raw_id)
         .map_err(|_| ContrixRouteError::BadRequest("invalid session grant id".into()))?;
 
-    // Revocation is destructive — Principal Server scope is not enough.
+    // Revocation is destructive — server_name scope is not enough.
     match require_session_grant_caller(req, depot).await? {
         SessionGrantAuthz::Admin => {}
         SessionGrantAuthz::PrincipalServer => {

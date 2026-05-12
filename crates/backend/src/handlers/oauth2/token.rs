@@ -5,8 +5,8 @@ use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SiteConfig, SystemClock, UrlBuilder,
 };
 use coauth_keystore::Keystore;
-use coauth_matrix::HomeserverAdmin;
 use coauth_policy::Policy;
+use coauth_principal::PrincipalServerAdmin;
 use coauth_templates::Templates;
 use oauth2_types::{
     errors::{ClientError, ClientErrorCode},
@@ -373,9 +373,9 @@ async fn handle_post(
         .get::<ContrixConfig>("contrix_config")
         .cloned()
         .unwrap_or_default();
-    let homeserver = depot
-        .get::<Arc<dyn HomeserverAdmin>>("homeserver_admin")
-        .expect("HomeserverAdmin not found in depot");
+    let principal_server = depot
+        .get::<Arc<dyn PrincipalServerAdmin>>("principal_server_admin")
+        .expect("PrincipalServerAdmin not found in depot");
     let site_config = depot
         .get::<SiteConfig>("site_config")
         .expect("SiteConfig not found in depot");
@@ -458,7 +458,7 @@ async fn handle_post(
                 &contrix_config,
                 site_config,
                 repo,
-                homeserver,
+                principal_server,
                 templates,
                 user_agent,
             )
@@ -506,7 +506,7 @@ async fn handle_post(
                 &contrix_config,
                 site_config,
                 repo,
-                homeserver,
+                principal_server,
                 user_agent,
             )
             .await?;

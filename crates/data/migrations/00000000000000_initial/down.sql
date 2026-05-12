@@ -1,3 +1,54 @@
+-- Consolidated from 20260510000200_account_starid_backend_marker/down.sql
+ALTER TABLE users
+    DROP COLUMN IF EXISTS starid_backend;
+
+-- Consolidated from 20260510000100_oauth2_clients_i18n/down.sql
+ALTER TABLE oauth2_clients DROP COLUMN IF EXISTS i18n;
+
+-- Consolidated from 20260509000300_webauthn_credentials/down.sql
+DROP TABLE IF EXISTS webauthn_credentials;
+
+-- Consolidated from 20260509000200_risk_action_proposals/down.sql
+DROP TABLE IF EXISTS risk_action_proposals;
+
+-- Consolidated from 20260509000100_invite_quarantine_queue/down.sql
+DROP TABLE IF EXISTS invite_quarantine_queue;
+
+-- Consolidated from 20260506000200_account_claims/down.sql
+DROP TABLE IF EXISTS account_claims;
+
+-- Consolidated from 20260429000100_session_grants/down.sql
+DROP TABLE IF EXISTS oauth2_session_grants;
+
+-- Consolidated from 20260420000100_notification_delivery_provider_lookup/down.sql
+DROP INDEX IF EXISTS notification_deliveries_provider_message_lookup;
+
+-- Consolidated from 20260407000100_upstream_oauth_provider_source/down.sql
+ALTER TABLE upstream_oauth_providers DROP COLUMN source;
+
+-- Consolidated from 20260401000200_add_notification_template_versions/down.sql
+DROP TABLE IF EXISTS notification_template_versions;
+
+-- Consolidated from 20260401000100_add_user_totp/down.sql
+DROP TABLE IF EXISTS user_totp_configs;
+
+-- Consolidated from 20260331000100_profile_patch_refactor/down.sql
+DROP TABLE IF EXISTS notification_preferences;
+
+ALTER TABLE upstream_oauth_links
+    DROP COLUMN IF EXISTS updated_at;
+
+ALTER TABLE user_emails
+    DROP COLUMN IF EXISTS updated_at,
+    DROP COLUMN IF EXISTS confirmed_at,
+    DROP COLUMN IF EXISTS is_primary;
+
+ALTER TABLE users
+    DROP COLUMN IF EXISTS updated_at,
+    DROP COLUMN IF EXISTS display_name,
+    DROP COLUMN IF EXISTS avatar_url,
+    DROP COLUMN IF EXISTS preferred_locale;
+
 -- This migration drops all tables. Only use in development.
 DROP TABLE IF EXISTS account_security_events CASCADE;
 DROP TABLE IF EXISTS admin_operation_logs CASCADE;

@@ -135,7 +135,7 @@ pub async fn get_link(
     let url_builder = depot.url_builder()?;
     let site_config = depot.site_config()?;
     let ip_address = extract_bound_activity_tracker(req, depot).ip();
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let mut policy = depot
         .policy_factory()?
         .instantiate()
@@ -152,7 +152,7 @@ pub async fn get_link(
         &mut *rng,
         &*clock,
         &url_builder,
-        &*homeserver,
+        &*principal_server,
         &mut policy,
         &site_config,
         user_agent,
@@ -198,7 +198,7 @@ pub async fn post_link(
         .instantiate()
         .await
         .map_err(|e| RouteError::Internal(e.into()))?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let url_builder = depot.url_builder()?;
     let site_config = depot.site_config()?;
     let ip_address = extract_bound_activity_tracker(req, depot).ip();
@@ -234,7 +234,7 @@ pub async fn post_link(
         &mut *rng,
         &*clock,
         &url_builder,
-        &*homeserver,
+        &*principal_server,
         &mut policy,
         &site_config,
         user_agent,
@@ -481,13 +481,13 @@ fn map_upstream_link_workflow_error(error: UpstreamLinkWorkflowError) -> RouteEr
         }
         UpstreamLinkWorkflowError::ConflictFail { .. }
         | UpstreamLinkWorkflowError::ConflictSetBlocked { .. }
-        | UpstreamLinkWorkflowError::PolicyDeniedLocalpart { .. }
-        | UpstreamLinkWorkflowError::LocalpartUnavailable { .. } => {
+        | UpstreamLinkWorkflowError::PolicyDeniedUsername { .. }
+        | UpstreamLinkWorkflowError::UsernameUnavailable { .. } => {
             RouteError::BadRequest(error.to_string().into())
         }
         UpstreamLinkWorkflowError::RequiredAttributeEmpty { .. }
         | UpstreamLinkWorkflowError::RequiredAttributeRender { .. }
-        | UpstreamLinkWorkflowError::HomeserverAdmin(_)
+        | UpstreamLinkWorkflowError::PrincipalServerAdmin(_)
         | UpstreamLinkWorkflowError::Repository(_)
         | UpstreamLinkWorkflowError::Internal(_) => RouteError::Internal(Box::new(error)),
     }

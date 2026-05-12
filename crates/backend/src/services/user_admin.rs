@@ -9,7 +9,7 @@ use coauth_data::{
     upstream_oauth2::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
     user::{UserEmailRepository, UserRepository},
 };
-use coauth_matrix::HomeserverAdmin;
+use coauth_principal::PrincipalServerAdmin;
 use lettre::address::AddressError;
 use rand_core::RngCore;
 use thiserror::Error;
@@ -54,7 +54,7 @@ pub enum UserAdminServiceError {
     UpstreamSubjectAlreadyLinked { provider_id: Ulid, subject: String },
 
     #[error(transparent)]
-    Homeserver(AnyhowError),
+    PrincipalServer(AnyhowError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -64,11 +64,11 @@ pub async fn patch_user(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     admin_user: Option<&User>,
     user_id: Ulid,
     patch: AdminUserPatch,
-    hs_erase: bool,
+    principal_erase: bool,
 ) -> Result<User, UserAdminServiceError> {
     validate_admin_patch(&patch)?;
 
@@ -93,18 +93,18 @@ pub async fn patch_user(
         .await?;
 
     if should_reactivate {
-        homeserver
+        principal_server
             .reactivate_user(&updated.username)
             .await
-            .map_err(UserAdminServiceError::Homeserver)?;
+            .map_err(UserAdminServiceError::PrincipalServer)?;
     }
 
     if updated.deactivated_at.is_none() {
-        sync_display_name_patch(homeserver, &updated, display_name_patch)
+        sync_display_name_patch(principal_server, &updated, display_name_patch)
             .await
             .map_err(|error| match error {
-                crate::services::user_profile::UserProfileServiceError::Homeserver(error) => {
-                    UserAdminServiceError::Homeserver(error)
+                crate::services::user_profile::UserProfileServiceError::PrincipalServer(error) => {
+                    UserAdminServiceError::PrincipalServer(error)
                 }
                 crate::services::user_profile::UserProfileServiceError::InvalidDisplayName => {
                     UserAdminServiceError::InvalidDisplayName
@@ -129,7 +129,7 @@ pub async fn patch_user(
 
     if should_schedule_deactivation {
         repo.queue_job()
-            .schedule_job(rng, clock, DeactivateUserJob::new(&updated, hs_erase))
+            .schedule_job(rng, clock, DeactivateUserJob::new(&updated, principal_erase))
             .await?;
     }
 
@@ -143,7 +143,7 @@ pub async fn patch_user(
         Some(updated.id),
         serde_json::json!({
             "patch": patch,
-            "hs_erase": hs_erase,
+            "principal_erase": principal_erase,
         }),
     )
     .await?;

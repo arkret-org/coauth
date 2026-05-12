@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Contrix Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
-// Originally developed for the Matrix project.
+// Originally developed for the legacy delegated-auth connector.
 
 mod mock;
 mod readonly;
@@ -7,10 +7,8 @@ pub mod registry;
 
 use std::{collections::HashSet, sync::Arc};
 
-use ruma_common::UserId;
-
 pub use self::{
-    mock::HomeserverAdmin as MockHomeserverAdmin, readonly::ReadOnlyHomeserverAdmin,
+    mock::PrincipalServerAdmin as MockPrincipalServerAdmin, readonly::ReadOnlyPrincipalServerAdmin,
     registry::ConnectorRegistry,
 };
 
@@ -25,12 +23,10 @@ pub struct ConnectorCapabilities {
     pub can_manage_devices: bool,
     /// Whether the connector can set display names.
     pub can_set_displayname: bool,
-    /// Whether the connector supports cross-signing reset.
-    pub can_cross_signing_reset: bool,
 }
 
 #[derive(Debug)]
-pub struct MatrixUser {
+pub struct PrincipalAccountProfile {
     pub displayname: Option<String>,
     pub avatar_url: Option<String>,
     pub deactivated: bool,
@@ -66,8 +62,8 @@ impl<T> FieldUpdate<T> {
     }
 }
 
-pub struct ProvisionRequest {
-    localpart: String,
+pub struct PrincipalProvisionRequest {
+    username: String,
     sub: String,
     displayname: FieldUpdate<String>,
     avatar_url: FieldUpdate<String>,
@@ -75,17 +71,17 @@ pub struct ProvisionRequest {
     admin: bool,
 }
 
-impl ProvisionRequest {
-    /// Create a new [`ProvisionRequest`].
+impl PrincipalProvisionRequest {
+    /// Create a new [`PrincipalProvisionRequest`].
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to provision.
+    /// * `username` - The username of the user to provision.
     /// * `sub` - The `sub` of the user, aka the internal ID.
     #[must_use]
-    pub fn new(localpart: impl Into<String>, sub: impl Into<String>) -> Self {
+    pub fn new(username: impl Into<String>, sub: impl Into<String>) -> Self {
         Self {
-            localpart: localpart.into(),
+            username: username.into(),
             sub: sub.into(),
             displayname: FieldUpdate::default(),
             avatar_url: FieldUpdate::default(),
@@ -100,10 +96,10 @@ impl ProvisionRequest {
         self.sub.as_str()
     }
 
-    /// Get the localpart of the user to provision.
+    /// Get the username of the user to provision.
     #[must_use]
-    pub fn localpart(&self) -> &str {
-        self.localpart.as_str()
+    pub fn username(&self) -> &str {
+        self.username.as_str()
     }
 
     /// Ask to set the displayname of the user.
@@ -201,56 +197,43 @@ impl ProvisionRequest {
         self
     }
 
-    /// Mark the user as a homeserver admin.
+    /// Mark the user as an administrator in the downstream principal system.
     #[must_use]
     pub fn set_admin(mut self) -> Self {
         self.admin = true;
         self
     }
 
-    /// Whether the user should be a homeserver admin.
+    /// Whether the user should be an administrator in the downstream principal
+    /// system.
     #[must_use]
     pub fn is_admin(&self) -> bool {
         self.admin
     }
 }
 
-/// Trait defining operations against a Matrix homeserver.
+/// Trait defining account and device synchronization hooks for a downstream
+/// Contrix principal system.
 ///
-/// Implementations can target real homeservers (e.g. via the admin API) or
-/// in-memory fakes for testing.
+/// This trait keeps account-lifecycle call sites testable while
+/// Contrix/Soland integrations use session grants and Principal Server
+/// discovery.
 #[async_trait::async_trait]
-pub trait HomeserverAdmin: Send + Sync {
-    /// Get the homeserver URL.
-    fn homeserver(&self) -> &str;
+pub trait PrincipalServerAdmin: Send + Sync {
+    /// Get the principal system authority used for generated account
+    /// identifiers.
+    fn principal_authority(&self) -> &str;
 
-    /// Get the Matrix ID of the user with the given localpart.
+    /// Get the downstream principal account ID for the given username.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user.
-    fn mxid(&self, localpart: &str) -> String {
-        format!("@{}:{}", localpart, self.homeserver())
+    /// * `username` - The local account username.
+    fn principal_id(&self, username: &str) -> String {
+        format!("{username}@{}", self.principal_authority())
     }
 
-    /// Get the localpart of a Matrix ID if it has the right server name
-    ///
-    /// Returns [`None`] if the input isn't a valid MXID, or if the server name
-    /// doesn't match
-    ///
-    /// # Parameters
-    ///
-    /// * `mxid` - The MXID of the user
-    fn localpart<'a>(&self, mxid: &'a str) -> Option<&'a str> {
-        let parsed = <&UserId>::try_from(mxid).ok()?;
-        if parsed.server_name() != self.homeserver() {
-            return None;
-        }
-        Some(parsed.localpart())
-    }
-
-    /// Verify a bearer token coming from the homeserver for homeserver to
-    /// Pasion interactions
+    /// Verify a bearer token coming from a downstream principal service.
     ///
     /// Returns `true` if the token is valid, `false` otherwise.
     ///
@@ -263,294 +246,285 @@ pub trait HomeserverAdmin: Send + Sync {
     /// Returns an error if the token failed to verify.
     async fn verify_token(&self, token: &str) -> Result<bool, anyhow::Error>;
 
-    /// Query the state of a user on the homeserver.
+    /// Query the state of a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to query.
+    /// * `username` - The username of the user to query.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the user does not
+    /// Returns an error if the downstream system is unreachable or the user does not
     /// exist.
-    async fn query_user(&self, localpart: &str) -> Result<MatrixUser, anyhow::Error>;
+    async fn query_user(&self, username: &str) -> Result<PrincipalAccountProfile, anyhow::Error>;
 
-    /// Provision a user on the homeserver.
+    /// Provision a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `request` - a [`ProvisionRequest`] containing the details of the user
+    /// * `request` - a [`PrincipalProvisionRequest`] containing the details of the user
     ///   to provision.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the user could not
+    /// Returns an error if the downstream system is unreachable or the user could not
     /// be provisioned.
-    async fn provision_user(&self, request: &ProvisionRequest) -> Result<bool, anyhow::Error>;
+    async fn provision_user(
+        &self,
+        request: &PrincipalProvisionRequest,
+    ) -> Result<bool, anyhow::Error>;
 
-    /// Check whether a given username is available on the homeserver.
+    /// Check whether a given username is available in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart to check.
+    /// * `username` - The username to check.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable.
-    async fn is_localpart_available(&self, localpart: &str) -> Result<bool, anyhow::Error>;
+    /// Returns an error if the downstream system is unreachable.
+    async fn is_username_available(&self, username: &str) -> Result<bool, anyhow::Error>;
 
-    /// Create a device for a user on the homeserver.
+    /// Create a device for a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to create a device for.
+    /// * `username` - The username of the user to create a device for.
     /// * `device_id` - The device ID to create.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the device could
+    /// Returns an error if the downstream system is unreachable or the device could
     /// not be created.
     async fn upsert_device(
         &self,
-        localpart: &str,
+        username: &str,
         device_id: &str,
         initial_display_name: Option<&str>,
     ) -> Result<(), anyhow::Error>;
 
-    /// Update the display name of a device for a user on the homeserver.
+    /// Update the display name of a device for a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to update a device for.
+    /// * `username` - The username of the user to update a device for.
     /// * `device_id` - The device ID to update.
     /// * `display_name` - The new display name to set
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the device could
+    /// Returns an error if the downstream system is unreachable or the device could
     /// not be updated.
     async fn update_device_display_name(
         &self,
-        localpart: &str,
+        username: &str,
         device_id: &str,
         display_name: &str,
     ) -> Result<(), anyhow::Error>;
 
-    /// Delete a device for a user on the homeserver.
+    /// Delete a device for a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to delete a device for.
+    /// * `username` - The username of the user to delete a device for.
     /// * `device_id` - The device ID to delete.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the device could
+    /// Returns an error if the downstream system is unreachable or the device could
     /// not be deleted.
-    async fn delete_device(&self, localpart: &str, device_id: &str) -> Result<(), anyhow::Error>;
+    async fn delete_device(&self, username: &str, device_id: &str) -> Result<(), anyhow::Error>;
 
-    /// Sync the list of devices of a user with the homeserver.
+    /// Sync the list of devices of a user with the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to sync the devices for.
+    /// * `username` - The username of the user to sync the devices for.
     /// * `devices` - The list of devices to sync.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the devices could
+    /// Returns an error if the downstream system is unreachable or the devices could
     /// not be synced.
     async fn sync_devices(
         &self,
-        localpart: &str,
+        username: &str,
         devices: HashSet<String>,
     ) -> Result<(), anyhow::Error>;
 
-    /// Delete a user on the homeserver.
+    /// Delete a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to delete.
-    /// * `erase` - Whether to ask the homeserver to erase the user's data.
+    /// * `username` - The username of the user to delete.
+    /// * `erase` - Whether to ask the downstream system to erase the user's data.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the user could not
+    /// Returns an error if the downstream system is unreachable or the user could not
     /// be deleted.
-    async fn delete_user(&self, localpart: &str, erase: bool) -> Result<(), anyhow::Error>;
+    async fn delete_user(&self, username: &str, erase: bool) -> Result<(), anyhow::Error>;
 
-    /// Reactivate a user on the homeserver.
+    /// Reactivate a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to reactivate.
+    /// * `username` - The username of the user to reactivate.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the user could not
+    /// Returns an error if the downstream system is unreachable or the user could not
     /// be reactivated.
-    async fn reactivate_user(&self, localpart: &str) -> Result<(), anyhow::Error>;
+    async fn reactivate_user(&self, username: &str) -> Result<(), anyhow::Error>;
 
-    /// Set the displayname of a user on the homeserver.
+    /// Set the displayname of a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to set the displayname for.
+    /// * `username` - The username of the user to set the displayname for.
     /// * `displayname` - The displayname to set.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the displayname
+    /// Returns an error if the downstream system is unreachable or the displayname
     /// could not be set.
     async fn set_displayname(
         &self,
-        localpart: &str,
+        username: &str,
         displayname: &str,
     ) -> Result<(), anyhow::Error>;
 
-    /// Unset the displayname of a user on the homeserver.
+    /// Unset the displayname of a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `localpart` - The localpart of the user to unset the displayname for.
+    /// * `username` - The username of the user to unset the displayname for.
     ///
     /// # Errors
     ///
-    /// Returns an error if the homeserver is unreachable or the displayname
+    /// Returns an error if the downstream system is unreachable or the displayname
     /// could not be unset.
-    async fn unset_displayname(&self, localpart: &str) -> Result<(), anyhow::Error>;
+    async fn unset_displayname(&self, username: &str) -> Result<(), anyhow::Error>;
 
-    /// Temporarily allow a user to reset their cross-signing keys.
-    ///
-    /// # Parameters
-    ///
-    /// * `localpart` - The localpart of the user to allow cross-signing key
-    ///   reset
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the homeserver is unreachable or the cross-signing
-    /// reset could not be allowed.
-    async fn allow_cross_signing_reset(&self, localpart: &str) -> Result<(), anyhow::Error>;
 }
 
-/// Helper trait: obtain a reference to the inner `HomeserverAdmin`
+/// Helper trait: obtain a reference to the inner `PrincipalServerAdmin`
 /// from a wrapper type. Used to de-duplicate the two blanket impls below.
 trait AsAdmin {
-    type Target: HomeserverAdmin + ?Sized;
+    type Target: PrincipalServerAdmin + ?Sized;
     fn as_admin(&self) -> &Self::Target;
 }
 
-impl<T: HomeserverAdmin + ?Sized> AsAdmin for &T {
+impl<T: PrincipalServerAdmin + ?Sized> AsAdmin for &T {
     type Target = T;
     fn as_admin(&self) -> &T {
         *self
     }
 }
 
-impl<T: HomeserverAdmin + ?Sized> AsAdmin for Arc<T> {
+impl<T: PrincipalServerAdmin + ?Sized> AsAdmin for Arc<T> {
     type Target = T;
     fn as_admin(&self) -> &T {
         self.as_ref()
     }
 }
 
-/// Blanket implementation: anything that can produce a `&dyn HomeserverAdmin`
+/// Blanket implementation: anything that can produce a `&dyn PrincipalServerAdmin`
 /// via [`AsAdmin`] is itself a valid admin handle.
 #[async_trait::async_trait]
-impl<W> HomeserverAdmin for W
+impl<W> PrincipalServerAdmin for W
 where
     W: AsAdmin + Send + Sync,
-    W::Target: HomeserverAdmin,
+    W::Target: PrincipalServerAdmin,
 {
-    fn homeserver(&self) -> &str {
-        self.as_admin().homeserver()
+    fn principal_authority(&self) -> &str {
+        self.as_admin().principal_authority()
     }
 
     async fn verify_token(&self, token: &str) -> Result<bool, anyhow::Error> {
         self.as_admin().verify_token(token).await
     }
 
-    async fn query_user(&self, localpart: &str) -> Result<MatrixUser, anyhow::Error> {
-        self.as_admin().query_user(localpart).await
+    async fn query_user(&self, username: &str) -> Result<PrincipalAccountProfile, anyhow::Error> {
+        self.as_admin().query_user(username).await
     }
 
-    async fn provision_user(&self, request: &ProvisionRequest) -> Result<bool, anyhow::Error> {
+    async fn provision_user(
+        &self,
+        request: &PrincipalProvisionRequest,
+    ) -> Result<bool, anyhow::Error> {
         self.as_admin().provision_user(request).await
     }
 
-    async fn is_localpart_available(&self, localpart: &str) -> Result<bool, anyhow::Error> {
-        self.as_admin().is_localpart_available(localpart).await
+    async fn is_username_available(&self, username: &str) -> Result<bool, anyhow::Error> {
+        self.as_admin().is_username_available(username).await
     }
 
     async fn upsert_device(
         &self,
-        localpart: &str,
+        username: &str,
         device_id: &str,
         initial_display_name: Option<&str>,
     ) -> Result<(), anyhow::Error> {
         self.as_admin()
-            .upsert_device(localpart, device_id, initial_display_name)
+            .upsert_device(username, device_id, initial_display_name)
             .await
     }
 
     async fn update_device_display_name(
         &self,
-        localpart: &str,
+        username: &str,
         device_id: &str,
         display_name: &str,
     ) -> Result<(), anyhow::Error> {
         self.as_admin()
-            .update_device_display_name(localpart, device_id, display_name)
+            .update_device_display_name(username, device_id, display_name)
             .await
     }
 
-    async fn delete_device(&self, localpart: &str, device_id: &str) -> Result<(), anyhow::Error> {
-        self.as_admin().delete_device(localpart, device_id).await
+    async fn delete_device(&self, username: &str, device_id: &str) -> Result<(), anyhow::Error> {
+        self.as_admin().delete_device(username, device_id).await
     }
 
     async fn sync_devices(
         &self,
-        localpart: &str,
+        username: &str,
         devices: HashSet<String>,
     ) -> Result<(), anyhow::Error> {
-        self.as_admin().sync_devices(localpart, devices).await
+        self.as_admin().sync_devices(username, devices).await
     }
 
-    async fn delete_user(&self, localpart: &str, erase: bool) -> Result<(), anyhow::Error> {
-        self.as_admin().delete_user(localpart, erase).await
+    async fn delete_user(&self, username: &str, erase: bool) -> Result<(), anyhow::Error> {
+        self.as_admin().delete_user(username, erase).await
     }
 
-    async fn reactivate_user(&self, localpart: &str) -> Result<(), anyhow::Error> {
-        self.as_admin().reactivate_user(localpart).await
+    async fn reactivate_user(&self, username: &str) -> Result<(), anyhow::Error> {
+        self.as_admin().reactivate_user(username).await
     }
 
     async fn set_displayname(
         &self,
-        localpart: &str,
+        username: &str,
         displayname: &str,
     ) -> Result<(), anyhow::Error> {
         self.as_admin()
-            .set_displayname(localpart, displayname)
+            .set_displayname(username, displayname)
             .await
     }
 
-    async fn unset_displayname(&self, localpart: &str) -> Result<(), anyhow::Error> {
-        self.as_admin().unset_displayname(localpart).await
+    async fn unset_displayname(&self, username: &str) -> Result<(), anyhow::Error> {
+        self.as_admin().unset_displayname(username).await
     }
 
-    async fn allow_cross_signing_reset(&self, localpart: &str) -> Result<(), anyhow::Error> {
-        self.as_admin().allow_cross_signing_reset(localpart).await
-    }
 }
 
-/// A connector provider represents an external system that Pasion can
+/// A connector provider represents an external system that coauth can
 /// provision users into, query state from, and synchronize with.
 ///
-/// [`HomeserverAdmin`] is the primary implementation of this trait
-/// for Matrix homeserver backends like Palpo.
-pub trait ConnectorProvider: HomeserverAdmin {
-    /// A human-readable name for this connector (e.g. "Palpo", "Synapse").
+/// [`PrincipalServerAdmin`] is the primary implementation of this trait
+/// for Contrix/Soland-facing principal connectors.
+pub trait ConnectorProvider: PrincipalServerAdmin {
+    /// A human-readable name for this connector (e.g. "soland").
     fn provider_name(&self) -> &str;
 
     /// Returns the set of capabilities this connector supports.

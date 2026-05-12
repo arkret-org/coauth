@@ -1,16 +1,16 @@
 //! Admin DTOs for the coauth connector-health probe surface.
 //!
-//! Mirrors `GET /api/admin/v1/connector-health` — per-provider Matrix
-//! homeserver health bucket. The endpoint enumerates every registered
+//! Mirrors `GET /api/admin/v1/connector-health` — per-provider principal
+//! connector health bucket. The endpoint enumerates every registered
 //! connector in the depot's `ConnectorRegistry`; if no registry is
-//! present, the single homeserver connection is probed directly and
+//! present, the single principal connection is probed directly and
 //! returned as a one-element list.
 //!
 //! Round-32 (C32.7): lifted out of the inline definition in
 //! `coauth/crates/backend/src/handlers/admin/v1/connector_health.rs`
 //! and out of the divergent inline `CoauthConnectorHealth` shim that
 //! lived in `sodmin/src/api/coauth.rs` (the shim used `name`/`ok`/
-//! `reason` whereas the wire actually carries `provider`/`homeserver`/
+//! `reason` whereas the wire actually carries `provider`/`principal_authority`/
 //! `status`/`error`). Sharing the wire shape via this crate makes the
 //! drift a compile-error rather than a runtime serde-default surprise.
 
@@ -56,8 +56,8 @@ impl ConnectorHealthStatus {
 /// Single connector-provider health row.
 ///
 /// `provider` is the connector name registered in the
-/// `ConnectorRegistry` (e.g. `"palpo"`); `homeserver` is the
-/// fully-qualified URL the provider is pointed at; `status` is the wire
+/// `ConnectorRegistry` (e.g. `"soland"`); `principal_authority` is the
+/// authority the provider is pointed at; `status` is the wire
 /// string — use [`ConnectorHealthRow::status_typed`] for the typed
 /// bucket. `error` carries the probe failure message when the provider
 /// is unhealthy.
@@ -70,7 +70,7 @@ pub struct ConnectorHealthRow {
     #[serde(default)]
     pub provider: String,
     #[serde(default)]
-    pub homeserver: String,
+    pub principal_authority: String,
     /// `"healthy"` or `"unhealthy"`. Use [`Self::status_typed`].
     #[serde(default)]
     pub status: String,
@@ -125,8 +125,8 @@ mod tests {
     #[test]
     fn unknown_status_falls_back_to_unhealthy() {
         let row = ConnectorHealthRow {
-            provider: "palpo".into(),
-            homeserver: "https://homeserver.example".into(),
+            provider: "soland".into(),
+            principal_authority: "soland.example".into(),
             status: "garbage".into(),
             error: None,
         };
@@ -137,8 +137,8 @@ mod tests {
     #[test]
     fn healthy_omits_error_on_serialize() {
         let row = ConnectorHealthRow {
-            provider: "palpo".into(),
-            homeserver: "https://h.example".into(),
+            provider: "soland".into(),
+            principal_authority: "soland.example".into(),
             status: "healthy".into(),
             error: None,
         };
@@ -150,8 +150,8 @@ mod tests {
     #[test]
     fn unhealthy_carries_error_field() {
         let row = ConnectorHealthRow {
-            provider: "palpo".into(),
-            homeserver: "https://h.example".into(),
+            provider: "soland".into(),
+            principal_authority: "soland.example".into(),
             status: "unhealthy".into(),
             error: Some("probe timed out".into()),
         };
@@ -164,14 +164,14 @@ mod tests {
         let resp = ConnectorHealthResponse {
             providers: vec![
                 ConnectorHealthRow {
-                    provider: "palpo".into(),
-                    homeserver: "https://a.example".into(),
+                    provider: "soland".into(),
+                    principal_authority: "soland-a.example".into(),
                     status: "healthy".into(),
                     error: None,
                 },
                 ConnectorHealthRow {
                     provider: "secondary".into(),
-                    homeserver: "https://b.example".into(),
+                    principal_authority: "soland-b.example".into(),
                     status: "unhealthy".into(),
                     error: Some("connection refused".into()),
                 },

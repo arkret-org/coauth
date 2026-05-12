@@ -47,7 +47,7 @@ pub async fn get(
         mut repo,
         cookie_jar,
     } = ViewContext::extract(req, depot).await?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let activity_tracker = common::extract_bound_activity_tracker(req, depot);
     let user_agent = req
         .headers()
@@ -59,10 +59,10 @@ pub async fn get(
     let prepared = match load_registration_finish_preparation(
         &mut repo,
         &clock,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         id,
         Some(registrations.contains_id(id)),
-        crate::handlers::account::service::registration::HomeserverCheckMode::Strict,
+        crate::handlers::account::service::registration::PrincipalServerCheckMode::Strict,
         site_config.registration_token_required,
     )
     .await
@@ -109,7 +109,7 @@ pub async fn get(
                     "Username is not available"
                 )));
             }
-            crate::handlers::account::service::registration::CheckRegistrationFinishEligibilityError::HomeserverUnavailable(error) => {
+            crate::handlers::account::service::registration::CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error) => {
                 return Err(InternalError::from_anyhow(error));
             }
             crate::handlers::account::service::registration::CheckRegistrationFinishEligibilityError::Repository(error) => {

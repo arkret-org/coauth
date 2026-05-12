@@ -19,11 +19,11 @@ $ coauth doctor
 
 The `doctor` command performs the following diagnostics:
 
-- **Database connectivity** — Verifies that the configured PostgreSQL database is reachable and the connection parameters are correct.
 - **Configuration validity** — Checks that the configuration file is syntactically and semantically valid.
-- **Template rendering** — Ensures all templates can be loaded and rendered without errors.
-- **Key material** — Validates that the configured signing keys are present and usable.
-- **Homeserver reachability** — Tests the connection to the configured Matrix homeserver.
+- **Issuer hygiene** — Warns when the configured issuer is not HTTPS.
+- **Principal Server configuration** — Reports the configured `contrix.principal_servers` entries.
+- **OpenID discovery** — Fetches `/.well-known/openid-configuration` and verifies its issuer.
+- **Contrix discovery** — Fetches `/api/v1/server/describe`.
 
 ### Interpreting the output
 

@@ -82,7 +82,7 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
                 p { class: "text-secondary",
                     strong { "{client_name}" }
                     " wants to access your account as "
-                    strong { "{data.user.mxid}" }
+                    strong { "{data.user.principal_id}" }
                 }
 
                 if !scopes.is_empty() {
@@ -188,18 +188,6 @@ fn scope_description(scope: &str) -> String {
                 || other.starts_with("urn:mas:admin") =>
         {
             "Administrative access to coauth management APIs".to_string()
-        }
-        "urn:matrix:org.matrix.msc2967.client:api:*" | "urn:matrix:client:api:*" => {
-            "Legacy Matrix client API access via the compatibility adapter".to_string()
-        }
-        other
-            if other.starts_with("urn:matrix:org.matrix.msc2967.client:device:")
-                || other.starts_with("urn:matrix:client:device:") =>
-        {
-            "Bind this authorization to a legacy Matrix device ID".to_string()
-        }
-        other if other.starts_with("urn:palpo:admin:") => {
-            "Legacy Palpo admin access via the compatibility adapter".to_string()
         }
         other => other.to_string(),
     }

@@ -133,7 +133,7 @@ pub async fn get(
     let locale = crate::handlers::preferred_language(req, depot);
     let templates = depot.templates()?;
     let url_builder = depot.url_builder()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let cookie_jar = depot.cookie_jar(req)?;
     let user_agent = req
         .headers()
@@ -162,7 +162,7 @@ pub async fn get(
         &mut *rng,
         &*clock,
         &url_builder,
-        &*homeserver,
+        &*principal_server,
         &mut policy,
         &site_config,
         user_agent,
@@ -173,14 +173,14 @@ pub async fn get(
     {
         Ok(outcome) => outcome,
         Err(
-            UpstreamLinkWorkflowError::ConflictFail { ref localpart }
-            | UpstreamLinkWorkflowError::ConflictSetBlocked { ref localpart },
+            UpstreamLinkWorkflowError::ConflictFail { ref username }
+            | UpstreamLinkWorkflowError::ConflictSetBlocked { ref username },
         ) => {
             let err_state = AppErrorState {
                 kind: "generic".to_owned(),
                 username: None,
                 description: Some(format!(
-                    "Upstream account provider returned {localpart:?} as username, \
+                    "Upstream account provider returned {username:?} as username, \
                      which could not be linked automatically."
                 )),
             };
@@ -193,15 +193,15 @@ pub async fn get(
             res.render(Text::Html(content));
             return Ok(());
         }
-        Err(UpstreamLinkWorkflowError::PolicyDeniedLocalpart {
-            ref localpart,
+        Err(UpstreamLinkWorkflowError::PolicyDeniedUsername {
+            ref username,
             ref detail,
         }) => {
             let err_state = AppErrorState {
                 kind: "generic".to_owned(),
                 username: None,
                 description: Some(format!(
-                    "Upstream account provider returned {localpart:?} as username, \
+                    "Upstream account provider returned {username:?} as username, \
                      which does not pass the policy check: {detail}"
                 )),
             };
@@ -214,12 +214,12 @@ pub async fn get(
             res.render(Text::Html(content));
             return Ok(());
         }
-        Err(UpstreamLinkWorkflowError::LocalpartUnavailable { ref localpart }) => {
+        Err(UpstreamLinkWorkflowError::UsernameUnavailable { ref username }) => {
             let err_state = AppErrorState {
                 kind: "generic".to_owned(),
                 username: None,
                 description: Some(format!(
-                    "Localpart {localpart:?} is not available on this homeserver"
+                    "Username {username:?} is not available on this PrincipalServer"
                 )),
             };
             let ctx = AppContext::new(&url_builder, &depot.frontend_script_src()?)
@@ -321,8 +321,8 @@ pub async fn get(
         LoadUpstreamLinkOutcome::Register { screen } => {
             let mut ctx = UpstreamRegister::new(screen.link, screen.provider);
 
-            if let Some(localpart) = screen.suggested_username {
-                ctx = ctx.with_localpart(localpart, screen.username_forced);
+            if let Some(username) = screen.suggested_username {
+                ctx = ctx.with_username(username, screen.username_forced);
             }
 
             if let Some(display_name) = screen.suggested_display_name {
@@ -417,7 +417,7 @@ pub async fn post(
     let mut policy = policy_factory.instantiate().await?;
     let locale = crate::handlers::preferred_language(req, depot);
     let templates = depot.templates()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let url_builder = depot.url_builder()?;
     let site_config = depot.site_config()?;
     let ip_address = crate::handlers::account::extract_bound_activity_tracker(req, depot).ip();
@@ -453,7 +453,7 @@ pub async fn post(
         &mut *rng,
         &*clock,
         &url_builder,
-        &*homeserver,
+        &*principal_server,
         &mut policy,
         &site_config,
         user_agent,
@@ -582,7 +582,7 @@ mod tests {
     use oauth2_types::scope::{OPENID, Scope};
     use coauth_data::{
         UpstreamOAuthAuthorizationSession, UpstreamOAuthLink, UpstreamOAuthProviderClaimsImports,
-        UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderLocalpartPreference,
+        UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderUsernamePreference,
         UpstreamOAuthProviderTokenAuthMethod, UserEmailAuthentication, UserRegistration,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
@@ -609,7 +609,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            localpart: UpstreamOAuthProviderLocalpartPreference {
+            username: UpstreamOAuthProviderUsernamePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Force,
                 template: None,
                 on_conflict: coauth_data::UpstreamOAuthProviderOnConflict::default(),
@@ -809,7 +809,7 @@ mod tests {
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
             skip_confirmation: true,
-            localpart: UpstreamOAuthProviderLocalpartPreference {
+            username: UpstreamOAuthProviderUsernamePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 on_conflict: coauth_data::UpstreamOAuthProviderOnConflict::default(),
@@ -984,11 +984,11 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            localpart: UpstreamOAuthProviderLocalpartPreference {
+            username: UpstreamOAuthProviderUsernamePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 // This is the important bit: this will automatically link
-                // existing accounts if the localpart matches
+                // existing accounts if the username matches
                 on_conflict: coauth_data::UpstreamOAuthProviderOnConflict::Add,
             },
             email: UpstreamOAuthProviderImportPreference {
@@ -1105,7 +1105,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            localpart: UpstreamOAuthProviderLocalpartPreference {
+            username: UpstreamOAuthProviderUsernamePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 on_conflict: coauth_data::UpstreamOAuthProviderOnConflict::default(),
@@ -1277,7 +1277,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            localpart: UpstreamOAuthProviderLocalpartPreference {
+            username: UpstreamOAuthProviderUsernamePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 // This will replace any existing links for this provider and user
@@ -1428,7 +1428,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            localpart: UpstreamOAuthProviderLocalpartPreference {
+            username: UpstreamOAuthProviderUsernamePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 // This will only link if there are no existing links for this provider and user
@@ -1550,7 +1550,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            localpart: UpstreamOAuthProviderLocalpartPreference {
+            username: UpstreamOAuthProviderUsernamePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 // This will only link if there are no existing links for this provider and user

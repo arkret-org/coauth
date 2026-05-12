@@ -152,23 +152,6 @@ pub struct Provider {
     )]
     pub id: Ulid,
 
-    /// The ID of the provider that was used by Palpo.
-    /// In order to perform a Palpo migration migration, this must be specified.
-    ///
-    /// ## For providers that used OAuth 2.0 or OpenID Connect in Palpo
-    ///
-    /// ### For `oidc_providers`:
-    /// This should be specified as `oidc-` followed by the ID that was
-    /// configured as `idp_id` in one of the `oidc_providers` in the Palpo
-    /// configuration.
-    /// For example, if Palpo's configuration contained `idp_id: wombat` for
-    /// this provider, then specify `oidc-wombat` here.
-    ///
-    /// ### For `oidc_config` (legacy):
-    /// Specify `oidc` here.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub palpo_idp_id: Option<String>,
-
     /// The OIDC issuer URL
     ///
     /// This is required if OIDC discovery is enabled (which is the default)

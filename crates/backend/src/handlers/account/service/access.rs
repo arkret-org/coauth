@@ -6,7 +6,7 @@ use coauth_data::{
     upstream_oauth2::UpstreamOAuthProviderRepository,
     user::{BrowserSessionRepository, UserPasswordRepository, UserRepository},
 };
-use coauth_matrix::HomeserverAdmin;
+use coauth_principal::PrincipalServerAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
 use ulid::Ulid;
@@ -63,7 +63,7 @@ pub async fn login_with_password(
     clock: &dyn Clock,
     password_manager: &PasswordManager,
     limiter: &Limiter,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     url_builder: &UrlBuilder,
     contrix_config: &ContrixConfig,
     site_config: &SiteConfig,
@@ -83,7 +83,7 @@ pub async fn login_with_password(
     // response latency matches the real-verify path.
     let Some(user) = find_user_by_login_identifier(
         site_config,
-        homeserver,
+        principal_server,
         url_builder,
         contrix_config,
         &mut repo,
@@ -219,7 +219,7 @@ async fn find_user_by_email_or_by_username(
 
 async fn find_user_by_login_identifier(
     site_config: &SiteConfig,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     url_builder: &UrlBuilder,
     contrix_config: &ContrixConfig,
     repo: &mut BoxRepository,
@@ -237,6 +237,6 @@ async fn find_user_by_login_identifier(
         return Ok(Some(user));
     }
 
-    let username_or_email = homeserver.localpart(identifier).unwrap_or(identifier);
-    find_user_by_email_or_by_username(site_config, repo, username_or_email).await
+    let _ = principal_server;
+    find_user_by_email_or_by_username(site_config, repo, identifier).await
 }

@@ -20,8 +20,8 @@ use coauth_data::{
 };
 use coauth_i18n::DataLocale;
 use coauth_keystore::Keystore;
-use coauth_matrix::HomeserverAdmin;
 use coauth_policy::Policy;
+use coauth_principal::PrincipalServerAdmin;
 use coauth_templates::{DeviceNameContext, TemplateContext, Templates};
 use oauth2_types::{
     pkce::CodeChallengeError,
@@ -228,8 +228,6 @@ fn client_device_ids(scope: &scope::Scope) -> Vec<String> {
             let token = token.as_str();
             token
                 .strip_prefix("urn:contrix:client:device:")
-                .or_else(|| token.strip_prefix("urn:matrix:client:device:"))
-                .or_else(|| token.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:"))
                 .map(str::to_owned)
         })
         .collect()
@@ -243,7 +241,7 @@ fn client_device_ids(scope: &scope::Scope) -> Vec<String> {
 ///
 /// Validates the authorization grant state, verifies PKCE if applicable,
 /// generates access/refresh tokens (and optionally an ID token), provisions
-/// the Matrix device, and marks the grant as exchanged.
+/// the bound principal device, and marks the grant as exchanged.
 ///
 /// The returned `BoxRepository` must be saved by the caller after recording
 /// metrics / activity.
@@ -259,7 +257,7 @@ pub async fn exchange_authorization_code(
     contrix_config: &ContrixConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
-    homeserver: &Arc<dyn HomeserverAdmin>,
+    principal_server: &Arc<dyn PrincipalServerAdmin>,
     templates: &Templates,
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), AuthorizationCodeExchangeError> {
@@ -550,7 +548,7 @@ pub async fn exchange_authorization_code(
         );
     }
     for device_id in &requested_device_ids {
-        homeserver
+        principal_server
             .upsert_device(
                 &browser_session.user.username,
                 device_id,
@@ -563,10 +561,10 @@ pub async fn exchange_authorization_code(
                     authorization_grant.id = %authz_grant.id,
                     oauth2_session.id = %session.id,
                     browser_session.id = %browser_session.id,
-                    matrix_device.id = %device_id,
+                    principal_device.id = %device_id,
                     error = %err,
                     error_debug = ?err,
-                    "Failed to provision Matrix device during authorization_code exchange"
+                    "Failed to provision principal device during authorization_code exchange"
                 );
                 AuthorizationCodeExchangeError::ProvisionDeviceFailed(err)
             })?;
@@ -849,7 +847,7 @@ pub async fn handle_client_credentials(
 ///
 /// Validates the device code grant state, creates an OAuth 2.0 session,
 /// generates tokens (including an optional ID token and refresh token),
-/// and provisions the Matrix device.
+/// and provisions the bound principal device.
 #[allow(clippy::too_many_arguments)]
 pub async fn exchange_device_code(
     rng: &mut (impl rand_core::RngCore + rand_core::CryptoRng + Send),
@@ -862,7 +860,7 @@ pub async fn exchange_device_code(
     contrix_config: &ContrixConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
-    homeserver: &Arc<dyn HomeserverAdmin>,
+    principal_server: &Arc<dyn PrincipalServerAdmin>,
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), DeviceCodeExchangeError> {
     debug!(
@@ -1074,7 +1072,7 @@ pub async fn exchange_device_code(
         );
     }
     for device_id in &requested_device_ids {
-        homeserver
+        principal_server
             .upsert_device(&browser_session.user.username, device_id, None)
             .await
             .map_err(|err| {
@@ -1083,10 +1081,10 @@ pub async fn exchange_device_code(
                     device_code_grant.id = %device_code_grant_id,
                     oauth2_session.id = %session.id,
                     browser_session.id = %browser_session.id,
-                    matrix_device.id = %device_id,
+                    principal_device.id = %device_id,
                     error = %err,
                     error_debug = ?err,
-                    "Failed to provision Matrix device during device_code exchange"
+                    "Failed to provision principal device during device_code exchange"
                 );
                 DeviceCodeExchangeError::ProvisionDeviceFailed(err)
             })?;

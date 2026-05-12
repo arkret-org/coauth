@@ -11,7 +11,7 @@ use coauth_data::{
     personal::{PersonalSessionFilter, session::PersonalSessionOwner},
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
 };
-use coauth_matrix::HomeserverAdmin;
+use coauth_principal::PrincipalServerAdmin;
 use oauth2_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -84,7 +84,7 @@ pub async fn add_session(
         ..
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let body: AddRequest = req.parse_json().await.map_err(AppError::internal)?;
     let owner = personal_session_owner_from_caller(&caller_session);
 
@@ -131,17 +131,14 @@ pub async fn add_session(
         )
         .await?;
 
-    // Provision any matrix devices declared through scope entries
+    // Provision any Contrix devices declared through scope entries.
     if new_session.has_device() {
         repo.user().acquire_lock_for_sync(&target_user).await?;
 
         for scope_token in &*new_session.scope {
             let raw = scope_token.as_str();
-            let device = raw
-                .strip_prefix("urn:matrix:client:device:")
-                .or_else(|| raw.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:"));
-            if let Some(device_id) = device {
-                homeserver
+            if let Some(device_id) = raw.strip_prefix("urn:contrix:client:device:") {
+                principal_server
                     .upsert_device(&target_user.username, device_id, None)
                     .await
                     .context("Device provisioning failed")

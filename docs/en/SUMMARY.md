@@ -10,7 +10,7 @@
 - [Installation](./setup/installation.md)
 - [General configuration](./setup/general.md)
 - [Database setup](./setup/database.md)
-- [Homeserver configuration](./setup/homeserver.md)
+- [Principal Server configuration](./setup/homeserver.md)
 - [Configuring a reverse proxy](./setup/reverse-proxy.md)
 - [Configure an upstream SSO provider](./setup/sso.md)
 - [Running the service](./setup/running.md)

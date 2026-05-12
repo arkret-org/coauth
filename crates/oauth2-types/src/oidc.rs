@@ -215,40 +215,33 @@ string_enum! {
 // via the outer_meta.
 string_enum! {
     /// An account management action that a user can take.
-    ///
-    /// Source: <https://github.com/matrix-org/matrix-spec-proposals/pull/2965>
     #[non_exhaustive]
     #[derive(PartialOrd, Ord)]
     pub enum AccountManagementAction {
-        /// `org.matrix.profile`
+        /// `profile`
         ///
         /// The user wishes to view their profile (name, avatar, contact details).
-        Profile => "org.matrix.profile",
+        Profile => "profile",
 
-        /// `org.matrix.sessions_list`
+        /// `sessions_list`
         ///
         /// The user wishes to view a list of their sessions.
-        SessionsList => "org.matrix.sessions_list",
+        SessionsList => "sessions_list",
 
-        /// `org.matrix.session_view`
+        /// `session_view`
         ///
         /// The user wishes to view the details of a specific session.
-        SessionView => "org.matrix.session_view",
+        SessionView => "session_view",
 
-        /// `org.matrix.session_end`
+        /// `session_end`
         ///
         /// The user wishes to end/log out of a specific session.
-        SessionEnd => "org.matrix.session_end",
+        SessionEnd => "session_end",
 
-        /// `org.matrix.account_deactivate`
+        /// `account_deactivate`
         ///
         /// The user wishes to deactivate their account.
-        AccountDeactivate => "org.matrix.account_deactivate",
-
-        /// `org.matrix.cross_signing_reset`
-        ///
-        /// The user wishes to reset their cross-signing keys.
-        CrossSigningReset => "org.matrix.cross_signing_reset",
+        AccountDeactivate => "account_deactivate",
     }
 }
 
@@ -279,7 +272,7 @@ pub static DEFAULT_CLAIM_TYPES_SUPPORTED: &[ClaimType] = &[ClaimType::Normal];
 //   1. Core OAuth 2.0 AS metadata (RFC 8414)
 //   2. OpenID Connect Discovery 1.0 extensions
 //   3. Additional protocol extensions (PAR, RP-Initiated Logout, etc.)
-//   4. Matrix-specific extensions (MSC 2965)
+//   4. Account-management extensions
 // ---------------------------------------------------------------------------
 
 /// Authorization server metadata, as described by the [IANA registry].
@@ -585,16 +578,14 @@ pub struct ProviderMetadata {
     /// [RP-Initiated Logout endpoint]: https://openid.net/specs/openid-connect-rpinitiated-1_0.html
     pub end_session_endpoint: Option<Url>,
 
-    // -- Section 4: Matrix-specific extensions (MSC 2965) --
+    // -- Section 4: Account-management extensions --
     /// URL where the user is able to access the account management capabilities
     /// of this OP.
     ///
-    /// This is a Matrix extension introduced in [MSC2965](https://github.com/matrix-org/matrix-spec-proposals/pull/2965).
     pub account_management_uri: Option<Url>,
 
     /// Array of actions that the account management URL supports.
     ///
-    /// This is a Matrix extension introduced in [MSC2965](https://github.com/matrix-org/matrix-spec-proposals/pull/2965).
     pub account_management_actions_supported: Option<Vec<AccountManagementAction>>,
 }
 

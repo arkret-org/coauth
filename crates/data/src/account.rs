@@ -39,8 +39,8 @@ pub enum ContactChannel {
 
 /// A binding between a user account and an external identity.
 ///
-/// This represents the link between a Pasion user and an identity in an
-/// external system (e.g., an upstream OAuth provider, a Matrix homeserver,
+/// This represents the link between a coauth user and an identity in an
+/// external system (e.g., an upstream OAuth provider, a principal server,
 /// or a directory service).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountIdentityBinding {
@@ -69,8 +69,8 @@ pub struct AccountIdentityBinding {
 pub enum IdentityProviderType {
     /// An upstream OAuth2/OIDC provider.
     UpstreamOAuth2,
-    /// The connected Matrix homeserver (Palpo).
-    MatrixHomeserver,
+    /// A connected principal server.
+    PrincipalServer,
     /// An LDAP or directory service.
     Directory,
     /// A SAML identity provider.

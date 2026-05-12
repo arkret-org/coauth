@@ -67,12 +67,12 @@ impl ConnectorRegistry {
     }
 
     /// Check health of all providers by calling
-    /// `is_localpart_available("__health_check__")` on each.
+    /// `is_username_available("__health_check__")` on each.
     pub async fn check_all_health(&self) -> Vec<(&str, Result<(), String>)> {
         let mut results = Vec::with_capacity(self.providers.len());
         for (name, provider) in &self.providers {
             let result = provider
-                .is_localpart_available("__health_check__")
+                .is_username_available("__health_check__")
                 .await
                 .map(|_| ())
                 .map_err(|e| e.to_string());

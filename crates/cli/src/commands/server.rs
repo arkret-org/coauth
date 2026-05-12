@@ -9,10 +9,11 @@ use coauth_backend::{
     listener::server::Server,
     services::email_webhook::EmailWebhookService,
     util::{
-        database_url_from_config, diesel_pool_from_config, homeserver_connection_from_config,
+        database_url_from_config, diesel_pool_from_config,
         load_policy_factory_dynamic_data_continuously, notification_center_from_config,
-        password_manager_from_config, policy_factory_from_config, site_config_from_config,
-        templates_from_config, test_mailer_in_background,
+        password_manager_from_config, policy_factory_from_config,
+        principal_server_connection_from_config, site_config_from_config, templates_from_config,
+        test_mailer_in_background,
     },
 };
 use coauth_config::{
@@ -121,9 +122,7 @@ impl Options {
 
         // Load and compile the WASM policies (and fallback to the default embedded one)
         info!("Loading and compiling the policy module");
-        let policy_factory =
-            policy_factory_from_config(&config.policy, &config.matrix, &config.experimental)
-                .await?;
+        let policy_factory = policy_factory_from_config(&config.policy, &config.experimental).await?;
         let policy_factory = Arc::new(policy_factory);
 
         load_policy_factory_dynamic_data_continuously(
@@ -143,7 +142,7 @@ impl Options {
         // Load the site configuration
         let site_config = site_config_from_config(
             &config.branding,
-            &config.matrix,
+            &config.http,
             &config.experimental,
             &config.passwords,
             &config.account,
@@ -164,8 +163,8 @@ impl Options {
 
         let http_client = coauth_backend::reqwest_client();
 
-        let (homeserver_admin, connector_registry) =
-            homeserver_connection_from_config(&config.matrix, http_client.clone()).await?;
+        let (principal_server_admin, connector_registry) =
+            principal_server_connection_from_config(&site_config);
 
         if !self.no_worker {
             let notifications =
@@ -181,7 +180,7 @@ impl Options {
                 database_url,
                 SystemClock::default(),
                 &notifications,
-                homeserver_admin.clone(),
+                principal_server_admin.clone(),
                 url_builder.clone(),
                 &site_config,
                 shutdown.soft_shutdown_token(),
@@ -272,7 +271,7 @@ impl Options {
                 cookie_manager,
                 encrypter,
                 url_builder,
-                homeserver_admin,
+                principal_server_admin,
                 connector_registry,
                 policy_factory,
                 http_client,

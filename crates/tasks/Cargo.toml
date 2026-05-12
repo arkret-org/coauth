@@ -53,6 +53,6 @@ oauth2-types.workspace = true
 # -- Internal crates -------------------------------------------------------
 coauth-data.workspace = true
 coauth-i18n.workspace = true
-coauth-matrix.workspace = true
+coauth-principal.workspace = true
 coauth-messaging.workspace = true
 coauth-templates.workspace = true

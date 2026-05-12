@@ -9,7 +9,7 @@ pub use self::{
         DiscoveryMode as UpstreamOAuthProviderDiscoveryMode,
         ImportAction as UpstreamOAuthProviderImportAction,
         ImportPreference as UpstreamOAuthProviderImportPreference,
-        LocalpartPreference as UpstreamOAuthProviderLocalpartPreference,
+        UsernamePreference as UpstreamOAuthProviderUsernamePreference,
         OnBackchannelLogout as UpstreamOAuthProviderOnBackchannelLogout,
         OnConflict as UpstreamOAuthProviderOnConflict, PkceMode as UpstreamOAuthProviderPkceMode,
         ProviderSource as UpstreamOAuthProviderSource,

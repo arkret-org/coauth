@@ -33,7 +33,7 @@ pub struct ClientInfo {
 
 #[derive(Serialize, ToSchema)]
 pub struct UserInfo {
-    pub mxid: String,
+    pub principal_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
 }
@@ -97,7 +97,7 @@ fn consent_get_response(screen: ConsentScreen) -> ConsentGetResponse {
         client: client_info(&screen.client),
         scope: screen.scope,
         user: UserInfo {
-            mxid: screen.user_mxid,
+            principal_id: screen.user_principal_id,
             display_name: screen.user_display_name,
         },
         policy_violation: screen.policy_violation,
@@ -155,7 +155,7 @@ pub async fn oauth2_consent_get(
     res: &mut Response,
 ) -> Result<(), RouteError> {
     let clock = make_clock();
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let policy_factory = depot.policy_factory()?;
     let mut repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -175,7 +175,7 @@ pub async fn oauth2_consent_get(
     let info = load_authorization_consent(
         repo,
         policy_factory.as_ref(),
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         &clock,
         &session,
         grant_id,
@@ -313,7 +313,7 @@ pub async fn device_consent_get(
     res: &mut Response,
 ) -> Result<(), RouteError> {
     let clock = make_clock();
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let policy_factory = depot.policy_factory()?;
     let mut repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -333,7 +333,7 @@ pub async fn device_consent_get(
     let screen = load_device_consent(
         repo,
         policy_factory.as_ref(),
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         &clock,
         &session,
         grant_id,

@@ -259,8 +259,6 @@ pub enum Resource {
     },
     /// OAuth 2.0 / OIDC protocol endpoints
     OAuth,
-    /// Matrix compatibility layer
-    Compat,
     /// Static frontend assets
     Assets {
         /// Directory from which to serve files
@@ -435,7 +433,6 @@ impl Default for HttpConfig {
                         Resource::Discovery,
                         Resource::Human,
                         Resource::OAuth,
-                        Resource::Compat,
                         Resource::RestApi {
                             playground: false,
                             undocumented_oauth2_access: false,

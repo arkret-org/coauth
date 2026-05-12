@@ -369,15 +369,10 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
         }
 
         if let Some(device) = filter.device() {
-            let stable = format!("urn:matrix:client:device:{device}");
-            let unstable = format!("urn:matrix:org.matrix.msc2967.client:device:{device}");
+            let device_scope = format!("urn:contrix:client:device:{device}");
             sub = sub.filter(
                 diesel::dsl::sql::<diesel::sql_types::Bool>("")
-                    .bind::<diesel::sql_types::Text, _>(stable)
-                    .sql(" = ANY(")
-                    .sql("personal_sessions.scope_list")
-                    .sql(") OR ")
-                    .bind::<diesel::sql_types::Text, _>(unstable)
+                    .bind::<diesel::sql_types::Text, _>(device_scope)
                     .sql(" = ANY(")
                     .sql("personal_sessions.scope_list")
                     .sql(")"),
@@ -463,15 +458,10 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
         }
 
         if let Some(device) = filter.device() {
-            let stable = format!("urn:matrix:client:device:{device}");
-            let unstable = format!("urn:matrix:org.matrix.msc2967.client:device:{device}");
+            let device_scope = format!("urn:contrix:client:device:{device}");
             query = query.filter(
                 diesel::dsl::sql::<diesel::sql_types::Bool>("")
-                    .bind::<diesel::sql_types::Text, _>(stable)
-                    .sql(" = ANY(")
-                    .sql("personal_sessions.scope_list")
-                    .sql(") OR ")
-                    .bind::<diesel::sql_types::Text, _>(unstable)
+                    .bind::<diesel::sql_types::Text, _>(device_scope)
                     .sql(" = ANY(")
                     .sql("personal_sessions.scope_list")
                     .sql(")"),
@@ -572,15 +562,10 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
         }
 
         if let Some(device) = filter.device() {
-            let stable = format!("urn:matrix:client:device:{device}");
-            let unstable = format!("urn:matrix:org.matrix.msc2967.client:device:{device}");
+            let device_scope = format!("urn:contrix:client:device:{device}");
             query = query.filter(
                 diesel::dsl::sql::<diesel::sql_types::Bool>("")
-                    .bind::<diesel::sql_types::Text, _>(stable)
-                    .sql(" = ANY(")
-                    .sql("personal_sessions.scope_list")
-                    .sql(") OR ")
-                    .bind::<diesel::sql_types::Text, _>(unstable)
+                    .bind::<diesel::sql_types::Text, _>(device_scope)
                     .sql(" = ANY(")
                     .sql("personal_sessions.scope_list")
                     .sql(")"),

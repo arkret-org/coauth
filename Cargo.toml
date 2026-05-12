@@ -47,8 +47,7 @@ coauth-iana = { path = "./crates/iana/", version = "=1.8.0" }
 coauth-iana-codegen = { path = "./crates/iana-codegen/", version = "=1.8.0" }
 coauth-jose = { path = "./crates/jose/", version = "=1.8.0" }
 coauth-keystore = { path = "./crates/keystore/", version = "=1.8.0" }
-coauth-matrix = { path = "./crates/matrix/", version = "=1.8.0" }
-coauth-matrix-palpo = { path = "./crates/matrix-palpo/", version = "=1.8.0" }
+coauth-principal = { path = "./crates/principal/", version = "=1.8.0" }
 coauth-policy = { path = "./crates/policy/", version = "=1.8.0" }
 coauth-tasks = { path = "./crates/tasks/", version = "=1.8.0" }
 coauth-templates = { path = "./crates/templates/", version = "=1.8.0" }

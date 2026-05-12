@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
 use crate::{
-    ConnectorCapabilities, ConnectorProvider, HomeserverAdmin, MatrixUser, ProvisionRequest,
+    ConnectorCapabilities, ConnectorProvider, PrincipalAccountProfile, PrincipalProvisionRequest,
+    PrincipalServerAdmin,
 };
 
 #[derive(Clone, Copy)]
-enum BlockedMatrixWrite {
+enum BlockedPrincipalWrite {
     ProvisionUser,
     UpsertDevice,
     UpdateDeviceDisplayName,
@@ -15,10 +16,9 @@ enum BlockedMatrixWrite {
     ReactivateUser,
     SetDisplayname,
     UnsetDisplayname,
-    AllowCrossSigningReset,
 }
 
-impl BlockedMatrixWrite {
+impl BlockedPrincipalWrite {
     fn summary(self) -> &'static str {
         match self {
             Self::ProvisionUser => "provision users",
@@ -30,28 +30,27 @@ impl BlockedMatrixWrite {
             Self::ReactivateUser => "reactivate users",
             Self::SetDisplayname => "set display names",
             Self::UnsetDisplayname => "clear display names",
-            Self::AllowCrossSigningReset => "allow cross-signing reset",
         }
     }
 }
 
-fn read_only_error(operation: BlockedMatrixWrite) -> anyhow::Error {
+fn read_only_error(operation: BlockedPrincipalWrite) -> anyhow::Error {
     anyhow::anyhow!(
-        "matrix connector is configured as read-only and cannot {}",
+        "principal connector is configured as read-only and cannot {}",
         operation.summary()
     )
 }
 
-fn deny_write<T>(operation: BlockedMatrixWrite) -> Result<T, anyhow::Error> {
+fn deny_write<T>(operation: BlockedPrincipalWrite) -> Result<T, anyhow::Error> {
     Err(read_only_error(operation))
 }
 
-/// Wraps a homeserver connector and forwards only read operations.
-pub struct ReadOnlyHomeserverAdmin<C> {
+/// Wraps a principal connector and forwards only read operations.
+pub struct ReadOnlyPrincipalServerAdmin<C> {
     source: C,
 }
 
-impl<C> ReadOnlyHomeserverAdmin<C> {
+impl<C> ReadOnlyPrincipalServerAdmin<C> {
     #[must_use]
     pub fn new(source: C) -> Self {
         Self { source }
@@ -59,83 +58,83 @@ impl<C> ReadOnlyHomeserverAdmin<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: HomeserverAdmin> HomeserverAdmin for ReadOnlyHomeserverAdmin<C> {
-    fn homeserver(&self) -> &str {
-        self.source.homeserver()
+impl<C: PrincipalServerAdmin> PrincipalServerAdmin for ReadOnlyPrincipalServerAdmin<C> {
+    fn principal_authority(&self) -> &str {
+        self.source.principal_authority()
     }
 
     async fn verify_token(&self, token: &str) -> Result<bool, anyhow::Error> {
         self.source.verify_token(token).await
     }
 
-    async fn query_user(&self, localpart: &str) -> Result<MatrixUser, anyhow::Error> {
-        self.source.query_user(localpart).await
+    async fn query_user(&self, username: &str) -> Result<PrincipalAccountProfile, anyhow::Error> {
+        self.source.query_user(username).await
     }
 
-    async fn provision_user(&self, _request: &ProvisionRequest) -> Result<bool, anyhow::Error> {
-        deny_write(BlockedMatrixWrite::ProvisionUser)
+    async fn provision_user(
+        &self,
+        _request: &PrincipalProvisionRequest,
+    ) -> Result<bool, anyhow::Error> {
+        deny_write(BlockedPrincipalWrite::ProvisionUser)
     }
 
-    async fn is_localpart_available(&self, localpart: &str) -> Result<bool, anyhow::Error> {
-        self.source.is_localpart_available(localpart).await
+    async fn is_username_available(&self, username: &str) -> Result<bool, anyhow::Error> {
+        self.source.is_username_available(username).await
     }
 
     async fn upsert_device(
         &self,
-        _localpart: &str,
+        _username: &str,
         _device_id: &str,
         _initial_display_name: Option<&str>,
     ) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::UpsertDevice)
+        deny_write(BlockedPrincipalWrite::UpsertDevice)
     }
 
     async fn update_device_display_name(
         &self,
-        _localpart: &str,
+        _username: &str,
         _device_id: &str,
         _display_name: &str,
     ) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::UpdateDeviceDisplayName)
+        deny_write(BlockedPrincipalWrite::UpdateDeviceDisplayName)
     }
 
-    async fn delete_device(&self, _localpart: &str, _device_id: &str) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::DeleteDevice)
+    async fn delete_device(&self, _username: &str, _device_id: &str) -> Result<(), anyhow::Error> {
+        deny_write(BlockedPrincipalWrite::DeleteDevice)
     }
 
     async fn sync_devices(
         &self,
-        _localpart: &str,
+        _username: &str,
         _devices: HashSet<String>,
     ) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::SyncDevices)
+        deny_write(BlockedPrincipalWrite::SyncDevices)
     }
 
-    async fn delete_user(&self, _localpart: &str, _erase: bool) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::DeleteUser)
+    async fn delete_user(&self, _username: &str, _erase: bool) -> Result<(), anyhow::Error> {
+        deny_write(BlockedPrincipalWrite::DeleteUser)
     }
 
-    async fn reactivate_user(&self, _localpart: &str) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::ReactivateUser)
+    async fn reactivate_user(&self, _username: &str) -> Result<(), anyhow::Error> {
+        deny_write(BlockedPrincipalWrite::ReactivateUser)
     }
 
     async fn set_displayname(
         &self,
-        _localpart: &str,
+        _username: &str,
         _displayname: &str,
     ) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::SetDisplayname)
+        deny_write(BlockedPrincipalWrite::SetDisplayname)
     }
 
-    async fn unset_displayname(&self, _localpart: &str) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::UnsetDisplayname)
+    async fn unset_displayname(&self, _username: &str) -> Result<(), anyhow::Error> {
+        deny_write(BlockedPrincipalWrite::UnsetDisplayname)
     }
 
-    async fn allow_cross_signing_reset(&self, _localpart: &str) -> Result<(), anyhow::Error> {
-        deny_write(BlockedMatrixWrite::AllowCrossSigningReset)
-    }
 }
 
-impl<C: ConnectorProvider> ConnectorProvider for ReadOnlyHomeserverAdmin<C> {
+impl<C: ConnectorProvider> ConnectorProvider for ReadOnlyPrincipalServerAdmin<C> {
     fn provider_name(&self) -> &str {
         self.source.provider_name()
     }
@@ -148,11 +147,11 @@ impl<C: ConnectorProvider> ConnectorProvider for ReadOnlyHomeserverAdmin<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock::HomeserverAdmin as MockHomeserverAdmin;
+    use crate::mock::PrincipalServerAdmin as MockPrincipalServerAdmin;
 
-    impl ConnectorProvider for MockHomeserverAdmin {
+    impl ConnectorProvider for MockPrincipalServerAdmin {
         fn provider_name(&self) -> &str {
-            "mock-homeserver"
+            "mock-principal"
         }
 
         fn capabilities(&self) -> ConnectorCapabilities {
@@ -161,7 +160,6 @@ mod tests {
                 can_delete_users: true,
                 can_manage_devices: true,
                 can_set_displayname: true,
-                can_cross_signing_reset: true,
             }
         }
     }
@@ -171,30 +169,30 @@ mod tests {
         assert!(!capabilities.can_delete_users);
         assert!(!capabilities.can_manage_devices);
         assert!(!capabilities.can_set_displayname);
-        assert!(!capabilities.can_cross_signing_reset);
     }
 
     #[tokio::test]
     async fn forwards_read_operations_to_source() {
-        let source = MockHomeserverAdmin::new("example.org");
-        source.reserve_localpart("reserved").await;
+        let source = MockPrincipalServerAdmin::new("example.org");
+        source.reserve_username("reserved").await;
         source
             .provision_user(
-                &ProvisionRequest::new("alice", "sub-alice").set_displayname("Alice".to_owned()),
+                &PrincipalProvisionRequest::new("alice", "sub-alice")
+                    .set_displayname("Alice".to_owned()),
             )
             .await
             .unwrap();
 
-        let connection = ReadOnlyHomeserverAdmin::new(source);
+        let connection = ReadOnlyPrincipalServerAdmin::new(source);
 
         assert!(
             connection
-                .verify_token(MockHomeserverAdmin::VALID_BEARER_TOKEN)
+                .verify_token(MockPrincipalServerAdmin::VALID_BEARER_TOKEN)
                 .await
                 .unwrap()
         );
-        assert!(!connection.is_localpart_available("alice").await.unwrap());
-        assert!(!connection.is_localpart_available("reserved").await.unwrap());
+        assert!(!connection.is_username_available("alice").await.unwrap());
+        assert!(!connection.is_username_available("reserved").await.unwrap());
 
         let user = connection.query_user("alice").await.unwrap();
         assert_eq!(user.displayname.as_deref(), Some("Alice"));
@@ -202,13 +200,14 @@ mod tests {
 
     #[tokio::test]
     async fn blocks_mutations_and_reports_no_write_capabilities() {
-        let connection = ReadOnlyHomeserverAdmin::new(MockHomeserverAdmin::new("example.org"));
+        let connection =
+            ReadOnlyPrincipalServerAdmin::new(MockPrincipalServerAdmin::new("example.org"));
 
-        assert_eq!(connection.provider_name(), "mock-homeserver");
+        assert_eq!(connection.provider_name(), "mock-principal");
         assert_all_writes_disabled(connection.capabilities());
 
         let provision_error = connection
-            .provision_user(&ProvisionRequest::new("bob", "sub-bob"))
+            .provision_user(&PrincipalProvisionRequest::new("bob", "sub-bob"))
             .await
             .unwrap_err();
         assert!(provision_error.to_string().contains("read-only"));

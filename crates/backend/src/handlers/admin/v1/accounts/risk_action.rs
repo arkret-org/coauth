@@ -102,7 +102,7 @@ pub struct AccountRiskActionExecuteResponse {
 
 struct AccountRiskActionMutation {
     patch: AdminUserPatch,
-    hs_erase: bool,
+    principal_erase: bool,
     mutation_kind: &'static str,
     mutation_description: &'static str,
 }
@@ -114,7 +114,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
                 locked: Some(true),
                 ..AdminUserPatch::default()
             },
-            hs_erase: false,
+            principal_erase: false,
             mutation_kind: "account_locked",
             mutation_description: "account locked through services.user_admin",
         }),
@@ -123,7 +123,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
                 deactivated: Some(true),
                 ..AdminUserPatch::default()
             },
-            hs_erase: false,
+            principal_erase: false,
             mutation_kind: "account_disabled",
             mutation_description: "account disabled through services.user_admin",
         }),
@@ -132,16 +132,16 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
                 deactivated: Some(true),
                 ..AdminUserPatch::default()
             },
-            hs_erase: true,
+            principal_erase: true,
             mutation_kind: "account_erasure_scheduled",
-            mutation_description: "account disabled and homeserver erasure job scheduled through services.user_admin",
+            mutation_description: "account disabled and PrincipalServer erasure job scheduled through services.user_admin",
         }),
         "reset_recovery" => Ok(AccountRiskActionMutation {
             patch: AdminUserPatch {
                 locked: Some(true),
                 ..AdminUserPatch::default()
             },
-            hs_erase: false,
+            principal_erase: false,
             mutation_kind: "account_locked_pending_recovery_reset",
             mutation_description: "account locked pending dedicated recovery reset workflow",
         }),
@@ -434,7 +434,7 @@ pub async fn execute(
     } = extract_call_context(req, depot).await?;
     let contrix_config = depot.contrix_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let executed_at = clock.now();
     let id = extract_ulid_param(req)?;
     let proposal_id = req
@@ -455,11 +455,11 @@ pub async fn execute(
         &mut repo,
         &mut rng,
         &*clock,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         admin_user.as_ref(),
         account.id,
         mutation.patch,
-        mutation.hs_erase,
+        mutation.principal_erase,
     )
     .await
     .map_err(super::map_service_error)?;
@@ -486,7 +486,7 @@ pub async fn execute(
                         "next_state": "mutation_recorded",
                         "mutation_kind": mutation.mutation_kind,
                         "mutation_description": mutation.mutation_description,
-                        "hs_erase": mutation.hs_erase,
+                        "principal_erase": mutation.principal_erase,
                         "ticket": params.ticket,
                         "executed_by": admin_user.id,
                         "executed_by_username": admin_user.username,

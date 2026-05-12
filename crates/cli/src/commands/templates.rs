@@ -13,7 +13,7 @@ use clap::Parser;
 use coauth_backend::util::{site_config_from_config, templates_from_config};
 use coauth_config::{
     AccountConfig, BrandingConfig, CaptchaConfig, ConfigurationSection, ConfigurationSectionExt,
-    ExperimentalConfig, MatrixConfig, PasswordsConfig, SmsConfig, TemplatesConfig,
+    ExperimentalConfig, HttpConfig, PasswordsConfig, SmsConfig, TemplatesConfig,
 };
 use coauth_data::{Clock, SystemClock};
 use figment::Figment;
@@ -54,7 +54,7 @@ impl Options {
             TemplatesConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
         let brand_cfg =
             BrandingConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
-        let matrix_cfg = MatrixConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
+        let http_cfg = HttpConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
         let exp_cfg =
             ExperimentalConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
         let pw_cfg =
@@ -83,7 +83,7 @@ impl Options {
 
         let site_config = site_config_from_config(
             &brand_cfg,
-            &matrix_cfg,
+            &http_cfg,
             &exp_cfg,
             &pw_cfg,
             &acct_cfg,

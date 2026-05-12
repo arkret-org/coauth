@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn scope_accepts_uris() {
         assert!(Scope::from_str("http://example.com").is_ok());
-        assert!(Scope::from_str("urn:matrix:client:api:*").is_ok());
-        assert!(Scope::from_str("urn:matrix:org.matrix.msc2967.client:api:*").is_ok());
+        assert!(Scope::from_str("urn:contrix:client:api:*").is_ok());
+        assert!(Scope::from_str("urn:contrix:client:device:DEVICE").is_ok());
     }
 }

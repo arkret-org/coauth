@@ -113,16 +113,15 @@ impl PersonalSession {
         Ok(self)
     }
 
-    /// Whether the session's scope includes a Matrix device scope, indicating
+    /// Whether the session's scope includes a Contrix device scope, indicating
     /// that a device is attached.
     #[must_use]
     pub fn has_device(&self) -> bool {
-        const DEVICE_URN: &str = "urn:matrix:client:device:";
-        const DEVICE_URN_MSC: &str = "urn:matrix:org.matrix.msc2967.client:device:";
+        const DEVICE_URN: &str = "urn:contrix:client:device:";
 
         self.scope.iter().any(|tok| {
             let s = tok.as_str();
-            s.starts_with(DEVICE_URN) || s.starts_with(DEVICE_URN_MSC)
+            s.starts_with(DEVICE_URN)
         })
     }
 }

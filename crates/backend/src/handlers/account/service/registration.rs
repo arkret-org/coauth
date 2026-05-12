@@ -22,8 +22,8 @@ use coauth_data::{
         UserRepository, UserTermsRepository,
     },
 };
-use coauth_matrix::HomeserverAdmin;
 use coauth_policy::PolicyFactory;
+use coauth_principal::PrincipalServerAdmin;
 use lettre::Address;
 use rand_chacha::rand_core::CryptoRngCore;
 use serde_json::Value;
@@ -652,7 +652,7 @@ pub enum RegistrationFinishError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HomeserverCheckMode {
+pub enum PrincipalServerCheckMode {
     Strict,
     BestEffort,
 }
@@ -672,7 +672,7 @@ pub enum CheckRegistrationFinishEligibilityError {
     UsernameNotAvailable,
 
     #[error("failed to verify username availability")]
-    HomeserverUnavailable(#[source] AnyhowError),
+    PrincipalServerUnavailable(#[source] AnyhowError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -1106,7 +1106,7 @@ pub async fn begin_password_registration(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     password_manager: &PasswordManager,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     policy_factory: &PolicyFactory,
     limiter: &Limiter,
     request: BeginPasswordRegistrationRequest,
@@ -1124,13 +1124,13 @@ pub async fn begin_password_registration(
     } else if repo.user().exists(&request.username).await? {
         issues.push(BeginPasswordRegistrationIssue::UsernameExists);
     } else {
-        match homeserver.is_localpart_available(&request.username).await {
+        match principal_server.is_username_available(&request.username).await {
             Ok(false) => issues.push(BeginPasswordRegistrationIssue::UsernameExists),
             Ok(true) => {}
             Err(error) => {
                 tracing::warn!(
                     error = &*error as &dyn std::error::Error,
-                    "Failed to check localpart availability, skipping homeserver check"
+                    "Failed to check username availability, skipping PrincipalServer check"
                 );
             }
         }
@@ -1742,10 +1742,10 @@ pub async fn submit_registration_display_name(
 pub async fn check_registration_finish_eligibility(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     registration: &UserRegistration,
     browser_session_present: Option<bool>,
-    homeserver_check_mode: HomeserverCheckMode,
+    principal_server_check_mode: PrincipalServerCheckMode,
 ) -> Result<(), CheckRegistrationFinishEligibilityError> {
     if clock.now() - registration.created_at > Duration::hours(1) {
         return Err(CheckRegistrationFinishEligibilityError::RegistrationExpired);
@@ -1759,20 +1759,20 @@ pub async fn check_registration_finish_eligibility(
         return Err(CheckRegistrationFinishEligibilityError::UsernameTaken);
     }
 
-    match homeserver
-        .is_localpart_available(&registration.username)
+    match principal_server
+        .is_username_available(&registration.username)
         .await
     {
         Ok(true) => Ok(()),
         Ok(false) => Err(CheckRegistrationFinishEligibilityError::UsernameNotAvailable),
-        Err(error) => match homeserver_check_mode {
-            HomeserverCheckMode::Strict => {
-                Err(CheckRegistrationFinishEligibilityError::HomeserverUnavailable(error))
+        Err(error) => match principal_server_check_mode {
+            PrincipalServerCheckMode::Strict => {
+                Err(CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error))
             }
-            HomeserverCheckMode::BestEffort => {
+            PrincipalServerCheckMode::BestEffort => {
                 tracing::warn!(
                     error = %error,
-                    "Failed to check localpart availability during finish, skipping homeserver check"
+                    "Failed to check username availability during finish, skipping PrincipalServer check"
                 );
                 Ok(())
             }
@@ -1783,10 +1783,10 @@ pub async fn check_registration_finish_eligibility(
 pub async fn load_registration_finish_preparation(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     registration_id: Ulid,
     browser_session_present: Option<bool>,
-    homeserver_check_mode: HomeserverCheckMode,
+    principal_server_check_mode: PrincipalServerCheckMode,
     registration_token_required: bool,
 ) -> Result<PreparedRegistrationCompletion, LoadRegistrationFinishPreparationError> {
     let progress = load_registration_progress(repo, registration_id)
@@ -1811,10 +1811,10 @@ pub async fn load_registration_finish_preparation(
     check_registration_finish_eligibility(
         repo,
         clock,
-        homeserver,
+        principal_server,
         &registration,
         browser_session_present,
-        homeserver_check_mode,
+        principal_server_check_mode,
     )
     .await
     .map_err(
@@ -2015,7 +2015,7 @@ pub async fn complete_registration(
 
     // Mirror the registration's display_name / avatar_url onto coauth's
     // local user record so the account UI ("Edit profile") shows them
-    // immediately, before the async homeserver-provision job runs.
+    // immediately, before the async PrincipalServer-provision job runs.
     if registration.display_name.is_some() || registration.avatar_url.is_some() {
         let profile_patch = coauth_data::UserProfilePatch {
             display_name: registration.display_name.clone().map(Some),
@@ -2113,10 +2113,10 @@ pub async fn finish_registration(
     mut repo: BoxRepository,
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     registration_id: Ulid,
     browser_session_present: Option<bool>,
-    homeserver_check_mode: HomeserverCheckMode,
+    principal_server_check_mode: PrincipalServerCheckMode,
     registration_token_required: bool,
     configured_bootstrap_admin_token: Option<&str>,
     requested_bootstrap_admin_token: Option<String>,
@@ -2125,10 +2125,10 @@ pub async fn finish_registration(
     let prepared = match load_registration_finish_preparation(
         &mut repo,
         clock,
-        homeserver,
+        principal_server,
         registration_id,
         browser_session_present,
-        homeserver_check_mode,
+        principal_server_check_mode,
         registration_token_required,
     )
     .await
@@ -2163,7 +2163,7 @@ pub async fn finish_registration(
                     "Registration browser session is required",
                 )));
             }
-            CheckRegistrationFinishEligibilityError::HomeserverUnavailable(_) => unreachable!(),
+            CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(_) => unreachable!(),
             CheckRegistrationFinishEligibilityError::Repository(error) => {
                 return Err(RegistrationFinishError::Repository(error));
             }

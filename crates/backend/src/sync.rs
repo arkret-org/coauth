@@ -74,10 +74,10 @@ fn map_claims_imports(
             template: config.subject.template.clone(),
         },
         skip_confirmation: config.skip_confirmation,
-        localpart: coauth_data::UpstreamOAuthProviderLocalpartPreference {
-            action: map_import_action(config.localpart.action),
-            template: config.localpart.template.clone(),
-            on_conflict: map_import_on_conflict(config.localpart.on_conflict),
+        username: coauth_data::UpstreamOAuthProviderUsernamePreference {
+            action: map_import_action(config.username.action),
+            template: config.username.template.clone(),
+            on_conflict: map_import_on_conflict(config.username.on_conflict),
         },
         displayname: coauth_data::UpstreamOAuthProviderImportPreference {
             action: map_import_action(config.displayname.action),

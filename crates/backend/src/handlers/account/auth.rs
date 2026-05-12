@@ -49,7 +49,7 @@ pub struct LoginRequest {
     /// Audience the client wants the issued session grant to be bound to.
     /// Must exactly match a configured principal-server audience. When
     /// omitted, the caller is implicitly accepting the deployment's only
-    /// configured principal server; deployments with zero or multiple
+    /// configured server_name; deployments with zero or multiple
     /// principal servers will reject the request.
     #[serde(default)]
     pub audience: Option<String>,
@@ -79,7 +79,7 @@ pub struct ViewerInfo {
     pub username: String,
     pub did: String,
     pub handle: String,
-    pub mxid: String,
+    pub principal_id: String,
     pub display_name: Option<String>,
 }
 
@@ -147,7 +147,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
     let limiter = depot.limiter()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
@@ -211,7 +211,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         &clock,
         &password_manager,
         &limiter,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         &url_builder,
         &contrix_config,
         &site_config,
@@ -295,7 +295,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 .await;
 
             let cookie_jar = cookie_jar.set_session(&user_session);
-            let display_name = match homeserver.query_user(&user.username).await {
+            let display_name = match principal_server.query_user(&user.username).await {
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
@@ -353,7 +353,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         username: user.username.clone(),
                         did: contrix::user_did_for(&url_builder, &contrix_config, &user),
                         handle: contrix::user_handle(&url_builder, &user),
-                        mxid: homeserver.mxid(&user.username),
+                        principal_id: principal_server.principal_id(&user.username),
                         display_name,
                     }),
                     session_grant: Some(SessionGrantInfo {

@@ -8,7 +8,6 @@ use oauth2_types::{
     scope::{OPENID, PROFILE, Scope},
 };
 use rand_core::RngCore;
-use ruma_common::UserId;
 use serde::Serialize;
 use ulid::Ulid;
 use url::Url;
@@ -143,9 +142,9 @@ impl AuthorizationGrantStage {
     }
 }
 
-/// Pasion-original: parsed login hint for the authorization grant.
+/// Parsed login hint for the authorization grant.
 pub enum LoginHint<'a> {
-    MXID(&'a UserId),
+    Username(&'a str),
     Email(lettre::Address),
     None,
 }
@@ -179,26 +178,23 @@ impl std::ops::Deref for AuthorizationGrant {
 }
 
 impl AuthorizationGrant {
-    /// Pasion-original: parse a `login_hint`
+    /// Parse a `login_hint`.
     ///
-    /// Returns `LoginHint::MXID` for valid mxid 'mxid:@john.doe:example.com'
-    ///
-    /// Returns `LoginHint::Email` for valid email 'john.doe@example.com'
-    ///
-    /// Otherwise returns `LoginHint::None`
+    /// Email addresses are returned as [`LoginHint::Email`]. Plain values
+    /// without a URI scheme are treated as local usernames.
     #[must_use]
-    pub fn parse_login_hint(&self, homeserver: &str) -> LoginHint<'_> {
+    pub fn parse_login_hint(&self) -> LoginHint<'_> {
         let Some(login_hint) = &self.login_hint else {
             return LoginHint::None;
         };
 
-        if let Some(value) = login_hint.strip_prefix("mxid:")
-            && let Ok(mxid) = <&UserId>::try_from(value)
-            && mxid.server_name() == homeserver
-        {
-            LoginHint::MXID(mxid)
-        } else if let Ok(email) = lettre::Address::from_str(login_hint) {
+        if let Ok(email) = lettre::Address::from_str(login_hint) {
             LoginHint::Email(email)
+        } else if !login_hint.trim().is_empty()
+            && !login_hint.contains(':')
+            && !login_hint.chars().any(char::is_whitespace)
+        {
+            LoginHint::Username(login_hint)
         } else {
             LoginHint::None
         }
@@ -265,7 +261,7 @@ impl AuthorizationGrant {
             response_mode: ResponseMode::Query,
             response_type_id_token: false,
             created_at: now,
-            login_hint: Some(String::from("mxid:@example-user:example.com")),
+            login_hint: Some(String::from("example-user")),
             locale: Some(String::from("fr")),
         }
     }
@@ -288,24 +284,24 @@ mod tests {
             ..AuthorizationGrant::sample(now, &mut rng)
         };
 
-        let hint = grant.parse_login_hint("example.com");
+        let hint = grant.parse_login_hint();
 
         assert!(matches!(hint, LoginHint::None));
     }
 
     #[test]
-    fn valid_login_hint() {
+    fn valid_login_hint_with_username() {
         let now = MockClock::default().now();
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
 
         let grant = AuthorizationGrant {
-            login_hint: Some(String::from("mxid:@example-user:example.com")),
+            login_hint: Some(String::from("example-user")),
             ..AuthorizationGrant::sample(now, &mut rng)
         };
 
-        let hint = grant.parse_login_hint("example.com");
+        let hint = grant.parse_login_hint();
 
-        assert!(matches!(hint, LoginHint::MXID(mxid) if mxid.localpart() == "example-user"));
+        assert!(matches!(hint, LoginHint::Username("example-user")));
     }
 
     #[test]
@@ -318,37 +314,22 @@ mod tests {
             ..AuthorizationGrant::sample(now, &mut rng)
         };
 
-        let hint = grant.parse_login_hint("example.com");
+        let hint = grant.parse_login_hint();
 
         assert!(matches!(hint, LoginHint::Email(email) if email.to_string() == "example@user"));
     }
 
     #[test]
-    fn invalid_login_hint() {
+    fn invalid_login_hint_with_whitespace() {
         let now = MockClock::default().now();
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
 
         let grant = AuthorizationGrant {
-            login_hint: Some(String::from("example-user")),
+            login_hint: Some(String::from("example user")),
             ..AuthorizationGrant::sample(now, &mut rng)
         };
 
-        let hint = grant.parse_login_hint("example.com");
-
-        assert!(matches!(hint, LoginHint::None));
-    }
-
-    #[test]
-    fn valid_login_hint_for_wrong_homeserver() {
-        let now = MockClock::default().now();
-        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
-
-        let grant = AuthorizationGrant {
-            login_hint: Some(String::from("mxid:@example-user:matrix.org")),
-            ..AuthorizationGrant::sample(now, &mut rng)
-        };
-
-        let hint = grant.parse_login_hint("example.com");
+        let hint = grant.parse_login_hint();
 
         assert!(matches!(hint, LoginHint::None));
     }
@@ -363,7 +344,7 @@ mod tests {
             ..AuthorizationGrant::sample(now, &mut rng)
         };
 
-        let hint = grant.parse_login_hint("example.com");
+        let hint = grant.parse_login_hint();
 
         assert!(matches!(hint, LoginHint::None));
     }

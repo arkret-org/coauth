@@ -99,18 +99,17 @@ contrix:
 
 ## `matrix`
 
-Legacy Matrix / Palpo compatibility 配置。
+Legacy Matrix account-domain 兼容配置。Palpo/Matrix connector 已退役；这个配置段不再
+连接 homeserver adapter。
 
 ```yaml
 matrix:
-  kind: palpo
-  homeserver: matrix.example.com
-  secret: shared-secret
-  endpoint: https://matrix.example.com/
+  enabled: false
+  homeserver: example.com
 ```
 
-这个配置段还保留在根配置模型里，因为 compatibility adapter 尚未彻底拆成可选 profile。
-对新的 Contrix-first 部署来说，除非你真的在承接 Matrix / Palpo 流量，否则应把它视为 legacy 配置。
+`homeserver` 现在只作为旧 identifier 路径使用的 account-domain/server-name。新的
+Contrix-first 部署应通过 `contrix.principal_servers` 发布 Soland，并保持这个 adapter 禁用。
 
 ## `templates`
 

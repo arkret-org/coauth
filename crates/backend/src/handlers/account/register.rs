@@ -21,7 +21,7 @@ use crate::{
         RequesterFingerprint,
         account::service::registration::{
             BeginPasswordRegistrationError, BeginPasswordRegistrationRequest,
-            BeginPasswordRegistrationResult, EmailAvailabilityCheck, HomeserverCheckMode,
+            BeginPasswordRegistrationResult, EmailAvailabilityCheck, PrincipalServerCheckMode,
             LoadRegistrationProgressError, RegistrationDisplayNameOutcome,
             RegistrationDisplayNameWorkflowError, RegistrationEmailChangeError,
             RegistrationEmailChangeOutcome, RegistrationFinishError, RegistrationFinishOutcome,
@@ -83,7 +83,7 @@ pub async fn post_register(
 
     let site_config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let policy_factory = depot.policy_factory()?;
     let limiter = depot.limiter()?;
     let repo_factory = depot.repo_factory()?;
@@ -134,7 +134,7 @@ pub async fn post_register(
         &mut rng,
         &clock,
         &password_manager,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         policy_factory.as_ref(),
         &limiter,
         BeginPasswordRegistrationRequest {
@@ -683,7 +683,7 @@ pub async fn post_finish(
         .map_err(|_| RouteError::BadRequest("invalid id".into()))?;
 
     let site_config = depot.site_config()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let repo_factory = depot.repo_factory()?;
     let input = if req
         .payload()
@@ -715,10 +715,10 @@ pub async fn post_finish(
         repo,
         &mut rng,
         &clock,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         id,
         None,
-        HomeserverCheckMode::BestEffort,
+        PrincipalServerCheckMode::BestEffort,
         site_config.registration_token_required,
         site_config.bootstrap_admin_token.as_deref(),
         input.bootstrap_admin_token,

@@ -48,10 +48,10 @@ pub fn AccountSettings() -> Element {
             let password_login_enabled = result.site_config.password_login_enabled;
             let account_deactivation_allowed = result.site_config.account_deactivation_allowed;
             let session_id = session.id.clone();
-            let user_mxid = user
-                .matrix
+            let user_principal_id = user
+                .principal
                 .as_ref()
-                .map(|m| m.mxid.clone())
+                .map(|m| m.principal_id.clone())
                 .unwrap_or_default();
 
             rsx! {
@@ -86,19 +86,6 @@ pub fn AccountSettings() -> Element {
                     LinkedAccountsSection { accounts: linked_accounts.clone() }
                     Separator { kind: SeparatorKind::Section }
 
-                    // E2EE section
-                    CollapsibleSection { title: "Encryption".to_string(),
-                        p { class: "text-md text-secondary",
-                            "Resetting your end-to-end encryption keys will clear your current encryption keys and force a re-verification of all sessions."
-                        }
-                        Link {
-                            class: "btn btn-secondary",
-                            to: Route::ResetCrossSigning {},
-                            "Reset encryption"
-                        }
-                    }
-                    Separator { kind: SeparatorKind::Section }
-
                     // Sign out
                     SignOutButton { session_id: session_id.clone() }
 
@@ -106,7 +93,7 @@ pub fn AccountSettings() -> Element {
                     if account_deactivation_allowed {
                         Separator {}
                         AccountDeleteButton {
-                            mxid: user_mxid.clone(),
+                            principal_id: user_principal_id.clone(),
                             has_password: has_password,
                             password_login_enabled: password_login_enabled,
                         }
@@ -297,7 +284,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
 }
 
 #[component]
-fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled: bool) -> Element {
+fn AccountDeleteButton(principal_id: String, has_password: bool, password_login_enabled: bool) -> Element {
     let nav = navigator();
     let mut show_dialog = use_signal(|| false);
     let mut deactivating = use_signal(|| false);
@@ -305,9 +292,9 @@ fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled:
     let mut erase_data = use_signal(|| false);
     let mut confirm_enabled = use_signal(|| false);
     let mut password = use_signal(String::new);
-    let mut mxid_confirm = use_signal(String::new);
-    let mxid_clone = mxid.clone();
-    let mxid_for_check = mxid.clone();
+    let mut principal_id_confirm = use_signal(String::new);
+    let principal_id_clone = principal_id.clone();
+    let principal_id_for_check = principal_id.clone();
 
     let use_password_mode = has_password && password_login_enabled;
 
@@ -326,7 +313,7 @@ fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled:
     let form_valid = if use_password_mode {
         !password.read().is_empty()
     } else {
-        *mxid_confirm.read() == mxid_for_check
+        *principal_id_confirm.read() == principal_id_for_check
     };
 
     rsx! {
@@ -337,7 +324,7 @@ fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled:
                 erase_data.set(false);
                 error.set(None);
                 password.set(String::new());
-                mxid_confirm.set(String::new());
+                principal_id_confirm.set(String::new());
                 show_dialog.set(true);
             },
             "Deactivate account"
@@ -353,10 +340,10 @@ fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled:
 
                     h3 { class: "dialog-title", "Deactivate account" }
 
-                    if !mxid_clone.is_empty() {
+                    if !principal_id_clone.is_empty() {
                         p { class: "text-md",
                             "Account: "
-                            strong { "{mxid_clone}" }
+                            strong { "{principal_id_clone}" }
                         }
                     }
 
@@ -381,7 +368,7 @@ fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled:
                         }
                     }
 
-                    // Password or MXID confirmation
+                    // Password or principal_id confirmation
                     if use_password_mode {
                         div { class: "form-field",
                             label { class: "form-label", "Enter your password to confirm" }
@@ -393,18 +380,18 @@ fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled:
                                 oninput: move |e| password.set(e.value()),
                             }
                         }
-                    } else if !mxid_clone.is_empty() {
+                    } else if !principal_id_clone.is_empty() {
                         div { class: "form-field",
                             label { class: "form-label",
                                 "Type "
-                                strong { "{mxid_clone}" }
+                                strong { "{principal_id_clone}" }
                                 " to confirm"
                             }
                             input {
                                 class: "form-input",
                                 r#type: "text",
-                                value: "{mxid_confirm}",
-                                oninput: move |e| mxid_confirm.set(e.value()),
+                                value: "{principal_id_confirm}",
+                                oninput: move |e| principal_id_confirm.set(e.value()),
                             }
                         }
                     }
@@ -419,7 +406,7 @@ fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled:
                         onclick: {
                             let nav = nav.clone();
                             move |_| {
-                                let hs_erase = erase_data();
+                                let principal_erase = erase_data();
                                 let pw = if use_password_mode {
                                     Some(password.to_string())
                                 } else {
@@ -430,7 +417,7 @@ fn AccountDeleteButton(mxid: String, has_password: bool, password_login_enabled:
                                 error.set(None);
                                 spawn(async move {
                                     let mut body = serde_json::json!({
-                                        "hs_erase": hs_erase,
+                                        "principal_erase": principal_erase,
                                     });
                                     if let Some(ref pw_val) = pw {
                                         body.as_object_mut().unwrap().insert(

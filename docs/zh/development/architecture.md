@@ -1,11 +1,11 @@
 # 架构设计
 
-Pasion 是面向 Palpo 的身份、通知、运营与接入平台。它以 PostgreSQL 为唯一外部存储依赖，支持水平扩展部署。
+coauth 是 Contrix 的 Auth Server，负责账号认证、OAuth/OIDC、会话授权与 Principal Server（例如 soland）集成。它以 PostgreSQL 为主要外部存储依赖，支持水平扩展部署。
 
 ## 设计目标
 
-- 面向 Palpo 的身份、通知、运营与接入平台
-- 支持 Matrix OIDC 认证（[MSC3861](https://github.com/matrix-org/matrix-spec-proposals/pull/3861)）同时提供独立的用户运营能力
+- 面向 Contrix / Soland 的账号认证与 session grant 签发
+- 支持标准 OAuth 2.0 / OIDC，同时提供独立的用户运营能力
 - 工作流驱动的业务流程管理
 - 统一通知中心
 - 可插拔的外部系统连接器
@@ -40,8 +40,7 @@ Pasion 是面向 Palpo 的身份、通知、运营与接入平台。它以 Postg
 
 | Crate | 说明 |
 |-------|------|
-| `coauth-matrix` | Matrix 连接器抽象 |
-| `coauth-matrix-palpo` | Palpo 连接器实现 |
+| `coauth-principal` | Principal Server 账号/设备同步抽象与测试 stub |
 | `coauth-oidc-client` | 上游 OIDC/OAuth2 客户端 |
 
 ### 协议与加密
@@ -128,17 +127,17 @@ Workflow / Service 层
     │
     ├────────────────┬────────────────┐
     ▼                ▼                ▼
-Repository      Connector       Notification
-(storage-pg)    (matrix-palpo)  (messaging)
+Repository      Principal       Notification
+(storage-pg)    (soland)        (messaging)
     │                │                │
     ▼                ▼                ▼
-PostgreSQL       Palpo API      Email / SMS
+PostgreSQL       Session grants Email / SMS
 ```
 
 Handler 层负责 HTTP 协议的适配——解析请求、校验参数、映射响应格式。业务逻辑集中在 Workflow / Service 层，每个工作流封装一个完整的业务流程（如注册、恢复、登录等）。工作流通过三类基础设施完成实际操作：
 
 - **Repository**（`coauth-storage-pg`）：持久化读写，对接 PostgreSQL。
-- **Connector**（`coauth-matrix-palpo`）：与外部系统（如 Palpo）的双向通信。
+- **Principal**（`coauth-principal`）：保留账号/设备同步抽象；生产路径通过 Contrix session grants 与 soland 集成。
 - **Notification**（`coauth-messaging`）：统一通知中心，将邮件和短信通过对应通道发送。
 
 ## API 分层

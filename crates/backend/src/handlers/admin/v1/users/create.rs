@@ -10,7 +10,7 @@ use coauth_data::{
     BoxClock, BoxRepository,
     audit::{AdminOperation, NewAdminOperationLog},
 };
-use coauth_matrix::ProvisionRequest;
+use coauth_principal::PrincipalProvisionRequest;
 use rand::distr::{Alphanumeric, SampleString};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -42,13 +42,13 @@ pub struct AddRequest {
     /// The username of the user to add.
     username: String,
 
-    /// Skip checking with the homeserver whether the username is available.
+    /// Skip checking with the PrincipalServer whether the username is available.
     ///
     /// Use this with caution! The main reason to use this, is when a user used
     /// by an application service needs to exist in the compatibility adapter
     /// to craft special tokens (like admin access) for them
     #[serde(default)]
-    skip_homeserver_check: bool,
+    skip_principal_server_check: bool,
 }
 
 #[endpoint]
@@ -62,7 +62,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
         ..
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let params: AddRequest = req.parse_json().await.map_err(AppError::internal)?;
 
     if repo.user().exists(&params.username).await? {
@@ -74,19 +74,19 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
         return Err(AppError::bad_request("Username is not valid"));
     }
 
-    // Ask the homeserver if the username is available
-    let homeserver_available = homeserver
-        .is_localpart_available(&params.username)
+    // Ask the PrincipalServer if the username is available
+    let principal_server_available = principal_server
+        .is_username_available(&params.username)
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
-    if !homeserver_available {
-        if !params.skip_homeserver_check {
-            return Err(AppError::conflict("Username is reserved by the homeserver"));
+    if !principal_server_available {
+        if !params.skip_principal_server_check {
+            return Err(AppError::conflict("Username is reserved by the PrincipalServer"));
         }
 
         // If we skipped the check, we still want to shout about it
-        warn!("Skipped homeserver check for username {}", params.username);
+        warn!("Skipped PrincipalServer check for username {}", params.username);
     }
 
     let user = repo.user().add(&mut rng, &clock, params.username).await?;
@@ -98,8 +98,8 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     // until the device-bound `update_key` is derived from the first
     // attested credential.
 
-    homeserver
-        .provision_user(&ProvisionRequest::new(&user.username, &user.sub))
+    principal_server
+        .provision_user(&PrincipalProvisionRequest::new(&user.username, &user.sub))
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
@@ -139,7 +139,7 @@ pub struct BatchInviteRequest {
 
     /// Optional Contrix consent-gate metadata (Move/Anchor/Lattice spec
     /// `consent-model.md` §6.1). When `peer_did` is supplied **and** a
-    /// principal server URL is configured, coauth queries the holder's
+    /// server_name URL is configured, coauth queries the holder's
     /// consent-grant cell on `soland` before minting registration tokens
     /// and rejects / quarantines the batch when the holder has not granted
     /// the requesting peer.
@@ -174,7 +174,7 @@ pub struct BatchInviteConsentGate {
     pub scope: String,
 
     /// Override `ContrixConfig::principal_server_url` per request. Useful
-    /// when a deployment fans out across multiple principal servers and
+    /// when a deployment fans out across multiple server_names and
     /// the global config points at a different one.
     #[serde(default)]
     pub target_principal_url: Option<Url>,
@@ -275,7 +275,7 @@ pub async fn evaluate_batch_invite_gate(
         // off, treat as quarantine. (We never silently allow.)
         debug!(
             consent_id = %gate.consent_id,
-            "batch_invite consent gate: no principal server URL — falling back per require_consent",
+            "batch_invite consent gate: no server_name URL — falling back per require_consent",
         );
         return if gate.require_consent {
             BatchInviteGateOutcome::ConsentRequired
@@ -383,7 +383,7 @@ pub async fn batch_invite(
     //
     // Per `contrix-spec` 2026-05-08 `consent-model.md` §6.1, when an
     // invite addresses a specific holder DID we must query the holder's
-    // consent-grant cell on their principal server (`soland`) before
+    // consent-grant cell on their server_name (`soland`) before
     // proceeding. The gate is opt-in via `BatchInviteConsentGate` —
     // legacy callers that just want bulk registration tokens omit the
     // metadata and skip the network round-trip entirely.

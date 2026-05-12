@@ -1,10 +1,10 @@
 use dioxus::prelude::*;
 
-use crate::api::types::{MatrixUser, PatchViewerProfileResponse, UserProfile};
+use crate::api::types::{PrincipalUser, PatchViewerProfileResponse, UserProfile};
 
 #[component]
 pub fn UserGreeting(
-    matrix: MatrixUser,
+    principal: PrincipalUser,
     profile: UserProfile,
     display_name_change_allowed: bool,
     on_edit: EventHandler,
@@ -12,11 +12,11 @@ pub fn UserGreeting(
     let display_name = profile
         .display_name
         .clone()
-        .or_else(|| matrix.display_name.clone());
+        .or_else(|| principal.display_name.clone());
     let initial = display_name
         .as_ref()
         .and_then(|name| name.chars().next())
-        .or_else(|| matrix.mxid.chars().nth(1))
+        .or_else(|| principal.principal_id.chars().next())
         .unwrap_or('?')
         .to_uppercase()
         .to_string();
@@ -37,9 +37,9 @@ pub fn UserGreeting(
             div { class: "user-meta",
                 if let Some(display_name) = display_name {
                     span { class: "text-lg font-semibold", "{display_name}" }
-                    span { class: "user-mxid", "{matrix.mxid}" }
+                    span { class: "user-principal-id", "{principal.principal_id}" }
                 } else {
-                    span { class: "text-lg font-semibold", "{matrix.mxid}" }
+                    span { class: "text-lg font-semibold", "{principal.principal_id}" }
                 }
             }
             if display_name_change_allowed {
@@ -57,7 +57,7 @@ pub fn UserGreeting(
 pub fn EditProfileDialog(
     open: Signal<bool>,
     profile: UserProfile,
-    matrix: MatrixUser,
+    principal: PrincipalUser,
     on_saved: EventHandler<PatchViewerProfileResponse>,
 ) -> Element {
     let mut display_name_value = use_signal(|| profile.display_name.clone().unwrap_or_default());
@@ -71,9 +71,9 @@ pub fn EditProfileDialog(
     let avatar_initial = profile
         .display_name
         .as_ref()
-        .or(matrix.display_name.as_ref())
+        .or(principal.display_name.as_ref())
         .and_then(|name| name.chars().next())
-        .or_else(|| matrix.mxid.chars().nth(1))
+        .or_else(|| principal.principal_id.chars().next())
         .unwrap_or('?')
         .to_uppercase()
         .to_string();
@@ -223,11 +223,11 @@ pub fn EditProfileDialog(
                     }
 
                     div { class: "form-field",
-                        label { class: "form-label", "Matrix ID" }
+                        label { class: "form-label", "Principal ID" }
                         input {
                             class: "form-input",
                             r#type: "text",
-                            value: "{matrix.mxid}",
+                            value: "{principal.principal_id}",
                             readonly: true,
                         }
                     }

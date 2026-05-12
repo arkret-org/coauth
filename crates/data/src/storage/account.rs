@@ -60,7 +60,7 @@ pub trait AccountRepository: Send + Sync {
         user_id: Ulid,
     ) -> Result<Vec<AccountContactPoint>, Self::Error>;
 
-    /// List all identity bindings (upstream OAuth links, Matrix homeserver
+    /// List all identity bindings (upstream OAuth links, principal server
     /// links, etc.) for a user.
     ///
     /// # Parameters

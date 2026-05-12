@@ -27,9 +27,9 @@ use coauth_data::{
 };
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
-use coauth_matrix::{HomeserverAdmin, MockHomeserverAdmin};
 use coauth_messaging::{MailTransport, Mailer, NotificationCenter};
 use coauth_policy::{InstantiateError, Policy, PolicyFactory};
+use coauth_principal::{MockPrincipalServerAdmin, PrincipalServerAdmin};
 use coauth_tasks::QueueWorker;
 use coauth_templates::{SiteConfigExt, Templates};
 use cookie_store::{CookieStore, RawCookie};
@@ -132,7 +132,7 @@ pub(crate) struct TestState {
     pub metadata_cache: MetadataCache,
     pub encrypter: Encrypter,
     pub url_builder: UrlBuilder,
-    pub homeserver_admin: Arc<MockHomeserverAdmin>,
+    pub principal_server_admin: Arc<MockPrincipalServerAdmin>,
     pub policy_factory: Arc<PolicyFactory>,
     pub password_manager: PasswordManager,
     pub site_config: SiteConfig,
@@ -217,8 +217,8 @@ impl Handler for InjectTestState {
         depot.insert("limiter", state.limiter.clone());
         depot.insert("policy_factory", state.policy_factory.clone());
         depot.insert(
-            "homeserver_admin",
-            Arc::clone(&state.homeserver_admin) as Arc<dyn HomeserverAdmin>,
+            "principal_server_admin",
+            Arc::clone(&state.principal_server_admin) as Arc<dyn PrincipalServerAdmin>,
         );
         depot.insert("app_version", AppVersion("v0.0.0-test"));
         depot.insert("activity_tracker", state.activity_tracker.clone());
@@ -301,7 +301,7 @@ impl TestState {
         let policy_factory =
             policy_factory(&site_config.server_name, serde_json::json!({})).await?;
 
-        let homeserver_admin = Arc::new(MockHomeserverAdmin::new(&site_config.server_name));
+        let principal_server_admin = Arc::new(MockPrincipalServerAdmin::new(&site_config.server_name));
 
         let clock = Arc::new(MockClock::default());
         let rng = Arc::new(Mutex::new(ChaChaRng::seed_from_u64(42)));
@@ -330,7 +330,7 @@ impl TestState {
             database_url,
             Arc::clone(&clock),
             &notifications,
-            homeserver_admin.clone(),
+            principal_server_admin.clone(),
             url_builder.clone(),
             &site_config,
             shutdown_token.child_token(),
@@ -349,7 +349,7 @@ impl TestState {
             metadata_cache,
             encrypter,
             url_builder,
-            homeserver_admin,
+            principal_server_admin,
             policy_factory,
             password_manager,
             site_config,
@@ -517,10 +517,6 @@ impl TestState {
             .push(
                 Router::with_path("/api/v1/viewer/profile")
                     .patch(crate::handlers::account::users::patch_profile),
-            )
-            .push(
-                Router::with_path("/api/v1/viewer/cross-signing-reset")
-                    .post(crate::handlers::account::users::allow_cross_signing_reset),
             )
             .push(
                 Router::with_path("/api/v1/viewer/deactivate")

@@ -54,8 +54,8 @@ pub fn AccountPage() -> Element {
                 }
             };
 
-            let matrix = match &user.matrix {
-                Some(m) => m.clone(),
+            let principal = match &user.principal {
+                Some(p) => p.clone(),
                 None => {
                     return rsx! {
                         Layout { p { "User data unavailable." } }
@@ -66,7 +66,7 @@ pub fn AccountPage() -> Element {
                 .profile
                 .clone()
                 .unwrap_or(crate::api::types::UserProfile {
-                    display_name: matrix.display_name.clone(),
+                    display_name: principal.display_name.clone(),
                     avatar_url: None,
                     preferred_locale: None,
                     updated_at: String::new(),
@@ -82,7 +82,7 @@ pub fn AccountPage() -> Element {
 
             let mut show_edit_dialog = use_signal(|| false);
             let mut current_profile = use_signal(|| profile.clone());
-            let mut current_matrix = use_signal(|| matrix.clone());
+            let mut current_principal = use_signal(|| principal.clone());
 
             rsx! {
                 Layout { width: LayoutWidth::Full,
@@ -90,7 +90,7 @@ pub fn AccountPage() -> Element {
                         nav { class: "account-sidebar",
                             div { class: "sidebar-profile",
                                 UserGreeting {
-                                    matrix: current_matrix.read().clone(),
+                                    principal: current_principal.read().clone(),
                                     profile: current_profile.read().clone(),
                                     display_name_change_allowed: display_name_change_allowed,
                                     on_edit: move |_| show_edit_dialog.set(true),
@@ -133,10 +133,10 @@ pub fn AccountPage() -> Element {
                                 EditProfileDialog {
                                     open: show_edit_dialog,
                                     profile: current_profile.read().clone(),
-                                    matrix: current_matrix.read().clone(),
+                                    principal: current_principal.read().clone(),
                                     on_saved: move |response: PatchViewerProfileResponse| {
                                         current_profile.set(response.profile);
-                                        current_matrix.set(response.matrix);
+                                        current_principal.set(response.principal);
                                     },
                                 }
                             }

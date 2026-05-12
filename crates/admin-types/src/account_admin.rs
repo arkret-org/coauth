@@ -109,7 +109,7 @@ impl std::fmt::Display for AdminAccountStatus {
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 pub struct AdminAccountAttributes {
-    /// Stable account handle / localpart.
+    /// Stable account handle / username.
     #[serde(default)]
     pub username: String,
 

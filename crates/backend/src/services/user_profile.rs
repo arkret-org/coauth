@@ -7,7 +7,7 @@ use coauth_data::{
     notification::NotificationRepository,
     user::{UserEmailRepository, UserPasswordRepository, UserRepository},
 };
-use coauth_matrix::HomeserverAdmin;
+use coauth_principal::PrincipalServerAdmin;
 use rand_core::RngCore;
 use thiserror::Error;
 
@@ -18,8 +18,8 @@ pub struct ViewerProfile {
     pub profile: UserProfile,
     pub emails: Vec<UserEmail>,
     pub has_password: bool,
-    pub matrix_display_name: Option<String>,
-    pub mxid: String,
+    pub principal_display_name: Option<String>,
+    pub principal_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,7 +58,7 @@ pub enum UserProfileServiceError {
     DuplicateNotificationChannel(String),
 
     #[error(transparent)]
-    Homeserver(AnyhowError),
+    PrincipalServer(AnyhowError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -68,7 +68,7 @@ pub async fn patch_viewer_profile(
     repo: &mut BoxRepository,
     requester: &Requester,
     clock: &dyn Clock,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     patch: UserProfilePatch,
 ) -> Result<User, UserProfileServiceError> {
     let requester_user = requester
@@ -89,18 +89,18 @@ pub async fn patch_viewer_profile(
     let display_name_patch = patch.display_name.clone();
     let user = repo.user().update_profile(clock, user, patch).await?;
 
-    sync_display_name_patch(homeserver, &user, display_name_patch).await?;
+    sync_display_name_patch(principal_server, &user, display_name_patch).await?;
 
     Ok(user)
 }
 
 pub async fn load_viewer_profile(
     repo: &mut BoxRepository,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     user: &User,
 ) -> Result<ViewerProfile, UserProfileServiceError> {
-    let mxid = homeserver.mxid(&user.username);
-    let matrix_display_name = match homeserver.query_user(&user.username).await {
+    let principal_id = principal_server.principal_id(&user.username);
+    let principal_display_name = match principal_server.query_user(&user.username).await {
         Ok(info) => info.displayname.or_else(|| user.display_name.clone()),
         Err(_) => user.display_name.clone(),
     };
@@ -119,8 +119,8 @@ pub async fn load_viewer_profile(
         profile: user.profile(),
         emails,
         has_password,
-        matrix_display_name,
-        mxid,
+        principal_display_name,
+        principal_id,
     })
 }
 
@@ -228,7 +228,7 @@ pub(crate) fn validate_display_name_patch(
 }
 
 pub(crate) async fn sync_display_name_patch(
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     user: &User,
     patch: Option<Option<String>>,
 ) -> Result<(), UserProfileServiceError> {
@@ -237,14 +237,14 @@ pub(crate) async fn sync_display_name_patch(
     };
 
     match display_name {
-        Some(name) => homeserver
+        Some(name) => principal_server
             .set_displayname(&user.username, &name)
             .await
-            .map_err(UserProfileServiceError::Homeserver),
-        None => homeserver
+            .map_err(UserProfileServiceError::PrincipalServer),
+        None => principal_server
             .unset_displayname(&user.username)
             .await
-            .map_err(UserProfileServiceError::Homeserver),
+            .map_err(UserProfileServiceError::PrincipalServer),
     }
 }
 

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock};
 use coauth_keystore::Encrypter;
-use coauth_matrix::HomeserverAdmin;
+use coauth_principal::PrincipalServerAdmin;
 use oauth2_types::{
     errors::{ClientError, ClientErrorCode},
     requests::RevocationRequest,
@@ -130,9 +130,9 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
     let encrypter = depot
         .get::<Encrypter>("encrypter")
         .expect("Encrypter not found in depot");
-    let homeserver = depot
-        .get::<Arc<dyn HomeserverAdmin>>("homeserver_admin")
-        .expect("HomeserverAdmin not found in depot");
+    let principal_server = depot
+        .get::<Arc<dyn PrincipalServerAdmin>>("principal_server_admin")
+        .expect("PrincipalServerAdmin not found in depot");
     let repo_factory = depot
         .get::<BoxRepositoryFactory>("box_repository_factory")
         .expect("BoxRepositoryFactory not found in depot");
@@ -144,12 +144,12 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
 
     let mut repo: BoxRepository = repo_factory.create().await?;
 
-    // Check if the caller authenticated with the homeserver admin secret
+    // Check if the caller authenticated with the PrincipalServer admin secret
     // (bearer token).  When that is the case, skip the client-ownership
-    // check so that the homeserver can revoke any token on behalf of a
+    // check so that the PrincipalServer can revoke any token on behalf of a
     // client (e.g. during Matrix /logout).
     let admin_mode = if let Some(token) = client_authorization.credentials.bearer_token() {
-        homeserver
+        principal_server
             .verify_token(token)
             .await
             .map_err(|e| RouteError::Internal(e.into()))?

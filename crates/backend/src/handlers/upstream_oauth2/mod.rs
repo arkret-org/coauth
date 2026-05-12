@@ -12,7 +12,7 @@
 //!   logic is delegated to `upstream_link_workflow.rs`.
 //!
 //! The `ConnectorRegistry` provides runtime provider lookup. Each upstream
-//! OAuth2 provider is NOT a `ConnectorProvider` (that's for homeservers).
+//! OAuth2 provider is NOT a `ConnectorProvider` (that's for PrincipalServers).
 //! Instead, upstream providers are managed through
 //! `UpstreamOAuthProviderRepository`.
 

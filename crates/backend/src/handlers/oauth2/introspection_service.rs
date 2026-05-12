@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, TokenFormatError, TokenType,
@@ -11,56 +9,12 @@ use coauth_data::{
     user::UserRepository,
 };
 use coauth_iana::oauth::OAuthTokenTypeHint;
-use oauth2_types::{
-    requests::IntrospectionResponse,
-    scope::{Scope, ScopeToken},
-};
+use oauth2_types::requests::IntrospectionResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
 use crate::handlers::ActivityTracker;
 use crate::handlers::contrix;
-
-const UNSTABLE_API_SCOPE: ScopeToken =
-    ScopeToken::from_static("urn:matrix:org.matrix.msc2967.client:api:*");
-const STABLE_API_SCOPE: ScopeToken = ScopeToken::from_static("urn:matrix:client:api:*");
-const CONTRIX_CLIENT_DEVICE_SCOPE_PREFIX: &str = "urn:contrix:client:device:";
-const LEGACY_MATRIX_CLIENT_DEVICE_SCOPE_PREFIX: &str = "urn:matrix:client:device:";
-const LEGACY_MATRIX_MSC_DEVICE_SCOPE_PREFIX: &str = "urn:matrix:org.matrix.msc2967.client:device:";
-
-/// Normalize a scope by adding the stable and unstable API scope equivalents
-/// if missing.
-fn normalize_scope(mut scope: Scope) -> Scope {
-    let mut to_add = BTreeSet::new();
-    for token in &*scope {
-        if token == &STABLE_API_SCOPE {
-            to_add.insert(UNSTABLE_API_SCOPE);
-        } else if token == &UNSTABLE_API_SCOPE {
-            to_add.insert(STABLE_API_SCOPE);
-        } else {
-            let s = token.as_str();
-            let device_id = s
-                .strip_prefix(CONTRIX_CLIENT_DEVICE_SCOPE_PREFIX)
-                .or_else(|| s.strip_prefix(LEGACY_MATRIX_CLIENT_DEVICE_SCOPE_PREFIX))
-                .or_else(|| s.strip_prefix(LEGACY_MATRIX_MSC_DEVICE_SCOPE_PREFIX));
-            if let Some(device_id) = device_id {
-                let device_scopes = [
-                    format!("{CONTRIX_CLIENT_DEVICE_SCOPE_PREFIX}{device_id}"),
-                    format!("{LEGACY_MATRIX_CLIENT_DEVICE_SCOPE_PREFIX}{device_id}"),
-                    format!("{LEGACY_MATRIX_MSC_DEVICE_SCOPE_PREFIX}{device_id}"),
-                ];
-
-                for device_scope in device_scopes {
-                    if let Ok(token) = device_scope.parse::<ScopeToken>() {
-                        to_add.insert(token);
-                    }
-                }
-            }
-        }
-    }
-    scope.append(&mut to_add);
-    scope
-}
 
 /// Errors that can occur during token introspection business logic.
 #[derive(Debug, Error)]
@@ -184,7 +138,7 @@ pub async fn introspect_token(
                 .await;
 
             let device_id = contrix::primary_device_id(&session.scope);
-            let scope = normalize_scope(session.scope);
+            let scope = session.scope;
 
             IntrospectionResponse {
                 active: true,
@@ -258,7 +212,7 @@ pub async fn introspect_token(
                 .await;
 
             let device_id = contrix::primary_device_id(&session.scope);
-            let scope = normalize_scope(session.scope);
+            let scope = session.scope;
 
             IntrospectionResponse {
                 active: true,
@@ -344,7 +298,7 @@ pub async fn introspect_token(
                 .await;
 
             let device_id = contrix::primary_device_id(&session.scope);
-            let scope = normalize_scope(session.scope);
+            let scope = session.scope;
             let actor_user_sub = contrix::user_did_for(url_builder, contrix_config, &actor_user);
 
             IntrospectionResponse {

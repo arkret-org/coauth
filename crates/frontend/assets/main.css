@@ -925,7 +925,7 @@ html[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
     flex: 1;
 }
 
-.user-mxid {
+.user-principal-id {
     color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
     overflow: hidden;
@@ -1578,14 +1578,6 @@ body:has(.dialog-overlay) .theme-toggle {
 .password-dots {
     letter-spacing: 4px;
     font-size: var(--font-size-lg);
-}
-
-/* ─── Cross signing reset ──────────────────────────────────── */
-
-.cross-signing-container {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6x);
 }
 
 /* ─── Login / Register / Recovery pages ────────────────────── */

@@ -36,7 +36,7 @@ pub struct AccountConfig {
     pub email_change_allowed: bool,
 
     /// Whether users can update their display name (default: `true`).
-    /// Keep in sync with the homeserver policy.
+    /// Keep in sync with the downstream principal policy.
     #[serde(default = "enabled_default", skip_serializing_if = "matches_enabled")]
     pub displayname_change_allowed: bool,
 

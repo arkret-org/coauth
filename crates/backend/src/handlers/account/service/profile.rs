@@ -4,10 +4,8 @@ use coauth_data::{
     queue::{DeactivateUserJob, QueueJobRepositoryExt as _},
     user::UserRepository,
 };
-use coauth_matrix::HomeserverAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
-use ulid::Ulid;
 
 use crate::handlers::{common::Requester, passwords::PasswordManager};
 
@@ -35,37 +33,7 @@ pub enum AccountProfileError {
     Password(AnyhowError),
 
     #[error(transparent)]
-    Homeserver(AnyhowError),
-
-    #[error(transparent)]
     Repository(#[from] RepositoryError),
-}
-
-pub async fn allow_cross_signing_reset(
-    mut repo: BoxRepository,
-    requester: &Requester,
-    homeserver: &dyn HomeserverAdmin,
-    user_id: Ulid,
-) -> Result<User, AccountProfileError> {
-    if !requester.is_owner_or_admin(Some(user_id)) {
-        return Err(AccountProfileError::Unauthorized);
-    }
-
-    let user = repo
-        .user()
-        .lookup(user_id)
-        .await?
-        .ok_or(AccountProfileError::NotFound)?;
-
-    repo.cancel().await?;
-
-    homeserver
-        .allow_cross_signing_reset(&user.username)
-        .await
-        .context("failed to allow cross-signing reset")
-        .map_err(AccountProfileError::Homeserver)?;
-
-    Ok(user)
 }
 
 pub async fn deactivate_current_account(
@@ -76,7 +44,7 @@ pub async fn deactivate_current_account(
     config: &SiteConfig,
     password_manager: &PasswordManager,
     password: Option<String>,
-    hs_erase: bool,
+    principal_erase: bool,
 ) -> Result<DeactivateAccountOutcome, AccountProfileError> {
     let Some(browser_session) = requester.browser_session() else {
         return Err(AccountProfileError::BrowserSessionRequired);
@@ -115,7 +83,7 @@ pub async fn deactivate_current_account(
         .await?;
 
     repo.queue_job()
-        .schedule_job(rng, clock, DeactivateUserJob::new(&user, hs_erase))
+        .schedule_job(rng, clock, DeactivateUserJob::new(&user, principal_erase))
         .await?;
 
     repo.save().await?;

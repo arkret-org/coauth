@@ -5,7 +5,7 @@
 //! Jobs that drive the user lifecycle -- deactivation and reactivation.
 //!
 //! Both jobs follow a two-phase pattern: mutate the local database first,
-//! then propagate changes to the Matrix homeserver.
+//! then propagate changes to the Matrix principal.
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -107,12 +107,12 @@ async fn terminate_all_sessions_for(
 impl RunnableJob for DeactivateUserJob {
     #[tracing::instrument(
         name = "job.deactivate_user",
-        fields(user.id = %self.user_id(), erase = %self.hs_erase()),
+        fields(user.id = %self.user_id(), erase = %self.principal_erase()),
         skip_all,
     )]
     async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
         let wall_clock = state.clock();
-        let hs = state.matrix_connection();
+        let hs = state.principal_connection();
         let mut repo = state.repository().await.map_err(JobError::retry)?;
 
         // Fetch the target user record.
@@ -143,13 +143,13 @@ impl RunnableJob for DeactivateUserJob {
             .map_err(JobError::retry)?;
         info!(removed = email_count, "email addresses purged");
 
-        // Commit before talking to the homeserver -- if the HS call fails
+        // Commit before talking to the principal -- if the HS call fails
         // the job will retry, but the local state is already consistent.
         repo.save().await.map_err(JobError::retry)?;
 
-        // Finally, tell the homeserver to remove / erase the account.
-        info!(username = %target.username, "requesting homeserver deactivation");
-        hs.delete_user(&target.username, self.hs_erase())
+        // Finally, tell the principal to remove / erase the account.
+        info!(username = %target.username, "requesting principal deactivation");
+        hs.delete_user(&target.username, self.principal_erase())
             .await
             .map_err(JobError::retry)?;
 
@@ -169,7 +169,7 @@ impl RunnableJob for ReactivateUserJob {
         skip_all,
     )]
     async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
-        let hs = state.matrix_connection();
+        let hs = state.principal_connection();
         let mut repo = state.repository().await.map_err(JobError::retry)?;
 
         let target = repo
@@ -180,9 +180,9 @@ impl RunnableJob for ReactivateUserJob {
             .context("target user does not exist")
             .map_err(JobError::fail)?;
 
-        // Re-enable the account on the homeserver *before* flipping the local
+        // Re-enable the account on the principal *before* flipping the local
         // flag -- this way the user cannot authenticate until the HS is ready.
-        info!(username = %target.username, "requesting homeserver reactivation");
+        info!(username = %target.username, "requesting principal reactivation");
         hs.reactivate_user(&target.username)
             .await
             .map_err(JobError::retry)?;

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use chrono::Duration;
-use coauth_data::{AuthorizationGrant, Client, DeviceCodeGrant, MatrixUser, PostAuthAction};
+use coauth_data::{AuthorizationGrant, Client, DeviceCodeGrant, PrincipalUser, PostAuthAction};
 use oauth2_types::scope::OPENID;
 use rand_core::RngCore as Rng;
 use serde::Serialize;
@@ -28,20 +28,20 @@ pub struct ConsentContext {
     grant: AuthorizationGrant,
     client: Client,
     action: PostAuthAction,
-    matrix_user: MatrixUser,
+    principal_user: PrincipalUser,
 }
 
 impl ConsentContext {
-    /// Build a consent-page context for the given grant, client and Matrix
+    /// Build a consent-page context for the given grant, client and principal
     /// user.
     #[must_use]
-    pub fn new(grant: AuthorizationGrant, client: Client, matrix_user: MatrixUser) -> Self {
+    pub fn new(grant: AuthorizationGrant, client: Client, principal_user: PrincipalUser) -> Self {
         let action = PostAuthAction::continue_grant(grant.id);
         Self {
             grant,
             client,
             action,
-            matrix_user,
+            principal_user,
         }
     }
 }
@@ -63,8 +63,8 @@ impl TemplateContext for ConsentContext {
                         grant,
                         client,
                         action,
-                        matrix_user: MatrixUser {
-                            mxid: "@alice:example.com".to_owned(),
+                        principal_user: PrincipalUser {
+                            principal_id: "alice@example.com".to_owned(),
                             display_name: Some("Alice".to_owned()),
                         },
                     }

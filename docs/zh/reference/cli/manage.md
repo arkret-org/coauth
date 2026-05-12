@@ -90,9 +90,9 @@ coauth manage issue-user-registration-token -c config.yaml
 
 ## 批量操作
 
-### 同步所有用户到 Homeserver
+### 同步所有用户到 Principal Server
 
-将 Pasion 中的所有用户同步到 Matrix homeserver：
+通过 Principal Server 抽象同步 coauth 中的所有用户：
 
 ```bash
 coauth manage provision-all-users -c config.yaml

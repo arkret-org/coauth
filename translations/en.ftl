@@ -34,7 +34,7 @@ branding-terms-and-conditions-link = Terms & Conditions
 common-display-name = Display Name
 common-email-address = Email address
 common-loading = Loading…
-common-mxid = Account handle
+common-account-id = Account ID
 common-password = Password
 common-password-confirm = Confirm password
 common-username = Username
@@ -47,10 +47,10 @@ error-unexpected = Unexpected error
 ## coauth
 
 coauth-account-deactivated-description =
-    This account (<em>{ $mxid }</em>) has been deleted. If this is not expected, contact your server administrator.
+    This account (<em>{ $account_id }</em>) has been deleted. If this is not expected, contact your server administrator.
 coauth-account-deactivated-heading = Account deleted
 coauth-account-locked-description =
-    This account (<em>{ $mxid }</em>) has been locked. If this is not expected, contact your server administrator.
+    This account (<em>{ $account_id }</em>) has been locked. If this is not expected, contact your server administrator.
 coauth-account-locked-heading = Account locked
 coauth-account-logged-out-description = This session has been terminated. Sign out to be able to log back in
 coauth-account-logged-out-heading = Session terminated
@@ -103,7 +103,7 @@ coauth-emails-recovery-copy-link = Copy the following link and paste it into a b
 coauth-emails-recovery-create-new-password = Create new password
 coauth-emails-recovery-fallback = The button doesn't work for you?
 coauth-emails-recovery-headline = You requested a password reset for your { $server_name } coauth account.
-coauth-emails-recovery-subject = Reset your coauth account password ({ $mxid })
+coauth-emails-recovery-subject = Reset your coauth account password ({ $account_id })
 coauth-emails-recovery-you-can-ignore =
     If you didn't ask for a new password, you can ignore this email. Your current password will continue to work.
 # The body of the email sent to verify an email address (HTML)
@@ -203,12 +203,9 @@ coauth-register-terms-of-service = I agree to the <a href="{ $tos_uri }" data-ki
 coauth-registration-token-description = Enter a registration token provided by your coauth administrator.
 coauth-registration-token-field = Registration token
 coauth-registration-token-headline = Registration token
-# Displayed when the 'urn:palpo:admin:*' scope is requested
-coauth-scope-palpo-admin = Administer a legacy Palpo adapter (urn:palpo:admin:*)
 coauth-scope-coauth-admin = Manage coauth accounts (urn:coauth:admin)
-coauth-scope-send-messages = Use legacy messaging compatibility on your behalf
-# Displayed when a legacy Matrix compatibility scope is requested
-coauth-scope-view-messages = Use legacy Matrix compatibility data access
+coauth-scope-send-messages = Send Contrix messages on your behalf
+coauth-scope-view-messages = Read Contrix message metadata
 # Displayed when the 'openid' scope is requested
 coauth-scope-view-profile = See your coauth profile info and contact details
 # Page shown when the user tries to link an upstream account that is already linked to another account

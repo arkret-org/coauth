@@ -22,7 +22,7 @@ pub async fn get(
     let templates = depot.templates()?;
     let url_builder = depot.url_builder()?;
     let site_config = depot.site_config()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let mut repo = depot.repo().await?;
     let activity_tracker = common::extract_bound_activity_tracker(req, depot);
     let query: OptionalPostAuthAction = req.parse_queries().unwrap_or_default();
@@ -94,7 +94,7 @@ pub async fn get(
         &clock,
         &mut rng,
         &templates,
-        &homeserver,
+        &principal_server,
         &site_config,
         res,
     )

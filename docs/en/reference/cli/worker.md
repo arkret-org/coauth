@@ -17,7 +17,7 @@ $ coauth worker -c config.yaml
 The worker process handles asynchronous tasks that do not need to be performed during an HTTP request. These include:
 
 - **Sending emails** — Verification codes, password reset links, and notification emails.
-- **Homeserver notifications** — Provisioning and deprovisioning users on the Matrix homeserver when accounts are created or deactivated.
+- **Principal account tasks** — Legacy account lifecycle jobs now run against the local Principal Server abstraction.
 - **Session cleanup** — Expiring old sessions and tokens according to configured TTL values.
 - **Scheduled maintenance** — Periodic tasks like flushing activity tracking data to the database.
 
@@ -35,13 +35,13 @@ The worker uses the same configuration file as the server. It requires access to
 
 - The PostgreSQL database (for the task queue)
 - SMTP credentials (if email sending is configured)
-- The Matrix homeserver (for user provisioning tasks)
+- Contrix Principal Server configuration, when downstream session grants are enabled
 
 ### Example: systemd service
 
 ```ini
 [Unit]
-Description=Pasion Background Worker
+Description=coauth Background Worker
 After=network.target postgresql.service
 
 [Service]

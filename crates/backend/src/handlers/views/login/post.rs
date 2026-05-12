@@ -37,7 +37,7 @@ pub async fn post(
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let limiter = depot.limiter()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let mut repo = depot.repo().await?;
     let activity_tracker = common::extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
@@ -90,7 +90,7 @@ pub async fn post(
             &clock,
             &mut rng,
             &templates,
-            &homeserver,
+            &principal_server,
             &site_config,
             res,
         )
@@ -103,7 +103,7 @@ pub async fn post(
         &clock,
         &password_manager,
         &limiter,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         &url_builder,
         &contrix_config,
         &site_config,
@@ -134,7 +134,7 @@ pub async fn post(
                 &clock,
                 &mut rng,
                 &templates,
-                &homeserver,
+                &principal_server,
                 &site_config,
                 res,
             )
@@ -153,7 +153,7 @@ pub async fn post(
                 &clock,
                 &mut rng,
                 &templates,
-                &homeserver,
+                &principal_server,
                 &site_config,
                 res,
             )

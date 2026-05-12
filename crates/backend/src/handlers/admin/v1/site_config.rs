@@ -15,7 +15,7 @@ use crate::{
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct SiteConfig {
-    /// Matrix homeserver name that this deployment serves
+    /// Matrix PrincipalServer name that this deployment serves
     server_name: String,
 
     /// Whether authenticating with a password is allowed

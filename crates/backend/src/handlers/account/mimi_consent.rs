@@ -139,7 +139,7 @@ pub enum PendingMoveOp {
 pub enum MimiConsentError {
     /// `anchor_pending_move` was called without a configured principal
     /// server URL.
-    #[error("mimi consent → move: principal server url not configured")]
+    #[error("mimi consent → move: server_name url not configured")]
     PrincipalServerNotConfigured,
 
     /// `PASION_CONTRIX__ANCHORER_SIGNING_KEY` was set but malformed.
@@ -376,7 +376,7 @@ impl AnchorerSigner {
     }
 }
 
-/// Build, sign, and POST a `PendingMove` to the holder's principal server.
+/// Build, sign, and POST a `PendingMove` to the holder's server_name.
 ///
 /// On success the SignedMove envelope returned by `Move::sign` has been
 /// POSTed to soland's `/api/v1/moves` endpoint and accepted with 2xx.
@@ -402,7 +402,7 @@ pub async fn anchor_pending_move(
 
     let url = base.join("api/v1/moves").map_err(|error| {
         MimiConsentError::PrincipalServerForwardFailed {
-            reason: format!("invalid principal server url: {error}"),
+            reason: format!("invalid server_name url: {error}"),
         }
     })?;
 

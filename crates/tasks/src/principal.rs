@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//! Background jobs for Matrix homeserver integration:
+//! Background jobs for principal principal integration:
 //! user provisioning, device synchronization, and legacy device jobs.
 
 use std::collections::HashSet;
@@ -19,7 +19,7 @@ use coauth_data::{
     },
     user::{UserEmailRepository, UserRepository},
 };
-use coauth_matrix::ProvisionRequest;
+use coauth_principal::PrincipalProvisionRequest;
 use tracing::info;
 
 use crate::{
@@ -29,7 +29,7 @@ use crate::{
 
 // ── Provision user ───────────────────────────────────────────────────
 
-/// Provisions (creates or updates) a user on the Matrix homeserver via
+/// Provisions (creates or updates) a user on the principal principal via
 /// the admin API, then schedules a device sync.
 #[async_trait]
 impl RunnableJob for ProvisionUserJob {
@@ -39,7 +39,7 @@ impl RunnableJob for ProvisionUserJob {
         skip_all,
     )]
     async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
-        let matrix = state.matrix_connection();
+        let principal = state.principal_connection();
         let mut repo = state.repository().await.map_err(JobError::retry)?;
         let mut rng = state.rng();
         let clock = state.clock();
@@ -62,8 +62,8 @@ impl RunnableJob for ProvisionUserJob {
             .map(|e| e.email)
             .collect();
 
-        let mut req =
-            ProvisionRequest::new(user.username.clone(), user.sub.clone()).set_emails(emails);
+        let mut req = PrincipalProvisionRequest::new(user.username.clone(), user.sub.clone())
+            .set_emails(emails);
 
         if let Some(name) = self.display_name_to_set() {
             req = req.set_displayname(name.to_owned());
@@ -77,13 +77,16 @@ impl RunnableJob for ProvisionUserJob {
             req = req.set_admin();
         }
 
-        let created = matrix.provision_user(&req).await.map_err(JobError::retry)?;
+        let created = principal
+            .provision_user(&req)
+            .await
+            .map_err(JobError::retry)?;
 
-        let mxid = matrix.mxid(&user.username);
+        let principal_id = principal.principal_id(&user.username);
         if created {
-            info!(%user.id, %mxid, "user created on homeserver");
+            info!(%user.id, %principal_id, "user created on principal");
         } else {
-            info!(%user.id, %mxid, "user updated on homeserver");
+            info!(%user.id, %principal_id, "user updated on principal");
         }
 
         // Follow up with a device sync
@@ -150,7 +153,7 @@ async fn schedule_device_sync(state: &State, user_id: ulid::Ulid) -> Result<(), 
 // ── Sync devices ─────────────────────────────────────────────────────
 
 /// Collects every active device ID from OAuth 2.0 and personal sessions,
-/// then pushes the canonical set to the homeserver.
+/// then pushes the canonical set to the principal.
 #[async_trait]
 impl RunnableJob for SyncDevicesJob {
     #[tracing::instrument(
@@ -159,7 +162,7 @@ impl RunnableJob for SyncDevicesJob {
         skip_all,
     )]
     async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
-        let matrix = state.matrix_connection();
+        let principal = state.principal_connection();
         let mut repo = state.repository().await.map_err(JobError::retry)?;
 
         let user = repo
@@ -184,8 +187,8 @@ impl RunnableJob for SyncDevicesJob {
         // ── Gather device IDs from personal sessions ─────────────────
         collect_devices_from_personal(&mut repo, &user, &mut devices).await?;
 
-        // ── Push the full set to the homeserver ──────────────────────
-        matrix
+        // ── Push the full set to the principal ──────────────────────
+        principal
             .sync_devices(&user.username, devices)
             .await
             .map_err(JobError::retry)?;
@@ -198,10 +201,10 @@ impl RunnableJob for SyncDevicesJob {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-/// Stable and unstable Matrix device-scope prefixes.
+/// Stable and unstable principal device-scope prefixes.
 const DEVICE_SCOPE_PREFIXES: &[&str] = &[
-    "urn:matrix:client:device:",
-    "urn:matrix:org.matrix.msc2967.client:device:",
+    "urn:principal:client:device:",
+    "urn:principal:org.principal.msc2967.client:device:",
 ];
 
 /// Extract a device ID from a scope token if it has a known device prefix.

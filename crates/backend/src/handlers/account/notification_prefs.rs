@@ -188,7 +188,7 @@ fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
         UserProfileServiceError::DuplicateNotificationChannel(channel) => {
             RouteError::BadRequest(format!("Duplicate notification channel: {channel}"))
         }
-        UserProfileServiceError::Homeserver(error) => RouteError::Internal(error.into()),
+        UserProfileServiceError::PrincipalServer(error) => RouteError::Internal(error.into()),
         UserProfileServiceError::Repository(error) => RouteError::from(error),
     }
 }

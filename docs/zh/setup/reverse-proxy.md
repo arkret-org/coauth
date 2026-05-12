@@ -1,12 +1,10 @@
 # 配置反向代理
 
-在生产环境中，Pasion 应部署在反向代理之后以提供 TLS 终止和请求路由。
+在生产环境中，coauth 应部署在反向代理之后以提供 TLS 终止和请求路由。
 
 ## nginx 配置示例
 
-以下示例假设：
-- Pasion 监听在 `localhost:8080`
-- Palpo (Matrix homeserver) 监听在 `localhost:8008`
+以下示例假设 coauth 监听在 `localhost:8080`：
 
 ```nginx
 # 认证服务 - auth.example.com
@@ -25,21 +23,6 @@ server {
     }
 }
 
-# Matrix homeserver - matrix.example.com
-server {
-    listen 443 ssl http2;
-    server_name matrix.example.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    location / {
-        proxy_pass http://localhost:8008;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
 ```
 
 ## 客户端 IP 保持
@@ -79,7 +62,7 @@ http:
 
 ## 静态资源优化
 
-建议让反向代理直接提供静态资源（CSS、JS、字体等），以减轻 Pasion 服务的负担：
+建议让反向代理直接提供静态资源（CSS、JS、字体等），以减轻 coauth 服务的负担：
 
 ```nginx
 location /assets/ {

@@ -103,8 +103,8 @@ impl FormField for UpstreamRegisterFormField {
 pub struct UpstreamRegister {
     upstream_oauth_link: UpstreamOAuthLink,
     upstream_oauth_provider: UpstreamOAuthProvider,
-    imported_localpart: Option<String>,
-    force_localpart: bool,
+    imported_username: Option<String>,
+    force_username: bool,
     imported_display_name: Option<String>,
     force_display_name: bool,
     imported_email: Option<String>,
@@ -122,8 +122,8 @@ impl UpstreamRegister {
         Self {
             upstream_oauth_link,
             upstream_oauth_provider,
-            imported_localpart: None,
-            force_localpart: false,
+            imported_username: None,
+            force_username: false,
             imported_display_name: None,
             force_display_name: false,
             imported_email: None,
@@ -132,18 +132,18 @@ impl UpstreamRegister {
         }
     }
 
-    /// Set the imported localpart
-    pub fn set_localpart(&mut self, localpart: String, force: bool) {
-        self.imported_localpart = Some(localpart);
-        self.force_localpart = force;
+    /// Set the imported username
+    pub fn set_username(&mut self, username: String, force: bool) {
+        self.imported_username = Some(username);
+        self.force_username = force;
     }
 
-    /// Set the imported localpart
+    /// Set the imported username
     #[must_use]
-    pub fn with_localpart(self, localpart: String, force: bool) -> Self {
+    pub fn with_username(self, username: String, force: bool) -> Self {
         Self {
-            imported_localpart: Some(localpart),
-            force_localpart: force,
+            imported_username: Some(username),
+            force_username: force,
             ..self
         }
     }

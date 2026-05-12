@@ -1,6 +1,6 @@
 {%- set _ = translator(lang) -%}
-{%- set mxid -%}
-    @{{ user.username }}:{{ branding.server_name }}
+{%- set account_id -%}
+    {{ user.username }}@{{ branding.server_name }}
 {%- endset -%}
 
-{{ _("coauth.emails.recovery.subject", mxid=mxid) }}
+{{ _("coauth.emails.recovery.subject", account_id=account_id) }}

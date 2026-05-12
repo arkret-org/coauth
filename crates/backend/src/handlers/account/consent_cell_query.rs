@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Cross-service helper that consults the holder's consent cell on the
-//! principal server (`soland`) before coauth admits or relays an invite.
+//! server_name (`soland`) before coauth admits or relays an invite.
 //!
 //! Per the Move/Anchor/Lattice spec (`contrix-spec` 2026-05-08,
 //! `consent-model.md` §3–§9), consent is no longer reducer state on the
-//! principal server. It is an OrSet cell:
+//! server_name. It is an OrSet cell:
 //!
 //! ```text
 //! cx:cell:cx.component.consent.grant.v1:<consent_id>
@@ -71,7 +71,7 @@ struct ConsentCellResponse {
     tags: Vec<String>,
 }
 
-/// Look up the holder's consent-grant cell on their principal server.
+/// Look up the holder's consent-grant cell on their server_name.
 ///
 /// * `principal_server_url` — base URL of the holder's soland deployment.
 ///   `None` means soland is not wired into this coauth instance and the

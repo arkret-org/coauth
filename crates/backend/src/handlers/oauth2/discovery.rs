@@ -21,10 +21,7 @@ struct DiscoveryResponse {
     #[serde(flatten)]
     standard: ProviderMetadata,
 
-    #[serde(rename = "org.matrix.coauth.api_endpoint")]
-    api_endpoint: String,
-
-    // As per MSC2965
+    // Account management actions supported by this server.
     account_management_uri: url::Url,
     account_management_actions_supported: Vec<String>,
 
@@ -277,16 +274,12 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
 
     Json(DiscoveryResponse {
         standard,
-        api_endpoint: format!("{}/api/v1", url_builder.prefix().unwrap_or_default()),
         account_management_uri: url_builder.account_management_uri(),
-        // This needs to be kept in sync with what is supported in the frontend,
-        // see frontend/src/routes/__root.tsx
         account_management_actions_supported: vec![
-            "org.matrix.profile".to_owned(),
-            "org.matrix.sessions_list".to_owned(),
-            "org.matrix.session_view".to_owned(),
-            "org.matrix.session_end".to_owned(),
-            "org.matrix.cross_signing_reset".to_owned(),
+            "profile".to_owned(),
+            "sessions_list".to_owned(),
+            "session_view".to_owned(),
+            "session_end".to_owned(),
         ],
         contrix_api_endpoint: url_builder.absolute_url("/api/v1").to_string(),
         contrix_server_describe: url_builder

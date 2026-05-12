@@ -441,7 +441,7 @@ async fn patch_account(
     req: &mut Request,
     depot: &Depot,
     patch: AdminUserPatch,
-    hs_erase: bool,
+    principal_erase: bool,
 ) -> JsonResult<SingleResponse<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
@@ -453,7 +453,7 @@ async fn patch_account(
     let contrix_config = depot.contrix_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let mut rng = crate::handlers::account::make_rng();
 
     // TODO(contrix): require and persist reason/approval proof for high-risk
@@ -462,11 +462,11 @@ async fn patch_account(
         &mut repo,
         &mut rng,
         &*clock,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         admin_user.as_ref(),
         id,
         patch,
-        hs_erase,
+        principal_erase,
     )
     .await
     .map_err(map_service_error)?;
@@ -512,7 +512,7 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
         crate::services::user_admin::UserAdminServiceError::InvalidDisplayName => {
             AppError::bad_request("Invalid display name")
         }
-        crate::services::user_admin::UserAdminServiceError::Homeserver(error) => {
+        crate::services::user_admin::UserAdminServiceError::PrincipalServer(error) => {
             AppError::internal(std::io::Error::other(error.to_string()))
         }
         crate::services::user_admin::UserAdminServiceError::Repository(error) => {

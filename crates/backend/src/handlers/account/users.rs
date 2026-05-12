@@ -7,8 +7,7 @@ use super::{
 };
 use crate::{
     handlers::account::service::profile::{
-        AccountProfileError, DeactivateAccountOutcome,
-        allow_cross_signing_reset as allow_cross_signing_reset_service, deactivate_current_account,
+        AccountProfileError, DeactivateAccountOutcome, deactivate_current_account,
     },
     services::user_profile::{self, UserProfileServiceError},
 };
@@ -25,7 +24,7 @@ pub struct PatchViewerProfileInput {
 #[derive(Serialize, ToSchema)]
 pub struct PatchViewerProfileResponse {
     pub profile: ViewerProfileData,
-    pub matrix: MatrixUserData,
+    pub principal: PrincipalUserData,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -37,8 +36,8 @@ pub struct ViewerProfileData {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct MatrixUserData {
-    pub mxid: String,
+pub struct PrincipalUserData {
+    pub principal_id: String,
     pub display_name: Option<String>,
 }
 
@@ -53,7 +52,7 @@ pub async fn patch_profile(
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
     let repo_factory = depot.repo_factory()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let clock = make_clock();
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -73,7 +72,7 @@ pub async fn patch_profile(
         &mut repo,
         &requester,
         &clock,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         patch,
     )
     .await
@@ -88,60 +87,10 @@ pub async fn patch_profile(
             preferred_locale: user.preferred_locale.clone(),
             updated_at: user.updated_at.to_rfc3339(),
         },
-        matrix: MatrixUserData {
-            mxid: homeserver.mxid(&user.username),
+        principal: PrincipalUserData {
+            principal_id: principal_server.principal_id(&user.username),
             display_name: user.display_name,
         },
-    }))
-}
-
-// ── POST /api/v1/viewer/cross-signing-reset ────────────────────
-
-#[derive(Deserialize, salvo::oapi::ToSchema)]
-pub struct AllowCrossSigningResetInput {
-    pub user_id: String,
-}
-
-#[derive(Serialize, salvo::oapi::ToSchema)]
-pub struct AllowCrossSigningResetResponse {
-    pub user: Option<UserBrief>,
-}
-
-#[derive(Serialize, salvo::oapi::ToSchema)]
-pub struct UserBrief {
-    pub id: String,
-}
-
-#[endpoint]
-pub async fn allow_cross_signing_reset(
-    req: &mut Request,
-    depot: &Depot,
-) -> Result<Json<AllowCrossSigningResetResponse>, RouteError> {
-    let input: AllowCrossSigningResetInput = req
-        .parse_json()
-        .await
-        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
-
-    let repo_factory = depot.repo_factory()?;
-    let homeserver = depot.homeserver()?;
-    let clock = make_clock();
-
-    let activity_tracker = extract_bound_activity_tracker(req, depot);
-    let session_info = extract_session_info(req, depot);
-
-    let repo = repo_factory.create().await?;
-    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
-
-    let user_id = NodeType::User.extract_ulid(&input.user_id)?;
-
-    let user = allow_cross_signing_reset_service(repo, &requester, homeserver.as_ref(), user_id)
-        .await
-        .map_err(map_account_profile_error)?;
-
-    Ok(Json(AllowCrossSigningResetResponse {
-        user: Some(UserBrief {
-            id: NodeType::User.serialize(user.id),
-        }),
     }))
 }
 
@@ -149,7 +98,7 @@ pub async fn allow_cross_signing_reset(
 
 #[derive(Deserialize, salvo::oapi::ToSchema)]
 pub struct DeactivateUserInput {
-    pub hs_erase: bool,
+    pub principal_erase: bool,
     pub password: Option<String>,
 }
 
@@ -188,7 +137,7 @@ pub async fn deactivate_user(
         &config,
         &password_manager,
         input.password,
-        input.hs_erase,
+        input.principal_erase,
     )
     .await
     .map_err(map_account_profile_error)?
@@ -209,9 +158,7 @@ fn map_account_profile_error(error: AccountProfileError) -> RouteError {
         AccountProfileError::DeactivationDisabled => {
             RouteError::BadRequest("Account deactivation is not allowed".into())
         }
-        AccountProfileError::Password(error) | AccountProfileError::Homeserver(error) => {
-            RouteError::Internal(error.into())
-        }
+        AccountProfileError::Password(error) => RouteError::Internal(error.into()),
         AccountProfileError::Repository(error) => RouteError::from(error),
     }
 }
@@ -229,7 +176,7 @@ fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
         UserProfileServiceError::DuplicateNotificationChannel(channel) => {
             RouteError::BadRequest(format!("Duplicate notification channel: {channel}"))
         }
-        UserProfileServiceError::Homeserver(error) => RouteError::Internal(error.into()),
+        UserProfileServiceError::PrincipalServer(error) => RouteError::Internal(error.into()),
         UserProfileServiceError::Repository(error) => RouteError::from(error),
     }
 }
@@ -241,7 +188,7 @@ mod tests {
         RepositoryAccess,
         user::{BrowserSessionRepository, UserRepository},
     };
-    use coauth_matrix::{HomeserverAdmin, ProvisionRequest};
+    use coauth_principal::{PrincipalProvisionRequest, PrincipalServerAdmin};
     use hyper::{Request, StatusCode};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
@@ -255,7 +202,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn test_patch_profile_updates_user_and_matrix_profile() {
+    async fn test_patch_profile_updates_user_and_principal_profile() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -280,8 +227,8 @@ mod tests {
         repo.save().await.unwrap();
 
         state
-            .homeserver_admin
-            .provision_user(&ProvisionRequest::new(&user.username, &user.sub))
+            .principal_server_admin
+            .provision_user(&PrincipalProvisionRequest::new(&user.username, &user.sub))
             .await
             .unwrap();
 
@@ -303,7 +250,7 @@ mod tests {
         assert_eq!(body["profile"]["display_name"], "Alice Example");
         assert_eq!(body["profile"]["avatar_url"], "mxc://example.com/alice");
         assert_eq!(body["profile"]["preferred_locale"], "zh-CN");
-        assert_eq!(body["matrix"]["display_name"], "Alice Example");
+        assert_eq!(body["principal"]["display_name"], "Alice Example");
 
         let mut repo = state.repository().await.unwrap();
         let stored = repo.user().lookup(user.id).await.unwrap().unwrap();
@@ -314,7 +261,7 @@ mod tests {
         );
         assert_eq!(stored.preferred_locale.as_deref(), Some("zh-CN"));
 
-        let matrix_user = state.homeserver_admin.query_user(&username).await.unwrap();
-        assert_eq!(matrix_user.displayname.as_deref(), Some("Alice Example"));
+        let principal_user = state.principal_server_admin.query_user(&username).await.unwrap();
+        assert_eq!(principal_user.displayname.as_deref(), Some("Alice Example"));
     }
 }

@@ -38,14 +38,10 @@ type UserSqlRow = (
     bool,
 );
 
-/// A Matrix user stored locally in Pasion.
-///
-/// Pasion-original fields beyond the Apache 2.0 base:
-/// - `updated_at`, `deactivated_at`, `is_guest`
-/// - `display_name`, `avatar_url`, `preferred_locale` (profile fields)
+/// A downstream principal account projection used by consent and viewer APIs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct MatrixUser {
-    pub mxid: String,
+pub struct PrincipalUser {
+    pub principal_id: String,
     pub display_name: Option<String>,
 }
 

@@ -57,24 +57,24 @@ pub struct LatestAnchorView {
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum AnchorViewError {
     /// The principal server URL is not configured on this coauth deployment.
-    #[error("anchor-view: principal server url not configured")]
+    #[error("anchor-view: server_name url not configured")]
     PrincipalServerNotConfigured,
     /// HTTP send failed (DNS, TLS, refused, etc.).
-    #[error("anchor-view: principal server unreachable: {reason}")]
+    #[error("anchor-view: server_name unreachable: {reason}")]
     PrincipalServerUnreachable { reason: String },
     /// soland returned a non-2xx status that's not covered by an explicit branch.
-    #[error("anchor-view: principal server returned status {status}")]
+    #[error("anchor-view: server_name returned status {status}")]
     PrincipalServerStatus { status: u16 },
     /// Response body could not be deserialized into the expected shape.
-    #[error("anchor-view: principal server response invalid: {reason}")]
+    #[error("anchor-view: server_name response invalid: {reason}")]
     PrincipalServerResponseInvalid { reason: String },
     /// Snapshot loaded but contained zero leaves. A freshly-bootstrapped
     /// space should always have at least the genesis anchor.
-    #[error("anchor-view: principal server returned empty leaves")]
+    #[error("anchor-view: server_name returned empty leaves")]
     EmptyLeaves,
     /// Built URL was malformed (defensive — base URL passed validation
     /// upstream so this is mostly a logic-error guard).
-    #[error("anchor-view: invalid principal server url: {reason}")]
+    #[error("anchor-view: invalid server_name url: {reason}")]
     InvalidUrl { reason: String },
 }
 

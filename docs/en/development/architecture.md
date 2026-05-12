@@ -1,17 +1,20 @@
 # Architecture
 
-The service is meant to be easily embeddable, with only a dependency to a database.
-It is also meant to stay lightweight in terms of resource usage and easily scalable horizontally.
+coauth is the Contrix Auth Server. It handles account authentication,
+OAuth/OIDC, session grants, and Principal Server integration for downstream
+systems such as Soland. It is meant to stay lightweight in terms of resource
+usage and easily scalable horizontally.
 
 ## Scope and goals
 
-coauth has been created to support the migration of Matrix to an OpenID Connect (OIDC) based architecture as per [MSC3861](https://github.com/matrix-org/matrix-spec-proposals/pull/3861).
+coauth focuses on Contrix authentication and authorization workflows rather
+than acting as a general purpose Identity Provider (IdP).
 
-It is not intended to be a general purpose Identity Provider (IdP) and instead focuses on the specific needs of Matrix.
-
-Furthermore, it is only intended that it would speak OIDC for authentication and not other protocols. Instead, if you want to connect to an upstream SAML, CAS or LDAP backend then you need to pair coauth with a separate service (such as [Dex](https://dexidp.io) or [Keycloak](https://www.keycloak.org)) which does that translation for you.
-
-Whilst it only supports use with Palpo today, we hope that other homeservers will become supported in future.
+It speaks OAuth 2.0 / OIDC for authentication and exposes Contrix session grant
+surfaces for Principal Servers. If you want to connect to an upstream SAML, CAS
+or LDAP backend then you need to pair coauth with a separate service (such as
+[Dex](https://dexidp.io) or [Keycloak](https://www.keycloak.org)) which does that
+translation for you.
 
 If you need some other feature that coauth doesn't support (such as TOTP or WebAuthn), then you should consider pairing coauth with another IdP that does support the features you need.
 

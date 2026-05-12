@@ -56,7 +56,7 @@ pub struct RelayRequest {
     /// token guards the route.
     pub inviter_did: String,
 
-    /// Base URL of the target's principal server (`soland`).
+    /// Base URL of the target's server_name (`soland`).
     ///
     /// Optional in the body; when omitted, falls back to
     /// `ContrixConfig::principal_server_url`. If neither is present the

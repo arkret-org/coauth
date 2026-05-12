@@ -10,18 +10,15 @@ use std::{collections::BTreeMap, process::ExitCode};
 
 use anyhow::Context;
 use clap::CommandFactory;
-use coauth_backend::util::{
-    diesel_pool_from_config, homeserver_connection_from_config, password_manager_from_config,
-};
+use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config};
 use coauth_config::{
-    ConfigurationSection, ConfigurationSectionExt, DatabaseConfig, MatrixConfig, PasswordsConfig,
+    ConfigurationSection, ConfigurationSectionExt, DatabaseConfig, PasswordsConfig,
 };
 use coauth_data::{
     Clock, DatabaseError, PgRepository, RepositoryAccess, SystemClock, UpstreamOAuthProvider, User,
     queue::{ProvisionUserJob, QueueJobRepositoryExt as _},
     user::{UserEmailRepository, UserPasswordRepository, UserRepository},
 };
-use coauth_matrix::HomeserverAdmin;
 use coauth_messaging::Address;
 use console::{Alignment, Style, Term, pad_str, style};
 use dialoguer::{Confirm, FuzzySelect, Input, Password, theme::ColorfulTheme};
@@ -50,33 +47,20 @@ impl std::fmt::Display for HumanReadable<&UpstreamOAuthProvider> {
 }
 
 async fn check_and_normalize_username<'a>(
-    localpart_or_mxid: &'a str,
+    username: &'a str,
     repo: &mut dyn RepositoryAccess<Error = DatabaseError>,
-    homeserver: &dyn HomeserverAdmin,
 ) -> anyhow::Result<&'a str> {
-    // Accept either a bare localpart ("alice") or a full MXID
-    // ("@alice:example.com"). We strip the leading '@' and anything from
-    // the first ':' onwards rather than pulling in ruma's MXID parser —
-    // the caller is a CLI tool with friendly input and we still validate
-    // the result against `exists`/`homeserver.is_localpart_available`.
-    let mut localpart = localpart_or_mxid.trim_start_matches('@');
-    if let Some(index) = localpart.find(':') {
-        localpart = &localpart[..index];
-    }
+    let username = username.trim();
 
-    if localpart.is_empty() {
+    if username.is_empty() {
         return Err(anyhow::anyhow!("Username cannot be empty"));
     }
 
-    if repo.user().exists(localpart).await? {
+    if repo.user().exists(username).await? {
         return Err(anyhow::anyhow!("User already exists"));
     }
 
-    if !homeserver.is_localpart_available(localpart).await? {
-        return Err(anyhow::anyhow!("Username not available on homeserver"));
-    }
-
-    Ok(localpart)
+    Ok(username)
 }
 
 pub(super) struct UserCreationRequest<'a> {
@@ -135,12 +119,11 @@ impl UserCreationRequest<'_> {
     }
 
     /// Show the user creation request in a human-readable format
-    fn show(&self, term: &Term, homeserver: &dyn HomeserverAdmin) -> std::io::Result<()> {
+    fn show(&self, term: &Term) -> std::io::Result<()> {
         let value_style = Style::new().green();
         let key_style = Style::new().bold();
         let warning_style = Style::new().italic().red().bright();
         let username = &self.username;
-        let mxid = homeserver.mxid(username);
 
         term.write_line(&style("User attributes").bold().underlined().to_string())?;
 
@@ -155,7 +138,6 @@ impl UserCreationRequest<'_> {
         }
 
         display!("Username", username);
-        display!("Matrix ID", mxid);
         if let Some(display_name) = &self.display_name {
             display!("Display name", display_name);
         }
@@ -361,16 +343,12 @@ pub(super) async fn handle_register_user(
     let clock = SystemClock::default();
     let mut rng = rand_chacha::ChaChaRng::from_entropy();
 
-    let http_client = coauth_backend::reqwest_client();
     let password_config =
         PasswordsConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
-    let matrix_config = MatrixConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
 
     let password_manager = password_manager_from_config(&password_config).await?;
-    let (homeserver, _registry) =
-        homeserver_connection_from_config(&matrix_config, http_client).await?;
     let pool = diesel_pool_from_config(&database_config).await?;
     let conn = pool
         .get()
@@ -387,8 +365,8 @@ pub(super) async fn handle_register_user(
     }
 
     // If the username is provided, check if it's available and normalize it.
-    let localpart = if let Some(username) = username {
-        check_and_normalize_username(&username, &mut repo, &homeserver)
+    let username = if let Some(username) = username {
+        check_and_normalize_username(&username, &mut repo)
             .await?
             .to_owned()
     } else {
@@ -401,8 +379,8 @@ pub(super) async fn handle_register_user(
             })
             .await??;
 
-            match check_and_normalize_username(&username, &mut repo, &homeserver).await {
-                Ok(localpart) => break localpart.to_owned(),
+            match check_and_normalize_username(&username, &mut repo).await {
+                Ok(username) => break username.to_owned(),
                 Err(e) => {
                     warn!("Invalid username: {e}");
                 }
@@ -445,7 +423,7 @@ pub(super) async fn handle_register_user(
     };
 
     let mut req = UserCreationRequest {
-        username: localpart,
+        username: username,
         hashed_password,
         emails,
         upstream_provider_mappings,
@@ -455,7 +433,7 @@ pub(super) async fn handle_register_user(
 
     let term = Term::buffered_stdout();
     loop {
-        req.show(&term, &homeserver)?;
+        req.show(&term)?;
 
         // If we're in `yes` mode, we don't prompt for actions
         if yes {
@@ -491,8 +469,8 @@ pub(super) async fn handle_register_user(
                     })
                     .await??;
 
-                    match check_and_normalize_username(&username, &mut repo, &homeserver).await {
-                        Ok(localpart) => break localpart.to_owned(),
+                    match check_and_normalize_username(&username, &mut repo).await {
+                        Ok(username) => break username.to_owned(),
                         Err(e) => {
                             warn!("Invalid username: {e}");
                         }

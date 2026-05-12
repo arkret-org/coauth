@@ -10,7 +10,7 @@
 - [安装](./setup/installation.md)
 - [基本配置](./setup/general.md)
 - [数据库设置](./setup/database.md)
-- [Homeserver 配置](./setup/homeserver.md)
+- [Principal Server 配置](./setup/homeserver.md)
 - [配置反向代理](./setup/reverse-proxy.md)
 - [配置上游 SSO 提供商](./setup/sso.md)
 - [运行服务](./setup/running.md)

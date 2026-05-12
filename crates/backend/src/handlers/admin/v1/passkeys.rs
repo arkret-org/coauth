@@ -35,9 +35,7 @@ use crate::{
         common::DepotExt,
     },
     services::{
-        onboarding_starid::{
-            OnboardingStaridError, mint_principal_did_for_first_credential,
-        },
+        onboarding_starid::{OnboardingStaridError, mint_principal_did_for_first_credential},
         starid_adapter::StaridError,
         webauthn::WebauthnError,
     },

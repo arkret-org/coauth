@@ -142,13 +142,8 @@ macro_rules! apply_session_filter {
         }
 
         if let Some(device) = $filter.device() {
-            let stable = format!("urn:matrix:client:device:{device}");
-            let unstable = format!("urn:matrix:org.matrix.msc2967.client:device:{device}");
-            q = q.filter(
-                oauth2_sessions::scope_list
-                    .contains(vec![stable])
-                    .or(oauth2_sessions::scope_list.contains(vec![unstable])),
-            );
+            let device_scope = format!("urn:contrix:client:device:{device}");
+            q = q.filter(oauth2_sessions::scope_list.contains(vec![device_scope]));
         }
 
         if let Some(browser_session) = $filter.browser_session() {

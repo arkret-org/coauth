@@ -33,7 +33,6 @@ rand.workspace = true
 rand_chacha.workspace = true
 rand_core.workspace = true
 regex.workspace = true
-ruma-common.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_urlencoded.workspace = true

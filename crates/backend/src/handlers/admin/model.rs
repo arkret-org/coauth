@@ -29,7 +29,7 @@ pub struct User {
     #[serde(skip)]
     id: Ulid,
 
-    /// The username (localpart) of the user
+    /// The username (username) of the user
     username: String,
 
     /// When the user was created

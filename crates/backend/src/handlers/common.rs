@@ -15,8 +15,8 @@ use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, BrowserSession, RepositoryError,
     Session, SiteConfig, SystemClock, UrlBuilder, User,
 };
-use coauth_matrix::HomeserverAdmin;
 use coauth_policy::PolicyFactory;
+use coauth_principal::PrincipalServerAdmin;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::prelude::*;
@@ -224,7 +224,7 @@ pub trait DepotExt {
     /// repeated in 40+ handler files.
     fn repo(&self) -> impl std::future::Future<Output = Result<BoxRepository, RouteError>> + Send;
     fn site_config(&self) -> Result<SiteConfig, RouteError>;
-    fn homeserver(&self) -> Result<Arc<dyn HomeserverAdmin>, RouteError>;
+    fn principal_server(&self) -> Result<Arc<dyn PrincipalServerAdmin>, RouteError>;
     fn policy_factory(&self) -> Result<Arc<PolicyFactory>, RouteError>;
     fn password_manager(&self) -> Result<PasswordManager, RouteError>;
     fn url_builder(&self) -> Result<UrlBuilder, RouteError>;
@@ -301,8 +301,8 @@ impl DepotExt for Depot {
         depot_get(self, "site_config")
     }
 
-    fn homeserver(&self) -> Result<Arc<dyn HomeserverAdmin>, RouteError> {
-        depot_get(self, "homeserver_admin")
+    fn principal_server(&self) -> Result<Arc<dyn PrincipalServerAdmin>, RouteError> {
+        depot_get(self, "principal_server_admin")
     }
 
     fn policy_factory(&self) -> Result<Arc<PolicyFactory>, RouteError> {

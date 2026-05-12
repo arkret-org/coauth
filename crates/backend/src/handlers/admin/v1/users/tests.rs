@@ -15,7 +15,7 @@ mod tests {
         RepositoryAccess,
         user::{UserPasswordRepository, UserRepository},
     };
-    use coauth_matrix::{HomeserverAdmin, ProvisionRequest};
+    use coauth_principal::{PrincipalProvisionRequest, PrincipalServerAdmin};
     use hyper::{Request, StatusCode};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
@@ -61,8 +61,8 @@ mod tests {
 
         assert_eq!(user.username, "alice");
 
-        // Check that the user was created on the homeserver
-        let result = state.homeserver_admin.query_user("alice").await;
+        // Check that the user was created on the PrincipalServer
+        let result = state.principal_server_admin.query_user("alice").await;
         assert!(result.is_ok());
     }
 
@@ -132,8 +132,8 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        // Reserve a username on the homeserver and try to add it
-        state.homeserver_admin.reserve_localpart("bob").await;
+        // Reserve a username on the PrincipalServer and try to add it
+        state.principal_server_admin.reserve_username("bob").await;
 
         let request = Request::post("/api/admin/v1/users")
             .bearer(&token)
@@ -146,15 +146,15 @@ mod tests {
         let body: serde_json::Value = response.json();
         assert_eq!(
             body["errors"][0]["title"],
-            "Username is reserved by the homeserver"
+            "Username is reserved by the PrincipalServer"
         );
 
-        // But we can force it with the skip_homeserver_check flag
+        // But we can force it with the skip_principal_server_check flag
         let request = Request::post("/api/admin/v1/users")
             .bearer(&token)
             .json(serde_json::json!({
                 "username": "bob",
-                "skip_homeserver_check": true,
+                "skip_principal_server_check": true,
             }));
 
         let response = state.request(request).await;
@@ -576,8 +576,8 @@ mod tests {
             .await
             .unwrap();
         state
-            .homeserver_admin
-            .provision_user(&ProvisionRequest::new(&user.username, &user.sub))
+            .principal_server_admin
+            .provision_user(&PrincipalProvisionRequest::new(&user.username, &user.sub))
             .await
             .unwrap();
         repo.save().await.unwrap();
@@ -600,7 +600,7 @@ mod tests {
         assert_eq!(body["data"]["attributes"]["admin"], true);
         assert!(body["data"]["attributes"]["locked_at"].is_string());
 
-        let user = state.homeserver_admin.query_user(&username).await.unwrap();
+        let user = state.principal_server_admin.query_user(&username).await.unwrap();
         assert_eq!(user.displayname.as_deref(), Some("Alice Admin"));
     }
 
@@ -627,12 +627,12 @@ mod tests {
         repo.save().await.unwrap();
 
         state
-            .homeserver_admin
-            .provision_user(&ProvisionRequest::new(&user.username, &user.sub))
+            .principal_server_admin
+            .provision_user(&PrincipalProvisionRequest::new(&user.username, &user.sub))
             .await
             .unwrap();
         state
-            .homeserver_admin
+            .principal_server_admin
             .delete_user(&user.username, true)
             .await
             .unwrap();
@@ -651,11 +651,11 @@ mod tests {
             serde_json::Value::Null
         );
 
-        let matrix_user = state
-            .homeserver_admin
+        let principal_user = state
+            .principal_server_admin
             .query_user(&user.username)
             .await
             .unwrap();
-        assert!(!matrix_user.deactivated);
+        assert!(!principal_user.deactivated);
     }
 }

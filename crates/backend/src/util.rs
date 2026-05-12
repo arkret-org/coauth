@@ -3,17 +3,16 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Context;
 use coauth_config::{
     AccountConfig, BrandingConfig, CaptchaConfig, DatabaseConfig, EmailConfig, EmailProviderConfig,
-    EmailSmtpMode, ExperimentalConfig, HomeserverKind, MatrixConfig, PasswordsConfig, PolicyConfig,
-    PolicyEngine, SmsConfig, SmsProviderConfig, TemplatesConfig,
+    EmailSmtpMode, ExperimentalConfig, HttpConfig, PasswordsConfig, PolicyConfig, PolicyEngine,
+    SmsConfig, SmsProviderConfig, TemplatesConfig,
 };
 use coauth_data::{
     BoxRepositoryFactory, RepositoryAccess, RepositoryFactory, SessionExpirationConfig,
     SessionLimitConfig, SiteConfig, UrlBuilder,
 };
-use coauth_matrix::{ConnectorRegistry, HomeserverAdmin, ReadOnlyHomeserverAdmin};
-use coauth_matrix_palpo::PalpoAdmin;
 use coauth_messaging::{MailTransport, Mailer, NotificationCenter, SmsSender, SmsTransport};
 use coauth_policy::PolicyFactory;
+use coauth_principal::{ConnectorRegistry, PrincipalServerAdmin};
 use coauth_templates::{SiteConfigExt, Templates};
 use diesel_async::{
     AsyncPgConnection, SimpleAsyncConnection,
@@ -350,7 +349,6 @@ pub fn test_mailer_in_background(mailer: &Mailer, timeout: Duration) {
 
 pub async fn policy_factory_from_config(
     config: &PolicyConfig,
-    _matrix_config: &MatrixConfig,
     _experimental_config: &ExperimentalConfig,
 ) -> Result<PolicyFactory, anyhow::Error> {
     match config.engine {
@@ -423,7 +421,7 @@ pub fn captcha_config_from_config(
 
 pub fn site_config_from_config(
     branding_config: &BrandingConfig,
-    matrix_config: &MatrixConfig,
+    http_config: &HttpConfig,
     experimental_config: &ExperimentalConfig,
     password_config: &PasswordsConfig,
     account_config: &AccountConfig,
@@ -441,7 +439,7 @@ pub fn site_config_from_config(
 
     Ok(SiteConfig {
         access_token_ttl: experimental_config.access_token_ttl,
-        server_name: matrix_config.homeserver.clone(),
+        server_name: server_name_from_public_base(&http_config.public_base),
         policy_uri: branding_config.policy_uri.clone(),
         tos_uri: branding_config.tos_uri.clone(),
         imprint: branding_config.imprint.clone(),
@@ -475,6 +473,14 @@ pub fn site_config_from_config(
         flow_engine_enabled: false,
         phone_verification_enabled: !matches!(&sms_config.provider, SmsProviderConfig::Blackhole),
     })
+}
+
+fn server_name_from_public_base(public_base: &url::Url) -> String {
+    let host = public_base.host_str().unwrap_or("localhost");
+    match public_base.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_owned(),
+    }
 }
 
 pub async fn templates_from_config(
@@ -631,56 +637,16 @@ pub async fn load_policy_factory_dynamic_data(
     Ok(())
 }
 
-/// Create a clonable, type-erased [`HomeserverAdmin`] and a
-/// [`ConnectorRegistry`] from the configuration.
-///
-/// The returned registry contains the connector as its primary provider,
-/// while the `Arc<dyn HomeserverAdmin>` is kept for backward
-/// compatibility with code that accesses the homeserver directly.
-pub async fn homeserver_connection_from_config(
-    config: &MatrixConfig,
-    http_client: reqwest::Client,
-) -> anyhow::Result<(Arc<dyn HomeserverAdmin>, ConnectorRegistry)> {
-    let mut registry = ConnectorRegistry::new();
+/// Create the local principal account facade used by account/profile flows.
+pub fn principal_server_connection_from_config(
+    site_config: &SiteConfig,
+) -> (Arc<dyn PrincipalServerAdmin>, ConnectorRegistry) {
+    let registry = ConnectorRegistry::new();
 
-    if !config.enabled {
-        // Legacy Matrix / Palpo adapter retired for this deployment.
-        // Wire a no-op stub for any code path that still reaches for
-        // `homeserver_admin`, and leave the connector registry empty so
-        // the connector-health surface honestly reports "no connector".
-        // The handshake against a real homeserver is skipped entirely.
-        tracing::info!(
-            "Matrix homeserver adapter disabled (matrix.enabled = false); using no-op stub"
-        );
-        let stub: Arc<dyn HomeserverAdmin> = Arc::new(coauth_matrix::MockHomeserverAdmin::new(
-            config.homeserver.clone(),
-        ));
-        return Ok((stub, registry));
-    }
-
-    Ok(match config.kind {
-        HomeserverKind::Palpo | HomeserverKind::PalpoModern => {
-            let palpo = Arc::new(PalpoAdmin::new(
-                config.homeserver.clone(),
-                config.endpoint.clone(),
-                config.secret().await?,
-                http_client,
-            ));
-            registry.register(Arc::clone(&palpo) as _);
-            (palpo as Arc<dyn HomeserverAdmin>, registry)
-        }
-        HomeserverKind::PalpoReadOnly => {
-            let palpo = PalpoAdmin::new(
-                config.homeserver.clone(),
-                config.endpoint.clone(),
-                config.secret().await?,
-                http_client,
-            );
-            let readonly = Arc::new(ReadOnlyHomeserverAdmin::new(palpo));
-            registry.register(Arc::clone(&readonly) as _);
-            (readonly as Arc<dyn HomeserverAdmin>, registry)
-        }
-    })
+    let stub: Arc<dyn PrincipalServerAdmin> = Arc::new(
+        coauth_principal::MockPrincipalServerAdmin::new(site_config.server_name.clone()),
+    );
+    (stub, registry)
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use std::{net::IpAddr, time::Duration};
 use coauth_config::ContrixConfig;
 use coauth_data::{
     AuthorizationGrant, AuthorizationGrantStage, BoxClock, BoxRepository, BoxRng, BrowserSession,
-    Client, Clock, MatrixUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
+    Client, Clock, PrincipalUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
     oauth2::{
         OAuth2AuthorizationGrantRepository, OAuth2ClientRepository,
         OAuth2DeviceCodeGrantRepository, OAuth2SessionRepository,
@@ -11,8 +11,8 @@ use coauth_data::{
     user::BrowserSessionRepository,
 };
 use coauth_keystore::Keystore;
-use coauth_matrix::HomeserverAdmin;
 use coauth_policy::{Policy, PolicyFactory};
+use coauth_principal::PrincipalServerAdmin;
 use oauth2_types::requests::AuthorizationResponse;
 use thiserror::Error;
 use ulid::Ulid;
@@ -30,7 +30,7 @@ use crate::handlers::{
 pub struct AuthorizationConsentInfo {
     pub grant: AuthorizationGrant,
     pub client: Client,
-    pub matrix_user: MatrixUser,
+    pub principal_user: PrincipalUser,
     pub policy_violation: bool,
 }
 
@@ -39,7 +39,7 @@ pub struct ConsentScreen {
     pub grant_id: Ulid,
     pub client: Client,
     pub scope: String,
-    pub user_mxid: String,
+    pub user_principal_id: String,
     pub user_display_name: Option<String>,
     pub policy_violation: bool,
 }
@@ -50,8 +50,8 @@ impl From<AuthorizationConsentInfo> for ConsentScreen {
             grant_id: info.grant.id,
             scope: info.grant.scope.to_string(),
             client: info.client,
-            user_mxid: info.matrix_user.mxid,
-            user_display_name: info.matrix_user.display_name,
+            user_principal_id: info.principal_user.principal_id,
+            user_display_name: info.principal_user.display_name,
             policy_violation: info.policy_violation,
         }
     }
@@ -113,7 +113,7 @@ pub enum OAuth2AccessError {
 pub async fn load_authorization_consent(
     mut repo: BoxRepository,
     policy_factory: &PolicyFactory,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     _clock: &dyn Clock,
     browser_session: &BrowserSession,
     grant_id: Ulid,
@@ -150,14 +150,14 @@ pub async fn load_authorization_consent(
 
     repo.cancel().await?;
 
-    let localpart = &browser_session.user.username;
-    let user_display_name = fetch_display_name(homeserver, localpart).await;
+    let username = &browser_session.user.username;
+    let user_display_name = fetch_display_name(principal_server, username).await;
 
     Ok(AuthorizationConsentInfo {
         grant,
         client,
-        matrix_user: MatrixUser {
-            mxid: homeserver.mxid(localpart),
+        principal_user: PrincipalUser {
+            principal_id: principal_server.principal_id(username),
             display_name: user_display_name,
         },
         policy_violation,
@@ -280,7 +280,7 @@ pub async fn lookup_device_link(
 pub async fn load_device_consent(
     mut repo: BoxRepository,
     policy_factory: &PolicyFactory,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     clock: &dyn Clock,
     browser_session: &BrowserSession,
     grant_id: Ulid,
@@ -317,14 +317,14 @@ pub async fn load_device_consent(
 
     repo.cancel().await?;
 
-    let localpart = &browser_session.user.username;
-    let user_display_name = fetch_display_name(homeserver, localpart).await;
+    let username = &browser_session.user.username;
+    let user_display_name = fetch_display_name(principal_server, username).await;
 
     Ok(ConsentScreen {
         grant_id: grant.id,
         client,
         scope: grant.scope.to_string(),
-        user_mxid: homeserver.mxid(localpart),
+        user_principal_id: principal_server.principal_id(username),
         user_display_name,
         policy_violation,
     })
@@ -433,19 +433,22 @@ async fn has_policy_violation(
     Ok(!eval_result.valid())
 }
 
-async fn fetch_display_name(homeserver: &dyn HomeserverAdmin, localpart: &str) -> Option<String> {
-    match tokio::time::timeout(Duration::from_secs(1), homeserver.query_user(localpart)).await {
+async fn fetch_display_name(
+    principal_server: &dyn PrincipalServerAdmin,
+    username: &str,
+) -> Option<String> {
+    match tokio::time::timeout(Duration::from_secs(1), principal_server.query_user(username)).await {
         Ok(Ok(user)) => user.displayname,
         Ok(Err(err)) => {
             tracing::warn!(
                 error = &*err as &dyn std::error::Error,
-                localpart,
+                username,
                 "Failed to query user"
             );
             None
         }
         Err(_) => {
-            tracing::warn!(localpart, "Timed out while querying user");
+            tracing::warn!(username, "Timed out while querying user");
             None
         }
     }

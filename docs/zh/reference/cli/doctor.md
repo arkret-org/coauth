@@ -12,11 +12,11 @@ coauth doctor -c config.yaml
 
 `doctor` 命令执行以下诊断：
 
-- **数据库连通性** — 验证 PostgreSQL 数据库是否可达
 - **配置有效性** — 检查配置文件的语法和语义
-- **模板渲染** — 确保所有模板可以正常加载和渲染
-- **密钥材料** — 验证签名密钥是否存在且可用
-- **Homeserver 可达性** — 测试与 Matrix homeserver 的连接
+- **Issuer 检查** — 当配置的 issuer 不是 HTTPS 时给出警告
+- **Principal Server 配置** — 输出 `contrix.principal_servers` 中配置的条目
+- **OpenID discovery** — 请求 `/.well-known/openid-configuration` 并校验 issuer
+- **Contrix discovery** — 请求 `/api/v1/server/describe`
 
 ## 输出说明
 

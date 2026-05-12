@@ -233,7 +233,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_password_login_with_mxid() {
+    async fn test_password_login_with_principal_id() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
@@ -281,7 +281,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_password_login_with_mxid_wrong_server() {
+    async fn test_password_login_with_principal_id_wrong_server() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();

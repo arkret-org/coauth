@@ -1,5 +1,5 @@
 [package]
-name = "coauth-matrix-palpo"
+name = "coauth-principal"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -14,12 +14,4 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-http.workspace = true
-reqwest.workspace = true
-serde.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-url.workspace = true
-urlencoding.workspace = true
-
-coauth-matrix.workspace = true
+tokio.workspace = true

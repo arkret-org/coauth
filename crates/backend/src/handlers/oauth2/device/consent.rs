@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use coauth_data::{Clock, MatrixUser};
+use coauth_data::{Clock, PrincipalUser};
 use coauth_policy::Policy;
 use crate::salvo_utils::{
     InternalError,
@@ -49,7 +49,7 @@ async fn handle_get(
     let locale = crate::handlers::preferred_language(req, depot);
     let templates = depot.templates()?;
     let url_builder = depot.url_builder()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let mut repo = depot.repo().await?;
     let policy_factory = depot.policy_factory()?;
     let mut policy: Policy = policy_factory
@@ -158,10 +158,10 @@ async fn handle_get(
     // Fetch informations about the user. This is purely cosmetic, so we let it
     // fail and put a 1s timeout to it in case we fail to query it
     // XXX: we're likely to need this in other places
-    let localpart = &session.user.username;
+    let username = &session.user.username;
     let display_name = match tokio::time::timeout(
         Duration::from_secs(1),
-        homeserver.query_user(localpart),
+        principal_server.query_user(username),
     )
     .await
     {
@@ -169,23 +169,23 @@ async fn handle_get(
         Ok(Err(err)) => {
             tracing::warn!(
                 error = &*err as &dyn std::error::Error,
-                localpart,
+                username,
                 "Failed to query user"
             );
             None
         }
         Err(_) => {
-            tracing::warn!(localpart, "Timed out while querying user");
+            tracing::warn!(username, "Timed out while querying user");
             None
         }
     };
 
-    let matrix_user = MatrixUser {
-        mxid: homeserver.mxid(localpart),
+    let principal_user = PrincipalUser {
+        principal_id: principal_server.principal_id(username),
         display_name,
     };
 
-    let ctx = DeviceConsentContext::new(grant, client, matrix_user)
+    let ctx = DeviceConsentContext::new(grant, client, principal_user)
         .with_session(session)
         .with_csrf(csrf_token.form_value())
         .with_language(locale);
@@ -218,7 +218,7 @@ async fn handle_post(
     let locale = crate::handlers::preferred_language(req, depot);
     let templates = depot.templates()?;
     let url_builder = depot.url_builder()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let mut repo = depot.repo().await?;
     let policy_factory = depot.policy_factory()?;
     let mut policy: Policy = policy_factory
@@ -358,10 +358,10 @@ async fn handle_post(
     // Fetch informations about the user. This is purely cosmetic, so we let it
     // fail and put a 1s timeout to it in case we fail to query it
     // XXX: we're likely to need this in other places
-    let localpart = &session.user.username;
+    let username = &session.user.username;
     let display_name = match tokio::time::timeout(
         Duration::from_secs(1),
-        homeserver.query_user(localpart),
+        principal_server.query_user(username),
     )
     .await
     {
@@ -369,23 +369,23 @@ async fn handle_post(
         Ok(Err(err)) => {
             tracing::warn!(
                 error = &*err as &dyn std::error::Error,
-                localpart,
+                username,
                 "Failed to query user"
             );
             None
         }
         Err(_) => {
-            tracing::warn!(localpart, "Timed out while querying user");
+            tracing::warn!(username, "Timed out while querying user");
             None
         }
     };
 
-    let matrix_user = MatrixUser {
-        mxid: homeserver.mxid(localpart),
+    let principal_user = PrincipalUser {
+        principal_id: principal_server.principal_id(username),
         display_name,
     };
 
-    let ctx = DeviceConsentContext::new(grant, client, matrix_user)
+    let ctx = DeviceConsentContext::new(grant, client, principal_user)
         .with_session(session)
         .with_csrf(csrf_token.form_value())
         .with_language(locale);

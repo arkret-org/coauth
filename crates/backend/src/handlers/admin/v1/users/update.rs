@@ -27,7 +27,7 @@ pub struct UpdateRequest {
     admin: Option<bool>,
     locked: Option<bool>,
     deactivated: Option<bool>,
-    hs_erase: Option<bool>,
+    principal_erase: Option<bool>,
 }
 
 #[endpoint]
@@ -41,7 +41,7 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleR
         ..
     } = call_context;
     let id = extract_ulid_param(req)?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let mut rng = crate::handlers::account::make_rng();
     let body: UpdateRequest = req
         .parse_json()
@@ -61,11 +61,11 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleR
         &mut repo,
         &mut rng,
         &*clock,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         admin_user.as_ref(),
         id,
         patch,
-        body.hs_erase.unwrap_or(true),
+        body.principal_erase.unwrap_or(true),
     )
     .await
     .map_err(map_service_error)?;
@@ -113,7 +113,7 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
         } => AppError::conflict(format!(
             "Provider ID {provider_id} already has subject {subject}"
         )),
-        crate::services::user_admin::UserAdminServiceError::Homeserver(error) => {
+        crate::services::user_admin::UserAdminServiceError::PrincipalServer(error) => {
             AppError::internal(std::io::Error::other(error.to_string()))
         }
         crate::services::user_admin::UserAdminServiceError::Repository(error) => {

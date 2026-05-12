@@ -1,4 +1,3 @@
-use base64ct::{Base64UrlUnpadded, Encoding};
 use chrono::{DateTime, Utc};
 use coauth_iana::oauth::OAuthTokenTypeHint;
 use crc::{CRC_32_ISO_HDLC, Crc};
@@ -283,13 +282,6 @@ impl TokenType {
     ///
     /// Returns an error if the token is not valid
     pub fn check(token: &str) -> Result<TokenType, TokenFormatError> {
-        // Reject legacy Palpo tokens -- the compat session infrastructure has
-        // been removed so these can no longer be serviced.
-        if token.starts_with("pst_") || token.starts_with("syr_") || is_likely_palpo_macaroon(token)
-        {
-            return Err(TokenFormatError::InvalidFormat);
-        }
-
         let split: Vec<&str> = token.split('_').collect();
         let [prefix, random_part, crc]: [&str; 3] = split
             .try_into()
@@ -328,21 +320,6 @@ impl PartialEq<OAuthTokenTypeHint> for TokenType {
             ) | (TokenType::RefreshToken, OAuthTokenTypeHint::RefreshToken)
         )
     }
-}
-
-/// Pasion-original: returns true if and only if a token looks like it may be a
-/// macaroon.
-///
-/// Macaroons are a standard for tokens that support attenuation.
-/// Palpo used them for old sessions and for guest sessions.
-///
-/// We won't bother to decode them fully, but we can check to see if the first
-/// constraint is the `location` constraint.
-fn is_likely_palpo_macaroon(token: &str) -> bool {
-    let Ok(decoded) = Base64UrlUnpadded::decode_vec(token) else {
-        return false;
-    };
-    decoded.get(4..13) == Some(b"location ")
 }
 
 fn generate_alphanumeric(rng: &mut (impl RngCore + ?Sized), len: usize) -> String {
@@ -423,27 +400,6 @@ mod tests {
             TokenType::match_prefix(TokenType::RefreshToken.prefix()),
             Some(TokenType::RefreshToken)
         );
-    }
-
-    #[test]
-    fn test_is_likely_palpo_macaroon() {
-        // This is just the prefix of a Palpo macaroon, but it's enough to make the
-        // sniffing work
-        assert!(is_likely_palpo_macaroon(
-            "MDAxYmxvY2F0aW9uIGxpYnJlcHVzaC5uZXQKMDAx"
-        ));
-
-        // This is a valid macaroon (even though Palpo did not generate this one)
-        assert!(is_likely_palpo_macaroon(
-            "MDAxY2xvY2F0aW9uIGh0dHA6Ly9teWJhbmsvCjAwMjZpZGVudGlmaWVyIHdlIHVzZWQgb3VyIHNlY3JldCBrZXkKMDAyZnNpZ25hdHVyZSDj2eApCFJsTAA5rhURQRXZf91ovyujebNCqvD2F9BVLwo"
-        ));
-
-        // None of these are macaroons
-        assert!(!is_likely_palpo_macaroon(
-            "eyJARTOhearotnaeisahtoarsnhiasra.arsohenaor.oarnsteao"
-        ));
-        assert!(!is_likely_palpo_macaroon("...."));
-        assert!(!is_likely_palpo_macaroon("aaa"));
     }
 
     #[test]

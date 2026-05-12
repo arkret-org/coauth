@@ -7,8 +7,8 @@ use coauth_data::{
 };
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, Keystore};
-use coauth_matrix::{ConnectorRegistry, HomeserverAdmin};
 use coauth_policy::{Policy, PolicyFactory};
+use coauth_principal::{ConnectorRegistry, PrincipalServerAdmin};
 use coauth_templates::Templates;
 use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
 use ipnetwork::IpNetwork;
@@ -22,13 +22,16 @@ use crate::{
         ActivityTracker, CookieManager, Limiter, MetadataCache, passwords::PasswordManager,
     },
     services::{
-        account_claims::account_claims_service, did_resolver::default_did_resolver_service,
-        email_webhook::EmailWebhookService, invite_quarantine::invite_quarantine_service,
+        account_claims::account_claims_service,
+        did_resolver::default_did_resolver_service,
+        email_webhook::EmailWebhookService,
+        invite_quarantine::invite_quarantine_service,
         risk_action_proposals::risk_action_proposals_service,
         risk_action_state::default_risk_action_state_service,
         starid_adapter::{StaridRegistryHandle, StaridResolver},
         upstream_oidc::default_upstream_oidc_service,
-        upstream_oidc_mapping::TrustedIssuerPolicySet, webauthn::webauthn_service,
+        upstream_oidc_mapping::TrustedIssuerPolicySet,
+        webauthn::webauthn_service,
     },
     telemetry::METER,
 };
@@ -45,7 +48,7 @@ pub struct AppState {
     pub cookie_manager: CookieManager,
     pub encrypter: Encrypter,
     pub url_builder: UrlBuilder,
-    pub homeserver_admin: Arc<dyn HomeserverAdmin>,
+    pub principal_server_admin: Arc<dyn PrincipalServerAdmin>,
     pub connector_registry: ConnectorRegistry,
     pub policy_factory: Arc<PolicyFactory>,
     pub http_client: reqwest::Client,
@@ -186,7 +189,7 @@ pub async fn inject_app_state(
     depot.insert("site_config", state.site_config.clone());
     depot.insert("limiter", state.limiter.clone());
     depot.insert("policy_factory", state.policy_factory.clone());
-    depot.insert("homeserver_admin", Arc::clone(&state.homeserver_admin));
+    depot.insert("principal_server_admin", Arc::clone(&state.principal_server_admin));
     depot.insert("connector_registry", state.connector_registry.clone());
     depot.insert("app_version", AppVersion(crate::version()));
     depot.insert("activity_tracker", state.activity_tracker.clone());
@@ -290,7 +293,7 @@ pub trait DepotExt {
     fn get_site_config(&self) -> Option<&SiteConfig>;
     fn get_limiter(&self) -> Option<&Limiter>;
     fn get_policy_factory(&self) -> Option<&Arc<PolicyFactory>>;
-    fn get_homeserver_admin(&self) -> Option<&Arc<dyn HomeserverAdmin>>;
+    fn get_principal_server_admin(&self) -> Option<&Arc<dyn PrincipalServerAdmin>>;
     fn get_connector_registry(&self) -> Option<&ConnectorRegistry>;
     fn get_app_version(&self) -> Option<&AppVersion>;
     fn get_activity_tracker(&self) -> Option<&ActivityTracker>;
@@ -359,8 +362,8 @@ impl DepotExt for Depot {
         self.get::<Arc<PolicyFactory>>("policy_factory").ok()
     }
 
-    fn get_homeserver_admin(&self) -> Option<&Arc<dyn HomeserverAdmin>> {
-        self.get::<Arc<dyn HomeserverAdmin>>("homeserver_admin")
+    fn get_principal_server_admin(&self) -> Option<&Arc<dyn PrincipalServerAdmin>> {
+        self.get::<Arc<dyn PrincipalServerAdmin>>("principal_server_admin")
             .ok()
     }
 

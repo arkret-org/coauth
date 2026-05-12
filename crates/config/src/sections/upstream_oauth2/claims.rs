@@ -79,27 +79,27 @@ impl SubjectImportPreference {
     }
 }
 
-// ── Localpart Import ──
+// ── Username Import ──
 
-/// Controls how the MXID localpart is imported from upstream claims
+/// Controls how the local account username is imported from upstream claims.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct LocalpartImportPreference {
-    /// How to handle the localpart attribute
+pub struct UsernameImportPreference {
+    /// How to handle the username attribute
     #[serde(default, skip_serializing_if = "ImportAction::is_default")]
     pub action: ImportAction,
 
-    /// A Jinja2 template for the localpart attribute.
+    /// A Jinja2 template for the username attribute.
     ///
     /// Defaults to `{{ user.preferred_username }}` when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
 
-    /// How to handle conflicts on the localpart claim
+    /// How to handle conflicts on the username claim
     #[serde(default, skip_serializing_if = "OnConflict::is_default")]
     pub on_conflict: OnConflict,
 }
 
-impl LocalpartImportPreference {
+impl UsernameImportPreference {
     pub(crate) const fn is_default(&self) -> bool {
         self.action.is_default() && self.template.is_none()
     }
@@ -199,14 +199,14 @@ pub struct ClaimsImports {
     pub subject: SubjectImportPreference,
 
     /// When `true`, the interactive confirmation screen is skipped.
-    /// Requires `localpart.action` to be `require` and other attribute
+    /// Requires `username.action` to be `require` and other attribute
     /// actions to be `ignore`, `force`, or `require`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub skip_confirmation: bool,
 
-    /// Import the localpart of the MXID
-    #[serde(default, skip_serializing_if = "LocalpartImportPreference::is_default")]
-    pub localpart: LocalpartImportPreference,
+    /// Import the local account username.
+    #[serde(default, skip_serializing_if = "UsernameImportPreference::is_default")]
+    pub username: UsernameImportPreference,
 
     /// Import the displayname of the user
     #[serde(
@@ -234,7 +234,7 @@ pub struct ClaimsImports {
 impl ClaimsImports {
     pub(crate) const fn is_default(&self) -> bool {
         self.subject.is_default()
-            && self.localpart.is_default()
+            && self.username.is_default()
             && !self.skip_confirmation
             && self.displayname.is_default()
             && self.email.is_default()

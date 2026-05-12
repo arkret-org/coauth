@@ -113,15 +113,10 @@ macro_rules! apply_app_session_filter {
         }
 
         if let Some(device) = filter.device() {
-            let stable_scope = format!("urn:matrix:client:device:{device}");
-            let unstable_scope = format!("urn:matrix:org.matrix.msc2967.client:device:{device}");
+            let device_scope = format!("urn:contrix:client:device:{device}");
             query = query.filter(
                 diesel::dsl::sql::<diesel::sql_types::Bool>("")
-                    .bind::<diesel::sql_types::Text, _>(stable_scope)
-                    .sql(" = ANY(")
-                    .sql("oauth2_sessions.scope_list")
-                    .sql(") OR ")
-                    .bind::<diesel::sql_types::Text, _>(unstable_scope)
+                    .bind::<diesel::sql_types::Text, _>(device_scope)
                     .sql(" = ANY(")
                     .sql("oauth2_sessions.scope_list")
                     .sql(")"),
@@ -217,19 +212,17 @@ impl AppSessionRepository for PgAppSessionRepository<'_> {
         device: &str,
     ) -> Result<bool, Self::Error> {
         let finished_at = clock.now();
-        let stable_scope = format!("urn:matrix:client:device:{device}");
-        let unstable_scope = format!("urn:matrix:org.matrix.msc2967.client:device:{device}");
+        let device_scope = format!("urn:contrix:client:device:{device}");
 
         let oauth2_affected = diesel::sql_query(
             "UPDATE oauth2_sessions
-             SET finished_at = $4
+             SET finished_at = $3
              WHERE user_id = $1
-               AND ($2 = ANY(scope_list) OR $3 = ANY(scope_list))
+               AND $2 = ANY(scope_list)
                AND finished_at IS NULL",
         )
         .bind::<diesel::sql_types::Uuid, _>(Uuid::from(user.id))
-        .bind::<diesel::sql_types::Text, _>(&stable_scope)
-        .bind::<diesel::sql_types::Text, _>(&unstable_scope)
+        .bind::<diesel::sql_types::Text, _>(&device_scope)
         .bind::<diesel::sql_types::Timestamptz, _>(finished_at)
         .execute(self.conn)
         .await?;
@@ -320,7 +313,7 @@ mod tests {
             .unwrap();
 
         let device_id = "AABBCCDDEE";
-        let stable_scope = format!("urn:matrix:client:device:{device_id}");
+        let stable_scope = format!("urn:contrix:client:device:{device_id}");
         let scope: Scope = [OPENID]
             .into_iter()
             .chain([stable_scope.parse().unwrap()])

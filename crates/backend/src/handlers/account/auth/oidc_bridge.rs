@@ -177,7 +177,7 @@ pub async fn oidc_code_exchange(
     let key_store = depot.key_store()?;
     let encrypter = depot.encrypter()?;
     let upstream_oidc = depot.upstream_oidc_service()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let http_client = depot
         .get::<reqwest::Client>("http_client")
         .cloned()
@@ -629,7 +629,7 @@ pub async fn oidc_code_exchange(
         .await?;
         repo.save().await?;
 
-        let display_name = match homeserver.query_user(&user.username).await {
+        let display_name = match principal_server.query_user(&user.username).await {
             Ok(info) => info.displayname,
             Err(_) => None,
         };
@@ -642,7 +642,7 @@ pub async fn oidc_code_exchange(
                 username: user.username.clone(),
                 did: contrix::user_did_for(&url_builder, &contrix_config, &user),
                 handle: contrix::user_handle(&url_builder, &user),
-                mxid: homeserver.mxid(&user.username),
+                principal_id: principal_server.principal_id(&user.username),
                 display_name,
             }),
             session_grant: Some(SessionGrantInfo {
@@ -1220,7 +1220,7 @@ pub async fn oidc_code_exchange(
     repo.save().await?;
 
     let user = &browser_session.user;
-    let display_name = match homeserver.query_user(&user.username).await {
+    let display_name = match principal_server.query_user(&user.username).await {
         Ok(info) => info.displayname,
         Err(_) => None,
     };
@@ -1233,7 +1233,7 @@ pub async fn oidc_code_exchange(
             username: user.username.clone(),
             did: contrix::user_did_for(&url_builder, &contrix_config, &user),
             handle: contrix::user_handle(&url_builder, &user),
-            mxid: homeserver.mxid(&user.username),
+            principal_id: principal_server.principal_id(&user.username),
             display_name,
         }),
         session_grant: Some(SessionGrantInfo {

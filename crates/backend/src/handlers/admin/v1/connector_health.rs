@@ -5,7 +5,7 @@
 //! type-checked the backend against.
 
 use coauth_admin_types::{ConnectorHealthResponse, ConnectorHealthRow};
-use coauth_matrix::ConnectorRegistry;
+use coauth_principal::ConnectorRegistry;
 use salvo::prelude::*;
 
 use crate::{
@@ -32,8 +32,8 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
             .into_iter()
             .map(|(name, result)| {
                 let provider_ref = registry.get(name);
-                let homeserver = provider_ref
-                    .map(|p| p.homeserver().to_owned())
+                let principal_authority = provider_ref
+                    .map(|p| p.principal_authority().to_owned())
                     .unwrap_or_default();
                 let (status, error) = match result {
                     Ok(()) => ("healthy".to_string(), None),
@@ -41,22 +41,24 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
                 };
                 ConnectorHealthRow {
                     provider: name.to_owned(),
-                    homeserver,
+                    principal_authority,
                     status,
                     error,
                 }
             })
             .collect()
     } else {
-        // Fallback: use the single homeserver connection directly.
-        let homeserver = depot.homeserver()?;
-        let (status, error) = match homeserver.is_localpart_available("__health_check__").await {
+        let principal_server = depot.principal_server()?;
+        let (status, error) = match principal_server
+            .is_username_available("__health_check__")
+            .await
+        {
             Ok(_) => ("healthy".to_string(), None),
             Err(e) => ("unhealthy".to_string(), Some(e.to_string())),
         };
         vec![ConnectorHealthRow {
-            provider: "palpo".to_string(),
-            homeserver: homeserver.homeserver().to_string(),
+            provider: "principal".to_string(),
+            principal_authority: principal_server.principal_authority().to_string(),
             status,
             error,
         }]

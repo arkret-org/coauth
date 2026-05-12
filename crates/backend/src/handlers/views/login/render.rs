@@ -1,5 +1,5 @@
 //! Shared render helper for both `GET /login` and `POST /login`, plus the
-//! `login_hint` interpretation logic that turns an inbound MXID/email
+//! `login_hint` interpretation logic that turns an inbound username/email
 //! login hint into a pre-filled form value.
 
 use coauth_data::{
@@ -7,7 +7,7 @@ use coauth_data::{
     oauth2::LoginHint,
 };
 use coauth_i18n::DataLocale;
-use coauth_matrix::HomeserverAdmin;
+use coauth_principal::PrincipalServerAdmin;
 use coauth_templates::{
     FormState, LoginContext, LoginFormField, PostAuthContext, PostAuthContextInner,
     TemplateContext, Templates,
@@ -26,7 +26,7 @@ use crate::salvo_utils::cookies::CookieJar;
 pub(super) fn handle_login_hint(
     mut ctx: LoginContext,
     next: &PostAuthContext,
-    homeserver: &dyn HomeserverAdmin,
+    _principal_server: &dyn PrincipalServerAdmin,
     site_config: &SiteConfig,
 ) -> LoginContext {
     let form_state = ctx.form_state_mut();
@@ -37,8 +37,8 @@ pub(super) fn handle_login_hint(
     }
 
     if let PostAuthContextInner::ContinueAuthorizationGrant { ref grant } = next.ctx {
-        let value = match grant.parse_login_hint(homeserver.homeserver()) {
-            LoginHint::MXID(mxid) => Some(mxid.localpart().to_owned()),
+        let value = match grant.parse_login_hint() {
+            LoginHint::Username(username) => Some(username.to_owned()),
             LoginHint::Email(email) if site_config.login_with_email_allowed => {
                 Some(email.to_string())
             }
@@ -63,7 +63,7 @@ pub(super) async fn render(
     clock: &impl Clock,
     rng: impl Rng,
     templates: &Templates,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     site_config: &SiteConfig,
     res: &mut Response,
 ) -> Result<(), InternalError> {
@@ -79,7 +79,7 @@ pub(super) async fn render(
         .await
         .map_err(InternalError::from_anyhow)?;
     let ctx = if let Some(next) = next {
-        let ctx = handle_login_hint(ctx, &next, homeserver, site_config);
+        let ctx = handle_login_hint(ctx, &next, principal_server, site_config);
         ctx.with_post_action(next)
     } else {
         ctx

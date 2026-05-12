@@ -4,9 +4,9 @@ use clap::Parser;
 use coauth_backend::{
     lifecycle::LifecycleManager,
     util::{
-        database_url_from_config, diesel_pool_from_config, homeserver_connection_from_config,
+        database_url_from_config, diesel_pool_from_config,
         notification_center_from_config, site_config_from_config, templates_from_config,
-        test_mailer_in_background,
+        test_mailer_in_background, principal_server_connection_from_config,
     },
 };
 use coauth_config::{AppConfig, ConfigurationSection};
@@ -40,7 +40,7 @@ impl Options {
         // ── Site configuration & templates ──────────────────────────────
         let site_cfg = site_config_from_config(
             &app_cfg.branding,
-            &app_cfg.matrix,
+            &app_cfg.http,
             &app_cfg.experimental,
             &app_cfg.passwords,
             &app_cfg.account,
@@ -62,9 +62,8 @@ impl Options {
             test_mailer_in_background(mailer, Duration::from_secs(30));
         }
 
-        // ── Homeserver connection ───────────────────────────────────────
-        let http = coauth_backend::reqwest_client();
-        let (hs_conn, _registry) = homeserver_connection_from_config(&app_cfg.matrix, http).await?;
+        // ── Principal account facade ───────────────────────────────────
+        let (principal_conn, _registry) = principal_server_connection_from_config(&site_cfg);
 
         drop(app_cfg);
 
@@ -75,7 +74,7 @@ impl Options {
             db_url,
             SystemClock::default(),
             &notifs,
-            hs_conn,
+            principal_conn,
             urls,
             &site_cfg,
             lifecycle.soft_shutdown_token(),

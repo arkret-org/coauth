@@ -521,10 +521,6 @@ pub fn build_router(
                     ),
             ),
             coauth_config::HttpResource::OAuth => build_oauth_router(router),
-            coauth_config::HttpResource::Compat => {
-                // Compat layer removed — pass through
-                router
-            }
             coauth_config::HttpResource::AdminApi => build_admin_router(router),
             coauth_config::HttpResource::ConnectionInfo => {
                 router.push(Router::with_path("/connection-info").get(connection_info_handler))
@@ -598,7 +594,6 @@ fn build_human_router(router: Router, _templates: Templates) -> Router {
         // Standalone pages
         .push(Router::with_path("/password/{**rest}").get(spa::get))
         .push(Router::with_path("/emails/{**rest}").get(spa::get))
-        .push(Router::with_path("/reset-cross-signing").get(spa::get))
         .push(Router::with_path("/clients/{**rest}").get(spa::get))
         .push(Router::with_path("/devices/{**rest}").get(spa::get))
         // Legacy account password routes
@@ -695,9 +690,6 @@ fn build_account_api_router(router: Router) -> Router {
                 .push(Router::with_path("profile").patch(users::patch_profile))
                 .push(Router::with_path("avatar").post(avatar::upload_avatar))
                 .push(Router::with_path("avatar/{user_id}").get(avatar::get_avatar))
-                .push(
-                    Router::with_path("cross-signing-reset").post(users::allow_cross_signing_reset),
-                )
                 .push(Router::with_path("deactivate").post(users::deactivate_user))
                 .push(
                     Router::with_path("preferences")

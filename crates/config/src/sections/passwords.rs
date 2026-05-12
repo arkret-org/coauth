@@ -66,8 +66,8 @@ pub struct HashingScheme {
     /// Which hashing algorithm to apply
     pub algorithm: Algorithm,
 
-    /// Apply NFKC normalization before hashing. Normally `false`; enable when
-    /// migrating password hashes from Palpo which performs this normalization.
+    /// Apply NFKC normalization before hashing. Normally `false`; enable only
+    /// when importing hashes that were produced with that normalization step.
     #[serde(default, skip_serializing_if = "bool_is_false")]
     pub unicode_normalization: bool,
 

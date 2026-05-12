@@ -521,7 +521,7 @@ mod tests {
         let path = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../templates/");
         let url_builder =
             UrlBuilder::new("https://tenant.example.com/".parse().unwrap(), None, None);
-        let branding = SiteBranding::new("matrix.example.com");
+        let branding = SiteBranding::new("auth.example.com");
         let features = SiteFeatures {
             password_login: true,
             password_registration: true,
@@ -561,11 +561,10 @@ mod tests {
             .unwrap();
         let text = templates.render_email_verification_txt(&context).unwrap();
 
-        assert!(subject.contains("[matrix.example.com]"));
+        assert!(subject.contains("[auth.example.com]"));
         assert!(subject.contains("Your email verification code"));
-        assert!(text.contains("Your email verification code for matrix.example.com is: 654321"));
-        assert!(text.contains("coauth service: matrix.example.com"));
-        assert!(!text.contains("Matrix homeserver:"));
+        assert!(text.contains("Your email verification code for auth.example.com is: 654321"));
+        assert!(text.contains("coauth service: auth.example.com"));
         assert!(!text.contains("Instance domain:"));
     }
 }

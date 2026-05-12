@@ -84,7 +84,7 @@ async fn handle_get(
     let locale = crate::handlers::preferred_language(req, depot);
     let templates = depot.templates()?;
     let url_builder = depot.url_builder()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let policy_factory = depot.policy_factory()?;
     let repo_factory = depot.repo_factory()?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
@@ -134,7 +134,7 @@ async fn handle_get(
     let info = load_authorization_consent(
         repo,
         policy_factory.as_ref(),
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         &clock,
         &session,
         grant_id,
@@ -155,7 +155,7 @@ async fn handle_get(
         return Ok(());
     }
 
-    let ctx = ConsentContext::new(info.grant, info.client, info.matrix_user)
+    let ctx = ConsentContext::new(info.grant, info.client, info.principal_user)
         .with_session(session)
         .with_csrf(csrf_token.form_value())
         .with_language(locale);
@@ -261,7 +261,7 @@ async fn handle_post(
             let info = load_authorization_consent(
                 repo,
                 policy_factory.as_ref(),
-                depot.homeserver()?.as_ref(),
+                depot.principal_server()?.as_ref(),
                 &clock,
                 &browser_session,
                 grant_id,

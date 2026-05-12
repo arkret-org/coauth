@@ -6,7 +6,7 @@ use std::{
 };
 
 use chrono::Duration;
-use coauth_data::{Client, DeviceCodeGrant, MatrixUser};
+use coauth_data::{Client, DeviceCodeGrant, PrincipalUser};
 use oauth2_types::scope::OPENID;
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
@@ -84,17 +84,17 @@ impl TemplateContext for DeviceLinkContext {
 pub struct DeviceConsentContext {
     grant: DeviceCodeGrant,
     client: Client,
-    matrix_user: MatrixUser,
+    principal_user: PrincipalUser,
 }
 
 impl DeviceConsentContext {
     /// Build the device-consent page context.
     #[must_use]
-    pub fn new(grant: DeviceCodeGrant, client: Client, matrix_user: MatrixUser) -> Self {
+    pub fn new(grant: DeviceCodeGrant, client: Client, principal_user: PrincipalUser) -> Self {
         Self {
             grant,
             client,
-            matrix_user,
+            principal_user,
         }
     }
 }
@@ -124,8 +124,8 @@ impl TemplateContext for DeviceConsentContext {
                     Self {
                         grant,
                         client,
-                        matrix_user: MatrixUser {
-                            mxid: "@alice:example.com".to_owned(),
+                        principal_user: PrincipalUser {
+                            principal_id: "alice@example.com".to_owned(),
                             display_name: Some("Alice".to_owned()),
                         },
                     }

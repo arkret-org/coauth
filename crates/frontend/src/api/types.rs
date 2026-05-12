@@ -35,7 +35,7 @@ pub struct User {
     #[serde(default)]
     pub profile: Option<UserProfile>,
     #[serde(default)]
-    pub matrix: Option<MatrixUser>,
+    pub principal: Option<PrincipalUser>,
     #[serde(default)]
     pub has_password: Option<bool>,
     #[serde(default)]
@@ -49,8 +49,8 @@ pub struct User {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct MatrixUser {
-    pub mxid: String,
+pub struct PrincipalUser {
+    pub principal_id: String,
     pub display_name: Option<String>,
 }
 
@@ -320,7 +320,7 @@ pub struct ProfilePatchRequest {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PatchViewerProfileResponse {
     pub profile: UserProfile,
-    pub matrix: MatrixUser,
+    pub principal: PrincipalUser,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -338,7 +338,7 @@ pub struct AdminUserPatchRequest {
     #[serde(default)]
     pub deactivated: Option<bool>,
     #[serde(default)]
-    pub hs_erase: Option<bool>,
+    pub principal_erase: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -503,16 +503,6 @@ pub struct DeviceRedirectData {
 
 pub type PasswordRecoveryData = ViewerResponse;
 
-// ── Cross-signing reset ───────────────────────────────────────
-
-pub type CurrentViewerData = ViewerResponse;
-pub type AllowCrossSigningResetResult = AllowCrossSigningResetPayload;
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct AllowCrossSigningResetPayload {
-    pub user: Option<User>,
-}
-
 // ── Resend recovery email ─────────────────────────────────────
 
 pub type ResendRecoveryEmailResult = ResendRecoveryEmailPayload;
@@ -589,7 +579,7 @@ pub struct LoginViewerInfo {
     pub username: String,
     pub did: String,
     pub handle: String,
-    pub mxid: String,
+    pub principal_id: String,
     #[serde(default)]
     pub display_name: Option<String>,
 }
@@ -745,7 +735,7 @@ pub struct ConsentClientInfo {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ConsentUserInfo {
-    pub mxid: String,
+    pub principal_id: String,
     #[serde(default)]
     pub display_name: Option<String>,
 }

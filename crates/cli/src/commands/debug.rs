@@ -6,7 +6,7 @@ use coauth_backend::util::{
 };
 use coauth_config::{
     ConfigurationSection, ConfigurationSectionExt, DatabaseConfig, ExperimentalConfig,
-    MatrixConfig, PolicyConfig,
+    PolicyConfig,
 };
 use coauth_data::PgRepositoryFactory;
 use figment::Figment;
@@ -39,11 +39,10 @@ impl Options {
 
         let pol_cfg =
             PolicyConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
-        let mtx_cfg = MatrixConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
         let exp_cfg = ExperimentalConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
 
         info!("Loading and compiling the policy module");
-        let factory = policy_factory_from_config(&pol_cfg, &mtx_cfg, &exp_cfg).await?;
+        let factory = policy_factory_from_config(&pol_cfg, &exp_cfg).await?;
 
         if load_dynamic {
             let db_cfg = DatabaseConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;

@@ -372,7 +372,7 @@ pub(super) async fn handle_kill_sessions(
         _ => info!("Ended {affected} active browser sessions"),
     }
 
-    // Schedule a job to sync the devices of the user with the homeserver
+    // Schedule a job to sync the devices of the user with the PrincipalServer
     warn!("Scheduling job to sync devices for the user");
     repo.queue_job()
         .schedule_job(&mut rng, &clock, SyncDevicesJob::new(&user))

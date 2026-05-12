@@ -25,7 +25,7 @@ use crate::{
 
 #[derive(Deserialize, JsonSchema)]
 pub struct UsernamePathParam {
-    /// The username (localpart) of the user to get
+    /// The username (username) of the user to get
     #[allow(dead_code)]
     username: String,
 }

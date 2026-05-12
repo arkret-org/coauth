@@ -62,50 +62,6 @@ server {
 }
 ```
 
-## Compatibility layer
-
-For the compatibility layer, the following endpoints need to be proxied to the service:
-
- - `/_matrix/client/*/login`
- - `/_matrix/client/*/logout`
- - `/_matrix/client/*/refresh`
-
-For example, a nginx configuration could look like:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-
-    server_name matrix.example.com;
-
-    # Forward to the auth service
-    location ~ ^/_matrix/client/(.*)/(login|logout|refresh) {
-        proxy_http_version 1.1;
-        proxy_pass http://localhost:8080;
-        # OR via the Unix domain socket
-        #proxy_pass http://unix:/var/run/coauth.sock;
-
-        # Forward the client IP address
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        # or, using the PROXY protocol
-        #proxy_protocol on;
-    }
-
-    # Forward to Palpo
-    # as per https://palpo-im.github.io/palpo/latest/reverse_proxy.html#nginx
-    location ~ ^(/_matrix|/_palpo/client|/_palpo/mas) {
-        proxy_pass http://localhost:8008;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Host $host;
-
-        client_max_body_size 50M;
-        proxy_http_version 1.1;
-    }
-}
-```
-
 ## Preserve the client IP
 
 For rate-limiting and logging purposes, coauth needs to know the client IP address, which can be lost when using a reverse proxy.

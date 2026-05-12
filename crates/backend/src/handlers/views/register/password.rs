@@ -140,7 +140,7 @@ pub async fn post(
         cookie_jar,
     } = crate::handlers::views::context::ViewContext::extract(req, depot).await?;
     let password_manager = depot.password_manager()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let http_client = depot.http_client()?;
     let limiter = depot.limiter()?;
     let policy_factory = depot.policy_factory()?;
@@ -229,7 +229,7 @@ pub async fn post(
         &mut rng,
         &clock,
         &password_manager,
-        homeserver.as_ref(),
+        principal_server.as_ref(),
         policy_factory.as_ref(),
         &limiter,
         BeginPasswordRegistrationRequest {
@@ -657,7 +657,7 @@ mod tests {
         assert!(response.body().contains("This username is already taken"));
     }
 
-    /// When the username is already reserved on the homeserver, it should give
+    /// When the username is already reserved on the principal_server, it should give
     /// an error
     #[tokio::test]
     async fn test_register_user_reserved() {
@@ -684,8 +684,8 @@ mod tests {
             .next()
             .unwrap();
 
-        // Reserve "john" on the homeserver
-        state.homeserver_admin.reserve_localpart("john").await;
+        // Reserve "john" on the PrincipalServer
+        state.principal_server_admin.reserve_username("john").await;
 
         // Submit the registration form
         let request = Request::post("/register/password")

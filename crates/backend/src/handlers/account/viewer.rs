@@ -40,7 +40,7 @@ struct ViewerUser {
     can_request_admin: bool,
     has_password: bool,
     profile: UserProfileData,
-    matrix: Option<MatrixUserData>,
+    principal: Option<PrincipalUserData>,
     emails: Option<EmailListData>,
     linked_accounts: Option<Vec<LinkedAccount>>,
 }
@@ -68,8 +68,8 @@ struct BrowserSessionData {
 }
 
 #[derive(Serialize, ToSchema)]
-struct MatrixUserData {
-    mxid: String,
+struct PrincipalUserData {
+    principal_id: String,
     display_name: Option<String>,
 }
 
@@ -114,7 +114,7 @@ pub async fn get_viewer(
     let config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
-    let homeserver = depot.homeserver()?;
+    let principal_server = depot.principal_server()?;
     let clock = make_clock();
 
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -129,13 +129,13 @@ pub async fn get_viewer(
             let user = &session.user;
 
             // Load viewer profile from service
-            let profile = load_viewer_profile(&mut repo, homeserver.as_ref(), user)
+            let profile = load_viewer_profile(&mut repo, principal_server.as_ref(), user)
                 .await
                 .map_err(map_user_profile_error)?;
 
-            let matrix = Some(MatrixUserData {
-                mxid: profile.mxid,
-                display_name: profile.matrix_display_name,
+            let principal = Some(PrincipalUserData {
+                principal_id: profile.principal_id,
+                display_name: profile.principal_display_name,
             });
 
             let email_edges: Vec<EmailEdgeData> = profile
@@ -183,7 +183,7 @@ pub async fn get_viewer(
                     preferred_locale: profile.profile.preferred_locale,
                     updated_at: profile.profile.updated_at.to_rfc3339(),
                 },
-                matrix,
+                principal,
                 emails: Some(EmailListData {
                     total_count: total,
                     edges: email_edges,
@@ -237,7 +237,7 @@ fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
         UserProfileServiceError::DuplicateNotificationChannel(channel) => {
             RouteError::BadRequest(format!("Duplicate notification channel: {channel}"))
         }
-        UserProfileServiceError::Homeserver(error) => RouteError::Internal(error.into()),
+        UserProfileServiceError::PrincipalServer(error) => RouteError::Internal(error.into()),
         UserProfileServiceError::Repository(error) => RouteError::from(error),
     }
 }

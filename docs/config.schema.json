@@ -70,7 +70,11 @@
           "::1/128"
         ],
         "public_base": "http://[::]:7080/",
-        "issuer": "http://[::]:7080/"
+        "issuer": "http://[::]:7080/",
+        "max_body_bytes": 1048576,
+        "request_timeout_seconds": 30,
+        "shutdown_grace_seconds": 30,
+        "csp_html": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
       },
       "allOf": [
         {
@@ -725,6 +729,46 @@
             "null"
           ],
           "format": "uri"
+        },
+        "max_body_bytes": {
+          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Contrix\n`cx.server.describe.limits.max_body_bytes` advertisement.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 1048576
+        },
+        "request_timeout_seconds": {
+          "description": "Per-request handling deadline, in seconds. Long-running upstream calls\nhave their own timeouts; this guards against accidentally unbounded\nhandlers. Defaults to 30 seconds. Set to 0 to disable.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 30
+        },
+        "shutdown_grace_seconds": {
+          "description": "Grace period (seconds) granted to in-flight requests when the process\nreceives SIGTERM/SIGINT before the listener is forcibly closed.\nDefaults to 30 seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 30
+        },
+        "hsts": {
+          "description": "Browser HTTP Strict-Transport-Security policy. Disabled by default\nbecause TLS frequently terminates upstream and HSTS has cache\nsemantics that can lock operators out of an HTTP-only host if\nemitted by mistake. Opt in only when this process or the trusted\nedge serves HTTPS to end users.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HstsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "csp_html": {
+          "description": "`Content-Security-Policy` value emitted on every HTML response.\nJSON / asset responses are unaffected. Set to an empty string to\nsuppress the header entirely (for example, when a downstream CDN\ninjects its own policy). When omitted, a conservative default\nscoped to `'self'` is applied — no third-party scripts, no\ninline scripts, no framing. Tighten or relax via this field.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
         }
       },
       "required": [
@@ -1077,6 +1121,29 @@
         }
       }
     },
+    "HstsConfig": {
+      "description": "HTTP Strict-Transport-Security policy.",
+      "type": "object",
+      "properties": {
+        "max_age_seconds": {
+          "description": "`max-age` directive, in seconds. The IETF baseline is 6 months\n(`15_552_000`); production deployments often raise this to 1\nyear (`31_536_000`) once they are confident TLS will stay on.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 15552000
+        },
+        "include_subdomains": {
+          "description": "Whether to include the `includeSubDomains` directive. Off by\ndefault — turning it on commits every subdomain of the public\nhost to HTTPS.",
+          "type": "boolean",
+          "default": false
+        },
+        "preload": {
+          "description": "Whether to include the `preload` directive. Off by default —\nonly set when you have read and intend to follow the\nhstspreload.org submission policy.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
     "DatabaseConfig": {
       "description": "PostgreSQL connection and pool settings",
       "type": "object",
@@ -1293,6 +1360,17 @@
             }
           ]
         },
+        "starid": {
+          "description": "`starid` registry endpoint used by onboarding / recovery flows to\nmint and verify managed `did:webvh` identifiers for principals.\nWhen omitted, principal-DID minting falls back to the local\n`did:web` derivation in [`crate::services::did_resolver`].",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StaridConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "service_did": {
           "description": "Optional explicit service DID for the coauth deployment.\n\nWhen omitted, the backend derives a `did:web` identifier from\n`http.public_base`.",
           "type": [
@@ -1313,6 +1391,21 @@
             "string",
             "null"
           ]
+        },
+        "principal_server_url": {
+          "description": "Base URL of the principal server (`soland`) used for cross-service\nconsent-cell queries (Move/Anchor/Lattice model — see consent-model\nspec §3-§9). When omitted, the consent gate degrades to a\n`consent_unknown` result and the caller decides the policy outcome.\n\nOverride at runtime via `COAUTH_PRINCIPAL_SERVER_URL`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "high_risk_threshold": {
+          "description": "Minimum number of distinct admin DID approvals required to execute a\nhigh-risk risk-action proposal. Defaults to `2`.\n\n\"High-risk\" actions today are `disable`, `erase`, and `reset_recovery`;\nthe action `lock` is treated as low-risk and only needs the proposer's\nown approval.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0,
+          "default": 2
         }
       }
     },
@@ -1388,6 +1481,39 @@
           "type": "string",
           "const": "external"
         }
+      ]
+    },
+    "StaridConfig": {
+      "description": "`starid` registry endpoint configuration.\n\nThe principal-server (coauth) calls into starid during onboarding and\nrecovery to mint a managed `did:webvh` for the principal and to\nverify control-proofs on subsequent privileged operations. The\nadapter implementation lives in\n[`crate::services::starid_adapter::StaridResolver`].",
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "description": "Base URL of the starid deployment, for example\n`https://starid.example.com`. Path segments are ignored — the\nadapter joins `/api/v1/webvh/...` itself.",
+          "type": "string",
+          "format": "uri"
+        },
+        "did_host": {
+          "description": "`host` value passed to starid's `POST /api/v1/webvh/dids`. Defaults\nto the host of `base_url` when omitted. Override when starid is\nfronted by a different public-facing hostname than the URL coauth\nreaches it on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path_prefix": {
+          "description": "Path prefix for minted principal DIDs (e.g. `accounts`). The\nadapter appends the account's stable id, so the final path is\n`<path_prefix>/<account_id>`.",
+          "type": "string",
+          "default": "accounts"
+        },
+        "admin_token": {
+          "description": "Optional bearer token for starid's admin endpoints. When set,\nthe adapter prefers `POST /admin/api/v1/dids` over the public\n`POST /api/v1/webvh/dids` — both produce the same DID but the\nadmin route bypasses public-rate-limits.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "base_url"
       ]
     },
     "TelemetryConfig": {
@@ -2673,20 +2799,16 @@
       ]
     },
     "MatrixConfig": {
-      "description": "Connection details for the Matrix homeserver",
+      "description": "Legacy Matrix compatibility settings.\n\ncoauth no longer wires a Palpo/Matrix connector. This section remains so\nexisting configs can still provide the account-domain used by older account\nidentifiers while Contrix/Soland integrations use session grants and\nPrincipal Server discovery.",
       "type": "object",
       "properties": {
-        "kind": {
-          "description": "Which homeserver variant is running",
-          "default": "palpo",
-          "allOf": [
-            {
-              "$ref": "#/definitions/HomeserverKind"
-            }
-          ]
+        "enabled": {
+          "description": "Whether the retired Matrix compatibility adapter was requested.\nThe backend ignores this flag and always uses a local no-op principal\nstub; `true` is accepted only to keep old config files parseable.",
+          "type": "boolean",
+          "default": false
         },
         "homeserver": {
-          "description": "The Matrix server name (e.g. `matrix.example.com:8448`)",
+          "description": "Legacy account-domain/server-name, e.g. `example.com`.",
           "type": "string",
           "default": "localhost:8008"
         },
@@ -2703,32 +2825,12 @@
           ]
         },
         "endpoint": {
-          "description": "Base URL of the homeserver's client-server API",
+          "description": "Deprecated homeserver API URL kept for old CLI/config compatibility.",
           "type": "string",
           "format": "uri",
           "default": "http://localhost:8008/"
         }
       }
-    },
-    "HomeserverKind": {
-      "description": "Variant of the Matrix homeserver backing this deployment",
-      "oneOf": [
-        {
-          "description": "Full read-write integration with Palpo",
-          "type": "string",
-          "const": "palpo"
-        },
-        {
-          "description": "Read-only mode against Palpo (safe for rolling-out evaluations)",
-          "type": "string",
-          "const": "palpo_read_only"
-        },
-        {
-          "description": "Palpo using the newer (modern) admin API surface",
-          "type": "string",
-          "const": "palpo_modern"
-        }
-      ]
     },
     "PolicyConfig": {
       "description": "Policy engine configuration.\n\nSupports multiple backends: Cedar (default) and Remote HTTP.",
@@ -2879,6 +2981,38 @@
           "allOf": [
             {
               "$ref": "#/definitions/PhoneAuthenticationRateLimitingConfig"
+            }
+          ]
+        },
+        "did_binding": {
+          "description": "DID-binding rate limits. Applies to admin-driven attach/remove\nof principal DIDs on accounts.",
+          "default": {
+            "per_ip": {
+              "burst": 5,
+              "per_second": 0.08333333333333333
+            },
+            "per_account": {
+              "burst": 3,
+              "per_second": 0.01
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/DidBindingRateLimitingConfig"
+            }
+          ]
+        },
+        "mfa_totp": {
+          "description": "MFA / TOTP verification rate limits. Tightened against\nbrute-force attempts on the second-factor input.",
+          "default": {
+            "per_account": {
+              "burst": 5,
+              "per_second": 0.005555555555555556
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/MfaTotpRateLimitingConfig"
             }
           ]
         }
@@ -3060,6 +3194,52 @@
           "default": {
             "burst": 10,
             "per_second": 0.016666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "DidBindingRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Controls how many DID-binding mutations are permitted from a\nsingle source IP. Tuned conservatively — admin tooling is the\nexpected caller, not end-user traffic.",
+          "default": {
+            "burst": 5,
+            "per_second": 0.08333333333333333
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_account": {
+          "description": "Controls how many DID-binding mutations are permitted against a\nsingle target account, regardless of source.",
+          "default": {
+            "burst": 3,
+            "per_second": 0.01
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "MfaTotpRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_account": {
+          "description": "Max TOTP attempts per account_id over a sliding window.\nDefault: 5 attempts per 15 minutes — matches NIST SP 800-63B\nguidance for time-based OTP throttling.",
+          "default": {
+            "burst": 5,
+            "per_second": 0.005555555555555556
           },
           "allOf": [
             {
@@ -3798,7 +3978,7 @@
           "type": "boolean"
         },
         "displayname_change_allowed": {
-          "description": "Whether users can update their display name (default: `true`).\nKeep in sync with the homeserver policy.",
+          "description": "Whether users can update their display name (default: `true`).\nKeep in sync with the downstream principal policy.",
           "type": "boolean"
         },
         "password_registration_enabled": {

@@ -269,8 +269,7 @@ mod tests {
         user.starid_backend = true;
         let did = resolver.primary_did_for_user(&contrix_config, &user).await;
         assert_eq!(
-            did,
-            "did:web:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
+            did, "did:web:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
             "starid_backend=true must produce the starid alias form, not the local derivation",
         );
 

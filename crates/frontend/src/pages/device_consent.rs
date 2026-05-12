@@ -82,7 +82,7 @@ fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
                     p { class: "text-secondary",
                         strong { "{client_name}" }
                         " on a new device wants to access your account as "
-                        strong { "{data.user.mxid}" }
+                        strong { "{data.user.principal_id}" }
                     }
 
                     if let Some(ref err) = *error.read() {

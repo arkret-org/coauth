@@ -1,69 +1,41 @@
-# Homeserver configuration
+# Principal Server configuration
 
-The `coauth` is designed to be run alongside a Matrix homeserver.
-It currently only supports [Palpo](https://github.com/palpo-im/palpo) version 1.136.0 or later.
-The authentication service needs to be able to call the Palpo admin API to provision users through a shared secret, and Palpo needs to be able to call the service to verify access tokens using the OAuth 2.0 token introspection endpoint.
+coauth now runs as the Contrix Auth Server. Downstream Principal Servers such as
+Soland consume OAuth/OIDC tokens and Contrix session grants; coauth no longer
+connects to the retired delegated-auth adapter.
 
-## Configure the connection to the homeserver
+## Configure Soland as a Principal Server
 
-In the [`matrix`](../reference/configuration.md#matrix) section of the configuration file, add the following properties:
-
- - `kind`: the type of homeserver to connect to, currently only `palpo` is supported
- - `homeserver`: corresponds to the `server_name` in the Palpo configuration file
- - `secret`: a shared secret the service will use to call the homeserver Pasion API
- - `endpoint`: the URL to which the homeserver is accessible from the service
+Declare each trusted Principal Server in the `contrix.principal_servers`
+section:
 
 ```yaml
+contrix:
+  principal_servers:
+    - name: soland
+      audience: https://soland.example.com/api
+      endpoint: https://soland.example.com/
+      did: did:web:soland.example.com
+
 matrix:
-  kind: palpo
+  enabled: false
   homeserver: example.com
-  endpoint: "http://localhost:8008"
-  secret: "AVeryRandomSecretPleaseUseSomethingSecure"
-  # Alternatively, using a file:
-  #secret_path: /path/to/secret.txt
 ```
 
-## Configure the homeserver to delegate authentication to the service
+- `name`: operator-facing identifier for the Principal Server.
+- `audience`: token/session-grant audience expected by that server.
+- `endpoint`: base URL advertised through Contrix/OIDC discovery.
+- `did`: optional DID advertised for the Principal Server.
 
-Set up the delegated authentication feature **in the Palpo configuration** in the `matrix_authentication_service` section:
+The `matrix` section is retained only for legacy account-domain compatibility.
+Keep `enabled: false` for new Contrix deployments.
 
-```yaml
-matrix_authentication_service:
-  enabled: true
-  endpoint: http://localhost:8080/
-  secret: "AVeryRandomSecretPleaseUseSomethingSecure"
-  # Alternatively, using a file:
-  #secret_file: /path/to/secret.txt
-```
+## Discovery
 
-The `endpoint` property should be set to the URL of the authentication service.
-This can be an internal URL, to avoid unnecessary round-trips.
+coauth publishes Principal Server metadata through the standard OpenID
+discovery document and the Contrix server description endpoint:
 
-The `secret` property must match in both the Palpo configuration and the Pasion configuration.
+- `/.well-known/openid-configuration`
+- `/api/v1/server/describe`
 
-## Set up the compatibility layer
-
-The service exposes a compatibility layer to allow legacy clients to authenticate using the service.
-This works by exposing a few Matrix endpoints that should be proxied to the service.
-
-The following Matrix Client-Server API endpoints need to be handled by the authentication service:
-
- - [`/_matrix/client/*/login`](https://spec.matrix.org/latest/client-server-api/#post_matrixclientv3login)
- - [`/_matrix/client/*/logout`](https://spec.matrix.org/latest/client-server-api/#post_matrixclientv3logout)
- - [`/_matrix/client/*/refresh`](https://spec.matrix.org/latest/client-server-api/#post_matrixclientv3refresh)
-
-See the [reverse proxy configuration](./reverse-proxy.md) guide for more information.
-
-
-## Migrating from the experimental MSC3861 feature
-
-If you are migrating from the experimental MSC3861 feature in Palpo, you will need to migrate the `experimental_features.msc3861` section of the Palpo configuration to the `matrix_authentication_service` section.
-
-To do so, you need to:
-
- - Remove the `experimental_features.msc3861` section from the Palpo configuration
- - Add the `matrix_authentication_service` section to the Palpo configuration with:
-   - `enabled: true`
-   - `endpoint` set to the URL of the authentication service
-   - `secret` set to the same secret as the `admin_token` that was set in the `msc3861` section
- - Optionally, remove the client provisioned for Palpo in the `clients` section of the Pasion configuration
+Run `coauth doctor` after the server is up to verify these discovery surfaces.

@@ -21,7 +21,6 @@ pub mod plan;
 pub mod recovery_progress;
 pub mod recovery_start;
 pub mod register;
-pub mod reset_cross_signing;
 pub mod security_center;
 pub mod session_detail;
 pub mod sessions;
@@ -53,7 +52,6 @@ use recovery_start::RecoveryStart;
 use register::{
     Register, RegisterDisplayName, RegisterFinish, RegisterVerifyEmail, RegisterVerifyPhone,
 };
-use reset_cross_signing::ResetCrossSigning;
 use security_center::SecurityCenter;
 use session_detail::SessionDetail;
 use sessions::Sessions;
@@ -127,8 +125,6 @@ pub enum Route {
     EmailInUse { id: String },
     #[route("/sessions/:id")]
     SessionDetail { id: String },
-    #[route("/reset-cross-signing")]
-    ResetCrossSigning {},
     #[route("/clients/:id")]
     ClientDetail { id: String },
     #[route("/admin/oauth2-clients/:id/i18n")]

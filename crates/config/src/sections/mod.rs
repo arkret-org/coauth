@@ -20,7 +20,6 @@ mod database;
 mod email;
 mod experimental;
 mod http;
-mod matrix;
 mod passwords;
 mod policy;
 mod rate_limiting;
@@ -57,7 +56,6 @@ pub use self::{
         ListenerConfig as HttpListenerConfig, Resource as HttpResource, TlsConfig as HttpTlsConfig,
         UnixOrTcp,
     },
-    matrix::{HomeserverKind, MatrixConfig},
     passwords::{
         Algorithm as PasswordAlgorithm, HashingScheme as PasswordHashingScheme, PasswordsConfig,
     },
@@ -209,9 +207,6 @@ pub struct RootConfig {
     #[serde(default)]
     pub passwords: PasswordsConfig,
 
-    /// Configuration related to the homeserver
-    pub matrix: MatrixConfig,
-
     /// Configuration related to the policy engine
     #[serde(default, skip_serializing_if = "PolicyConfig::is_default")]
     pub policy: PolicyConfig,
@@ -271,7 +266,6 @@ impl ConfigurationSection for RootConfig {
             &|f| self.sms.validate(f),
             &|f| self.passwords.validate(f),
             &|f| self.secrets.validate(f),
-            &|f| self.matrix.validate(f),
             &|f| self.policy.validate(f),
             &|f| self.rate_limiting.validate(f),
             &|f| self.upstream_oauth2.validate(f),
@@ -301,11 +295,8 @@ impl RootConfig {
         R: Rng + Send,
     {
         let secrets = SecretsConfig::generate(&mut rng).await?;
-        let matrix = MatrixConfig::generate(&mut rng);
-
         Ok(Self {
             secrets,
-            matrix,
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
@@ -331,7 +322,6 @@ impl RootConfig {
     pub fn test() -> Self {
         Self {
             secrets: SecretsConfig::test(),
-            matrix: MatrixConfig::test(),
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
@@ -382,8 +372,6 @@ pub struct AppConfig {
     #[serde(default)]
     pub passwords: PasswordsConfig,
 
-    pub matrix: MatrixConfig,
-
     #[serde(default)]
     pub policy: PolicyConfig,
 
@@ -421,7 +409,6 @@ impl ConfigurationSection for AppConfig {
         self.sms.validate(figment)?;
         self.passwords.validate(figment)?;
         self.secrets.validate(figment)?;
-        self.matrix.validate(figment)?;
         self.policy.validate(figment)?;
         self.rate_limiting.validate(figment)?;
         self.branding.validate(figment)?;

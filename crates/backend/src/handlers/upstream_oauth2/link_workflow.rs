@@ -14,8 +14,8 @@ use coauth_data::{
     },
 };
 use coauth_jose::jwt::Jwt;
-use coauth_matrix::HomeserverAdmin;
 use coauth_policy::{Policy, RegisterInput, RegistrationMethod, Requester as PolicyRequester};
+use coauth_principal::PrincipalServerAdmin;
 use minijinja::Environment;
 use rand_core::RngCore;
 use serde_json::{Map as JsonMap, Value as JsonValue};
@@ -33,7 +33,7 @@ use crate::{
     salvo_utils::SessionInfo,
 };
 
-const DEFAULT_LOCALPART_TEMPLATE: &str = "{{ user.preferred_username }}";
+const DEFAULT_USERNAME_TEMPLATE: &str = "{{ user.preferred_username }}";
 const DEFAULT_DISPLAYNAME_TEMPLATE: &str = "{{ user.name }}";
 const DEFAULT_EMAIL_TEMPLATE: &str = "{{ user.email }}";
 const DEFAULT_AVATAR_TEMPLATE: &str = "{{ user.picture }}";
@@ -68,22 +68,22 @@ pub enum UpstreamLinkWorkflowError {
         source: minijinja::Error,
     },
 
-    #[error("localpart conflict: existing user cannot be linked (on_conflict=fail)")]
-    ConflictFail { localpart: String },
+    #[error("username conflict: existing user cannot be linked (on_conflict=fail)")]
+    ConflictFail { username: String },
 
     #[error(
-        "localpart conflict: existing user already has a link to this provider (on_conflict=set)"
+        "username conflict: existing user already has a link to this provider (on_conflict=set)"
     )]
-    ConflictSetBlocked { localpart: String },
+    ConflictSetBlocked { username: String },
 
-    #[error("policy denied the suggested localpart")]
-    PolicyDeniedLocalpart { localpart: String, detail: String },
+    #[error("policy denied the suggested username")]
+    PolicyDeniedUsername { username: String, detail: String },
 
-    #[error("localpart not available on homeserver")]
-    LocalpartUnavailable { localpart: String },
+    #[error("username not available on principal server")]
+    UsernameUnavailable { username: String },
 
-    #[error("homeserver admin call failed")]
-    HomeserverAdmin(#[source] AnyhowError),
+    #[error("principal server admin call failed")]
+    PrincipalServerAdmin(#[source] AnyhowError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -100,8 +100,8 @@ impl UpstreamLinkWorkflowError {
         Self::Internal(AnyhowError::new(error))
     }
 
-    fn homeserver(error: AnyhowError) -> Self {
-        Self::HomeserverAdmin(error)
+    fn principal_server(error: AnyhowError) -> Self {
+        Self::PrincipalServerAdmin(error)
     }
 }
 
@@ -239,7 +239,7 @@ pub async fn load_upstream_link_state(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     policy: &mut Policy,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -343,7 +343,7 @@ pub async fn load_upstream_link_state(
                 rng,
                 clock,
                 url_builder,
-                homeserver,
+                principal_server,
                 policy,
                 site_config,
                 user_agent,
@@ -362,7 +362,7 @@ pub async fn submit_upstream_link_action(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     policy: &mut Policy,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -416,7 +416,7 @@ pub async fn submit_upstream_link_action(
 
             let field_errors = validate_registration_action(
                 repo,
-                homeserver,
+                principal_server,
                 policy,
                 site_config,
                 ip_address,
@@ -473,7 +473,7 @@ async fn load_upstream_registration_screen(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     policy: &mut Policy,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -493,11 +493,11 @@ async fn load_upstream_registration_screen(
         OptionalPostAuthAction::from(post_auth_action.clone()).next_relative_url(url_builder);
 
     // If we have a suggested username, run pre-checks (policy, conflicts,
-    // homeserver availability)
-    let localpart = match pre_check_localpart(
+    // PrincipalServer availability)
+    let username = match pre_check_username(
         repo,
         clock,
-        homeserver,
+        principal_server,
         policy,
         &provider,
         &link,
@@ -508,8 +508,8 @@ async fn load_upstream_registration_screen(
     )
     .await?
     {
-        LocalpartPreCheckResult::Available(localpart) => localpart,
-        LocalpartPreCheckResult::ConflictResolved {
+        UsernamePreCheckResult::Available(username) => username,
+        UsernamePreCheckResult::ConflictResolved {
             user: existing_user,
             provider_id,
         } => {
@@ -550,9 +550,9 @@ async fn load_upstream_registration_screen(
     };
 
     if provider.claims_imports.skip_confirmation {
-        let Some(ref localpart) = localpart else {
+        let Some(ref username) = username else {
             return Err(UpstreamLinkWorkflowError::Internal(AnyhowError::msg(
-                "No localpart available even though the provider is configured to skip confirmation",
+                "No username available even though the provider is configured to skip confirmation",
             )));
         };
 
@@ -561,7 +561,7 @@ async fn load_upstream_registration_screen(
             clock,
             repo,
             upstream_session,
-            localpart.clone(),
+            username.clone(),
             suggestions.suggested_display_name.clone(),
             suggestions.suggested_email.clone(),
             suggestions.suggested_avatar_url.clone(),
@@ -579,7 +579,7 @@ async fn load_upstream_registration_screen(
         });
     }
 
-    let username_forced = provider.claims_imports.localpart.is_forced_or_required();
+    let username_forced = provider.claims_imports.username.is_forced_or_required();
     let display_name_forced = provider.claims_imports.displayname.is_forced_or_required();
     let email_forced = provider.claims_imports.email.is_forced_or_required();
     let provider_name = provider.human_name.clone();
@@ -587,7 +587,7 @@ async fn load_upstream_registration_screen(
         screen: UpstreamRegisterScreen {
             link,
             provider,
-            suggested_username: localpart,
+            suggested_username: username,
             username_forced,
             suggested_display_name: suggestions.suggested_display_name,
             display_name_forced,
@@ -599,44 +599,44 @@ async fn load_upstream_registration_screen(
     })
 }
 
-/// Result of pre-checking a suggested localpart from the upstream provider.
-enum LocalpartPreCheckResult {
-    /// The localpart is valid and available for registration.
+/// Result of pre-checking a suggested username from the upstream provider.
+enum UsernamePreCheckResult {
+    /// The username is valid and available for registration.
     Available(Option<String>),
-    /// The localpart matched an existing user whose conflict was resolved by
+    /// The username matched an existing user whose conflict was resolved by
     /// linking. The caller should log this user in.
     ConflictResolved { user: User, provider_id: Ulid },
 }
 
-/// Pre-check a suggested localpart from the upstream provider.
+/// Pre-check a suggested username from the upstream provider.
 ///
 /// This runs policy checks, user conflict resolution (using the provider's
-/// `on_conflict` setting), and homeserver availability checks on the suggested
-/// localpart.
+/// `on_conflict` setting), and PrincipalServer availability checks on the suggested
+/// username.
 #[allow(clippy::too_many_arguments)]
-async fn pre_check_localpart(
+async fn pre_check_username(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     policy: &mut Policy,
     provider: &UpstreamOAuthProvider,
     link: &UpstreamOAuthLink,
-    suggested_localpart: Option<String>,
+    suggested_username: Option<String>,
     email: Option<&str>,
     user_agent: Option<String>,
     ip_address: Option<IpAddr>,
-) -> Result<LocalpartPreCheckResult, UpstreamLinkWorkflowError> {
-    let Some(localpart) = suggested_localpart else {
-        return Ok(LocalpartPreCheckResult::Available(None));
+) -> Result<UsernamePreCheckResult, UpstreamLinkWorkflowError> {
+    let Some(username) = suggested_username else {
+        return Ok(UsernamePreCheckResult::Available(None));
     };
 
-    let forced_or_required = provider.claims_imports.localpart.is_forced_or_required();
+    let forced_or_required = provider.claims_imports.username.is_forced_or_required();
 
-    // Run policy check on the suggested localpart
+    // Run policy check on the suggested username
     let eval_result = policy
         .evaluate_register(RegisterInput {
             registration_method: RegistrationMethod::UpstreamOAuth2,
-            username: &localpart,
+            username: &username,
             email,
             requester: PolicyRequester {
                 ip_address,
@@ -657,40 +657,40 @@ async fn pre_check_localpart(
             tracing::warn!(
                 upstream_oauth_provider.id = %provider.id,
                 upstream_oauth_link.id = %link.id,
-                "Upstream provider returned a localpart {localpart:?} which was denied by the policy ({eval_result}). As the username is just a suggestion, it was ignored."
+                "Upstream provider returned a username {username:?} which was denied by the policy ({eval_result}). As the username is just a suggestion, it was ignored."
             );
-            return Ok(LocalpartPreCheckResult::Available(None));
+            return Ok(UsernamePreCheckResult::Available(None));
         }
 
-        return Err(UpstreamLinkWorkflowError::PolicyDeniedLocalpart {
-            localpart,
+        return Err(UpstreamLinkWorkflowError::PolicyDeniedUsername {
+            username,
             detail: eval_result.to_string(),
         });
     }
 
-    // Check if the localpart conflicts with an existing user
-    let maybe_existing_user = repo.user().find_by_username(&localpart).await?;
+    // Check if the username conflicts with an existing user
+    let maybe_existing_user = repo.user().find_by_username(&username).await?;
     if let Some(existing_user) = maybe_existing_user {
         if !forced_or_required {
             tracing::warn!(
                 upstream_oauth_provider.id = %provider.id,
                 upstream_oauth_link.id = %link.id,
                 user.id = %existing_user.id,
-                "Upstream provider returned a localpart {localpart:?} which is already used by another user. As the username is just a suggestion, it was ignored."
+                "Upstream provider returned a username {username:?} which is already used by another user. As the username is just a suggestion, it was ignored."
             );
-            return Ok(LocalpartPreCheckResult::Available(None));
+            return Ok(UsernamePreCheckResult::Available(None));
         }
 
         // Apply conflict resolution
-        match provider.claims_imports.localpart.on_conflict {
+        match provider.claims_imports.username.on_conflict {
             UpstreamOAuthProviderOnConflict::Fail => {
                 tracing::warn!(
                     upstream_oauth_provider.id = %provider.id,
                     upstream_oauth_link.id = %link.id,
                     user.id = %existing_user.id,
-                    "Upstream provider returned a localpart {localpart:?} which is already used by another user. Configuration doesn't allow for automatic linking of existing users."
+                    "Upstream provider returned a username {username:?} which is already used by another user. Configuration doesn't allow for automatic linking of existing users."
                 );
-                return Err(UpstreamLinkWorkflowError::ConflictFail { localpart });
+                return Err(UpstreamLinkWorkflowError::ConflictFail { username });
             }
 
             UpstreamOAuthProviderOnConflict::Add => {
@@ -699,7 +699,7 @@ async fn pre_check_localpart(
                     upstream_oauth_provider.id = %provider.id,
                     upstream_oauth_link.id = %link.id,
                     upstream_oauth_link.subject = link.subject,
-                    "Upstream account mapped localpart {localpart:?} matched an existing user, linking"
+                    "Upstream account mapped username {username:?} matched an existing user, linking"
                 );
                 repo.upstream_oauth_link()
                     .associate_to_user(link, &existing_user)
@@ -731,7 +731,7 @@ async fn pre_check_localpart(
                         upstream_oauth_provider.id = %provider.id,
                         upstream_oauth_link.id = %link.id,
                         upstream_oauth_link.subject = link.subject,
-                        "Upstream account mapped localpart {localpart:?} matched an existing user, replaced {removed} links"
+                        "Upstream account mapped username {username:?} matched an existing user, replaced {removed} links"
                     );
                 } else {
                     tracing::info!(
@@ -739,7 +739,7 @@ async fn pre_check_localpart(
                         upstream_oauth_provider.id = %provider.id,
                         upstream_oauth_link.id = %link.id,
                         upstream_oauth_link.subject = link.subject,
-                        "Upstream account mapped localpart {localpart:?} matched an existing user, linking"
+                        "Upstream account mapped username {username:?} matched an existing user, linking"
                     );
                 }
 
@@ -759,9 +759,9 @@ async fn pre_check_localpart(
                         upstream_oauth_provider.id = %provider.id,
                         upstream_oauth_link.id = %link.id,
                         user.id = %existing_user.id,
-                        "Upstream provider returned a localpart {localpart:?} matching an existing user who already has {count} link(s) to this provider, which isn't allowed by the conflict resolution"
+                        "Upstream provider returned a username {username:?} matching an existing user who already has {count} link(s) to this provider, which isn't allowed by the conflict resolution"
                     );
-                    return Err(UpstreamLinkWorkflowError::ConflictSetBlocked { localpart });
+                    return Err(UpstreamLinkWorkflowError::ConflictSetBlocked { username });
                 }
 
                 repo.upstream_oauth_link()
@@ -771,32 +771,32 @@ async fn pre_check_localpart(
         }
 
         // Conflict resolved by linking. The caller should log this user in.
-        return Ok(LocalpartPreCheckResult::ConflictResolved {
+        return Ok(UsernamePreCheckResult::ConflictResolved {
             user: existing_user,
             provider_id: provider.id,
         });
     }
 
-    // Check homeserver availability
-    let is_available = homeserver
-        .is_localpart_available(&localpart)
+    // Check PrincipalServer availability
+    let is_available = principal_server
+        .is_username_available(&username)
         .await
-        .map_err(UpstreamLinkWorkflowError::homeserver)?;
+        .map_err(UpstreamLinkWorkflowError::PrincipalServer)?;
 
     if !is_available {
         if !forced_or_required {
             tracing::warn!(
                 upstream_oauth_provider.id = %provider.id,
                 upstream_oauth_link.id = %link.id,
-                "Upstream provider returned a localpart {localpart:?} which isn't available on the homeserver. As the username is just a suggestion, it was ignored."
+                "Upstream provider returned a username {username:?} which isn't available on the principal_server. As the username is just a suggestion, it was ignored."
             );
-            return Ok(LocalpartPreCheckResult::Available(None));
+            return Ok(UsernamePreCheckResult::Available(None));
         }
 
-        return Err(UpstreamLinkWorkflowError::LocalpartUnavailable { localpart });
+        return Err(UpstreamLinkWorkflowError::UsernameUnavailable { username });
     }
 
-    Ok(LocalpartPreCheckResult::Available(Some(localpart)))
+    Ok(UsernamePreCheckResult::Available(Some(username)))
 }
 
 struct RegistrationSuggestions {
@@ -844,15 +844,15 @@ fn resolve_registration_suggestions(
         )?
     };
 
-    let suggested_username = if provider.claims_imports.localpart.ignore() {
+    let suggested_username = if provider.claims_imports.username.ignore() {
         None
     } else {
         render_imported_attribute(
             &env,
-            provider.claims_imports.localpart.template.as_deref(),
-            DEFAULT_LOCALPART_TEMPLATE,
+            provider.claims_imports.username.template.as_deref(),
+            DEFAULT_USERNAME_TEMPLATE,
             &context,
-            provider.claims_imports.localpart.is_required(),
+            provider.claims_imports.username.is_required(),
         )?
     };
 
@@ -916,11 +916,11 @@ fn resolve_registration_attributes(
         None
     };
 
-    let username = if provider.claims_imports.localpart.is_forced_or_required() {
+    let username = if provider.claims_imports.username.is_forced_or_required() {
         render_imported_attribute(
             &env,
-            provider.claims_imports.localpart.template.as_deref(),
-            DEFAULT_LOCALPART_TEMPLATE,
+            provider.claims_imports.username.template.as_deref(),
+            DEFAULT_USERNAME_TEMPLATE,
             &context,
             true,
         )?
@@ -952,7 +952,7 @@ fn resolve_registration_attributes(
 
 async fn validate_registration_action(
     repo: &mut BoxRepository,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     policy: &mut Policy,
     site_config: &SiteConfig,
     ip_address: Option<IpAddr>,
@@ -967,10 +967,10 @@ async fn validate_registration_action(
         field_errors.insert("username".into(), serde_json::json!("required"));
     } else if repo.user().exists(username).await? {
         field_errors.insert("username".into(), serde_json::json!("exists"));
-    } else if !homeserver
-        .is_localpart_available(username)
+    } else if !principal_server
+        .is_username_available(username)
         .await
-        .map_err(UpstreamLinkWorkflowError::homeserver)?
+        .map_err(UpstreamLinkWorkflowError::PrincipalServer)?
     {
         field_errors.insert("username".into(), serde_json::json!("exists"));
     }
@@ -1090,7 +1090,7 @@ async fn prepare_user_registration(
     clock: &dyn Clock,
     repo: &mut BoxRepository,
     upstream_session: UpstreamOAuthAuthorizationSession,
-    localpart: String,
+    username: String,
     displayname: Option<String>,
     email: Option<String>,
     avatar_url: Option<String>,
@@ -1103,7 +1103,7 @@ async fn prepare_user_registration(
         .add(
             rng,
             clock,
-            localpart,
+            username,
             ip_address,
             user_agent,
             post_auth_action,

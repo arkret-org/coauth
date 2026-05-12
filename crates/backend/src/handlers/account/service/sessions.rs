@@ -4,7 +4,7 @@ use coauth_data::{
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
     user::{BrowserSessionRepository, UserRepository},
 };
-use coauth_matrix::HomeserverAdmin;
+use coauth_principal::PrincipalServerAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
 use ulid::Ulid;
@@ -144,7 +144,7 @@ pub async fn set_oauth2_session_human_name(
     mut repo: BoxRepository,
     requester: &Requester,
     _clock: &dyn Clock,
-    homeserver: &dyn HomeserverAdmin,
+    principal_server: &dyn PrincipalServerAdmin,
     session_id: Ulid,
     human_name: Option<String>,
 ) -> Result<(), AccountSessionError> {
@@ -171,10 +171,8 @@ pub async fn set_oauth2_session_human_name(
 
     if let (Some(name), Some(user)) = (&human_name, session_user.as_ref()) {
         for token in session.scope.iter() {
-            if let Some(device_id) =
-                token.strip_prefix("urn:matrix:org.matrix.msc2967.client:device:")
-            {
-                let _ = homeserver
+            if let Some(device_id) = token.strip_prefix("urn:contrix:client:device:") {
+                let _ = principal_server
                     .update_device_display_name(&user.username, device_id, name)
                     .await;
             }

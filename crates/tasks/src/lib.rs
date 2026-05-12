@@ -4,7 +4,7 @@
 //! PostgreSQL-backed worker.  The main categories are:
 //!
 //! * **Notifications** -- verification codes, password-reset links, etc.
-//! * **Homeserver provisioning** -- Matrix user creation / deactivation.
+//! * **principal provisioning** -- principal user creation / deactivation.
 //! * **Cleanup** -- expiring stale sessions, tokens, and grants.
 //! * **Account recovery** -- recovery-ticket workflows.
 //!
@@ -19,8 +19,8 @@ use coauth_data::{
     BoxRepository, Clock, PgRepositoryFactory, RepositoryError, RepositoryFactory, SiteConfig,
     UrlBuilder,
 };
-use coauth_matrix::HomeserverAdmin;
 use coauth_messaging::NotificationCenter;
+use coauth_principal::PrincipalServerAdmin;
 use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
 use new_queue::QueueRunnerError;
 use opentelemetry::metrics::Meter;
@@ -32,9 +32,9 @@ pub use crate::new_queue::QueueWorker;
 // ── Sub-modules ─────────────────────────────────────────────────────────
 mod cleanup;
 mod email;
-mod matrix;
 mod new_queue;
 mod notifications;
+mod principal;
 mod recovery;
 mod sessions;
 mod sms;
@@ -61,7 +61,7 @@ struct State {
     db_url: String,
     notifier: NotificationCenter,
     wall_clock: Arc<dyn Clock>,
-    hs_connection: Arc<dyn HomeserverAdmin>,
+    principal_connection: Arc<dyn PrincipalServerAdmin>,
     urls: UrlBuilder,
     site_cfg: SiteConfig,
 }
@@ -73,7 +73,7 @@ impl State {
         db_url: String,
         clock: impl Clock + 'static,
         notifier: NotificationCenter,
-        homeserver: impl HomeserverAdmin + 'static,
+        principal: impl PrincipalServerAdmin + 'static,
         urls: UrlBuilder,
         site_cfg: SiteConfig,
     ) -> Self {
@@ -82,7 +82,7 @@ impl State {
             db_url,
             notifier,
             wall_clock: Arc::new(clock),
-            hs_connection: Arc::new(homeserver),
+            principal_connection: Arc::new(principal),
             urls,
             site_cfg,
         }
@@ -116,8 +116,8 @@ impl State {
         self.repo_factory.create().await
     }
 
-    pub fn matrix_connection(&self) -> &dyn HomeserverAdmin {
-        self.hs_connection.as_ref()
+    pub fn principal_connection(&self) -> &dyn PrincipalServerAdmin {
+        self.principal_connection.as_ref()
     }
 
     pub fn url_builder(&self) -> &UrlBuilder {
@@ -168,7 +168,7 @@ fn register_all_handlers(w: &mut QueueWorker) {
     w.register_handler::<queue::DeactivateUserJob>();
     w.register_handler::<queue::ReactivateUserJob>();
 
-    // Homeserver device management
+    // principal device management
     w.register_handler::<queue::DeleteDeviceJob>();
     w.register_handler::<queue::ProvisionDeviceJob>();
     w.register_handler::<queue::ProvisionUserJob>();
@@ -341,7 +341,7 @@ pub async fn init(
     database_url: String,
     clock: impl Clock + 'static,
     notifications: &NotificationCenter,
-    homeserver: impl HomeserverAdmin + 'static,
+    principal: impl PrincipalServerAdmin + 'static,
     url_builder: UrlBuilder,
     site_config: &SiteConfig,
     cancellation_token: CancellationToken,
@@ -351,7 +351,7 @@ pub async fn init(
         database_url,
         clock,
         notifications.clone(),
-        homeserver,
+        principal,
         url_builder,
         site_config.clone(),
     );
@@ -375,7 +375,7 @@ pub async fn init_and_run(
     database_url: String,
     clock: impl Clock + 'static,
     notifications: &NotificationCenter,
-    homeserver: impl HomeserverAdmin + 'static,
+    principal: impl PrincipalServerAdmin + 'static,
     url_builder: UrlBuilder,
     site_config: &SiteConfig,
     cancellation_token: CancellationToken,
@@ -386,7 +386,7 @@ pub async fn init_and_run(
         database_url,
         clock,
         notifications,
-        homeserver,
+        principal,
         url_builder,
         site_config,
         cancellation_token,
