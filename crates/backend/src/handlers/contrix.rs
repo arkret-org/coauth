@@ -457,6 +457,8 @@ struct ServiceDescribeResponse {
     protocol_version: &'static str,
     supported_profiles: Vec<&'static str>,
     supported_features: Vec<&'static str>,
+    supported_reducer_profiles: Vec<&'static str>,
+    supported_schema_profiles: Vec<&'static str>,
     supported_bindings: Vec<SupportedBinding>,
     supported_operations: Vec<&'static str>,
     admin_audience: String,
@@ -886,17 +888,9 @@ fn service_describe_response(
 
     ServiceDescribeResponse {
         service_did: service_did_for(url_builder, contrix_config),
-        service_type: "auth_account_server",
+        service_type: "auth_server",
         protocol_version: CONTRIX_PROTOCOL_VERSION,
-        supported_profiles: vec![
-            "cx.profile.auth_account.v1",
-            "cx.profile.account_lifecycle.v1",
-            "cx.profile.account_first_onboarding.v1",
-            "cx.profile.did_binding.v1",
-            "cx.profile.session_grant.v1",
-            "cx.profile.claim_attestation.v1",
-            "cx.profile.policy_hook.v1",
-        ],
+        supported_profiles: Vec::new(),
         supported_features: vec![
             "oidc",
             "account_first_onboarding",
@@ -908,6 +902,8 @@ fn service_describe_response(
             "claim_attestation",
             "policy_hook",
         ],
+        supported_reducer_profiles: vec!["cx.reducer.v1"],
+        supported_schema_profiles: vec!["cx.schema.v1"],
         supported_bindings: vec![SupportedBinding {
             binding: CONTRIX_HTTP_BINDING,
             base_url: url_builder.http_base().to_string(),
@@ -1390,7 +1386,7 @@ pub async fn identity_describe(
         },
         supported_receipts: Vec::new(),
         protocol_version: CONTRIX_PROTOCOL_VERSION,
-        profiles: vec!["cx.profile.identity_registry.v1"],
+        profiles: Vec::new(),
         identity_registry,
     }))
 }
@@ -1481,7 +1477,7 @@ pub async fn directory_describe(
     Ok(Json(DirectoryDescribeResponse {
         service_did: service_did_for(&url_builder, &contrix_config),
         resource_types: vec!["actor", "handle"],
-        discovery_profiles: vec!["cx.profile.directory_service.v1"],
+        discovery_profiles: Vec::new(),
         restricted_query_proof: false,
     }))
 }
@@ -1934,7 +1930,7 @@ mod tests {
             serde_json::to_value(service_describe_response(&url_builder, &contrix_config)).unwrap();
 
         assert_eq!(body["service_did"], "did:web:auth.example.com");
-        assert_eq!(body["service_type"], "auth_account_server");
+        assert_eq!(body["service_type"], "auth_server");
         assert_eq!(body["admin_audience"], "https://auth.example.com/api/admin");
         assert_eq!(
             body["auth_metadata"]["issuer_did"],
@@ -1976,9 +1972,11 @@ mod tests {
         );
 
         let supported_profiles = body["supported_profiles"].as_array().unwrap();
-        assert!(supported_profiles.contains(&serde_json::json!("cx.profile.auth_account.v1")));
-        assert!(supported_profiles.contains(&serde_json::json!("cx.profile.did_binding.v1")));
-        assert!(supported_profiles.contains(&serde_json::json!("cx.profile.session_grant.v1")));
+        assert!(supported_profiles.is_empty());
+        let supported_reducer_profiles = body["supported_reducer_profiles"].as_array().unwrap();
+        assert!(supported_reducer_profiles.contains(&serde_json::json!("cx.reducer.v1")));
+        let supported_schema_profiles = body["supported_schema_profiles"].as_array().unwrap();
+        assert!(supported_schema_profiles.contains(&serde_json::json!("cx.schema.v1")));
         let not_authoritative_for = body["service_boundary"]["not_authoritative_for"]
             .as_array()
             .unwrap();
