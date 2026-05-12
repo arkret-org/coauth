@@ -6,7 +6,6 @@ pub mod email_webhook;
 pub mod invite_quarantine;
 pub mod onboarding_starid;
 pub mod passkey_derive;
-pub mod principal_cache;
 pub mod risk_action_proposals;
 pub mod risk_action_state;
 pub mod starid_adapter;

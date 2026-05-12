@@ -406,32 +406,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    recovery_principal_cache (cache_key) {
-        cache_key -> Text,
-        principal_base_url -> Nullable<Text>,
-        audience -> Nullable<Text>,
-        cache_state -> Jsonb,
-        etag -> Nullable<Text>,
-        contract_digest -> Nullable<Text>,
-        last_refresh_at -> Nullable<Timestamptz>,
-        last_invalidated_at -> Nullable<Timestamptz>,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    recovery_principal_cache_failure (id) {
-        id -> Uuid,
-        cache_key -> Text,
-        failure_code -> Text,
-        reason -> Nullable<Text>,
-        details -> Jsonb,
-        failed_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
     upstream_oauth_providers (id) {
         id -> Uuid,
         issuer -> Nullable<Text>,
@@ -791,7 +765,6 @@ diesel::joinable!(oauth2_access_tokens -> oauth2_sessions (oauth2_session_id));
 diesel::joinable!(oauth2_authorization_grants -> oauth2_clients (oauth2_client_id));
 diesel::joinable!(oauth2_device_code_grant -> oauth2_clients (oauth2_client_id));
 diesel::joinable!(oauth2_session_grants -> user_sessions (user_session_id));
-diesel::joinable!(recovery_principal_cache_failure -> recovery_principal_cache (cache_key));
 diesel::joinable!(oauth2_client_localized_metadata -> oauth2_clients (client_id));
 diesel::joinable!(upstream_oauth_links -> upstream_oauth_providers (upstream_oauth_provider_id));
 diesel::joinable!(upstream_oauth_authorization_sessions -> upstream_oauth_providers (upstream_oauth_provider_id));
@@ -838,8 +811,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     oauth2_authorization_grants,
     oauth2_device_code_grant,
     oauth2_session_grants,
-    recovery_principal_cache,
-    recovery_principal_cache_failure,
     upstream_oauth_providers,
     upstream_oauth_links,
     upstream_oauth_authorization_sessions,

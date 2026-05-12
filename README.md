@@ -11,7 +11,7 @@ delegated/public DID resolver services.
 
 ## Integration model
 
-- `chask` acts as a public/native Contrix client and consumes OIDC tokens.
+- `yougen` acts as a public/native Contrix client and consumes OIDC tokens.
 - Principal Servers such as `soland` consume session grants and account
   metadata from `coauth`.
 - `sodmin` uses the admin API with `urn:coauth:admin` or

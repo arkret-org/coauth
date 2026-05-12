@@ -3,26 +3,10 @@
 //! These endpoints serve as thin HTTP adapters over the business logic in
 //! [`crate::handlers::account::service::recovery`]. They parse requests,
 //! delegate to service functions, and map results to JSON responses.
-//!
-//! The principal-server cache scaffold (snapshot + ~12 cache control endpoints)
-//! lives in the [`principal_cache`] submodule and is re-exported below so the
-//! [`crate::server`] router keeps using `recovery::*` paths unchanged.
 pub mod model;
-pub mod principal_cache;
 
 pub use model::{
-    RecoveryAuthzExamples, RecoveryBackupPayloadExample, RecoveryDescribeResponse,
-    RecoveryExampleScaffold, RecoveryRestoreExamples, RecoveryStatusResponse,
-    ResendRecoveryResponse, StartRecoveryInput, StartRecoveryResponse,
-};
-pub use principal_cache::{
-    get_recovery_principal_cache_failures, get_recovery_principal_cache_policy,
-    get_recovery_principal_cache_queue, get_recovery_principal_cache_status,
-    get_recovery_principal_cache_upstream, get_recovery_principal_snapshot,
-    post_recovery_principal_cache_complete, post_recovery_principal_cache_fail,
-    post_recovery_principal_cache_invalidate, post_recovery_principal_cache_refresh,
-    post_recovery_principal_cache_retry, post_recovery_principal_cache_upstream_bind,
-    post_recovery_principal_cache_upstream_probe,
+    RecoveryStatusResponse, ResendRecoveryResponse, StartRecoveryInput, StartRecoveryResponse,
 };
 
 use chrono::Utc;
@@ -226,105 +210,6 @@ pub async fn get_recovery(
 }
 
 // ── POST /api/v1/auth/recovery/:id/resend ──────────────────────
-
-#[endpoint]
-pub async fn get_recovery_describe() -> Json<RecoveryDescribeResponse> {
-    Json(RecoveryDescribeResponse {
-        contract: "contrix.auth.recovery_bridge.v1".to_string(),
-        version: "2026-05-04".to_string(),
-        recovery_start_path: "/api/v1/auth/recovery/start".to_string(),
-        recovery_status_path: "/api/v1/auth/recovery/{id}".to_string(),
-        recovery_resend_path: "/api/v1/auth/recovery/{id}/resend".to_string(),
-        recovery_principal_snapshot_path: "/api/v1/auth/recovery/principal-snapshot".to_string(),
-        recovery_principal_cache_status_path: "/api/v1/auth/recovery/principal-cache/status".to_string(),
-        recovery_principal_cache_refresh_path: "/api/v1/auth/recovery/principal-cache/refresh".to_string(),
-        recovery_principal_cache_queue_path: "/api/v1/auth/recovery/principal-cache/queue".to_string(),
-        recovery_principal_cache_complete_path: "/api/v1/auth/recovery/principal-cache/complete".to_string(),
-        recovery_principal_cache_fail_path: "/api/v1/auth/recovery/principal-cache/fail".to_string(),
-        recovery_principal_cache_policy_path: "/api/v1/auth/recovery/principal-cache/policy".to_string(),
-        recovery_principal_cache_retry_path: "/api/v1/auth/recovery/principal-cache/retry".to_string(),
-        recovery_principal_cache_invalidate_path: "/api/v1/auth/recovery/principal-cache/invalidate".to_string(),
-        recovery_principal_cache_failures_path: "/api/v1/auth/recovery/principal-cache/failures".to_string(),
-        recovery_principal_cache_upstream_path: "/api/v1/auth/recovery/principal-cache/upstream".to_string(),
-        recovery_principal_cache_upstream_probe_path: "/api/v1/auth/recovery/principal-cache/upstream/probe".to_string(),
-        recovery_principal_cache_upstream_bind_path: "/api/v1/auth/recovery/principal-cache/upstream/bind".to_string(),
-        key_backup_rest_base: "/api/v1/keys/backups".to_string(),
-        key_backup_schema: "cx.schema.key_backup.v1".to_string(),
-        device_message_schema: "cx.schema.device_message.v1".to_string(),
-        principal_recovery_contract_stack_path: "/api/v1/recovery/contract-stack".to_string(),
-        principal_recovery_stack_bundle_path: "/api/v1/recovery/stack-bundle".to_string(),
-        principal_recovery_discovery_path: "/api/v1/recovery/discovery".to_string(),
-        principal_recovery_readiness_path: "/api/v1/recovery/readiness".to_string(),
-        principal_device_messages_describe_path: "/api/v1/device_messages/describe".to_string(),
-        principal_key_backups_describe_path: "/api/v1/keys/backups/describe".to_string(),
-        principal_restore_state_describe_path: "/api/v1/keys/backups/restore-state/describe".to_string(),
-        principal_restore_state_export_path: "/api/v1/keys/backups/restore-state/export".to_string(),
-        principal_restore_state_import_path: "/api/v1/keys/backups/restore-state/import".to_string(),
-        principal_restore_state_durability_path: "/api/v1/keys/backups/restore-state/durability".to_string(),
-        principal_restore_state_checkpoint_collection_path: "/api/v1/keys/backups/restore-state/checkpoints".to_string(),
-        principal_restore_start_path: "/api/v1/keys/backups/{backup_id}/restore/start".to_string(),
-        principal_restore_describe_path: "/api/v1/keys/backups/{backup_id}/restore/describe".to_string(),
-        principal_restore_ticket_collection_path: "/api/v1/keys/backups/restore-tickets".to_string(),
-        principal_restore_ticket_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}".to_string(),
-        principal_restore_ticket_advance_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/advance".to_string(),
-        principal_restore_ticket_resume_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/resume".to_string(),
-        principal_restore_ticket_cancel_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/cancel".to_string(),
-        principal_restore_ticket_retry_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/retry".to_string(),
-        principal_restore_approval_status_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/approvals/status".to_string(),
-        principal_restore_approval_submit_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/approvals/submit".to_string(),
-        principal_restore_executor_status_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/executor/status".to_string(),
-        principal_restore_executor_enqueue_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/executor/enqueue".to_string(),
-        principal_restore_executor_start_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/executor/start".to_string(),
-        principal_restore_executor_complete_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/executor/complete".to_string(),
-        principal_restore_result_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/result".to_string(),
-        principal_restore_receipt_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/receipt".to_string(),
-        principal_restore_materialized_device_handoff_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/materialized-device-handoff".to_string(),
-        principal_restore_bundle_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/bundle".to_string(),
-        principal_restore_activity_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/activity".to_string(),
-        principal_restore_timeline_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/timeline".to_string(),
-        principal_restore_audit_feed_path: "/api/v1/keys/backups/restore-tickets/{ticket_id}/audit-feed".to_string(),
-        principal_recovery_live_snapshot_path: "/api/v1/recovery/live-snapshot".to_string(),
-        principal_authz_describe_path: "/api/v1/authz/describe".to_string(),
-        principal_authz_check_path: "/api/v1/authz/check".to_string(),
-        principal_policy_describe_path: "/api/v1/policies/describe".to_string(),
-        principal_policy_collection_path: "/api/v1/policies".to_string(),
-        principal_policy_item_path: "/api/v1/policies/{policy_id}".to_string(),
-        verification_event_kinds: vec![
-            "cx.key.verification.request".to_string(),
-            "cx.key.verification.ready".to_string(),
-            "cx.key.verification.start".to_string(),
-            "cx.key.verification.accept".to_string(),
-            "cx.key.verification.key".to_string(),
-            "cx.key.verification.mac".to_string(),
-            "cx.key.verification.done".to_string(),
-            "cx.key.verification.cancel".to_string(),
-        ],
-        recovery_modes: vec![
-            "password_recovery".to_string(),
-            "flow_session_recovery".to_string(),
-            "key_backup_restore_scaffold".to_string(),
-        ],
-        example_backup_payload: RecoveryBackupPayloadExample::scaffold(),
-        recovery_restore_examples: RecoveryRestoreExamples::scaffold(),
-        recovery_authz_examples: RecoveryAuthzExamples::scaffold(),
-        todos: vec![
-            "TODO: bind key backup restore to durable encrypted blob storage.".to_string(),
-            "TODO: bind device verification messages to signed device envelopes.".to_string(),
-            "TODO: bind recovery bridge to live principal recovery contract-stack aggregation instead of only publishing path templates.".to_string(),
-            "TODO: bind recovery bridge to live principal device-message and key-backup describe endpoints instead of only publishing path templates.".to_string(),
-            "TODO: bind recovery bridge to live principal restore-state describe/export/import endpoints instead of only publishing path templates.".to_string(),
-            "TODO: bind recovery bridge to live principal restore approval queue/status endpoints instead of only publishing path templates.".to_string(),
-            "TODO: bind recovery bridge to live principal restore executor queue/status endpoints instead of only publishing path templates.".to_string(),
-            "TODO: bind recovery bridge to live principal restore executor start/complete endpoints instead of only publishing path templates.".to_string(),
-            "TODO: bind recovery bridge to live principal restore result/receipt/handoff endpoints instead of only publishing path templates.".to_string(),
-            "TODO: add recovery proofing policy and restore approvals.".to_string(),
-            "TODO: bind recovery bridge restore-start and restore-ticket examples to live principal endpoints instead of static scaffold payloads.".to_string(),
-            "TODO: bind recovery bridge to live principal authz/policies describe endpoints instead of only publishing static path templates.".to_string(),
-            "TODO: bind recovery bridge examples to live principal authz/policy endpoints instead of static scaffold paths.".to_string(),
-            "TODO: bind recovery bridge to live principal restore-describe endpoint instead of only publishing the path template.".to_string(),
-        ],
-    })
-}
 
 #[endpoint]
 pub async fn post_recovery_resend(

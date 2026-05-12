@@ -9,7 +9,7 @@ receipt 等能力属于委托的 public DID resolver / DID 服务。
 
 ## 集成模型
 
-- `chask` 作为 Contrix 的 public/native client，消费 OIDC token。
+- `yougen` 作为 Contrix 的 public/native client，消费 OIDC token。
 - Principal Server（例如 `soland`）从 `coauth` 获取 session grant 和账号元数据。
 - `sodmin` 通过 `urn:coauth:admin` 或 `urn:contrix:admin:*` 访问管理 API。
 - 委托的 public DID resolver / DID 服务继续作为 identity registry / resolver。

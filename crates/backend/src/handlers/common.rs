@@ -245,9 +245,6 @@ pub trait DepotExt {
     fn risk_action_proposals_service(
         &self,
     ) -> Result<crate::services::risk_action_proposals::RiskActionProposalsServiceHandle, RouteError>;
-    fn principal_cache_service(
-        &self,
-    ) -> Result<crate::services::principal_cache::PrincipalCacheServiceHandle, RouteError>;
     fn account_claims_service(
         &self,
     ) -> Result<crate::services::account_claims::AccountClaimsServiceHandle, RouteError>;
@@ -265,9 +262,7 @@ pub trait DepotExt {
     /// otherwise — handlers should treat the absence as "starid
     /// integration disabled" rather than an error, so onboarding can
     /// degrade to the legacy local-derivation path.
-    fn starid_registry(
-        &self,
-    ) -> Option<crate::services::starid_adapter::StaridRegistryHandle>;
+    fn starid_registry(&self) -> Option<crate::services::starid_adapter::StaridRegistryHandle>;
     fn webauthn_service(
         &self,
     ) -> Result<crate::services::webauthn::WebauthnServiceHandle, RouteError>;
@@ -379,12 +374,6 @@ impl DepotExt for Depot {
         depot_get(self, "risk_action_proposals_service")
     }
 
-    fn principal_cache_service(
-        &self,
-    ) -> Result<crate::services::principal_cache::PrincipalCacheServiceHandle, RouteError> {
-        depot_get(self, "principal_cache_service")
-    }
-
     fn account_claims_service(
         &self,
     ) -> Result<crate::services::account_claims::AccountClaimsServiceHandle, RouteError> {
@@ -409,9 +398,7 @@ impl DepotExt for Depot {
         depot_get(self, "did_resolver_service")
     }
 
-    fn starid_registry(
-        &self,
-    ) -> Option<crate::services::starid_adapter::StaridRegistryHandle> {
+    fn starid_registry(&self) -> Option<crate::services::starid_adapter::StaridRegistryHandle> {
         self.get::<crate::services::starid_adapter::StaridRegistryHandle>("starid_registry")
             .ok()
             .cloned()

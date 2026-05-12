@@ -21,8 +21,8 @@ pub struct PolicyDryRunRequest {
     /// Target resource identifier.
     resource: String,
 
-    /// Optional entity facets supplied by the Principal Server reducer.
-    entity_facets: Option<serde_json::Value>,
+    /// Optional object facets supplied by the Principal Server reducer.
+    object_facets: Option<serde_json::Value>,
 
     /// Additional policy attributes such as organization role, risk, or MFA.
     attributes: Option<serde_json::Value>,
@@ -52,7 +52,7 @@ pub struct PolicyDryRunResponse {
     reason: Option<String>,
 
     /// Facets preserved from the reducer output.
-    allowed_entity_facets: Option<serde_json::Value>,
+    facet_allow: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]

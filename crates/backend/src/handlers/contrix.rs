@@ -896,7 +896,6 @@ fn service_describe_response(
             "cx.profile.session_grant.v1",
             "cx.profile.claim_attestation.v1",
             "cx.profile.policy_hook.v1",
-            "cx.profile.legacy_compatibility.v1",
         ],
         supported_features: vec![
             "oidc",
@@ -1482,7 +1481,7 @@ pub async fn directory_describe(
     Ok(Json(DirectoryDescribeResponse {
         service_did: service_did_for(&url_builder, &contrix_config),
         resource_types: vec!["actor", "handle"],
-        discovery_profiles: vec!["cx.profile.directory.v1"],
+        discovery_profiles: vec!["cx.profile.directory_service.v1"],
         restricted_query_proof: false,
     }))
 }

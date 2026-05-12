@@ -41,8 +41,7 @@ const MULTICODEC_ED25519_PUB: [u8; 2] = [0xed, 0x01];
 /// Base58btc alphabet (Bitcoin) used by `did:key` / multibase `z…`
 /// prefix. Inlined to avoid pulling the `multibase` crate just for one
 /// 58-character table.
-const BASE58_ALPHABET: &[u8; 58] =
-    b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 /// Derive a deterministic, multibase-encoded `update_key` from
 /// `passkey`. Returns a string of the form `z6Mk…` that starid accepts
@@ -176,7 +175,11 @@ mod tests {
         assert!(key.starts_with('z'));
         let body = &key[1..];
         let decoded = base58btc_decode(body).expect("output is valid base58btc");
-        assert_eq!(decoded.len(), 34, "envelope must be 2-byte tag + 32-byte digest");
+        assert_eq!(
+            decoded.len(),
+            34,
+            "envelope must be 2-byte tag + 32-byte digest"
+        );
         assert_eq!(&decoded[..2], &MULTICODEC_ED25519_PUB);
     }
 

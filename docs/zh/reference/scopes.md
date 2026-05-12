@@ -7,7 +7,7 @@
 
 ### `openid`
 
-请求 OpenID Connect `id_token`，并允许访问 userinfo endpoint。对 `chask`
+请求 OpenID Connect `id_token`，并允许访问 userinfo endpoint。对 `yougen`
 这样的交互式 OIDC client 来说，它仍然是基础 scope。
 
 ### `email`
@@ -28,7 +28,7 @@ Contrix admin capability family。当前 `coauth` 会接受整个 wildcard famil
 
 ### `urn:contrix:client:*`
 
-Contrix client capability family，面向 `chask` 这类第一方或受信任的 Contrix client。
+Contrix client capability family，面向 `yougen` 这类第一方或受信任的 Contrix client。
 
 当前它主要作为粗粒度 capability family 被发布；后续可以在策略和客户端约定中继续细化。
 

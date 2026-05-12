@@ -10,7 +10,7 @@ longer the recommended integration path.
 
 Requests an OpenID Connect `id_token` and allows access to the userinfo
 endpoint. This remains the baseline scope for interactive OIDC clients such as
-`chask`.
+`yougen`.
 
 ### `email`
 
@@ -33,7 +33,7 @@ internal automation that wants a Contrix namespace instead of the coauth one.
 ### `urn:contrix:client:*`
 
 Contrix client capability family. This is intended for first-party or trusted
-Contrix clients such as `chask`.
+Contrix clients such as `yougen`.
 
 Today it is advertised as a coarse-grained capability family; narrower suffixes
 can be added by policy and client conventions over time.
