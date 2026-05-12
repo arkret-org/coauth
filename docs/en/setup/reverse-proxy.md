@@ -15,7 +15,6 @@ http:
         - name: discovery
         - name: human
         - name: oauth
-        - name: compat
         - name: restapi
         - name: assets
 
@@ -106,7 +105,6 @@ http:
         - name: discovery
         - name: human
         - name: oauth
-        - name: compat
         - name: restapi
         - name: assets
       binds:
@@ -128,7 +126,6 @@ http:
         - name: discovery
         - name: human
         - name: oauth
-        - name: compat
         - name: restapi
         # coauth doesn't need to serve the assets anymore
         #- name: assets

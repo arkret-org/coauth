@@ -1,4 +1,4 @@
-//! Asynchronous job queue for the Pasion authentication service.
+//! Asynchronous job queue for the coauth authentication service.
 //!
 //! Jobs are enqueued by HTTP handlers and executed in the background by a
 //! PostgreSQL-backed worker.  The main categories are:

@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::api::types::{PrincipalUser, PatchViewerProfileResponse, UserProfile};
+use crate::api::types::{PatchViewerProfileResponse, PrincipalUser, UserProfile};
 
 #[component]
 pub fn UserGreeting(

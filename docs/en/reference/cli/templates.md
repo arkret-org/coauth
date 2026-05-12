@@ -24,7 +24,7 @@ Options:
 
 What is checked:
 - the Jinja templates are syntactically valid
-- the templates can render with a few sample values, with the branding from the Pasion configuration
+- the templates can render with a few sample values, with the branding from the coauth configuration
   - undefined variables (`{{ undefined_variable }}`) will raise errors
 - all translation keys exist
 

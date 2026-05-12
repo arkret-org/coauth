@@ -2,8 +2,7 @@
 //!
 //! Provides a JSON:API-style REST interface for managing users, sessions,
 //! OAuth 2.0 clients, upstream providers, and policy data. All endpoints
-//! require the `urn:coauth:admin` scope (the legacy `urn:mas:admin` scope
-//! is also accepted for backward compatibility).
+//! require the `urn:coauth:admin` scope or a Contrix admin scope.
 //!
 //! The API specification is available as an OpenAPI document served by the
 //! [`swagger`] handler.
@@ -50,14 +49,9 @@ pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 /// Contrix admin scope family.
 pub const CONTRIX_ADMIN_SCOPE: &str = "urn:contrix:admin:*";
 
-/// Legacy admin scope, kept for backward compatibility with existing tokens.
-pub const ADMIN_SCOPE_LEGACY: &str = "urn:mas:admin";
-
-/// Returns `true` if the given scope string contains either the current or
-/// legacy admin scope.
+/// Returns `true` if the given scope string contains an admin scope.
 pub fn has_admin_scope(scope: &oauth2_types::scope::Scope) -> bool {
     scope.contains(ADMIN_SCOPE)
-        || scope.contains(ADMIN_SCOPE_LEGACY)
         || scope.contains(CONTRIX_ADMIN_SCOPE)
         || scope
             .iter()

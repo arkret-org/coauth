@@ -135,7 +135,7 @@ pub struct Client {
     /// Client identifier
     pub client_id: String,
 
-    /// Pasion-original: hash of the client metadata
+    /// coauth extension: hash of the client metadata
     pub metadata_digest: Option<String>,
 
     pub encrypted_client_secret: Option<String>,
@@ -266,7 +266,7 @@ impl Client {
         pick_localized_url(&self.localized_metadata.tos_uri, locale).or(self.tos_uri.as_ref())
     }
 
-    /// Pasion-original: create a client metadata object for this client
+    /// coauth extension: create a client metadata object for this client
     #[must_use]
     pub fn into_metadata(self) -> ClientMetadata {
         let (jwks, jwks_uri) = match self.jwks {

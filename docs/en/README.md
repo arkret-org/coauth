@@ -6,8 +6,7 @@ Contrix Principal Servers, public DID resolver services, `sodmin`, and first-par
 
 `coauth` is an OAuth 2.0 and OpenID Connect provider. Its primary product
 surface is Contrix-native account, session, DID-binding, claim, and admin
-integration. Legacy Matrix / Palpo compatibility is documented only as an
-adapter path for older deployments.
+integration.
 
 The documentation itself is built using [mdBook](https://rust-lang.github.io/mdBook/).
 
@@ -18,8 +17,7 @@ This documentation has four main sections:
 - The [installation guide](./setup/) explains how to run `coauth` on your own
   infrastructure.
 - The topics section covers service behavior such as the [policy engine](./topics/policy.md),
-  [authorization sessions](./topics/authorization.md), access tokens, and legacy
-  compatibility.
+  [authorization sessions](./topics/authorization.md), and access tokens.
 - The reference documentation covers [configuration options](./reference/configuration.md),
   the [Admin API](../api/index.html), [OAuth 2.0 scopes](./reference/scopes.md),
   and the [command line interface](./reference/cli/).

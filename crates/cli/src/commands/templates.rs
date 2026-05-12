@@ -54,7 +54,8 @@ impl Options {
             TemplatesConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
         let brand_cfg =
             BrandingConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
-        let http_cfg = HttpConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
+        let http_cfg =
+            HttpConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
         let exp_cfg =
             ExperimentalConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
         let pw_cfg =

@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use serde::Serialize;
 use woothee::{parser::Parser, woothee::VALUE_UNKNOWN};
 
-/// Pasion-original: compile regexes once via `LazyLock` instead of on every
+/// coauth extension: compile regexes once via `LazyLock` instead of on every
 /// call (the Apache 2.0 base created them inline in each function).
 static CUSTOM_USER_AGENT_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"^(?P<name>[^/]+)/(?P<version>[^ ]+) \((?P<segments>.+)\)$").unwrap()

@@ -26,10 +26,6 @@ sections you override and remove the untouched defaults.
 - `secrets`
 - `passwords`
 
-`matrix` is still part of the root config model because the legacy compatibility
-adapter has not been fully split into a separate profile yet. If you are not
-serving Matrix / Palpo compatibility flows, treat that section as legacy.
-
 ## Validate the config
 
 ```sh

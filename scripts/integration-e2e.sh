@@ -23,7 +23,7 @@
 # Each scenario logs PASS / FAIL with stage timings so a CI run shows
 # *where* the e2e budget is being spent. Failures inside a scenario are
 # captured but the script keeps running so the operator sees the full
-# matrix; the exit code at the end is non-zero if any scenario failed.
+# summary; the exit code at the end is non-zero if any scenario failed.
 #
 # This is deliberately a *thin* harness:
 #
@@ -94,7 +94,7 @@ stage() {
     echo "[e2e]   stage ${name}: HTTP ${LAST_STATUS} (${elapsed} ms)"
 }
 
-# scenario_pass / scenario_fail / scenario_skip update the matrix counters.
+# scenario_pass / scenario_fail / scenario_skip update the result counters.
 scenario_pass() { SCENARIOS_PASSED=$((SCENARIOS_PASSED + 1)); echo "[e2e] PASS — $1"; }
 scenario_fail() { SCENARIOS_FAILED=$((SCENARIOS_FAILED + 1)); echo "[e2e] FAIL — $1" >&2; }
 scenario_skip() { SCENARIOS_SKIPPED=$((SCENARIOS_SKIPPED + 1)); echo "[e2e] SKIP — $1 (${2:-surface not wired})"; }
@@ -290,7 +290,7 @@ scenario_s3() {
     # for an unauthenticated probe of an admin surface — the wire is
     # confirmed (endpoint reachable, structured error returned) without
     # us having to mint a real admin token from inside this thin
-    # harness. We log it as SKIP rather than FAIL so the matrix reflects
+    # harness. We log it as SKIP rather than FAIL so the summary reflects
     # "auth-gated wire is up" instead of a regression.
     if [[ "${LAST_STATUS}" == "400" || "${LAST_STATUS}" == "401" || "${LAST_STATUS}" == "403" ]]; then
         scenario_skip "S3" "admin endpoint requires bearer token (${LAST_STATUS})"
@@ -356,7 +356,7 @@ echo
 scenario_s3
 echo
 
-echo "[e2e] ─── matrix ───"
+echo "[e2e] --- summary ---"
 echo "[e2e] run     : ${SCENARIOS_RUN}"
 echo "[e2e] passed  : ${SCENARIOS_PASSED}"
 echo "[e2e] failed  : ${SCENARIOS_FAILED}"

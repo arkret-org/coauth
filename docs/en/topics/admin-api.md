@@ -8,7 +8,7 @@ trusted automation.
 ## Enabling the API
 
 The API isn't exposed by default, and must be added to either a public or a private HTTP listener.
-It is considered safe to expose the API to the public, as access to it is gated by the `urn:coauth:admin` scope (the legacy `urn:mas:admin` scope is also accepted for backward compatibility).
+It is considered safe to expose the API to the public, as access to it is gated by `urn:coauth:admin` or `urn:contrix:admin:*`.
 
 To enable the API, tweak the [`http.listeners`](../reference/configuration.md#httplisteners) configuration section to add the `adminapi` resource:
 
@@ -61,7 +61,7 @@ models land.
 All requests to the admin API are gated either using access tokens obtained using OAuth 2.0 grants,
 or using personal access tokens (which must currently be issued through the Admin API).
 
-They must have the [`urn:coauth:admin`](../reference/scopes.md#urncoauthadmin) scope (or the legacy [`urn:mas:admin`](../reference/scopes.md#urnmasadmin) scope).
+They must have the [`urn:coauth:admin`](../reference/scopes.md#urncoauthadmin) scope or a Contrix admin scope.
 
 ### User-interactive tools
 

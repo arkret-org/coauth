@@ -99,7 +99,7 @@ pub struct AuthorizationRequestData {
 
     /// Requested response mode.
     ///
-    /// Pasion addition: allows callers to request a specific response mode
+    /// coauth addition: allows callers to request a specific response mode
     /// (e.g. `form_post` for certain social providers).
     pub response_mode: Option<ResponseMode>,
 }

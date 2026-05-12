@@ -97,9 +97,7 @@ for the full release process.
 - Container-image signing scope documented in
   `docs/en/development/releasing.md` (Cosign signs `v*` tags and
   `main` only) with a `cosign verify` snippet for operators.
-- `_todos.md` notes the rolling-upgrade hazard around the Postgres
-  advisory-lock label `"Pasion config sync"` (intentionally not
-  renamed).
+- Postgres advisory-lock label renamed to `"coauth config sync"`.
 - Bearer-token authentication enforced on the Contrix session-grant
   admin surface (`/api/v1/session-grants`,
   `/api/v1/session-grants/introspect`,
@@ -132,12 +130,8 @@ for the full release process.
 - `.github/workflows/ci.yaml` clippy job now pins
   `dtolnay/rust-toolchain@1.93.0` to match the `Dockerfile` builder.
 - Repository URLs / container registry references unified under
-  `github.com/contrix-dev/coauth` and `ghcr.io/contrix-dev/coauth`
-  (previously a mix of `palpo-im`, `taidge`, `meldry-com`).
-- User-visible `Pasion` strings in CLI help, library doc-comments, and
-  contributor / architecture docs replaced with `coauth`. (Internal
-  identifiers that affect runtime state — e.g. the Postgres advisory
-  lock label — are kept for backwards compatibility and tracked in
-  `_todos.md`.)
+  `github.com/contrix-dev/coauth` and `ghcr.io/contrix-dev/coauth`.
+- User-visible legacy product strings in CLI help, library doc-comments, and
+  contributor / architecture docs replaced with `coauth`.
 
 [Unreleased]: https://github.com/contrix-dev/coauth/compare/v1.8.0...HEAD

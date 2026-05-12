@@ -1,15 +1,9 @@
-//! An [OpenID Connect] client library for the [Matrix] specification.
-//!
-//! This is part of the [Pasion] project.
+//! OpenID Connect client helpers used by coauth.
 //!
 //! # Scope
 //!
-//! The scope of this crate is to support OIDC features required by the
-//! Matrix specification according to [MSC3861] and its sub-proposals.
-//!
-//! As such, it is compatible with the OpenID Connect 1.0 specification, but
-//! also enforces Matrix-specific requirements or adds compatibility with new
-//! [OAuth 2.0] features.
+//! The scope of this crate is to support the OIDC and OAuth 2.0 features
+//! needed by the Contrix/Soland auth flows.
 //!
 //! # OpenID Connect and OAuth 2.0 Features
 //!
@@ -21,17 +15,7 @@
 //! - [User Info](https://openid.net/specs/openid-connect-core-1_0.html#UserInfo)
 //! - [PKCE](https://www.rfc-editor.org/rfc/rfc7636)
 //!
-//! # Matrix features
-//!
-//! - Client registration
-//! - Login
-//! - Matrix API Scopes
-//! - Logout
-//!
 //! [OpenID Connect]: https://openid.net/connect/
-//! [Matrix]: https://matrix.org/
-//! [Pasion]: https://github.com/contrix-dev/coauth
-//! [MSC3861]: https://github.com/matrix-org/matrix-spec-proposals/pull/3861
 //! [OAuth 2.0]: https://oauth.net/2/
 
 pub mod error;

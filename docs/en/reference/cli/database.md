@@ -16,7 +16,7 @@ $ coauth database migrate -c config.yaml
 
 ### When to use
 
-- **After upgrading** — When you install a new version of Pasion, run `database migrate` before starting the server if you use the `--no-migrate` flag.
+- **After upgrading** — When you install a new version of coauth, run `database migrate` before starting the server if you use the `--no-migrate` flag.
 - **CI/CD pipelines** — Run migrations as a separate step before deploying the new server version.
 - **Manual control** — If you prefer to apply migrations explicitly rather than letting the server do it automatically on startup.
 

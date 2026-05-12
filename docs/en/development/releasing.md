@@ -134,5 +134,5 @@ At this point, the releaser should check the changelog and ensure the "Set as pr
 [`release-bump` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/release-bump.yaml
 [`release` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/release.yaml
 [translation download PR]: https://github.com/contrix-dev/coauth/pulls?q=is%3Apr+label%3AA-I18n
-[CI to churn]: https://github.com/contrix-dev/coauth/actions/workflows/release.yaml?query=event%3Apush+actor%3Amatrixbot
+[CI to churn]: https://github.com/contrix-dev/coauth/actions/workflows/release.yaml?query=event%3Apush
 [draft release to appear]: https://github.com/contrix-dev/coauth/releases

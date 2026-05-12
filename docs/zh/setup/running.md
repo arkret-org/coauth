@@ -1,6 +1,6 @@
 # 运行服务
 
-Pasion 由两个主要组件组成：
+coauth 由两个主要组件组成：
 
 1. **HTTP 服务器** — 处理所有 Web 请求（登录页面、OAuth 2.0 端点、管理 API 等）
 2. **后台 Worker** — 处理异步任务（发送邮件、用户同步等）
@@ -48,7 +48,7 @@ coauth worker -c config.yaml
 
 ```ini
 [Unit]
-Description=Pasion 认证服务
+Description=coauth 认证服务
 After=network.target postgresql.service
 
 [Service]
@@ -115,6 +115,6 @@ volumes:
 # 显示所有 info 级别日志
 RUST_LOG=info coauth server -c config.yaml
 
-# 仅显示 Pasion 相关的 debug 日志
+# 仅显示 coauth 相关的 debug 日志
 RUST_LOG=coauth=debug coauth server -c config.yaml
 ```

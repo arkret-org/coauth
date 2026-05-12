@@ -182,11 +182,7 @@ fn scope_description(scope: &str) -> String {
         other if other.starts_with("urn:contrix:client:") => {
             "Use Contrix client capabilities on your behalf".to_string()
         }
-        other
-            if other == "urn:coauth:admin"
-                || other.starts_with("urn:contrix:admin:")
-                || other.starts_with("urn:mas:admin") =>
-        {
+        other if other == "urn:coauth:admin" || other.starts_with("urn:contrix:admin:") => {
             "Administrative access to coauth management APIs".to_string()
         }
         other => other.to_string(),

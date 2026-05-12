@@ -47,7 +47,7 @@ impl JsonSchema for Device {
         json_schema!({
             "type": "string",
             "title": "Device ID",
-            "description": "A device ID as per https://matrix.org/docs/spec/client_server/r0.6.0#device-ids",
+            "description": "A client device identifier.",
             "examples": [
                 "AABBCCDDEE",
                 "FFGGHHIIJJ",

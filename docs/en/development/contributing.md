@@ -4,9 +4,7 @@ This document aims to get you started with contributing to the coauth!
 
 ## 1. Who can contribute to coauth?
 
-Everyone is welcome to contribute code to [coauth](https://github.com/contrix-dev/coauth), provided that they are willing to license their contributions to Element under a [Contributor License Agreement](https://cla-assistant.io/contrix-dev/coauth) (CLA). This ensures that their contribution will be made available under an OSI-approved open-source license, currently Affero General Public License v3 (AGPLv3).
-
-Please see the [Element blog post](https://element.io/blog/palpo-now-lives-at-github-com-palpo-im-palpo/) for the full rationale.
+Everyone is welcome to contribute code to [coauth](https://github.com/contrix-dev/coauth), provided that they are willing to license their contributions under the project's contributor terms. This ensures that their contribution will be made available under an OSI-approved open-source license, currently Affero General Public License v3 (AGPLv3).
 
 ## 2. What can I contribute?
 

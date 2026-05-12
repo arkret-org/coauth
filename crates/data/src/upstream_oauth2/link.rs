@@ -8,14 +8,14 @@ pub struct UpstreamOAuthLink {
     pub provider_id: Ulid,
     pub user_id: Option<Ulid>,
     pub subject: String,
-    /// Pasion-original: human-readable account name from upstream
+    /// coauth extension: human-readable account name from upstream
     pub human_account_name: Option<String>,
     pub created_at: DateTime<Utc>,
-    /// Pasion-original: tracks when the link was last updated
+    /// coauth extension: tracks when the link was last updated
     pub updated_at: DateTime<Utc>,
 }
 
-/// Pasion-original: a patch object for updating upstream OAuth link fields.
+/// coauth extension: a patch object for updating upstream OAuth link fields.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpstreamOAuthLinkPatch {
     pub user_id: Option<Option<Ulid>>,

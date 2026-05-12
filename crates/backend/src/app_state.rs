@@ -189,7 +189,10 @@ pub async fn inject_app_state(
     depot.insert("site_config", state.site_config.clone());
     depot.insert("limiter", state.limiter.clone());
     depot.insert("policy_factory", state.policy_factory.clone());
-    depot.insert("principal_server_admin", Arc::clone(&state.principal_server_admin));
+    depot.insert(
+        "principal_server_admin",
+        Arc::clone(&state.principal_server_admin),
+    );
     depot.insert("connector_registry", state.connector_registry.clone());
     depot.insert("app_version", AppVersion(crate::version()));
     depot.insert("activity_tracker", state.activity_tracker.clone());

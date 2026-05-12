@@ -29,9 +29,6 @@
                 "name": "oauth"
               },
               {
-                "name": "compat"
-              },
-              {
                 "name": "restapi"
               },
               {
@@ -171,14 +168,6 @@
         }
       ]
     },
-    "matrix": {
-      "description": "Configuration related to the homeserver",
-      "allOf": [
-        {
-          "$ref": "#/definitions/MatrixConfig"
-        }
-      ]
-    },
     "policy": {
       "description": "Configuration related to the policy engine",
       "allOf": [
@@ -245,8 +234,7 @@
     }
   },
   "required": [
-    "secrets",
-    "matrix"
+    "secrets"
   ],
   "definitions": {
     "ClientsConfig": {
@@ -912,19 +900,6 @@
             "name": {
               "type": "string",
               "const": "oauth"
-            }
-          },
-          "required": [
-            "name"
-          ]
-        },
-        {
-          "description": "Matrix compatibility layer",
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "const": "compat"
             }
           },
           "required": [
@@ -2745,7 +2720,7 @@
           ]
         },
         "unicode_normalization": {
-          "description": "Apply NFKC normalization before hashing. Normally `false`; enable when\nmigrating password hashes from Palpo which performs this normalization.",
+          "description": "Apply NFKC normalization before hashing. Normally `false`; enable only\nwhen importing hashes that were produced with that normalization step.",
           "type": "boolean"
         },
         "cost": {
@@ -2797,40 +2772,6 @@
           "const": "pbkdf2"
         }
       ]
-    },
-    "MatrixConfig": {
-      "description": "Legacy Matrix compatibility settings.\n\ncoauth no longer wires a Palpo/Matrix connector. This section remains so\nexisting configs can still provide the account-domain used by older account\nidentifiers while Contrix/Soland integrations use session grants and\nPrincipal Server discovery.",
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "description": "Whether the retired Matrix compatibility adapter was requested.\nThe backend ignores this flag and always uses a local no-op principal\nstub; `true` is accepted only to keep old config files parseable.",
-          "type": "boolean",
-          "default": false
-        },
-        "homeserver": {
-          "description": "Legacy account-domain/server-name, e.g. `example.com`.",
-          "type": "string",
-          "default": "localhost:8008"
-        },
-        "secret_file": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "secret": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "endpoint": {
-          "description": "Deprecated homeserver API URL kept for old CLI/config compatibility.",
-          "type": "string",
-          "format": "uri",
-          "default": "http://localhost:8008/"
-        }
-      }
     },
     "PolicyConfig": {
       "description": "Policy engine configuration.\n\nSupports multiple backends: Cedar (default) and Remote HTTP.",
@@ -3278,13 +3219,6 @@
           "type": "string",
           "pattern": "^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
         },
-        "palpo_idp_id": {
-          "description": "The ID of the provider that was used by Palpo.\nIn order to perform a Palpo migration migration, this must be specified.\n\n## For providers that used OAuth 2.0 or OpenID Connect in Palpo\n\n### For `oidc_providers`:\nThis should be specified as `oidc-` followed by the ID that was\nconfigured as `idp_id` in one of the `oidc_providers` in the Palpo\nconfiguration.\nFor example, if Palpo's configuration contained `idp_id: wombat` for\nthis provider, then specify `oidc-wombat` here.\n\n### For `oidc_config` (legacy):\nSpecify `oidc` here.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "issuer": {
           "description": "The OIDC issuer URL\n\nThis is required if OIDC discovery is enabled (which is the default)",
           "type": [
@@ -3641,14 +3575,14 @@
           ]
         },
         "skip_confirmation": {
-          "description": "When `true`, the interactive confirmation screen is skipped.\nRequires `localpart.action` to be `require` and other attribute\nactions to be `ignore`, `force`, or `require`.",
+          "description": "When `true`, the interactive confirmation screen is skipped.\nRequires `username.action` to be `require` and other attribute\nactions to be `ignore`, `force`, or `require`.",
           "type": "boolean"
         },
-        "localpart": {
-          "description": "Import the localpart of the MXID",
+        "username": {
+          "description": "Import the local account username.",
           "allOf": [
             {
-              "$ref": "#/definitions/LocalpartImportPreference"
+              "$ref": "#/definitions/UsernameImportPreference"
             }
           ]
         },
@@ -3699,12 +3633,12 @@
         }
       }
     },
-    "LocalpartImportPreference": {
-      "description": "Controls how the MXID localpart is imported from upstream claims",
+    "UsernameImportPreference": {
+      "description": "Controls how the local account username is imported from upstream claims.",
       "type": "object",
       "properties": {
         "action": {
-          "description": "How to handle the localpart attribute",
+          "description": "How to handle the username attribute",
           "allOf": [
             {
               "$ref": "#/definitions/ImportAction"
@@ -3712,14 +3646,14 @@
           ]
         },
         "template": {
-          "description": "A Jinja2 template for the localpart attribute.\n\nDefaults to `{{ user.preferred_username }}` when omitted.",
+          "description": "A Jinja2 template for the username attribute.\n\nDefaults to `{{ user.preferred_username }}` when omitted.",
           "type": [
             "string",
             "null"
           ]
         },
         "on_conflict": {
-          "description": "How to handle conflicts on the localpart claim",
+          "description": "How to handle conflicts on the username claim",
           "allOf": [
             {
               "$ref": "#/definitions/OnConflict"
@@ -3863,12 +3797,12 @@
           "const": "do_nothing"
         },
         {
-          "description": "Only log out the Pasion 'browser session' started by this OIDC session",
+          "description": "Only log out the coauth browser session started by this OIDC session",
           "type": "string",
           "const": "logout_browser_only"
         },
         {
-          "description": "Log out all sessions started by this OIDC session, including Pasion\n'browser sessions' and client sessions",
+          "description": "Log out all sessions started by this OIDC session, including coauth\nbrowser sessions and client sessions",
           "type": "string",
           "const": "logout_all"
         }

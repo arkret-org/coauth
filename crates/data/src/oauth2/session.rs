@@ -77,7 +77,7 @@ pub struct Session {
     pub user_agent: Option<String>,
     pub last_active_at: Option<DateTime<Utc>>,
     pub last_active_ip: Option<IpAddr>,
-    /// Pasion-original: optional human-readable name for this session.
+    /// coauth extension: optional human-readable name for this session.
     pub human_name: Option<String>,
 }
 

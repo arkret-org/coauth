@@ -1,4 +1,4 @@
-# Pasion — development task runner
+# coauth — development task runner
 # Usage: just <recipe>
 # See all recipes: just --list
 

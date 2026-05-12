@@ -28,7 +28,6 @@ http:
         - name: restapi
         - name: assets
           path: ./dist
-        - name: compat    # legacy Matrix compatibility adapter
         - name: adminapi  # 管理 API
 ```
 
@@ -41,7 +40,6 @@ http:
 - `oauth`：OAuth2 / OIDC 端点
 - `restapi`：SPA/API 后端
 - `assets`：前端静态资源
-- `compat`：legacy Matrix 兼容路由
 - `adminapi`：`/api/admin/v1/*`
 - `health`、`prometheus`：运维端点
 
@@ -96,20 +94,6 @@ contrix:
 - `service_did`：显式 service DID；未配置时从 `http.public_base` 推导
 - `issuer_did`：session grant 中写入的 DID；默认继承 `service_did`
 - `admin_audience`：Contrix admin 集成期望的 audience；默认回退到本地 `/api/v1`
-
-## `matrix`
-
-Legacy Matrix account-domain 兼容配置。Palpo/Matrix connector 已退役；这个配置段不再
-连接 homeserver adapter。
-
-```yaml
-matrix:
-  enabled: false
-  homeserver: example.com
-```
-
-`homeserver` 现在只作为旧 identifier 路径使用的 account-domain/server-name。新的
-Contrix-first 部署应通过 `contrix.principal_servers` 发布 Soland，并保持这个 adapter 禁用。
 
 ## `templates`
 
@@ -294,7 +278,6 @@ branding:
 ```yaml
 experimental:
   access_token_ttl: 300
-  compat_token_ttl: 300
 ```
 
 ## `storage`

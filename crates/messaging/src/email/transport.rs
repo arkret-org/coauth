@@ -1538,7 +1538,7 @@ mod tests {
 
     fn sample_email() -> OutboundEmail {
         OutboundEmail {
-            from: "Pasion <noreply@example.com>".parse().unwrap(),
+            from: "coauth <noreply@example.com>".parse().unwrap(),
             reply_to: Some("Support <support@example.com>".parse().unwrap()),
             to: vec!["Alice <alice@example.com>".parse().unwrap()],
             subject: "Production check".to_owned(),
@@ -1629,7 +1629,7 @@ mod tests {
     async fn paloud_internal_transport_signs_request() {
         let mock_server = MockServer::start().await;
         let email = OutboundEmail {
-            from: "Pasion <noreply@example.com>".parse().unwrap(),
+            from: "coauth <noreply@example.com>".parse().unwrap(),
             reply_to: None,
             to: vec!["alice@example.com".parse().unwrap()],
             subject: "Verify your email".to_owned(),
@@ -1690,7 +1690,7 @@ mod tests {
             .and(path("/emails"))
             .and(header("authorization", "Bearer resend-key"))
             .and(body_partial_json(json!({
-                "from": "Pasion <noreply@example.com>",
+                "from": "coauth <noreply@example.com>",
                 "reply_to": "Support <support@example.com>",
                 "to": ["Alice <alice@example.com>"],
                 "subject": "Production check",
@@ -1746,7 +1746,7 @@ mod tests {
         };
 
         provider
-            .test_connection(&"Pasion <noreply@example.com>".parse().unwrap())
+            .test_connection(&"coauth <noreply@example.com>".parse().unwrap())
             .await
             .unwrap();
     }
@@ -1773,7 +1773,7 @@ mod tests {
         };
 
         let error = provider
-            .test_connection(&"Pasion <noreply@example.com>".parse().unwrap())
+            .test_connection(&"coauth <noreply@example.com>".parse().unwrap())
             .await
             .unwrap_err();
 
@@ -1838,7 +1838,7 @@ mod tests {
         };
 
         provider
-            .test_connection(&"Pasion <noreply@example.com>".parse().unwrap())
+            .test_connection(&"coauth <noreply@example.com>".parse().unwrap())
             .await
             .unwrap();
     }

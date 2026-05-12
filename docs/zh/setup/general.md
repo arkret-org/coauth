@@ -24,9 +24,6 @@ coauth config generate > config.yaml
 - `secrets`
 - `passwords`
 
-当前 `matrix` 仍然保留在根配置模型里，因为 legacy compatibility adapter 还没有完全拆到独立
-profile。若你的部署不提供 Matrix / Palpo 兼容路径，应把它视为 legacy 配置段。
-
 ## 校验配置
 
 ```bash

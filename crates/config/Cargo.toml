@@ -44,7 +44,7 @@ rand_chacha.workspace = true
 rand_core.workspace = true
 tokio.workspace = true
 
-# Pasion workspace crates
+# coauth workspace crates
 coauth-iana.workspace = true
 coauth-jose.workspace = true
 coauth-keystore.workspace = true

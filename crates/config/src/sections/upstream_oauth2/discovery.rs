@@ -68,11 +68,11 @@ pub enum OnBackchannelLogout {
     #[default]
     DoNothing,
 
-    /// Only log out the Pasion 'browser session' started by this OIDC session
+    /// Only log out the coauth browser session started by this OIDC session
     LogoutBrowserOnly,
 
-    /// Log out all sessions started by this OIDC session, including Pasion
-    /// 'browser sessions' and client sessions
+    /// Log out all sessions started by this OIDC session, including coauth
+    /// browser sessions and client sessions
     LogoutAll,
 }
 

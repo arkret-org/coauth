@@ -8,7 +8,7 @@
 //! deserializer accept what the admin SPA / sodmin sends, and refuse
 //! garbage?
 //!
-//! Coverage matrix (each line ≥ 1 happy + 1 invalid case):
+//! Coverage table (each line ≥ 1 happy + 1 invalid case):
 //!
 //! ```text
 //!  1. POST /accounts/{id}/risk-action                  (propose)
@@ -177,7 +177,7 @@ mod replicas {
     pub struct AddUser {
         pub username: String,
         #[serde(default)]
-        pub skip_homeserver_check: bool,
+        pub skip_principal_server_check: bool,
     }
 
     #[derive(Debug, Deserialize)]

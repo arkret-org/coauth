@@ -16,19 +16,12 @@ contrix:
       audience: https://soland.example.com/api
       endpoint: https://soland.example.com/
       did: did:web:soland.example.com
-
-matrix:
-  enabled: false
-  homeserver: example.com
 ```
 
 - `name`: operator-facing identifier for the Principal Server.
 - `audience`: token/session-grant audience expected by that server.
 - `endpoint`: base URL advertised through Contrix/OIDC discovery.
 - `did`: optional DID advertised for the Principal Server.
-
-The `matrix` section is retained only for legacy account-domain compatibility.
-Keep `enabled: false` for new Contrix deployments.
 
 ## Discovery
 

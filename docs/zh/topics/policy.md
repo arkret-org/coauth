@@ -1,6 +1,6 @@
 # 策略引擎
 
-Pasion 内置了一个可扩展的策略引擎，用于控制用户注册、客户端注册和授权请求等行为。通过策略提供者抽象层，支持多种不同的策略语言和后端。
+coauth 内置了一个可扩展的策略引擎，用于控制用户注册、客户端注册和授权请求等行为。通过策略提供者抽象层，支持多种不同的策略语言和后端。
 
 ## 支持的后端
 
@@ -20,7 +20,7 @@ Pasion 内置了一个可扩展的策略引擎，用于控制用户注册、客�
 
 ## Cedar 后端（默认）
 
-[Amazon Cedar](https://www.cedarpolicy.com/) 是一种专为权限控制设计的策略语言。由于 Cedar 本身使用 Rust 编写，在 Pasion 中集成的性能最高，无需 WebAssembly 开销。
+[Amazon Cedar](https://www.cedarpolicy.com/) 是一种专为权限控制设计的策略语言。由于 Cedar 本身使用 Rust 编写，在 coauth 中集成的性能最高，无需 WebAssembly 开销。
 
 Cedar 适用于以下场景：
 - 希望使用简单、可读性好的策略语言
@@ -36,7 +36,7 @@ policy:
 
 ### 编写 Cedar 策略
 
-Cedar 以 `(principal, action, resource, context)` 的形式评估授权请求。Pasion 的映射关系：
+Cedar 以 `(principal, action, resource, context)` 的形式评估授权请求。coauth 的映射关系：
 
 - **Principal**（主体）：`Requester::"anonymous"`
 - **Action**（操作）：`Action::"register"`、`Action::"add_email"`、`Action::"register_client"`、`Action::"authorize"`

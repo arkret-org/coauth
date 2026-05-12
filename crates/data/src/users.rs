@@ -56,7 +56,7 @@ pub struct User {
     pub deactivated_at: Option<DateTime<Utc>>,
     pub can_request_admin: bool,
     pub is_guest: bool,
-    // Pasion-original profile fields
+    // Profile fields synced to the downstream principal projection.
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
     pub preferred_locale: Option<String>,
@@ -171,7 +171,7 @@ impl User {
     }
 }
 
-/// Pasion-original: user profile snapshot used for display and API responses.
+/// coauth extension: user profile snapshot used for display and API responses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserProfile {
     pub display_name: Option<String>,
@@ -180,7 +180,7 @@ pub struct UserProfile {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Pasion-original: a patch object for updating user profile fields.
+/// coauth extension: a patch object for updating user profile fields.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserProfilePatch {
     pub display_name: Option<Option<String>>,
@@ -195,7 +195,7 @@ impl UserProfilePatch {
     }
 }
 
-/// Pasion-original: a patch object for updating user fields.
+/// coauth extension: a patch object for updating user fields.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserPatch {
     pub display_name: Option<Option<String>>,
@@ -231,7 +231,7 @@ impl From<UserProfilePatch> for UserPatch {
     }
 }
 
-/// Pasion-original: admin-specific user patch.
+/// coauth extension: admin-specific user patch.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdminUserPatch {
     pub display_name: Option<Option<String>>,
@@ -328,7 +328,7 @@ impl UserRecoveryTicket {
     }
 }
 
-/// Pasion-original: a user email authentication session
+/// coauth extension: a user email authentication session
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserEmailAuthentication {
     pub id: Ulid,
@@ -339,7 +339,7 @@ pub struct UserEmailAuthentication {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
-/// Pasion-original: a user email authentication code
+/// coauth extension: a user email authentication code
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserEmailAuthenticationCode {
     pub id: Ulid,
@@ -424,7 +424,7 @@ impl UserEmail {
     }
 }
 
-/// Pasion-original: a patch object for updating user email fields.
+/// coauth extension: a patch object for updating user email fields.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserEmailPatch {
     pub email: Option<String>,
@@ -439,14 +439,14 @@ impl UserEmailPatch {
     }
 }
 
-/// Pasion-original: password data stored during user registration.
+/// coauth extension: password data stored during user registration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserRegistrationPassword {
     pub hashed_password: String,
     pub version: u16,
 }
 
-/// Pasion-original: a registration token for gated signups.
+/// coauth extension: a registration token for gated signups.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserRegistrationToken {
     pub id: Ulid,
@@ -493,7 +493,7 @@ impl UserRegistrationToken {
     }
 }
 
-/// Pasion-original: an in-progress user registration.
+/// coauth extension: an in-progress user registration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserRegistration {
     pub id: Ulid,
@@ -513,7 +513,7 @@ pub struct UserRegistration {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
-/// Pasion-original: a phone number associated with a user
+/// coauth extension: a phone number associated with a user
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserPhone {
     pub id: Ulid,
@@ -522,7 +522,7 @@ pub struct UserPhone {
     pub created_at: DateTime<Utc>,
 }
 
-/// Pasion-original: an authentication session for a phone number
+/// coauth extension: an authentication session for a phone number
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserPhoneAuthentication {
     pub id: Ulid,
@@ -532,7 +532,7 @@ pub struct UserPhoneAuthentication {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
-/// Pasion-original: a verification code for phone authentication
+/// coauth extension: a verification code for phone authentication
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserPhoneAuthenticationCode {
     pub id: Ulid,

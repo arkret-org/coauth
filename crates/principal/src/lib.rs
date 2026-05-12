@@ -388,11 +388,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// Returns an error if the downstream system is unreachable or the displayname
     /// could not be set.
-    async fn set_displayname(
-        &self,
-        username: &str,
-        displayname: &str,
-    ) -> Result<(), anyhow::Error>;
+    async fn set_displayname(&self, username: &str, displayname: &str)
+    -> Result<(), anyhow::Error>;
 
     /// Unset the displayname of a user in the downstream principal system.
     ///
@@ -405,7 +402,6 @@ pub trait PrincipalServerAdmin: Send + Sync {
     /// Returns an error if the downstream system is unreachable or the displayname
     /// could not be unset.
     async fn unset_displayname(&self, username: &str) -> Result<(), anyhow::Error>;
-
 }
 
 /// Helper trait: obtain a reference to the inner `PrincipalServerAdmin`
@@ -507,15 +503,12 @@ where
         username: &str,
         displayname: &str,
     ) -> Result<(), anyhow::Error> {
-        self.as_admin()
-            .set_displayname(username, displayname)
-            .await
+        self.as_admin().set_displayname(username, displayname).await
     }
 
     async fn unset_displayname(&self, username: &str) -> Result<(), anyhow::Error> {
         self.as_admin().unset_displayname(username).await
     }
-
 }
 
 /// A connector provider represents an external system that coauth can

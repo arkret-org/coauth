@@ -1,4 +1,4 @@
--- Initial consolidated schema for Pasion
+-- Initial consolidated schema for coauth
 -- This migration creates all tables from scratch for a fresh installation.
 
 -- ── Users ───────────────────────────────────────────────────────

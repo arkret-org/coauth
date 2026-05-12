@@ -15,19 +15,12 @@ contrix:
       audience: https://soland.example.com/api
       endpoint: https://soland.example.com/
       did: did:web:soland.example.com
-
-matrix:
-  enabled: false
-  homeserver: example.com
 ```
 
 - `name`：面向运维的 Principal Server 标识。
 - `audience`：该服务器验证 token/session grant 时使用的 audience。
 - `endpoint`：通过 Contrix/OIDC discovery 发布的基础 URL。
 - `did`：可选的 Principal Server DID。
-
-`matrix` 配置段只保留给旧 account-domain 兼容路径。新的 Contrix 部署应保持
-`enabled: false`。
 
 ## Discovery
 

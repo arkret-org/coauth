@@ -7,7 +7,7 @@ A decision of the policy engine is deterministically made based on three compone
  - A static configuration
  - The action to be performed
 
-Pasion supports multiple policy engine backends through an abstraction layer, allowing you to choose the best tool for your needs:
+coauth supports multiple policy engine backends through an abstraction layer, allowing you to choose the best tool for your needs:
 
 | Backend | Language | Performance | Flexibility | Feature Flag |
 |---------|----------|-------------|-------------|--------------|
@@ -16,7 +16,7 @@ Pasion supports multiple policy engine backends through an abstraction layer, al
 
 ## Cedar backend (default)
 
-[Amazon Cedar](https://www.cedarpolicy.com/) is a policy language designed for simplicity and performance. Since Cedar is natively written in Rust, it integrates directly into Pasion with no WebAssembly overhead.
+[Amazon Cedar](https://www.cedarpolicy.com/) is a policy language designed for simplicity and performance. Since Cedar is natively written in Rust, it integrates directly into coauth with no WebAssembly overhead.
 
 Cedar is a good choice when:
 - You want a simple, readable policy language
@@ -32,7 +32,7 @@ policy:
 
 ### Writing Cedar policies
 
-Cedar evaluates authorization requests of the form `(principal, action, resource, context)`. Pasion maps policy evaluations as:
+Cedar evaluates authorization requests of the form `(principal, action, resource, context)`. coauth maps policy evaluations as:
 
 - **Principal**: `Requester::"anonymous"`
 - **Action**: `Action::"register"`, `Action::"add_email"`, `Action::"register_client"`, `Action::"authorize"`
@@ -184,7 +184,7 @@ This is useful in production environments, but can be relaxed in development env
 ### Authorization requests
 
 The policy is evaluated when a client requests an access token.
-This only covers OAuth 2.0 sessions, not compatibility sessions.
+This covers OAuth 2.0 sessions.
 It is evaluated for the authorization code grant, the client credentials grant and the device authorization grant.
 
 This is probably the most interesting policy, as it defines which scope can be granted to which user and which client.
@@ -200,15 +200,15 @@ Therefore the client must know in advance which scope they want to request.
 
 This is an important concept to understand: what access a token has is stored in the session itself, therefore access to privileged scopes is only based on policy evaluation, not on user attributes.
 
-If we take the Palpo admin API access as an example, the fact that an access token has admin API access doesn't depend on attributes on the user *directly*.
+If we take coauth admin API access as an example, the fact that an access token has admin API access doesn't depend on attributes on the user *directly*.
 Instead, it is during the creation of the session that:
 
- - the client asks for the corresponding scope (e.g. `urn:palpo:admin:*`)
+ - the client asks for the corresponding scope (e.g. `urn:coauth:admin`)
  - the policy engine decides whether to grant it or not
 
 The default policy shipped with the service does gate access to this scope based on a user attributes (`can_request_admin`), but this is not a requirement.
 
-It does make reasoning about admin access more complicated compared to a simple boolean flag on the user like what Palpo does, but it also allows for more complex authorization logic.
+It does make reasoning about admin access more explicit than a simple boolean flag on the user, but it also allows for more complex authorization logic.
 This is especially important as in the future it will make it possible to implement a more granular role-based access control system to fit more complex use cases.
 
 To understand the authorization process and how sessions are created, refer to the [authorization and sessions](./authorization.md) section.

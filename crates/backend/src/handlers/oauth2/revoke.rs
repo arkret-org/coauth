@@ -147,7 +147,7 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
     // Check if the caller authenticated with the PrincipalServer admin secret
     // (bearer token).  When that is the case, skip the client-ownership
     // check so that the PrincipalServer can revoke any token on behalf of a
-    // client (e.g. during Matrix /logout).
+    // client.
     let admin_mode = if let Some(token) = client_authorization.credentials.bearer_token() {
         principal_server
             .verify_token(token)

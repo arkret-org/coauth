@@ -131,7 +131,6 @@ impl<C: PrincipalServerAdmin> PrincipalServerAdmin for ReadOnlyPrincipalServerAd
     async fn unset_displayname(&self, _username: &str) -> Result<(), anyhow::Error> {
         deny_write(BlockedPrincipalWrite::UnsetDisplayname)
     }
-
 }
 
 impl<C: ConnectorProvider> ConnectorProvider for ReadOnlyPrincipalServerAdmin<C> {

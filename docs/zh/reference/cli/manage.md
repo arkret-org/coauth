@@ -72,14 +72,6 @@ coauth manage kill-sessions -c config.yaml <用户名>
 
 ## 令牌管理
 
-### 签发兼容性令牌
-
-为用户签发一个旧版 Matrix 兼容令牌：
-
-```bash
-coauth manage issue-compatibility-token -c config.yaml <用户名>
-```
-
 ### 签发注册令牌
 
 生成一次性注册令牌：

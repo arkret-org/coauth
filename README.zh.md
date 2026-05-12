@@ -13,20 +13,16 @@ receipt 等能力属于委托的 public DID resolver / DID 服务。
 - Principal Server（例如 `soland`）从 `coauth` 获取 session grant 和账号元数据。
 - `sodmin` 通过 `urn:coauth:admin` 或 `urn:contrix:admin:*` 访问管理 API。
 - 委托的 public DID resolver / DID 服务继续作为 identity registry / resolver。
-- Matrix / Palpo 集成保留为 legacy compatibility adapter，不再是主产品路径。
 
 ## 当前状态
 
-仓库仍在从早期的 Pasion / Matrix 语境迁移。当前已经以 Contrix 为主路径暴露：
+当前以 Contrix 为主路径暴露：
 
 - `/.well-known/openid-configuration`
 - `/.well-known/did.json`
 - `/api/v1/server/describe`
 - `/api/v1/identity/describe`
 - `/api/v1/directory/resolve-handle`
-
-非主路径里仍然保留了一些 legacy naming 和 compatibility code。剩余迁移项见
-[`_todos.md`](_todos.md)。
 
 ## 主要能力
 
@@ -36,7 +32,6 @@ receipt 等能力属于委托的 public DID resolver / DID 服务。
 - 本地账号生命周期、密码登录、上游 OAuth2 联邦、恢复流程
 - 面向 session、token、user、client、template、connector、policy data 的管理 API
 - Email / SMS 通知、限流、CAPTCHA 钩子、telemetry、策略执行
-- 仍可为需要 delegated-auth bridge 的部署提供 Matrix / Palpo legacy adapter
 
 ## 快速开始
 
@@ -76,16 +71,7 @@ secrets:
 
 passwords:
   enabled: true
-
-matrix:
-  homeserver: matrix.example.com
-  secret: legacy-shared-secret
-  endpoint: https://matrix.example.com/
 ```
-
-当前代码里的 `matrix` 段还没有完全拆到独立 compatibility profile，所以它仍在
-根配置模型中。除非你正在启用 Matrix / Palpo 兼容路径，否则应把它视为 legacy
-integration config。
 
 ### 3. 启动服务
 

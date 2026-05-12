@@ -437,7 +437,12 @@ async fn fetch_display_name(
     principal_server: &dyn PrincipalServerAdmin,
     username: &str,
 ) -> Option<String> {
-    match tokio::time::timeout(Duration::from_secs(1), principal_server.query_user(username)).await {
+    match tokio::time::timeout(
+        Duration::from_secs(1),
+        principal_server.query_user(username),
+    )
+    .await
+    {
         Ok(Ok(user)) => user.displayname,
         Ok(Err(err)) => {
             tracing::warn!(

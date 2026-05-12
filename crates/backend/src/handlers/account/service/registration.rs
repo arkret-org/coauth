@@ -1124,7 +1124,10 @@ pub async fn begin_password_registration(
     } else if repo.user().exists(&request.username).await? {
         issues.push(BeginPasswordRegistrationIssue::UsernameExists);
     } else {
-        match principal_server.is_username_available(&request.username).await {
+        match principal_server
+            .is_username_available(&request.username)
+            .await
+        {
             Ok(false) => issues.push(BeginPasswordRegistrationIssue::UsernameExists),
             Ok(true) => {}
             Err(error) => {
@@ -2163,7 +2166,9 @@ pub async fn finish_registration(
                     "Registration browser session is required",
                 )));
             }
-            CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(_) => unreachable!(),
+            CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(_) => {
+                unreachable!()
+            }
             CheckRegistrationFinishEligibilityError::Repository(error) => {
                 return Err(RegistrationFinishError::Repository(error));
             }

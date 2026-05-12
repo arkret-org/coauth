@@ -1,79 +1,63 @@
 # 授权与会话
 
-`coauth` 使用 OAuth 2.0、OpenID Connect 和 Contrix session grant 来管理账号认证、客户端授权和 Principal Server 会话验证。
+`coauth` 负责认证用户和客户端，然后签发 OAuth 2.0/OIDC token 或 Contrix
+session grant，供下游服务验证。
 
 ## 会话类型
 
-### 浏览器会话（Browser Session）
+### 浏览器会话
 
-当用户通过 Web 界面登录时，`coauth` 创建一个浏览器会话。该会话以加密 Cookie 的形式存储在用户的浏览器中。
+用户通过 Web UI 登录后，`coauth` 会创建浏览器会话，并以加密 Cookie 保存。
 
 ### OAuth 2.0 会话
 
-当 OAuth 2.0 客户端获得授权后，`coauth` 创建一个 OAuth 2.0 会话。该会话关联了：
+OAuth 会话在客户端完成授权流程后创建，关联以下信息：
 
-- 授权的用户
-- 请求的客户端
-- 授予的作用域（scope）
-- 访问令牌和刷新令牌
-
-### 兼容会话（Compat Session）
-
-通过旧版 Matrix `/_matrix/client/*/login` API 创建的会话。这些会话在内部映射为 OAuth 2.0 会话，只属于 legacy compatibility adapter。
+- 被授权的用户（如果该 grant 绑定用户）
+- 请求授权的客户端
+- 已授予的 scope
+- access token 与 refresh token
 
 ### Contrix Session Grant
 
-Principal Server 应验证 `cx.session.grant`，而不是把 legacy scope 当作 Contrix capability。session grant payload 包含 issuer service DID、subject principal DID、service account ID、device ID、audience、scope、expiry、revocation reference，以及带签名算法、key ID、canonical payload hash 和 hash algorithm 的 proof block。
+Principal Server 应验证 `cx.session.grant` 来执行下游账号和设备访问。grant payload
+包含 issuer service DID、subject principal DID、service account ID、可选 device
+ID、audience、scope、expiry、revocation reference 以及 proof block。
 
-`POST /api/v1/session-grants/introspect` 接受 grant ID 或 signed grant JWT，并可附带 audience。响应只返回 `active`、标准状态码（`active`、`revoked`、`expired`、`locked`、`suspended`、`audience_mismatch`、`not_found`）和非敏感元数据，不返回已存储 JWT、refresh token、session private key、handle 或 claim payload。
+`POST /api/v1/session-grants/introspect` 接受 grant ID 或 signed grant JWT，并可附带
+audience。响应只返回 `active`、标准状态（`active`、`revoked`、`expired`、`locked`、
+`suspended`、`audience_mismatch`、`not_found`）和非敏感元数据，不返回已存储 JWT、
+refresh token、session private key、handle 或 claim payload。
 
-## 授权流程（Grant Types）
+## Grant Types
 
-### 授权码流程（Authorization Code Grant）
+### Authorization Code
 
-最常用的流程，适用于有用户界面的客户端（如 Element）：
+适合有浏览器交互能力的客户端。客户端把用户重定向到 `coauth`，拿到授权码后再换取
+token。
 
-1. 客户端将用户重定向到 `coauth` 的授权端点
-2. 用户登录并同意授权
-3. `coauth` 将用户重定向回客户端，附带授权码
-4. 客户端使用授权码换取访问令牌
+### Device Authorization
 
-### 客户端凭据流程（Client Credentials Grant）
+适合不方便承载浏览器 redirect 的设备或 CLI。设备展示 code，用户在另一台设备确认，
+客户端轮询直到 token 签发完成。
 
-适用于服务间通信，无需用户参与：
+### Client Credentials
 
-1. 客户端使用自己的 `client_id` 和 `client_secret` 直接请求令牌
-2. `coauth` 验证客户端身份并颁发访问令牌
+适合服务间自动化。客户端以自身身份认证，不需要用户浏览器会话。
 
-### 设备码流程（Device Code Grant）
+## Access Token
 
-适用于输入受限的设备（如智能电视）：
+Access token 对客户端是不透明字符串，`coauth` 在服务端保存 token 元数据：
 
-1. 设备向 `coauth` 请求设备码
-2. 用户在另一设备上访问验证 URL 并输入设备码
-3. 用户在 Web 界面上完成登录和授权
-4. 设备轮询 Pasion 获取访问令牌
+- subject
+- client
+- granted scopes
+- expiry
+- revocation state
 
-## 访问令牌
+用户、管理员或授权客户端都可以通过撤销端点撤销 token。
 
-访问令牌包含以下信息：
+## Personal Session
 
-- **发行者（issuer）** — `coauth` 的 URL 或 service DID
-- **主体（subject）** — 用户标识
-- **作用域（scope）** — 授权的权限范围
-- **过期时间（expiry）** — 令牌的有效期
-
-令牌的有效期可以在配置文件中设置：
-
-```yaml
-matrix:
-  access_token_ttl: 300  # 秒（默认 5 分钟）
-```
-
-## 令牌撤销
-
-访问令牌可以通过以下方式撤销：
-
-- 用户在账户管理页面手动结束会话
-- 管理员通过管理 API 终止会话
-- 客户端调用令牌撤销端点
+管理员可以签发 personal access token，用于自动化或委托用户操作。它们携带预定义
+scope 和过期时间，可通过 admin API regenerate 或 revoke。

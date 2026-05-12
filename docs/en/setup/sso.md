@@ -19,7 +19,7 @@ Removals need to be applied using the [`coauth config sync --prune`](../referenc
 The general configuration usually goes as follows:
 
  - determine a unique `id` for the provider, which will be used as stable identifier between the configuration file and the database. This `id` must be a ULID, and can be generated using online tools like <https://www.ulidtools.com>
- - determine the exact external `http.public_base` value used by Pasion. The provider callback URL is derived from it, so it must be the public URL visible to both end users and the upstream provider
+ - determine the exact external `http.public_base` value used by coauth. The provider callback URL is derived from it, so it must be the public URL visible to both end users and the upstream provider
  - create an OAuth 2.0/OIDC client on the provider's side, using the following parameters:
    - `redirect_uri`: `<http.public_base>/upstream/callback/<id>`
    - `response_type`: `code`
@@ -39,7 +39,7 @@ Important details about callback URLs:
 
  - the path is always `/upstream/callback/<id>`, where `<id>` is the provider `id` from the config
  - if `http.public_base` includes a path prefix, that prefix is part of the callback URL
- - do not register `/upstream/authorize/<id>` on the provider side; that is Pasion's own redirect entrypoint, not the provider callback
+ - do not register `/upstream/authorize/<id>` on the provider side; that is coauth's own redirect entrypoint, not the provider callback
 
 For example, if `http.public_base` is `https://example.com/coauth/` and the provider ID is `01JABCDEF0123456789ABCDEFG`, the callback URL to register upstream is `https://example.com/coauth/upstream/callback/01JABCDEF0123456789ABCDEFG`.
 
@@ -47,7 +47,7 @@ For example, if `http.public_base` is `https://example.com/coauth/` and the prov
 
 The authentication service supports importing the following user attributes from the provider:
 
- - The localpart/username (e.g. `@localpart:example.com`)
+ - The username (e.g. `alice`)
  - The display name
  - An email address
  - An account name, to help end users identify what account they are using
@@ -63,7 +63,7 @@ They can also configure what should be done for each of those attributes. It can
 A Jinja2 template is used as mapping for each attribute.
 The following default templates are used:
 
- - `localpart`: `{{ user.preferred_username }}`
+ - `username`: `{{ user.preferred_username }}`
  - `displayname`: `{{ user.name }}`
  - `email`: `{{ user.email }}`
  - `account_name`: none
@@ -78,10 +78,10 @@ The template has the following variables available:
 
 ## Allow linking existing user accounts
 
-The authentication service supports linking external provider identities to existing local user accounts if the `localpart` matches.
+The authentication service supports linking external provider identities to existing local user accounts if the `username` matches.
 
-If the `localpart` given by the upstream provider matches an existing user and the `claims_imports.localpart.action` is set to `force` or `require`, by default the service will refuse to link to that existing account.
-This behaviour is controlled by the `claims_imports.localpart.on_conflict` option, which can be set to:
+If the `username` given by the upstream provider matches an existing user and the `claims_imports.username.action` is set to `force` or `require`, by default the service will refuse to link to that existing account.
+This behaviour is controlled by the `claims_imports.username.on_conflict` option, which can be set to:
 
   * `fail` *(default)*: fails the upstream OAuth 2.0 login
   * `add`: automatically adds the upstream account to the existing user, regardless of whether the existing user already has another upstream account or not
@@ -93,7 +93,7 @@ upstream_oauth2:
   providers:
    - id: …
      claims_imports:
-       localpart:
+       username:
          action: force
          on_conflict: set
 ```
@@ -101,7 +101,7 @@ upstream_oauth2:
 > ⚠️ **Security Notice**
 > Enabling this option can introduce a risk of account takeover.
 >
-> To mitigate this risk, ensure that this option is only enabled for identity providers where you can guarantee that the attribute mapping `localpart` will reliably and uniquely correspond to the intended local user account.
+> To mitigate this risk, ensure that this option is only enabled for identity providers where you can guarantee that the attribute mapping `username` will reliably and uniquely correspond to the intended local user account.
 
 
 ## Multiple providers behaviour
@@ -125,11 +125,11 @@ The [`on_backchannel_logout`](../reference/configuration.md#upstream_oauth2) opt
 Possible values are:
 
  - `do_nothing`: Do nothing, other than validating and logging the request
- - `logout_browser_only`: Only log out the Pasion 'browser session' started by this OIDC session
- - `logout_all`: Log out all sessions started by this OIDC session, including Pasion 'browser sessions' and client sessions
+ - `logout_browser_only`: Only log out the coauth 'browser session' started by this OIDC session
+ - `logout_all`: Log out all sessions started by this OIDC session, including coauth 'browser sessions' and client sessions
 
 One important caveat is that `logout_all` will log out all sessions started by this upstream OIDC session, including 'remote' ones done through the Device Code flow.
-Concretely, this means that if QR-code login is used to log in on a phone from a laptop, when Pasion receives a backchannel logout request from the upstream provider for the laptop, Pasion will also log out the session on the phone.
+Concretely, this means that if QR-code login is used to log in on a phone from a laptop, when coauth receives a backchannel logout request from the upstream provider for the laptop, coauth will also log out the session on the phone.
 
 ## Sample configurations
 
@@ -161,7 +161,7 @@ upstream_oauth2:
         team_id: "<Team ID>" # TO BE FILLED
         key_id: "<Key ID>" # TO BE FILLED
       claims_imports:
-        localpart:
+        username:
           action: ignore
         displayname:
           action: suggest
@@ -182,14 +182,14 @@ upstream_oauth2:
 
 These instructions assume that you have already enabled the OIDC provider support in [Authelia](https://www.authelia.com/).
 
-Add a client for Pasion to Authelia's `configuration.yaml` (see the [Authelia OIDC documentation](https://www.authelia.com/configuration/identity-providers/openid-connect/clients/) for full details):
+Add a client for coauth to Authelia's `configuration.yaml` (see the [Authelia OIDC documentation](https://www.authelia.com/configuration/identity-providers/openid-connect/clients/) for full details):
 
 ```yaml
 identity_providers:
   oidc:
     clients:
       - client_id: "<client-id>" # TO BE FILLED
-          client_name: Matrix
+          client_name: coauth
           client_secret: "<client-secret>" # TO BE FILLED
           public: false
           redirect_uris:
@@ -220,7 +220,7 @@ upstream_oauth2:
     scope: "openid profile email"
     discovery_mode: insecure
     claims_imports:
-        localpart:
+        username:
           action: require
           template: "{{ user.preferred_username }}"
         displayname:
@@ -256,7 +256,7 @@ upstream_oauth2:
       token_endpoint_auth_method: client_secret_basic
       scope: "openid profile email"
       claims_imports:
-        localpart:
+        username:
           action: require
           template: "{{ user.preferred_username }}"
         displayname:
@@ -297,7 +297,7 @@ upstream_oauth2:
       client_secret: "<app-secret>" # TO BE FILLED
       scope: "openid"
       claims_imports:
-        localpart:
+        username:
           action: ignore
         displayname:
           action: suggest
@@ -333,7 +333,7 @@ upstream_oauth2:
         displayname:
           action: suggest
           template: "{{ user.name }}"
-        localpart:
+        username:
           action: ignore
         email:
           action: suggest
@@ -378,7 +378,7 @@ upstream_oauth2:
         displayname:
           action: suggest
           template: "{{ userinfo_claims.name or userinfo_claims.login }}"
-        localpart:
+        username:
           action: ignore
         email:
           action: suggest
@@ -414,7 +414,7 @@ upstream_oauth2:
       client_secret: "<client-secret>" # TO BE FILLED
       scope: "openid profile email"
       claims_imports:
-        localpart:
+        username:
           action: ignore
         displayname:
           action: suggest
@@ -476,7 +476,7 @@ upstream_oauth2:
       client_secret: "<client-secret>" # TO BE FILLED
       scope: "openid profile email"
       claims_imports:
-        localpart:
+        username:
           action: require
           template: "{{ user.preferred_username }}"
         displayname:
@@ -512,7 +512,7 @@ upstream_oauth2:
       discovery_mode: insecure
 
       claims_imports:
-        localpart:
+        username:
           action: require
           template: "{{ (user.preferred_username | split('@'))[0] }}"
         displayname:
@@ -546,7 +546,7 @@ upstream_oauth2:
       userinfo_endpoint: "https://discord.com/api/users/@me"
       scope: "openid identify email"
       claims_imports:
-        localpart:
+        username:
           action: suggest
           template: "{{ user.username }}"
         displayname:
@@ -596,7 +596,7 @@ upstream_oauth2:
       client_secret: "<client-secret>" # TO BE FILLED
       scope: "openid profile email"
       claims_imports:
-        localpart:
+        username:
           action: ignore
         displayname:
           action: suggest
@@ -631,7 +631,7 @@ It is primarily based on SAML but also supports OIDC via the [OIDC OP Plugin](ht
 
 These instructions assume you have a running Shibboleth instance with the OIDC plugin configured.
 
-Register Pasion as a relying party in Shibboleth:
+Register coauth as a relying party in Shibboleth:
 
 1. Add a metadata file (e.g. `mas-metadata.xml`) to `%{idp.home}/metadata/` with the following content:
 
@@ -679,7 +679,7 @@ upstream_oauth2:
       discovery_mode: insecure
       fetch_userinfo: true
       claims_imports:
-        localpart:
+        username:
           action: require
           template: "{{ user.preferred_username }}"
         displayname:

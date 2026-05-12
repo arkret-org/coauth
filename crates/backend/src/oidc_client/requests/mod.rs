@@ -22,7 +22,7 @@ pub mod refresh_token;
 pub mod token;
 pub mod userinfo;
 
-// Pasion-specific request modules for social login providers.
+// coauth-specific request modules for social login providers.
 pub mod dingtalk;
 pub mod feishu;
 pub mod qq_connect;

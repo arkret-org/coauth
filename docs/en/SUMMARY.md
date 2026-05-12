@@ -10,7 +10,7 @@
 - [Installation](./setup/installation.md)
 - [General configuration](./setup/general.md)
 - [Database setup](./setup/database.md)
-- [Principal Server configuration](./setup/homeserver.md)
+- [Principal Server configuration](./setup/principal-server.md)
 - [Configuring a reverse proxy](./setup/reverse-proxy.md)
 - [Configure an upstream SSO provider](./setup/sso.md)
 - [Running the service](./setup/running.md)
@@ -22,7 +22,6 @@
 - [Authorization and sessions](./topics/authorization.md)
 - [Use the Admin API](./topics/admin-api.md)
 - [Get an access token](./topics/access-token.md)
-- [Legacy compatibility routes](./topics/legacy-compatibility.md)
 
 # Operations
 
@@ -49,7 +48,3 @@
 - [Releasing](./development/releasing.md)
 - [Architecture](./development/architecture.md)
 - [Database](./development/database.md)
-
----
-
-[Application Services login](./as-login.md)

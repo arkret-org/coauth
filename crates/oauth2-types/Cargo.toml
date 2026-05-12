@@ -1,6 +1,6 @@
 [package]
 name = "oauth2-types"
-description = "OAuth 2.0 and OpenID Connect wire types for Pasion"
+description = "OAuth 2.0 and OpenID Connect wire types for coauth"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

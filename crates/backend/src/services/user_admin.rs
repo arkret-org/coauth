@@ -129,7 +129,11 @@ pub async fn patch_user(
 
     if should_schedule_deactivation {
         repo.queue_job()
-            .schedule_job(rng, clock, DeactivateUserJob::new(&updated, principal_erase))
+            .schedule_job(
+                rng,
+                clock,
+                DeactivateUserJob::new(&updated, principal_erase),
+            )
             .await?;
     }
 

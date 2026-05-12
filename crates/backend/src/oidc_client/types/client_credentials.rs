@@ -106,7 +106,7 @@ pub enum ClientCredentials {
         token_endpoint: Url,
     },
 
-    // -- Pasion-specific credential types for social login providers --
+    // -- coauth-specific credential types for social login providers --
     /// The client authenticates using Sign in with Apple.
     ///
     /// Apple requires a specially constructed JWT as the client_secret.
@@ -322,7 +322,7 @@ impl ClientCredentials {
                 })
             }
 
-            // -- Pasion-specific social provider handling --
+            // -- coauth-specific social provider handling --
             ClientCredentials::QQConnect {
                 client_id,
                 client_secret,

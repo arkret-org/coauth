@@ -30,7 +30,6 @@ http:
         - name: restapi
         - name: assets
           path: ./dist
-        - name: compat    # legacy Matrix compatibility adapter
         - name: adminapi  # admin API
 ```
 
@@ -43,7 +42,6 @@ Common resource names:
 - `oauth` for OAuth2 / OIDC endpoints
 - `restapi` for the SPA/API backend
 - `assets` for frontend assets
-- `compat` for legacy Matrix compatibility routes
 - `adminapi` for `/api/admin/v1/*`
 - `health` and `prometheus` for internal operations
 
@@ -102,21 +100,6 @@ contrix:
 - `issuer_did`: DID emitted in session grants, defaults to `service_did`
 - `admin_audience`: audience expected by Contrix admin integrations, defaults
   to the local `/api/v1` endpoint
-
-## `matrix`
-
-Legacy Matrix account-domain compatibility configuration. The Palpo/Matrix
-connector has been retired; this section no longer wires a homeserver adapter.
-
-```yaml
-matrix:
-  enabled: false
-  homeserver: example.com
-```
-
-`homeserver` is now only the legacy account-domain/server-name used by older
-identifier paths. Contrix-first deployments should publish Soland through
-`contrix.principal_servers` and keep this adapter disabled.
 
 ## `templates`
 
@@ -307,7 +290,6 @@ Feature flags and tunables that may still move or change shape.
 ```yaml
 experimental:
   access_token_ttl: 300
-  compat_token_ttl: 300
 ```
 
 ## `storage`

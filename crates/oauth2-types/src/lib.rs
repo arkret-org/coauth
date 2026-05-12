@@ -1,10 +1,10 @@
 //! [OAuth 2.0] and [OpenID Connect] types.
 //!
-//! This is part of the [Pasion] project.
+//! This is part of the coauth project.
 //!
 //! [OAuth 2.0]: https://oauth.net/2/
 //! [OpenID Connect]: https://openid.net/connect/
-//! [Pasion]: https://github.com/contrix-dev/coauth
+//! [coauth]: https://github.com/contrix-dev/coauth
 
 #![deny(missing_docs)]
 #![allow(clippy::module_name_repetitions)]

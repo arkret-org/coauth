@@ -112,7 +112,7 @@ pub async fn config_sync(
     // Note: this string is hashed into a pg advisory-lock key. Do not rename
     // without a coordinated upgrade — it would let an old and a new process
     // hold different locks and step on each other.
-    let lock_key = advisory_lock_key("Pasion config sync");
+    let lock_key = advisory_lock_key("coauth config sync");
 
     // pg_advisory_lock blocks until the lock is acquired (returns void/true)
     let _: AdvisoryLockResult = sql_query(format!(

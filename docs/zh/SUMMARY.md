@@ -10,7 +10,7 @@
 - [安装](./setup/installation.md)
 - [基本配置](./setup/general.md)
 - [数据库设置](./setup/database.md)
-- [Principal Server 配置](./setup/homeserver.md)
+- [Principal Server 配置](./setup/principal-server.md)
 - [配置反向代理](./setup/reverse-proxy.md)
 - [配置上游 SSO 提供商](./setup/sso.md)
 - [运行服务](./setup/running.md)
@@ -22,7 +22,6 @@
 - [授权与会话](./topics/authorization.md)
 - [使用管理 API](./topics/admin-api.md)
 - [获取访问令牌](./topics/access-token.md)
-- [Legacy 兼容路由](./topics/legacy-compatibility.md)
 
 # 运维
 
@@ -45,7 +44,3 @@
 
 - [贡献指南](./development/contributing.md)
 - [架构设计](./development/architecture.md)
-
----
-
-[Application Services 登录](./as-login.md)

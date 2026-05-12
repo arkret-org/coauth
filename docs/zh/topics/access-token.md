@@ -35,9 +35,6 @@ Contrix-native 集成应使用 Contrix scope：
 sh ./misc/device-code-grant.sh https://auth.example.com/ urn:contrix:admin:* urn:contrix:principal-server:session.bind
 ```
 
-Legacy Matrix / Palpo scope 只适用于显式启用 compatibility adapter 的部署。新的 CLI
-或 admin 集成不应再请求这些 scope。
-
 ## 自动化
 
 非交互式自动化应优先使用 OAuth 2.0 client credentials grant，并配置 confidential

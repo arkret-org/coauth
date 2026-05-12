@@ -1,4 +1,4 @@
-//! Unified notification delivery for the Pasion authentication service.
+//! Unified notification delivery for the coauth authentication service.
 //!
 //! Provides email and SMS transports behind a common trait interface.
 

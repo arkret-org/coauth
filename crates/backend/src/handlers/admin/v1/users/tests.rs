@@ -600,7 +600,11 @@ mod tests {
         assert_eq!(body["data"]["attributes"]["admin"], true);
         assert!(body["data"]["attributes"]["locked_at"].is_string());
 
-        let user = state.principal_server_admin.query_user(&username).await.unwrap();
+        let user = state
+            .principal_server_admin
+            .query_user(&username)
+            .await
+            .unwrap();
         assert_eq!(user.displayname.as_deref(), Some("Alice Admin"));
     }
 

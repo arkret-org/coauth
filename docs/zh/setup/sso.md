@@ -1,6 +1,6 @@
 # 配置上游 SSO 提供商
 
-Pasion 支持把外部身份提供商接入为 upstream，用于登录、注册和账户关联。
+coauth 支持把外部身份提供商接入为 upstream，用于登录、注册和账户关联。
 
 常见场景分两类：
 
@@ -65,7 +65,7 @@ upstream_oauth2:
       token_endpoint_auth_method: client_secret_post
       scope: "openid profile email"
       claims_imports:
-        localpart:
+        username:
           action: ignore
         displayname:
           action: suggest
@@ -80,7 +80,7 @@ upstream_oauth2:
 - 只要 `discovery_mode` 没设成 `disabled`，`issuer` 就是必填项
 - `issuer` 必须和 provider 的 `/.well-known/openid-configuration` 返回的 `issuer` 完全一致
 - 多数标准 OIDC provider 用 `scope: "openid profile email"` 就够了
-- 如果你不想让 upstream 自动决定 Matrix 用户名，`localpart.action` 用 `ignore` 最稳
+- 如果你不想让 upstream 自动决定 本地用户名，`username.action` 用 `ignore` 最稳
 
 ## Google
 
@@ -95,7 +95,7 @@ Google 属于标准 OIDC 提供商，直接走 discovery 即可。
    `https://<你的对外域名>/upstream/callback/<provider-id>`
 5. 记录生成的 `Client ID` 和 `Client Secret`
 
-Pasion 配置示例：
+coauth 配置示例：
 
 ```yaml
 upstream_oauth2:
@@ -109,7 +109,7 @@ upstream_oauth2:
       token_endpoint_auth_method: client_secret_post
       scope: "openid profile email"
       claims_imports:
-        localpart:
+        username:
           action: ignore
         displayname:
           action: suggest
@@ -125,11 +125,11 @@ upstream_oauth2:
 
 - `issuer` 推荐写成 `https://accounts.google.com`，不要额外加尾部 `/`
 - callback URL 里的 `<provider-id>` 必须是这条配置里的 `id`
-- 如果你的 Pasion 部署在子路径下，例如 `https://example.com/coauth/`，Google 后台里也必须登记带子路径的完整 callback URL
+- 如果你的 coauth 部署在子路径下，例如 `https://example.com/coauth/`，Google 后台里也必须登记带子路径的完整 callback URL
 
 ## GitHub
 
-GitHub 不是标准 OIDC provider。Pasion 对 GitHub 使用的是 OAuth 2.0 + 手工指定端点 + `userinfo` 拉取资料的模式。
+GitHub 不是标准 OIDC provider。coauth 对 GitHub 使用的是 OAuth 2.0 + 手工指定端点 + `userinfo` 拉取资料的模式。
 
 在 GitHub Developer Settings 中：
 
@@ -141,7 +141,7 @@ GitHub 不是标准 OIDC provider。Pasion 对 GitHub 使用的是 OAuth 2.0 + �
 5. 保存后拿到 `Client ID`
 6. 生成并保存 `Client Secret`
 
-Pasion 配置示例：
+coauth 配置示例：
 
 ```yaml
 upstream_oauth2:
@@ -164,7 +164,7 @@ upstream_oauth2:
         displayname:
           action: suggest
           template: "{{ userinfo_claims.name or userinfo_claims.login }}"
-        localpart:
+        username:
           action: ignore
         email:
           action: suggest
@@ -198,7 +198,7 @@ GitLab、Keycloak、Authentik、Azure AD 等标准 OIDC 提供商，原则上都
 | 字段 | 说明 |
 |------|------|
 | `subject` | 上游身份的唯一标识，用来建立账号关联 |
-| `localpart` | Matrix ID 的本地部分 |
+| `username` | 本地账户用户名 |
 | `displayname` | 显示名 |
 | `email` | 邮箱 |
 | `avatar` | 头像 URL |
@@ -215,7 +215,7 @@ GitLab、Keycloak、Authentik、Azure AD 等标准 OIDC 提供商，原则上都
 
 大多数场景建议：
 
-- `localpart`: `ignore`
+- `username`: `ignore`
 - `displayname`: `suggest`
 - `email`: `suggest`
 

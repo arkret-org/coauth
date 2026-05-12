@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_build_otpauth_uri() {
-        let uri = build_otpauth_uri("JBSWY3DPEHPK3PXP", "Pasion", "user@example.com");
+        let uri = build_otpauth_uri("JBSWY3DPEHPK3PXP", "coauth", "user@example.com");
         assert!(uri.starts_with("otpauth://totp/"));
         assert!(uri.contains("secret=JBSWY3DPEHPK3PXP"));
         assert!(uri.contains("issuer="));

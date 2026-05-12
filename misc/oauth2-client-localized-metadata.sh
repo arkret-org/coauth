@@ -1,5 +1,5 @@
 #!/bin/sh
-# OAuth 2.0 client localised metadata management helper for Pasion.
+# OAuth 2.0 client localised metadata management helper for coauth.
 #
 # Usage:
 #   ./oauth2-client-localized-metadata.sh get  <admin-url> <admin-token> <client-id>

@@ -6,8 +6,8 @@ Connection to the database is configured in the [`database`](../reference/config
 
 ## A warning about database pooling software
 
-Pasion must not be connected to a database pooler (such as pgBouncer or pgCat) when it is configured in transaction pooling mode.
-This is because Pasion uses advisory locks, which are not compatible with transaction pooling.
+coauth must not be connected to a database pooler (such as pgBouncer or pgCat) when it is configured in transaction pooling mode.
+This is because coauth uses advisory locks, which are not compatible with transaction pooling.
 
 You should instead configure such poolers in session pooling mode.
 
@@ -69,7 +69,7 @@ coauth database migrate
 
 Once the database is up, the remaining steps are to:
 
- - [Configure Principal Server discovery (recommended)](./homeserver.md)
+ - [Configure Principal Server discovery (recommended)](./principal-server.md)
  - [Setup email sending (optional)](../reference/configuration.md#email)
  - [Configure a reverse proxy (optional)](./reverse-proxy.md)
  - [Run the service](./running.md)

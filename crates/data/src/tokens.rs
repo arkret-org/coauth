@@ -49,7 +49,7 @@ pub struct AccessToken {
     pub access_token: String,
     pub created_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
-    /// Pasion-original: tracks the first time this token was actually used.
+    /// coauth extension: tracks the first time this token was actually used.
     pub first_used_at: Option<DateTime<Utc>>,
 }
 
@@ -105,7 +105,7 @@ impl AccessToken {
     }
 }
 
-/// Pasion-original: RefreshTokenState extended with `Revoked` variant and
+/// coauth extension: RefreshTokenState extended with `Revoked` variant and
 /// `next_refresh_token_id` tracking (replacing the simple Apache 2.0
 /// `Consumed` state).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -225,7 +225,7 @@ impl RefreshToken {
 
 /// Type of token to generate or validate
 ///
-/// Pasion-original: replaces Compat* token types with PersonalAccessToken.
+/// coauth extension: personal-access-token format marker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenType {
     /// An access token, used by Relying Parties to authenticate requests

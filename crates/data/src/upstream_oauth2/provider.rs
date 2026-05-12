@@ -110,7 +110,7 @@ impl std::fmt::Display for PkceMode {
     }
 }
 
-/// Pasion-original: response mode for the upstream OAuth 2.0 authorization
+/// coauth extension: response mode for the upstream OAuth 2.0 authorization
 /// request.
 #[derive(Debug, Clone, Error)]
 #[error("Invalid response mode {0:?}")]
@@ -161,7 +161,7 @@ impl std::str::FromStr for ResponseMode {
     }
 }
 
-/// Pasion-original: token endpoint authentication method for upstream
+/// coauth extension: token endpoint authentication method for upstream
 /// providers.
 ///
 /// Extends the standard OAuth methods with platform-specific variants for
@@ -235,7 +235,7 @@ impl std::str::FromStr for TokenAuthMethod {
 #[error("Invalid upstream OAuth 2.0 token auth method: {0}")]
 pub struct InvalidUpstreamOAuth2TokenAuthMethod(String);
 
-/// Pasion-original: behaviour on receiving a backchannel logout from an
+/// coauth extension: behaviour on receiving a backchannel logout from an
 /// upstream provider.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -329,7 +329,7 @@ impl std::str::FromStr for ProviderSource {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UpstreamOAuthProvider {
     pub id: Ulid,
-    /// Pasion-original: `issuer` is Optional (for non-OIDC providers)
+    /// coauth extension: `issuer` is Optional (for non-OIDC providers)
     pub issuer: Option<String>,
     pub human_name: Option<String>,
     pub brand_name: Option<String>,
@@ -339,29 +339,29 @@ pub struct UpstreamOAuthProvider {
     pub authorization_endpoint_override: Option<Url>,
     pub scope: Scope,
     pub token_endpoint_override: Option<Url>,
-    /// Pasion-original: allow overriding the userinfo endpoint
+    /// coauth extension: allow overriding the userinfo endpoint
     pub userinfo_endpoint_override: Option<Url>,
-    /// Pasion-original: whether to fetch userinfo from the upstream
+    /// coauth extension: whether to fetch userinfo from the upstream
     pub fetch_userinfo: bool,
-    /// Pasion-original: signing alg for userinfo responses
+    /// coauth extension: signing alg for userinfo responses
     pub userinfo_signed_response_alg: Option<JsonWebSignatureAlg>,
     pub client_id: String,
     pub encrypted_client_secret: Option<String>,
     pub token_endpoint_signing_alg: Option<JsonWebSignatureAlg>,
-    /// Pasion-original: uses custom `TokenAuthMethod` enum instead of
+    /// coauth extension: uses custom `TokenAuthMethod` enum instead of
     /// `OAuthClientAuthenticationMethod`
     pub token_endpoint_auth_method: TokenAuthMethod,
-    /// Pasion-original: expected signing algorithm for ID tokens
+    /// coauth extension: expected signing algorithm for ID tokens
     pub id_token_signed_response_alg: JsonWebSignatureAlg,
-    /// Pasion-original: response mode for the authorization request
+    /// coauth extension: response mode for the authorization request
     pub response_mode: Option<ResponseMode>,
     pub created_at: DateTime<Utc>,
     pub disabled_at: Option<DateTime<Utc>>,
     pub claims_imports: ClaimsImports,
     pub additional_authorization_parameters: Vec<(String, String)>,
-    /// Pasion-original: whether to forward the login_hint parameter
+    /// coauth extension: whether to forward the login_hint parameter
     pub forward_login_hint: bool,
-    /// Pasion-original: backchannel logout behaviour
+    /// coauth extension: backchannel logout behaviour
     pub on_backchannel_logout: OnBackchannelLogout,
     /// Where the row originated (config file vs admin API).
     pub source: ProviderSource,
@@ -392,7 +392,7 @@ pub struct ClaimsImports {
     #[serde(default)]
     pub subject: SubjectPreference,
 
-    /// Pasion-original: whether to skip the confirmation step
+    /// coauth extension: whether to skip the confirmation step
     #[serde(default)]
     pub skip_confirmation: bool,
 
@@ -408,7 +408,7 @@ pub struct ClaimsImports {
     #[serde(default)]
     pub avatar: ImportPreference,
 
-    /// Pasion-original: template for computing a human-readable account name
+    /// coauth extension: template for computing a human-readable account name
     #[serde(default)]
     pub account_name: SubjectPreference,
 }
@@ -423,7 +423,7 @@ pub struct SubjectPreference {
     pub template: Option<String>,
 }
 
-/// Pasion-original: username preference with conflict-resolution strategy.
+/// coauth extension: username preference with conflict-resolution strategy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct UsernamePreference {
     #[serde(default)]
@@ -504,7 +504,7 @@ impl ImportAction {
     }
 }
 
-/// Pasion-original: conflict-resolution strategy for upstream username
+/// coauth extension: conflict-resolution strategy for upstream username
 /// imports.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]

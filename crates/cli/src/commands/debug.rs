@@ -5,8 +5,7 @@ use coauth_backend::util::{
     diesel_pool_from_config, load_policy_factory_dynamic_data, policy_factory_from_config,
 };
 use coauth_config::{
-    ConfigurationSection, ConfigurationSectionExt, DatabaseConfig, ExperimentalConfig,
-    PolicyConfig,
+    ConfigurationSection, ConfigurationSectionExt, DatabaseConfig, ExperimentalConfig, PolicyConfig,
 };
 use coauth_data::PgRepositoryFactory;
 use figment::Figment;

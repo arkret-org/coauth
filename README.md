@@ -17,22 +17,16 @@ delegated/public DID resolver services.
 - `sodmin` uses the admin API with `urn:coauth:admin` or
   `urn:contrix:admin:*`.
 - A delegated/public DID resolver remains the identity registry / resolver source.
-- Matrix / Palpo support remains available as a legacy compatibility adapter,
-  not the primary product path.
 
 ## Current status
 
-The repository is still migrating away from older Pasion / Matrix assumptions.
-The primary Contrix paths already include:
+The primary Contrix paths include:
 
 - `/.well-known/openid-configuration`
 - `/.well-known/did.json`
 - `/api/v1/server/describe`
 - `/api/v1/identity/describe`
 - `/api/v1/directory/resolve-handle`
-
-Some legacy naming and compatibility code still exists in non-primary paths.
-Track the remaining work in the cross-project [`../_todos.md`](../_todos.md).
 
 ## Features
 
@@ -46,8 +40,6 @@ Track the remaining work in the cross-project [`../_todos.md`](../_todos.md).
   policy data
 - Email / SMS notification runtime, rate limiting, CAPTCHA hooks, telemetry,
   and policy enforcement
-- Legacy Matrix / Palpo compatibility adapter for deployments that still need
-  delegated-auth bridging
 
 ## Quick start
 
@@ -87,16 +79,7 @@ secrets:
 
 passwords:
   enabled: true
-
-matrix:
-  homeserver: matrix.example.com
-  secret: legacy-shared-secret
-  endpoint: https://matrix.example.com/
 ```
-
-`matrix` is still present in the config model because the compatibility adapter
-has not been fully split into a separate profile yet. Treat it as legacy
-integration config unless you are actively serving Matrix / Palpo flows.
 
 ### 3. Start the server
 

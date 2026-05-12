@@ -45,7 +45,7 @@ The server exposes health endpoints at `/health` and `/healthz` that return HTTP
 
 ```ini
 [Unit]
-Description=Pasion Authentication Service
+Description=coauth Authentication Service
 After=network.target postgresql.service
 
 [Service]

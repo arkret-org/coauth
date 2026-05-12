@@ -37,9 +37,6 @@ Use Contrix scopes for Contrix-native integrations:
 sh ./misc/device-code-grant.sh https://auth.example.com/ urn:contrix:admin:* urn:contrix:principal-server:session.bind
 ```
 
-Legacy Matrix / Palpo scopes are only for deployments that explicitly enable a
-compatibility adapter. New CLI/admin integrations should not request them.
-
 ## Automation
 
 For non-interactive automation, prefer the OAuth 2.0 client credentials grant

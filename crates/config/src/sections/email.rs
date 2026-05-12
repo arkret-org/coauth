@@ -485,7 +485,7 @@ mod tests {
                 "config.yaml",
                 r#"
                     email:
-                      from: 'Pasion <noreply@example.com>'
+                      from: 'coauth <noreply@example.com>'
                       reply_to: 'Support <support@example.com>'
                       provider:
                         type: smtp
@@ -501,7 +501,7 @@ mod tests {
                 .merge(Yaml::file("config.yaml"))
                 .extract_inner::<EmailConfig>("email")?;
 
-            assert_eq!(config.from, "Pasion <noreply@example.com>");
+            assert_eq!(config.from, "coauth <noreply@example.com>");
             match config.provider {
                 EmailProviderConfig::Smtp(provider) => {
                     assert_eq!(provider.hostname, "smtp.example.com");
@@ -521,7 +521,7 @@ mod tests {
                 "config.yaml",
                 r#"
                     email:
-                      from: 'Pasion <noreply@example.com>'
+                      from: 'coauth <noreply@example.com>'
                       reply_to: 'Support <support@example.com>'
                       provider:
                         type: resend
@@ -562,7 +562,7 @@ mod tests {
                 "config.yaml",
                 r#"
                     email:
-                      from: 'Pasion <noreply@example.com>'
+                      from: 'coauth <noreply@example.com>'
                       reply_to: 'Support <support@example.com>'
                       provider:
                         type: smtp
@@ -591,7 +591,7 @@ mod tests {
                 "config.yaml",
                 r#"
                     email:
-                      from: 'Pasion <noreply@example.com>'
+                      from: 'coauth <noreply@example.com>'
                       reply_to: 'Support <support@example.com>'
                       provider:
                         type: http_webhook
@@ -618,7 +618,7 @@ mod tests {
                 "config.yaml",
                 r#"
                     email:
-                      from: 'Pasion <noreply@example.com>'
+                      from: 'coauth <noreply@example.com>'
                       reply_to: 'Support <support@example.com>'
                       provider:
                         type: sendgrid
@@ -646,7 +646,7 @@ mod tests {
                 "config.yaml",
                 r#"
                     email:
-                      from: 'Pasion <noreply@example.com>'
+                      from: 'coauth <noreply@example.com>'
                       reply_to: 'Support <support@example.com>'
                       provider:
                         type: aws_ses
@@ -675,7 +675,7 @@ mod tests {
                 "config.yaml",
                 r#"
                     email:
-                      from: 'Pasion <noreply@example.com>'
+                      from: 'coauth <noreply@example.com>'
                       reply_to: 'Support <support@example.com>'
                       provider:
                         type: brevo

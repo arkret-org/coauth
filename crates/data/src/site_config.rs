@@ -25,14 +25,14 @@ pub struct CaptchaConfig {
     pub secret_key: String,
 }
 
-/// Pasion-original: automatic session expiration configuration
+/// coauth extension: automatic session expiration configuration
 #[derive(Debug, Clone)]
 pub struct SessionExpirationConfig {
     pub user_session_inactivity_ttl: Option<Duration>,
     pub oauth_session_inactivity_ttl: Option<Duration>,
 }
 
-/// Pasion-original: limits on the number of application sessions per user
+/// coauth extension: limits on the number of application sessions per user
 #[derive(Serialize, Debug, Clone)]
 pub struct SessionLimitConfig {
     pub soft_limit: NonZeroU64,
@@ -46,7 +46,7 @@ pub struct SiteConfig {
     /// Time-to-live of access tokens.
     pub access_token_ttl: Duration,
 
-    /// The server name, e.g. "matrix.org".
+    /// The server name, e.g. "auth.example.com".
     pub server_name: String,
 
     /// The URL to the privacy policy.
@@ -64,11 +64,11 @@ pub struct SiteConfig {
     /// Whether password registration is enabled.
     pub password_registration_enabled: bool,
 
-    /// Pasion-original: whether at least one contact method (email or phone) is
+    /// coauth extension: whether at least one contact method (email or phone) is
     /// required for password registrations.
     pub password_registration_contact_required: bool,
 
-    /// Pasion-original: whether registration tokens are required for password
+    /// coauth extension: whether registration tokens are required for password
     /// registrations.
     pub registration_token_required: bool,
 
@@ -88,7 +88,7 @@ pub struct SiteConfig {
     /// Whether users can recover their account via email.
     pub account_recovery_allowed: bool,
 
-    /// Pasion-original: whether users can delete their own account.
+    /// coauth extension: whether users can delete their own account.
     pub account_deactivation_allowed: bool,
 
     /// Captcha configuration
@@ -98,23 +98,23 @@ pub struct SiteConfig {
     /// This is a score from zxcvbn.
     pub minimum_password_complexity: u8,
 
-    /// Pasion-original: automatic session expiration
+    /// coauth extension: automatic session expiration
     pub session_expiration: Option<SessionExpirationConfig>,
 
-    /// Pasion-original: whether users can log in with their email address.
+    /// coauth extension: whether users can log in with their email address.
     pub login_with_email_allowed: bool,
 
     /// URL of the external admin portal shown to eligible users.
     pub admin_portal_url: Option<Url>,
 
-    /// Pasion-original: the iframe URL to show in the plan tab of the UI
+    /// coauth extension: the iframe URL to show in the plan tab of the UI
     pub plan_management_iframe_uri: Option<String>,
 
-    /// Pasion-original: limits on the number of application sessions that each
+    /// coauth extension: limits on the number of application sessions that each
     /// user can have
     pub session_limit: Option<SessionLimitConfig>,
 
-    /// Pasion-original: when true, registration/recovery/password-change use
+    /// coauth extension: when true, registration/recovery/password-change use
     /// the flow engine instead of the legacy service modules.
     pub flow_engine_enabled: bool,
 

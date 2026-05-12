@@ -1,6 +1,6 @@
 # 数据库设置
 
-Pasion 使用 **PostgreSQL** 作为唯一的数据存储后端。
+coauth 使用 **PostgreSQL** 作为唯一的数据存储后端。
 
 ## 要求
 
@@ -8,7 +8,7 @@ Pasion 使用 **PostgreSQL** 作为唯一的数据存储后端。
 - 建议使用专用数据库用户
 - 数据库用户需要拥有建表、建索引等 DDL 权限（用于自动迁移）
 
-> **注意：** 如果你使用数据库连接池工具（如 PgBouncer），请确保使用 **session** 模式而非 **transaction** 模式。Transaction 模式不支持 Pasion 使用的某些 PostgreSQL 特性（如 `LISTEN/NOTIFY`）。
+> **注意：** 如果你使用数据库连接池工具（如 PgBouncer），请确保使用 **session** 模式而非 **transaction** 模式。Transaction 模式不支持 coauth 使用的某些 PostgreSQL 特性（如 `LISTEN/NOTIFY`）。
 
 ## 创建数据库
 
@@ -34,7 +34,7 @@ database:
 
 ## 数据库迁移
 
-Pasion 使用自动迁移机制管理数据库架构。默认情况下，`coauth server` 启动时会自动应用所有待执行的迁移。
+coauth 使用自动迁移机制管理数据库架构。默认情况下，`coauth server` 启动时会自动应用所有待执行的迁移。
 
 如果你希望手动控制迁移过程：
 

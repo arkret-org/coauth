@@ -1,6 +1,6 @@
 [package]
 name = "coauth-keystore"
-description = "Secret key storage and management for Pasion"
+description = "Secret key storage and management for coauth"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

@@ -43,20 +43,6 @@ minor 之间**可能**变化的：
 - 模板变量；自定义模板需要在每次升级时 rebase。
 - Cedar / OPA policy bundle。
 
-## 从 Pasion / Palpo 老部署迁移
-
-1. 进入维护模式，停止新写入。
-2. 完整 `pg_dump`。
-3. 上线新二进制；除非确实仍需 Matrix 兼容流程，否则**关闭 legacy
-   compatibility adapter**。配置开关位于 `matrix.enabled`：`true` 保留
-   原有 Palpo 连接，`false` 切换为 no-op stub,启动时不再握手 homeserver。
-   `coauth config generate` 自此版本起默认生成 `enabled: false`。
-4. 重新发布 OAuth client metadata，迁移到 `urn:contrix:client:*` 与
-   `urn:contrix:admin:*`；旧的 `urn:matrix:*` scope 仅 legacy adapter 接受。
-5. 反向代理规则改为新的 `/api/v1/*`（Contrix）与 `/api/admin/v1/*`（管理 API），
-   不再使用 `/_palpo/*`。
-6. 重新跑 `coauth doctor`，把输出存进运维 runbook。
-
 ## 环境变量迁移
 
 老的 `PASION_CONFIG` / `PASION_*` 仍然兼容，但已被标记为 deprecated。

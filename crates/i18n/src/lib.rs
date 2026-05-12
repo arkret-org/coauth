@@ -1,4 +1,4 @@
-//! Internationalization (i18n) support for the Pasion authentication service.
+//! Internationalization (i18n) support for the coauth authentication service.
 //!
 //! This crate provides:
 //!

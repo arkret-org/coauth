@@ -1402,7 +1402,7 @@ mod tests {
         assert!(json["paths"]["/api/admin/v1/claims"].is_object());
         assert!(json["paths"]["/api/admin/v1/claims/status"].is_object());
         assert!(json["paths"]["/api/admin/v1/policy-checks/dry-run"].is_object());
-        assert!(!body.contains("Pasion Admin API"));
+        assert!(!body.contains("coauth Admin API"));
     }
 
     #[tokio::test]
@@ -1429,7 +1429,7 @@ mod tests {
             let body = response.take_string().await.unwrap();
             assert!(body.contains("title: coauth Admin API"), "{body}");
             assert!(body.contains("/api/admin/v1/user-sessions:"), "{body}");
-            assert!(!body.contains("Pasion Admin API"), "{body}");
+            assert!(!body.contains("coauth Admin API"), "{body}");
         }
     }
 }

@@ -284,7 +284,11 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
 }
 
 #[component]
-fn AccountDeleteButton(principal_id: String, has_password: bool, password_login_enabled: bool) -> Element {
+fn AccountDeleteButton(
+    principal_id: String,
+    has_password: bool,
+    password_login_enabled: bool,
+) -> Element {
     let nav = navigator();
     let mut show_dialog = use_signal(|| false);
     let mut deactivating = use_signal(|| false);

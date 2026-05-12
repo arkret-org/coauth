@@ -301,7 +301,8 @@ impl TestState {
         let policy_factory =
             policy_factory(&site_config.server_name, serde_json::json!({})).await?;
 
-        let principal_server_admin = Arc::new(MockPrincipalServerAdmin::new(&site_config.server_name));
+        let principal_server_admin =
+            Arc::new(MockPrincipalServerAdmin::new(&site_config.server_name));
 
         let clock = Arc::new(MockClock::default());
         let rng = Arc::new(Mutex::new(ChaChaRng::seed_from_u64(42)));

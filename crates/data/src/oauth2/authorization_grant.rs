@@ -163,9 +163,9 @@ pub struct AuthorizationGrant {
     pub response_mode: ResponseMode,
     pub response_type_id_token: bool,
     pub created_at: DateTime<Utc>,
-    /// Pasion-original: login hint passed through the authorization request.
+    /// coauth extension: login hint passed through the authorization request.
     pub login_hint: Option<String>,
-    /// Pasion-original: preferred locale from the authorization request.
+    /// coauth extension: preferred locale from the authorization request.
     pub locale: Option<String>,
 }
 

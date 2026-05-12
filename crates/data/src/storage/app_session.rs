@@ -123,14 +123,14 @@ impl<'a> AppSessionFilter<'a> {
         self.last_active_after
     }
 
-    /// Only return active compatibility sessions
+    /// Only return active application sessions
     #[must_use]
     pub fn active_only(mut self) -> Self {
         self.state = Some(AppSessionState::Active);
         self
     }
 
-    /// Only return finished compatibility sessions
+    /// Only return finished application sessions
     #[must_use]
     pub fn finished_only(mut self) -> Self {
         self.state = Some(AppSessionState::Finished);

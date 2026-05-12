@@ -261,7 +261,11 @@ mod tests {
         );
         assert_eq!(stored.preferred_locale.as_deref(), Some("zh-CN"));
 
-        let principal_user = state.principal_server_admin.query_user(&username).await.unwrap();
+        let principal_user = state
+            .principal_server_admin
+            .query_user(&username)
+            .await
+            .unwrap();
         assert_eq!(principal_user.displayname.as_deref(), Some("Alice Example"));
     }
 }

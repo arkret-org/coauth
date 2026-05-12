@@ -221,7 +221,7 @@ coauth-upstream-oauth2-register-forced-display-name = Will use the following dis
 # Tells the user which email address will be imported
 coauth-upstream-oauth2-register-forced-email = Will use the following email address
 # Tells the user which username will be used
-coauth-upstream-oauth2-register-forced-localpart = Will use the following username
+coauth-upstream-oauth2-register-forced-username = Will use the following username
 coauth-upstream-oauth2-register-import-data-description = Confirm the information that will be linked to your new { $server_name } account.
 coauth-upstream-oauth2-register-import-data-heading = Import your data
 coauth-upstream-oauth2-register-imported-from-upstream = Imported from your upstream account

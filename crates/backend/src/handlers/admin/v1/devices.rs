@@ -87,7 +87,7 @@ pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<Device
     let ctx = extract_call_context(req, depot).await?;
     ctx.repo.cancel().await?;
     // TODO(contrix): derive device records from device DID registration and
-    // session bindings instead of legacy Matrix device scopes.
+    // session bindings instead of device scopes.
     Err(AppError::not_implemented(
         "device administration list is not implemented yet",
     ))

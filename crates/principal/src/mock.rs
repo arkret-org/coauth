@@ -70,11 +70,7 @@ impl PrincipalServerAdmin {
     }
 
     pub async fn reserve_username(&self, username: &'static str) {
-        self.state
-            .write()
-            .await
-            .blocked_usernames
-            .insert(username);
+        self.state.write().await.blocked_usernames.insert(username);
     }
 }
 
@@ -238,7 +234,6 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
         record.displayname = None;
         Ok(())
     }
-
 }
 
 #[cfg(test)]

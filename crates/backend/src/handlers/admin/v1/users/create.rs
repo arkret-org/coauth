@@ -44,9 +44,9 @@ pub struct AddRequest {
 
     /// Skip checking with the PrincipalServer whether the username is available.
     ///
-    /// Use this with caution! The main reason to use this, is when a user used
-    /// by an application service needs to exist in the compatibility adapter
-    /// to craft special tokens (like admin access) for them
+    /// Use this with caution. It bypasses downstream username reservation and
+    /// should only be used when the caller already knows the Principal Server
+    /// state is consistent.
     #[serde(default)]
     skip_principal_server_check: bool,
 }
@@ -82,11 +82,16 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
 
     if !principal_server_available {
         if !params.skip_principal_server_check {
-            return Err(AppError::conflict("Username is reserved by the PrincipalServer"));
+            return Err(AppError::conflict(
+                "Username is reserved by the PrincipalServer",
+            ));
         }
 
         // If we skipped the check, we still want to shout about it
-        warn!("Skipped PrincipalServer check for username {}", params.username);
+        warn!(
+            "Skipped PrincipalServer check for username {}",
+            params.username
+        );
     }
 
     let user = repo.user().add(&mut rng, &clock, params.username).await?;

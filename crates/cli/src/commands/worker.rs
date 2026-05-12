@@ -4,9 +4,9 @@ use clap::Parser;
 use coauth_backend::{
     lifecycle::LifecycleManager,
     util::{
-        database_url_from_config, diesel_pool_from_config,
-        notification_center_from_config, site_config_from_config, templates_from_config,
-        test_mailer_in_background, principal_server_connection_from_config,
+        database_url_from_config, diesel_pool_from_config, notification_center_from_config,
+        principal_server_connection_from_config, site_config_from_config, templates_from_config,
+        test_mailer_in_background,
     },
 };
 use coauth_config::{AppConfig, ConfigurationSection};

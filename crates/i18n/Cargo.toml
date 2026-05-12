@@ -1,6 +1,6 @@
 [package]
 name = "coauth-i18n"
-description = "Internationalization support for Pasion"
+description = "Internationalization support for coauth"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

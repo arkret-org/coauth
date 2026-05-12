@@ -4,8 +4,7 @@
 会话、设备、claim、OAuth 客户端、通知渠道、连接器和策略数据。
 
 管理 API 默认不暴露。需要在 `http.listeners` 的 `resources` 中启用 `adminapi`。所有请求
-都必须携带具备 `urn:coauth:admin` 或 `urn:contrix:admin:*` 的访问令牌；旧部署中的
-`urn:mas:admin` 仍作为兼容 scope 被接受。
+都必须携带具备 `urn:coauth:admin` 或 `urn:contrix:admin:*` 的访问令牌。
 
 ## API 文档
 
@@ -32,7 +31,7 @@ Contrix-native 管理面现在包含 `GET /api/admin/v1/accounts`、
 
 ```bash
 # 先通过设备码流程获取令牌
-coauth manage issue-compatibility-token --scope "urn:coauth:admin" <user_id>
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
 ```
 
 ### 2. OAuth 2.0 令牌

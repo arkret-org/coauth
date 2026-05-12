@@ -1,4 +1,4 @@
-//! Core data model types for the Pasion authentication service.
+//! Core data model types for the coauth authentication service.
 //!
 //! This crate defines the domain objects that are persisted in the database
 //! and shared across the application. Types here are storage-backend agnostic —
@@ -156,10 +156,10 @@ pub use self::{
         UpstreamOAuthLink, UpstreamOAuthLinkPatch, UpstreamOAuthProvider,
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
         UpstreamOAuthProviderImportAction, UpstreamOAuthProviderImportPreference,
-        UpstreamOAuthProviderUsernamePreference, UpstreamOAuthProviderOnBackchannelLogout,
-        UpstreamOAuthProviderOnConflict, UpstreamOAuthProviderPkceMode,
-        UpstreamOAuthProviderResponseMode, UpstreamOAuthProviderSource,
-        UpstreamOAuthProviderSubjectPreference, UpstreamOAuthProviderTokenAuthMethod,
+        UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderOnConflict,
+        UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderResponseMode,
+        UpstreamOAuthProviderSource, UpstreamOAuthProviderSubjectPreference,
+        UpstreamOAuthProviderTokenAuthMethod, UpstreamOAuthProviderUsernamePreference,
     },
     url_builder::UrlBuilder,
     user_agent::{DeviceType, UserAgent},

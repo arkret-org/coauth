@@ -1,4 +1,4 @@
-//! SMS transport and sending for Pasion authentication service.
+//! SMS transport and sending for coauth authentication service.
 
 mod aliyun;
 mod sender;

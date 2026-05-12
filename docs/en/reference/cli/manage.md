@@ -60,18 +60,6 @@ Options:
 $ coauth manage set-password <username> <password> --ignore-complexity
 ```
 
-## `manage issue-compatibility-token`
-
-Issue a compatibility token for a user.
-
-Options:
-- `--device-id <device_id>`: Device ID to set in the token. If not specified, a random device ID will be generated.
-- `--yes-i-want-to-grant-admin-privileges`: Whether the token should be given admin privileges.
-
-```
-$ coauth manage issue-compatibility-token <username> --device-id <device_id> --yes-i-want-to-grant-admin-privileges
-```
-
 ## `manage issue-user-registration-token`
 
 Create a new user registration token.

@@ -1,85 +1,52 @@
 # OAuth 2.0 作用域
 
-`coauth` 现在把 Contrix scope 视为主产品接口。Legacy Matrix / Palpo scope 仍然
-保留给 compatibility adapter，但不再是推荐的集成路径。
+`coauth` 当前支持 coauth 与 Contrix 命名空间下的 scope。
 
-## 主路径上的 coauth / Contrix scope
+## `openid`
 
-### `openid`
+请求 OpenID Connect `id_token`，并允许访问 userinfo endpoint。这是 `yougen`
+等交互式 OIDC client 的基础 scope。
 
-请求 OpenID Connect `id_token`，并允许访问 userinfo endpoint。对 `yougen`
-这样的交互式 OIDC client 来说，它仍然是基础 scope。
+## `email`
 
-### `email`
+请求用户已验证的邮箱地址。通常与 `openid` 一起使用。
 
-在部署中存在该数据时，请求用户的已验证邮箱地址。通常与 `openid` 搭配使用。
+## `urn:coauth:admin`
 
-### `urn:coauth:admin`
+标准 coauth 管理 scope。它授予 coauth admin API 访问权限，是稳定管理工具的首选。
 
-coauth 的 canonical admin scope，用于访问 coauth admin API，也是现阶段最稳定的
-管理权限入口。
+## `urn:contrix:admin:*`
 
-### `urn:contrix:admin:*`
+Contrix 管理能力族。`coauth` 接受 wildcard scope，也接受
+`urn:contrix:admin:<capability>` 前缀作为管理权限。
 
-Contrix admin capability family。当前 `coauth` 会接受整个 wildcard family，以及
-`urn:contrix:admin:<capability>` 前缀形式的管理权限。
+这个命名空间适合 `sodmin` 等 Contrix-native 管理集成。
 
-对于 `sodmin` 或内部自动化等 Contrix-native 管理集成，优先使用这个命名空间。
+## `urn:contrix:client:*`
 
-### `urn:contrix:client:*`
+面向一方或受信任 Contrix client 的能力族。
 
-Contrix client capability family，面向 `yougen` 这类第一方或受信任的 Contrix client。
+## `urn:contrix:client:device:[device id]`
 
-当前它主要作为粗粒度 capability family 被发布；后续可以在策略和客户端约定中继续细化。
+Contrix 设备绑定 scope。它把 OAuth session 与下游 Principal Server 使用的
+client device identifier 关联起来。
 
-### `urn:contrix:principal-server:*`
+## `urn:contrix:principal-server:*`
 
-Principal Server capability family，面向受信任的 Principal Server 集成，用于表达
-比通用 OIDC 登录更明确的能力边界。
+Principal Server 能力族。这个命名空间用于需要比普通 OIDC 登录更细粒度授权的
+受信任 Principal Server 集成。
 
-### `urn:contrix:principal-server:session.bind`
+## `urn:contrix:principal-server:session.bind`
 
-表示请求或描述“为当前认证后的浏览器会话签发短时 Contrix session grant”的能力。
-当 `coauth` 为受信任的 Principal Server 生成 session grant 时，会使用这个 scope。
+请求或描述为已认证浏览器会话签发短时 Contrix session grant 的能力。`coauth`
+给受信任 Principal Server 签发 session grant 时使用这个 scope。
 
-## 与 scope 一起暴露的 Contrix claim
+## Contrix Claims
 
-在适用时，ID token、userinfo 响应和 introspection 响应会暴露以下 Contrix claim：
+在适用场景下，ID token、userinfo response 和 introspection response 可以暴露：
 
 - `org.contrix.principal_did`
 - `org.contrix.device_id`
 - `org.contrix.session_id`
 
-只有当会话确实绑定了设备标识时，`device_id` 才会出现。
-
-## Legacy compatibility scope
-
-### `urn:matrix:client:api:*` 和 `urn:matrix:org.matrix.msc2967.client:api:*`
-
-这是 legacy Matrix client API access scope，属于 compatibility adapter 路径，不应再
-作为新的 Contrix 部署的主 scope contract。
-
-### `urn:matrix:client:device:[device id]` 和 `urn:matrix:org.matrix.msc2967.client:device:[device id]`
-
-这是 legacy Matrix device-binding scope，会把设备 ID 直接编码进 scope token，目前
-仍然被兼容路径识别。
-
-### `urn:palpo:admin:*`
-
-这是 legacy Palpo admin scope family，只有在 `coauth` 仍被用于旧 Palpo / Matrix
-delegated-auth bridge 时才相关。
-
-### `urn:mas:admin`
-
-这是为了向后兼容保留的 legacy admin scope。旧 token 仍可继续使用，但新的集成应迁移到
-`urn:coauth:admin` 或 `urn:contrix:admin:*`。
-
-## 策略说明
-
-- OIDC discovery 会发布主路径上的 Contrix scope family 和 claim。
-- `urn:coauth:admin` 是现有 admin API 的稳定 scope。
-- `urn:contrix:admin:*` 是 Contrix-native 的管理命名空间。
-- `urn:contrix:principal-server:session.bind` 用于受信任 Principal Server 的
-  session grant。
-- Matrix / Palpo scope 应视为 legacy compatibility affordance，而不是新工作的默认
-  scope registry。
+只有当 session 绑定到设备标识时才会出现 `device_id`。

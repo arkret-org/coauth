@@ -21,8 +21,8 @@ use crate::{
         RequesterFingerprint,
         account::service::registration::{
             BeginPasswordRegistrationError, BeginPasswordRegistrationRequest,
-            BeginPasswordRegistrationResult, EmailAvailabilityCheck, PrincipalServerCheckMode,
-            LoadRegistrationProgressError, RegistrationDisplayNameOutcome,
+            BeginPasswordRegistrationResult, EmailAvailabilityCheck, LoadRegistrationProgressError,
+            PrincipalServerCheckMode, RegistrationDisplayNameOutcome,
             RegistrationDisplayNameWorkflowError, RegistrationEmailChangeError,
             RegistrationEmailChangeOutcome, RegistrationFinishError, RegistrationFinishOutcome,
             RegistrationResendError, RegistrationResendOutcome, RegistrationVerificationError,

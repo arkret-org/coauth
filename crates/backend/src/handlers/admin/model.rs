@@ -29,7 +29,7 @@ pub struct User {
     #[serde(skip)]
     id: Ulid,
 
-    /// The username (username) of the user
+    /// The username of the user.
     username: String,
 
     /// When the user was created
@@ -47,13 +47,13 @@ pub struct User {
     /// Whether the user can request admin privileges.
     admin: bool,
 
-    /// Whether the user was a legacy guest during Matrix-era migration.
+    /// Whether the user was imported as a legacy guest.
     legacy_guest: bool,
 
-    /// Human-facing display name for the legacy compatibility data model.
+    /// Human-facing display name.
     display_name: Option<String>,
 
-    /// Optional avatar URL for the legacy compatibility data model.
+    /// Optional avatar URL.
     avatar_url: Option<String>,
 
     /// Preferred locale stored for this user.

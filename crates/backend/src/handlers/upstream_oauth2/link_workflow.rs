@@ -781,7 +781,7 @@ async fn pre_check_username(
     let is_available = principal_server
         .is_username_available(&username)
         .await
-        .map_err(UpstreamLinkWorkflowError::PrincipalServer)?;
+        .map_err(UpstreamLinkWorkflowError::principal_server)?;
 
     if !is_available {
         if !forced_or_required {
@@ -970,7 +970,7 @@ async fn validate_registration_action(
     } else if !principal_server
         .is_username_available(username)
         .await
-        .map_err(UpstreamLinkWorkflowError::PrincipalServer)?
+        .map_err(UpstreamLinkWorkflowError::principal_server)?
     {
         field_errors.insert("username".into(), serde_json::json!("exists"));
     }
