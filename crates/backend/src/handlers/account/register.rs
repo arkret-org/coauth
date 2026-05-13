@@ -383,8 +383,6 @@ pub async fn post_webvh_start(
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationEmailInput {
     pub email: String,
-    #[serde(default)]
-    pub skip_email_delivery: bool,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -425,16 +423,6 @@ pub async fn post_webvh_email(
             error: Some("email_invalid".into()),
         }));
     }
-    if input.skip_email_delivery && !site_config.registration_email_delivery_bypass_allowed {
-        return Ok(Json(WebvhRegistrationEmailResponse {
-            status: "error",
-            next_step: None,
-            delivery: None,
-            dev_code: None,
-            error: Some("email_delivery_bypass_not_allowed".into()),
-        }));
-    }
-
     let repo_factory = depot.repo_factory()?;
     let limiter = depot.limiter()?;
     let clock = make_clock();
@@ -491,7 +479,7 @@ pub async fn post_webvh_email(
         .set_email_authentication(registration, &authentication)
         .await?;
 
-    let (delivery, dev_code) = if input.skip_email_delivery {
+    let (delivery, dev_code) = if site_config.registration_email_delivery_bypass_allowed {
         let code = "123456".to_owned();
         let _ = repo
             .user_email()
@@ -589,9 +577,16 @@ pub async fn post_webvh_verify_email(
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationFinishInput {
-    pub public_key_multibase: String,
+    pub did_public_key_multibase: String,
+    pub update_public_key_multibase: String,
     #[serde(default)]
-    pub key_id: Option<String>,
+    pub did_key_id: Option<String>,
+    #[serde(default)]
+    pub update_key_id: Option<String>,
+    #[serde(default)]
+    pub webvh_version_time: Option<String>,
+    #[serde(default)]
+    pub webvh_proof: Option<Value>,
     #[serde(default)]
     pub device_id: Option<String>,
     pub password: String,
@@ -607,7 +602,13 @@ pub struct WebvhRegistrationFinishResponse {
     pub username: Option<String>,
     pub did: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub key_id: Option<String>,
+    pub did_key_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_key_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub did_public_key_multibase: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_public_key_multibase: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_log_head: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -639,9 +640,26 @@ pub async fn post_webvh_finish(
     if input.password != input.password_confirm {
         return Ok(Json(webvh_finish_error("password_mismatch")));
     }
-    if input.public_key_multibase.trim().is_empty() {
-        return Ok(Json(webvh_finish_error("public_key_required")));
+    if input.did_public_key_multibase.trim().is_empty() {
+        return Ok(Json(webvh_finish_error("did_public_key_required")));
     }
+    if input.update_public_key_multibase.trim().is_empty() {
+        return Ok(Json(webvh_finish_error("update_public_key_required")));
+    }
+    if input.did_public_key_multibase.trim() == input.update_public_key_multibase.trim() {
+        return Ok(Json(webvh_finish_error("webvh_keys_must_be_separate")));
+    }
+    let Some(webvh_version_time) = input
+        .webvh_version_time
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(Json(webvh_finish_error("webvh_version_time_required")));
+    };
+    let Some(webvh_proof) = input.webvh_proof.clone() else {
+        return Ok(Json(webvh_finish_error("webvh_proof_required")));
+    };
 
     let site_config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
@@ -688,8 +706,12 @@ pub async fn post_webvh_finish(
         http_client,
         &target,
         registration.username.as_str(),
-        input.public_key_multibase.trim(),
-        input.key_id.as_deref().unwrap_or("key-1"),
+        input.did_public_key_multibase.trim(),
+        input.update_public_key_multibase.trim(),
+        input.did_key_id.as_deref().unwrap_or("did-key-1"),
+        input.update_key_id.as_deref().unwrap_or("update-key-1"),
+        webvh_version_time,
+        webvh_proof,
     )
     .await
     .map_err(RouteError::BadRequest)?;
@@ -727,7 +749,10 @@ pub async fn post_webvh_finish(
         error: None,
         username: Some(completed.user.username),
         did: webvh.did,
-        key_id: webvh.key_id,
+        did_key_id: webvh.did_key_id,
+        update_key_id: webvh.update_key_id,
+        did_public_key_multibase: webvh.did_public_key_multibase,
+        update_public_key_multibase: webvh.update_public_key_multibase,
         key_log_head: webvh.key_log_head,
         document_url: webvh.document_url,
         log_url: webvh.log_url,
@@ -799,7 +824,10 @@ fn webvh_finish_error(error: impl Into<String>) -> WebvhRegistrationFinishRespon
         error: Some(error.into()),
         username: None,
         did: String::new(),
-        key_id: None,
+        did_key_id: None,
+        update_key_id: None,
+        did_public_key_multibase: None,
+        update_public_key_multibase: None,
         key_log_head: None,
         document_url: None,
         log_url: None,
@@ -868,7 +896,13 @@ fn urls_match(left: &Url, right: &Url) -> bool {
 struct SolandEmbeddedWebvhResponse {
     pub did: String,
     #[serde(default)]
-    pub key_id: Option<String>,
+    pub did_key_id: Option<String>,
+    #[serde(default)]
+    pub update_key_id: Option<String>,
+    #[serde(default)]
+    pub did_public_key_multibase: Option<String>,
+    #[serde(default)]
+    pub update_public_key_multibase: Option<String>,
     #[serde(default)]
     pub key_log_head: Option<String>,
     #[serde(default)]
@@ -887,18 +921,27 @@ async fn register_soland_webvh(
     http_client: reqwest::Client,
     target: &WebvhTarget,
     username: &str,
-    public_key_multibase: &str,
-    key_id: &str,
+    did_public_key_multibase: &str,
+    update_public_key_multibase: &str,
+    did_key_id: &str,
+    update_key_id: &str,
+    webvh_version_time: &str,
+    webvh_proof: Value,
 ) -> Result<SolandEmbeddedWebvhResponse, String> {
+    let local_id = normalize_webvh_local_id(username).unwrap_or_else(|| username.to_owned());
     let response = http_client
         .post(target.endpoint.clone())
         .bearer_auth(target.bearer.as_str())
         .timeout(StdDuration::from_secs(10))
         .json(&json!({
-            "local_id": username,
-            "public_key_multibase": public_key_multibase,
-            "key_id": key_id,
-            "also_known_as": [format!("acct:{username}")],
+            "local_id": local_id,
+            "did_public_key_multibase": did_public_key_multibase,
+            "update_public_key_multibase": update_public_key_multibase,
+            "did_key_id": did_key_id,
+            "update_key_id": update_key_id,
+            "also_known_as": [format!("acct:{local_id}")],
+            "version_time": webvh_version_time,
+            "proof": webvh_proof,
         }))
         .send()
         .await
@@ -915,6 +958,17 @@ async fn register_soland_webvh(
         ));
     }
     serde_json::from_str(&body).map_err(|error| format!("embedded_webvh_provider_json:{error}"))
+}
+
+fn normalize_webvh_local_id(value: &str) -> Option<String> {
+    let normalized = value.trim().trim_start_matches('@').to_ascii_lowercase();
+    let valid = !normalized.is_empty()
+        && normalized.len() <= 64
+        && !normalized.contains("..")
+        && normalized
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'));
+    valid.then_some(normalized)
 }
 
 // ── GET /api/v1/auth/register/:id ──────────────────────────────

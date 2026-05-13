@@ -256,11 +256,10 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            if let Some(server) = contrix_config
-                .principal_servers
-                .iter()
-                .find(|server| server.audience == requested_audience)
-            {
+            if let Some(server) = contrix_config.principal_servers.iter().find(|server| {
+                server.audience == requested_audience
+                    || principal_endpoint_matches_audience(&server.endpoint, requested_audience)
+            }) {
                 return Ok(UpstreamOidcSessionGrantTarget {
                     audience: server.audience.clone(),
                     principal_server_name: Some(server.name.clone()),
@@ -448,6 +447,16 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             id_token_subject,
         })
     }
+}
+
+fn principal_endpoint_matches_audience(endpoint: &url::Url, requested_audience: &str) -> bool {
+    let requested_audience = requested_audience.trim().trim_end_matches('/');
+    if requested_audience.is_empty() {
+        return false;
+    }
+
+    let endpoint_base = endpoint.as_str().trim_end_matches('/');
+    requested_audience == endpoint_base || requested_audience == format!("{endpoint_base}/api")
 }
 
 async fn fetch_oidc_userinfo(

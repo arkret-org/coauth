@@ -38,6 +38,7 @@ pub struct OidcCodeExchangeRequest {
     pub token_endpoint: String,
     pub userinfo_endpoint: String,
     pub client_id: String,
+    #[serde(default)]
     pub login_hint: String,
     pub device_id: String,
     #[serde(default)]
@@ -51,6 +52,7 @@ pub struct OidcCodeExchangeRequest {
 #[derive(Deserialize, ToSchema)]
 pub struct OidcBrowserBridgeSessionRequest {
     pub redirect_uri: String,
+    #[serde(default)]
     pub login_hint: String,
     pub device_id: String,
     #[serde(default)]
@@ -221,7 +223,6 @@ pub async fn oidc_code_exchange(
         || input.token_endpoint.trim().is_empty()
         || input.userinfo_endpoint.trim().is_empty()
         || input.client_id.trim().is_empty()
-        || input.login_hint.trim().is_empty()
         || input.device_id.trim().is_empty()
     {
         res.render(Json(LoginResponse {
@@ -230,7 +231,7 @@ pub async fn oidc_code_exchange(
             viewer: None,
             session_grant: None,
             warnings: vec![
-                "authorization_code, redirect_uri, issuer, token_endpoint, userinfo_endpoint, client_id, login_hint, and device_id are required"
+                "authorization_code, redirect_uri, issuer, token_endpoint, userinfo_endpoint, client_id, and device_id are required"
                     .to_owned(),
             ],
         }));
@@ -560,12 +561,14 @@ pub async fn oidc_code_exchange(
             }));
             return Ok(());
         }
-        if !login_hint_matches_user(
-            &url_builder,
-            &contrix_config,
-            &user,
-            input.login_hint.trim(),
-        ) {
+        if !input.login_hint.trim().is_empty()
+            && !login_hint_matches_user(
+                &url_builder,
+                &contrix_config,
+                &user,
+                input.login_hint.trim(),
+            )
+        {
             res.render(Json(LoginResponse {
                 status: "error",
                 error: Some("invalid_login_hint"),
@@ -784,6 +787,7 @@ pub async fn oidc_code_exchange(
     }
 
     if let Some(expected_login_hint) = authz_grant.login_hint.as_deref()
+        && !input.login_hint.trim().is_empty()
         && expected_login_hint != input.login_hint.trim()
     {
         res.render(Json(LoginResponse {
@@ -813,10 +817,9 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     };
-    if !oauth2_client
-        .redirect_uris
-        .iter()
-        .any(|registered_redirect_uri| registered_redirect_uri == &redirect_uri)
+    if oauth2_client
+        .resolve_redirect_uri(&Some(redirect_uri.clone()))
+        .is_err()
     {
         res.render(Json(LoginResponse {
             status: "error",
@@ -1304,12 +1307,9 @@ pub async fn oidc_browser_bridge_session(
         .await
         .map_err(|_| RouteError::BadRequest("invalid browser bridge session payload".to_owned()))?;
 
-    if input.redirect_uri.trim().is_empty()
-        || input.login_hint.trim().is_empty()
-        || input.device_id.trim().is_empty()
-    {
+    if input.redirect_uri.trim().is_empty() || input.device_id.trim().is_empty() {
         return Err(RouteError::BadRequest(
-            "redirect_uri, login_hint, and device_id are required".to_owned(),
+            "redirect_uri and device_id are required".to_owned(),
         ));
     }
 
@@ -1339,7 +1339,9 @@ pub async fn oidc_browser_bridge_session(
         query.append_pair("scope", "openid profile");
         query.append_pair("state", state.as_str());
         query.append_pair("nonce", nonce.as_str());
-        query.append_pair("login_hint", input.login_hint.trim());
+        if !input.login_hint.trim().is_empty() {
+            query.append_pair("login_hint", input.login_hint.trim());
+        }
         query.append_pair("code_challenge_method", "S256");
         query.append_pair("code_challenge", code_challenge.as_str());
         query.append_pair("resource", principal_audience.as_str());
@@ -1390,7 +1392,6 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "token_endpoint",
             "userinfo_endpoint",
             "client_id",
-            "login_hint",
             "device_id",
         ],
         validation_layers: vec![
@@ -1406,7 +1407,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "federated_token_endpoint_exchange",
             "federated_userinfo_subject_validation",
             "federated_upstream_link_to_local_account",
-            "login_hint_to_linked_local_account",
+            "login_hint_to_linked_local_account_if_supplied",
             "configured_principal_audience_match",
             "contrix_session_grant_issuance",
         ],
