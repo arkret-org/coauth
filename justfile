@@ -11,7 +11,7 @@ default:
 # ── Development ──────────────────────────────────────────────
 
 # One-click: start PostgreSQL + backend with dev config
-dev:
+dev: frontend-assets
     # docker compose -f .devcontainer/compose.yml up -d postgres
     # @echo "Waiting for PostgreSQL..."
     # @until docker compose -f .devcontainer/compose.yml exec -T postgres pg_isready -U coauth > /dev/null 2>&1; do sleep 1; done
@@ -30,7 +30,7 @@ config-dev-generate:
     @echo "Created config.dev.yaml"
 
 # Start the backend server (auto-migrates DB)
-backend *ARGS:
+backend *ARGS: frontend-assets
     if (!(Test-Path config.dev.yaml)) { just config-dev-generate }
     cargo run -p coauth --features cedar -- server -c config.dev.yaml {{ARGS}}
 
@@ -50,6 +50,10 @@ frontend-hot:
 frontend-build:
     dx build -p coauth-frontend --release
     {{ if os() == "windows" { "if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse target/dx/coauth-frontend/release/web/public dist" } else { "rm -rf dist && cp -r target/dx/coauth-frontend/release/web/public dist" } }}
+
+# Ensure backend-served frontend assets exist
+frontend-assets:
+    {{ if os() == "windows" { "if (!(Test-Path dist\\assets) -or -not (Get-ChildItem dist\\assets -Filter 'coauth-frontend*.js' -ErrorAction SilentlyContinue)) { just frontend-build }" } else { "if ! find dist/assets -maxdepth 1 -name 'coauth-frontend*.js' -print -quit 2>/dev/null | grep -q .; then just frontend-build; fi" } }}
 
 # ── Build ────────────────────────────────────────────────────
 

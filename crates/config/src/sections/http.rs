@@ -370,7 +370,7 @@ fn default_csp_html() -> Option<String> {
     Some(
         concat!(
             "default-src 'self'; ",
-            "script-src 'self'; ",
+            "script-src 'self' 'wasm-unsafe-eval'; ",
             "style-src 'self' 'unsafe-inline'; ",
             "img-src 'self' data:; ",
             "font-src 'self' data:; ",

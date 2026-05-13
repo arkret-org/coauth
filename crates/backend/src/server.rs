@@ -2,7 +2,7 @@
 use std::os::unix::net::UnixListener;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, ToSocketAddrs},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use anyhow::Context;
@@ -38,13 +38,24 @@ use crate::{
 pub fn discover_frontend_script(assets_root: &camino::Utf8Path) -> Option<String> {
     let assets_dir = assets_root.join("assets");
     let dir = std::fs::read_dir(&assets_dir).ok()?;
+    let mut candidates = Vec::new();
     for entry in dir.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if name.starts_with("coauth-frontend-") && name.ends_with(".js") {
-            return Some(format!("/assets/{name}"));
+            let modified = entry
+                .metadata()
+                .and_then(|metadata| metadata.modified())
+                .unwrap_or(SystemTime::UNIX_EPOCH);
+            candidates.push((modified, name.into_owned()));
         }
     }
+
+    candidates.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    if let Some((_modified, name)) = candidates.into_iter().next() {
+        return Some(format!("/assets/{name}"));
+    }
+
     // Fallback: check for non-hashed name
     if assets_dir.join("coauth-frontend.js").exists() {
         return Some("/assets/coauth-frontend.js".into());
@@ -443,6 +454,17 @@ async fn oidc_preflight_handler() -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
+const INLINE_FAVICON_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1f7a4f"/><text x="32" y="41" text-anchor="middle" font-size="34" font-family="Arial,sans-serif" font-weight="700" fill="white">C</text></svg>"##;
+
+#[handler]
+async fn favicon_handler(res: &mut Response) {
+    res.headers_mut().insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("image/svg+xml; charset=utf-8"),
+    );
+    res.render(Text::Plain(INLINE_FAVICON_SVG));
+}
+
 pub fn build_router(
     state: AppState,
     resources: &[HttpResource],
@@ -511,15 +533,17 @@ pub fn build_router(
                 playground: _,
                 undocumented_oauth2_access: _,
             } => build_account_api_router(router),
-            coauth_config::HttpResource::Assets { path } => router.push(
-                Router::with_path("/assets/{**path}")
-                    .hoop(cache_control_middleware)
-                    .get(
-                        StaticDir::new([path.join("assets")])
-                            .include_dot_files(false)
-                            .auto_list(false),
-                    ),
-            ),
+            coauth_config::HttpResource::Assets { path } => router
+                .push(Router::with_path("/favicon.ico").get(favicon_handler))
+                .push(
+                    Router::with_path("/assets/{**path}")
+                        .hoop(cache_control_middleware)
+                        .get(
+                            StaticDir::new([path.join("assets")])
+                                .include_dot_files(false)
+                                .auto_list(false),
+                        ),
+                ),
             coauth_config::HttpResource::OAuth => build_oauth_router(router),
             coauth_config::HttpResource::AdminApi => build_admin_router(router),
             coauth_config::HttpResource::ConnectionInfo => {

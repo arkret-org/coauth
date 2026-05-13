@@ -1,7 +1,7 @@
 //! OIDC browser-bridge and exchange surfaces for the account API.
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
-use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode};
+use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
@@ -151,10 +151,108 @@ fn pkce_s256_challenge(code_verifier: &str) -> String {
     Base64UrlUnpadded::encode_string(&Sha256::digest(code_verifier.as_bytes()))
 }
 
+fn is_protocol_device_id(value: &str) -> bool {
+    let Some(uuid) = value.strip_prefix("cx:device:") else {
+        return false;
+    };
+    is_lowercase_uuidv7(uuid)
+}
+
+fn is_lowercase_uuidv7(value: &str) -> bool {
+    if value.len() != 36 {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    if bytes.iter().any(u8::is_ascii_uppercase) {
+        return false;
+    }
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        match index {
+            8 | 13 | 18 | 23 if byte != b'-' => return false,
+            8 | 13 | 18 | 23 => {}
+            _ if !(byte.is_ascii_digit() || matches!(byte, b'a'..=b'f')) => return false,
+            _ => {}
+        }
+    }
+    bytes[14] == b'7' && matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
+}
+
+fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
+    vec![
+        contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+        format!("urn:contrix:client:device:{device_id}"),
+    ]
+}
+
+#[derive(Serialize)]
+struct SolandAccountRegisterRequest<'a> {
+    did: &'a str,
+    handle: String,
+    display_name: Option<&'a str>,
+    device_id: Option<&'a str>,
+}
+
+fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
+    let base = url::Url::parse(principal_endpoint)
+        .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
+    base.join("/api/v1/account/register")
+        .map_err(|error| format!("invalid principal account register endpoint: {error}"))
+}
+
+fn soland_account_handle_for_did(did: &str) -> String {
+    let tail = did.rsplit(':').next().unwrap_or("coauth");
+    let local = tail
+        .chars()
+        .filter_map(|ch| {
+            let ch = ch.to_ascii_lowercase();
+            (ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')).then_some(ch)
+        })
+        .collect::<String>();
+    if local.is_empty() {
+        "@coauth".to_owned()
+    } else {
+        format!("@coauth-{local}")
+    }
+}
+
+async fn ensure_soland_account_registered(
+    http_client: &reqwest::Client,
+    principal_endpoint: Option<&str>,
+    principal_did: &str,
+    display_name: Option<&str>,
+    device_id: &str,
+) -> Result<(), String> {
+    let Some(principal_endpoint) = principal_endpoint else {
+        return Ok(());
+    };
+    let endpoint = soland_account_register_endpoint(principal_endpoint)?;
+    let response = http_client
+        .post(endpoint)
+        .timeout(std::time::Duration::from_secs(10))
+        .json(&SolandAccountRegisterRequest {
+            did: principal_did,
+            handle: soland_account_handle_for_did(principal_did),
+            display_name,
+            device_id: Some(device_id),
+        })
+        .send()
+        .await
+        .map_err(|error| format!("principal account register request failed: {error}"))?;
+    let status = response.status();
+    if status.is_success() || status == reqwest::StatusCode::CONFLICT {
+        return Ok(());
+    }
+    let body = response.text().await.unwrap_or_default();
+    Err(format!(
+        "principal account register returned {status}: {}",
+        body.chars().take(256).collect::<String>()
+    ))
+}
+
 fn login_hint_matches_user(
     url_builder: &coauth_data::UrlBuilder,
     contrix_config: &coauth_config::ContrixConfig,
-    user: &coauth_data::User,
+    user: &User,
     login_hint: &str,
 ) -> bool {
     let login_hint = login_hint.trim();
@@ -234,6 +332,17 @@ pub async fn oidc_code_exchange(
                 "authorization_code, redirect_uri, issuer, token_endpoint, userinfo_endpoint, client_id, and device_id are required"
                     .to_owned(),
             ],
+        }));
+        return Ok(());
+    }
+    let device_id = input.device_id.trim().to_owned();
+    if !is_protocol_device_id(&device_id) {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_device_id"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec!["device_id must be a cx:device:<uuidv7> protocol identifier".to_owned()],
         }));
         return Ok(());
     }
@@ -592,7 +701,6 @@ pub async fn oidc_code_exchange(
             .browser_session()
             .add(&mut rng, &*clock, &user, user_agent)
             .await?;
-        let device_id = input.device_id.trim().to_owned();
         let grant_target = match upstream_oidc.session_grant_target_for_requested_audience(
             &url_builder,
             &contrix_config,
@@ -610,6 +718,25 @@ pub async fn oidc_code_exchange(
                 return Ok(());
             }
         };
+        let principal_did = contrix::user_did_for(&url_builder, &contrix_config, &user);
+        if let Err(message) = ensure_soland_account_registered(
+            &http_client,
+            grant_target.principal_server_endpoint.as_deref(),
+            &principal_did,
+            user.display_name.as_deref(),
+            &device_id,
+        )
+        .await
+        {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("principal_account_registration_failed"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![message],
+            }));
+            return Ok(());
+        }
         let session_grant = contrix::issue_session_grant_for_audience(
             &mut rng,
             &*clock,
@@ -618,7 +745,7 @@ pub async fn oidc_code_exchange(
             &key_store,
             &browser_session,
             grant_target.audience.clone(),
-            vec![contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+            principal_session_grant_scopes(&device_id),
         )
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
@@ -643,7 +770,7 @@ pub async fn oidc_code_exchange(
             viewer: Some(ViewerInfo {
                 id: NodeType::User.serialize(user.id),
                 username: user.username.clone(),
-                did: contrix::user_did_for(&url_builder, &contrix_config, &user),
+                did: principal_did,
                 handle: contrix::user_handle(&url_builder, &user),
                 principal_id: principal_server.principal_id(&user.username),
                 display_name,
@@ -887,6 +1014,9 @@ pub async fn oidc_code_exchange(
             &mut rng,
         )
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
+    // Release the repository session before making a nested HTTP request
+    // back into coauth. The local token endpoint needs its own repo access.
+    repo.cancel().await?;
     let oauth_token_http_response = oauth_token_http_request
         .send()
         .await
@@ -954,7 +1084,6 @@ pub async fn oidc_code_exchange(
         .json()
         .await
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    repo.cancel().await?;
     let mut repo = depot.repo().await?;
 
     let oauth2_session_id = exchangeable_oauth2_session_id.ok_or_else(|| {
@@ -1114,6 +1243,9 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
+    // Release the repository session before validating userinfo through the
+    // local HTTP endpoint, which also needs repo-backed token/session access.
+    repo.cancel().await?;
     let (oauth_userinfo, userinfo_response_signed) = match upstream_oidc
         .fetch_local_oidc_userinfo(
             &http_client,
@@ -1140,6 +1272,7 @@ pub async fn oidc_code_exchange(
             return Ok(());
         }
     };
+    let mut repo = depot.repo().await?;
     if oauth_userinfo.sub != expected_subject {
         res.render(Json(LoginResponse {
             status: "error",
@@ -1182,7 +1315,6 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
 
-    let device_id = input.device_id.trim().to_owned();
     let grant_target = match upstream_oidc.session_grant_target_for_requested_audience(
         &url_builder,
         &contrix_config,
@@ -1200,6 +1332,26 @@ pub async fn oidc_code_exchange(
             return Ok(());
         }
     };
+    let user = &browser_session.user;
+    let principal_did = contrix::user_did_for(&url_builder, &contrix_config, user);
+    if let Err(message) = ensure_soland_account_registered(
+        &http_client,
+        grant_target.principal_server_endpoint.as_deref(),
+        &principal_did,
+        user.display_name.as_deref(),
+        &device_id,
+    )
+    .await
+    {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("principal_account_registration_failed"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![message],
+        }));
+        return Ok(());
+    }
     let session_grant = contrix::issue_session_grant_for_audience(
         &mut rng,
         &clock,
@@ -1208,7 +1360,7 @@ pub async fn oidc_code_exchange(
         &key_store,
         &browser_session,
         grant_target.audience.clone(),
-        vec![contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        principal_session_grant_scopes(&device_id),
     )
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
@@ -1222,7 +1374,6 @@ pub async fn oidc_code_exchange(
     .await?;
     repo.save().await?;
 
-    let user = &browser_session.user;
     let display_name = match principal_server.query_user(&user.username).await {
         Ok(info) => info.displayname,
         Err(_) => None,
@@ -1234,8 +1385,8 @@ pub async fn oidc_code_exchange(
         viewer: Some(ViewerInfo {
             id: NodeType::User.serialize(user.id),
             username: user.username.clone(),
-            did: contrix::user_did_for(&url_builder, &contrix_config, &user),
-            handle: contrix::user_handle(&url_builder, &user),
+            did: principal_did,
+            handle: contrix::user_handle(&url_builder, user),
             principal_id: principal_server.principal_id(&user.username),
             display_name,
         }),
@@ -1310,6 +1461,11 @@ pub async fn oidc_browser_bridge_session(
     if input.redirect_uri.trim().is_empty() || input.device_id.trim().is_empty() {
         return Err(RouteError::BadRequest(
             "redirect_uri and device_id are required".to_owned(),
+        ));
+    }
+    if !is_protocol_device_id(input.device_id.trim()) {
+        return Err(RouteError::BadRequest(
+            "device_id must be a cx:device:<uuidv7> protocol identifier".to_owned(),
         ));
     }
 
@@ -1416,6 +1572,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "invalid_issuer",
             "invalid_discovery_binding",
             "invalid_client_id",
+            "invalid_device_id",
             "pkce_required",
             "invalid_code_verifier",
             "invalid_state",
@@ -1435,7 +1592,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "userinfo_endpoint": "https://coauth.example/oauth2/userinfo",
             "client_id": "yougen",
             "login_hint": "did:web:alice.example",
-            "device_id": "device-web",
+            "device_id": "cx:device:01964137-0000-7000-8000-000000000001",
             "principal_audience": "https://soland.example",
             "state": "TODO_CALLBACK_STATE",
             "expected_state": "TODO_EXPECTED_STATE"
@@ -1601,4 +1758,54 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             "TODO: publish OpenAPI examples that match the integration manifest surfaces exactly.".to_string(),
         ],
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn protocol_device_id_validation_matches_soland_boundary() {
+        assert!(is_protocol_device_id(
+            "cx:device:01964137-0000-7000-8000-000000000001"
+        ));
+        assert!(!is_protocol_device_id("dev_yougen"));
+        assert!(!is_protocol_device_id(
+            "cx:device:01964137-0000-6000-8000-000000000001"
+        ));
+    }
+
+    #[test]
+    fn principal_session_grant_scopes_include_device_binding() {
+        let scopes =
+            principal_session_grant_scopes("cx:device:01964137-0000-7000-8000-000000000001");
+
+        assert!(scopes.contains(&contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()));
+        assert!(scopes.contains(
+            &"urn:contrix:client:device:cx:device:01964137-0000-7000-8000-000000000001".to_owned()
+        ));
+    }
+
+    #[test]
+    fn soland_account_register_endpoint_uses_origin_root_api_path() {
+        let endpoint = soland_account_register_endpoint("https://local.host/base/path").unwrap();
+
+        assert_eq!(
+            endpoint.as_str(),
+            "https://local.host/api/v1/account/register"
+        );
+    }
+
+    #[test]
+    fn soland_account_handle_is_stable_and_safe() {
+        assert_eq!(
+            soland_account_handle_for_did("did:web:auth.local.host:users:01KRFA"),
+            "@coauth-01krfa"
+        );
+        assert_eq!(
+            soland_account_handle_for_did("did:web:auth.local.host:users:Bad/Value"),
+            "@coauth-badvalue"
+        );
+        assert_eq!(soland_account_handle_for_did("did:web:@@@"), "@coauth");
+    }
 }

@@ -11,7 +11,7 @@ pub struct AppError {
     pub description: Option<String>,
 }
 
-/// Application configuration, loaded from window.APP_CONFIG or defaults.
+/// Application configuration, loaded from the server-rendered JSON config.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct AppConfig {
@@ -33,42 +33,54 @@ impl Default for AppConfig {
 }
 
 /// Get the app configuration.
-/// In WASM, this reads from window.APP_CONFIG. Otherwise uses defaults.
+/// In WASM, this reads the inert JSON config block. Otherwise uses defaults.
 pub fn get_config() -> AppConfig {
     #[cfg(target_arch = "wasm32")]
     {
-        use web_sys::window;
-
-        if let Some(win) = window() {
-            if let Ok(val) = js_sys::Reflect::get(&win, &"APP_CONFIG".into()) {
-                if !val.is_undefined() && !val.is_null() {
-                    let root = js_sys::Reflect::get(&val, &"root".into())
+        if let Some(val) = read_config_value() {
+            let root = js_sys::Reflect::get(&val, &"root".into())
+                .ok()
+                .and_then(|v| v.as_string())
+                .unwrap_or_else(|| "/".to_string());
+            let api_endpoint = js_sys::Reflect::get(&val, &"api_endpoint".into())
+                .ok()
+                .and_then(|v| v.as_string())
+                .or_else(|| {
+                    js_sys::Reflect::get(&val, &"apiEndpoint".into())
                         .ok()
                         .and_then(|v| v.as_string())
-                        .unwrap_or_else(|| "/".to_string());
-                    let api_endpoint = js_sys::Reflect::get(&val, &"api_endpoint".into())
-                        .ok()
-                        .and_then(|v| v.as_string())
-                        .or_else(|| {
-                            js_sys::Reflect::get(&val, &"apiEndpoint".into())
-                                .ok()
-                                .and_then(|v| v.as_string())
-                        })
-                        .unwrap_or_else(|| "/api/v1".to_string());
+                })
+                .unwrap_or_else(|| "/api/v1".to_string());
 
-                    let error = read_error_from_js(&val);
+            let error = read_error_from_js(&val);
 
-                    return AppConfig {
-                        root,
-                        api_endpoint,
-                        error,
-                    };
-                }
-            }
+            return AppConfig {
+                root,
+                api_endpoint,
+                error,
+            };
         }
     }
 
     AppConfig::default()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn read_config_value() -> Option<web_sys::wasm_bindgen::JsValue> {
+    let window = web_sys::window()?;
+    if let Some(document) = window.document()
+        && let Some(element) = document.get_element_by_id("coauth-app-config")
+        && let Some(text) = element.text_content()
+        && let Ok(value) = js_sys::JSON::parse(&text)
+        && !value.is_undefined()
+        && !value.is_null()
+    {
+        return Some(value);
+    }
+
+    js_sys::Reflect::get(&window, &"APP_CONFIG".into())
+        .ok()
+        .filter(|value| !value.is_undefined() && !value.is_null())
 }
 
 /// Try to read the optional `error` object from the JS config.
