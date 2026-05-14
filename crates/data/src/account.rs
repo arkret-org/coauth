@@ -67,8 +67,8 @@ pub struct AccountIdentityBinding {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IdentityProviderType {
-    /// An upstream OAuth2/OIDC provider.
-    UpstreamOAuth2,
+    /// An upstream OAuth/OIDC provider.
+    UpstreamOAuth,
     /// A connected principal server.
     PrincipalServer,
     /// An LDAP or directory service.

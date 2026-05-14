@@ -51,7 +51,7 @@ coauth-principal = { path = "./crates/principal/", version = "=1.8.0" }
 coauth-policy = { path = "./crates/policy/", version = "=1.8.0" }
 coauth-tasks = { path = "./crates/tasks/", version = "=1.8.0" }
 coauth-templates = { path = "./crates/templates/", version = "=1.8.0" }
-oauth2-types = { path = "./crates/oauth2-types/", version = "=1.8.0" }
+oauth-types = { path = "./crates/oauth-types/", version = "=1.8.0" }
 
 coauth-frontend = { path = "./crates/frontend/", version = "=1.8.0" }
 

@@ -1,7 +1,7 @@
-// ── Upstream OAuth 2.0 / OIDC Provider Configuration ──
+// ── Upstream OAuth / OIDC Provider Configuration ──
 //
 // Defines how the application connects to external identity providers
-// using OAuth 2.0 and OpenID Connect protocols.
+// using OAuth and OpenID Connect protocols.
 
 mod claims;
 mod discovery;
@@ -20,22 +20,22 @@ use crate::ConfigurationSection;
 
 // ── Top-level Section ──
 
-/// Holds the list of upstream OAuth 2.0 identity providers
+/// Holds the list of upstream OAuth identity providers
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
-pub struct UpstreamOAuth2Config {
-    /// List of OAuth 2.0 providers
+pub struct UpstreamOAuthConfig {
+    /// List of OAuth providers
     pub providers: Vec<Provider>,
 }
 
-impl UpstreamOAuth2Config {
+impl UpstreamOAuthConfig {
     /// Returns `true` when no providers have been configured
     pub(crate) fn is_default(&self) -> bool {
         self.providers.is_empty()
     }
 }
 
-impl ConfigurationSection for UpstreamOAuth2Config {
-    const PATH: &'static str = "upstream_oauth2";
+impl ConfigurationSection for UpstreamOAuthConfig {
+    const PATH: &'static str = "upstream_oauth";
 
     fn validate(
         &self,
@@ -266,29 +266,29 @@ mod tests {
                 jail.create_file(
                     "config.yaml",
                     r#"
-                      upstream_oauth2:
+                      upstream_oauth:
                         providers:
                           - id: 01GFWR28C4KNE04WG3HKXB7C9R
-                            client_id: upstream-oauth2
+                            client_id: upstream-oauth
                             token_endpoint_auth_method: none
 
                           - id: 01GFWR32NCQ12B8Z0J8CPXRRB6
-                            client_id: upstream-oauth2
+                            client_id: upstream-oauth
                             client_secret_file: secret
                             token_endpoint_auth_method: client_secret_basic
 
                           - id: 01GFWR3WHR93Y5HK389H28VHZ9
-                            client_id: upstream-oauth2
+                            client_id: upstream-oauth
                             client_secret: c1!3n753c237
                             token_endpoint_auth_method: client_secret_post
 
                           - id: 01GFWR43R2ZZ8HX9CVBNW9TJWG
-                            client_id: upstream-oauth2
+                            client_id: upstream-oauth
                             client_secret_file: secret
                             token_endpoint_auth_method: client_secret_jwt
 
                           - id: 01GFWR4BNFDCC4QDG6AMSP1VRR
-                            client_id: upstream-oauth2
+                            client_id: upstream-oauth
                             token_endpoint_auth_method: private_key_jwt
                             jwks:
                               keys:
@@ -311,7 +311,7 @@ mod tests {
 
                 let config = Figment::new()
                     .merge(Yaml::file("config.yaml"))
-                    .extract_inner::<UpstreamOAuth2Config>("upstream_oauth2")?;
+                    .extract_inner::<UpstreamOAuthConfig>("upstream_oauth")?;
 
                 assert_eq!(config.providers.len(), 5);
 

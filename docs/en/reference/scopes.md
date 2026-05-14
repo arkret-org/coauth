@@ -1,4 +1,4 @@
-# OAuth 2.0 scopes
+# OAuth scopes
 
 `coauth` treats coauth and Contrix scopes as the supported scope surface.
 

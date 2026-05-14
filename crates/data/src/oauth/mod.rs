@@ -13,15 +13,15 @@ pub use self::{
         Client, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField, LocalizedClientMetadata,
     },
     device_code_grant::{DeviceCodeGrant, DeviceCodeGrantState},
-    i18n::{OAuth2ClientI18n, OAuth2ClientI18nEntry},
+    i18n::{OAuthClientI18n, OAuthClientI18nEntry},
     session::{Session, SessionState},
     session_grant::SessionGrant,
 };
 pub use crate::{
-    pg::oauth2::{
-        PgOAuth2AccessTokenRepository, PgOAuth2AuthorizationGrantRepository,
-        PgOAuth2ClientRepository, PgOAuth2DeviceCodeGrantRepository,
-        PgOAuth2RefreshTokenRepository, PgOAuth2SessionGrantRepository, PgOAuth2SessionRepository,
+    pg::oauth::{
+        PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository,
+        PgOAuthClientRepository, PgOAuthDeviceCodeGrantRepository,
+        PgOAuthRefreshTokenRepository, PgOAuthSessionGrantRepository, PgOAuthSessionRepository,
     },
-    storage::oauth2::*,
+    storage::oauth::*,
 };

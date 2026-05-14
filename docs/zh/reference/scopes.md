@@ -1,4 +1,4 @@
-# OAuth 2.0 作用域
+# OAuth 作用域
 
 `coauth` 当前支持 coauth 与 Contrix 命名空间下的 scope。
 

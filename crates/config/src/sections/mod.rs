@@ -28,7 +28,7 @@ pub mod sms;
 mod storage;
 mod telemetry;
 mod templates;
-mod upstream_oauth2;
+mod upstream_oauth;
 
 // ── Re-exports ──
 
@@ -72,14 +72,14 @@ pub use self::{
         TracingExporterKind,
     },
     templates::TemplatesConfig,
-    upstream_oauth2::{
-        ClaimsImports as UpstreamOAuth2ClaimsImports, DiscoveryMode as UpstreamOAuth2DiscoveryMode,
-        EmailImportPreference as UpstreamOAuth2EmailImportPreference,
-        ImportAction as UpstreamOAuth2ImportAction,
-        OnBackchannelLogout as UpstreamOAuth2OnBackchannelLogout,
-        OnConflict as UpstreamOAuth2OnConflict, PkceMethod as UpstreamOAuth2PkceMethod,
-        Provider as UpstreamOAuth2Provider, ResponseMode as UpstreamOAuth2ResponseMode,
-        TokenAuthMethod as UpstreamOAuth2TokenAuthMethod, UpstreamOAuth2Config,
+    upstream_oauth::{
+        ClaimsImports as UpstreamOAuthClaimsImports, DiscoveryMode as UpstreamOAuthDiscoveryMode,
+        EmailImportPreference as UpstreamOAuthEmailImportPreference,
+        ImportAction as UpstreamOAuthImportAction,
+        OnBackchannelLogout as UpstreamOAuthOnBackchannelLogout,
+        OnConflict as UpstreamOAuthOnConflict, PkceMethod as UpstreamOAuthPkceMethod,
+        Provider as UpstreamOAuthProvider, ResponseMode as UpstreamOAuthResponseMode,
+        TokenAuthMethod as UpstreamOAuthTokenAuthMethod, UpstreamOAuthConfig,
     },
 };
 use crate::util::ConfigurationSection;
@@ -168,7 +168,7 @@ impl From<Option<ClientSecret>> for ClientSecretRaw {
 /// Top-level application configuration encompassing all sections
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct RootConfig {
-    /// List of OAuth 2.0/OIDC clients config
+    /// List of OAuth/OIDC clients config
     #[serde(default, skip_serializing_if = "ClientsConfig::is_default")]
     pub clients: ClientsConfig,
 
@@ -217,8 +217,8 @@ pub struct RootConfig {
     pub rate_limiting: RateLimitingConfig,
 
     /// Configuration related to upstream OAuth providers
-    #[serde(default, skip_serializing_if = "UpstreamOAuth2Config::is_default")]
-    pub upstream_oauth2: UpstreamOAuth2Config,
+    #[serde(default, skip_serializing_if = "UpstreamOAuthConfig::is_default")]
+    pub upstream_oauth: UpstreamOAuthConfig,
 
     /// Configuration section for tweaking the branding of the service
     #[serde(default, skip_serializing_if = "BrandingConfig::is_default")]
@@ -268,7 +268,7 @@ impl ConfigurationSection for RootConfig {
             &|f| self.secrets.validate(f),
             &|f| self.policy.validate(f),
             &|f| self.rate_limiting.validate(f),
-            &|f| self.upstream_oauth2.validate(f),
+            &|f| self.upstream_oauth.validate(f),
             &|f| self.branding.validate(f),
             &|f| self.captcha.validate(f),
             &|f| self.account.validate(f),
@@ -308,7 +308,7 @@ impl RootConfig {
             passwords: PasswordsConfig::default(),
             policy: PolicyConfig::default(),
             rate_limiting: RateLimitingConfig::default(),
-            upstream_oauth2: UpstreamOAuth2Config::default(),
+            upstream_oauth: UpstreamOAuthConfig::default(),
             branding: BrandingConfig::default(),
             captcha: CaptchaConfig::default(),
             account: AccountConfig::default(),
@@ -333,7 +333,7 @@ impl RootConfig {
             sms: SmsConfig::default(),
             policy: PolicyConfig::default(),
             rate_limiting: RateLimitingConfig::default(),
-            upstream_oauth2: UpstreamOAuth2Config::default(),
+            upstream_oauth: UpstreamOAuthConfig::default(),
             branding: BrandingConfig::default(),
             captcha: CaptchaConfig::default(),
             account: AccountConfig::default(),
@@ -436,7 +436,7 @@ pub struct SyncConfig {
     pub clients: ClientsConfig,
 
     #[serde(default)]
-    pub upstream_oauth2: UpstreamOAuth2Config,
+    pub upstream_oauth: UpstreamOAuthConfig,
 }
 
 impl ConfigurationSection for SyncConfig {
@@ -449,7 +449,7 @@ impl ConfigurationSection for SyncConfig {
         self.database.validate(figment)?;
         self.secrets.validate(figment)?;
         self.clients.validate(figment)?;
-        self.upstream_oauth2.validate(figment)?;
+        self.upstream_oauth.validate(figment)?;
 
         Ok(())
     }

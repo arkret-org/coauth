@@ -4,7 +4,7 @@
 
 //! RFC 7591 dynamic-client-registration admin handler.
 //!
-//! `POST /api/admin/v1/oauth2/clients/register`
+//! `POST /api/admin/v1/oauth/clients/register`
 //!
 //! Accepts the standard RFC 7591 request payload (client_name,
 //! redirect_uris, grant_types, token_endpoint_auth_method, scope) and
@@ -15,13 +15,13 @@
 //! registration via the admin SPA.
 //!
 //! This is the *admin* surface (mounted under `/api/admin/v1`). The
-//! public, abuse-gated RFC 7591 endpoint at `/oauth2/registration` is
-//! still served by [`crate::handlers::oauth2::registration`].
+//! public, abuse-gated RFC 7591 endpoint at `/oauth/registration` is
+//! still served by [`crate::handlers::oauth::registration`].
 
 use chrono::{DateTime, Utc};
-use coauth_data::{audit::AdminOperation, oauth2::OAuth2ClientRepository};
+use coauth_data::{audit::AdminOperation, oauth::OAuthClientRepository};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
-use oauth2_types::requests::GrantType;
+use oauth_types::requests::GrantType;
 use rand::distr::{Alphanumeric, SampleString};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -38,7 +38,7 @@ use crate::{
     },
 };
 
-/// Request body for `POST /api/admin/v1/oauth2/clients/register`.
+/// Request body for `POST /api/admin/v1/oauth/clients/register`.
 ///
 /// Mirrors RFC 7591 §3.1 with a curated subset of fields. Unknown fields
 /// are accepted and ignored (per RFC 7591 §2) — they would normally come
@@ -258,7 +258,7 @@ pub async fn register(
     };
 
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .add(
             &mut rng,
             &*clock,
@@ -292,8 +292,8 @@ pub async fn register(
         &mut rng,
         &*clock,
         admin_user.as_ref(),
-        AdminOperation::Other("oauth2_client.register".to_owned()),
-        "oauth2_client",
+        AdminOperation::Other("oauth_client.register".to_owned()),
+        "oauth_client",
         Some(client.id),
         serde_json::json!({
             "client_name": &body.client_name,

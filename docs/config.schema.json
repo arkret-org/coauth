@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "clients": {
-      "description": "List of OAuth 2.0/OIDC clients config",
+      "description": "List of OAuth/OIDC clients config",
       "allOf": [
         {
           "$ref": "#/definitions/ClientsConfig"
@@ -184,11 +184,11 @@
         }
       ]
     },
-    "upstream_oauth2": {
+    "upstream_oauth": {
       "description": "Configuration related to upstream OAuth providers",
       "allOf": [
         {
-          "$ref": "#/definitions/UpstreamOAuth2Config"
+          "$ref": "#/definitions/UpstreamOAuthConfig"
         }
       ]
     },
@@ -238,14 +238,14 @@
   ],
   "definitions": {
     "ClientsConfig": {
-      "description": "Wrapper around a list of statically-configured OAuth 2.0 clients",
+      "description": "Wrapper around a list of statically-configured OAuth clients",
       "type": "array",
       "items": {
         "$ref": "#/definitions/ClientConfig"
       }
     },
     "ClientConfig": {
-      "description": "Represents the configuration of a single statically-registered OAuth 2.0\nclient",
+      "description": "Represents the configuration of a single statically-registered OAuth\nclient",
       "type": "object",
       "properties": {
         "client_id": {
@@ -262,7 +262,7 @@
           ]
         },
         "client_name": {
-          "description": "Name of the `OAuth2` client",
+          "description": "Name of the `OAuth` client",
           "type": [
             "string",
             "null"
@@ -880,7 +880,7 @@
               "description": "Deprecated -- no longer used",
               "type": "boolean"
             },
-            "undocumented_oauth2_access": {
+            "undocumented_oauth_access": {
               "description": "Deprecated -- no longer used",
               "type": "boolean"
             },
@@ -894,7 +894,7 @@
           ]
         },
         {
-          "description": "OAuth 2.0 / OIDC protocol endpoints",
+          "description": "OAuth / OIDC protocol endpoints",
           "type": "object",
           "properties": {
             "name": {
@@ -3190,12 +3190,12 @@
         }
       }
     },
-    "UpstreamOAuth2Config": {
-      "description": "Holds the list of upstream OAuth 2.0 identity providers",
+    "UpstreamOAuthConfig": {
+      "description": "Holds the list of upstream OAuth identity providers",
       "type": "object",
       "properties": {
         "providers": {
-          "description": "List of OAuth 2.0 providers",
+          "description": "List of OAuth providers",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Provider"
@@ -3207,7 +3207,7 @@
       ]
     },
     "Provider": {
-      "description": "Full configuration for a single upstream OAuth 2.0 / OIDC provider",
+      "description": "Full configuration for a single upstream OAuth / OIDC provider",
       "type": "object",
       "properties": {
         "enabled": {
@@ -3444,32 +3444,32 @@
           "const": "sign_in_with_apple"
         },
         {
-          "description": "`qq_connect`: QQ Connect OAuth2 flow",
+          "description": "`qq_connect`: QQ Connect OAuth flow",
           "type": "string",
           "const": "q_q_connect"
         },
         {
-          "description": "`feishu`: Feishu (Lark China) OAuth2 flow",
+          "description": "`feishu`: Feishu (Lark China) OAuth flow",
           "type": "string",
           "const": "feishu"
         },
         {
-          "description": "`lark`: Lark (international Feishu) OAuth2 flow",
+          "description": "`lark`: Lark (international Feishu) OAuth flow",
           "type": "string",
           "const": "lark"
         },
         {
-          "description": "`dingtalk`: DingTalk OAuth2 flow",
+          "description": "`dingtalk`: DingTalk OAuth flow",
           "type": "string",
           "const": "ding_talk"
         },
         {
-          "description": "`wechat`: WeChat Open Platform OAuth2 flow",
+          "description": "`wechat`: WeChat Open Platform OAuth flow",
           "type": "string",
           "const": "we_chat"
         },
         {
-          "description": "`wecom`: WeCom (Enterprise WeChat) OAuth2 flow",
+          "description": "`wecom`: WeCom (Enterprise WeChat) OAuth flow",
           "type": "string",
           "const": "we_com"
         }
@@ -4014,7 +4014,7 @@
           "maximum": 7776000
         },
         "expire_oauth_sessions": {
-          "description": "Apply the inactivity timeout to OAuth 2.0 sessions",
+          "description": "Apply the inactivity timeout to OAuth sessions",
           "type": "boolean",
           "default": true
         },

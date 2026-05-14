@@ -9,7 +9,7 @@ use coauth_data::{
         session::{PersonalSession, PersonalSessionOwner},
     },
 };
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 
@@ -188,7 +188,7 @@ repository_impl!(PersonalSessionRepository:
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct PersonalSessionFilter<'a> {
     owner_user: Option<&'a User>,
-    owner_oauth2_client: Option<&'a Client>,
+    owner_oauth_client: Option<&'a Client>,
     actor_user: Option<&'a User>,
     device: Option<&'a str>,
     state: Option<PersonalSessionState>,
@@ -229,14 +229,14 @@ impl<'a> PersonalSessionFilter<'a> {
     ///
     /// Returns [`None`] if no user filter was set
     #[must_use]
-    pub fn owner_oauth2_client(&self) -> Option<&'a Client> {
-        self.owner_oauth2_client
+    pub fn owner_oauth_client(&self) -> Option<&'a Client> {
+        self.owner_oauth_client
     }
 
     /// List sessions owned by a specific user
     #[must_use]
-    pub fn for_owner_oauth2_client(mut self, client: &'a Client) -> Self {
-        self.owner_oauth2_client = Some(client);
+    pub fn for_owner_oauth_client(mut self, client: &'a Client) -> Self {
+        self.owner_oauth_client = Some(client);
         self
     }
 

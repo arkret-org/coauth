@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use coauth_data::{
-    RepositoryAccess, audit::AdminOperation, upstream_oauth2::UpstreamOAuthLinkFilter,
+    RepositoryAccess, audit::AdminOperation, upstream_oauth::UpstreamOAuthLinkFilter,
 };
 use salvo::{http::StatusCode, prelude::*};
 use schemars::JsonSchema;
@@ -28,10 +28,10 @@ mod test_utils {
     use coauth_data::{
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
         UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
-        UpstreamOAuthProviderTokenAuthMethod, upstream_oauth2::UpstreamOAuthProviderParams,
+        UpstreamOAuthProviderTokenAuthMethod, upstream_oauth::UpstreamOAuthProviderParams,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
-    use oauth2_types::scope::{OPENID, Scope};
+    use oauth_types::scope::{OPENID, Scope};
 
     pub(crate) fn oidc_provider_params(name: &str) -> UpstreamOAuthProviderParams {
         UpstreamOAuthProviderParams {
@@ -113,7 +113,7 @@ pub async fn add_link(
         .await?
         .ok_or_else(|| {
             AppError::not_found(format!(
-                "Upstream OAuth 2.0 Provider ID {} not found",
+                "Upstream OAuth Provider ID {} not found",
                 body.provider_id
             ))
         })?;
@@ -221,7 +221,7 @@ pub async fn delete_link(req: &mut Request, depot: &Depot) -> AppResult<StatusCo
         .lookup(link_id)
         .await?
         .ok_or_else(|| {
-            AppError::not_found(format!("Upstream OAuth 2.0 Link ID {link_id} not found"))
+            AppError::not_found(format!("Upstream OAuth Link ID {link_id} not found"))
         })?;
 
     let provider_id = entry.provider_id;
@@ -265,7 +265,7 @@ pub async fn get_link(
         .lookup(link_id)
         .await?
         .ok_or_else(|| {
-            AppError::not_found(format!("Upstream OAuth 2.0 Link ID {link_id} not found"))
+            AppError::not_found(format!("Upstream OAuth Link ID {link_id} not found"))
         })?;
 
     Ok(Json(SingleResponse::new_canonical(
@@ -452,7 +452,7 @@ pub async fn update_link(
 fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) -> AppError {
     match error {
         crate::services::user_admin::UserAdminServiceError::UpstreamOAuthLinkNotFound(id) => {
-            AppError::not_found(format!("Upstream OAuth 2.0 Link ID {id} not found"))
+            AppError::not_found(format!("Upstream OAuth Link ID {id} not found"))
         }
         crate::services::user_admin::UserAdminServiceError::ReferencedUserNotFound(id) => {
             AppError::bad_request(format!("Referenced user ID {id} not found"))
@@ -495,7 +495,7 @@ mod tests {
     use chrono::Duration;
     use coauth_data::{
         RepositoryAccess, UpstreamOAuthAuthorizationSessionState,
-        upstream_oauth2::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
+        upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
         user::UserRepository,
     };
     use hyper::{Request, StatusCode};
@@ -795,7 +795,7 @@ mod tests {
         {
           "errors": [
             {
-              "title": "Upstream OAuth 2.0 Provider ID 00000000000000000000000000 not found"
+              "title": "Upstream OAuth Provider ID 00000000000000000000000000 not found"
             }
           ]
         }

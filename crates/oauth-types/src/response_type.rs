@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//! OAuth 2.0 / OpenID Connect response type handling.
+//! OAuth / OpenID Connect response type handling.
 //!
 //! A response type is a space-separated set of tokens that determines which
 //! artifacts the authorization endpoint returns.

@@ -7,7 +7,7 @@
 use std::net::IpAddr;
 
 use coauth_data::{Client, User};
-use oauth2_types::{registration::VerifiedClientMetadata, scope::Scope};
+use oauth_types::{registration::VerifiedClientMetadata, scope::Scope};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -159,9 +159,9 @@ pub enum RegistrationMethod {
     #[serde(rename = "password")]
     Password,
 
-    /// Registration via an upstream OAuth 2.0 identity provider
-    #[serde(rename = "upstream-oauth2")]
-    UpstreamOAuth2,
+    /// Registration via an upstream OAuth identity provider
+    #[serde(rename = "upstream-oauth")]
+    UpstreamOAuth,
 }
 
 /// Policy input for evaluating a new user registration request.
@@ -186,7 +186,7 @@ pub struct RegisterInput<'a> {
 // Client registration
 // ---------------------------------------------------------------------------
 
-/// Policy input for evaluating an OAuth 2.0 dynamic client registration.
+/// Policy input for evaluating an OAuth dynamic client registration.
 #[derive(Serialize, Debug, JsonSchema)]
 pub struct ClientRegistrationInput<'a> {
     /// The validated client metadata from the registration request
@@ -201,7 +201,7 @@ pub struct ClientRegistrationInput<'a> {
 // Authorization grants
 // ---------------------------------------------------------------------------
 
-/// The OAuth 2.0 grant type being requested.
+/// The OAuth grant type being requested.
 #[derive(Serialize, Debug, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GrantType {
@@ -223,8 +223,8 @@ pub struct SessionCounts {
     /// Total number of active sessions across all types
     pub total: u64,
 
-    /// Number of active OAuth 2.0 sessions
-    pub oauth2: u64,
+    /// Number of active OAuth sessions
+    pub oauth: u64,
 
     /// Number of active personal/direct sessions
     pub personal: u64,
@@ -243,7 +243,7 @@ pub struct AuthorizationGrantInput<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_counts: Option<SessionCounts>,
 
-    /// The OAuth 2.0 client requesting the grant
+    /// The OAuth client requesting the grant
     #[schemars(with = "std::collections::HashMap<String, serde_json::Value>")]
     pub client: &'a Client,
 

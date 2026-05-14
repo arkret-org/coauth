@@ -1,6 +1,6 @@
 # coauth
 
-`coauth` is the Contrix Auth / Account Server. It provides OIDC/OAuth2 login,
+`coauth` is the Contrix Auth / Account Server. It provides OIDC/OAuth login,
 account lifecycle management, short-lived session grants, policy hooks,
 notifications, and a stable admin API for Contrix deployments.
 
@@ -34,7 +34,7 @@ The primary Contrix paths include:
   credentials, and device code grants
 - Contrix discovery, service DID documents, handle resolution, and short-lived
   session grants with Principal Server introspection
-- Local account lifecycle, password auth, upstream OAuth2 federation, and
+- Local account lifecycle, password auth, upstream OAuth federation, and
   recovery workflows
 - Admin APIs for sessions, tokens, users, clients, templates, connectors, and
   policy data

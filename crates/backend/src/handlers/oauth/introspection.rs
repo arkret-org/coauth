@@ -5,7 +5,7 @@ use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock, Ur
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
 use coauth_keystore::Encrypter;
 use coauth_principal::PrincipalServerAdmin;
-use oauth2_types::{
+use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     requests::{IntrospectionRequest, IntrospectionResponse},
 };
@@ -22,8 +22,8 @@ use crate::{
 
 static INTROSPECTION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("coauth.oauth2.introspection_request")
-        .with_description("Number of OAuth 2.0 introspection requests")
+        .u64_counter("coauth.oauth.introspection_request")
+        .with_description("Number of OAuth introspection requests")
         .with_unit("{request}")
         .build()
 });
@@ -122,7 +122,7 @@ impl Scribe for RouteError {
                     | IntrospectionError::CantLoadOAuthSession(_)
                     | IntrospectionError::CantLoadPersonalSession(_)
                     | IntrospectionError::CantLoadUser(_)
-                    | IntrospectionError::CantLoadOAuth2Client(_) => {
+                    | IntrospectionError::CantLoadOAuthClient(_) => {
                         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
                         res.render(Json(
                             ClientError::from(ClientErrorCode::ServerError)
@@ -156,7 +156,7 @@ impl_from_error_for_route!(coauth_data::RepositoryError);
 impl_from_error_for_route!(crate::salvo_utils::client_authorization::ClientAuthorizationError);
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.introspection.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.introspection.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     match handle_post(req, depot).await {
         Ok(reply) => {
@@ -249,8 +249,8 @@ async fn handle_post(
 
     // Record the counter for the active introspection result.
     let kind_value = match reply.token_type {
-        Some(OAuthTokenTypeHint::RefreshToken) => "oauth2_refresh_token",
-        Some(OAuthTokenTypeHint::AccessToken) => "oauth2_access_token",
+        Some(OAuthTokenTypeHint::RefreshToken) => "oauth_refresh_token",
+        Some(OAuthTokenTypeHint::AccessToken) => "oauth_access_token",
         _ => "unknown",
     };
     // Distinguish personal access tokens by checking if there is no jti

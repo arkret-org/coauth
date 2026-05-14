@@ -11,7 +11,7 @@
 //!   [`UserRegistration`], [`UserRecoveryTicket`]
 //! - **Flows** — [`FlowDefinition`], [`FlowStageBinding`], [`StageKind`],
 //!   [`FlowSession`], [`StageChallenge`], [`StageResponse`], [`StageOutcome`]
-//! - **OAuth 2.0** — [`Client`], [`Session`], [`AuthorizationGrant`],
+//! - **OAuth** — [`Client`], [`Session`], [`AuthorizationGrant`],
 //!   [`AccessToken`], [`RefreshToken`], [`DeviceCodeGrant`]
 //! - **Upstream SSO** — [`UpstreamOAuthProvider`], [`UpstreamOAuthLink`],
 //!   [`UpstreamOAuthAuthorizationSession`]
@@ -49,8 +49,8 @@ pub mod clock;
 pub mod flow;
 /// Persisted notification request, delivery, and audit event models.
 pub mod notification;
-/// OAuth 2.0 client and session models.
-pub mod oauth2;
+/// OAuth client and session models.
+pub mod oauth;
 /// Personal access token types.
 pub mod personal;
 /// PostgreSQL storage backend implementation details.
@@ -64,7 +64,7 @@ mod site_config;
 /// Storage repository abstractions and pagination helpers.
 pub mod storage;
 pub(crate) mod tokens;
-pub mod upstream_oauth2;
+pub mod upstream_oauth;
 mod url_builder;
 /// User domain types, repositories, and PostgreSQL implementations.
 pub mod user;
@@ -138,7 +138,7 @@ pub use self::{
         NotificationEventKind, NotificationEventLog, NotificationPreference, NotificationRequest,
         NotificationRequestSource, NotificationRequestStatus,
     },
-    oauth2::{
+    oauth::{
         AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, DeviceCodeGrant,
         DeviceCodeGrantState, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField,
         LocalizedClientMetadata, Pkce, Session, SessionGrant, SessionState,
@@ -151,7 +151,7 @@ pub use self::{
     tokens::{
         AccessToken, AccessTokenState, RefreshToken, RefreshTokenState, TokenFormatError, TokenType,
     },
-    upstream_oauth2::{
+    upstream_oauth::{
         UpstreamOAuthAuthorizationSession, UpstreamOAuthAuthorizationSessionState,
         UpstreamOAuthLink, UpstreamOAuthLinkPatch, UpstreamOAuthProvider,
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,

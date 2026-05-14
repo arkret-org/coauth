@@ -39,7 +39,7 @@ Common resource names:
 
 - `discovery` for `/.well-known/*`
 - `human` for browser-facing pages
-- `oauth` for OAuth2 / OIDC endpoints
+- `oauth` for OAuth / OIDC endpoints
 - `restapi` for the SPA/API backend
 - `assets` for frontend assets
 - `adminapi` for `/api/admin/v1/*`
@@ -115,7 +115,7 @@ templates:
 
 ## `clients`
 
-Static OAuth2 / OIDC client registrations that are synchronized into the
+Static OAuth / OIDC client registrations that are synchronized into the
 database.
 
 ```yaml
@@ -253,12 +253,12 @@ sms:
     from_number: "+12065550123"
 ```
 
-## `upstream_oauth2`
+## `upstream_oauth`
 
-Trusted upstream OAuth2 / OIDC providers for federation.
+Trusted upstream OAuth / OIDC providers for federation.
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01HFVBY12TMNTYTBV8W921M5FA
       issuer: https://accounts.google.com

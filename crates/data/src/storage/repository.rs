@@ -8,15 +8,15 @@ use crate::{
     app_session::AppSessionRepository,
     audit::AuditRepository,
     notification::NotificationRepository,
-    oauth2::{
-        OAuth2AccessTokenRepository, OAuth2AuthorizationGrantRepository, OAuth2ClientRepository,
-        OAuth2DeviceCodeGrantRepository, OAuth2RefreshTokenRepository, OAuth2SessionRepository,
+    oauth::{
+        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
+        OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
         SessionGrantRepository,
     },
     personal::{PersonalAccessTokenRepository, PersonalSessionRepository},
     policy_data::PolicyDataRepository,
     queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository},
-    upstream_oauth2::{
+    upstream_oauth::{
         UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
         UpstreamOAuthSessionRepository,
     },
@@ -180,39 +180,39 @@ pub trait RepositoryAccess: Send {
     /// Get a [`NotificationRepository`]
     fn notification<'c>(&'c mut self) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c>;
 
-    /// Get an [`OAuth2ClientRepository`]
-    fn oauth2_client<'c>(&'c mut self)
-    -> Box<dyn OAuth2ClientRepository<Error = Self::Error> + 'c>;
+    /// Get an [`OAuthClientRepository`]
+    fn oauth_client<'c>(&'c mut self)
+    -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c>;
 
-    /// Get an [`OAuth2AuthorizationGrantRepository`]
-    fn oauth2_authorization_grant<'c>(
+    /// Get an [`OAuthAuthorizationGrantRepository`]
+    fn oauth_authorization_grant<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2AuthorizationGrantRepository<Error = Self::Error> + 'c>;
+    ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c>;
 
-    /// Get an [`OAuth2SessionRepository`]
-    fn oauth2_session<'c>(
+    /// Get an [`OAuthSessionRepository`]
+    fn oauth_session<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2SessionRepository<Error = Self::Error> + 'c>;
+    ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c>;
 
     /// Get a [`SessionGrantRepository`]
-    fn oauth2_session_grant<'c>(
+    fn oauth_session_grant<'c>(
         &'c mut self,
     ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c>;
 
-    /// Get an [`OAuth2AccessTokenRepository`]
-    fn oauth2_access_token<'c>(
+    /// Get an [`OAuthAccessTokenRepository`]
+    fn oauth_access_token<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2AccessTokenRepository<Error = Self::Error> + 'c>;
+    ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c>;
 
-    /// Get an [`OAuth2RefreshTokenRepository`]
-    fn oauth2_refresh_token<'c>(
+    /// Get an [`OAuthRefreshTokenRepository`]
+    fn oauth_refresh_token<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2RefreshTokenRepository<Error = Self::Error> + 'c>;
+    ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c>;
 
-    /// Get an [`OAuth2DeviceCodeGrantRepository`]
+    /// Get an [`OAuthDeviceCodeGrantRepository`]
     fn oauth_device_code_grant<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2DeviceCodeGrantRepository<Error = Self::Error> + 'c>;
+    ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c>;
 
     /// Get a [`PersonalAccessTokenRepository`]
     fn personal_access_token<'c>(
@@ -259,16 +259,16 @@ mod impls {
         app_session::AppSessionRepository,
         audit::AuditRepository,
         notification::NotificationRepository,
-        oauth2::{
-            OAuth2AccessTokenRepository, OAuth2AuthorizationGrantRepository,
-            OAuth2ClientRepository, OAuth2DeviceCodeGrantRepository, OAuth2RefreshTokenRepository,
-            OAuth2SessionRepository, SessionGrantRepository,
+        oauth::{
+            OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository,
+            OAuthClientRepository, OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository,
+            OAuthSessionRepository, SessionGrantRepository,
         },
         personal::{PersonalAccessTokenRepository, PersonalSessionRepository},
         policy_data::PolicyDataRepository,
         queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository},
         storage::notification_template::NotificationTemplateRepository,
-        upstream_oauth2::{
+        upstream_oauth::{
             UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
             UpstreamOAuthSessionRepository,
         },
@@ -422,57 +422,57 @@ mod impls {
             Box::new(MapErr::new(self.inner.notification(), &mut self.mapper))
         }
 
-        fn oauth2_client<'c>(
+        fn oauth_client<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2ClientRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.oauth2_client(), &mut self.mapper))
+        ) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(self.inner.oauth_client(), &mut self.mapper))
         }
 
-        fn oauth2_authorization_grant<'c>(
+        fn oauth_authorization_grant<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2AuthorizationGrantRepository<Error = Self::Error> + 'c> {
+        ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
-                self.inner.oauth2_authorization_grant(),
+                self.inner.oauth_authorization_grant(),
                 &mut self.mapper,
             ))
         }
 
-        fn oauth2_session<'c>(
+        fn oauth_session<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2SessionRepository<Error = Self::Error> + 'c> {
-            Box::new(MapErr::new(self.inner.oauth2_session(), &mut self.mapper))
+        ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(self.inner.oauth_session(), &mut self.mapper))
         }
 
-        fn oauth2_session_grant<'c>(
+        fn oauth_session_grant<'c>(
             &'c mut self,
         ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
-                self.inner.oauth2_session_grant(),
+                self.inner.oauth_session_grant(),
                 &mut self.mapper,
             ))
         }
 
-        fn oauth2_access_token<'c>(
+        fn oauth_access_token<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2AccessTokenRepository<Error = Self::Error> + 'c> {
+        ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
-                self.inner.oauth2_access_token(),
+                self.inner.oauth_access_token(),
                 &mut self.mapper,
             ))
         }
 
-        fn oauth2_refresh_token<'c>(
+        fn oauth_refresh_token<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2RefreshTokenRepository<Error = Self::Error> + 'c> {
+        ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
-                self.inner.oauth2_refresh_token(),
+                self.inner.oauth_refresh_token(),
                 &mut self.mapper,
             ))
         }
 
         fn oauth_device_code_grant<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2DeviceCodeGrantRepository<Error = Self::Error> + 'c> {
+        ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
                 self.inner.oauth_device_code_grant(),
                 &mut self.mapper,
@@ -621,45 +621,45 @@ mod impls {
             (**self).notification()
         }
 
-        fn oauth2_client<'c>(
+        fn oauth_client<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2ClientRepository<Error = Self::Error> + 'c> {
-            (**self).oauth2_client()
+        ) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
+            (**self).oauth_client()
         }
 
-        fn oauth2_authorization_grant<'c>(
+        fn oauth_authorization_grant<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2AuthorizationGrantRepository<Error = Self::Error> + 'c> {
-            (**self).oauth2_authorization_grant()
+        ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c> {
+            (**self).oauth_authorization_grant()
         }
 
-        fn oauth2_session<'c>(
+        fn oauth_session<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2SessionRepository<Error = Self::Error> + 'c> {
-            (**self).oauth2_session()
+        ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c> {
+            (**self).oauth_session()
         }
 
-        fn oauth2_session_grant<'c>(
+        fn oauth_session_grant<'c>(
             &'c mut self,
         ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
-            (**self).oauth2_session_grant()
+            (**self).oauth_session_grant()
         }
 
-        fn oauth2_access_token<'c>(
+        fn oauth_access_token<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2AccessTokenRepository<Error = Self::Error> + 'c> {
-            (**self).oauth2_access_token()
+        ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c> {
+            (**self).oauth_access_token()
         }
 
-        fn oauth2_refresh_token<'c>(
+        fn oauth_refresh_token<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2RefreshTokenRepository<Error = Self::Error> + 'c> {
-            (**self).oauth2_refresh_token()
+        ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c> {
+            (**self).oauth_refresh_token()
         }
 
         fn oauth_device_code_grant<'c>(
             &'c mut self,
-        ) -> Box<dyn OAuth2DeviceCodeGrantRepository<Error = Self::Error> + 'c> {
+        ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c> {
             (**self).oauth_device_code_grant()
         }
 

@@ -1,6 +1,6 @@
 # 获取访问令牌
 
-`coauth` 在 `misc/` 中提供了脚本，用 OAuth 2.0 Device Authorization Grant
+`coauth` 在 `misc/` 中提供了脚本，用 OAuth Device Authorization Grant
 为 CLI 或管理员场景交互式获取访问令牌：
 
 - `misc/device-code-grant.sh` 面向 POSIX shell，需要 `sh`、`jq` 和 `curl`。
@@ -37,11 +37,11 @@ sh ./misc/device-code-grant.sh https://auth.example.com/ urn:contrix:admin:* urn
 
 ## 自动化
 
-非交互式自动化应优先使用 OAuth 2.0 client credentials grant，并配置 confidential
+非交互式自动化应优先使用 OAuth client credentials grant，并配置 confidential
 client：
 
 ```bash
-TOKEN=$(curl -sS -X POST https://auth.example.com/oauth2/token \
+TOKEN=$(curl -sS -X POST https://auth.example.com/oauth/token \
   -d "grant_type=client_credentials" \
   -d "client_id=${CLIENT_ID}" \
   -d "client_secret=${CLIENT_SECRET}" \

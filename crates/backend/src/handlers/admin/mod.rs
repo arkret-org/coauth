@@ -1,7 +1,7 @@
 //! Admin API handlers.
 //!
 //! Provides a JSON:API-style REST interface for managing users, sessions,
-//! OAuth 2.0 clients, upstream providers, and policy data. All endpoints
+//! OAuth clients, upstream providers, and policy data. All endpoints
 //! require the `urn:coauth:admin` scope or a Contrix admin scope.
 //!
 //! The API specification is available as an OpenAPI document served by the
@@ -50,7 +50,7 @@ pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 pub const CONTRIX_ADMIN_SCOPE: &str = "urn:contrix:admin:*";
 
 /// Returns `true` if the given scope string contains an admin scope.
-pub fn has_admin_scope(scope: &oauth2_types::scope::Scope) -> bool {
+pub fn has_admin_scope(scope: &oauth_types::scope::Scope) -> bool {
     scope.contains(ADMIN_SCOPE)
         || scope.contains(CONTRIX_ADMIN_SCOPE)
         || scope

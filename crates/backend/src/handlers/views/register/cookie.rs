@@ -2,7 +2,7 @@
 //!
 //! Stores the set of in-flight registration IDs the browser is allowed to
 //! interact with. Shares the [`TimedCookie`] contract with the upstream
-//! OAuth 2.0 cookie; this module only supplies the payload-specific filter
+//! OAuth cookie; this module only supplies the payload-specific filter
 //! and the "remove when empty" save override.
 
 use std::collections::BTreeSet;

@@ -3,7 +3,7 @@ use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError, SiteConfig,
     UpstreamOAuthProvider, UrlBuilder, User,
-    upstream_oauth2::UpstreamOAuthProviderRepository,
+    upstream_oauth::UpstreamOAuthProviderRepository,
     user::{BrowserSessionRepository, UserPasswordRepository, UserRepository},
 };
 use coauth_principal::PrincipalServerAdmin;

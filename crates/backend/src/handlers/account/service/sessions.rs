@@ -1,6 +1,6 @@
 use coauth_data::{
     Authentication, BoxRepository, BrowserSession, Client, Clock, RepositoryError, Session,
-    oauth2::{OAuth2ClientRepository, OAuth2SessionRepository},
+    oauth::{OAuthClientRepository, OAuthSessionRepository},
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
     user::{BrowserSessionRepository, UserRepository},
 };
@@ -16,7 +16,7 @@ pub struct BrowserSessionDetailData {
     pub last_authentication: Option<Authentication>,
 }
 
-pub struct OAuth2SessionDetailData {
+pub struct OAuthSessionDetailData {
     pub session: Session,
     pub client: Option<Client>,
 }
@@ -61,13 +61,13 @@ pub async fn load_browser_session_detail(
     })
 }
 
-pub async fn load_oauth2_session_detail(
+pub async fn load_oauth_session_detail(
     mut repo: BoxRepository,
     requester: &Requester,
     session_id: Ulid,
-) -> Result<OAuth2SessionDetailData, AccountSessionError> {
+) -> Result<OAuthSessionDetailData, AccountSessionError> {
     let session = repo
-        .oauth2_session()
+        .oauth_session()
         .lookup(session_id)
         .await?
         .ok_or(AccountSessionError::NotFound)?;
@@ -76,11 +76,11 @@ pub async fn load_oauth2_session_detail(
         return Err(AccountSessionError::Unauthorized);
     }
 
-    let client = repo.oauth2_client().lookup(session.client_id).await?;
+    let client = repo.oauth_client().lookup(session.client_id).await?;
 
     repo.cancel().await?;
 
-    Ok(OAuth2SessionDetailData { session, client })
+    Ok(OAuthSessionDetailData { session, client })
 }
 
 pub async fn end_browser_session(
@@ -105,7 +105,7 @@ pub async fn end_browser_session(
     Ok(())
 }
 
-pub async fn end_oauth2_session(
+pub async fn end_oauth_session(
     mut repo: BoxRepository,
     requester: &Requester,
     rng: &mut (dyn CryptoRngCore + Send),
@@ -113,7 +113,7 @@ pub async fn end_oauth2_session(
     session_id: Ulid,
 ) -> Result<(), AccountSessionError> {
     let session = repo
-        .oauth2_session()
+        .oauth_session()
         .lookup(session_id)
         .await?
         .ok_or(AccountSessionError::NotFound)?;
@@ -134,13 +134,13 @@ pub async fn end_oauth2_session(
             .await?;
     }
 
-    repo.oauth2_session().finish(clock, session).await?;
+    repo.oauth_session().finish(clock, session).await?;
     repo.save().await?;
 
     Ok(())
 }
 
-pub async fn set_oauth2_session_human_name(
+pub async fn set_oauth_session_human_name(
     mut repo: BoxRepository,
     requester: &Requester,
     _clock: &dyn Clock,
@@ -149,7 +149,7 @@ pub async fn set_oauth2_session_human_name(
     human_name: Option<String>,
 ) -> Result<(), AccountSessionError> {
     let session = repo
-        .oauth2_session()
+        .oauth_session()
         .lookup(session_id)
         .await?
         .ok_or(AccountSessionError::NotFound)?;
@@ -165,7 +165,7 @@ pub async fn set_oauth2_session_human_name(
     };
 
     let session = repo
-        .oauth2_session()
+        .oauth_session()
         .set_human_name(session, human_name.clone())
         .await?;
 

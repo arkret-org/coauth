@@ -18,7 +18,7 @@ use coauth_backend::{
 };
 use coauth_config::{
     AppConfig, ClientsConfig, ConfigurationSection, ConfigurationSectionExt, HttpResource,
-    UpstreamOAuth2Config,
+    UpstreamOAuthConfig,
 };
 use coauth_data::{PgRepositoryFactory, SystemClock, UrlBuilder};
 use figment::Figment;
@@ -92,11 +92,11 @@ impl Options {
                 .context("could not get connection from pool")?;
             let clients_config =
                 ClientsConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
-            let upstream_oauth2_config = UpstreamOAuth2Config::extract_or_default(figment)
+            let upstream_oauth_config = UpstreamOAuthConfig::extract_or_default(figment)
                 .map_err(anyhow::Error::from_boxed)?;
 
             coauth_backend::sync::config_sync(
-                upstream_oauth2_config,
+                upstream_oauth_config,
                 clients_config,
                 conn,
                 &encrypter,

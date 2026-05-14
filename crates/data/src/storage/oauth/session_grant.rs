@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 
@@ -152,7 +152,7 @@ pub trait SessionGrantRepository: Send + Sync {
     /// Delete session grants whose `expires_at` is strictly before `until`.
     ///
     /// Mirrors the time-cursor cleanup contract used elsewhere
-    /// (e.g. `oauth2_session.cleanup_finished`): paginates through
+    /// (e.g. `oauth_session.cleanup_finished`): paginates through
     /// matching rows in `expires_at` ascending order, returns the count
     /// deleted in this batch and the latest `expires_at` processed so a
     /// later call can resume from `since = next_cursor`.

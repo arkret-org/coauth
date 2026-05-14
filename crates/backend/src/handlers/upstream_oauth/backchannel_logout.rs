@@ -2,16 +2,16 @@ use std::collections::{HashMap, HashSet};
 
 use coauth_data::{
     Pagination, UpstreamOAuthProvider, UpstreamOAuthProviderOnBackchannelLogout,
-    oauth2::OAuth2SessionFilter,
+    oauth::OAuthSessionFilter,
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
-    upstream_oauth2::UpstreamOAuthSessionFilter,
+    upstream_oauth::UpstreamOAuthSessionFilter,
     user::BrowserSessionFilter,
 };
 use coauth_jose::{
     claims::{self, Claim, TimeOptions},
     jwt::JwtDecodeError,
 };
-use oauth2_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::errors::{ClientError, ClientErrorCode};
 use salvo::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
@@ -19,7 +19,7 @@ use thiserror::Error;
 use ulid::Ulid;
 
 use crate::{
-    handlers::{account::DepotExt, upstream_oauth2::cache::LazyProviderInfos},
+    handlers::{account::DepotExt, upstream_oauth::cache::LazyProviderInfos},
     oidc_client::{
         error::JwtVerificationError,
         requests::jose::{JwtVerificationData, verify_signed_jwt},
@@ -119,7 +119,7 @@ struct LogoutTokenEvents {
 const EVENTS: Claim<LogoutTokenEvents> = Claim::new("events");
 
 #[handler]
-#[tracing::instrument(name = "handlers.upstream_oauth2.backchannel_logout.post", skip_all)]
+#[tracing::instrument(name = "handlers.upstream_oauth.backchannel_logout.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteError> {
     let provider_id: Ulid = req
         .param("provider_id")
@@ -218,7 +218,7 @@ pub async fn post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteError
     EVENTS.extract_required(&mut claims)?; // (6)
     claims::NONCE.assert_absent(&claims)?; // (7)
 
-    // Find the corresponding upstream OAuth 2.0 sessions
+    // Find the corresponding upstream OAuth sessions
     let mut auth_session_filter = UpstreamOAuthSessionFilter::new().for_provider(&provider);
     if let Some(sub) = &sub {
         auth_session_filter = auth_session_filter.with_sub_claim(sub);
@@ -272,17 +272,17 @@ pub async fn post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteError
                 .finish_bulk(&clock, browser_session_filter.active_only())
                 .await?;
 
-            let oauth2_session_filter = OAuth2SessionFilter::new()
+            let oauth_session_filter = OAuthSessionFilter::new()
                 .active_only()
                 .for_browser_sessions(browser_session_filter);
 
-            let oauth2_sessions_affected = repo
-                .oauth2_session()
-                .finish_bulk(&clock, oauth2_session_filter)
+            let oauth_sessions_affected = repo
+                .oauth_session()
+                .finish_bulk(&clock, oauth_session_filter)
                 .await?;
 
             tracing::info!(
-                "Finished {browser_sessions_affected} browser sessions and {oauth2_sessions_affected} OAuth 2.0 sessions"
+                "Finished {browser_sessions_affected} browser sessions and {oauth_sessions_affected} OAuth sessions"
             );
 
             for user_id in user_ids {

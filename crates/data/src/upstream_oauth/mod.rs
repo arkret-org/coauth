@@ -20,9 +20,9 @@ pub use self::{
     session::{UpstreamOAuthAuthorizationSession, UpstreamOAuthAuthorizationSessionState},
 };
 pub use crate::{
-    pg::upstream_oauth2::{
+    pg::upstream_oauth::{
         PgUpstreamOAuthLinkRepository, PgUpstreamOAuthProviderRepository,
         PgUpstreamOAuthSessionRepository,
     },
-    storage::upstream_oauth2::*,
+    storage::upstream_oauth::*,
 };

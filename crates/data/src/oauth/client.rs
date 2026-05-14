@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
-use oauth2_types::{
+use oauth_types::{
     oidc::ApplicationType,
     registration::{ClientMetadata, Localized},
     requests::GrantType,
@@ -17,7 +17,7 @@ use url::Url;
 /// OIDC client metadata fields that may have a per-locale variant.
 ///
 /// Mirrors the small allow-list enforced at the database level by the
-/// `oauth2_client_localized_metadata_field_check` constraint. Adding a new
+/// `oauth_client_localized_metadata_field_check` constraint. Adding a new
 /// field requires a migration update *and* extending this enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -145,7 +145,7 @@ pub struct Client {
     /// Array of Redirection URI values used by the Client
     pub redirect_uris: Vec<Url>,
 
-    /// Array containing a list of the OAuth 2.0 Grant Types that the Client is
+    /// Array containing a list of the OAuth Grant Types that the Client is
     /// declaring that it will restrict itself to using.
     pub grant_types: Vec<GrantType>,
 

@@ -90,7 +90,7 @@ pub enum StageDefinition {
     },
     /// Display a CAPTCHA challenge.
     Captcha { order: i32 },
-    /// Display an OAuth2 consent screen.
+    /// Display an OAuth consent screen.
     Consent { order: i32 },
     /// Collect arbitrary prompted fields.
     Prompt {

@@ -8,8 +8,8 @@ use salvo::{prelude::*, writing::Text};
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::oauth2::access::{
-    OAuth2AccessError, accept_authorization_consent, load_authorization_consent,
+use crate::handlers::oauth::access::{
+    OAuthAccessError, accept_authorization_consent, load_authorization_consent,
 };
 use crate::handlers::account::DepotExt;
 use crate::handlers::session::{AccountError, SessionOrFallback, load_session_or_fallback};
@@ -32,16 +32,16 @@ pub enum RouteError {
     PolicyViolation,
 }
 
-impl From<OAuth2AccessError> for RouteError {
-    fn from(e: OAuth2AccessError) -> Self {
+impl From<OAuthAccessError> for RouteError {
+    fn from(e: OAuthAccessError) -> Self {
         match e {
-            OAuth2AccessError::NotFound => RouteError::GrantNotFound,
-            OAuth2AccessError::GrantNotPending => RouteError::GrantNotPending,
-            OAuth2AccessError::PolicyViolation => RouteError::PolicyViolation,
-            OAuth2AccessError::Repository(e) => RouteError::Internal(Box::new(e)),
-            OAuth2AccessError::Internal(e) => RouteError::Internal(e),
-            OAuth2AccessError::GrantExpired => {
-                RouteError::Internal(Box::new(OAuth2AccessError::GrantExpired))
+            OAuthAccessError::NotFound => RouteError::GrantNotFound,
+            OAuthAccessError::GrantNotPending => RouteError::GrantNotPending,
+            OAuthAccessError::PolicyViolation => RouteError::PolicyViolation,
+            OAuthAccessError::Repository(e) => RouteError::Internal(Box::new(e)),
+            OAuthAccessError::Internal(e) => RouteError::Internal(e),
+            OAuthAccessError::GrantExpired => {
+                RouteError::Internal(Box::new(OAuthAccessError::GrantExpired))
             }
         }
     }
@@ -66,7 +66,7 @@ impl Scribe for RouteError {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.authorization.consent.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.authorization.consent.get", skip_all)]
 pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_get(req, depot, res).await {
         Ok(()) => {}
@@ -167,7 +167,7 @@ async fn handle_get(
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.authorization.consent.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.authorization.consent.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_post(req, depot, res).await {
         Ok(()) => {}
@@ -255,7 +255,7 @@ async fn handle_post(
     .await
     {
         Ok(decision) => decision,
-        Err(OAuth2AccessError::PolicyViolation) => {
+        Err(OAuthAccessError::PolicyViolation) => {
             // Re-load the grant and client so we can render the violation page.
             let repo = repo_factory.create().await?;
             let info = load_authorization_consent(
@@ -284,7 +284,7 @@ async fn handle_post(
     };
 
     activity_tracker
-        .record_oauth2_session(&clock, &decision.session)
+        .record_oauth_session(&clock, &decision.session)
         .await;
 
     let callback_response =

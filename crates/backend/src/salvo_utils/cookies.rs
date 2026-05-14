@@ -295,7 +295,7 @@ pub fn ulid_is_expired(id: Ulid, now: DateTime<Utc>, max_age: Duration) -> bool 
 /// Shared abstraction for encrypted "session list" cookies whose entries
 /// auto-expire after a fixed wall-clock duration.
 ///
-/// Implemented by [`crate::handlers::upstream_oauth2::UpstreamSessionsCookie`]
+/// Implemented by [`crate::handlers::upstream_oauth::UpstreamSessionsCookie`]
 /// and
 /// [`crate::handlers::views::register::UserRegistrationSessionsCookie`], both
 /// of which used to carry a `// TODO: move that to a standalone cookie

@@ -1,5 +1,5 @@
 ---
-source: crates/backend/src/handlers/oauth2/discovery.rs
+source: crates/backend/src/handlers/oauth/discovery.rs
 expression: snapshot
 ---
 {

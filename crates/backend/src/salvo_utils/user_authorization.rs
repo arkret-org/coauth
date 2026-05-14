@@ -2,14 +2,14 @@ use std::{collections::HashMap, error::Error, sync::LazyLock};
 
 use coauth_data::{
     Clock, RepositoryAccess, Session,
-    oauth2::{OAuth2AccessTokenRepository, OAuth2SessionRepository},
+    oauth::{OAuthAccessTokenRepository, OAuthSessionRepository},
 };
 use headers::{
     Header, HeaderMapExt, HeaderName,
     authorization::{Bearer, Credentials},
 };
 use http::{HeaderMap, HeaderValue, StatusCode, header::WWW_AUTHENTICATE};
-use oauth2_types::scope::ScopeToken;
+use oauth_types::scope::ScopeToken;
 use salvo::{
     extract::{Extractible, Metadata},
     prelude::*,
@@ -44,13 +44,13 @@ impl AccessToken {
         };
 
         let token = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .find_by_token(token.as_str())
             .await?
             .ok_or(AuthorizationVerificationError::InvalidToken)?;
 
         let session = repo
-            .oauth2_session()
+            .oauth_session()
             .lookup(token.session_id)
             .await?
             .ok_or(AuthorizationVerificationError::InvalidToken)?;
@@ -123,7 +123,7 @@ impl<F: Send> UserAuthorization<F> {
 
         if !token.is_used() {
             // Mark the token as used
-            repo.oauth2_access_token().mark_used(clock, token).await?;
+            repo.oauth_access_token().mark_used(clock, token).await?;
         }
 
         Ok(session)

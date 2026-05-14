@@ -9,7 +9,7 @@ use coauth_data::{
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth2_types::scope::{Scope, ScopeToken};
+use oauth_types::scope::{Scope, ScopeToken};
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -28,7 +28,7 @@ impl<'c> PgAppSessionRepository<'c> {
     }
 }
 
-/// Row type for loading an OAuth2 session as an app session
+/// Row type for loading an OAuth session as an app session
 #[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = oauth_sessions)]
 struct AppSessionLookup {
@@ -88,7 +88,7 @@ impl TryFrom<AppSessionLookup> for AppSession {
             human_name: value.human_name,
         };
 
-        Ok(AppSession::OAuth2(Box::new(session)))
+        Ok(AppSession::OAuth(Box::new(session)))
     }
 }
 
@@ -214,7 +214,7 @@ impl AppSessionRepository for PgAppSessionRepository<'_> {
         let finished_at = clock.now();
         let device_scope = format!("urn:contrix:client:device:{device}");
 
-        let oauth2_affected = diesel::sql_query(
+        let oauth_affected = diesel::sql_query(
             "UPDATE oauth_sessions
              SET finished_at = $3
              WHERE user_id = $1
@@ -227,7 +227,7 @@ impl AppSessionRepository for PgAppSessionRepository<'_> {
         .execute(self.conn)
         .await?;
 
-        Ok(oauth2_affected > 0)
+        Ok(oauth_affected > 0)
     }
 }
 
@@ -239,9 +239,9 @@ mod tests {
         RepositoryTransaction as _,
         app_session::{AppSession, AppSessionFilter},
         clock::MockClock,
-        oauth2::OAuth2SessionRepository,
+        oauth::OAuthSessionRepository,
     };
-    use oauth2_types::{
+    use oauth_types::{
         requests::GrantType,
         scope::{OPENID, Scope},
     };
@@ -285,9 +285,9 @@ mod tests {
         let finished_list = repo.app_session().list(finished, pagination).await.unwrap();
         assert!(finished_list.edges.is_empty());
 
-        // Start an OAuth2 session
+        // Start an OAuth session
         let client = repo
-            .oauth2_client()
+            .oauth_client()
             .add(
                 &mut rng,
                 &clock,
@@ -324,7 +324,7 @@ mod tests {
         clock.advance(Duration::try_minutes(1).unwrap());
 
         let oauth_session = repo
-            .oauth2_session()
+            .oauth_session()
             .add(&mut rng, &clock, &client, Some(&user), None, scope)
             .await
             .unwrap();
@@ -337,14 +337,14 @@ mod tests {
         assert_eq!(full_list.edges.len(), 1);
         assert_eq!(
             full_list.edges[0].node,
-            AppSession::OAuth2(Box::new(oauth_session.clone()))
+            AppSession::OAuth(Box::new(oauth_session.clone()))
         );
 
         let active_list = repo.app_session().list(active, pagination).await.unwrap();
         assert_eq!(active_list.edges.len(), 1);
         assert_eq!(
             active_list.edges[0].node,
-            AppSession::OAuth2(Box::new(oauth_session.clone()))
+            AppSession::OAuth(Box::new(oauth_session.clone()))
         );
 
         let finished_list = repo.app_session().list(finished, pagination).await.unwrap();
@@ -352,7 +352,7 @@ mod tests {
 
         // Finish the session
         let oauth_session = repo
-            .oauth2_session()
+            .oauth_session()
             .finish(&clock, oauth_session)
             .await
             .unwrap();
@@ -365,7 +365,7 @@ mod tests {
         assert_eq!(full_list.edges.len(), 1);
         assert_eq!(
             full_list.edges[0].node,
-            AppSession::OAuth2(Box::new(oauth_session.clone()))
+            AppSession::OAuth(Box::new(oauth_session.clone()))
         );
 
         let active_list = repo.app_session().list(active, pagination).await.unwrap();
@@ -375,7 +375,7 @@ mod tests {
         assert_eq!(finished_list.edges.len(), 1);
         assert_eq!(
             finished_list.edges[0].node,
-            AppSession::OAuth2(Box::new(oauth_session.clone()))
+            AppSession::OAuth(Box::new(oauth_session.clone()))
         );
 
         // Query by device
@@ -385,7 +385,7 @@ mod tests {
         assert_eq!(list.edges.len(), 1);
         assert_eq!(
             list.edges[0].node,
-            AppSession::OAuth2(Box::new(oauth_session.clone()))
+            AppSession::OAuth(Box::new(oauth_session.clone()))
         );
 
         // Create a second user

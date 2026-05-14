@@ -11,7 +11,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use coauth_data::{
     Pagination, RepositoryAccess,
-    oauth2::OAuth2SessionFilter,
+    oauth::OAuthSessionFilter,
     personal::PersonalSessionFilter,
     queue::{
         DeleteDeviceJob, ProvisionDeviceJob, ProvisionUserJob, QueueJobRepositoryExt as _,
@@ -152,7 +152,7 @@ async fn schedule_device_sync(state: &State, user_id: ulid::Ulid) -> Result<(), 
 
 // ── Sync devices ─────────────────────────────────────────────────────
 
-/// Collects every active device ID from OAuth 2.0 and personal sessions,
+/// Collects every active device ID from OAuth and personal sessions,
 /// then pushes the canonical set to the principal.
 #[async_trait]
 impl RunnableJob for SyncDevicesJob {
@@ -181,8 +181,8 @@ impl RunnableJob for SyncDevicesJob {
 
         let mut devices = HashSet::new();
 
-        // ── Gather device IDs from OAuth 2.0 sessions ────────────────
-        collect_devices_from_oauth2(&mut repo, &user, &mut devices).await?;
+        // ── Gather device IDs from OAuth sessions ────────────────
+        collect_devices_from_oauth(&mut repo, &user, &mut devices).await?;
 
         // ── Gather device IDs from personal sessions ─────────────────
         collect_devices_from_personal(&mut repo, &user, &mut devices).await?;
@@ -208,15 +208,15 @@ const DEVICE_SCOPE_PREFIXES: &[&str] = &[
 ];
 
 /// Extract a device ID from a scope token if it has a known device prefix.
-fn extract_device_id(token: &oauth2_types::scope::ScopeToken) -> Option<&str> {
+fn extract_device_id(token: &oauth_types::scope::ScopeToken) -> Option<&str> {
     let s = token.as_str();
     DEVICE_SCOPE_PREFIXES
         .iter()
         .find_map(|prefix| s.strip_prefix(prefix))
 }
 
-/// Paginate through all active OAuth 2.0 sessions and collect device IDs.
-async fn collect_devices_from_oauth2(
+/// Paginate through all active OAuth sessions and collect device IDs.
+async fn collect_devices_from_oauth(
     repo: &mut impl RepositoryAccess,
     user: &coauth_data::User,
     devices: &mut HashSet<String>,
@@ -224,9 +224,9 @@ async fn collect_devices_from_oauth2(
     let mut cursor = Pagination::first(5000);
     loop {
         let page = repo
-            .oauth2_session()
+            .oauth_session()
             .list(
-                OAuth2SessionFilter::new().for_user(user).active_only(),
+                OAuthSessionFilter::new().for_user(user).active_only(),
                 cursor,
             )
             .await

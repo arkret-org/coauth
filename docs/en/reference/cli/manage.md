@@ -123,7 +123,7 @@ Options:
 - `--username <username>`: Username to register.
 - `--password <password>`: Password to set.
 - `--email <email>`: Email to add. Can be specified multiple times.
-- `--upstream-provider-mapping <UPSTREAM_PROVIDER_ID:SUBJECT>`: Upstream OAuth 2.0 provider mapping. Can be specified multiple times.
+- `--upstream-provider-mapping <UPSTREAM_PROVIDER_ID:SUBJECT>`: Upstream OAuth provider mapping. Can be specified multiple times.
 - `--admin`: Make the user an admin.
 - `--no-admin`: Make the user not an admin.
 - `--yes`: Don't ask questions, just do it.

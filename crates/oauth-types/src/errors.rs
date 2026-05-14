@@ -44,7 +44,7 @@ impl From<ClientErrorCode> for ClientError {
     }
 }
 
-/// Client error codes defined in OAuth2.0, OpenID Connect and their extensions.
+/// Client error codes defined in OAuth, OpenID Connect and their extensions.
 #[derive(Debug, Clone, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
 pub enum ClientErrorCode {
     /// `invalid_request`

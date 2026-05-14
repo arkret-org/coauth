@@ -4,7 +4,7 @@
 //!   1. Mark the device record as revoked (today: emit an admin-audit log
 //!      entry — there is no `devices` table yet, so the device identity is
 //!      the device DID/identifier supplied by the caller).
-//!   2. Revoke every still-active `oauth2_session_grant` whose
+//!   2. Revoke every still-active `oauth_session_grant` whose
 //!      `device_id` column equals the revoked device.
 //!
 //! Both writes share a Diesel `BoxRepository` transaction so a partial
@@ -13,7 +13,7 @@
 
 use chrono::{DateTime, Utc};
 use coauth_data::{
-    BoxClock, BoxRepository, Pagination, RepositoryAccess, oauth2::SessionGrantFilter,
+    BoxClock, BoxRepository, Pagination, RepositoryAccess, oauth::SessionGrantFilter,
 };
 use thiserror::Error;
 
@@ -50,7 +50,7 @@ pub async fn cascade_revoke_session_grants(
             .for_device(device_id)
             .active_at(now);
         let page = repo
-            .oauth2_session_grant()
+            .oauth_session_grant()
             .list(filter, Pagination::first(100))
             .await?;
 
@@ -63,7 +63,7 @@ pub async fn cascade_revoke_session_grants(
         for edge in edges {
             // Filter is `active_at(now)` so this grant has no `revoked_at`
             // and hasn't expired.
-            repo.oauth2_session_grant().revoke(clock, edge.node).await?;
+            repo.oauth_session_grant().revoke(clock, edge.node).await?;
             total += 1;
         }
 

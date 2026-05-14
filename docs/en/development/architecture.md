@@ -10,7 +10,7 @@ usage and easily scalable horizontally.
 coauth focuses on Contrix authentication and authorization workflows rather
 than acting as a general purpose Identity Provider (IdP).
 
-It speaks OAuth 2.0 / OIDC for authentication and exposes Contrix session grant
+It speaks OAuth / OIDC for authentication and exposes Contrix session grant
 surfaces for Principal Servers. If you want to connect to an upstream SAML, CAS
 or LDAP backend then you need to pair coauth with a separate service (such as
 [Dex](https://dexidp.io) or [Keycloak](https://www.keycloak.org)) which does that
@@ -37,7 +37,7 @@ This includes:
  - [`coauth-storage`][coauth-storage]: Abstraction of the storage backends
  - [`coauth-storage-pg`][coauth-storage-pg]: Storage backend implementation for a PostgreSQL database
  - [`coauth-tasks`][coauth-tasks]: Asynchronous task runner and scheduler
- - [`oauth2-types`][oauth2-types]: Useful structures and types to deal with OAuth 2.0/OpenID Connect endpoints. This might end up published as a standalone library as it can be useful in other contexts.
+ - [`oauth-types`][oauth-types]: Useful structures and types to deal with OAuth/OpenID Connect endpoints. This might end up published as a standalone library as it can be useful in other contexts.
 
 [coauth-config]: ../rustdoc/coauth_config/index.html
 [coauth-data-model]: ../rustdoc/coauth_data_model/index.html
@@ -51,7 +51,7 @@ This includes:
 [coauth-storage]: ../rustdoc/coauth_storage/index.html
 [coauth-storage-pg]: ../rustdoc/coauth_storage/index.html
 [coauth-tasks]: ../rustdoc/coauth_tasks/index.html
-[oauth2-types]: ../rustdoc/oauth2_types/index.html
+[oauth-types]: ../rustdoc/oauth_types/index.html
 
 ## Important crates
 
@@ -125,5 +125,5 @@ Flow engine endpoints, supporting multi-step interactive flows (registration, re
 ### Admin Operations API (/api/admin/v1/*)
 Administrative operation endpoints, consumed by the Padmin management interface.
 
-### OAuth2 Protocol API (/oauth2/*, /.well-known/*)
-Standard OAuth 2.0 / OIDC protocol endpoints.
+### OAuth Protocol API (/oauth/*, /.well-known/*)
+Standard OAuth / OIDC protocol endpoints.

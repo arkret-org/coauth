@@ -48,7 +48,7 @@ crc.workspace = true
 ulid.workspace = true
 
 # -- OAuth / OpenID Connect ------------------------------------------------
-oauth2-types.workspace = true
+oauth-types.workspace = true
 
 # -- Internal crates -------------------------------------------------------
 coauth-data.workspace = true

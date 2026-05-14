@@ -1,9 +1,9 @@
 #!/bin/sh
-# OAuth 2.0 client localised metadata management helper for coauth.
+# OAuth client localised metadata management helper for coauth.
 #
 # Usage:
-#   ./oauth2-client-localized-metadata.sh get  <admin-url> <admin-token> <client-id>
-#   ./oauth2-client-localized-metadata.sh put  <admin-url> <admin-token> <client-id> <payload-file>
+#   ./oauth-client-localized-metadata.sh get  <admin-url> <admin-token> <client-id>
+#   ./oauth-client-localized-metadata.sh put  <admin-url> <admin-token> <client-id> <payload-file>
 #
 # Example:
 #   # Set Japanese and German variants for client 01H...:
@@ -18,10 +18,10 @@
 #     }
 #   }
 #   EOF
-#   ./oauth2-client-localized-metadata.sh put \
+#   ./oauth-client-localized-metadata.sh put \
 #     https://auth.example.com 'urn:coauth:admin:...' 01H... payload.json
 #
-# This wraps T08b's `GET / PUT /api/admin/v1/oauth2-clients/{id}/localized-metadata`
+# This wraps T08b's `GET / PUT /api/admin/v1/oauth-clients/{id}/localized-metadata`
 # endpoint so operators can manage localised client metadata without a UI.
 # The Dioxus admin SPA editor (T08c) will eventually replace this script.
 
@@ -32,8 +32,8 @@ die() { echo "error: $*" >&2; exit 1; }
 usage() {
     cat >&2 <<'EOF'
 usage:
-  oauth2-client-localized-metadata.sh get  <admin-url> <admin-token> <client-id>
-  oauth2-client-localized-metadata.sh put  <admin-url> <admin-token> <client-id> <payload-file>
+  oauth-client-localized-metadata.sh get  <admin-url> <admin-token> <client-id>
+  oauth-client-localized-metadata.sh put  <admin-url> <admin-token> <client-id> <payload-file>
 EOF
     exit 1
 }
@@ -45,7 +45,7 @@ admin_url="${2%/}"
 admin_token="$3"
 client_id="$4"
 
-endpoint="${admin_url}/api/admin/v1/oauth2-clients/${client_id}/localized-metadata"
+endpoint="${admin_url}/api/admin/v1/oauth-clients/${client_id}/localized-metadata"
 
 case "$cmd" in
     get)

@@ -1,4 +1,4 @@
-//! Repositories to interact with entities related to the upstream OAuth 2.0
+//! Repositories to interact with entities related to the upstream OAuth
 //! providers
 
 mod link;

@@ -2,7 +2,7 @@ use std::str::FromStr as _;
 
 use chrono::{DateTime, Utc};
 use coauth_iana::oauth::PkceCodeChallengeMethod;
-use oauth2_types::{
+use oauth_types::{
     pkce::{CodeChallengeError, CodeChallengeMethodExt},
     requests::ResponseMode,
     scope::{OPENID, PROFILE, Scope},

@@ -12,7 +12,7 @@ use coauth_data::{
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
 };
 use coauth_principal::PrincipalServerAdmin;
-use oauth2_types::scope::{Scope, ScopeToken};
+use oauth_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -39,11 +39,11 @@ use crate::{
 /// so that newly created personal sessions are attributed correctly.
 pub(crate) fn personal_session_owner_from_caller(caller: &CallerSession) -> PersonalSessionOwner {
     match caller {
-        CallerSession::OAuth2Session(entry) => {
+        CallerSession::OAuthSession(entry) => {
             if let Some(uid) = entry.user_id {
                 PersonalSessionOwner::User(uid)
             } else {
-                PersonalSessionOwner::OAuth2Client(entry.client_id)
+                PersonalSessionOwner::OAuthClient(entry.client_id)
             }
         }
         CallerSession::PersonalSession(entry) => PersonalSessionOwner::User(entry.actor_user_id),
@@ -61,7 +61,7 @@ pub struct AddRequest {
     /// A human-friendly label for the session
     human_name: String,
 
-    /// Space-separated OAuth2 scopes
+    /// Space-separated OAuth scopes
     scope: String,
 
     /// How long (in seconds) before the access token expires.
@@ -212,7 +212,7 @@ pub struct FilterParams {
     #[schemars(with = "Option<crate::handlers::admin::schema::Ulid>")]
     owner_user: Option<Ulid>,
 
-    /// Narrow results to sessions owned by this OAuth2 client
+    /// Narrow results to sessions owned by this OAuth client
     #[serde(rename = "filter[owner_client]")]
     #[schemars(with = "Option<crate::handlers::admin::schema::Ulid>")]
     owner_client: Option<Ulid>,
@@ -330,7 +330,7 @@ pub async fn list_sessions(
     // Resolve and apply the owner-client filter
     let resolved_client = if let Some(cid) = params.owner_client {
         let c = repo
-            .oauth2_client()
+            .oauth_client()
             .lookup(cid)
             .await?
             .ok_or_else(|| AppError::not_found(format!("Client {cid} does not exist")))?;
@@ -340,7 +340,7 @@ pub async fn list_sessions(
     };
 
     filter = match &resolved_client {
-        Some(c) => filter.for_owner_oauth2_client(c),
+        Some(c) => filter.for_owner_oauth_client(c),
         None => filter,
     };
 
@@ -573,7 +573,7 @@ mod tests {
     use coauth_data::{Clock, personal::session::PersonalSessionOwner};
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
-    use oauth2_types::scope::{OPENID, Scope};
+    use oauth_types::scope::{OPENID, Scope};
     use serde_json::{Value, json};
     use ulid::Ulid;
 

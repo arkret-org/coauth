@@ -17,7 +17,7 @@
 //! [Client Credentials flow]: https://www.rfc-editor.org/rfc/rfc6749#section-4.4
 
 use chrono::{DateTime, Utc};
-use oauth2_types::{
+use oauth_types::{
     requests::{AccessTokenRequest, AccessTokenResponse, ClientCredentialsGrant},
     scope::Scope,
 };

@@ -286,7 +286,7 @@ pub struct Authentication {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum AuthenticationMethod {
     Password { user_password_id: Ulid },
-    UpstreamOAuth2 { upstream_oauth2_session_id: Ulid },
+    UpstreamOAuth { upstream_oauth_session_id: Ulid },
     Unknown,
 }
 

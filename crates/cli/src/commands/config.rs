@@ -113,7 +113,7 @@ impl Options {
             .context("could not get connection from pool")?;
 
         coauth_backend::sync::config_sync(
-            cfg.upstream_oauth2,
+            cfg.upstream_oauth,
             cfg.clients,
             conn,
             &encrypter,

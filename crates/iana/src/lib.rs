@@ -1,4 +1,4 @@
-//! IANA registry values for JOSE and OAuth 2.0, defined via declarative macros.
+//! IANA registry values for JOSE and OAuth, defined via declarative macros.
 
 #![deny(missing_docs)]
 #![allow(clippy::module_name_repetitions)]

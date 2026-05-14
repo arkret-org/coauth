@@ -4,7 +4,7 @@
 
 use coauth_data::{
     Clock, RepositoryAccess, SiteConfig,
-    oauth2::LoginHint,
+    oauth::LoginHint,
 };
 use coauth_i18n::DataLocale;
 use coauth_principal::PrincipalServerAdmin;

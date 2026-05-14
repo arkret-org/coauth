@@ -78,7 +78,7 @@ coauth-principal.workspace = true
 coauth-policy.workspace = true
 coauth-tasks.workspace = true
 coauth-templates.workspace = true
-oauth2-types.workspace = true
+oauth-types.workspace = true
 
 argon2.workspace = true
 async-trait.workspace = true

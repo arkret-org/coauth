@@ -5,7 +5,7 @@
 //!
 //! # Modules
 //!
-//! - [`client_authorization`] — Extract and validate OAuth 2.0 client
+//! - [`client_authorization`] — Extract and validate OAuth client
 //!   credentials
 //! - [`cookies`] — Encrypted cookie jar (read/write encrypted session cookies)
 //! - [`csrf`] — CSRF token generation and verification
@@ -17,7 +17,7 @@
 //! - [`fancy_error`] — User-friendly HTML error pages
 //! - [`sentry`] — Sentry error-reporting integration
 
-/// Extract and validate OAuth 2.0 client credentials from requests.
+/// Extract and validate OAuth client credentials from requests.
 pub mod client_authorization;
 /// Encrypted cookie jar for session management.
 pub mod cookies;
@@ -35,7 +35,7 @@ pub mod language_detection;
 pub mod sentry;
 /// Browser session extraction from encrypted cookies.
 pub mod session;
-/// Extract and validate OAuth 2.0 user bearer tokens.
+/// Extract and validate OAuth user bearer tokens.
 pub mod user_authorization;
 
 pub use self::{

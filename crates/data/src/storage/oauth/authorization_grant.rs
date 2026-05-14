@@ -1,16 +1,16 @@
 use async_trait::async_trait;
 use coauth_data::{AuthorizationCode, AuthorizationGrant, Client, Clock, Session};
-use oauth2_types::{requests::ResponseMode, scope::Scope};
+use oauth_types::{requests::ResponseMode, scope::Scope};
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
 
 use crate::repository_impl;
 
-/// An [`OAuth2AuthorizationGrantRepository`] helps interacting with
+/// An [`OAuthAuthorizationGrantRepository`] helps interacting with
 /// [`AuthorizationGrant`] saved in the storage backend
 #[async_trait]
-pub trait OAuth2AuthorizationGrantRepository: Send + Sync {
+pub trait OAuthAuthorizationGrantRepository: Send + Sync {
     /// The error type returned by the repository
     type Error;
 
@@ -147,7 +147,7 @@ pub trait OAuth2AuthorizationGrantRepository: Send + Sync {
     ) -> Result<(usize, Option<Ulid>), Self::Error>;
 }
 
-repository_impl!(OAuth2AuthorizationGrantRepository:
+repository_impl!(OAuthAuthorizationGrantRepository:
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),

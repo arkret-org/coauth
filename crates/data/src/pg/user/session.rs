@@ -123,8 +123,8 @@ impl TryFrom<AuthenticationLookup> for Authentication {
                 .map(Into::into),
         ) {
             (Some(user_password_id), None) => AuthenticationMethod::Password { user_password_id },
-            (None, Some(upstream_oauth2_session_id)) => AuthenticationMethod::UpstreamOAuth2 {
-                upstream_oauth2_session_id,
+            (None, Some(upstream_oauth_session_id)) => AuthenticationMethod::UpstreamOAuth {
+                upstream_oauth_session_id,
             },
             (None, None) => AuthenticationMethod::Unknown,
             _ => {
@@ -536,8 +536,8 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
         Ok(Authentication {
             id,
             created_at,
-            authentication_method: AuthenticationMethod::UpstreamOAuth2 {
-                upstream_oauth2_session_id: upstream_oauth_session.id,
+            authentication_method: AuthenticationMethod::UpstreamOAuth {
+                upstream_oauth_session_id: upstream_oauth_session.id,
             },
         })
     }

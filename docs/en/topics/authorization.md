@@ -1,6 +1,6 @@
 # Authorization and sessions
 
-`coauth` authenticates users and clients, then issues OAuth 2.0/OIDC tokens or
+`coauth` authenticates users and clients, then issues OAuth/OIDC tokens or
 Contrix session grants that downstream services can validate.
 
 ## Session Types
@@ -10,7 +10,7 @@ Contrix session grants that downstream services can validate.
 When a user signs in through the web UI, `coauth` creates a browser session and
 stores it in an encrypted cookie.
 
-### OAuth 2.0 sessions
+### OAuth sessions
 
 OAuth sessions are created after a client completes an authorization flow. They
 bind together:

@@ -15,7 +15,7 @@ use coauth_data::{
     UpstreamOAuthAuthorizationSession, UpstreamOAuthLink, User, UserEmailAuthentication,
     UserPhoneAuthentication, UserRegistration, UserRegistrationToken,
     queue::{ProvisionUserJob, QueueJobRepositoryExt as _},
-    upstream_oauth2::{UpstreamOAuthLinkRepository, UpstreamOAuthSessionRepository},
+    upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthSessionRepository},
     user::{
         BrowserSessionRepository, UserEmailFilter, UserEmailRepository, UserFilter,
         UserPasswordRepository, UserPhoneRepository, UserRegistrationTokenRepository,

@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS user_unsupported_third_party_ids (
     PRIMARY KEY (user_id, medium, address)
 );
 
--- ── OAuth2 ──────────────────────────────────────────────────────
+-- ── OAuth ──────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS oauth_clients (
     id UUID PRIMARY KEY,
@@ -925,7 +925,7 @@ CREATE INDEX IF NOT EXISTS webauthn_credentials_account_idx
     WHERE revoked_at IS NULL;
 
 -- Consolidated from 20260510000100_oauth_clients_i18n/up.sql
--- OAuth2 client display-name + description, indexed by BCP-47 locale tag.
+-- OAuth client display-name + description, indexed by BCP-47 locale tag.
 --
 -- This is a separate concern from `oauth_client_localized_metadata`: that
 -- table backs the OIDC `*#<locale>` metadata fields (client_name, logo_uri,

@@ -6,13 +6,13 @@ use crate::{
     pages::Route,
 };
 
-/// OAuth2 consent page — shows what permissions a client is requesting.
+/// OAuth consent page — shows what permissions a client is requesting.
 #[component]
 pub fn Consent(grant_id: String) -> Element {
     let gid = grant_id.clone();
     let data = use_resource(move || {
         let id = gid.clone();
-        async move { crate::api::api_get::<ConsentDataResponse>(&format!("/oauth2/consent/{id}")).await }
+        async move { crate::api::api_get::<ConsentDataResponse>(&format!("/oauth/consent/{id}")).await }
     });
     let binding = data.read();
 
@@ -115,14 +115,14 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
 
                                 spawn(async move {
                                     let result = crate::api::api_post::<ConsentSubmitResponse>(
-                                        &format!("/oauth2/consent/{gid}"),
+                                        &format!("/oauth/consent/{gid}"),
                                         serde_json::json!({ "action": "consent" }),
                                     ).await;
                                     submitting.set(false);
                                     match result {
                                         Ok(resp) if resp.status == "success" => {
                                             if let Some(url) = resp.redirect_url {
-                                                // Navigate browser to the OAuth2 callback URL
+                                                // Navigate browser to the OAuth callback URL
                                                 #[cfg(target_arch = "wasm32")]
                                                 {
                                                     if let Some(win) = web_sys::window() {

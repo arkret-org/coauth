@@ -5,7 +5,7 @@
 //!
 //! This module provides Rust types for working with OpenID Connect provider
 //! metadata as defined in OpenID Connect Discovery 1.0 Section 3 and
-//! OAuth 2.0 Authorization Server Metadata (RFC 8414).
+//! OAuth Authorization Server Metadata (RFC 8414).
 
 use std::{fmt, ops::Deref};
 
@@ -269,7 +269,7 @@ pub static DEFAULT_CLAIM_TYPES_SUPPORTED: &[ClaimType] = &[ClaimType::Normal];
 // ProviderMetadata
 //
 // Fields are grouped by specification section:
-//   1. Core OAuth 2.0 AS metadata (RFC 8414)
+//   1. Core OAuth AS metadata (RFC 8414)
 //   2. OpenID Connect Discovery 1.0 extensions
 //   3. Additional protocol extensions (PAR, RP-Initiated Logout, etc.)
 //   4. Account-management extensions
@@ -283,7 +283,7 @@ pub static DEFAULT_CLAIM_TYPES_SUPPORTED: &[ClaimType] = &[ClaimType::Normal];
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProviderMetadata {
-    // -- Section 1: Core OAuth 2.0 Authorization Server Metadata (RFC 8414) --
+    // -- Section 1: Core OAuth Authorization Server Metadata (RFC 8414) --
     /// Authorization server's issuer identifier URL.
     ///
     /// This field is required. The URL must use a `https` scheme, and must not
@@ -314,43 +314,43 @@ pub struct ProviderMetadata {
     /// [JWK]: https://www.rfc-editor.org/rfc/rfc7517.html
     pub jwks_uri: Option<Url>,
 
-    /// URL of the authorization server's [OAuth 2.0 Dynamic Client
+    /// URL of the authorization server's [OAuth Dynamic Client
     /// Registration] endpoint.
     ///
     /// If this field is present, the URL must use a `https` scheme.
     ///
-    /// [OAuth 2.0 Dynamic Client Registration]: https://www.rfc-editor.org/rfc/rfc7591
+    /// [OAuth Dynamic Client Registration]: https://www.rfc-editor.org/rfc/rfc7591
     pub registration_endpoint: Option<Url>,
 
-    /// JSON array containing a list of the OAuth 2.0 `scope` values that this
+    /// JSON array containing a list of the OAuth `scope` values that this
     /// authorization server supports.
     ///
     /// If this field is present, it must contain at least the `openid` scope
     /// value.
     pub scopes_supported: Option<Vec<String>>,
 
-    /// JSON array containing a list of the [OAuth 2.0 `response_type` values]
+    /// JSON array containing a list of the [OAuth `response_type` values]
     /// that this authorization server supports.
     ///
     /// This field is required.
     ///
-    /// [OAuth 2.0 `response_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
+    /// [OAuth `response_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
     pub response_types_supported: Option<Vec<ResponseType>>,
 
-    /// JSON array containing a list of the [OAuth 2.0 `response_mode` values]
+    /// JSON array containing a list of the [OAuth `response_mode` values]
     /// that this authorization server supports.
     ///
     /// Defaults to [`DEFAULT_RESPONSE_MODES_SUPPORTED`].
     ///
-    /// [OAuth 2.0 `response_mode` values]: https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html
+    /// [OAuth `response_mode` values]: https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html
     pub response_modes_supported: Option<Vec<ResponseMode>>,
 
-    /// JSON array containing a list of the [OAuth 2.0 `grant_type` values] that
+    /// JSON array containing a list of the [OAuth `grant_type` values] that
     /// this authorization server supports.
     ///
     /// Defaults to [`DEFAULT_GRANT_TYPES_SUPPORTED`].
     ///
-    /// [OAuth 2.0 `grant_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
+    /// [OAuth `grant_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
     pub grant_types_supported: Option<Vec<GrantType>>,
 
     /// JSON array containing a list of client authentication methods supported
@@ -389,12 +389,12 @@ pub struct ProviderMetadata {
     /// client to read about the authorization server's terms of service.
     pub op_tos_uri: Option<Url>,
 
-    /// URL of the authorization server's [OAuth 2.0 revocation endpoint].
+    /// URL of the authorization server's [OAuth revocation endpoint].
     ///
     /// If this field is present, the URL must use a `https` scheme, and must
     /// not contain a fragment.
     ///
-    /// [OAuth 2.0 revocation endpoint]: https://www.rfc-editor.org/rfc/rfc7009
+    /// [OAuth revocation endpoint]: https://www.rfc-editor.org/rfc/rfc7009
     pub revocation_endpoint: Option<Url>,
 
     /// JSON array containing a list of client authentication methods supported
@@ -414,11 +414,11 @@ pub struct ProviderMetadata {
     /// [`OAuthClientAuthenticationMethod::ClientSecretJwt`].
     pub revocation_endpoint_auth_signing_alg_values_supported: Option<Vec<JsonWebSignatureAlg>>,
 
-    /// URL of the authorization server's [OAuth 2.0 introspection endpoint].
+    /// URL of the authorization server's [OAuth introspection endpoint].
     ///
     /// If this field is present, the URL must use a `https` scheme.
     ///
-    /// [OAuth 2.0 introspection endpoint]: https://www.rfc-editor.org/rfc/rfc7662
+    /// [OAuth introspection endpoint]: https://www.rfc-editor.org/rfc/rfc7662
     pub introspection_endpoint: Option<Url>,
 
     /// JSON array containing a list of client authentication methods or token
@@ -876,7 +876,7 @@ impl ProviderMetadata {
         Ok(VerifiedProviderMetadata { inner: self })
     }
 
-    /// JSON array containing a list of the OAuth 2.0 `response_mode` values
+    /// JSON array containing a list of the OAuth `response_mode` values
     /// that this authorization server supports.
     ///
     /// Defaults to [`DEFAULT_RESPONSE_MODES_SUPPORTED`].
@@ -887,7 +887,7 @@ impl ProviderMetadata {
             .unwrap_or(DEFAULT_RESPONSE_MODES_SUPPORTED)
     }
 
-    /// JSON array containing a list of the OAuth 2.0 grant type values that
+    /// JSON array containing a list of the OAuth grant type values that
     /// this authorization server supports.
     ///
     /// Defaults to [`DEFAULT_GRANT_TYPES_SUPPORTED`].
@@ -1044,7 +1044,7 @@ impl VerifiedProviderMetadata {
             .expect("jwks_uri was verified to be present")
     }
 
-    /// JSON array containing a list of the OAuth 2.0 `response_type` values
+    /// JSON array containing a list of the OAuth `response_type` values
     /// that this authorization server supports.
     #[must_use]
     pub fn response_types_supported(&self) -> &[ResponseType] {
@@ -1181,7 +1181,7 @@ pub enum ProviderMetadataVerificationError {
 #[serde_as]
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct RpInitiatedLogoutRequest {
-    /// OAuth 2.0 Client Identifier valid at the Authorization Server.
+    /// OAuth Client Identifier valid at the Authorization Server.
     ///
     /// The most common use case for this parameter is to specify the Client
     /// Identifier when `post_logout_redirect_uri` is used but `id_token_hint`

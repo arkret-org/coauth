@@ -54,7 +54,7 @@ pub async fn get(
     let maybe_session = session_info.load_active_session(&mut repo).await?;
     if maybe_session.is_some() {
         // Already signed in — skip recovery and continue the original post-auth
-        // flow (e.g. an OAuth2 grant) if one was attached to the request.
+        // flow (e.g. an OAuth grant) if one was attached to the request.
         let reply = query.go_next(&url_builder);
         cookie_jar.finalize(res, reply);
         return Ok(());

@@ -3,13 +3,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use async_trait::async_trait;
 use coauth_data::{
     Client, Clock, JwksOrJwksUri, LocalizableField, LocalizedClientMetadata, new_id,
-    oauth2::{OAuth2ClientI18n, OAuth2ClientI18nEntry, OAuth2ClientRepository},
+    oauth::{OAuthClientI18n, OAuthClientI18nEntry, OAuthClientRepository},
 };
 use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth2_types::{oidc::ApplicationType, requests::GrantType};
+use oauth_types::{oidc::ApplicationType, requests::GrantType};
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
@@ -24,13 +24,13 @@ use crate::{
     },
 };
 
-/// An implementation of [`OAuth2ClientRepository`] for a PostgreSQL connection
-pub struct PgOAuth2ClientRepository<'c> {
+/// An implementation of [`OAuthClientRepository`] for a PostgreSQL connection
+pub struct PgOAuthClientRepository<'c> {
     conn: &'c mut diesel_async::AsyncPgConnection,
 }
 
-impl<'c> PgOAuth2ClientRepository<'c> {
-    /// Create a new [`PgOAuth2ClientRepository`] from an active PostgreSQL
+impl<'c> PgOAuthClientRepository<'c> {
+    /// Create a new [`PgOAuthClientRepository`] from an active PostgreSQL
     /// connection
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
@@ -81,11 +81,11 @@ impl<'c> PgOAuth2ClientRepository<'c> {
     }
 }
 
-/// Row type for loading OAuth2 clients from the database
+/// Row type for loading OAuth clients from the database
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Queryable, Selectable)]
 #[diesel(table_name = oauth_clients)]
-struct OAuth2ClientRow {
+struct OAuthClientRow {
     id: Uuid,
     metadata_digest: Option<String>,
     encrypted_client_secret: Option<String>,
@@ -109,10 +109,10 @@ struct OAuth2ClientRow {
     initiate_login_uri: Option<String>,
 }
 
-impl TryFrom<OAuth2ClientRow> for Client {
+impl TryFrom<OAuthClientRow> for Client {
     type Error = DatabaseInconsistencyError;
 
-    fn try_from(row: OAuth2ClientRow) -> Result<Client, Self::Error> {
+    fn try_from(row: OAuthClientRow) -> Result<Client, Self::Error> {
         let id = Ulid::from(row.id);
 
         let redirect_uris: Result<Vec<Url>, _> =
@@ -288,10 +288,10 @@ impl TryFrom<OAuth2ClientRow> for Client {
     }
 }
 
-/// Insertable row for creating a new OAuth2 client
+/// Insertable row for creating a new OAuth client
 #[derive(Insertable)]
 #[diesel(table_name = oauth_clients)]
-struct NewOAuth2Client {
+struct NewOAuthClient {
     id: Uuid,
     metadata_digest: Option<String>,
     encrypted_client_secret: Option<String>,
@@ -317,22 +317,22 @@ struct NewOAuth2Client {
 }
 
 #[async_trait]
-impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
+impl OAuthClientRepository for PgOAuthClientRepository<'_> {
     type Error = DatabaseError;
 
     #[tracing::instrument(
-        name = "db.oauth2_client.lookup",
+        name = "db.oauth_client.lookup",
         skip_all,
         fields(
-            oauth2_client.id = %id,
+            oauth_client.id = %id,
         ),
         err,
     )]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<Client>, Self::Error> {
         let res = oauth_clients::table
             .find(Uuid::from(id))
-            .select(OAuth2ClientRow::as_select())
-            .first::<OAuth2ClientRow>(self.conn)
+            .select(OAuthClientRow::as_select())
+            .first::<OAuthClientRow>(self.conn)
             .await
             .optional()?;
 
@@ -347,15 +347,15 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         Ok(Some(client))
     }
 
-    #[tracing::instrument(name = "db.oauth2_client.find_by_metadata_digest", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_client.find_by_metadata_digest", skip_all, err)]
     async fn find_by_metadata_digest(
         &mut self,
         digest: &str,
     ) -> Result<Option<Client>, Self::Error> {
         let res = oauth_clients::table
             .filter(oauth_clients::metadata_digest.eq(digest))
-            .select(OAuth2ClientRow::as_select())
-            .first::<OAuth2ClientRow>(self.conn)
+            .select(OAuthClientRow::as_select())
+            .first::<OAuthClientRow>(self.conn)
             .await
             .optional()?;
 
@@ -370,16 +370,16 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         Ok(Some(client))
     }
 
-    #[tracing::instrument(name = "db.oauth2_client.load_batch", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_client.load_batch", skip_all, err)]
     async fn load_batch(
         &mut self,
         ids: BTreeSet<Ulid>,
     ) -> Result<BTreeMap<Ulid, Client>, Self::Error> {
         let ids: Vec<Uuid> = ids.into_iter().map(Uuid::from).collect();
 
-        let res: Vec<OAuth2ClientRow> = oauth_clients::table
+        let res: Vec<OAuthClientRow> = oauth_clients::table
             .filter(oauth_clients::id.eq_any(&ids))
-            .select(OAuth2ClientRow::as_select())
+            .select(OAuthClientRow::as_select())
             .load(self.conn)
             .await?;
 
@@ -397,7 +397,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_client.add",
+        name = "db.oauth_client.add",
         skip_all,
         fields(
             client.id,
@@ -439,7 +439,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
 
         let redirect_uris_array = redirect_uris.iter().map(Url::to_string).collect::<Vec<_>>();
 
-        let new_client = NewOAuth2Client {
+        let new_client = NewOAuthClient {
             id: Uuid::from(id),
             metadata_digest,
             encrypted_client_secret: encrypted_client_secret.clone(),
@@ -499,7 +499,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
             tos_uri,
             // Newly inserted client has no localised variants yet — they
             // are added after the fact via
-            // `OAuth2ClientRepository::set_localized_metadata`.
+            // `OAuthClientRepository::set_localized_metadata`.
             localized_metadata: coauth_data::LocalizedClientMetadata::default(),
             jwks,
             id_token_signed_response_alg,
@@ -511,7 +511,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_client.upsert_static",
+        name = "db.oauth_client.upsert_static",
         skip_all,
         fields(
             client.id = %client_id,
@@ -537,7 +537,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         let client_auth_method_str = client_auth_method.to_string();
         let redirect_uris_array = redirect_uris.iter().map(Url::to_string).collect::<Vec<_>>();
 
-        let new_client = NewOAuth2Client {
+        let new_client = NewOAuthClient {
             id: Uuid::from(client_id),
             metadata_digest: None,
             encrypted_client_secret: encrypted_client_secret.clone(),
@@ -616,11 +616,11 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         })
     }
 
-    #[tracing::instrument(name = "db.oauth2_client.all_static", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_client.all_static", skip_all, err)]
     async fn all_static(&mut self) -> Result<Vec<Client>, Self::Error> {
-        let res: Vec<OAuth2ClientRow> = oauth_clients::table
+        let res: Vec<OAuthClientRow> = oauth_clients::table
             .filter(oauth_clients::is_static.eq(Some(true)))
-            .select(OAuth2ClientRow::as_select())
+            .select(OAuthClientRow::as_select())
             .load(self.conn)
             .await?;
 
@@ -640,7 +640,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_client.delete_by_id",
+        name = "db.oauth_client.delete_by_id",
         skip_all,
         fields(
             client.id = %id,
@@ -658,7 +658,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         .execute(self.conn)
         .await?;
 
-        // Delete the OAuth 2 sessions related data: access tokens
+        // Delete the OAuth sessions related data: access tokens
         diesel::delete(
             oauth_access_tokens::table.filter(
                 oauth_access_tokens::oauth_session_id.eq_any(
@@ -722,7 +722,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_client.load_localized_metadata",
+        name = "db.oauth_client.load_localized_metadata",
         skip_all,
         fields(client.id = %id),
         err,
@@ -737,7 +737,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_client.replace_localized_metadata",
+        name = "db.oauth_client.replace_localized_metadata",
         skip_all,
         fields(client.id = %id, entry_count),
         err,
@@ -830,12 +830,12 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_client.load_i18n",
+        name = "db.oauth_client.load_i18n",
         skip_all,
         fields(client.id = %id),
         err,
     )]
-    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuth2ClientI18n, Self::Error> {
+    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuthClientI18n, Self::Error> {
         let client_uuid = Uuid::from(id);
 
         let raw: Option<serde_json::Value> = oauth_clients::table
@@ -846,17 +846,17 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
             .optional()?;
 
         let Some(raw) = raw else {
-            return Ok(OAuth2ClientI18n::default());
+            return Ok(OAuthClientI18n::default());
         };
 
         // Tolerate corrupt rows by treating bad shape as "no entries". The
         // admin UI can always overwrite via `set_i18n_entry` afterwards.
-        let parsed: OAuth2ClientI18n = serde_json::from_value(raw).unwrap_or_default();
+        let parsed: OAuthClientI18n = serde_json::from_value(raw).unwrap_or_default();
         Ok(parsed)
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_client.set_i18n_entry",
+        name = "db.oauth_client.set_i18n_entry",
         skip_all,
         fields(client.id = %id, locale = %locale),
         err,
@@ -867,7 +867,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         locale: String,
         display_name: String,
         description: Option<String>,
-    ) -> Result<OAuth2ClientI18n, Self::Error> {
+    ) -> Result<OAuthClientI18n, Self::Error> {
         let client_uuid = Uuid::from(id);
         let mut current = self.load_i18n(id).await?;
 
@@ -877,7 +877,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         } else {
             current.insert(
                 locale.clone(),
-                OAuth2ClientI18nEntry {
+                OAuthClientI18nEntry {
                     display_name: trimmed_name,
                     description: description.and_then(|d| {
                         let t = d.trim().to_owned();

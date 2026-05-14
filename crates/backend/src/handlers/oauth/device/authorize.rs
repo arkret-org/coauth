@@ -1,6 +1,6 @@
 use chrono::Duration;
-use coauth_data::oauth2::OAuth2DeviceCodeGrantParams;
-use oauth2_types::{
+use coauth_data::oauth::OAuthDeviceCodeGrantParams;
+use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     requests::{DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType},
     scope::ScopeToken,
@@ -75,7 +75,7 @@ impl Scribe for RouteError {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.device.request.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.device.request.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     match handle_post(req, depot).await {
         Ok(response) => {
@@ -165,7 +165,7 @@ async fn handle_post(
         .add(
             &mut rng,
             &clock,
-            OAuth2DeviceCodeGrantParams {
+            OAuthDeviceCodeGrantParams {
                 client: &client,
                 scope,
                 device_code,
@@ -194,7 +194,7 @@ async fn handle_post(
 #[cfg(test)]
 mod tests {
     use hyper::{Request, StatusCode};
-    use oauth2_types::{
+    use oauth_types::{
         registration::ClientRegistrationResponse, requests::DeviceAuthorizationResponse,
     };
 
@@ -209,7 +209,7 @@ mod tests {
         let state = TestState::from_pool(pool.clone()).await.unwrap();
 
         // Provision a client
-        let request = Request::post("/oauth2/registration").json(serde_json::json!({
+        let request = Request::post("/oauth/registration").json(serde_json::json!({
             "client_uri": "https://example.com/",
             "token_endpoint_auth_method": "none",
             "grant_types": ["urn:ietf:params:oauth:grant-type:device_code"],
@@ -223,7 +223,7 @@ mod tests {
         let client_id = response.client_id;
 
         // Test the happy path: the client is allowed to use the device code grant type
-        let request = Request::post("/oauth2/device").form(serde_json::json!({
+        let request = Request::post("/oauth/device").form(serde_json::json!({
             "client_id": client_id,
             "scope": "openid",
         }));

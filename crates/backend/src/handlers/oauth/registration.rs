@@ -2,12 +2,12 @@ use std::sync::{Arc, LazyLock};
 
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, LocalizedClientMetadata, SystemClock,
-    oauth2::OAuth2ClientRepository,
+    oauth::OAuthClientRepository,
 };
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_keystore::Encrypter;
 use coauth_policy::{EvaluationResult, Policy, PolicyFactory};
-use oauth2_types::{
+use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     registration::{
         ClientMetadata, ClientMetadataVerificationError, ClientRegistrationResponse, Localized,
@@ -30,8 +30,8 @@ use crate::handlers::METER;
 
 static REGISTRATION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("coauth.oauth2.registration_request")
-        .with_description("Number of OAuth2 registration requests")
+        .u64_counter("coauth.oauth.registration_request")
+        .with_description("Number of OAuth registration requests")
         .with_unit("{request}")
         .build()
 });
@@ -190,7 +190,7 @@ fn localised_url_has_public_suffix(url: &Localized<Url>) -> bool {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.registration.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.registration.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_post(req, depot).await {
         Ok(response) => {
@@ -319,7 +319,7 @@ async fn handle_post(req: &mut Request, depot: &Depot) -> Result<RouteResponse, 
         // database
         let hash = sha2::Sha256::digest(&body_json);
         let hash = hex::encode(hash);
-        let client = repo.oauth2_client().find_by_metadata_digest(&hash).await?;
+        let client = repo.oauth_client().find_by_metadata_digest(&hash).await?;
         (Some(hash), client)
     } else {
         (None, None)
@@ -331,7 +331,7 @@ async fn handle_post(req: &mut Request, depot: &Depot) -> Result<RouteResponse, 
         client
     } else {
         let mut client = repo
-            .oauth2_client()
+            .oauth_client()
             .add(
                 &mut rng,
                 &clock,
@@ -366,7 +366,7 @@ async fn handle_post(req: &mut Request, depot: &Depot) -> Result<RouteResponse, 
         // table.
         let localized = collect_localized_metadata(&metadata);
         if !localized.is_empty() {
-            repo.oauth2_client()
+            repo.oauth_client()
                 .replace_localized_metadata(client.id, &localized)
                 .await?;
             client.localized_metadata = localized;
@@ -396,7 +396,7 @@ async fn handle_post(req: &mut Request, depot: &Depot) -> Result<RouteResponse, 
 
 /// Extract the tagged (locale-specific) variants from `metadata` into a
 /// [`LocalizedClientMetadata`] suitable for
-/// [`OAuth2ClientRepository::replace_localized_metadata`]. The
+/// [`OAuthClientRepository::replace_localized_metadata`]. The
 /// non-localised default is *not* copied — that already lives on the
 /// `oauth_clients` row itself.
 fn collect_localized_metadata(metadata: &VerifiedClientMetadata) -> LocalizedClientMetadata {

@@ -2,11 +2,11 @@ use dioxus::prelude::*;
 
 use super::session_card::*;
 use crate::{
-    api::types::{DeviceType, Oauth2Session as Oauth2SessionData},
+    api::types::{DeviceType, OauthSession as OauthSessionData},
     pages::Route,
 };
 
-fn session_display_name(session: &Oauth2SessionData) -> String {
+fn session_display_name(session: &OauthSessionData) -> String {
     if let Some(ref name) = session.display_name {
         return name.clone();
     }
@@ -20,7 +20,7 @@ fn session_display_name(session: &Oauth2SessionData) -> String {
 }
 
 #[component]
-pub fn OAuth2SessionCard(session: Oauth2SessionData) -> Element {
+pub fn OAuthSessionCard(session: OauthSessionData) -> Element {
     let device_type = session
         .user_agent
         .as_ref()

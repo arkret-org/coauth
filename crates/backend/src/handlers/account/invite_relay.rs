@@ -52,7 +52,7 @@ use crate::handlers::account::consent_cell_query::{
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RelayRequest {
     /// DID of the actor issuing the invite. Recorded in audit but not
-    /// trusted as authentication on its own; the bearer cookie / OAuth2
+    /// trusted as authentication on its own; the bearer cookie / OAuth
     /// token guards the route.
     pub inviter_did: String,
 

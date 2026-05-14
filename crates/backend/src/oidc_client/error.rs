@@ -6,7 +6,7 @@ use coauth_jose::{
     jwa::InvalidAlgorithm,
     jwt::{JwtDecodeError, JwtSignatureError, NoKeyWorked},
 };
-use oauth2_types::{oidc::ProviderMetadataVerificationError, pkce::CodeChallengeError};
+use oauth_types::{oidc::ProviderMetadataVerificationError, pkce::CodeChallengeError};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -78,7 +78,7 @@ pub enum TokenRequestError {
     Http(#[from] reqwest::Error),
 
     /// The server returned an error
-    OAuth2(#[from] OAuth2Error),
+    OAuth(#[from] OAuthError),
 
     /// Error while injecting the client credentials into the request.
     Credentials(#[from] CredentialsError),
@@ -147,7 +147,7 @@ pub enum UserInfoError {
 
     /// The server returned an error
     #[error(transparent)]
-    OAuth2(#[from] OAuth2Error),
+    OAuth(#[from] OAuthError),
 
     /// The provider returned a business-level error (e.g. QQ, Feishu).
     #[error("Provider error (code={code}): {msg}")]
@@ -249,13 +249,13 @@ pub enum CredentialsError {
 }
 
 #[derive(Debug, Deserialize)]
-struct OAuth2ErrorResponse {
+struct OAuthErrorResponse {
     error: String,
     error_description: Option<String>,
     error_uri: Option<String>,
 }
 
-impl std::fmt::Display for OAuth2ErrorResponse {
+impl std::fmt::Display for OAuthErrorResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.error)?;
 
@@ -271,16 +271,16 @@ impl std::fmt::Display for OAuth2ErrorResponse {
     }
 }
 
-/// An error returned by the OAuth 2.0 provider
+/// An error returned by the OAuth provider
 #[derive(Debug, Error)]
-pub struct OAuth2Error {
-    error: Option<OAuth2ErrorResponse>,
+pub struct OAuthError {
+    error: Option<OAuthErrorResponse>,
 
     #[source]
     inner: reqwest::Error,
 }
 
-impl std::fmt::Display for OAuth2Error {
+impl std::fmt::Display for OAuthError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(error) = &self.error {
             write!(
@@ -293,30 +293,30 @@ impl std::fmt::Display for OAuth2Error {
     }
 }
 
-impl From<reqwest::Error> for OAuth2Error {
+impl From<reqwest::Error> for OAuthError {
     fn from(inner: reqwest::Error) -> Self {
         Self { error: None, inner }
     }
 }
 
-/// An extension trait to deal with error responses from the OAuth 2.0 provider
+/// An extension trait to deal with error responses from the OAuth provider
 #[async_trait]
 pub(crate) trait ResponseExt {
-    async fn error_from_oauth2_error_response(self) -> Result<Self, OAuth2Error>
+    async fn error_from_oauth_error_response(self) -> Result<Self, OAuthError>
     where
         Self: Sized;
 }
 
 #[async_trait]
 impl ResponseExt for reqwest::Response {
-    async fn error_from_oauth2_error_response(self) -> Result<Self, OAuth2Error> {
+    async fn error_from_oauth_error_response(self) -> Result<Self, OAuthError> {
         let Err(inner) = self.error_for_status_ref() else {
             return Ok(self);
         };
 
-        let error: OAuth2ErrorResponse = self.json().await?;
+        let error: OAuthErrorResponse = self.json().await?;
 
-        Err(OAuth2Error {
+        Err(OAuthError {
             error: Some(error),
             inner,
         })

@@ -14,7 +14,7 @@ use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
 use coauth_data::{
     Clock, Pagination, PgRepository, RepositoryAccess, SystemClock,
-    oauth2::OAuth2SessionFilter,
+    oauth::OAuthSessionFilter,
     queue::{
         DeactivateUserJob, ProvisionUserJob, QueueJobRepositoryExt as _, ReactivateUserJob,
         SyncDevicesJob,
@@ -346,17 +346,17 @@ pub(super) async fn handle_kill_sessions(
         .await?
         .context("User not found")?;
 
-    let filter = OAuth2SessionFilter::new().for_user(&user).active_only();
+    let filter = OAuthSessionFilter::new().for_user(&user).active_only();
     let affected = if dry_run {
-        repo.oauth2_session().count(filter).await?
+        repo.oauth_session().count(filter).await?
     } else {
-        repo.oauth2_session().finish_bulk(&clock, filter).await?
+        repo.oauth_session().finish_bulk(&clock, filter).await?
     };
 
     match affected {
-        0 => info!("No active OAuth 2.0 sessions to end"),
-        1 => info!("Ended 1 active OAuth 2.0 session"),
-        _ => info!("Ended {affected} active OAuth 2.0 sessions"),
+        0 => info!("No active OAuth sessions to end"),
+        1 => info!("Ended 1 active OAuth session"),
+        _ => info!("Ended {affected} active OAuth sessions"),
     }
 
     let filter = BrowserSessionFilter::new().for_user(&user).active_only();

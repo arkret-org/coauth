@@ -255,9 +255,9 @@ pub enum Resource {
         playground: bool,
         /// Deprecated -- no longer used
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        undocumented_oauth2_access: bool,
+        undocumented_oauth_access: bool,
     },
-    /// OAuth 2.0 / OIDC protocol endpoints
+    /// OAuth / OIDC protocol endpoints
     OAuth,
     /// Static frontend assets
     Assets {
@@ -435,7 +435,7 @@ impl Default for HttpConfig {
                         Resource::OAuth,
                         Resource::RestApi {
                             playground: false,
-                            undocumented_oauth2_access: false,
+                            undocumented_oauth_access: false,
                         },
                         Resource::Assets {
                             path: http_listener_assets_path_default(),

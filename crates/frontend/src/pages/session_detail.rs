@@ -101,7 +101,7 @@ fn SessionDetailView(node: SessionNode) -> Element {
                 }
             }
         }
-        SessionNode::Oauth2Session(session) => {
+        SessionNode::OauthSession(session) => {
             let device_type = session
                 .user_agent
                 .as_ref()
@@ -135,7 +135,7 @@ fn SessionDetailView(node: SessionNode) -> Element {
                         EditSessionName {
                             session_id: session_id.clone(),
                             current_name: session.display_name.clone().unwrap_or_default(),
-                            session_type: EditableSessionType::Oauth2,
+                            session_type: EditableSessionType::Oauth,
                         }
                     }
                     SessionCardMetadata {
@@ -162,7 +162,7 @@ fn SessionDetailView(node: SessionNode) -> Element {
                     }
                     EndSessionButton {
                         session_id: session_id,
-                        session_type: SessionType::Oauth2,
+                        session_type: SessionType::Oauth,
                     }
                 }
             }
@@ -173,12 +173,12 @@ fn SessionDetailView(node: SessionNode) -> Element {
 #[derive(Debug, Clone, PartialEq)]
 enum SessionType {
     Browser,
-    Oauth2,
+    Oauth,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 enum EditableSessionType {
-    Oauth2,
+    Oauth,
 }
 
 #[component]
@@ -236,7 +236,7 @@ fn EditSessionName(
                                 error_msg.set(None);
                                 spawn(async move {
                                     let path = match st {
-                                        EditableSessionType::Oauth2 => format!("/oauth2-sessions/{}/name", sid),
+                                        EditableSessionType::Oauth => format!("/oauth-sessions/{}/name", sid),
                                     };
                                     let result = crate::api::api_put::<serde_json::Value>(
                                         &path,
@@ -314,7 +314,7 @@ fn EndSessionButton(session_id: String, session_type: SessionType) -> Element {
                 spawn(async move {
                     let path = match st {
                         SessionType::Browser => format!("/browser-sessions/{}", sid),
-                        SessionType::Oauth2 => format!("/oauth2-sessions/{}", sid),
+                        SessionType::Oauth => format!("/oauth-sessions/{}", sid),
                     };
                     let _ = crate::api::api_delete::<serde_json::Value>(
                         &path,

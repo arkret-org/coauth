@@ -1,7 +1,7 @@
 # 升级
 
 `coauth` 在 HTTP 契约上遵循 [SemVer](https://semver.org/)。Patch / minor
-升级永远不会破坏 OIDC / OAuth2 / Contrix 已有 surface；major 升级会在至少
+升级永远不会破坏 OIDC / OAuth / Contrix 已有 surface；major 升级会在至少
 一个 minor 版本之前预先标记 deprecation。
 
 ## 常规升级流程

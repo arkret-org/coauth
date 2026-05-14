@@ -31,7 +31,7 @@
 # 参考
 
 - [配置文件参考](./reference/configuration.md)
-- [OAuth 2.0 作用域](./reference/scopes.md)
+- [OAuth 作用域](./reference/scopes.md)
 - [命令行工具](./reference/cli/README.md)
     - [`config`](./reference/cli/config.md)
     - [`database`](./reference/cli/database.md)

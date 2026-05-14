@@ -6,15 +6,15 @@ use coauth_data::{
     app_session::AppSessionRepository,
     audit::AuditRepository,
     notification::{NotificationRepository, NotificationTemplateRepository},
-    oauth2::{
-        OAuth2AccessTokenRepository, OAuth2AuthorizationGrantRepository, OAuth2ClientRepository,
-        OAuth2DeviceCodeGrantRepository, OAuth2RefreshTokenRepository, OAuth2SessionRepository,
+    oauth::{
+        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
+        OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
         SessionGrantRepository,
     },
     personal::PersonalSessionRepository,
     policy_data::PolicyDataRepository,
     queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository},
-    upstream_oauth2::{
+    upstream_oauth::{
         UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
         UpstreamOAuthSessionRepository,
     },
@@ -38,10 +38,10 @@ use crate::{
     app_session::PgAppSessionRepository,
     audit::PgAuditRepository,
     notification::{PgNotificationRepository, PgNotificationTemplateRepository},
-    oauth2::{
-        PgOAuth2AccessTokenRepository, PgOAuth2AuthorizationGrantRepository,
-        PgOAuth2ClientRepository, PgOAuth2DeviceCodeGrantRepository,
-        PgOAuth2RefreshTokenRepository, PgOAuth2SessionGrantRepository, PgOAuth2SessionRepository,
+    oauth::{
+        PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository,
+        PgOAuthClientRepository, PgOAuthDeviceCodeGrantRepository,
+        PgOAuthRefreshTokenRepository, PgOAuthSessionGrantRepository, PgOAuthSessionRepository,
     },
     personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository},
     pg::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM,
@@ -50,7 +50,7 @@ use crate::{
         job::PgQueueJobRepository, schedule::PgQueueScheduleRepository,
         worker::PgQueueWorkerRepository,
     },
-    upstream_oauth2::{
+    upstream_oauth::{
         PgUpstreamOAuthLinkRepository, PgUpstreamOAuthProviderRepository,
         PgUpstreamOAuthSessionRepository,
     },
@@ -269,46 +269,46 @@ impl RepositoryAccess for PgRepository {
         Box::new(PgNotificationRepository::new(&mut *self.conn))
     }
 
-    fn oauth2_client<'c>(
+    fn oauth_client<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2ClientRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuth2ClientRepository::new(&mut *self.conn))
+    ) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
+        Box::new(PgOAuthClientRepository::new(&mut *self.conn))
     }
 
-    fn oauth2_authorization_grant<'c>(
+    fn oauth_authorization_grant<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2AuthorizationGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuth2AuthorizationGrantRepository::new(&mut *self.conn))
+    ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c> {
+        Box::new(PgOAuthAuthorizationGrantRepository::new(&mut *self.conn))
     }
 
-    fn oauth2_session<'c>(
+    fn oauth_session<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2SessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuth2SessionRepository::new(&mut *self.conn))
+    ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c> {
+        Box::new(PgOAuthSessionRepository::new(&mut *self.conn))
     }
 
-    fn oauth2_session_grant<'c>(
+    fn oauth_session_grant<'c>(
         &'c mut self,
     ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuth2SessionGrantRepository::new(&mut *self.conn))
+        Box::new(PgOAuthSessionGrantRepository::new(&mut *self.conn))
     }
 
-    fn oauth2_access_token<'c>(
+    fn oauth_access_token<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2AccessTokenRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuth2AccessTokenRepository::new(&mut *self.conn))
+    ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c> {
+        Box::new(PgOAuthAccessTokenRepository::new(&mut *self.conn))
     }
 
-    fn oauth2_refresh_token<'c>(
+    fn oauth_refresh_token<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2RefreshTokenRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuth2RefreshTokenRepository::new(&mut *self.conn))
+    ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c> {
+        Box::new(PgOAuthRefreshTokenRepository::new(&mut *self.conn))
     }
 
     fn oauth_device_code_grant<'c>(
         &'c mut self,
-    ) -> Box<dyn OAuth2DeviceCodeGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuth2DeviceCodeGrantRepository::new(&mut *self.conn))
+    ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c> {
+        Box::new(PgOAuthDeviceCodeGrantRepository::new(&mut *self.conn))
     }
 
     fn personal_access_token<'c>(

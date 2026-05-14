@@ -1,6 +1,6 @@
-//! WeChat Open Platform OAuth2 specific request implementations.
+//! WeChat Open Platform OAuth specific request implementations.
 //!
-//! WeChat uses a non-standard OAuth2 flow:
+//! WeChat uses a non-standard OAuth flow:
 //! - Uses `appid` instead of `client_id`, `secret` instead of `client_secret`
 //! - Token response includes `openid` and `unionid` directly
 //! - UserInfo requires `openid` as a query parameter
@@ -39,7 +39,7 @@ pub struct WeChatTokenResponse {
 
 /// Exchange an authorization code for an access token with WeChat.
 ///
-/// `GET https://api.weixin.qq.com/sns/oauth2/access_token?appid=APPID&secret=SECRET&code=CODE&grant_type=authorization_code`
+/// `GET https://api.weixin.qq.com/sns/oauth/access_token?appid=APPID&secret=SECRET&code=CODE&grant_type=authorization_code`
 #[tracing::instrument(skip_all, fields(%token_endpoint))]
 pub async fn request_access_token(
     http_client: &reqwest::Client,

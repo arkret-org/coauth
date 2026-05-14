@@ -4,21 +4,21 @@ use coauth_config::ContrixConfig;
 use coauth_data::{
     AuthorizationGrant, AuthorizationGrantStage, BoxClock, BoxRepository, BoxRng, BrowserSession,
     Client, Clock, PrincipalUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
-    oauth2::{
-        OAuth2AuthorizationGrantRepository, OAuth2ClientRepository,
-        OAuth2DeviceCodeGrantRepository, OAuth2SessionRepository,
+    oauth::{
+        OAuthAuthorizationGrantRepository, OAuthClientRepository,
+        OAuthDeviceCodeGrantRepository, OAuthSessionRepository,
     },
     user::BrowserSessionRepository,
 };
 use coauth_keystore::Keystore;
 use coauth_policy::{Policy, PolicyFactory};
 use coauth_principal::PrincipalServerAdmin;
-use oauth2_types::requests::AuthorizationResponse;
+use oauth_types::requests::AuthorizationResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
 use crate::handlers::{
-    oauth2::{authorization::callback::CallbackDestination, generate_id_token},
+    oauth::{authorization::callback::CallbackDestination, generate_id_token},
     session::count_user_sessions_for_limiting,
 };
 
@@ -69,11 +69,11 @@ pub struct AuthorizationConsentDecision {
 
 impl AuthorizationConsentDecision {
     /// Build the redirect URL string for JSON API responses.
-    pub fn redirect_url(&self) -> Result<String, OAuth2AccessError> {
+    pub fn redirect_url(&self) -> Result<String, OAuthAccessError> {
         self.callback_destination
             .redirect_url(&self.params)
             .map(|info| info.url)
-            .map_err(|error| OAuth2AccessError::Internal(Box::new(error)))
+            .map_err(|error| OAuthAccessError::Internal(Box::new(error)))
     }
 }
 
@@ -90,7 +90,7 @@ pub enum DeviceConsentStatus {
 }
 
 #[derive(Debug, Error)]
-pub enum OAuth2AccessError {
+pub enum OAuthAccessError {
     #[error("not found")]
     NotFound,
 
@@ -119,22 +119,22 @@ pub async fn load_authorization_consent(
     grant_id: Ulid,
     requester_ip: Option<IpAddr>,
     user_agent: Option<String>,
-) -> Result<AuthorizationConsentInfo, OAuth2AccessError> {
+) -> Result<AuthorizationConsentInfo, OAuthAccessError> {
     let grant = repo
-        .oauth2_authorization_grant()
+        .oauth_authorization_grant()
         .lookup(grant_id)
         .await?
-        .ok_or(OAuth2AccessError::NotFound)?;
+        .ok_or(OAuthAccessError::NotFound)?;
 
     if !matches!(grant.stage, AuthorizationGrantStage::Pending) {
-        return Err(OAuth2AccessError::GrantNotPending);
+        return Err(OAuthAccessError::GrantNotPending);
     }
 
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .lookup(grant.client_id)
         .await?
-        .ok_or(OAuth2AccessError::NotFound)?;
+        .ok_or(OAuthAccessError::NotFound)?;
 
     let policy_violation = has_policy_violation(
         &mut repo,
@@ -176,25 +176,25 @@ pub async fn accept_authorization_consent(
     grant_id: Ulid,
     requester_ip: Option<IpAddr>,
     user_agent: Option<String>,
-) -> Result<AuthorizationConsentDecision, OAuth2AccessError> {
+) -> Result<AuthorizationConsentDecision, OAuthAccessError> {
     let grant = repo
-        .oauth2_authorization_grant()
+        .oauth_authorization_grant()
         .lookup(grant_id)
         .await?
-        .ok_or(OAuth2AccessError::NotFound)?;
+        .ok_or(OAuthAccessError::NotFound)?;
 
     let callback_destination = CallbackDestination::try_from(&grant)
-        .map_err(|error| OAuth2AccessError::Internal(Box::new(error)))?;
+        .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?;
 
     if !matches!(grant.stage, AuthorizationGrantStage::Pending) {
-        return Err(OAuth2AccessError::GrantNotPending);
+        return Err(OAuthAccessError::GrantNotPending);
     }
 
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .lookup(grant.client_id)
         .await?
-        .ok_or(OAuth2AccessError::NotFound)?;
+        .ok_or(OAuthAccessError::NotFound)?;
 
     if has_policy_violation(
         &mut repo,
@@ -208,16 +208,16 @@ pub async fn accept_authorization_consent(
     )
     .await?
     {
-        return Err(OAuth2AccessError::PolicyViolation);
+        return Err(OAuthAccessError::PolicyViolation);
     }
 
     let session = repo
-        .oauth2_session()
+        .oauth_session()
         .add_from_browser_session(rng, clock, &client, browser_session, grant.scope.clone())
         .await?;
 
     let grant = repo
-        .oauth2_authorization_grant()
+        .oauth_authorization_grant()
         .fulfill(clock, &session, grant)
         .await?;
 
@@ -243,7 +243,7 @@ pub async fn accept_authorization_consent(
                 None,
                 last_authentication.as_ref(),
             )
-            .map_err(|error| OAuth2AccessError::Internal(Box::new(error)))?,
+            .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?,
         );
     }
 
@@ -264,7 +264,7 @@ pub async fn lookup_device_link(
     mut repo: BoxRepository,
     clock: &dyn Clock,
     code: &str,
-) -> Result<Option<Ulid>, OAuth2AccessError> {
+) -> Result<Option<Ulid>, OAuthAccessError> {
     let grant = repo
         .oauth_device_code_grant()
         .find_by_user_code(code)
@@ -286,22 +286,22 @@ pub async fn load_device_consent(
     grant_id: Ulid,
     requester_ip: Option<IpAddr>,
     user_agent: Option<String>,
-) -> Result<ConsentScreen, OAuth2AccessError> {
+) -> Result<ConsentScreen, OAuthAccessError> {
     let grant = repo
         .oauth_device_code_grant()
         .lookup(grant_id)
         .await?
-        .ok_or(OAuth2AccessError::NotFound)?;
+        .ok_or(OAuthAccessError::NotFound)?;
 
     if grant.expires_at < clock.now() {
-        return Err(OAuth2AccessError::GrantExpired);
+        return Err(OAuthAccessError::GrantExpired);
     }
 
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .lookup(grant.client_id)
         .await?
-        .ok_or(OAuth2AccessError::NotFound)?;
+        .ok_or(OAuthAccessError::NotFound)?;
 
     let policy_violation = has_policy_violation(
         &mut repo,
@@ -339,22 +339,22 @@ pub async fn submit_device_consent(
     action: DeviceConsentAction,
     requester_ip: Option<IpAddr>,
     user_agent: Option<String>,
-) -> Result<DeviceConsentStatus, OAuth2AccessError> {
+) -> Result<DeviceConsentStatus, OAuthAccessError> {
     let grant = repo
         .oauth_device_code_grant()
         .lookup(grant_id)
         .await?
-        .ok_or(OAuth2AccessError::NotFound)?;
+        .ok_or(OAuthAccessError::NotFound)?;
 
     if grant.expires_at < clock.now() {
-        return Err(OAuth2AccessError::GrantExpired);
+        return Err(OAuthAccessError::GrantExpired);
     }
 
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .lookup(grant.client_id)
         .await?
-        .ok_or(OAuth2AccessError::NotFound)?;
+        .ok_or(OAuthAccessError::NotFound)?;
 
     if has_policy_violation(
         &mut repo,
@@ -368,7 +368,7 @@ pub async fn submit_device_consent(
     )
     .await?
     {
-        return Err(OAuth2AccessError::PolicyViolation);
+        return Err(OAuthAccessError::PolicyViolation);
     }
 
     let status = if grant.is_pending() {
@@ -402,15 +402,15 @@ async fn has_policy_violation(
     policy_factory: &PolicyFactory,
     browser_session: &BrowserSession,
     client: &Client,
-    scope: &oauth2_types::scope::Scope,
+    scope: &oauth_types::scope::Scope,
     grant_type: coauth_policy::GrantType,
     requester_ip: Option<IpAddr>,
     user_agent: Option<String>,
-) -> Result<bool, OAuth2AccessError> {
+) -> Result<bool, OAuthAccessError> {
     let mut policy: Policy = policy_factory
         .instantiate()
         .await
-        .map_err(|error| OAuth2AccessError::Internal(Box::new(error)))?;
+        .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?;
 
     let session_counts = count_user_sessions_for_limiting(repo, &browser_session.user).await?;
 
@@ -428,7 +428,7 @@ async fn has_policy_violation(
             },
         })
         .await
-        .map_err(|error| OAuth2AccessError::Internal(Box::new(error)))?;
+        .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?;
 
     Ok(!eval_result.valid())
 }

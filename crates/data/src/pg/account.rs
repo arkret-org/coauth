@@ -211,7 +211,7 @@ impl AccountRepository for PgAccountRepository<'_> {
                     AccountIdentityBinding {
                         id: link_id.into(),
                         user_id: link_user_id.into(),
-                        provider_type: IdentityProviderType::UpstreamOAuth2,
+                        provider_type: IdentityProviderType::UpstreamOAuth,
                         provider_id: Ulid::from(provider_id).to_string(),
                         external_subject: subject,
                         external_display_name: human_name,

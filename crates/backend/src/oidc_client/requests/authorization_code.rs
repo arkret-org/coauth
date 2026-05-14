@@ -23,7 +23,7 @@ use chrono::{DateTime, Utc};
 use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, PkceCodeChallengeMethod};
 use coauth_jose::claims::{self, TokenHash};
 use language_tags::LanguageTag;
-use oauth2_types::{
+use oauth_types::{
     pkce,
     prelude::CodeChallengeMethodExt,
     requests::{
@@ -203,7 +203,7 @@ pub struct AuthorizationValidationData {
     /// A string to mitigate replay attacks.
     ///
     /// Present when the `openid` scope was requested (i.e. when operating
-    /// in OpenID Connect mode). `None` for plain OAuth 2.0 flows.
+    /// in OpenID Connect mode). `None` for plain OAuth flows.
     pub nonce: Option<String>,
 
     /// The URI where the end-user will be redirected after authorization.
@@ -348,8 +348,8 @@ fn build_authorization_request(
 ///
 /// Returns an error if preparing the URL fails.
 ///
-/// [`VerifiedClientMetadata`]: oauth2_types::registration::VerifiedClientMetadata
-/// [`ClientErrorCode`]: oauth2_types::errors::ClientErrorCode
+/// [`VerifiedClientMetadata`]: oauth_types::registration::VerifiedClientMetadata
+/// [`ClientErrorCode`]: oauth_types::errors::ClientErrorCode
 pub fn build_authorization_url(
     authorization_endpoint: Url,
     authorization_data: AuthorizationRequestData,

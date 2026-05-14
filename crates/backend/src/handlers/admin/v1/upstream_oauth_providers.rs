@@ -8,12 +8,12 @@ use coauth_data::{
     UpstreamOAuthProviderResponseMode, UpstreamOAuthProviderSource,
     UpstreamOAuthProviderTokenAuthMethod,
     audit::AdminOperation,
-    upstream_oauth2::{
+    upstream_oauth::{
         UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
     },
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use salvo::{http::StatusCode, prelude::*};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -534,11 +534,11 @@ mod tests {
         RepositoryAccess, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
         UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
         UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod,
-        upstream_oauth2::{UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository},
+        upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository},
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use hyper::{Request, StatusCode};
-    use oauth2_types::scope::{OPENID, Scope};
+    use oauth_types::scope::{OPENID, Scope};
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};

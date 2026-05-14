@@ -70,8 +70,8 @@ pub enum AdminOperation {
     UpstreamLinkUpdated,
     /// An upstream OAuth link was deleted.
     UpstreamLinkDeleted,
-    /// Localised metadata for an OAuth 2.0 client was replaced.
-    OAuth2ClientLocalizedMetadataUpdated,
+    /// Localised metadata for an OAuth client was replaced.
+    OAuthClientLocalizedMetadataUpdated,
     /// An operation not covered by the enumerated variants.
     Other(String),
 }

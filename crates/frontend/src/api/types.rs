@@ -148,16 +148,16 @@ pub struct Authentication {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "__typename")]
 pub enum AppSession {
-    Oauth2Session(Oauth2Session),
+    OauthSession(OauthSession),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Oauth2Session {
+pub struct OauthSession {
     pub id: String,
     #[serde(default)]
     pub scope: Option<String>,
     #[serde(default)]
-    pub client: Option<Oauth2Client>,
+    pub client: Option<OauthClient>,
     #[serde(default)]
     pub user_agent: Option<UserAgent>,
     #[serde(default)]
@@ -171,7 +171,7 @@ pub struct Oauth2Session {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Oauth2Client {
+pub struct OauthClient {
     pub id: String,
     pub client_id: String,
     pub client_name: Option<String>,
@@ -445,7 +445,7 @@ pub type SetPasswordResult = SetPasswordPayload;
 pub type SetDisplayNameResult = SetDisplayNamePayload;
 pub type AddEmailResult = AddEmailPayload;
 pub type EndBrowserSessionResult = EndSessionPayload;
-pub type EndOauth2SessionResult = EndSessionPayload;
+pub type EndOauthSessionResult = EndSessionPayload;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct PlanManagementData {
@@ -459,7 +459,7 @@ pub type SessionDetailData = SessionNode;
 #[serde(tag = "__typename")]
 pub enum SessionNode {
     BrowserSession(BrowserSession),
-    Oauth2Session(Oauth2Session),
+    OauthSession(OauthSession),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -473,16 +473,16 @@ pub type DeactivateUserResult = DeactivateUserPayload;
 // ── Client detail ──────────────────────────────────────────────
 
 // REST returns client directly
-pub type ClientDetailData = Oauth2ClientDetail;
+pub type ClientDetailData = OauthClientDetail;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "__typename")]
 pub enum ClientNode {
-    Oauth2Client(Oauth2ClientDetail),
+    OauthClient(OauthClientDetail),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct Oauth2ClientDetail {
+pub struct OauthClientDetail {
     pub id: String,
     pub client_id: String,
     pub client_name: Option<String>,
@@ -525,7 +525,7 @@ pub struct SetSessionNamePayload {
     pub status: String,
 }
 
-pub type SetOauth2SessionNameResult = SetSessionNamePayload;
+pub type SetOauthSessionNameResult = SetSessionNamePayload;
 
 // ── Email verification query/mutation types ───────────────────
 
@@ -676,7 +676,7 @@ pub struct StepResponse {
     #[serde(default)]
     pub error: Option<String>,
     /// Set when the registration was started as part of another flow
-    /// (e.g. an OAuth2 authorization grant continuation). The frontend
+    /// (e.g. an OAuth authorization grant continuation). The frontend
     /// uses this to resume the original flow after the account is created.
     #[serde(default)]
     pub post_auth_action: Option<serde_json::Value>,
@@ -719,7 +719,7 @@ pub struct RecoveryTicketStatusResponse {
     pub email: Option<String>,
 }
 
-// ── OAuth2 Consent API types ──────────────────────────────────
+// ── OAuth Consent API types ──────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ConsentClientInfo {

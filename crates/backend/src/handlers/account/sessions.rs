@@ -7,8 +7,8 @@ use super::{
 };
 use crate::handlers::account::service::sessions::{
     AccountSessionError, end_browser_session as end_browser_session_service,
-    end_oauth2_session as end_oauth2_session_service, load_browser_session_detail,
-    load_oauth2_session_detail, set_oauth2_session_human_name,
+    end_oauth_session as end_oauth_session_service, load_browser_session_detail,
+    load_oauth_session_detail, set_oauth_session_human_name,
 };
 
 // ── Response types ─────────────────────────────────────────────
@@ -17,7 +17,7 @@ use crate::handlers::account::service::sessions::{
 #[serde(tag = "__typename")]
 pub enum SessionDetailResponse {
     BrowserSession(BrowserSessionDetail),
-    Oauth2Session(Oauth2SessionDetail),
+    OauthSession(OauthSessionDetail),
 }
 
 #[derive(Serialize, ToSchema)]
@@ -38,11 +38,11 @@ pub struct AuthenticationData {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct Oauth2SessionDetail {
+pub struct OauthSessionDetail {
     pub id: String,
     pub scope: Option<String>,
     pub display_name: Option<String>,
-    pub client: Option<Oauth2ClientBrief>,
+    pub client: Option<OauthClientBrief>,
     pub user_agent: Option<UserAgentInfo>,
     pub last_active_ip: Option<String>,
     pub last_active_at: Option<String>,
@@ -50,7 +50,7 @@ pub struct Oauth2SessionDetail {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct Oauth2ClientBrief {
+pub struct OauthClientBrief {
     pub id: String,
     pub client_id: String,
     pub client_name: Option<String>,
@@ -100,18 +100,18 @@ pub async fn get_session(
                 }),
             })
         }
-        NodeType::OAuth2Session => {
-            let detail = load_oauth2_session_detail(repo, &requester, ulid)
+        NodeType::OAuthSession => {
+            let detail = load_oauth_session_detail(repo, &requester, ulid)
                 .await
                 .map_err(map_account_session_error)?;
             let session = detail.session;
 
-            SessionDetailResponse::Oauth2Session(Oauth2SessionDetail {
-                id: NodeType::OAuth2Session.serialize(session.id),
+            SessionDetailResponse::OauthSession(OauthSessionDetail {
+                id: NodeType::OAuthSession.serialize(session.id),
                 scope: Some(session.scope.to_string()),
                 display_name: None,
-                client: detail.client.map(|c| Oauth2ClientBrief {
-                    id: NodeType::OAuth2Client.serialize(c.id),
+                client: detail.client.map(|c| OauthClientBrief {
+                    id: NodeType::OAuthClient.serialize(c.id),
                     client_id: c.client_id.to_string(),
                     client_name: c.client_name.clone(),
                     client_uri: c.client_uri.as_ref().map(|u| u.to_string()),
@@ -162,17 +162,17 @@ pub async fn end_browser_session(
     Ok(Json(EndSessionResponse { status: "ENDED" }))
 }
 
-// ── DELETE /api/v1/oauth2-sessions/:id ─────────────────────────
+// ── DELETE /api/v1/oauth-sessions/:id ─────────────────────────
 
 #[endpoint]
-pub async fn end_oauth2_session(
+pub async fn end_oauth_session(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<EndSessionResponse>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
-    let ulid = NodeType::OAuth2Session.extract_ulid(&id)?;
+    let ulid = NodeType::OAuthSession.extract_ulid(&id)?;
 
     let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
@@ -184,14 +184,14 @@ pub async fn end_oauth2_session(
     let repo = repo_factory.create().await?;
     let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
 
-    end_oauth2_session_service(repo, &requester, &mut rng, &clock, ulid)
+    end_oauth_session_service(repo, &requester, &mut rng, &clock, ulid)
         .await
         .map_err(map_account_session_error)?;
 
     Ok(Json(EndSessionResponse { status: "ENDED" }))
 }
 
-// ── PUT /api/v1/oauth2-sessions/:id/name ───────────────────────
+// ── PUT /api/v1/oauth-sessions/:id/name ───────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct SetSessionNameInput {
@@ -204,14 +204,14 @@ pub struct SetSessionNameResponse {
 }
 
 #[endpoint]
-pub async fn set_oauth2_session_name(
+pub async fn set_oauth_session_name(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<SetSessionNameResponse>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
-    let ulid = NodeType::OAuth2Session.extract_ulid(&id)?;
+    let ulid = NodeType::OAuthSession.extract_ulid(&id)?;
 
     let input: SetSessionNameInput = req
         .parse_json::<SetSessionNameInput>()
@@ -228,7 +228,7 @@ pub async fn set_oauth2_session_name(
     let repo = repo_factory.create().await?;
     let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
 
-    set_oauth2_session_human_name(
+    set_oauth_session_human_name(
         repo,
         &requester,
         &clock,

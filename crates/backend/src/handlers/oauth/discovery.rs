@@ -6,7 +6,7 @@ use coauth_iana::oauth::{
 };
 use coauth_jose::jwa::SUPPORTED_SIGNING_ALGORITHMS;
 use coauth_keystore::Keystore;
-use oauth2_types::{
+use oauth_types::{
     oidc::{ClaimType, ProviderMetadata, SubjectType},
     requests::{Display, GrantType, Prompt, ResponseMode},
     scope,
@@ -67,7 +67,7 @@ struct IdentityRegistryMetadata {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.discovery.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.discovery.get", skip_all)]
 pub async fn get(depot: &Depot) -> Json<DiscoveryResponse> {
     get_inner(depot)
 }

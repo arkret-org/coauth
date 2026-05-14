@@ -11,7 +11,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess,
-    oauth2::OAuth2SessionFilter,
+    oauth::OAuthSessionFilter,
     personal::PersonalSessionFilter,
     queue::{DeactivateUserJob, ReactivateUserJob},
     user::{BrowserSessionFilter, User, UserEmailFilter, UserRepository},
@@ -25,7 +25,7 @@ use crate::{
 
 /// Terminate every active session that belongs to `target` and log the counts.
 ///
-/// The function finishes browser sessions, OAuth 2.0 sessions, and both
+/// The function finishes browser sessions, OAuth sessions, and both
 /// the "actor" and "owner" flavours of personal sessions.
 async fn terminate_all_sessions_for(
     repo: &mut BoxRepository,
@@ -47,18 +47,18 @@ async fn terminate_all_sessions_for(
         "sessions terminated"
     );
 
-    // OAuth 2.0 sessions
+    // OAuth sessions
     let oauth_count = repo
-        .oauth2_session()
+        .oauth_session()
         .finish_bulk(
             wall_clock,
-            OAuth2SessionFilter::new().for_user(target).active_only(),
+            OAuthSessionFilter::new().for_user(target).active_only(),
         )
         .await
         .map_err(JobError::retry)?;
     info!(
         sessions = oauth_count,
-        kind = "oauth2",
+        kind = "oauth",
         "sessions terminated"
     );
 

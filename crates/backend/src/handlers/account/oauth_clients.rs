@@ -2,10 +2,10 @@ use salvo::{oapi::ToSchema, prelude::*};
 use serde::Serialize;
 
 use super::{DepotExt, NodeType, RouteError};
-use crate::handlers::account::service::connections::{OAuth2ClientLookupError, load_oauth2_client};
+use crate::handlers::account::service::connections::{OAuthClientLookupError, load_oauth_client};
 
 #[derive(Serialize, ToSchema)]
-pub struct Oauth2ClientResponse {
+pub struct OauthClientResponse {
     pub id: String,
     pub client_id: String,
     pub client_name: Option<String>,
@@ -15,26 +15,26 @@ pub struct Oauth2ClientResponse {
     pub logo_uri: Option<String>,
 }
 
-/// GET /api/v1/oauth2-clients/:id
+/// GET /api/v1/oauth-clients/:id
 #[endpoint]
 pub async fn get_client(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<Oauth2ClientResponse>, RouteError> {
+) -> Result<Json<OauthClientResponse>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
-    let ulid = NodeType::OAuth2Client.extract_ulid(&id)?;
+    let ulid = NodeType::OAuthClient.extract_ulid(&id)?;
 
     let repo_factory = depot.repo_factory()?;
     let repo = repo_factory.create().await?;
 
-    let client = load_oauth2_client(repo, ulid)
+    let client = load_oauth_client(repo, ulid)
         .await
         .map_err(map_client_lookup_error)?;
 
-    Ok(Json(Oauth2ClientResponse {
-        id: NodeType::OAuth2Client.serialize(client.id),
+    Ok(Json(OauthClientResponse {
+        id: NodeType::OAuthClient.serialize(client.id),
         client_id: client.client_id.to_string(),
         client_name: client.client_name.clone(),
         client_uri: client.client_uri.as_ref().map(|u| u.to_string()),
@@ -44,9 +44,9 @@ pub async fn get_client(
     }))
 }
 
-fn map_client_lookup_error(error: OAuth2ClientLookupError) -> RouteError {
+fn map_client_lookup_error(error: OAuthClientLookupError) -> RouteError {
     match error {
-        OAuth2ClientLookupError::NotFound => RouteError::NotFound,
-        OAuth2ClientLookupError::Repository(error) => RouteError::from(error),
+        OAuthClientLookupError::NotFound => RouteError::NotFound,
+        OAuthClientLookupError::Repository(error) => RouteError::from(error),
     }
 }

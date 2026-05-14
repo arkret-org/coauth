@@ -89,7 +89,7 @@ impl LoginContext {
         &mut self.form
     }
 
-    /// Attach upstream OAuth 2.0 providers to the context.
+    /// Attach upstream OAuth providers to the context.
     #[must_use]
     pub fn with_upstream_providers(self, providers: Vec<UpstreamOAuthProvider>) -> Self {
         Self { providers, ..self }

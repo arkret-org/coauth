@@ -4,13 +4,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     BrowserSession, Client, Clock, Page, Pagination, Session, SessionState, User, new_id,
-    oauth2::{OAuth2SessionFilter, OAuth2SessionRepository},
+    oauth::{OAuthSessionFilter, OAuthSessionRepository},
     pagination::{Node, PaginationDirection},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use ipnetwork::IpNetwork;
-use oauth2_types::scope::{Scope, ScopeToken};
+use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -20,20 +20,20 @@ use crate::{
     schema::{oauth_clients, oauth_sessions, user_sessions},
 };
 
-/// An implementation of [`OAuth2SessionRepository`] for a PostgreSQL connection
-pub struct PgOAuth2SessionRepository<'c> {
+/// An implementation of [`OAuthSessionRepository`] for a PostgreSQL connection
+pub struct PgOAuthSessionRepository<'c> {
     conn: &'c mut diesel_async::AsyncPgConnection,
 }
 
-impl<'c> PgOAuth2SessionRepository<'c> {
-    /// Create a new [`PgOAuth2SessionRepository`] from an active PostgreSQL
+impl<'c> PgOAuthSessionRepository<'c> {
+    /// Create a new [`PgOAuthSessionRepository`] from an active PostgreSQL
     /// connection
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
     }
 }
 
-/// Row type for loading OAuth2 sessions from the database
+/// Row type for loading OAuth sessions from the database
 #[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = oauth_sessions)]
 struct OAuthSessionLookup {
@@ -94,7 +94,7 @@ impl TryFrom<OAuthSessionLookup> for Session {
     }
 }
 
-/// Insertable row for creating a new OAuth2 session
+/// Insertable row for creating a new OAuth session
 #[derive(Insertable)]
 #[diesel(table_name = oauth_sessions)]
 struct NewOAuthSession {
@@ -115,7 +115,7 @@ struct CleanupResult {
     last_ts: Option<DateTime<Utc>>,
 }
 
-/// Macro to apply the common [`OAuth2SessionFilter`] conditions to a diesel
+/// Macro to apply the common [`OAuthSessionFilter`] conditions to a diesel
 /// query (works with any query type that supports `.filter()`).
 macro_rules! apply_session_filter {
     ($query:expr, $filter:expr) => {{
@@ -212,11 +212,11 @@ macro_rules! apply_session_filter {
 }
 
 #[async_trait]
-impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
+impl OAuthSessionRepository for PgOAuthSessionRepository<'_> {
     type Error = DatabaseError;
 
     #[tracing::instrument(
-        name = "db.oauth2_session.lookup",
+        name = "db.oauth_session.lookup",
         skip_all,
         fields(
             session.id = %id,
@@ -237,7 +237,7 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_session.add",
+        name = "db.oauth_session.add",
         skip_all,
         fields(
             %client.id,
@@ -290,11 +290,11 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
         })
     }
 
-    #[tracing::instrument(name = "db.oauth2_session.finish_bulk", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_session.finish_bulk", skip_all, err)]
     async fn finish_bulk(
         &mut self,
         clock: &dyn Clock,
-        filter: OAuth2SessionFilter<'_>,
+        filter: OAuthSessionFilter<'_>,
     ) -> Result<usize, Self::Error> {
         let finished_at = clock.now();
 
@@ -316,7 +316,7 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_session.finish",
+        name = "db.oauth_session.finish",
         skip_all,
         fields(
             %session.id,
@@ -343,10 +343,10 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
             .map_err(DatabaseError::to_invalid_operation)
     }
 
-    #[tracing::instrument(name = "db.oauth2_session.list", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_session.list", skip_all, err)]
     async fn list(
         &mut self,
-        filter: OAuth2SessionFilter<'_>,
+        filter: OAuthSessionFilter<'_>,
         pagination: Pagination,
     ) -> Result<Page<Session>, Self::Error> {
         let mut query = apply_session_filter!(
@@ -384,8 +384,8 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
         Ok(page)
     }
 
-    #[tracing::instrument(name = "db.oauth2_session.count", skip_all, err)]
-    async fn count(&mut self, filter: OAuth2SessionFilter<'_>) -> Result<usize, Self::Error> {
+    #[tracing::instrument(name = "db.oauth_session.count", skip_all, err)]
+    async fn count(&mut self, filter: OAuthSessionFilter<'_>) -> Result<usize, Self::Error> {
         let query = apply_session_filter!(oauth_sessions::table.into_boxed(), filter);
 
         let count: i64 = query.count().get_result(self.conn).await?;
@@ -395,7 +395,7 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
             .map_err(DatabaseError::to_invalid_operation)
     }
 
-    #[tracing::instrument(name = "db.oauth2_session.record_batch_activity", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_session.record_batch_activity", skip_all, err)]
     async fn record_batch_activity(
         &mut self,
         mut activities: Vec<(Ulid, DateTime<Utc>, Option<IpAddr>)>,
@@ -442,7 +442,7 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_session.record_user_agent",
+        name = "db.oauth_session.record_user_agent",
         skip_all,
         fields(
             %session.id,
@@ -470,7 +470,7 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "repository.oauth2_session.set_human_name",
+        name = "repository.oauth_session.set_human_name",
         skip(self),
         fields(
             client.id = %session.client_id,
@@ -496,7 +496,7 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_session.cleanup_finished",
+        name = "db.oauth_session.cleanup_finished",
         skip_all,
         fields(
             since = since.map(tracing::field::display),
@@ -550,7 +550,7 @@ impl OAuth2SessionRepository for PgOAuth2SessionRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_session.cleanup_inactive_ips",
+        name = "db.oauth_session.cleanup_inactive_ips",
         skip_all,
         fields(
             since = since.map(tracing::field::display),

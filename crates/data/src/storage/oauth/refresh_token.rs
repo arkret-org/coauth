@@ -5,10 +5,10 @@ use ulid::Ulid;
 
 use crate::repository_impl;
 
-/// An [`OAuth2RefreshTokenRepository`] helps interacting with [`RefreshToken`]
+/// An [`OAuthRefreshTokenRepository`] helps interacting with [`RefreshToken`]
 /// saved in the storage backend
 #[async_trait]
-pub trait OAuth2RefreshTokenRepository: Send + Sync {
+pub trait OAuthRefreshTokenRepository: Send + Sync {
     /// The error type returned by the repository
     type Error;
 
@@ -153,7 +153,7 @@ pub trait OAuth2RefreshTokenRepository: Send + Sync {
     ) -> Result<(usize, Option<chrono::DateTime<chrono::Utc>>), Self::Error>;
 }
 
-repository_impl!(OAuth2RefreshTokenRepository:
+repository_impl!(OAuthRefreshTokenRepository:
     async fn lookup(&mut self, id: Ulid) -> Result<Option<RefreshToken>, Self::Error>;
 
     async fn find_by_token(

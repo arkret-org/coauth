@@ -39,7 +39,7 @@ use hyper::{
     Request, Response, StatusCode,
     header::{CONTENT_TYPE, COOKIE, SET_COOKIE},
 };
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::{
@@ -58,7 +58,7 @@ use crate::{
     handlers::{
         ActivityTracker, BoundActivityTracker, Limiter, RequesterFingerprint,
         passwords::{Hasher, PasswordManager},
-        upstream_oauth2::cache::MetadataCache,
+        upstream_oauth::cache::MetadataCache,
     },
     salvo_utils::cookies::{CookieJar, CookieManager},
     services::{
@@ -396,7 +396,7 @@ impl TestState {
     fn build_test_router(&self) -> Router {
         use crate::handlers::admin::v1::{
             account_dids, accounts, audit_feed, claims, connector_health, devices,
-            notification_channels, notification_templates, oauth2_sessions, personal_sessions,
+            notification_channels, notification_templates, oauth_sessions, personal_sessions,
             policy_checks, policy_data, site_config, upstream_oauth_links,
             upstream_oauth_providers, user_emails, user_registration_tokens, user_sessions, users,
             version,
@@ -410,14 +410,14 @@ impl TestState {
                 Router::with_path("/webhooks/email/{provider}")
                     .post(crate::handlers::email_webhooks::post),
             )
-            // OAuth2 discovery
+            // OAuth discovery
             .push(
                 Router::with_path("/.well-known/openid-configuration")
-                    .get(crate::handlers::oauth2::discovery::get),
+                    .get(crate::handlers::oauth::discovery::get),
             )
             .push(
                 Router::with_path("/.well-known/webfinger")
-                    .get(crate::handlers::oauth2::webfinger::get),
+                    .get(crate::handlers::oauth::webfinger::get),
             )
             .push(
                 Router::with_path("/.well-known/did.json")
@@ -431,34 +431,34 @@ impl TestState {
                 Router::with_path("/users/{id}/did.json")
                     .get(crate::handlers::contrix::user_did_json),
             )
-            // OAuth2 endpoints
+            // OAuth endpoints
             .push(
-                Router::with_path("/oauth2/keys.json").get(crate::handlers::oauth2::keys::get),
+                Router::with_path("/oauth/keys.json").get(crate::handlers::oauth::keys::get),
             )
             .push(
-                Router::with_path("/oauth2/userinfo")
-                    .get(crate::handlers::oauth2::userinfo::get)
-                    .post(crate::handlers::oauth2::userinfo::get),
+                Router::with_path("/oauth/userinfo")
+                    .get(crate::handlers::oauth::userinfo::get)
+                    .post(crate::handlers::oauth::userinfo::get),
             )
             .push(
-                Router::with_path("/oauth2/introspect")
-                    .post(crate::handlers::oauth2::introspection::post),
+                Router::with_path("/oauth/introspect")
+                    .post(crate::handlers::oauth::introspection::post),
             )
             .push(
-                Router::with_path("/oauth2/revoke")
-                    .post(crate::handlers::oauth2::revoke::post),
+                Router::with_path("/oauth/revoke")
+                    .post(crate::handlers::oauth::revoke::post),
             )
             .push(
-                Router::with_path("/oauth2/token")
-                    .post(crate::handlers::oauth2::token::post),
+                Router::with_path("/oauth/token")
+                    .post(crate::handlers::oauth::token::post),
             )
             .push(
-                Router::with_path("/oauth2/registration")
-                    .post(crate::handlers::oauth2::registration::post),
+                Router::with_path("/oauth/registration")
+                    .post(crate::handlers::oauth::registration::post),
             )
             .push(
-                Router::with_path("/oauth2/device")
-                    .post(crate::handlers::oauth2::device::authorize::post),
+                Router::with_path("/oauth/device")
+                    .post(crate::handlers::oauth::device::authorize::post),
             )
             // REST API
             .push(Router::with_path("/api/v1/server/describe").get(crate::handlers::contrix::server_describe))
@@ -489,16 +489,16 @@ impl TestState {
                     .delete(crate::handlers::account::sessions::end_browser_session),
             )
             .push(
-                Router::with_path("/api/v1/oauth2-sessions/{id}")
-                    .delete(crate::handlers::account::sessions::end_oauth2_session),
+                Router::with_path("/api/v1/oauth-sessions/{id}")
+                    .delete(crate::handlers::account::sessions::end_oauth_session),
             )
             .push(
-                Router::with_path("/api/v1/oauth2-sessions/{id}/name")
-                    .put(crate::handlers::account::sessions::set_oauth2_session_name),
+                Router::with_path("/api/v1/oauth-sessions/{id}/name")
+                    .put(crate::handlers::account::sessions::set_oauth_session_name),
             )
             .push(
-                Router::with_path("/api/v1/oauth2-clients/{id}")
-                    .get(crate::handlers::account::oauth2_clients::get_client),
+                Router::with_path("/api/v1/oauth-clients/{id}")
+                    .get(crate::handlers::account::oauth_clients::get_client),
             )
             .push(
                 Router::with_path("/api/v1/viewer/password")
@@ -549,24 +549,24 @@ impl TestState {
                 Router::with_path("/api/v1/user-emails/{id}")
                     .delete(crate::handlers::account::emails::remove_email),
             )
-            // OAuth2 authorization
+            // OAuth authorization
             .push(
                 Router::with_path("/authorize")
-                    .get(crate::handlers::oauth2::authorization::get),
+                    .get(crate::handlers::oauth::authorization::get),
             )
-            // Upstream OAuth2
+            // Upstream OAuth
             .push(
                 Router::with_path("/upstream/authorize/{provider_id}")
-                    .get(crate::handlers::upstream_oauth2::authorize::get),
+                    .get(crate::handlers::upstream_oauth::authorize::get),
             )
             .push(
                 Router::with_path("/upstream/callback/{provider_id}")
-                    .get(crate::handlers::upstream_oauth2::callback::handler)
-                    .post(crate::handlers::upstream_oauth2::callback::handler),
+                    .get(crate::handlers::upstream_oauth::callback::handler)
+                    .post(crate::handlers::upstream_oauth::callback::handler),
             )
             .push(
                 Router::with_path("/upstream/backchannel-logout/{provider_id}")
-                    .post(crate::handlers::upstream_oauth2::backchannel_logout::post),
+                    .post(crate::handlers::upstream_oauth::backchannel_logout::post),
             )
             // Admin API
             .push(
@@ -661,13 +661,13 @@ impl TestState {
                             ),
                     )
                     .push(
-                        Router::with_path("oauth2-sessions")
-                            .get(oauth2_sessions::list_sessions)
+                        Router::with_path("oauth-sessions")
+                            .get(oauth_sessions::list_sessions)
                             .push(
                                 Router::with_path("{id}")
-                                    .get(oauth2_sessions::get_session)
+                                    .get(oauth_sessions::get_session)
                                     .push(
-                                        Router::with_path("finish").post(oauth2_sessions::finish_session),
+                                        Router::with_path("finish").post(oauth_sessions::finish_session),
                                     ),
                             ),
                     )
@@ -798,7 +798,7 @@ impl TestState {
         builder.body(body_str).unwrap()
     }
 
-    /// Create an OAuth 2.0 access token with the given scope for admin API
+    /// Create an OAuth access token with the given scope for admin API
     /// tests.
     pub async fn token_with_scope(&mut self, scope: &str) -> String {
         let parsed_scope: Scope = if scope.is_empty() {
@@ -872,7 +872,7 @@ impl TestState {
     ///
     /// Panics if the response status code is not 200 or 401.
     pub async fn is_access_token_valid(&self, token: &str) -> bool {
-        let request = Request::get("/oauth2/userinfo").bearer(token).empty();
+        let request = Request::get("/oauth/userinfo").bearer(token).empty();
 
         let response = self.request(request).await;
 

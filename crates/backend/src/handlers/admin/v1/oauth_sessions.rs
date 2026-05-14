@@ -7,10 +7,10 @@ use std::str::FromStr;
 use coauth_data::{
     RepositoryAccess,
     audit::AdminOperation,
-    oauth2::OAuth2SessionFilter,
+    oauth::OAuthSessionFilter,
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
 };
-use oauth2_types::scope::{Scope, ScopeToken};
+use oauth_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -20,7 +20,7 @@ use crate::{
     AppError, JsonResult,
     handlers::admin::{
         call_context::extract_call_context,
-        model::{OAuth2Session, Resource},
+        model::{OAuthSession, Resource},
         params::{IncludeCount, extract_pagination, extract_ulid_param},
         response::{
             PaginatedResponse, SingleResponse, paginated_response_for_count_only,
@@ -29,7 +29,7 @@ use crate::{
     },
 };
 
-/// Terminate an active OAuth 2.0 session. If the session is associated with a
+/// Terminate an active OAuth session. If the session is associated with a
 /// user, a device-sync job is enqueued so that downstream PrincipalServers learn
 /// about the revocation promptly.
 #[endpoint]
@@ -37,7 +37,7 @@ use crate::{
 pub async fn finish_session(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<OAuth2Session>> {
+) -> JsonResult<SingleResponse<OAuthSession>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -49,16 +49,16 @@ pub async fn finish_session(
     let mut rng = crate::handlers::account::make_rng();
 
     let oauth_session = repo
-        .oauth2_session()
+        .oauth_session()
         .lookup(session_id)
         .await?
         .ok_or_else(|| {
-            AppError::not_found(format!("OAuth 2.0 session with ID {session_id} not found"))
+            AppError::not_found(format!("OAuth session with ID {session_id} not found"))
         })?;
 
     if oauth_session.finished_at().is_some() {
         return Err(AppError::bad_request(format!(
-            "OAuth 2.0 session with ID {session_id} is already finished"
+            "OAuth session with ID {session_id} is already finished"
         )));
     }
 
@@ -72,7 +72,7 @@ pub async fn finish_session(
             .await?;
     }
 
-    let ended = repo.oauth2_session().finish(&clock, oauth_session).await?;
+    let ended = repo.oauth_session().finish(&clock, oauth_session).await?;
 
     crate::handlers::admin::audit_helper::record_admin_operation(
         &mut repo,
@@ -80,7 +80,7 @@ pub async fn finish_session(
         &*clock,
         admin_user.as_ref(),
         AdminOperation::SessionTerminated,
-        "oauth2_session",
+        "oauth_session",
         Some(session_id),
         serde_json::json!({}),
     )
@@ -89,40 +89,40 @@ pub async fn finish_session(
     repo.save().await?;
 
     Ok(Json(SingleResponse::new(
-        OAuth2Session::from(ended),
-        format!("/api/admin/v1/oauth2-sessions/{session_id}/finish"),
+        OAuthSession::from(ended),
+        format!("/api/admin/v1/oauth-sessions/{session_id}/finish"),
     )))
 }
 
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.oauth2_session.get", skip_all)]
+#[tracing::instrument(name = "handler.admin.v1.oauth_session.get", skip_all)]
 pub async fn get_session(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<OAuth2Session>> {
+) -> JsonResult<SingleResponse<OAuthSession>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let id = extract_ulid_param(req)?;
 
     let session = repo
-        .oauth2_session()
+        .oauth_session()
         .lookup(id)
         .await?
-        .ok_or_else(|| AppError::not_found(format!("OAuth 2.0 session ID {id} not found")))?;
+        .ok_or_else(|| AppError::not_found(format!("OAuth session ID {id} not found")))?;
 
-    Ok(Json(SingleResponse::new_canonical(OAuth2Session::from(
+    Ok(Json(SingleResponse::new_canonical(OAuthSession::from(
         session,
     ))))
 }
 
 #[derive(Deserialize, JsonSchema, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
-enum OAuth2SessionStatus {
+enum OAuthSessionStatus {
     Active,
     Finished,
 }
 
-impl std::fmt::Display for OAuth2SessionStatus {
+impl std::fmt::Display for OAuthSessionStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Active => write!(f, "active"),
@@ -133,12 +133,12 @@ impl std::fmt::Display for OAuth2SessionStatus {
 
 #[derive(Deserialize, JsonSchema, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
-enum OAuth2ClientKind {
+enum OAuthClientKind {
     Dynamic,
     Static,
 }
 
-impl std::fmt::Display for OAuth2ClientKind {
+impl std::fmt::Display for OAuthClientKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Dynamic => write!(f, "dynamic"),
@@ -148,7 +148,7 @@ impl std::fmt::Display for OAuth2ClientKind {
 }
 
 #[derive(Deserialize, JsonSchema, Default)]
-#[serde(rename = "OAuth2SessionFilter")]
+#[serde(rename = "OAuthSessionFilter")]
 pub struct FilterParams {
     /// Retrieve the items for the given user
     #[serde(rename = "filter[user]")]
@@ -162,7 +162,7 @@ pub struct FilterParams {
 
     /// Retrieve the items only for a specific client kind
     #[serde(rename = "filter[client-kind]")]
-    client_kind: Option<OAuth2ClientKind>,
+    client_kind: Option<OAuthClientKind>,
 
     /// Retrieve the items started from the given browser session
     #[serde(rename = "filter[user-session]")]
@@ -181,7 +181,7 @@ pub struct FilterParams {
     ///
     /// * `finished`: Only retrieve finished sessions
     #[serde(rename = "filter[status]")]
-    status: Option<OAuth2SessionStatus>,
+    status: Option<OAuthSessionStatus>,
 }
 
 impl std::fmt::Display for FilterParams {
@@ -228,15 +228,15 @@ impl std::fmt::Display for FilterParams {
 pub async fn list_sessions(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PaginatedResponse<OAuth2Session>> {
+) -> JsonResult<PaginatedResponse<OAuthSession>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let (pagination, include_count) = extract_pagination(req)?;
     let params: FilterParams = req.parse_queries().unwrap_or_default();
 
-    let base = format!("{path}{params}", path = OAuth2Session::PATH);
+    let base = format!("{path}{params}", path = OAuthSession::PATH);
     let base = include_count.add_to_base(&base);
-    let filter = OAuth2SessionFilter::default();
+    let filter = OAuthSessionFilter::default();
 
     // Load the user from the filter
     let user = if let Some(user_id) = params.user {
@@ -258,7 +258,7 @@ pub async fn list_sessions(
 
     let client = if let Some(client_id) = params.client {
         let client = repo
-            .oauth2_client()
+            .oauth_client()
             .lookup(client_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("Client ID {client_id} not found")))?;
@@ -274,8 +274,8 @@ pub async fn list_sessions(
     };
 
     let filter = match params.client_kind {
-        Some(OAuth2ClientKind::Dynamic) => filter.only_dynamic_clients(),
-        Some(OAuth2ClientKind::Static) => filter.only_static_clients(),
+        Some(OAuthClientKind::Dynamic) => filter.only_dynamic_clients(),
+        Some(OAuthClientKind::Static) => filter.only_static_clients(),
         None => filter,
     };
 
@@ -315,31 +315,31 @@ pub async fn list_sessions(
     };
 
     let filter = match params.status {
-        Some(OAuth2SessionStatus::Active) => filter.active_only(),
-        Some(OAuth2SessionStatus::Finished) => filter.finished_only(),
+        Some(OAuthSessionStatus::Active) => filter.active_only(),
+        Some(OAuthSessionStatus::Finished) => filter.finished_only(),
         None => filter,
     };
 
     let response = match include_count {
         IncludeCount::True => {
             let page = repo
-                .oauth2_session()
+                .oauth_session()
                 .list(filter, pagination)
                 .await?
-                .map(OAuth2Session::from);
-            let count = repo.oauth2_session().count(filter).await?;
+                .map(OAuthSession::from);
+            let count = repo.oauth_session().count(filter).await?;
             paginated_response_for_page(page, pagination, Some(count), &base)
         }
         IncludeCount::False => {
             let page = repo
-                .oauth2_session()
+                .oauth_session()
                 .list(filter, pagination)
                 .await?
-                .map(OAuth2Session::from);
+                .map(OAuthSession::from);
             paginated_response_for_page(page, pagination, None, &base)
         }
         IncludeCount::Only => {
-            let count = repo.oauth2_session().count(filter).await?;
+            let count = repo.oauth_session().count(filter).await?;
             paginated_response_for_count_only(count, &base)
         }
     };
@@ -368,14 +368,14 @@ mod tests {
         // Get the session ID from the token we just created
         let mut repo = state.repository().await.unwrap();
         let AccessToken { session_id, .. } = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .find_by_token(&token)
             .await
             .unwrap()
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::post(format!("/api/admin/v1/oauth2-sessions/{session_id}/finish"))
+        let request = Request::post(format!("/api/admin/v1/oauth-sessions/{session_id}/finish"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -406,14 +406,14 @@ mod tests {
         // Get the second session and finish it first
         let mut repo = state.repository().await.unwrap();
         let AccessToken { session_id, .. } = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .find_by_token(&second_admin_token)
             .await
             .unwrap()
             .unwrap();
 
         let session = repo
-            .oauth2_session()
+            .oauth_session()
             .lookup(session_id)
             .await
             .unwrap()
@@ -421,7 +421,7 @@ mod tests {
 
         // Finish the session first
         let session = repo
-            .oauth2_session()
+            .oauth_session()
             .finish(&state.clock, session)
             .await
             .unwrap();
@@ -432,7 +432,7 @@ mod tests {
         state.clock.advance(Duration::try_minutes(1).unwrap());
 
         let request = Request::post(format!(
-            "/api/admin/v1/oauth2-sessions/{}/finish",
+            "/api/admin/v1/oauth-sessions/{}/finish",
             session.id
         ))
         .bearer(&admin_token)
@@ -443,7 +443,7 @@ mod tests {
         assert_eq!(
             body["errors"][0]["title"],
             format!(
-                "OAuth 2.0 session with ID {} is already finished",
+                "OAuth session with ID {} is already finished",
                 session.id
             )
         );
@@ -459,7 +459,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let request =
-            Request::post("/api/admin/v1/oauth2-sessions/01040G2081040G2081040G2081/finish")
+            Request::post("/api/admin/v1/oauth-sessions/01040G2081040G2081040G2081/finish")
                 .bearer(&token)
                 .empty();
         let response = state.request(request).await;
@@ -467,7 +467,7 @@ mod tests {
         let body: serde_json::Value = response.json();
         assert_eq!(
             body["errors"][0]["title"],
-            "OAuth 2.0 session with ID 01040G2081040G2081040G2081 not found"
+            "OAuth session with ID 01040G2081040G2081040G2081 not found"
         );
     }
 
@@ -483,24 +483,24 @@ mod tests {
         // state.token_with_scope did create a session, so we can get it here
         let mut repo = state.repository().await.unwrap();
         let AccessToken { session_id, .. } = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .find_by_token(&token)
             .await
             .unwrap()
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::get(format!("/api/admin/v1/oauth2-sessions/{session_id}"))
+        let request = Request::get(format!("/api/admin/v1/oauth-sessions/{session_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_eq!(body["data"]["type"], "oauth2-session");
+        assert_eq!(body["data"]["type"], "oauth-session");
         insta::assert_json_snapshot!(body, @r#"
         {
           "data": {
-            "type": "oauth2-session",
+            "type": "oauth-session",
             "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
             "attributes": {
               "created_at": "2022-01-16T14:40:00Z",
@@ -515,11 +515,11 @@ mod tests {
               "human_name": null
             },
             "links": {
-              "self": "/api/admin/v1/oauth2-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+              "self": "/api/admin/v1/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
             }
           },
           "links": {
-            "self": "/api/admin/v1/oauth2-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+            "self": "/api/admin/v1/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
           }
         }
         "#);
@@ -535,7 +535,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let session_id = Ulid::nil();
-        let request = Request::get(format!("/api/admin/v1/oauth2-sessions/{session_id}"))
+        let request = Request::get(format!("/api/admin/v1/oauth-sessions/{session_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -543,7 +543,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_oauth2_simple_session_list() {
+    async fn test_oauth_simple_session_list() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -552,7 +552,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         // We already have a session because of the token above
-        let request = Request::get("/api/admin/v1/oauth2-sessions")
+        let request = Request::get("/api/admin/v1/oauth-sessions")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -565,7 +565,7 @@ mod tests {
           },
           "data": [
             {
-              "type": "oauth2-session",
+              "type": "oauth-session",
               "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
               "attributes": {
                 "created_at": "2022-01-16T14:40:00Z",
@@ -580,7 +580,7 @@ mod tests {
                 "human_name": null
               },
               "links": {
-                "self": "/api/admin/v1/oauth2-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+                "self": "/api/admin/v1/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
               },
               "meta": {
                 "page": {
@@ -590,15 +590,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/oauth2-sessions?page[first]=10",
-            "first": "/api/admin/v1/oauth2-sessions?page[first]=10",
-            "last": "/api/admin/v1/oauth2-sessions?page[last]=10"
+            "self": "/api/admin/v1/oauth-sessions?page[first]=10",
+            "first": "/api/admin/v1/oauth-sessions?page[first]=10",
+            "last": "/api/admin/v1/oauth-sessions?page[last]=10"
           }
         }
         "#);
 
         // Test count=false
-        let request = Request::get("/api/admin/v1/oauth2-sessions?count=false")
+        let request = Request::get("/api/admin/v1/oauth-sessions?count=false")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -608,7 +608,7 @@ mod tests {
         {
           "data": [
             {
-              "type": "oauth2-session",
+              "type": "oauth-session",
               "id": "01FSHN9AG0MKGTBNZ16RDR3PVY",
               "attributes": {
                 "created_at": "2022-01-16T14:40:00Z",
@@ -623,7 +623,7 @@ mod tests {
                 "human_name": null
               },
               "links": {
-                "self": "/api/admin/v1/oauth2-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+                "self": "/api/admin/v1/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
               },
               "meta": {
                 "page": {
@@ -633,15 +633,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/oauth2-sessions?count=false&page[first]=10",
-            "first": "/api/admin/v1/oauth2-sessions?count=false&page[first]=10",
-            "last": "/api/admin/v1/oauth2-sessions?count=false&page[last]=10"
+            "self": "/api/admin/v1/oauth-sessions?count=false&page[first]=10",
+            "first": "/api/admin/v1/oauth-sessions?count=false&page[first]=10",
+            "last": "/api/admin/v1/oauth-sessions?count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only
-        let request = Request::get("/api/admin/v1/oauth2-sessions?count=only")
+        let request = Request::get("/api/admin/v1/oauth-sessions?count=only")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -653,7 +653,7 @@ mod tests {
             "count": 1
           },
           "links": {
-            "self": "/api/admin/v1/oauth2-sessions?count=only"
+            "self": "/api/admin/v1/oauth-sessions?count=only"
           }
         }
         "#);

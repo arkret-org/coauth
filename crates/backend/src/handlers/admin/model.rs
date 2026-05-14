@@ -197,9 +197,9 @@ impl UserEmail {
     }
 }
 
-/// A OAuth 2.0 session
+/// A OAuth session
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct OAuth2Session {
+pub struct OAuthSession {
     #[serde(skip)]
     id: Ulid,
 
@@ -237,7 +237,7 @@ pub struct OAuth2Session {
     human_name: Option<String>,
 }
 
-impl From<coauth_data::Session> for OAuth2Session {
+impl From<coauth_data::Session> for OAuthSession {
     fn from(session: coauth_data::Session) -> Self {
         Self {
             id: session.id,
@@ -255,8 +255,8 @@ impl From<coauth_data::Session> for OAuth2Session {
     }
 }
 
-impl OAuth2Session {
-    /// Samples of OAuth 2.0 sessions
+impl OAuthSession {
+    /// Samples of OAuth sessions
     pub fn samples() -> [Self; 3] {
         [
             Self {
@@ -302,9 +302,9 @@ impl OAuth2Session {
     }
 }
 
-impl Resource for OAuth2Session {
-    const KIND: &'static str = "oauth2-session";
-    const PATH: &'static str = "/api/admin/v1/oauth2-sessions";
+impl Resource for OAuthSession {
+    const KIND: &'static str = "oauth-session";
+    const PATH: &'static str = "/api/admin/v1/oauth-sessions";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -395,7 +395,7 @@ impl Resource for UserSession {
     }
 }
 
-/// An upstream OAuth 2.0 link
+/// An upstream OAuth link
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct UpstreamOAuthLink {
     #[serde(skip)]
@@ -446,7 +446,7 @@ impl From<coauth_data::UpstreamOAuthLink> for UpstreamOAuthLink {
 }
 
 impl UpstreamOAuthLink {
-    /// Samples of upstream OAuth 2.0 links
+    /// Samples of upstream OAuth links
     pub fn samples() -> [Self; 3] {
         [
             Self {
@@ -613,7 +613,7 @@ impl UserRegistrationToken {
     }
 }
 
-/// An upstream OAuth 2.0 provider
+/// An upstream OAuth provider
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct UpstreamOAuthProvider {
     #[serde(skip)]
@@ -667,7 +667,7 @@ impl Resource for UpstreamOAuthProvider {
 }
 
 impl UpstreamOAuthProvider {
-    /// Samples of upstream OAuth 2.0 providers
+    /// Samples of upstream OAuth providers
     pub fn samples() -> [Self; 3] {
         [
             Self {
@@ -729,7 +729,7 @@ pub struct PersonalSession {
     #[schemars(with = "Option<super::schema::Ulid>")]
     owner_user_id: Option<Ulid>,
 
-    /// The ID of the `OAuth2` client that owns this session (if client-owned)
+    /// The ID of the `OAuth` client that owns this session (if client-owned)
     #[schemars(with = "Option<super::schema::Ulid>")]
     owner_client_id: Option<Ulid>,
 
@@ -740,7 +740,7 @@ pub struct PersonalSession {
     /// Human-readable name for the session
     human_name: String,
 
-    /// `OAuth2` scopes for this session
+    /// `OAuth` scopes for this session
     scope: String,
 
     /// When the session was last active
@@ -788,7 +788,7 @@ impl
 
         let (owner_user_id, owner_client_id) = match session.owner {
             PersonalSessionOwner::User(id) => (Some(id), None),
-            PersonalSessionOwner::OAuth2Client(id) => (None, Some(id)),
+            PersonalSessionOwner::OAuthClient(id) => (None, Some(id)),
         };
 
         Ok(Self {

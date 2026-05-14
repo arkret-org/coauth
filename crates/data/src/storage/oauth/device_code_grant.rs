@@ -3,14 +3,14 @@ use std::net::IpAddr;
 use async_trait::async_trait;
 use chrono::Duration;
 use coauth_data::{BrowserSession, Client, Clock, DeviceCodeGrant, Session};
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 
 use crate::repository_impl;
 
 /// Parameters used to create a new [`DeviceCodeGrant`]
-pub struct OAuth2DeviceCodeGrantParams<'a> {
+pub struct OAuthDeviceCodeGrantParams<'a> {
     /// The client which requested the device code grant
     pub client: &'a Client,
 
@@ -33,10 +33,10 @@ pub struct OAuth2DeviceCodeGrantParams<'a> {
     pub user_agent: Option<String>,
 }
 
-/// An [`OAuth2DeviceCodeGrantRepository`] helps interacting with
+/// An [`OAuthDeviceCodeGrantRepository`] helps interacting with
 /// [`DeviceCodeGrant`] saved in the storage backend.
 #[async_trait]
-pub trait OAuth2DeviceCodeGrantRepository: Send + Sync {
+pub trait OAuthDeviceCodeGrantRepository: Send + Sync {
     /// The error type returned by the repository
     type Error;
 
@@ -49,7 +49,7 @@ pub trait OAuth2DeviceCodeGrantRepository: Send + Sync {
     /// * `rng`: A random number generator
     /// * `clock`: The clock used to generate timestamps
     /// * `params`: The parameters used to create the device code grant. See the
-    ///   fields of [`OAuth2DeviceCodeGrantParams`]
+    ///   fields of [`OAuthDeviceCodeGrantParams`]
     ///
     /// # Errors
     ///
@@ -58,7 +58,7 @@ pub trait OAuth2DeviceCodeGrantRepository: Send + Sync {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: OAuth2DeviceCodeGrantParams<'_>,
+        params: OAuthDeviceCodeGrantParams<'_>,
     ) -> Result<DeviceCodeGrant, Self::Error>;
 
     /// Lookup a device code grant by its ID
@@ -163,7 +163,7 @@ pub trait OAuth2DeviceCodeGrantRepository: Send + Sync {
     ///
     /// * `clock`: The clock used to generate timestamps
     /// * `device_code_grant`: The device code grant to exchange
-    /// * `session`: The OAuth 2.0 session which was created
+    /// * `session`: The OAuth session which was created
     ///
     /// # Errors
     ///
@@ -203,12 +203,12 @@ pub trait OAuth2DeviceCodeGrantRepository: Send + Sync {
     ) -> Result<(usize, Option<Ulid>), Self::Error>;
 }
 
-repository_impl!(OAuth2DeviceCodeGrantRepository:
+repository_impl!(OAuthDeviceCodeGrantRepository:
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: OAuth2DeviceCodeGrantParams<'_>,
+        params: OAuthDeviceCodeGrantParams<'_>,
     ) -> Result<DeviceCodeGrant, Self::Error>;
 
     async fn lookup(&mut self, id: Ulid) -> Result<Option<DeviceCodeGrant>, Self::Error>;

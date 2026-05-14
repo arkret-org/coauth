@@ -5,7 +5,7 @@ use crate::{
     components::{
         empty_state::EmptyState,
         loading::LoadingScreen,
-        oauth2_session::OAuth2SessionCard,
+        oauth_session::OAuthSessionCard,
         pagination::{PaginationControls, PaginationDirection, PaginationState},
         separator::{Separator, SeparatorKind},
     },
@@ -113,8 +113,8 @@ pub fn Sessions() -> Element {
                     // App sessions list
                     for edge in app_sessions.iter() {
                         match &edge.node {
-                            AppSession::Oauth2Session(session) => rsx! {
-                                OAuth2SessionCard { key: "{edge.cursor}", session: session.clone() }
+                            AppSession::OauthSession(session) => rsx! {
+                                OAuthSessionCard { key: "{edge.cursor}", session: session.clone() }
                             },
                         }
                     }

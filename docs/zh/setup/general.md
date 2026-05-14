@@ -68,7 +68,7 @@ cargo run -p coauth-config --bin schema > docs/config.schema.json
 以下配置段会在启动时同步到数据库，最常见的是：
 
 - `clients`
-- `upstream_oauth2`
+- `upstream_oauth`
 
 也可以手动执行：
 

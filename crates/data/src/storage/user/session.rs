@@ -9,7 +9,7 @@ use rand_core::RngCore;
 use ulid::Ulid;
 
 use crate::{
-    Pagination, pagination::Page, repository_impl, upstream_oauth2::UpstreamOAuthSessionFilter,
+    Pagination, pagination::Page, repository_impl, upstream_oauth::UpstreamOAuthSessionFilter,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

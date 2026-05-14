@@ -31,7 +31,7 @@ pub struct InactiveSessionExpirationConfig {
     #[serde_as(as = "serde_with::DurationSeconds<i64>")]
     pub ttl: Duration,
 
-    /// Apply the inactivity timeout to OAuth 2.0 sessions
+    /// Apply the inactivity timeout to OAuth sessions
     #[serde(default = "default_bool_true")]
     pub expire_oauth_sessions: bool,
 

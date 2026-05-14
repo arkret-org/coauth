@@ -29,10 +29,10 @@ impl Bound {
         self.ip
     }
 
-    /// Record activity in an OAuth 2.0 session.
-    pub async fn record_oauth2_session(&self, clock: &dyn Clock, session: &Session) {
+    /// Record activity in an OAuth session.
+    pub async fn record_oauth_session(&self, clock: &dyn Clock, session: &Session) {
         self.tracker
-            .record_oauth2_session(clock, session, self.ip)
+            .record_oauth_session(clock, session, self.ip)
             .await;
     }
 

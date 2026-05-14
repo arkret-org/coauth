@@ -8,7 +8,7 @@ use coauth_data::queue::{
 cleanup_ulid_cursor_job!(
     job = CleanupOAuthAuthorizationGrantsJob,
     span = "job.cleanup_oauth_authorization_grants",
-    repo = oauth2_authorization_grant,
+    repo = oauth_authorization_grant,
     method = cleanup,
     cutoff = |state: &crate::State| state.clock().now() - chrono::Duration::days(7),
     timeout_secs = 10 * 60,

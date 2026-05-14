@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Admin endpoints for managing OAuth 2.0 client metadata.
+//! Admin endpoints for managing OAuth client metadata.
 //!
 //! This module currently exposes the **localised** metadata side of the
 //! house — the per-locale variants of `client_name`, `logo_uri`,
@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use coauth_data::{
     LocalizableField, LocalizedClientMetadata, audit::AdminOperation,
-    oauth2::OAuth2ClientRepository,
+    oauth::OAuthClientRepository,
 };
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -29,7 +29,7 @@ use crate::{
     handlers::admin::{call_context::extract_call_context, params::extract_ulid_param},
 };
 
-/// JSON shape for the localised metadata of a single OAuth 2.0 client.
+/// JSON shape for the localised metadata of a single OAuth client.
 ///
 /// Field naming mirrors the column names on
 /// `oauth_client_localized_metadata`. Each map is keyed by BCP-47 locale
@@ -37,7 +37,7 @@ use crate::{
 /// strings — URL fields are validated server-side at write time so the
 /// admin UI can stay schema-free.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "OAuth2ClientLocalizedMetadata")]
+#[serde(rename = "OAuthClientLocalizedMetadata")]
 pub struct LocalizedMetadataPayload {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub client_name: BTreeMap<String, String>,
@@ -120,14 +120,14 @@ fn parse_url(
 /// requires the payload to implement
 /// [`super::super::model::Resource`], which expects a stable canonical
 /// path *per resource instance*. The localised metadata is a sub-resource
-/// of an OAuth 2.0 client and has no independent identity, so a flat
+/// of an OAuth client and has no independent identity, so a flat
 /// `{ data: ... }` envelope is a better fit.
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct LocalizedMetadataResponse {
     pub data: LocalizedMetadataPayload,
 }
 
-/// `GET /api/admin/v1/oauth2-clients/{id}/localized-metadata`
+/// `GET /api/admin/v1/oauth-clients/{id}/localized-metadata`
 ///
 /// Returns the full set of localised metadata for the given client. The
 /// response is the same shape accepted by `PUT`, so admin UIs can
@@ -147,15 +147,15 @@ pub async fn get_localized_metadata(
 
     // Confirm the client actually exists; without this the admin UI
     // would happily round-trip an empty payload for a typo'd ID.
-    let exists = repo.oauth2_client().lookup(client_id).await?.is_some();
+    let exists = repo.oauth_client().lookup(client_id).await?.is_some();
     if !exists {
         return Err(AppError::not_found(format!(
-            "OAuth 2.0 client {client_id} not found"
+            "OAuth client {client_id} not found"
         )));
     }
 
     let metadata = repo
-        .oauth2_client()
+        .oauth_client()
         .load_localized_metadata(client_id)
         .await?;
 
@@ -164,7 +164,7 @@ pub async fn get_localized_metadata(
     }))
 }
 
-/// `PUT /api/admin/v1/oauth2-clients/{id}/localized-metadata`
+/// `PUT /api/admin/v1/oauth-clients/{id}/localized-metadata`
 ///
 /// Replaces the entire set of localised metadata for the given client. An
 /// empty payload clears all locales. URL-typed values are parsed
@@ -190,10 +190,10 @@ pub async fn replace_localized_metadata(
     let client_id = extract_ulid_param(req)?;
 
     // Confirm the client exists before mutating any rows.
-    let exists = repo.oauth2_client().lookup(client_id).await?.is_some();
+    let exists = repo.oauth_client().lookup(client_id).await?.is_some();
     if !exists {
         return Err(AppError::not_found(format!(
-            "OAuth 2.0 client {client_id} not found"
+            "OAuth client {client_id} not found"
         )));
     }
 
@@ -208,7 +208,7 @@ pub async fn replace_localized_metadata(
         ))
     })?;
 
-    repo.oauth2_client()
+    repo.oauth_client()
         .replace_localized_metadata(client_id, &metadata)
         .await?;
 
@@ -217,8 +217,8 @@ pub async fn replace_localized_metadata(
         &mut rng,
         &*clock,
         admin_user.as_ref(),
-        AdminOperation::OAuth2ClientLocalizedMetadataUpdated,
-        "oauth2_client",
+        AdminOperation::OAuthClientLocalizedMetadataUpdated,
+        "oauth_client",
         Some(client_id),
         serde_json::json!({
             "locale_count":

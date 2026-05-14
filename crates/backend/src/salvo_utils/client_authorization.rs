@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use coauth_data::{Client, JwksOrJwksUri, RepositoryAccess, oauth2::OAuth2ClientRepository};
+use coauth_data::{Client, JwksOrJwksUri, RepositoryAccess, oauth::OAuthClientRepository};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
 use coauth_keystore::Encrypter;
 use headers::authorization::{Basic, Bearer, Credentials as _};
 use http::StatusCode;
-use oauth2_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::errors::{ClientError, ClientErrorCode};
 use salvo::{
     extract::{Extractible, Metadata},
     prelude::*,
@@ -92,7 +92,7 @@ impl Credentials {
             Credentials::BearerToken { .. } => return Ok(None),
         };
 
-        repo.oauth2_client().find_by_client_id(client_id).await
+        repo.oauth_client().find_by_client_id(client_id).await
     }
 
     /// Verify credentials presented by the client for authentication

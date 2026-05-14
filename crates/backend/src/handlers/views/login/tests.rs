@@ -11,7 +11,7 @@ mod tests {
         Request, StatusCode,
         header::{CONTENT_TYPE, LOCATION},
     };
-    use oauth2_types::scope::OPENID;
+    use oauth_types::scope::OPENID;
     use coauth_data::{
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderOnBackchannelLogout,
         UpstreamOAuthProviderTokenAuthMethod,
@@ -19,7 +19,7 @@ mod tests {
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_data::{
         RepositoryAccess,
-        upstream_oauth2::{UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository},
+        upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository},
     };
     use coauth_templates::escape_html;
     use zeroize::Zeroizing;

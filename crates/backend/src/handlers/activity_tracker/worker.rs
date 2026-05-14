@@ -56,7 +56,7 @@ impl Worker {
             .build();
 
         // Record stuff on the counter so that the metrics are initialized
-        for kind in &[SessionKind::OAuth2, SessionKind::Browser] {
+        for kind in &[SessionKind::OAuth, SessionKind::Browser] {
             message_counter.add(
                 0,
                 &[
@@ -221,7 +221,7 @@ impl Worker {
                 SessionKind::Browser => {
                     browser_sessions.push((*id, record.end_time, record.ip));
                 }
-                SessionKind::OAuth2 => {
+                SessionKind::OAuth => {
                     oauth_sessions.push((*id, record.end_time, record.ip));
                 }
                 SessionKind::Personal => {
@@ -238,7 +238,7 @@ impl Worker {
         repo.browser_session()
             .record_batch_activity(browser_sessions)
             .await?;
-        repo.oauth2_session()
+        repo.oauth_session()
             .record_batch_activity(oauth_sessions)
             .await?;
         repo.personal_session()

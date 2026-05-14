@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use serde::Serialize;
 use ulid::Ulid;
 
@@ -56,7 +56,7 @@ impl SessionState {
     }
 }
 
-/// Persistent personal session issued outside the OAuth 2.0 flow.
+/// Persistent personal session issued outside the OAuth flow.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PersonalSession {
     pub id: Ulid,
@@ -64,7 +64,7 @@ pub struct PersonalSession {
     pub owner: PersonalSessionOwner,
     pub actor_user_id: Ulid,
     pub human_name: String,
-    /// OAuth 2-compatible scope granted to this session.  May optionally
+    /// OAuth-compatible scope granted to this session.  May optionally
     /// contain a device scope (personal sessions are not required to have one).
     pub scope: Scope,
     pub created_at: DateTime<Utc>,
@@ -72,13 +72,13 @@ pub struct PersonalSession {
     pub last_active_ip: Option<IpAddr>,
 }
 
-/// Who owns a personal session -- either a user directly or an OAuth 2 client.
+/// Who owns a personal session -- either a user directly or an OAuth client.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
 pub enum PersonalSessionOwner {
     /// Owned by the user identified by this ULID.
     User(Ulid),
-    /// Owned by the OAuth 2 client identified by this ULID.
-    OAuth2Client(Ulid),
+    /// Owned by the OAuth client identified by this ULID.
+    OAuthClient(Ulid),
 }
 
 impl<'a> From<&'a User> for PersonalSessionOwner {
@@ -89,7 +89,7 @@ impl<'a> From<&'a User> for PersonalSessionOwner {
 
 impl<'a> From<&'a Client> for PersonalSessionOwner {
     fn from(c: &'a Client) -> Self {
-        Self::OAuth2Client(c.id)
+        Self::OAuthClient(c.id)
     }
 }
 

@@ -2,10 +2,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use coauth_data::{
     RepositoryAccess, UpstreamOAuthProvider, UpstreamOAuthProviderDiscoveryMode,
-    UpstreamOAuthProviderPkceMode, upstream_oauth2::UpstreamOAuthProviderRepository,
+    UpstreamOAuthProviderPkceMode, upstream_oauth::UpstreamOAuthProviderRepository,
 };
 use coauth_iana::oauth::PkceCodeChallengeMethod;
-use oauth2_types::oidc::VerifiedProviderMetadata;
+use oauth_types::oidc::VerifiedProviderMetadata;
 use tokio::sync::RwLock;
 use url::Url;
 
@@ -303,7 +303,7 @@ mod tests {
         UpstreamOAuthProviderTokenAuthMethod, clock::MockClock,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
-    use oauth2_types::scope::{OPENID, Scope};
+    use oauth_types::scope::{OPENID, Scope};
     use ulid::Ulid;
     use wiremock::{
         Mock, MockServer, ResponseTemplate,

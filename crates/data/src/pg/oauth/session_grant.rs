@@ -2,12 +2,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     Clock, Page, Pagination, SessionGrant, new_id,
-    oauth2::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository},
+    oauth::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository},
     pagination::{Node, PaginationDirection},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth2_types::scope::{Scope, ScopeToken};
+use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -15,11 +15,11 @@ use uuid::Uuid;
 use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_session_grants};
 
 /// PostgreSQL implementation of [`SessionGrantRepository`].
-pub struct PgOAuth2SessionGrantRepository<'c> {
+pub struct PgOAuthSessionGrantRepository<'c> {
     conn: &'c mut diesel_async::AsyncPgConnection,
 }
 
-impl<'c> PgOAuth2SessionGrantRepository<'c> {
+impl<'c> PgOAuthSessionGrantRepository<'c> {
     /// Create a repository backed by the provided PostgreSQL connection.
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
@@ -130,10 +130,10 @@ macro_rules! apply_session_grant_filter {
 }
 
 #[async_trait]
-impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
+impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
     type Error = DatabaseError;
 
-    #[tracing::instrument(name = "db.oauth2_session_grant.add", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_session_grant.add", skip_all, err)]
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),
@@ -183,7 +183,7 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
         })
     }
 
-    #[tracing::instrument(name = "db.oauth2_session_grant.lookup", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_session_grant.lookup", skip_all, err)]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error> {
         let row = oauth_session_grants::table
             .find(Uuid::from(id))
@@ -197,7 +197,7 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(name = "db.oauth2_session_grant.lookup_by_grant_jwt", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_session_grant.lookup_by_grant_jwt", skip_all, err)]
     async fn lookup_by_grant_jwt(
         &mut self,
         grant_jwt: &str,
@@ -214,7 +214,7 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(name = "db.oauth2_session_grant.list", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_session_grant.list", skip_all, err)]
     async fn list(
         &mut self,
         filter: SessionGrantFilter<'_>,
@@ -254,7 +254,7 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(name = "db.oauth2_session_grant.revoke", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_session_grant.revoke", skip_all, err)]
     async fn revoke(
         &mut self,
         clock: &dyn Clock,
@@ -274,7 +274,7 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_session_grant.cleanup_expired",
+        name = "db.oauth_session_grant.cleanup_expired",
         skip_all,
         fields(
             since = since.map(tracing::field::display),

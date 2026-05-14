@@ -3,7 +3,7 @@ use std::sync::Arc;
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock};
 use coauth_keystore::Encrypter;
 use coauth_principal::PrincipalServerAdmin;
-use oauth2_types::{
+use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     requests::RevocationRequest,
 };
@@ -14,7 +14,7 @@ use thiserror::Error;
 use ulid::Ulid;
 
 use crate::{
-    handlers::oauth2::revocation_service,
+    handlers::oauth::revocation_service,
     salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError},
 };
 
@@ -110,7 +110,7 @@ impl_from_error_for_route!(coauth_data::RepositoryError);
 impl_from_error_for_route!(crate::salvo_utils::client_authorization::ClientAuthorizationError);
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.revoke.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.revoke.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     match handle_post(req, depot).await {
         Ok(()) => {

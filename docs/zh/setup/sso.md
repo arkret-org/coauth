@@ -5,7 +5,7 @@ coauth 支持把外部身份提供商接入为 upstream，用于登录、注册�
 常见场景分两类：
 
 - 标准 OIDC 提供商：Google、GitLab、Keycloak、Authentik、Azure AD 等
-- 非标准 OAuth 2.0 提供商：GitHub，以及 QQ / 微信 / 飞书 / 钉钉等需要自定义端点或特殊 token 交换逻辑的平台
+- 非标准 OAuth 提供商：GitHub，以及 QQ / 微信 / 飞书 / 钉钉等需要自定义端点或特殊 token 交换逻辑的平台
 
 如果你只关心「GitHub / Google 怎么配」和「callback URL 到底是什么」，先看下面两节。
 
@@ -22,7 +22,7 @@ coauth 支持把外部身份提供商接入为 upstream，用于登录、注册�
 其中：
 
 - `http.public_base` 必须是外部用户和第三方提供商都能访问到的公网地址
-- `<provider-id>` 就是 `upstream_oauth2.providers[].id`，必须和配置文件里的值完全一致
+- `<provider-id>` 就是 `upstream_oauth.providers[].id`，必须和配置文件里的值完全一致
 - 如果 `http.public_base` 带有路径前缀，这个前缀也必须保留在 callback URL 里
 
 例如：
@@ -49,13 +49,13 @@ coauth 支持把外部身份提供商接入为 upstream，用于登录、注册�
 1. 先确定 `http.public_base`
 2. 为每个 upstream 生成一个唯一 `id`，格式必须是 ULID
 3. 用这个 `id` 计算 callback URL，并登记到 Google / GitHub / 其他 provider 后台
-4. 把 provider 的 `client_id`、`client_secret` 和必要端点写进 `upstream_oauth2.providers`
+4. 把 provider 的 `client_id`、`client_secret` 和必要端点写进 `upstream_oauth.providers`
 5. 启动服务或执行 `coauth config sync -c config.yaml` 把配置同步到数据库
 
 一个最小的标准 OIDC 配置通常长这样：
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01JABCDEF0123456789ABCDEFG
       human_name: Example OIDC
@@ -98,7 +98,7 @@ Google 属于标准 OIDC 提供商，直接走 discovery 即可。
 coauth 配置示例：
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01JABCDEF0123456789ABCDEG1
       human_name: Google
@@ -129,7 +129,7 @@ upstream_oauth2:
 
 ## GitHub
 
-GitHub 不是标准 OIDC provider。coauth 对 GitHub 使用的是 OAuth 2.0 + 手工指定端点 + `userinfo` 拉取资料的模式。
+GitHub 不是标准 OIDC provider。coauth 对 GitHub 使用的是 OAuth + 手工指定端点 + `userinfo` 拉取资料的模式。
 
 在 GitHub Developer Settings 中：
 
@@ -144,7 +144,7 @@ GitHub 不是标准 OIDC provider。coauth 对 GitHub 使用的是 OAuth 2.0 + �
 coauth 配置示例：
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01JABCDEF0123456789ABCDEG2
       human_name: GitHub

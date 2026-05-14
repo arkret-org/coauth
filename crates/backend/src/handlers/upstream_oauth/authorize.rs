@@ -1,6 +1,6 @@
 use coauth_data::{
     PostAuthAction, UpstreamOAuthProvider,
-    upstream_oauth2::{UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository},
+    upstream_oauth::{UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository},
 };
 use salvo::prelude::*;
 use thiserror::Error;
@@ -41,7 +41,7 @@ impl Scribe for RouteError {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.upstream_oauth2.authorize.get", skip_all)]
+#[tracing::instrument(name = "handlers.upstream_oauth.authorize.get", skip_all)]
 pub async fn get(
     req: &mut Request,
     depot: &mut Depot,
@@ -89,7 +89,7 @@ pub async fn get(
     if provider.forward_login_hint
         && let Some(PostAuthAction::ContinueAuthorizationGrant { id }) = &query.post_auth_action
         && let Some(login_hint) = repo
-            .oauth2_authorization_grant()
+            .oauth_authorization_grant()
             .lookup(*id)
             .await?
             .and_then(|grant| grant.login_hint)

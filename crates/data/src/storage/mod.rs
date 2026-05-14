@@ -113,16 +113,16 @@ pub mod audit;
 pub mod notification;
 /// Notification template version repositories.
 pub mod notification_template;
-/// OAuth 2.0 repositories.
-pub mod oauth2;
+/// OAuth repositories.
+pub mod oauth;
 /// Personal access repositories.
 pub mod personal;
 /// Policy data repositories.
 pub mod policy_data;
 /// Queue repositories.
 pub mod queue;
-/// Upstream OAuth 2.0 repositories.
-pub mod upstream_oauth2;
+/// Upstream OAuth repositories.
+pub mod upstream_oauth;
 /// User repositories.
 pub mod user;
 /// Workflow instance, step, and event repositories.

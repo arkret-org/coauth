@@ -3,7 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use coauth_config::{ContrixConfig, IdentityRegistryKind};
 use coauth_data::{
     BrowserSession, Clock, Pagination, RepositoryAccess, SessionGrant, UrlBuilder, User,
-    oauth2::{NewSessionGrant, SessionGrantFilter},
+    oauth::{NewSessionGrant, SessionGrantFilter},
 };
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::{
@@ -13,7 +13,7 @@ use coauth_jose::{
 };
 use coauth_keystore::{Keystore, PrivateKey, WrongAlgorithmError};
 use der::pem::LineEnding;
-use oauth2_types::scope::{Scope, ScopeToken};
+use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::{CryptoRngCore, RngCore};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -137,7 +137,7 @@ async fn require_session_grant_caller(
     let scope = match token_type {
         TokenType::AccessToken => {
             let access = repo
-                .oauth2_access_token()
+                .oauth_access_token()
                 .find_by_token(token)
                 .await
                 .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
@@ -145,7 +145,7 @@ async fn require_session_grant_caller(
                     ContrixRouteError::Unauthorized("unknown access token".to_owned())
                 })?;
             let session = repo
-                .oauth2_session()
+                .oauth_session()
                 .lookup(access.session_id)
                 .await
                 .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
@@ -1258,7 +1258,7 @@ where
         // string before signing the JWT.
         .expect("session grant scopes must be valid OAuth scope tokens");
 
-    repo.oauth2_session_grant()
+    repo.oauth_session_grant()
         .add(
             rng,
             clock,
@@ -1349,7 +1349,7 @@ pub async fn server_describe(
     let contrix_config = depot.contrix_config()?;
     let mut repo = depot.repo().await?;
     let oidc_clients = repo
-        .oauth2_client()
+        .oauth_client()
         .all_static()
         .await?
         .into_iter()
@@ -1357,7 +1357,7 @@ pub async fn server_describe(
             client.grant_types.iter().any(|grant_type| {
                 matches!(
                     grant_type,
-                    oauth2_types::requests::GrantType::AuthorizationCode
+                    oauth_types::requests::GrantType::AuthorizationCode
                 )
             })
         })
@@ -1573,7 +1573,7 @@ pub async fn list_session_grants(
     let _ = require_session_grant_caller(req, depot).await?;
     let mut repo = depot.repo().await?;
     let page = repo
-        .oauth2_session_grant()
+        .oauth_session_grant()
         .list(filter, Pagination::first(100))
         .await
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
@@ -1614,14 +1614,14 @@ pub async fn revoke_session_grant(
 
     let mut repo = depot.repo().await?;
     let grant = repo
-        .oauth2_session_grant()
+        .oauth_session_grant()
         .lookup(id)
         .await
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
         .ok_or(ContrixRouteError::NotFound)?;
 
     let grant = repo
-        .oauth2_session_grant()
+        .oauth_session_grant()
         .revoke(&clock, grant)
         .await
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
@@ -1760,12 +1760,12 @@ pub async fn introspect_session_grant(
     let grant = if let Some(id) = body.id.as_deref() {
         let id = Ulid::from_string(id)
             .map_err(|_| ContrixRouteError::BadRequest("invalid session grant id".into()))?;
-        repo.oauth2_session_grant()
+        repo.oauth_session_grant()
             .lookup(id)
             .await
             .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
     } else if let Some(grant_jwt) = body.grant_jwt.as_deref() {
-        repo.oauth2_session_grant()
+        repo.oauth_session_grant()
             .lookup_by_grant_jwt(grant_jwt)
             .await
             .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
@@ -1809,7 +1809,7 @@ pub async fn introspect_session_grant(
 
     let one_time_use_consumed = active;
     if active {
-        repo.oauth2_session_grant()
+        repo.oauth_session_grant()
             .revoke(&*clock, grant.clone())
             .await
             .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;

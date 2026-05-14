@@ -28,7 +28,7 @@ coauth config dump -c config.yaml
 
 ## `config sync`
 
-将配置文件中的 OAuth 2.0 客户端和上游提供商定义同步到数据库：
+将配置文件中的 OAuth 客户端和上游提供商定义同步到数据库：
 
 ```bash
 coauth config sync -c config.yaml

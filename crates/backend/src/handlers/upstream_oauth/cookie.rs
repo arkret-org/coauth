@@ -1,4 +1,4 @@
-//! Upstream OAuth 2.0 authorization-session cookie.
+//! Upstream OAuth authorization-session cookie.
 //!
 //! The payload is a list of in-flight upstream authorization attempts. It
 //! implements the shared [`TimedCookie`] trait, which supplies `load`/`save`
@@ -34,7 +34,7 @@ pub struct UpstreamSessions(Vec<Payload>);
 pub struct UpstreamSessionNotFound;
 
 impl TimedCookie for UpstreamSessions {
-    const COOKIE_NAME: &'static str = "upstream-oauth2-sessions";
+    const COOKIE_NAME: &'static str = "upstream-oauth-sessions";
 
     fn max_age() -> Duration {
         upstream_session_max_age()

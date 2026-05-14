@@ -1,8 +1,8 @@
-//! [OAuth 2.0] and [OpenID Connect] types.
+//! [OAuth] and [OpenID Connect] types.
 //!
 //! This is part of the coauth project.
 //!
-//! [OAuth 2.0]: https://oauth.net/2/
+//! [OAuth]: https://oauth.net/2/
 //! [OpenID Connect]: https://openid.net/connect/
 //! [coauth]: https://github.com/contrix-dev/coauth
 

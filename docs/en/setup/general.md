@@ -72,7 +72,7 @@ In VS Code or other YAML-aware editors, point the file at that schema:
 Some sections are synchronized into the database on startup, especially:
 
 - `clients`
-- `upstream_oauth2`
+- `upstream_oauth`
 
 You can sync them manually with:
 

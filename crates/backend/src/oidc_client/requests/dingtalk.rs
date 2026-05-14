@@ -1,6 +1,6 @@
-//! DingTalk (钉钉) OAuth2 specific request implementations.
+//! DingTalk (钉钉) OAuth specific request implementations.
 //!
-//! DingTalk uses a mostly standard OAuth2 flow with JSON request/response
+//! DingTalk uses a mostly standard OAuth flow with JSON request/response
 //! bodies and a custom header for the access token in userinfo requests.
 
 use std::collections::HashMap;
@@ -57,7 +57,7 @@ impl DingTalkTokenResponse {
 
 /// Exchange an authorization code for an access token with DingTalk.
 ///
-/// `POST https://api.dingtalk.com/v1.0/oauth2/userAccessToken`
+/// `POST https://api.dingtalk.com/v1.0/oauth/userAccessToken`
 #[tracing::instrument(skip_all, fields(%token_endpoint))]
 pub async fn request_access_token(
     http_client: &reqwest::Client,

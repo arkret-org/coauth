@@ -58,7 +58,7 @@ models land.
 
 ## Authentication
 
-All requests to the admin API are gated either using access tokens obtained using OAuth 2.0 grants,
+All requests to the admin API are gated either using access tokens obtained using OAuth grants,
 or using personal access tokens (which must currently be issued through the Admin API).
 
 They must have the [`urn:coauth:admin`](../reference/scopes.md#urncoauthadmin) scope or a Contrix admin scope.
@@ -79,7 +79,7 @@ clients:
     client_secret: wie9oh2EekeeDeithei9Eipaeh2sohte
     redirect_uris:
       # The Swagger UI callback hosted by the service
-      - https://auth.example.com/admin-swagger-ui/oauth2-callback
+      - https://auth.example.com/admin-swagger-ui/oauth-callback
 ```
 
 Then, in Swagger UI, click on the "Authorize" button.
@@ -224,7 +224,7 @@ CLIENT_SECRET=phoo8ahneir3ohY2eigh4xuu6Oodaewi
 curl \
   -u "$CLIENT_ID:$CLIENT_SECRET" \
   -d "grant_type=client_credentials&scope=urn:coauth:admin" \
-  https://auth.example.com/oauth2/token \
+  https://auth.example.com/oauth/token \
   | jq -r '.access_token' \
   | read -r ACCESS_TOKEN
 

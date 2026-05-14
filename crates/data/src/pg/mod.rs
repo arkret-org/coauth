@@ -18,16 +18,16 @@ pub mod app_session;
 pub mod audit;
 /// PostgreSQL notification persistence repositories.
 pub mod notification;
-/// PostgreSQL OAuth 2.0 repositories.
-pub mod oauth2;
+/// PostgreSQL OAuth repositories.
+pub mod oauth;
 /// PostgreSQL personal access repositories.
 pub mod personal;
 /// PostgreSQL queue repositories.
 pub mod queue;
 /// Diesel schema definitions generated from the database
 pub mod schema;
-/// PostgreSQL upstream OAuth 2.0 repositories.
-pub mod upstream_oauth2;
+/// PostgreSQL upstream OAuth repositories.
+pub mod upstream_oauth;
 /// PostgreSQL user repositories.
 pub mod user;
 /// PostgreSQL workflow engine repositories.

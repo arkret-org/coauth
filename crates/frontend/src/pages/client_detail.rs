@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::Oauth2ClientDetail,
+    api::types::OauthClientDetail,
     components::{layout::Layout, loading::LoadingScreen},
     pages::Route,
 };
@@ -12,7 +12,7 @@ pub fn ClientDetail(id: String) -> Element {
     let data = use_resource(move || {
         let id = id_clone.clone();
         async move {
-            crate::api::api_get::<Oauth2ClientDetail>(&format!("/oauth2-clients/{}", id)).await
+            crate::api::api_get::<OauthClientDetail>(&format!("/oauth-clients/{}", id)).await
         }
     });
     let binding = data.read();

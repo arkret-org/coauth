@@ -420,7 +420,7 @@ register_templates! {
     /// Render the frontend app (Dioxus SPA shell)
     pub fn render_app(WithLanguage<AppContext>) { "app.html" }
 
-    /// Render the form used by the `form_post` response mode (OAuth2 protocol)
+    /// Render the form used by the `form_post` response mode (OAuth protocol)
     pub fn render_form_post<#[sample(EmptyContext)] T: Serialize>(WithLanguage<FormPostContext<T>>) { "form_post.html" }
 
     /// Render the email recovery email (plain text variant)
@@ -441,7 +441,7 @@ register_templates! {
     /// Render the email verification subject
     pub fn render_email_verification_subject(WithLanguage<EmailVerificationContext>) { "emails/verification.subject" }
 
-    /// Render the automatic device name for OAuth 2.0 client
+    /// Render the automatic device name for OAuth client
     pub fn render_device_name(WithLanguage<DeviceNameContext>) { "device_name.txt" }
 }
 

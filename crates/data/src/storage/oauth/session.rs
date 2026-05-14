@@ -3,19 +3,19 @@ use std::net::IpAddr;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{BrowserSession, Client, Clock, Session, User};
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 
 use crate::{Pagination, pagination::Page, repository_impl, user::BrowserSessionFilter};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OAuth2SessionState {
+pub enum OAuthSessionState {
     Active,
     Finished,
 }
 
-impl OAuth2SessionState {
+impl OAuthSessionState {
     pub fn is_active(self) -> bool {
         matches!(self, Self::Active)
     }
@@ -37,9 +37,9 @@ impl ClientKind {
     }
 }
 
-/// Filter parameters for listing OAuth 2.0 sessions
+/// Filter parameters for listing OAuth sessions
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct OAuth2SessionFilter<'a> {
+pub struct OAuthSessionFilter<'a> {
     user: Option<&'a User>,
     any_user: Option<bool>,
     browser_session: Option<&'a BrowserSession>,
@@ -47,14 +47,14 @@ pub struct OAuth2SessionFilter<'a> {
     device: Option<&'a str>,
     client: Option<&'a Client>,
     client_kind: Option<ClientKind>,
-    state: Option<OAuth2SessionState>,
+    state: Option<OAuthSessionState>,
     scope: Option<&'a Scope>,
     last_active_before: Option<DateTime<Utc>>,
     last_active_after: Option<DateTime<Utc>>,
 }
 
-impl<'a> OAuth2SessionFilter<'a> {
-    /// Create a new [`OAuth2SessionFilter`] with default values
+impl<'a> OAuthSessionFilter<'a> {
+    /// Create a new [`OAuthSessionFilter`] with default values
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -200,14 +200,14 @@ impl<'a> OAuth2SessionFilter<'a> {
     /// Only return active sessions
     #[must_use]
     pub fn active_only(mut self) -> Self {
-        self.state = Some(OAuth2SessionState::Active);
+        self.state = Some(OAuthSessionState::Active);
         self
     }
 
     /// Only return finished sessions
     #[must_use]
     pub fn finished_only(mut self) -> Self {
-        self.state = Some(OAuth2SessionState::Finished);
+        self.state = Some(OAuthSessionState::Finished);
         self
     }
 
@@ -215,7 +215,7 @@ impl<'a> OAuth2SessionFilter<'a> {
     ///
     /// Returns [`None`] if no state filter was set
     #[must_use]
-    pub fn state(&self) -> Option<OAuth2SessionState> {
+    pub fn state(&self) -> Option<OAuthSessionState> {
         self.state
     }
 
@@ -250,10 +250,10 @@ impl<'a> OAuth2SessionFilter<'a> {
     }
 }
 
-/// An [`OAuth2SessionRepository`] helps interacting with [`Session`]
+/// An [`OAuthSessionRepository`] helps interacting with [`Session`]
 /// saved in the storage backend
 #[async_trait]
-pub trait OAuth2SessionRepository: Send + Sync {
+pub trait OAuthSessionRepository: Send + Sync {
     /// The error type returned by the repository
     type Error;
 
@@ -387,7 +387,7 @@ pub trait OAuth2SessionRepository: Send + Sync {
     async fn finish_bulk(
         &mut self,
         clock: &dyn Clock,
-        filter: OAuth2SessionFilter<'_>,
+        filter: OAuthSessionFilter<'_>,
     ) -> Result<usize, Self::Error>;
 
     /// List [`Session`]s matching the given filter and pagination parameters
@@ -402,7 +402,7 @@ pub trait OAuth2SessionRepository: Send + Sync {
     /// Returns [`Self::Error`] if the underlying repository fails
     async fn list(
         &mut self,
-        filter: OAuth2SessionFilter<'_>,
+        filter: OAuthSessionFilter<'_>,
         pagination: Pagination,
     ) -> Result<Page<Session>, Self::Error>;
 
@@ -415,7 +415,7 @@ pub trait OAuth2SessionRepository: Send + Sync {
     /// # Errors
     ///
     /// Returns [`Self::Error`] if the underlying repository fails
-    async fn count(&mut self, filter: OAuth2SessionFilter<'_>) -> Result<usize, Self::Error>;
+    async fn count(&mut self, filter: OAuthSessionFilter<'_>) -> Result<usize, Self::Error>;
 
     /// Record a batch of [`Session`] activity
     ///
@@ -504,7 +504,7 @@ pub trait OAuth2SessionRepository: Send + Sync {
     ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
 }
 
-repository_impl!(OAuth2SessionRepository:
+repository_impl!(OAuthSessionRepository:
     async fn lookup(&mut self, id: Ulid) -> Result<Option<Session>, Self::Error>;
 
     async fn add(
@@ -540,16 +540,16 @@ repository_impl!(OAuth2SessionRepository:
     async fn finish_bulk(
         &mut self,
         clock: &dyn Clock,
-        filter: OAuth2SessionFilter<'_>,
+        filter: OAuthSessionFilter<'_>,
     ) -> Result<usize, Self::Error>;
 
     async fn list(
         &mut self,
-        filter: OAuth2SessionFilter<'_>,
+        filter: OAuthSessionFilter<'_>,
         pagination: Pagination,
     ) -> Result<Page<Session>, Self::Error>;
 
-    async fn count(&mut self, filter: OAuth2SessionFilter<'_>) -> Result<usize, Self::Error>;
+    async fn count(&mut self, filter: OAuthSessionFilter<'_>) -> Result<usize, Self::Error>;
 
     async fn record_batch_activity(
         &mut self,

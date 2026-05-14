@@ -6,7 +6,7 @@ use coauth_data::{
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
     audit::AdminOperation,
     queue::{DeactivateUserJob, QueueJobRepositoryExt as _},
-    upstream_oauth2::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
+    upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
     user::{UserEmailRepository, UserRepository},
 };
 use coauth_principal::PrincipalServerAdmin;

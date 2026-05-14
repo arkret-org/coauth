@@ -30,7 +30,7 @@ pub enum FlowDesignation {
     PasswordChange,
     /// Authentication / login flow.
     Authentication,
-    /// OAuth2 authorization consent flow.
+    /// OAuth authorization consent flow.
     Authorization,
     /// MFA device enrollment flow.
     Enrollment,
@@ -108,7 +108,7 @@ pub enum StageKind {
     },
     /// Display a CAPTCHA challenge.
     Captcha,
-    /// Display an OAuth2 consent screen.
+    /// Display an OAuth consent screen.
     Consent,
     /// Collect arbitrary prompted fields.
     Prompt {
@@ -314,7 +314,7 @@ pub enum StageChallenge {
         /// The CAPTCHA provider's public site key.
         site_key: String,
     },
-    /// OAuth2 consent challenge.
+    /// OAuth consent challenge.
     Consent {
         /// The requested scope string.
         scope: String,

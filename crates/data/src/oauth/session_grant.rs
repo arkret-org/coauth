@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use serde::Serialize;
 use ulid::Ulid;
 

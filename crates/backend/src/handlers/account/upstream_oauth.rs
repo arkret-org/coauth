@@ -1,7 +1,7 @@
-//! REST API endpoints for upstream OAuth 2.0 link flow.
+//! REST API endpoints for upstream OAuth link flow.
 //!
 //! These endpoints replace the server-rendered HTML handlers in
-//! `upstream_oauth2::link`, providing JSON responses for the Dioxus SPA.
+//! `upstream_oauth::link`, providing JSON responses for the Dioxus SPA.
 
 use std::sync::LazyLock;
 
@@ -15,7 +15,7 @@ use crate::{
     handlers::{
         METER,
         account::registration_cookie::UserRegistrationSessions,
-        upstream_oauth2::{
+        upstream_oauth::{
             UpstreamSessionsCookie,
             link_workflow::{
                 LoadUpstreamLinkOutcome, SubmitUpstreamLinkError, SubmitUpstreamLinkOutcome,
@@ -32,21 +32,21 @@ use crate::{
 
 static LOGIN_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("coauth.rest.upstream_oauth2.login")
-        .with_description("Successful upstream OAuth 2.0 login via REST API")
+        .u64_counter("coauth.rest.upstream_oauth.login")
+        .with_description("Successful upstream OAuth login via REST API")
         .with_unit("{login}")
         .build()
 });
 static REGISTRATION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("coauth.rest.upstream_oauth2.registration")
-        .with_description("Successful upstream OAuth 2.0 registration via REST API")
+        .u64_counter("coauth.rest.upstream_oauth.registration")
+        .with_description("Successful upstream OAuth registration via REST API")
         .with_unit("{registration}")
         .build()
 });
 const PROVIDER: Key = Key::from_static_str("provider");
 
-/// The possible states of an upstream OAuth2 link.
+/// The possible states of an upstream OAuth link.
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum LinkState {
@@ -113,7 +113,7 @@ pub struct LinkActionResponse {
     pub field_errors: Option<serde_json::Value>,
 }
 
-/// Return the current state of an upstream OAuth2 link as JSON.
+/// Return the current state of an upstream OAuth link as JSON.
 #[endpoint]
 pub async fn get_link(
     req: &mut Request,
@@ -174,7 +174,7 @@ pub async fn get_link(
     render_get_link_outcome(res, cookie_jar, sessions_cookie, &clock, link_id, outcome)
 }
 
-/// Process a user's choice for an upstream OAuth2 link.
+/// Process a user's choice for an upstream OAuth link.
 #[endpoint]
 pub async fn post_link(
     req: &mut Request,

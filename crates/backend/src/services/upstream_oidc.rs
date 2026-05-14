@@ -6,7 +6,7 @@ use coauth_config::ContrixConfig;
 use coauth_data::{UpstreamOAuthProvider, UrlBuilder};
 use coauth_jose::claims::{self, TokenHash};
 use coauth_keystore::{Encrypter, Keystore};
-use oauth2_types::{
+use oauth_types::{
     oidc::VerifiedProviderMetadata,
     requests::{AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant},
 };
@@ -341,7 +341,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         now: DateTime<Utc>,
         rng: &mut coauth_data::BoxRng,
     ) -> Result<FederatedOidcExchange, String> {
-        let client_credentials = crate::handlers::upstream_oauth2::client_credentials_for_provider(
+        let client_credentials = crate::handlers::upstream_oauth::client_credentials_for_provider(
             provider,
             token_endpoint,
             key_store,

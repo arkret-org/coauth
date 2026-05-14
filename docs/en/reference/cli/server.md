@@ -11,7 +11,7 @@ Runs the authentication service. This is the main command for production deploym
 Options:
 - `--no-migrate`: Do not apply pending database migrations on start.
 - `--no-worker`: Do not start the background task worker (see [`worker`](./worker.md)).
-- `--no-sync`: Do not sync the configuration (OAuth 2.0 clients and upstream providers) with the database.
+- `--no-sync`: Do not sync the configuration (OAuth clients and upstream providers) with the database.
 
 ```
 $ coauth server -c config.yaml
@@ -24,7 +24,7 @@ INFO coauth_cli::server: Listening on http://0.0.0.0:8080
 On startup, the server performs these steps in order:
 
 1. **Database migrations** — Applies any pending schema migrations (unless `--no-migrate`).
-2. **Configuration sync** — Syncs OAuth 2.0 client registrations and upstream provider definitions from the config file to the database (unless `--no-sync`).
+2. **Configuration sync** — Syncs OAuth client registrations and upstream provider definitions from the config file to the database (unless `--no-sync`).
 3. **Key loading** — Loads signing keys from the configured secrets.
 4. **Template compilation** — Loads and compiles page templates.
 5. **Worker startup** — Starts the background task worker (unless `--no-worker`).

@@ -3,7 +3,7 @@ use coauth_keystore::Keystore;
 use salvo::prelude::*;
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.keys.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.keys.get", skip_all)]
 pub async fn get(depot: &Depot) -> Json<PublicJsonWebKeySet> {
     get_inner(depot)
 }

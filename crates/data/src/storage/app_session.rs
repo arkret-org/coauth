@@ -29,11 +29,11 @@ impl AppSessionState {
     }
 }
 
-/// An [`AppSession`] represents an OAuth 2.0 [`Session`]
+/// An [`AppSession`] represents an OAuth [`Session`]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppSession {
-    /// An OAuth 2.0 session
-    OAuth2(Box<Session>),
+    /// An OAuth session
+    OAuth(Box<Session>),
 }
 
 /// Filtering parameters for application sessions
@@ -145,7 +145,7 @@ impl<'a> AppSessionFilter<'a> {
 }
 
 /// A [`AppSessionRepository`] helps interacting with
-/// OAuth 2.0 [`Session`] saved in the storage backend
+/// OAuth [`Session`] saved in the storage backend
 #[async_trait]
 pub trait AppSessionRepository: Send + Sync {
     /// The error type returned by the repository

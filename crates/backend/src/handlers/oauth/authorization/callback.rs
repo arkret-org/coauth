@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use coauth_data::AuthorizationGrant;
 use coauth_i18n::DataLocale;
 use coauth_templates::{FormPostContext, Templates};
-use oauth2_types::requests::ResponseMode;
+use oauth_types::requests::ResponseMode;
 use salvo::{
     prelude::*,
     writing::{Redirect, Text},
@@ -21,7 +21,7 @@ use url::Url;
 pub struct RedirectInfo {
     /// The fully-constructed redirect URL.
     pub url: String,
-    /// The OAuth 2.0 response mode (`"query"`, `"fragment"`, or `"form_post"`).
+    /// The OAuth response mode (`"query"`, `"fragment"`, or `"form_post"`).
     pub response_mode: &'static str,
 }
 

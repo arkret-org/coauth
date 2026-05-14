@@ -4,7 +4,7 @@
 //! targets a particular domain:
 //!
 //! - [`tokens`]: Revoked / expired OAuth access and refresh tokens
-//! - [`sessions`]: Finished OAuth2 and browser sessions, plus inactive session
+//! - [`sessions`]: Finished OAuth and browser sessions, plus inactive session
 //!   IPs
 //! - [`oauth`]: Authorization grants, device-code grants, upstream OAuth
 //!   sessions and links

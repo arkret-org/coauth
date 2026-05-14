@@ -31,7 +31,7 @@ pub struct ConsentForm {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.device.consent.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.device.consent.get", skip_all)]
 pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_get(req, depot, res).await {
         Ok(()) => {}
@@ -114,7 +114,7 @@ async fn handle_get(
     }
 
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .lookup(grant.client_id)
         .await?
         .context("Client not found")
@@ -200,7 +200,7 @@ async fn handle_get(
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.device.consent.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.device.consent.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_post(req, depot, res).await {
         Ok(()) => {}
@@ -290,7 +290,7 @@ async fn handle_post(
     }
 
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .lookup(grant.client_id)
         .await?
         .context("Client not found")
@@ -345,7 +345,7 @@ async fn handle_post(
         // XXX: In case we're not pending, let's just return the grant as-is
         // since it might just be a form resubmission, and feedback is nice enough
         warn!(
-            oauth2_device_code.id = %grant.id,
+            oauth_device_code.id = %grant.id,
             browser_session.id = %session.id,
             user.id = %session.user.id,
             "Grant is not pending",

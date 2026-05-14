@@ -22,7 +22,7 @@ static MESSAGE_QUEUE_SIZE: usize = 1000;
 
 #[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash)]
 enum SessionKind {
-    OAuth2,
+    OAuth,
     /// Session associated with personal access tokens
     Personal,
     Browser,
@@ -31,7 +31,7 @@ enum SessionKind {
 impl SessionKind {
     const fn as_str(self) -> &'static str {
         match self {
-            SessionKind::OAuth2 => "oauth2",
+            SessionKind::OAuth => "oauth",
             SessionKind::Personal => "personal",
             SessionKind::Browser => "browser",
         }
@@ -87,8 +87,8 @@ impl ActivityTracker {
         Bound::new(self, ip)
     }
 
-    /// Record activity in an OAuth 2.0 session.
-    pub async fn record_oauth2_session(
+    /// Record activity in an OAuth session.
+    pub async fn record_oauth_session(
         &self,
         clock: &dyn Clock,
         session: &Session,
@@ -97,7 +97,7 @@ impl ActivityTracker {
         let res = self
             .channel
             .send(Message::Record {
-                kind: SessionKind::OAuth2,
+                kind: SessionKind::OAuth,
                 id: session.id,
                 date_time: clock.now(),
                 ip,
@@ -105,7 +105,7 @@ impl ActivityTracker {
             .await;
 
         if let Err(e) = res {
-            tracing::error!("Failed to record OAuth2 session: {}", e);
+            tracing::error!("Failed to record OAuth session: {}", e);
         }
     }
 

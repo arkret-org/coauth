@@ -7,7 +7,7 @@
 //! an error variant that it can translate into an SPA error page.
 
 use coauth_data::{
-    BoxRepository, BrowserSession, RepositoryError, User, oauth2::OAuth2SessionFilter,
+    BoxRepository, BrowserSession, RepositoryError, User, oauth::OAuthSessionFilter,
     personal::PersonalSessionFilter,
 };
 use coauth_policy::model::SessionCounts;
@@ -115,9 +115,9 @@ pub(crate) async fn count_user_sessions_for_limiting(
     repo: &mut BoxRepository,
     user: &User,
 ) -> Result<SessionCounts, RepositoryError> {
-    let num_oauth2 = repo
-        .oauth2_session()
-        .count(OAuth2SessionFilter::new().active_only().for_user(user))
+    let num_oauth = repo
+        .oauth_session()
+        .count(OAuthSessionFilter::new().active_only().for_user(user))
         .await? as u64;
 
     let num_personal = repo
@@ -131,8 +131,8 @@ pub(crate) async fn count_user_sessions_for_limiting(
         .await? as u64;
 
     Ok(SessionCounts {
-        total: num_oauth2 + num_personal,
-        oauth2: num_oauth2,
+        total: num_oauth + num_personal,
+        oauth: num_oauth,
         personal: num_personal,
     })
 }

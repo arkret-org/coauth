@@ -1393,7 +1393,7 @@ pub struct FinishRegistrationResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// If the registration was started as part of another flow (e.g. an
-    /// OAuth2 authorization grant continuation), the frontend uses this to
+    /// OAuth authorization grant continuation), the frontend uses this to
     /// resume that flow after the account is created.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub post_auth_action: Option<serde_json::Value>,

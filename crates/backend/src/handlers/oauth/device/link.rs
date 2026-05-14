@@ -14,7 +14,7 @@ pub struct Params {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.device.link.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.device.link.get", skip_all)]
 pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_get(req, depot, res).await {
         Ok(()) => {}

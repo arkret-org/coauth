@@ -8,7 +8,7 @@ use coauth_keystore::Keystore;
 use coauth_policy::Policy;
 use coauth_principal::PrincipalServerAdmin;
 use coauth_templates::Templates;
-use oauth2_types::{
+use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     requests::{AccessTokenRequest, AccessTokenResponse},
 };
@@ -30,8 +30,8 @@ use crate::{
 
 static TOKEN_REQUEST_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("coauth.oauth2.token_request")
-        .with_description("How many OAuth 2.0 token requests have gone through")
+        .u64_counter("coauth.oauth.token_request")
+        .with_description("How many OAuth token requests have gone through")
         .with_unit("{request}")
         .build()
 });
@@ -47,7 +47,7 @@ pub(crate) enum RouteError {
     BadRequest,
 
     #[error("pkce verification failed")]
-    PkceVerification(#[from] oauth2_types::pkce::CodeChallengeError),
+    PkceVerification(#[from] oauth_types::pkce::CodeChallengeError),
 
     #[error("client not found")]
     ClientNotFound,
@@ -332,7 +332,7 @@ impl From<DeviceCodeExchangeError> for RouteError {
 // ---------------------------------------------------------------------------
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.token.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.token.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     match handle_post(req, depot).await {
         Ok(reply) => {
@@ -347,7 +347,7 @@ pub async fn post(req: &mut Request, depot: &mut Depot, res: &mut Response) {
             res.render(Json(reply));
         }
         Err(e) => {
-            tracing::error!(error = %e, error_debug = ?e, "OAuth2 token endpoint failed");
+            tracing::error!(error = %e, error_debug = ?e, "OAuth token endpoint failed");
             e.render(res);
         }
     }
@@ -440,9 +440,9 @@ async fn handle_post(
 
     let grant_type = form.grant_type().to_string();
     tracing::info!(
-        oauth2_client.id = %client.id,
+        oauth_client.id = %client.id,
         grant_type = %grant_type,
-        "Handling OAuth2 token request"
+        "Handling OAuth token request"
     );
 
     let (reply, repo) = match form {
@@ -514,7 +514,7 @@ async fn handle_post(
         }
         _ => {
             tracing::warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 grant_type = %grant_type,
                 "Client requested an unsupported grant type at the token endpoint"
             );
@@ -525,9 +525,9 @@ async fn handle_post(
     repo.save().await?;
 
     tracing::debug!(
-        oauth2_client.id = %client.id,
+        oauth_client.id = %client.id,
         grant_type = %grant_type,
-        "OAuth2 token request completed successfully"
+        "OAuth token request completed successfully"
     );
 
     TOKEN_REQUEST_COUNTER.add(

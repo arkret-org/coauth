@@ -67,8 +67,8 @@ fn format_operation(op: &AdminOperation) -> String {
         AdminOperation::UpstreamLinkCreated => "upstream_link.create".to_owned(),
         AdminOperation::UpstreamLinkUpdated => "upstream_link.update".to_owned(),
         AdminOperation::UpstreamLinkDeleted => "upstream_link.delete".to_owned(),
-        AdminOperation::OAuth2ClientLocalizedMetadataUpdated => {
-            "oauth2_client.localized_metadata.update".to_owned()
+        AdminOperation::OAuthClientLocalizedMetadataUpdated => {
+            "oauth_client.localized_metadata.update".to_owned()
         }
         AdminOperation::Other(s) => s.clone(),
     }

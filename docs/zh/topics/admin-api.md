@@ -34,12 +34,12 @@ Contrix-native 管理面现在包含 `GET /api/admin/v1/accounts`、
 sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
 ```
 
-### 2. OAuth 2.0 令牌
+### 2. OAuth 令牌
 
 使用客户端凭据流程获取管理 API 的访问令牌：
 
 ```bash
-curl -X POST https://auth.example.com/oauth2/token \
+curl -X POST https://auth.example.com/oauth/token \
   -d "grant_type=client_credentials" \
   -d "client_id=你的客户端ID" \
   -d "client_secret=你的客户端密钥" \

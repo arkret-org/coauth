@@ -1,7 +1,7 @@
 # Get an access token
 
 `coauth` includes helper scripts in `misc/` for interactive CLI/admin access
-through the OAuth 2.0 Device Authorization Grant:
+through the OAuth Device Authorization Grant:
 
 - `misc/device-code-grant.sh` for POSIX shells. It requires `sh`, `jq`, and
   `curl`.
@@ -39,11 +39,11 @@ sh ./misc/device-code-grant.sh https://auth.example.com/ urn:contrix:admin:* urn
 
 ## Automation
 
-For non-interactive automation, prefer the OAuth 2.0 client credentials grant
+For non-interactive automation, prefer the OAuth client credentials grant
 with a confidential client:
 
 ```sh
-TOKEN=$(curl -sS -X POST https://auth.example.com/oauth2/token \
+TOKEN=$(curl -sS -X POST https://auth.example.com/oauth/token \
   -d "grant_type=client_credentials" \
   -d "client_id=${CLIENT_ID}" \
   -d "client_secret=${CLIENT_SECRET}" \

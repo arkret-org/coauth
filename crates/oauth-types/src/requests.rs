@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//! OAuth 2.0 and OpenID Connect request/response message types.
+//! OAuth and OpenID Connect request/response message types.
 //!
 //! Implements the wire format for endpoints defined across:
-//! - [RFC 6749 - The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749)
+//! - [RFC 6749 - The OAuth Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749)
 //! - [RFC 7009 - Token Revocation](https://www.rfc-editor.org/rfc/rfc7009)
 //! - [RFC 7662 - Token Introspection](https://www.rfc-editor.org/rfc/rfc7662)
 //! - [RFC 8628 - Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628)
@@ -35,7 +35,7 @@ use crate::{response_type::ResponseType, scope::Scope};
 
 /// Internal helper macro that generates `Display`, `FromStr`,
 /// `SerializeDisplay` and `DeserializeFromStr` for "string enums" used
-/// throughout the OAuth 2.0 / OIDC wire protocol.
+/// throughout the OAuth / OIDC wire protocol.
 macro_rules! string_enum {
     (
         $(#[$outer:meta])*
@@ -96,7 +96,7 @@ string_enum! {
     /// The mechanism to be used for returning Authorization Response parameters
     /// from the Authorization Endpoint.
     ///
-    /// Defined in [OAuth 2.0 Multiple Response Type Encoding Practices](https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#ResponseModes).
+    /// Defined in [OAuth Multiple Response Type Encoding Practices](https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#ResponseModes).
     pub enum ResponseMode {
         /// Authorization Response parameters are encoded in the query string added
         /// to the `redirect_uri`.
@@ -112,7 +112,7 @@ string_enum! {
         /// encoded in the body using the `application/x-www-form-urlencoded`
         /// format.
         ///
-        /// Defined in [OAuth 2.0 Form Post Response Mode](https://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html).
+        /// Defined in [OAuth Form Post Response Mode](https://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html).
         FormPost => "form_post",
 
         @unknown
@@ -251,11 +251,11 @@ string_enum! {
 #[serde_as]
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AuthorizationRequest {
-    /// OAuth 2.0 Response Type value that determines the authorization
+    /// OAuth Response Type value that determines the authorization
     /// processing flow to be used.
     pub response_type: ResponseType,
 
-    /// OAuth 2.0 Client Identifier valid at the Authorization Server.
+    /// OAuth Client Identifier valid at the Authorization Server.
     pub client_id: String,
 
     /// Redirection URI to which the response will be sent.
@@ -761,7 +761,7 @@ pub struct IntrospectionResponse {
     /// The scope associated with the token.
     pub scope: Option<Scope>,
 
-    /// Client identifier for the OAuth 2.0 client that requested this token.
+    /// Client identifier for the OAuth client that requested this token.
     pub client_id: Option<String>,
 
     /// Human-readable identifier for the resource owner who authorized this

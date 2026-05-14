@@ -5,7 +5,7 @@ coauth 是 Contrix 的 Auth Server，负责账号认证、OAuth/OIDC、会话授
 ## 设计目标
 
 - 面向 Contrix / Soland 的账号认证与 session grant 签发
-- 支持标准 OAuth 2.0 / OIDC，同时提供独立的用户运营能力
+- 支持标准 OAuth / OIDC，同时提供独立的用户运营能力
 - 工作流驱动的业务流程管理
 - 统一通知中心
 - 可插拔的外部系统连接器
@@ -23,7 +23,7 @@ coauth 是 Contrix 的 Auth Server，负责账号认证、OAuth/OIDC、会话授
 | `coauth-data-model` | 领域数据模型 |
 | `coauth-storage` | 存储抽象层 |
 | `coauth-storage-pg` | PostgreSQL 实现 |
-| `coauth-handlers` | HTTP 适配层（REST/OAuth2/Admin） |
+| `coauth-handlers` | HTTP 适配层（REST/OAuth/Admin） |
 | `coauth-policy` | 策略引擎（OPA + Cedar） |
 | `coauth-tasks` | 后台任务与工作流调度 |
 
@@ -41,13 +41,13 @@ coauth 是 Contrix 的 Auth Server，负责账号认证、OAuth/OIDC、会话授
 | Crate | 说明 |
 |-------|------|
 | `coauth-principal` | Principal Server 账号/设备同步抽象与测试 stub |
-| `coauth-oidc-client` | 上游 OIDC/OAuth2 客户端 |
+| `coauth-oidc-client` | 上游 OIDC/OAuth 客户端 |
 
 ### 协议与加密
 
 | Crate | 说明 |
 |-------|------|
-| `oauth2-types` | OAuth 2.0 / OIDC 类型 |
+| `oauth-types` | OAuth / OIDC 类型 |
 | `coauth-jose` | JWT/JWS/JWK |
 | `coauth-keystore` | 密钥管理 |
 
@@ -122,7 +122,7 @@ Workflow / Service 层
     │  - account_sessions（会话管理）
     │  - account_profile（用户资料）
     │  - account_access（登录/登出）
-    │  - oauth2_access（OAuth2 授权/同意）
+    │  - oauth_access（OAuth 授权/同意）
     │  - upstream_link_workflow（上游链接）
     │
     ├────────────────┬────────────────┐
@@ -151,5 +151,5 @@ Handler 层负责 HTTP 协议的适配——解析请求、校验参数、映射
 ### 管理运营 API（/api/admin/v1/*）
 管理操作端点，由 Padmin 管理界面消费。
 
-### OAuth2 协议 API（/oauth2/*, /.well-known/*）
-标准 OAuth 2.0 / OIDC 协议端点。
+### OAuth 协议 API（/oauth/*, /.well-known/*）
+标准 OAuth / OIDC 协议端点。

@@ -1,18 +1,18 @@
 // Copyright (c) 2026 Contrix Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
 
-//! Admin endpoint for editing per-locale OAuth 2.0 client display strings.
+//! Admin endpoint for editing per-locale OAuth client display strings.
 //!
-//! `POST /api/admin/v1/oauth2/clients/{id}/i18n`
+//! `POST /api/admin/v1/oauth/clients/{id}/i18n`
 //!
 //! Body:
 //!     { "locale": "zh-CN", "display_name": "示例", "description": "..." }
 //!
 //! The handler upserts the entry into the `oauth_clients.i18n` JSONB
-//! column (see migration `20260510000100_oauth2_clients_i18n`). Other
+//! column (see migration `20260510000100_oauth_clients_i18n`). Other
 //! locales are left untouched. Pass an empty `display_name` to delete
 //! the entry for that locale.
 //!
-//! This is distinct from `/api/admin/v1/oauth2-clients/{id}/localized-metadata`
+//! This is distinct from `/api/admin/v1/oauth-clients/{id}/localized-metadata`
 //! which only covers the OIDC-spec-shaped fields (`client_name`,
 //! `logo_uri`, `client_uri`, `policy_uri`, `tos_uri`). The i18n payload
 //! covered here adds a free-form `description` that the consent screen
@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use coauth_data::{
     audit::AdminOperation,
-    oauth2::{OAuth2ClientI18n, OAuth2ClientI18nEntry, OAuth2ClientRepository},
+    oauth::{OAuthClientI18n, OAuthClientI18nEntry, OAuthClientRepository},
 };
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -36,15 +36,15 @@ use crate::{
 /// Wire-format entry for one locale's worth of admin-curated display
 /// strings. `description` is optional (clear by sending `null`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "OAuth2ClientI18nEntry")]
+#[serde(rename = "OAuthClientI18nEntry")]
 pub struct I18nEntryDto {
     pub display_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
-impl From<OAuth2ClientI18nEntry> for I18nEntryDto {
-    fn from(value: OAuth2ClientI18nEntry) -> Self {
+impl From<OAuthClientI18nEntry> for I18nEntryDto {
+    fn from(value: OAuthClientI18nEntry) -> Self {
         Self {
             display_name: value.display_name,
             description: value.description,
@@ -53,7 +53,7 @@ impl From<OAuth2ClientI18nEntry> for I18nEntryDto {
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "OAuth2ClientI18nUpsertRequest")]
+#[serde(rename = "OAuthClientI18nUpsertRequest")]
 pub struct UpsertRequest {
     pub locale: String,
     pub display_name: String,
@@ -62,13 +62,13 @@ pub struct UpsertRequest {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-#[serde(rename = "OAuth2ClientI18nResponse")]
+#[serde(rename = "OAuthClientI18nResponse")]
 pub struct I18nResponse {
     pub data: BTreeMap<String, I18nEntryDto>,
 }
 
 impl I18nResponse {
-    fn from_domain(value: OAuth2ClientI18n) -> Self {
+    fn from_domain(value: OAuthClientI18n) -> Self {
         let data = value.into_iter().map(|(k, v)| (k, v.into())).collect();
         Self { data }
     }
@@ -86,32 +86,32 @@ fn is_valid_locale(tag: &str) -> bool {
     tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-/// `GET /api/admin/v1/oauth2/clients/{id}/i18n`
+/// `GET /api/admin/v1/oauth/clients/{id}/i18n`
 ///
 /// Returns the full set of locale → entry mappings for the client.
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.oauth2_clients_i18n.get", skip_all)]
+#[tracing::instrument(name = "handler.admin.v1.oauth_clients_i18n.get", skip_all)]
 pub async fn get_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nResponse> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let client_id = extract_ulid_param(req)?;
 
-    let exists = repo.oauth2_client().lookup(client_id).await?.is_some();
+    let exists = repo.oauth_client().lookup(client_id).await?.is_some();
     if !exists {
         return Err(AppError::not_found(format!(
-            "OAuth 2.0 client {client_id} not found"
+            "OAuth client {client_id} not found"
         )));
     }
 
-    let entries = repo.oauth2_client().load_i18n(client_id).await?;
+    let entries = repo.oauth_client().load_i18n(client_id).await?;
     Ok(Json(I18nResponse::from_domain(entries)))
 }
 
-/// `POST /api/admin/v1/oauth2/clients/{id}/i18n`
+/// `POST /api/admin/v1/oauth/clients/{id}/i18n`
 ///
 /// Upserts a single locale entry. Returns the post-update map.
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.oauth2_clients_i18n.upsert", skip_all)]
+#[tracing::instrument(name = "handler.admin.v1.oauth_clients_i18n.upsert", skip_all)]
 pub async fn upsert_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nResponse> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
@@ -123,10 +123,10 @@ pub async fn upsert_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nRes
     let mut rng = crate::handlers::account::make_rng();
     let client_id = extract_ulid_param(req)?;
 
-    let exists = repo.oauth2_client().lookup(client_id).await?.is_some();
+    let exists = repo.oauth_client().lookup(client_id).await?.is_some();
     if !exists {
         return Err(AppError::not_found(format!(
-            "OAuth 2.0 client {client_id} not found"
+            "OAuth client {client_id} not found"
         )));
     }
 
@@ -140,7 +140,7 @@ pub async fn upsert_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nRes
     }
 
     let updated = repo
-        .oauth2_client()
+        .oauth_client()
         .set_i18n_entry(
             client_id,
             body.locale.clone(),
@@ -154,8 +154,8 @@ pub async fn upsert_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nRes
         &mut rng,
         &*clock,
         admin_user.as_ref(),
-        AdminOperation::OAuth2ClientLocalizedMetadataUpdated,
-        "oauth2_client",
+        AdminOperation::OAuthClientLocalizedMetadataUpdated,
+        "oauth_client",
         Some(client_id),
         serde_json::json!({
             "kind": "i18n_entry_upsert",

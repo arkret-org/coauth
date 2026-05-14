@@ -1,4 +1,4 @@
-//! A module containing the PostgreSQL implementations of the OAuth2-related
+//! A module containing the PostgreSQL implementations of the OAuth-related
 //! repositories
 
 mod access_token;
@@ -10,11 +10,11 @@ mod session;
 mod session_grant;
 
 pub use self::{
-    access_token::PgOAuth2AccessTokenRepository,
-    authorization_grant::PgOAuth2AuthorizationGrantRepository, client::PgOAuth2ClientRepository,
-    device_code_grant::PgOAuth2DeviceCodeGrantRepository,
-    refresh_token::PgOAuth2RefreshTokenRepository, session::PgOAuth2SessionRepository,
-    session_grant::PgOAuth2SessionGrantRepository,
+    access_token::PgOAuthAccessTokenRepository,
+    authorization_grant::PgOAuthAuthorizationGrantRepository, client::PgOAuthClientRepository,
+    device_code_grant::PgOAuthDeviceCodeGrantRepository,
+    refresh_token::PgOAuthRefreshTokenRepository, session::PgOAuthSessionRepository,
+    session_grant::PgOAuthSessionGrantRepository,
 };
 
 #[cfg(test)]
@@ -24,9 +24,9 @@ mod tests {
         AuthorizationCode, Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _,
         RepositoryTransaction as _,
         clock::MockClock,
-        oauth2::{OAuth2DeviceCodeGrantParams, OAuth2SessionFilter, OAuth2SessionRepository},
+        oauth::{OAuthDeviceCodeGrantParams, OAuthSessionFilter, OAuthSessionRepository},
     };
-    use oauth2_types::{
+    use oauth_types::{
         requests::{GrantType, ResponseMode},
         scope::{EMAIL, OPENID, PROFILE, Scope},
     };
@@ -49,12 +49,12 @@ mod tests {
             .unwrap();
 
         // Lookup a non-existing client
-        let client = repo.oauth2_client().lookup(Ulid::nil()).await.unwrap();
+        let client = repo.oauth_client().lookup(Ulid::nil()).await.unwrap();
         assert_eq!(client, None);
 
         // Find a non-existing client by client id
         let client = repo
-            .oauth2_client()
+            .oauth_client()
             .find_by_client_id("some-client-id")
             .await
             .unwrap();
@@ -62,7 +62,7 @@ mod tests {
 
         // Create a client
         let client = repo
-            .oauth2_client()
+            .oauth_client()
             .add(
                 &mut rng,
                 &clock,
@@ -89,7 +89,7 @@ mod tests {
 
         // Lookup the same client by id
         let client_lookup = repo
-            .oauth2_client()
+            .oauth_client()
             .lookup(client.id)
             .await
             .unwrap()
@@ -98,7 +98,7 @@ mod tests {
 
         // Find the same client by client id
         let client_lookup = repo
-            .oauth2_client()
+            .oauth_client()
             .find_by_client_id(&client.client_id)
             .await
             .unwrap()
@@ -107,7 +107,7 @@ mod tests {
 
         // Lookup a non-existing grant
         let grant = repo
-            .oauth2_authorization_grant()
+            .oauth_authorization_grant()
             .lookup(Ulid::nil())
             .await
             .unwrap();
@@ -115,7 +115,7 @@ mod tests {
 
         // Find a non-existing grant by code
         let grant = repo
-            .oauth2_authorization_grant()
+            .oauth_authorization_grant()
             .find_by_code("code")
             .await
             .unwrap();
@@ -123,7 +123,7 @@ mod tests {
 
         // Create an authorization grant
         let grant = repo
-            .oauth2_authorization_grant()
+            .oauth_authorization_grant()
             .add(
                 &mut rng,
                 &clock,
@@ -147,7 +147,7 @@ mod tests {
 
         // Lookup the same grant by id
         let grant_lookup = repo
-            .oauth2_authorization_grant()
+            .oauth_authorization_grant()
             .lookup(grant.id)
             .await
             .unwrap()
@@ -156,7 +156,7 @@ mod tests {
 
         // Find the same grant by code
         let grant_lookup = repo
-            .oauth2_authorization_grant()
+            .oauth_authorization_grant()
             .find_by_code("code")
             .await
             .unwrap()
@@ -176,12 +176,12 @@ mod tests {
             .unwrap();
 
         // Lookup a non-existing session
-        let session = repo.oauth2_session().lookup(Ulid::nil()).await.unwrap();
+        let session = repo.oauth_session().lookup(Ulid::nil()).await.unwrap();
         assert_eq!(session, None);
 
         // Create an OAuth session
         let session = repo
-            .oauth2_session()
+            .oauth_session()
             .add_from_browser_session(
                 &mut rng,
                 &clock,
@@ -194,7 +194,7 @@ mod tests {
 
         // Mark the grant as fulfilled
         let grant = repo
-            .oauth2_authorization_grant()
+            .oauth_authorization_grant()
             .fulfill(&clock, &session, grant)
             .await
             .unwrap();
@@ -202,7 +202,7 @@ mod tests {
 
         // Lookup the same session by id
         let session_lookup = repo
-            .oauth2_session()
+            .oauth_session()
             .lookup(session.id)
             .await
             .unwrap()
@@ -211,7 +211,7 @@ mod tests {
 
         // Mark the grant as exchanged
         let grant = repo
-            .oauth2_authorization_grant()
+            .oauth_authorization_grant()
             .exchange(&clock, grant)
             .await
             .unwrap();
@@ -219,7 +219,7 @@ mod tests {
 
         // Lookup a non-existing token
         let token = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .lookup(Ulid::nil())
             .await
             .unwrap();
@@ -227,7 +227,7 @@ mod tests {
 
         // Find a non-existing token
         let token = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .find_by_token("aabbcc")
             .await
             .unwrap();
@@ -235,7 +235,7 @@ mod tests {
 
         // Create an access token
         let access_token = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .add(
                 &mut rng,
                 &clock,
@@ -248,7 +248,7 @@ mod tests {
 
         // Lookup the same token by id
         let access_token_lookup = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .lookup(access_token.id)
             .await
             .unwrap()
@@ -257,7 +257,7 @@ mod tests {
 
         // Find the same token by token
         let access_token_lookup = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .find_by_token("aabbcc")
             .await
             .unwrap()
@@ -266,7 +266,7 @@ mod tests {
 
         // Lookup a non-existing refresh token
         let refresh_token = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .lookup(Ulid::nil())
             .await
             .unwrap();
@@ -274,7 +274,7 @@ mod tests {
 
         // Find a non-existing refresh token
         let refresh_token = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .find_by_token("aabbcc")
             .await
             .unwrap();
@@ -282,7 +282,7 @@ mod tests {
 
         // Create a refresh token
         let refresh_token = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .add(
                 &mut rng,
                 &clock,
@@ -295,7 +295,7 @@ mod tests {
 
         // Lookup the same refresh token by id
         let refresh_token_lookup = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .lookup(refresh_token.id)
             .await
             .unwrap()
@@ -304,7 +304,7 @@ mod tests {
 
         // Find the same refresh token by token
         let refresh_token_lookup = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .find_by_token("aabbcc")
             .await
             .unwrap()
@@ -321,7 +321,7 @@ mod tests {
 
         // Create a new refresh token to be able to consume the old one
         let new_refresh_token = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .add(
                 &mut rng,
                 &clock,
@@ -334,7 +334,7 @@ mod tests {
 
         // Mark the access token as revoked
         let access_token = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .revoke(&clock, access_token)
             .await
             .unwrap();
@@ -343,7 +343,7 @@ mod tests {
         // Mark the refresh token as consumed
         assert!(refresh_token.is_valid());
         let refresh_token = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .consume(&clock, refresh_token, &new_refresh_token)
             .await
             .unwrap();
@@ -352,7 +352,7 @@ mod tests {
         // Record the user-agent on the session
         assert!(session.user_agent.is_none());
         let session = repo
-            .oauth2_session()
+            .oauth_session()
             .record_user_agent(session, "Mozilla/5.0".to_owned())
             .await
             .unwrap();
@@ -360,7 +360,7 @@ mod tests {
 
         // Reload the session and check the user-agent
         let session = repo
-            .oauth2_session()
+            .oauth_session()
             .lookup(session.id)
             .await
             .unwrap()
@@ -369,12 +369,12 @@ mod tests {
 
         // Mark the session as finished
         assert!(session.is_valid());
-        let session = repo.oauth2_session().finish(&clock, session).await.unwrap();
+        let session = repo.oauth_session().finish(&clock, session).await.unwrap();
         assert!(!session.is_valid());
     }
 
-    /// Test the [`OAuth2SessionRepository::list`] and
-    /// [`OAuth2SessionRepository::count`] methods.
+    /// Test the [`OAuthSessionRepository::list`] and
+    /// [`OAuthSessionRepository::count`] methods.
     #[tokio::test]
     async fn test_list_sessions() {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
@@ -412,7 +412,7 @@ mod tests {
 
         // Create two clients
         let client1 = repo
-            .oauth2_client()
+            .oauth_client()
             .add(
                 &mut rng,
                 &clock,
@@ -437,7 +437,7 @@ mod tests {
             .await
             .unwrap();
         let client2 = repo
-            .oauth2_client()
+            .oauth_client()
             .add(
                 &mut rng,
                 &clock,
@@ -469,28 +469,28 @@ mod tests {
         // We're moving the clock forward by 1 minute between each session to ensure
         // we're getting consistent ordering in lists.
         let session11 = repo
-            .oauth2_session()
+            .oauth_session()
             .add_from_browser_session(&mut rng, &clock, &client1, &user1_session, scope.clone())
             .await
             .unwrap();
         clock.advance(Duration::try_minutes(1).unwrap());
 
         let session12 = repo
-            .oauth2_session()
+            .oauth_session()
             .add_from_browser_session(&mut rng, &clock, &client1, &user2_session, scope.clone())
             .await
             .unwrap();
         clock.advance(Duration::try_minutes(1).unwrap());
 
         let session21 = repo
-            .oauth2_session()
+            .oauth_session()
             .add_from_browser_session(&mut rng, &clock, &client2, &user1_session, scope2.clone())
             .await
             .unwrap();
         clock.advance(Duration::try_minutes(1).unwrap());
 
         let session22 = repo
-            .oauth2_session()
+            .oauth_session()
             .add_from_browser_session(&mut rng, &clock, &client2, &user2_session, scope2.clone())
             .await
             .unwrap();
@@ -498,12 +498,12 @@ mod tests {
 
         // We're also finishing two of the sessions
         let session11 = repo
-            .oauth2_session()
+            .oauth_session()
             .finish(&clock, session11)
             .await
             .unwrap();
         let session22 = repo
-            .oauth2_session()
+            .oauth_session()
             .finish(&clock, session22)
             .await
             .unwrap();
@@ -511,9 +511,9 @@ mod tests {
         let pagination = Pagination::first(10);
 
         // First, list all the sessions
-        let filter = OAuth2SessionFilter::new().for_any_user();
+        let filter = OAuthSessionFilter::new().for_any_user();
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -524,12 +524,12 @@ mod tests {
         assert_eq!(list.edges[2].node, session21);
         assert_eq!(list.edges[3].node, session22);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 4);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 4);
 
         // Now filter for only one user
-        let filter = OAuth2SessionFilter::new().for_user(&user1);
+        let filter = OAuthSessionFilter::new().for_user(&user1);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -538,12 +538,12 @@ mod tests {
         assert_eq!(list.edges[0].node, session11);
         assert_eq!(list.edges[1].node, session21);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 2);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 2);
 
         // Filter for only one client
-        let filter = OAuth2SessionFilter::new().for_client(&client1);
+        let filter = OAuthSessionFilter::new().for_client(&client1);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -552,14 +552,14 @@ mod tests {
         assert_eq!(list.edges[0].node, session11);
         assert_eq!(list.edges[1].node, session12);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 2);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 2);
 
         // Filter for both a user and a client
-        let filter = OAuth2SessionFilter::new()
+        let filter = OAuthSessionFilter::new()
             .for_user(&user2)
             .for_client(&client2);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -567,12 +567,12 @@ mod tests {
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session22);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 1);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 1);
 
         // Filter for active sessions
-        let filter = OAuth2SessionFilter::new().active_only();
+        let filter = OAuthSessionFilter::new().active_only();
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -581,12 +581,12 @@ mod tests {
         assert_eq!(list.edges[0].node, session12);
         assert_eq!(list.edges[1].node, session21);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 2);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 2);
 
         // Filter for finished sessions
-        let filter = OAuth2SessionFilter::new().finished_only();
+        let filter = OAuthSessionFilter::new().finished_only();
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -595,12 +595,12 @@ mod tests {
         assert_eq!(list.edges[0].node, session11);
         assert_eq!(list.edges[1].node, session22);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 2);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 2);
 
         // Combine the finished filter with the user filter
-        let filter = OAuth2SessionFilter::new().finished_only().for_user(&user2);
+        let filter = OAuthSessionFilter::new().finished_only().for_user(&user2);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -608,14 +608,14 @@ mod tests {
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session22);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 1);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 1);
 
         // Combine the finished filter with the client filter
-        let filter = OAuth2SessionFilter::new()
+        let filter = OAuthSessionFilter::new()
             .finished_only()
             .for_client(&client2);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -623,12 +623,12 @@ mod tests {
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session22);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 1);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 1);
 
         // Combine the active filter with the user filter
-        let filter = OAuth2SessionFilter::new().active_only().for_user(&user2);
+        let filter = OAuthSessionFilter::new().active_only().for_user(&user2);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -636,14 +636,14 @@ mod tests {
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session12);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 1);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 1);
 
         // Combine the active filter with the client filter
-        let filter = OAuth2SessionFilter::new()
+        let filter = OAuthSessionFilter::new()
             .active_only()
             .for_client(&client2);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -651,13 +651,13 @@ mod tests {
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session21);
 
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 1);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 1);
 
         // Try the scope filter. We should get all sessions with the "openid" scope
         let scope = Scope::from_iter([OPENID]);
-        let filter = OAuth2SessionFilter::new().with_scope(&scope);
+        let filter = OAuthSessionFilter::new().with_scope(&scope);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -667,13 +667,13 @@ mod tests {
         assert_eq!(list.edges[1].node, session12);
         assert_eq!(list.edges[2].node, session21);
         assert_eq!(list.edges[3].node, session22);
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 4);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 4);
 
         // We should get all sessions with the "openid" and "email" scope
         let scope = Scope::from_iter([OPENID, EMAIL]);
-        let filter = OAuth2SessionFilter::new().with_scope(&scope);
+        let filter = OAuthSessionFilter::new().with_scope(&scope);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
@@ -681,27 +681,27 @@ mod tests {
         assert_eq!(list.edges.len(), 2);
         assert_eq!(list.edges[0].node, session11);
         assert_eq!(list.edges[1].node, session12);
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 2);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 2);
 
         // Try combining the scope filter with the user filter
-        let filter = OAuth2SessionFilter::new()
+        let filter = OAuthSessionFilter::new()
             .with_scope(&scope)
             .for_user(&user1);
         let list = repo
-            .oauth2_session()
+            .oauth_session()
             .list(filter, pagination)
             .await
             .unwrap();
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session11);
-        assert_eq!(repo.oauth2_session().count(filter).await.unwrap(), 1);
+        assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 1);
 
         // Finish all sessions of a client in batch
         let affected = repo
-            .oauth2_session()
+            .oauth_session()
             .finish_bulk(
                 &clock,
-                OAuth2SessionFilter::new()
+                OAuthSessionFilter::new()
                     .for_client(&client1)
                     .active_only(),
             )
@@ -711,8 +711,8 @@ mod tests {
 
         // We should have 3 finished sessions
         assert_eq!(
-            repo.oauth2_session()
-                .count(OAuth2SessionFilter::new().finished_only())
+            repo.oauth_session()
+                .count(OAuthSessionFilter::new().finished_only())
                 .await
                 .unwrap(),
             3
@@ -720,15 +720,15 @@ mod tests {
 
         // We should have 1 active sessions
         assert_eq!(
-            repo.oauth2_session()
-                .count(OAuth2SessionFilter::new().active_only())
+            repo.oauth_session()
+                .count(OAuthSessionFilter::new().active_only())
                 .await
                 .unwrap(),
             1
         );
     }
 
-    /// Test the [`OAuth2DeviceCodeGrantRepository`] implementation
+    /// Test the [`OAuthDeviceCodeGrantRepository`] implementation
     #[tokio::test]
     async fn test_device_code_grant_repository() {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
@@ -743,7 +743,7 @@ mod tests {
 
         // Provision a client
         let client = repo
-            .oauth2_client()
+            .oauth_client()
             .add(
                 &mut rng,
                 &clock,
@@ -792,7 +792,7 @@ mod tests {
             .add(
                 &mut rng,
                 &clock,
-                OAuth2DeviceCodeGrantParams {
+                OAuthDeviceCodeGrantParams {
                     client: &client,
                     scope: scope.clone(),
                     device_code: device_code.to_owned(),
@@ -867,9 +867,9 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // Create an OAuth 2.0 session
+        // Create an OAuth session
         let session = repo
-            .oauth2_session()
+            .oauth_session()
             .add_from_browser_session(&mut rng, &clock, &client, &browser_session, scope.clone())
             .await
             .unwrap();
@@ -897,7 +897,7 @@ mod tests {
             .add(
                 &mut rng,
                 &clock,
-                OAuth2DeviceCodeGrantParams {
+                OAuthDeviceCodeGrantParams {
                     client: &client,
                     scope: scope.clone(),
                     device_code: "second_devicecode".to_owned(),

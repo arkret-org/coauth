@@ -81,7 +81,7 @@ pub async fn fetch_userinfo(
     let userinfo_response = userinfo_request
         .send_traced()
         .await?
-        .error_from_oauth2_error_response()
+        .error_from_oauth_error_response()
         .await?;
 
     let content_type: Mime = userinfo_response

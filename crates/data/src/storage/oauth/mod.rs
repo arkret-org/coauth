@@ -1,4 +1,4 @@
-//! Repositories to interact with entities related to the OAuth 2.0 protocol
+//! Repositories to interact with entities related to the OAuth protocol
 
 mod access_token;
 mod authorization_grant;
@@ -9,11 +9,11 @@ mod session;
 mod session_grant;
 
 pub use self::{
-    access_token::OAuth2AccessTokenRepository,
-    authorization_grant::OAuth2AuthorizationGrantRepository,
-    client::OAuth2ClientRepository,
-    device_code_grant::{OAuth2DeviceCodeGrantParams, OAuth2DeviceCodeGrantRepository},
-    refresh_token::OAuth2RefreshTokenRepository,
-    session::{OAuth2SessionFilter, OAuth2SessionRepository},
+    access_token::OAuthAccessTokenRepository,
+    authorization_grant::OAuthAuthorizationGrantRepository,
+    client::OAuthClientRepository,
+    device_code_grant::{OAuthDeviceCodeGrantParams, OAuthDeviceCodeGrantRepository},
+    refresh_token::OAuthRefreshTokenRepository,
+    session::{OAuthSessionFilter, OAuthSessionRepository},
     session_grant::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository},
 };

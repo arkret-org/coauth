@@ -1,6 +1,6 @@
 use coauth_data::{
     BoxRepository, BoxRng, Clock, RepositoryAccess, RepositoryError, TokenType,
-    oauth2::{OAuth2AccessTokenRepository, OAuth2RefreshTokenRepository, OAuth2SessionRepository},
+    oauth::{OAuthAccessTokenRepository, OAuthRefreshTokenRepository, OAuthSessionRepository},
     queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
     user::UserRepository,
 };
@@ -27,7 +27,7 @@ pub enum RevocationError {
 }
 
 /// Look up a token by its string value, verify ownership by the given client,
-/// and revoke the entire associated OAuth 2.0 session.
+/// and revoke the entire associated OAuth session.
 ///
 /// The caller is responsible for client authentication and HTTP-level
 /// concerns. This function only touches the repository.
@@ -46,7 +46,7 @@ pub async fn revoke_token(
     let session_id = match (token_type_hint, token_type) {
         (Some(OAuthTokenTypeHint::AccessToken) | None, TokenType::AccessToken) => {
             let access_token = repo
-                .oauth2_access_token()
+                .oauth_access_token()
                 .find_by_token(token_str)
                 .await?
                 .ok_or(RevocationError::UnknownToken)?;
@@ -59,7 +59,7 @@ pub async fn revoke_token(
 
         (Some(OAuthTokenTypeHint::RefreshToken) | None, TokenType::RefreshToken) => {
             let refresh_token = repo
-                .oauth2_refresh_token()
+                .oauth_refresh_token()
                 .find_by_token(token_str)
                 .await?
                 .ok_or(RevocationError::UnknownToken)?;
@@ -80,7 +80,7 @@ pub async fn revoke_token(
     };
 
     let session = repo
-        .oauth2_session()
+        .oauth_session()
         .lookup(session_id)
         .await?
         .ok_or(RevocationError::UnknownToken)?;
@@ -100,7 +100,7 @@ pub async fn revoke_token(
     }
 
     activity_tracker
-        .record_oauth2_session(clock, &session)
+        .record_oauth_session(clock, &session)
         .await;
 
     // If the session is associated with a user, make sure we schedule a device
@@ -118,7 +118,7 @@ pub async fn revoke_token(
     }
 
     // Now that we checked everything, we can end the session.
-    repo.oauth2_session().finish(clock, session).await?;
+    repo.oauth_session().finish(clock, session).await?;
 
     Ok(())
 }

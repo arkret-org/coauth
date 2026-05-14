@@ -105,49 +105,49 @@ impl UrlBuilder {
         self.absolute_url_for_issuer("/.well-known/openid-configuration")
     }
 
-    /// OAuth 2.0 authorization endpoint.
+    /// OAuth authorization endpoint.
     #[must_use]
     pub fn oauth_authorization_endpoint(&self) -> Url {
         self.absolute_url("/authorize")
     }
 
-    /// OAuth 2.0 token endpoint.
+    /// OAuth token endpoint.
     #[must_use]
     pub fn oauth_token_endpoint(&self) -> Url {
-        self.absolute_url("/oauth2/token")
+        self.absolute_url("/oauth/token")
     }
 
-    /// OAuth 2.0 introspection endpoint.
+    /// OAuth introspection endpoint.
     #[must_use]
     pub fn oauth_introspection_endpoint(&self) -> Url {
-        self.absolute_url("/oauth2/introspect")
+        self.absolute_url("/oauth/introspect")
     }
 
-    /// OAuth 2.0 revocation endpoint.
+    /// OAuth revocation endpoint.
     #[must_use]
     pub fn oauth_revocation_endpoint(&self) -> Url {
-        self.absolute_url("/oauth2/revoke")
+        self.absolute_url("/oauth/revoke")
     }
 
-    /// OAuth 2.0 client registration endpoint.
+    /// OAuth client registration endpoint.
     #[must_use]
     pub fn oauth_registration_endpoint(&self) -> Url {
-        self.absolute_url("/oauth2/registration")
+        self.absolute_url("/oauth/registration")
     }
 
-    /// OAuth 2.0 device authorization endpoint.
+    /// OAuth device authorization endpoint.
     #[must_use]
     pub fn oauth_device_authorization_endpoint(&self) -> Url {
-        self.absolute_url("/oauth2/device")
+        self.absolute_url("/oauth/device")
     }
 
-    /// OAuth 2.0 device code link.
+    /// OAuth device code link.
     #[must_use]
     pub fn device_code_link(&self) -> Url {
         self.absolute_url("/link")
     }
 
-    /// OAuth 2.0 device code link full URL.
+    /// OAuth device code link full URL.
     #[must_use]
     pub fn device_code_link_full(&self, code: String) -> Url {
         let mut url = self.absolute_url("/link");
@@ -158,13 +158,13 @@ impl UrlBuilder {
     /// OIDC userinfo endpoint.
     #[must_use]
     pub fn oidc_userinfo_endpoint(&self) -> Url {
-        self.absolute_url("/oauth2/userinfo")
+        self.absolute_url("/oauth/userinfo")
     }
 
     /// JWKS URI.
     #[must_use]
     pub fn jwks_uri(&self) -> Url {
-        self.absolute_url("/oauth2/keys.json")
+        self.absolute_url("/oauth/keys.json")
     }
 
     /// Static asset URL.

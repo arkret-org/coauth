@@ -140,7 +140,7 @@ fn register_all_handlers(w: &mut QueueWorker) {
     w.register_handler::<queue::CleanupExpiredOAuthAccessTokensJob>();
     w.register_handler::<queue::CleanupRevokedOAuthRefreshTokensJob>();
     w.register_handler::<queue::CleanupConsumedOAuthRefreshTokensJob>();
-    w.register_handler::<queue::CleanupFinishedOAuth2SessionsJob>();
+    w.register_handler::<queue::CleanupFinishedOAuthSessionsJob>();
     w.register_handler::<queue::CleanupFinishedUserSessionsJob>();
     w.register_handler::<queue::CleanupExpiredSessionGrantsJob>();
 
@@ -161,7 +161,7 @@ fn register_all_handlers(w: &mut QueueWorker) {
     w.register_handler::<queue::CleanupQueueJobsJob>();
 
     // IP address cleanup
-    w.register_handler::<queue::CleanupInactiveOAuth2SessionIpsJob>();
+    w.register_handler::<queue::CleanupInactiveOAuthSessionIpsJob>();
     w.register_handler::<queue::CleanupInactiveUserSessionIpsJob>();
 
     // User lifecycle
@@ -232,9 +232,9 @@ fn attach_recurring_schedules(w: &mut QueueWorker) -> Result<(), QueueRunnerErro
 
     // -- Hourly session cleanup (minutes 15-25) ---------------------------
     w.add_schedule(
-        "cleanup-finished-oauth2-sessions",
+        "cleanup-finished-oauth-sessions",
         "0 15 * * * *".parse()?,
-        queue::CleanupFinishedOAuth2SessionsJob,
+        queue::CleanupFinishedOAuthSessionsJob,
     );
     w.add_schedule(
         "cleanup-finished-user-sessions",
@@ -242,9 +242,9 @@ fn attach_recurring_schedules(w: &mut QueueWorker) -> Result<(), QueueRunnerErro
         queue::CleanupFinishedUserSessionsJob,
     );
     w.add_schedule(
-        "cleanup-inactive-oauth2-session-ips",
+        "cleanup-inactive-oauth-session-ips",
         "0 25 * * * *".parse()?,
-        queue::CleanupInactiveOAuth2SessionIpsJob,
+        queue::CleanupInactiveOAuthSessionIpsJob,
     );
     w.add_schedule(
         "cleanup-inactive-user-session-ips",

@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::{
     Clock, Page, Pagination, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports, new_id,
     pagination::{Node, PaginationDirection},
-    upstream_oauth2::{
+    upstream_oauth::{
         UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
     },
 };

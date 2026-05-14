@@ -3,7 +3,7 @@
 //! Round 25 introduces a typed mapping layer between an upstream OIDC
 //! provider's raw `id_token` claims and the local Contrix identity model.
 //!
-//! Unlike the existing `upstream_oidc.rs` flow — which orchestrates the OAuth2
+//! Unlike the existing `upstream_oidc.rs` flow — which orchestrates the OAuth
 //! authorization-code dance with a *configured* upstream provider — this
 //! module is the policy-decision point: a small `TrustedIssuerPolicy` set
 //! says "if you receive a token signed by issuer X with audience Y, here is

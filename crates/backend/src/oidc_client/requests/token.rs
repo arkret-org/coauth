@@ -17,7 +17,7 @@
 use chrono::{DateTime, Utc};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
-use oauth2_types::requests::{AccessTokenRequest, AccessTokenResponse};
+use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
 use rand_core::RngCore as Rng;
 use url::Url;
 
@@ -66,7 +66,7 @@ pub async fn request_access_token(
         .authenticated_form(token_request, &request, now, rng)?
         .send_traced()
         .await?
-        .error_from_oauth2_error_response()
+        .error_from_oauth_error_response()
         .await?
         .json()
         .await?;

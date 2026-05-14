@@ -1,5 +1,5 @@
 use coauth_data::UrlBuilder;
-use oauth2_types::webfinger::WebFingerResponse;
+use oauth_types::webfinger::WebFingerResponse;
 use salvo::prelude::*;
 use serde::Deserialize;
 
@@ -21,7 +21,7 @@ fn jrd() -> mime::Mime {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.webfinger.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.webfinger.get", skip_all)]
 pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     use crate::handlers::common::DepotExt as _;
 

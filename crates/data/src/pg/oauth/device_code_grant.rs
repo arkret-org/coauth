@@ -2,12 +2,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     BrowserSession, Clock, DeviceCodeGrant, DeviceCodeGrantState, Session, new_id,
-    oauth2::{OAuth2DeviceCodeGrantParams, OAuth2DeviceCodeGrantRepository},
+    oauth::{OAuthDeviceCodeGrantParams, OAuthDeviceCodeGrantRepository},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use ipnetwork::IpNetwork;
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -16,14 +16,14 @@ use crate::{
     DatabaseError, pg::errors::DatabaseInconsistencyError, schema::oauth_device_code_grant,
 };
 
-/// An implementation of [`OAuth2DeviceCodeGrantRepository`] for a PostgreSQL
+/// An implementation of [`OAuthDeviceCodeGrantRepository`] for a PostgreSQL
 /// connection
-pub struct PgOAuth2DeviceCodeGrantRepository<'c> {
+pub struct PgOAuthDeviceCodeGrantRepository<'c> {
     conn: &'c mut diesel_async::AsyncPgConnection,
 }
 
-impl<'c> PgOAuth2DeviceCodeGrantRepository<'c> {
-    /// Create a new [`PgOAuth2DeviceCodeGrantRepository`] from an active
+impl<'c> PgOAuthDeviceCodeGrantRepository<'c> {
+    /// Create a new [`PgOAuthDeviceCodeGrantRepository`] from an active
     /// PostgreSQL connection
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
@@ -32,7 +32,7 @@ impl<'c> PgOAuth2DeviceCodeGrantRepository<'c> {
 
 #[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = oauth_device_code_grant)]
-struct OAuth2DeviceGrantLookup {
+struct OAuthDeviceGrantLookup {
     id: Uuid,
     oauth_client_id: Uuid,
     scope: String,
@@ -49,11 +49,11 @@ struct OAuth2DeviceGrantLookup {
     user_agent: Option<String>,
 }
 
-impl TryFrom<OAuth2DeviceGrantLookup> for DeviceCodeGrant {
+impl TryFrom<OAuthDeviceGrantLookup> for DeviceCodeGrant {
     type Error = DatabaseInconsistencyError;
 
     fn try_from(
-        OAuth2DeviceGrantLookup {
+        OAuthDeviceGrantLookup {
             id,
             oauth_client_id,
             scope,
@@ -68,7 +68,7 @@ impl TryFrom<OAuth2DeviceGrantLookup> for DeviceCodeGrant {
             oauth_session_id,
             ip_address,
             user_agent,
-        }: OAuth2DeviceGrantLookup,
+        }: OAuthDeviceGrantLookup,
     ) -> Result<Self, Self::Error> {
         let id = Ulid::from(id);
         let client_id = Ulid::from(oauth_client_id);
@@ -150,16 +150,16 @@ struct NewDeviceCodeGrant {
 }
 
 #[async_trait]
-impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
+impl OAuthDeviceCodeGrantRepository for PgOAuthDeviceCodeGrantRepository<'_> {
     type Error = DatabaseError;
 
     #[tracing::instrument(
         name = "db.oauth_device_code_grant.add",
         skip_all,
         fields(
-            oauth2_device_code.id,
-            oauth2_device_code.scope = %params.scope,
-            oauth2_client.id = %params.client.id,
+            oauth_device_code.id,
+            oauth_device_code.scope = %params.scope,
+            oauth_client.id = %params.client.id,
         ),
         err,
     )]
@@ -167,11 +167,11 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: OAuth2DeviceCodeGrantParams<'_>,
+        params: OAuthDeviceCodeGrantParams<'_>,
     ) -> Result<DeviceCodeGrant, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
-        tracing::Span::current().record("oauth2_device_code.id", tracing::field::display(id));
+        tracing::Span::current().record("oauth_device_code.id", tracing::field::display(id));
 
         let created_at = now;
         let expires_at = now + params.expires_in;
@@ -212,15 +212,15 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         name = "db.oauth_device_code_grant.lookup",
         skip_all,
         fields(
-            oauth2_device_code.id = %id,
+            oauth_device_code.id = %id,
         ),
         err,
     )]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<DeviceCodeGrant>, Self::Error> {
         let res = oauth_device_code_grant::table
             .find(Uuid::from(id))
-            .select(OAuth2DeviceGrantLookup::as_select())
-            .first::<OAuth2DeviceGrantLookup>(self.conn)
+            .select(OAuthDeviceGrantLookup::as_select())
+            .first::<OAuthDeviceGrantLookup>(self.conn)
             .await
             .optional()?;
 
@@ -233,7 +233,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         name = "db.oauth_device_code_grant.find_by_user_code",
         skip_all,
         fields(
-            oauth2_device_code.user_code = %user_code,
+            oauth_device_code.user_code = %user_code,
         ),
         err,
     )]
@@ -243,8 +243,8 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     ) -> Result<Option<DeviceCodeGrant>, Self::Error> {
         let res = oauth_device_code_grant::table
             .filter(oauth_device_code_grant::user_code.eq(user_code))
-            .select(OAuth2DeviceGrantLookup::as_select())
-            .first::<OAuth2DeviceGrantLookup>(self.conn)
+            .select(OAuthDeviceGrantLookup::as_select())
+            .first::<OAuthDeviceGrantLookup>(self.conn)
             .await
             .optional()?;
 
@@ -257,7 +257,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         name = "db.oauth_device_code_grant.find_by_device_code",
         skip_all,
         fields(
-            oauth2_device_code.device_code = %device_code,
+            oauth_device_code.device_code = %device_code,
         ),
         err,
     )]
@@ -267,8 +267,8 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     ) -> Result<Option<DeviceCodeGrant>, Self::Error> {
         let res = oauth_device_code_grant::table
             .filter(oauth_device_code_grant::device_code.eq(device_code))
-            .select(OAuth2DeviceGrantLookup::as_select())
-            .first::<OAuth2DeviceGrantLookup>(self.conn)
+            .select(OAuthDeviceGrantLookup::as_select())
+            .first::<OAuthDeviceGrantLookup>(self.conn)
             .await
             .optional()?;
 
@@ -281,8 +281,8 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         name = "db.oauth_device_code_grant.fulfill",
         skip_all,
         fields(
-            oauth2_device_code.id = %device_code_grant.id,
-            oauth2_client.id = %device_code_grant.client_id,
+            oauth_device_code.id = %device_code_grant.id,
+            oauth_client.id = %device_code_grant.client_id,
             browser_session.id = %browser_session.id,
             user.id = %browser_session.user.id,
         ),
@@ -318,8 +318,8 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         name = "db.oauth_device_code_grant.reject",
         skip_all,
         fields(
-            oauth2_device_code.id = %device_code_grant.id,
-            oauth2_client.id = %device_code_grant.client_id,
+            oauth_device_code.id = %device_code_grant.id,
+            oauth_client.id = %device_code_grant.client_id,
             browser_session.id = %browser_session.id,
             user.id = %browser_session.user.id,
         ),
@@ -355,9 +355,9 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         name = "db.oauth_device_code_grant.exchange",
         skip_all,
         fields(
-            oauth2_device_code.id = %device_code_grant.id,
-            oauth2_client.id = %device_code_grant.client_id,
-            oauth2_session.id = %session.id,
+            oauth_device_code.id = %device_code_grant.id,
+            oauth_client.id = %device_code_grant.client_id,
+            oauth_session.id = %session.id,
         ),
         err,
     )]

@@ -2,14 +2,14 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use coauth_data::{
     Clock, UpstreamOAuthProvider, UpstreamOAuthProviderResponseMode,
-    upstream_oauth2::{
+    upstream_oauth::{
         UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
         UpstreamOAuthSessionRepository,
     },
 };
 use coauth_jose::claims::TokenHash;
 use coauth_templates::FormPostContext;
-use oauth2_types::{errors::ClientErrorCode, requests::AccessTokenRequest};
+use oauth_types::{errors::ClientErrorCode, requests::AccessTokenRequest};
 use opentelemetry::{Key, KeyValue, metrics::Counter};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -33,8 +33,8 @@ use crate::{
 
 static CALLBACK_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("coauth.upstream_oauth2.callback")
-        .with_description("Number of requests to the upstream OAuth2 callback endpoint")
+        .u64_counter("coauth.upstream_oauth.callback")
+        .with_description("Number of requests to the upstream OAuth callback endpoint")
         .build()
 });
 const PROVIDER: Key = Key::from_static_str("provider");
@@ -152,7 +152,7 @@ impl Scribe for RouteError {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.upstream_oauth2.callback.handler", skip_all)]
+#[tracing::instrument(name = "handlers.upstream_oauth.callback.handler", skip_all)]
 #[allow(clippy::too_many_arguments)]
 pub async fn handler(
     req: &mut Request,
@@ -601,7 +601,7 @@ pub async fn handler(
                 client_credentials,
                 lazy_metadata.token_endpoint().await?,
                 AccessTokenRequest::AuthorizationCode(
-                    oauth2_types::requests::AuthorizationCodeGrant {
+                    oauth_types::requests::AuthorizationCodeGrant {
                         code: code.clone(),
                         redirect_uri: Some(redirect_uri),
                         code_verifier: session.code_challenge_verifier.clone(),

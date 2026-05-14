@@ -515,7 +515,7 @@ impl InsertableJob for CleanupExpiredTokensJob {
     const QUEUE_NAME: &'static str = "cleanup-expired-tokens";
 }
 
-/// Cleanup revoked OAuth 2.0 access tokens
+/// Cleanup revoked OAuth access tokens
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupRevokedOAuthAccessTokensJob;
 
@@ -523,7 +523,7 @@ impl InsertableJob for CleanupRevokedOAuthAccessTokensJob {
     const QUEUE_NAME: &'static str = "cleanup-revoked-oauth-access-tokens";
 }
 
-/// Cleanup expired OAuth 2.0 access tokens
+/// Cleanup expired OAuth access tokens
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupExpiredOAuthAccessTokensJob;
 
@@ -531,7 +531,7 @@ impl InsertableJob for CleanupExpiredOAuthAccessTokensJob {
     const QUEUE_NAME: &'static str = "cleanup-expired-oauth-access-tokens";
 }
 
-/// Cleanup revoked OAuth 2.0 refresh tokens
+/// Cleanup revoked OAuth refresh tokens
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupRevokedOAuthRefreshTokensJob;
 
@@ -539,7 +539,7 @@ impl InsertableJob for CleanupRevokedOAuthRefreshTokensJob {
     const QUEUE_NAME: &'static str = "cleanup-revoked-oauth-refresh-tokens";
 }
 
-/// Cleanup consumed OAuth 2.0 refresh tokens
+/// Cleanup consumed OAuth refresh tokens
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupConsumedOAuthRefreshTokensJob;
 
@@ -555,12 +555,12 @@ impl InsertableJob for CleanupUserRegistrationsJob {
     const QUEUE_NAME: &'static str = "cleanup-user-registrations";
 }
 
-/// Cleanup finished OAuth 2.0 sessions
+/// Cleanup finished OAuth sessions
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct CleanupFinishedOAuth2SessionsJob;
+pub struct CleanupFinishedOAuthSessionsJob;
 
-impl InsertableJob for CleanupFinishedOAuth2SessionsJob {
-    const QUEUE_NAME: &'static str = "cleanup-finished-oauth2-sessions";
+impl InsertableJob for CleanupFinishedOAuthSessionsJob {
+    const QUEUE_NAME: &'static str = "cleanup-finished-oauth-sessions";
 }
 
 /// Cleanup expired Contrix session grants (`oauth_session_grants`)
@@ -579,7 +579,7 @@ impl InsertableJob for CleanupFinishedUserSessionsJob {
     const QUEUE_NAME: &'static str = "cleanup-finished-user-sessions";
 }
 
-/// Cleanup old OAuth 2.0 authorization grants
+/// Cleanup old OAuth authorization grants
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupOAuthAuthorizationGrantsJob;
 
@@ -587,7 +587,7 @@ impl InsertableJob for CleanupOAuthAuthorizationGrantsJob {
     const QUEUE_NAME: &'static str = "cleanup-oauth-authorization-grants";
 }
 
-/// Cleanup old OAuth 2.0 device code grants
+/// Cleanup old OAuth device code grants
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupOAuthDeviceCodeGrantsJob;
 
@@ -646,7 +646,7 @@ impl InsertableJob for ExpireInactiveSessionsJob {
     const QUEUE_NAME: &'static str = "expire-inactive-sessions";
 }
 
-/// Expire inactive OAuth 2.0 sessions
+/// Expire inactive OAuth sessions
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExpireInactiveOAuthSessionsJob {
     threshold: DateTime<Utc>,
@@ -654,7 +654,7 @@ pub struct ExpireInactiveOAuthSessionsJob {
 }
 
 impl ExpireInactiveOAuthSessionsJob {
-    /// Create a new job to expire inactive OAuth 2.0 sessions
+    /// Create a new job to expire inactive OAuth sessions
     ///
     /// # Parameters
     ///
@@ -768,12 +768,12 @@ impl InsertableJob for PruneStalePolicyDataJob {
     const QUEUE_NAME: &'static str = "prune-stale-policy-data";
 }
 
-/// Cleanup IP addresses from inactive OAuth 2.0 sessions
+/// Cleanup IP addresses from inactive OAuth sessions
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct CleanupInactiveOAuth2SessionIpsJob;
+pub struct CleanupInactiveOAuthSessionIpsJob;
 
-impl InsertableJob for CleanupInactiveOAuth2SessionIpsJob {
-    const QUEUE_NAME: &'static str = "cleanup-inactive-oauth2-session-ips";
+impl InsertableJob for CleanupInactiveOAuthSessionIpsJob {
+    const QUEUE_NAME: &'static str = "cleanup-inactive-oauth-session-ips";
 }
 
 /// Cleanup IP addresses from inactive user/browser sessions

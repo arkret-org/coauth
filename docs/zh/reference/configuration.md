@@ -37,7 +37,7 @@ http:
 
 - `discovery`：`/.well-known/*`
 - `human`：浏览器页面
-- `oauth`：OAuth2 / OIDC 端点
+- `oauth`：OAuth / OIDC 端点
 - `restapi`：SPA/API 后端
 - `assets`：前端静态资源
 - `adminapi`：`/api/admin/v1/*`
@@ -108,7 +108,7 @@ templates:
 
 ## `clients`
 
-静态 OAuth2 / OIDC client 注册项，会在启动时同步到数据库。
+静态 OAuth / OIDC client 注册项，会在启动时同步到数据库。
 
 ```yaml
 clients:
@@ -242,12 +242,12 @@ sms:
     from_number: "+12065550123"
 ```
 
-## `upstream_oauth2`
+## `upstream_oauth`
 
-用于联邦登录的受信任 upstream OAuth2 / OIDC provider。
+用于联邦登录的受信任 upstream OAuth / OIDC provider。
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01HFVBY12TMNTYTBV8W921M5FA
       issuer: https://accounts.google.com

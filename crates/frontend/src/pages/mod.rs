@@ -1,7 +1,7 @@
 pub mod account;
 pub mod account_overview;
 pub mod account_settings;
-pub mod admin_oauth2_client_i18n;
+pub mod admin_oauth_client_i18n;
 pub mod browser_sessions;
 pub mod client_detail;
 pub mod consent;
@@ -30,7 +30,7 @@ pub mod workflow_inbox;
 // Re-export page components for the router
 use account_overview::AccountOverview;
 use account_settings::AccountSettings;
-use admin_oauth2_client_i18n::AdminOAuth2ClientI18n;
+use admin_oauth_client_i18n::AdminOAuthClientI18n;
 use browser_sessions::BrowserSessions;
 use client_detail::ClientDetail;
 use consent::Consent;
@@ -82,7 +82,7 @@ pub enum Route {
     #[route("/recover/progress/:id")]
     RecoveryProgress { id: String },
 
-    // OAuth2 consent & device code (public, require session)
+    // OAuth consent & device code (public, require session)
     #[route("/consent/:grant_id")]
     Consent { grant_id: String },
     #[route("/link")]
@@ -127,12 +127,12 @@ pub enum Route {
     SessionDetail { id: String },
     #[route("/clients/:id")]
     ClientDetail { id: String },
-    #[route("/admin/oauth2-clients/:id/i18n")]
-    AdminOAuth2ClientI18n { id: String },
+    #[route("/admin/oauth-clients/:id/i18n")]
+    AdminOAuthClientI18n { id: String },
     #[route("/devices/:..route")]
     DeviceRedirect { route: Vec<String> },
 
-    // Upstream OAuth2 link
+    // Upstream OAuth link
     #[route("/upstream/link/:id")]
     UpstreamLink { id: String },
 

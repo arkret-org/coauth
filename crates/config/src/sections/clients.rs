@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Contrix Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
 
-// ── OAuth 2.0 Client Configuration ──
+// ── OAuth Client Configuration ──
 //
-// Defines configuration for statically-registered OAuth 2.0 clients,
+// Defines configuration for statically-registered OAuth clients,
 // including authentication methods, secrets, and redirect URIs.
 
 use std::ops::Deref;
@@ -74,7 +74,7 @@ impl std::fmt::Display for ClientAuthMethodConfig {
 
 // ── Single Client Configuration ──
 
-/// Represents the configuration of a single statically-registered OAuth 2.0
+/// Represents the configuration of a single statically-registered OAuth
 /// client
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -90,7 +90,7 @@ pub struct ClientConfig {
     /// Token endpoint authentication method for this client
     client_auth_method: ClientAuthMethodConfig,
 
-    /// Name of the `OAuth2` client
+    /// Name of the `OAuth` client
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_name: Option<String>,
 
@@ -251,7 +251,7 @@ impl ClientConfig {
 
 // ── Clients Collection ──
 
-/// Wrapper around a list of statically-configured OAuth 2.0 clients
+/// Wrapper around a list of statically-configured OAuth clients
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(transparent)]
 pub struct ClientsConfig(#[schemars(with = "Vec::<ClientConfig>")] Vec<ClientConfig>);

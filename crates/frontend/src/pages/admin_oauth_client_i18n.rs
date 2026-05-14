@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Contrix Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
 
 //! Admin page: edit per-locale display name + description for an
-//! OAuth2 client.
+//! OAuth client.
 //!
 //! This is the round-26 i18n editor backed by `POST
-//! /api/admin/v1/oauth2/clients/{id}/i18n`. The page renders the existing
+//! /api/admin/v1/oauth/clients/{id}/i18n`. The page renders the existing
 //! locale rows (loaded via `GET .../i18n`) and a small form for adding /
 //! updating one locale at a time. Submitting an empty `display_name`
 //! clears the entry for that locale (matches the backend semantics).
@@ -54,7 +54,7 @@ const SUPPORTED_LOCALES: &[(&str, &str)] = &[
 ];
 
 #[component]
-pub fn AdminOAuth2ClientI18n(id: String) -> Element {
+pub fn AdminOAuthClientI18n(id: String) -> Element {
     let client_id = id.clone();
     let mut entries = use_signal(BTreeMap::<String, I18nEntry>::new);
     let mut loading = use_signal(|| true);
@@ -124,7 +124,7 @@ pub fn AdminOAuth2ClientI18n(id: String) -> Element {
     rsx! {
         Layout {
             div { class: "flex flex-col gap-6",
-                h3 { class: "heading-xs", "OAuth2 Client i18n editor" }
+                h3 { class: "heading-xs", "OAuth Client i18n editor" }
                 p { class: "text-sm",
                     "Client ID: "
                     code { "{client_id}" }
@@ -207,7 +207,7 @@ pub fn AdminOAuth2ClientI18n(id: String) -> Element {
 
 async fn fetch_entries(client_id: &str) -> Result<BTreeMap<String, I18nEntry>, String> {
     let url = format!(
-        "{}/admin/v1/oauth2/clients/{}/i18n",
+        "{}/admin/v1/oauth/clients/{}/i18n",
         api_base_url(),
         client_id
     );
@@ -228,7 +228,7 @@ async fn upsert_entry(
     body: &UpsertBody<'_>,
 ) -> Result<BTreeMap<String, I18nEntry>, String> {
     let url = format!(
-        "{}/admin/v1/oauth2/clients/{}/i18n",
+        "{}/admin/v1/oauth/clients/{}/i18n",
         api_base_url(),
         client_id
     );

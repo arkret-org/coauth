@@ -7,7 +7,7 @@ use std::{
 
 use chrono::Duration;
 use coauth_data::{Client, DeviceCodeGrant, PrincipalUser};
-use oauth2_types::scope::OPENID;
+use oauth_types::scope::OPENID;
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 

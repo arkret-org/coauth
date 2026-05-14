@@ -10,27 +10,27 @@ A deployment which requires SAML or LDAP-based authentication should use a servi
 
 ## General configuration
 
-Configuration of upstream providers is done in the `upstream_oauth2` section of the configuration file, which has a `providers` list.
+Configuration of upstream providers is done in the `upstream_oauth` section of the configuration file, which has a `providers` list.
 Additions and changes to this sections are synced with the database on startup.
 Removals need to be applied using the [`coauth config sync --prune`](../reference/cli/config.md#config-sync---prune---dry-run) command.
 
-**An exhaustive list of all the parameters is available in the [configuration file reference](../reference/configuration.md#upstream_oauth2).**
+**An exhaustive list of all the parameters is available in the [configuration file reference](../reference/configuration.md#upstream_oauth).**
 
 The general configuration usually goes as follows:
 
  - determine a unique `id` for the provider, which will be used as stable identifier between the configuration file and the database. This `id` must be a ULID, and can be generated using online tools like <https://www.ulidtools.com>
  - determine the exact external `http.public_base` value used by coauth. The provider callback URL is derived from it, so it must be the public URL visible to both end users and the upstream provider
- - create an OAuth 2.0/OIDC client on the provider's side, using the following parameters:
+ - create an OAuth/OIDC client on the provider's side, using the following parameters:
    - `redirect_uri`: `<http.public_base>/upstream/callback/<id>`
    - `response_type`: `code`
    - `response_mode`: `query`
    - `grant_type`: `authorization_code`
    - (optional) `backchannel_logout_uri`: `<http.public_base>/upstream/backchannel-logout/<id>`
- - fill the `upstream_oauth2` section of the configuration file with the following parameters:
+ - fill the `upstream_oauth` section of the configuration file with the following parameters:
    - `providers`:
      - `id`: the previously generated ULID
-     - `client_id`: the client ID of the OAuth 2.0/OIDC client given by the provider
-     - `client_secret`: the client secret of the OAuth 2.0/OIDC client given by the provider
+     - `client_id`: the client ID of the OAuth/OIDC client given by the provider
+     - `client_secret`: the client secret of the OAuth/OIDC client given by the provider
      - `issuer`: the issuer URL of the provider
      - `scope`: the scope to request from the provider. `openid` is usually required, and `profile` and `email` are recommended to import a few user attributes.
  - setup user attributes mapping to automatically fill the user profile with data from the provider. See the [user attributes mapping](#user-attributes-mapping) section for more details.
@@ -83,13 +83,13 @@ The authentication service supports linking external provider identities to exis
 If the `username` given by the upstream provider matches an existing user and the `claims_imports.username.action` is set to `force` or `require`, by default the service will refuse to link to that existing account.
 This behaviour is controlled by the `claims_imports.username.on_conflict` option, which can be set to:
 
-  * `fail` *(default)*: fails the upstream OAuth 2.0 login
+  * `fail` *(default)*: fails the upstream OAuth login
   * `add`: automatically adds the upstream account to the existing user, regardless of whether the existing user already has another upstream account or not
   * `set`: automatically adds the upstream account to the existing user only if there are no other upstream accounts for that provider linked to the user
   * `replace`: automatically replaces any upstream account for that provider linked to the user
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
    - id: …
      claims_imports:
@@ -120,7 +120,7 @@ Those are notifications from the upstream provider that the user has logged out 
 The backchannel logout URI must be configured in the provider as `<http.public_base>/upstream/backchannel-logout/<id>`, where `<id>` is the `id` of the provider.
 
 By default, the authentication service will not perform any action when receiving a backchannel logout request.
-The [`on_backchannel_logout`](../reference/configuration.md#upstream_oauth2) option can be used to configure what to do when receiving a backchannel logout request.
+The [`on_backchannel_logout`](../reference/configuration.md#upstream_oauth) option can be used to configure what to do when receiving a backchannel logout request.
 
 Possible values are:
 
@@ -142,7 +142,7 @@ Unless noted otherwise, any sample callback URL written as `https://<auth-servic
 Sign-in with Apple uses special non-standard for authenticating clients, which requires a special configuration.
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01JAYS74TCG3BTWKADN5Q4518C
       issuer: "https://appleid.apple.com"
@@ -209,7 +209,7 @@ identity_providers:
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
   - id: <id>
     human_name: Authelia
@@ -236,7 +236,7 @@ upstream_oauth2:
 
 [Authentik](https://goauthentik.io/) is an open-source IdP solution.
 
-1. Create a provider in Authentik, with type OAuth2/OpenID.
+1. Create a provider in Authentik, with type OAuth/OpenID.
 2. The parameters are:
   - Client Type: Confidential
   - Redirect URIs: `https://<auth-service-domain>/upstream/callback/<id>`
@@ -246,7 +246,7 @@ upstream_oauth2:
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01HFRQFT5QFMJFGF01P7JAV2ME
       human_name: Authentik
@@ -281,7 +281,7 @@ upstream_oauth2:
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: "01HFS3WM7KSWCEQVJTN0V9X1W6"
       issuer: "https://www.facebook.com"
@@ -319,7 +319,7 @@ upstream_oauth2:
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: "01HFS67GJ145HCM9ZASYS9DC3J"
       issuer: "https://gitlab.com"
@@ -344,7 +344,7 @@ upstream_oauth2:
 
 ### GitHub
 
-GitHub doesn't support OpenID Connect, but it does support OAuth 2.0.
+GitHub doesn't support OpenID Connect, but it does support OAuth.
 It will use the `fetch_userinfo` option with a manual `userinfo_endpoint` to fetch the user's profile through the GitHub API.
 
 1. Create a [new application](https://github.com/settings/applications/new).
@@ -358,7 +358,7 @@ The GitHub callback URL must use the same provider ULID as the `id` field below.
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: "01HFS67GJ145HCM9ZASYS9DC3J"
       human_name: GitHub
@@ -396,14 +396,14 @@ Notes:
 
 ### Google
 
-1. Set up a project in the Google API Console (see [documentation](https://developers.google.com/identity/protocols/oauth2/openid-connect#appsetup))
+1. Set up a project in the Google API Console (see [documentation](https://developers.google.com/identity/protocols/oauth/openid-connect#appsetup))
 2. Add an "OAuth Client ID" for a Web Application under ["Credentials"](https://console.developers.google.com/apis/credentials)
 3. Add the following "Authorized redirect URI": `<http.public_base>/upstream/callback/<id>`
 
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01HFS6S2SVAR7Y7QYMZJ53ZAGZ
       human_name: Google
@@ -467,7 +467,7 @@ Follow the [Getting Started Guide](https://www.keycloak.org/guides) to install K
 8. Copy Secret
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: "01H8PKNWKKRPCBW4YGH1RWV279"
       issuer: "https://<keycloak>/realms/<realm>" # TO BE FILLED
@@ -501,7 +501,7 @@ Make note of your Directory (tenant) ID as it will be used in the Azure links.
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: "01HFRPWGR6BG9SAGAKDTQHG2R2"
       human_name: Microsoft Azure AD
@@ -528,12 +528,12 @@ upstream_oauth2:
 ### Discord
 
 1. Create a new application in the Discord Developer Portal (see [documentation](https://discord.com/developers/applications))
-2. Add the following "Redirect URI" in the OAuth2 tab under settings: `https://<auth-service-domain>/upstream/callback/<id>`
+2. Add the following "Redirect URI" in the OAuth tab under settings: `https://<auth-service-domain>/upstream/callback/<id>`
 
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01JQK7DK6VFH62NMW4HS9RKD3R
       human_name: Discord
@@ -587,7 +587,7 @@ upstream_oauth2:
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: "01JFFHK7HJF70YSYF753GEWVRP"
       human_name: Rauthy
@@ -667,7 +667,7 @@ Register coauth as a relying party in Shibboleth:
 Authentication service configuration:
 
 ```yaml
-upstream_oauth2:
+upstream_oauth:
   providers:
     - id: 01JB6YS8N7Q2ZM9CPXW6V0KGRT
       human_name: Shibboleth

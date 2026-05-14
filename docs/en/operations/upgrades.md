@@ -2,7 +2,7 @@
 
 `coauth` follows [Semantic Versioning](https://semver.org/) for the HTTP
 contracts. Patch and minor releases never break compatibility with the
-existing OIDC / OAuth2 / Contrix surfaces. Major releases may remove
+existing OIDC / OAuth / Contrix surfaces. Major releases may remove
 deprecated paths after at least one minor release of warning.
 
 ## Routine upgrades

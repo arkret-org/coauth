@@ -4,7 +4,7 @@ use coauth_data::{
     BrowserSession, Clock, Page, Pagination, UpstreamOAuthAuthorizationSession,
     UpstreamOAuthAuthorizationSessionState, UpstreamOAuthLink, UpstreamOAuthProvider, new_id,
     pagination::{Node, PaginationDirection},
-    upstream_oauth2::{UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository},
+    upstream_oauth::{UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;

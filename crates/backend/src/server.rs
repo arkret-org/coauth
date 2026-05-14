@@ -491,7 +491,7 @@ pub fn build_router(
     // Build sub-routers for each resource
     use crate::handlers::{
         contrix, health,
-        oauth2::{discovery, webfinger},
+        oauth::{discovery, webfinger},
     };
 
     for resource in resources {
@@ -531,7 +531,7 @@ pub fn build_router(
             coauth_config::HttpResource::Human => build_human_router(router, templates.clone()),
             coauth_config::HttpResource::RestApi {
                 playground: _,
-                undocumented_oauth2_access: _,
+                undocumented_oauth_access: _,
             } => build_account_api_router(router),
             coauth_config::HttpResource::Assets { path } => router
                 .push(Router::with_path("/favicon.ico").get(favicon_handler))
@@ -569,26 +569,26 @@ pub fn build_router(
 }
 
 fn build_human_router(router: Router, _templates: Templates) -> Router {
-    use crate::handlers::{email_webhooks, oauth2::authorization, spa, upstream_oauth2};
+    use crate::handlers::{email_webhooks, oauth::authorization, spa, upstream_oauth};
 
     router
         .push(Router::with_path("/webhooks/email/{provider}").post(email_webhooks::post))
-        // ── OAuth2 protocol endpoints (server-side redirects) ──
+        // ── OAuth protocol endpoints (server-side redirects) ──
         .push(Router::with_path("/authorize").get(authorization::get))
-        // ── Upstream OAuth2 (server-side redirect & callback) ──
+        // ── Upstream OAuth (server-side redirect & callback) ──
         .push(
             Router::with_path("/upstream/authorize/{provider_id}")
-                .get(upstream_oauth2::authorize::get),
+                .get(upstream_oauth::authorize::get),
         )
         .push(
             Router::with_path("/upstream/callback/{provider_id}")
-                .get(upstream_oauth2::callback::handler)
-                .post(upstream_oauth2::callback::handler),
+                .get(upstream_oauth::callback::handler)
+                .post(upstream_oauth::callback::handler),
         )
         .push(Router::with_path("/upstream/link/{link_id}").get(spa::get))
         .push(
             Router::with_path("/upstream/backchannel-logout/{provider_id}")
-                .post(upstream_oauth2::backchannel_logout::post),
+                .post(upstream_oauth::backchannel_logout::post),
         )
         // ── Well-known redirect ──
         .push(
@@ -636,7 +636,7 @@ fn build_human_router(router: Router, _templates: Templates) -> Router {
 }
 
 fn build_oauth_router(router: Router) -> Router {
-    use crate::handlers::oauth2::{
+    use crate::handlers::oauth::{
         device, introspection, keys, registration, revoke, token, userinfo,
     };
 
@@ -644,43 +644,43 @@ fn build_oauth_router(router: Router) -> Router {
 
     router
         .push(
-            Router::with_path("/oauth2/keys.json")
+            Router::with_path("/oauth/keys.json")
                 .hoop(cors())
                 .get(keys::get),
         )
         .push(
-            Router::with_path("/oauth2/userinfo")
+            Router::with_path("/oauth/userinfo")
                 .hoop(cors())
                 .options(oidc_preflight_handler)
                 .get(userinfo::get)
                 .post(userinfo::get),
         )
         .push(
-            Router::with_path("/oauth2/introspect")
+            Router::with_path("/oauth/introspect")
                 .hoop(cors())
                 .options(oidc_preflight_handler)
                 .post(introspection::post),
         )
         .push(
-            Router::with_path("/oauth2/revoke")
+            Router::with_path("/oauth/revoke")
                 .hoop(cors())
                 .options(oidc_preflight_handler)
                 .post(revoke::post),
         )
         .push(
-            Router::with_path("/oauth2/token")
+            Router::with_path("/oauth/token")
                 .hoop(cors())
                 .options(oidc_preflight_handler)
                 .post(token::post),
         )
         .push(
-            Router::with_path("/oauth2/registration")
+            Router::with_path("/oauth/registration")
                 .hoop(cors())
                 .options(oidc_preflight_handler)
                 .post(registration::post),
         )
         .push(
-            Router::with_path("/oauth2/device")
+            Router::with_path("/oauth/device")
                 .hoop(cors())
                 .options(oidc_preflight_handler)
                 .post(device::authorize::post),
@@ -729,12 +729,12 @@ fn build_account_api_router(router: Router) -> Router {
         .push(Router::with_path("sessions/{id}").get(sessions::get_session))
         .push(Router::with_path("browser-sessions/{id}").delete(sessions::end_browser_session))
         .push(
-            Router::with_path("oauth2-sessions/{id}")
-                .delete(sessions::end_oauth2_session)
-                .push(Router::with_path("name").put(sessions::set_oauth2_session_name)),
+            Router::with_path("oauth-sessions/{id}")
+                .delete(sessions::end_oauth_session)
+                .push(Router::with_path("name").put(sessions::set_oauth_session_name)),
         )
-        // OAuth2 clients
-        .push(Router::with_path("oauth2-clients/{id}").get(oauth2_clients::get_client))
+        // OAuth clients
+        .push(Router::with_path("oauth-clients/{id}").get(oauth_clients::get_client))
         // Password recovery
         .push(
             Router::with_path("password-recovery")
@@ -830,11 +830,11 @@ fn build_account_api_router(router: Router) -> Router {
                         )),
                 ),
         )
-        // OAuth2 consent
+        // OAuth consent
         .push(
-            Router::with_path("oauth2/consent/{grant_id}")
-                .get(consent::oauth2_consent_get)
-                .post(consent::oauth2_consent_post),
+            Router::with_path("oauth/consent/{grant_id}")
+                .get(consent::oauth_consent_get)
+                .post(consent::oauth_consent_post),
         )
         // Invite relay (consent-gated forward to target principal)
         .push(Router::with_path("account/invites/relay").post(invite_relay::post_invite_relay))
@@ -851,11 +851,11 @@ fn build_account_api_router(router: Router) -> Router {
                 .get(linked_accounts::list_linked_accounts)
                 .push(Router::with_path("{id}").delete(linked_accounts::unlink_account)),
         )
-        // Upstream OAuth2 link
+        // Upstream OAuth link
         .push(
-            Router::with_path("upstream-oauth2/link/{id}")
-                .get(upstream_oauth2::get_link)
-                .post(upstream_oauth2::post_link),
+            Router::with_path("upstream-oauth/link/{id}")
+                .get(upstream_oauth::get_link)
+                .post(upstream_oauth::post_link),
         )
         // Flow engine
         .push(
@@ -995,33 +995,33 @@ fn build_admin_router(router: Router) -> Router {
                         .push(Router::with_path("finish").post(user_sessions::finish_session)),
                 ),
         )
-        // OAuth2 sessions
+        // OAuth sessions
         .push(
-            Router::with_path("oauth2-sessions")
-                .get(oauth2_sessions::list_sessions)
+            Router::with_path("oauth-sessions")
+                .get(oauth_sessions::list_sessions)
                 .push(
                     Router::with_path("{id}")
-                        .get(oauth2_sessions::get_session)
-                        .push(Router::with_path("finish").post(oauth2_sessions::finish_session)),
+                        .get(oauth_sessions::get_session)
+                        .push(Router::with_path("finish").post(oauth_sessions::finish_session)),
                 ),
         )
-        // OAuth2 client localised metadata
+        // OAuth client localised metadata
         .push(
-            Router::with_path("oauth2-clients").push(
+            Router::with_path("oauth-clients").push(
                 Router::with_path("{id}").push(
                     Router::with_path("localized-metadata")
-                        .get(oauth2_clients::get_localized_metadata)
-                        .put(oauth2_clients::replace_localized_metadata),
+                        .get(oauth_clients::get_localized_metadata)
+                        .put(oauth_clients::replace_localized_metadata),
                 ),
             ),
         )
         // RFC 7591 admin dynamic client registration
-        .push(Router::with_path("oauth2/clients/register").post(oauth2_clients_register::register))
-        // Admin-curated OAuth2 client display name + description per locale.
+        .push(Router::with_path("oauth/clients/register").post(oauth_clients_register::register))
+        // Admin-curated OAuth client display name + description per locale.
         .push(
-            Router::with_path("oauth2/clients/{id}/i18n")
-                .get(oauth2_clients_i18n::get_i18n)
-                .post(oauth2_clients_i18n::upsert_i18n),
+            Router::with_path("oauth/clients/{id}/i18n")
+                .get(oauth_clients_i18n::get_i18n)
+                .post(oauth_clients_i18n::upsert_i18n),
         )
         // Personal sessions
         .push(
@@ -1432,9 +1432,9 @@ mod tests {
         assert!(json["paths"]["/api/admin/v1/user-sessions"].is_object());
         assert!(json["paths"]["/api/admin/v1/user-sessions/{id}"].is_object());
         assert!(json["paths"]["/api/admin/v1/user-sessions/{id}/finish"].is_object());
-        assert!(json["paths"]["/api/admin/v1/oauth2-sessions"].is_object());
-        assert!(json["paths"]["/api/admin/v1/oauth2-sessions/{id}"].is_object());
-        assert!(json["paths"]["/api/admin/v1/oauth2-sessions/{id}/finish"].is_object());
+        assert!(json["paths"]["/api/admin/v1/oauth-sessions"].is_object());
+        assert!(json["paths"]["/api/admin/v1/oauth-sessions/{id}"].is_object());
+        assert!(json["paths"]["/api/admin/v1/oauth-sessions/{id}/finish"].is_object());
         assert!(json["paths"]["/api/admin/v1/personal-sessions"].is_object());
         assert!(json["paths"]["/api/admin/v1/personal-sessions/{id}"].is_object());
         assert!(json["paths"]["/api/admin/v1/personal-sessions/{id}/revoke"].is_object());

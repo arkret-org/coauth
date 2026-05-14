@@ -2,7 +2,7 @@
 //!
 //! These endpoints let users manage their sessions, emails, passwords, and
 //! profile. All responses use JSON and authentication is via browser session
-//! cookies or OAuth 2.0 bearer tokens.
+//! cookies or OAuth bearer tokens.
 
 #![allow(clippy::module_name_repetitions)]
 
@@ -34,14 +34,14 @@ pub mod invite_relay;
 pub mod linked_accounts;
 pub mod mimi_consent;
 pub mod notification_prefs;
-pub mod oauth2_clients;
+pub mod oauth_clients;
 pub mod openapi;
 pub mod password;
 pub mod recovery;
 pub mod register;
 pub mod sessions;
 pub mod site_config;
-pub mod upstream_oauth2;
+pub mod upstream_oauth;
 pub mod users;
 pub mod viewer;
 
@@ -102,10 +102,10 @@ pub async fn verify_password_if_needed(
 pub enum NodeType {
     Authentication,
     BrowserSession,
-    OAuth2Client,
-    OAuth2Session,
-    UpstreamOAuth2Provider,
-    UpstreamOAuth2Link,
+    OAuthClient,
+    OAuthSession,
+    UpstreamOAuthProvider,
+    UpstreamOAuthLink,
     User,
     UserEmail,
     UserEmailAuthentication,
@@ -117,10 +117,10 @@ impl NodeType {
         match self {
             Self::Authentication => "authentication",
             Self::BrowserSession => "browser_session",
-            Self::OAuth2Client => "oauth2_client",
-            Self::OAuth2Session => "oauth2_session",
-            Self::UpstreamOAuth2Provider => "upstream_oauth2_provider",
-            Self::UpstreamOAuth2Link => "upstream_oauth2_link",
+            Self::OAuthClient => "oauth_client",
+            Self::OAuthSession => "oauth_session",
+            Self::UpstreamOAuthProvider => "upstream_oauth_provider",
+            Self::UpstreamOAuthLink => "upstream_oauth_link",
             Self::User => "user",
             Self::UserEmail => "user_email",
             Self::UserEmailAuthentication => "user_email_authentication",
@@ -132,10 +132,10 @@ impl NodeType {
         match prefix {
             "authentication" => Some(Self::Authentication),
             "browser_session" => Some(Self::BrowserSession),
-            "oauth2_client" => Some(Self::OAuth2Client),
-            "oauth2_session" => Some(Self::OAuth2Session),
-            "upstream_oauth2_provider" => Some(Self::UpstreamOAuth2Provider),
-            "upstream_oauth2_link" => Some(Self::UpstreamOAuth2Link),
+            "oauth_client" => Some(Self::OAuthClient),
+            "oauth_session" => Some(Self::OAuthSession),
+            "upstream_oauth_provider" => Some(Self::UpstreamOAuthProvider),
+            "upstream_oauth_link" => Some(Self::UpstreamOAuthLink),
             "user" => Some(Self::User),
             "user_email" => Some(Self::UserEmail),
             "user_email_authentication" => Some(Self::UserEmailAuthentication),

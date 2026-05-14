@@ -3,7 +3,7 @@ use coauth_data::{
     Clock, Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
     RepositoryTransaction as _, UserEmailPatch, UserPatch, UserProfilePatch,
     clock::MockClock,
-    upstream_oauth2::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter},
+    upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter},
     user::{
         BrowserSessionFilter, BrowserSessionRepository, UserEmailFilter, UserEmailRepository,
         UserFilter, UserPasswordRepository, UserRepository,
@@ -11,7 +11,7 @@ use coauth_data::{
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use diesel_async::RunQueryDsl;
-use oauth2_types::scope::{OPENID, Scope};
+use oauth_types::scope::{OPENID, Scope};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 

@@ -1,7 +1,7 @@
-//! Business logic for OAuth 2.0 token endpoint grant types.
+//! Business logic for OAuth token endpoint grant types.
 //!
 //! This module extracts the core grant-type handling out of the token endpoint
-//! HTTP handler (`oauth2::token`) so that the handler is responsible only for
+//! HTTP handler (`oauth::token`) so that the handler is responsible only for
 //! HTTP-level concerns (request parsing, client authentication, metrics,
 //! response formatting) while the actual authorization/token logic lives here.
 
@@ -12,9 +12,9 @@ use coauth_config::ContrixConfig;
 use coauth_data::{
     AuthorizationGrantStage, BoxRepository, Client, Clock, DeviceCodeGrantState, RepositoryAccess,
     RepositoryError, SiteConfig, TokenType, UrlBuilder,
-    oauth2::{
-        OAuth2AccessTokenRepository, OAuth2AuthorizationGrantRepository,
-        OAuth2RefreshTokenRepository, OAuth2SessionRepository,
+    oauth::{
+        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository,
+        OAuthRefreshTokenRepository, OAuthSessionRepository,
     },
     user::BrowserSessionRepository,
 };
@@ -23,7 +23,7 @@ use coauth_keystore::Keystore;
 use coauth_policy::Policy;
 use coauth_principal::PrincipalServerAdmin;
 use coauth_templates::{DeviceNameContext, TemplateContext, Templates};
-use oauth2_types::{
+use oauth_types::{
     pkce::CodeChallengeError,
     requests::{
         AccessTokenResponse, AuthorizationCodeGrant, ClientCredentialsGrant, DeviceCodeGrant,
@@ -38,7 +38,7 @@ use ulid::Ulid;
 use crate::{
     handlers::{
         BoundActivityTracker,
-        oauth2::{IdTokenSignatureError, generate_id_token, generate_token_pair},
+        oauth::{IdTokenSignatureError, generate_id_token, generate_token_pair},
     },
     oidc_client::types::scope::ScopeToken,
 };
@@ -262,7 +262,7 @@ pub async fn exchange_authorization_code(
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), AuthorizationCodeExchangeError> {
     debug!(
-        oauth2_client.id = %client.id,
+        oauth_client.id = %client.id,
         has_code_verifier = grant.code_verifier.is_some(),
         "Starting authorization_code token exchange"
     );
@@ -270,7 +270,7 @@ pub async fn exchange_authorization_code(
     // Check that the client is allowed to use this grant type
     if !client.grant_types.contains(&GrantType::AuthorizationCode) {
         warn!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             "Client attempted authorization_code exchange without authorization_code grant enabled"
         );
         return Err(AuthorizationCodeExchangeError::UnauthorizedClient(
@@ -279,14 +279,14 @@ pub async fn exchange_authorization_code(
     }
 
     let authz_grant = match repo
-        .oauth2_authorization_grant()
+        .oauth_authorization_grant()
         .find_by_code(&grant.code)
         .await?
     {
         Some(authz_grant) => authz_grant,
         None => {
             warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 has_code_verifier = grant.code_verifier.is_some(),
                 "Authorization code not found during token exchange"
             );
@@ -300,7 +300,7 @@ pub async fn exchange_authorization_code(
     let session_id = match authz_grant.stage {
         AuthorizationGrantStage::Cancelled { cancelled_at } => {
             warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 authorization_grant.id = %authz_grant.id,
                 %cancelled_at,
                 "Authorization grant was cancelled before token exchange"
@@ -313,9 +313,9 @@ pub async fn exchange_authorization_code(
             session_id,
         } => {
             warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 authorization_grant.id = %authz_grant.id,
-                oauth2_session.id = %session_id,
+                oauth_session.id = %session_id,
                 %exchanged_at,
                 %fulfilled_at,
                 "Authorization code was already exchanged"
@@ -324,11 +324,11 @@ pub async fn exchange_authorization_code(
             // Ending the session if the token was already exchanged more than 20s ago
             if now - exchanged_at > Duration::microseconds(20 * 1000 * 1000) {
                 warn!(oauth_session.id = %session_id, "Ending potentially compromised session");
-                let session = repo.oauth2_session().lookup(session_id).await?.ok_or(
+                let session = repo.oauth_session().lookup(session_id).await?.ok_or(
                     AuthorizationCodeExchangeError::NoSuchOAuthSession(session_id),
                 )?;
 
-                repo.oauth2_session().finish(clock, session).await?;
+                repo.oauth_session().finish(clock, session).await?;
                 repo.save().await?;
             }
 
@@ -336,7 +336,7 @@ pub async fn exchange_authorization_code(
         }
         AuthorizationGrantStage::Pending => {
             warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 authorization_grant.id = %authz_grant.id,
                 "Authorization grant has not been fulfilled yet"
             );
@@ -348,9 +348,9 @@ pub async fn exchange_authorization_code(
         } => {
             if now - fulfilled_at > Duration::microseconds(10 * 60 * 1000 * 1000) {
                 warn!(
-                    oauth2_client.id = %client.id,
+                    oauth_client.id = %client.id,
                     authorization_grant.id = %authz_grant.id,
-                    oauth2_session.id = %session_id,
+                    oauth_session.id = %session_id,
                     %fulfilled_at,
                     "Code exchange took more than 10 minutes"
                 );
@@ -361,13 +361,13 @@ pub async fn exchange_authorization_code(
         }
     };
 
-    let mut session = match repo.oauth2_session().lookup(session_id).await? {
+    let mut session = match repo.oauth_session().lookup(session_id).await? {
         Some(session) => session,
         None => {
             error!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 authorization_grant.id = %authz_grant.id,
-                oauth2_session.id = %session_id,
+                oauth_session.id = %session_id,
                 "OAuth session missing during authorization_code exchange"
             );
             return Err(AuthorizationCodeExchangeError::NoSuchOAuthSession(
@@ -379,9 +379,9 @@ pub async fn exchange_authorization_code(
     let requested_scopes = scope_tokens(&session.scope);
     let requested_device_ids = client_device_ids(&session.scope);
     debug!(
-        oauth2_client.id = %client.id,
+        oauth_client.id = %client.id,
         authorization_grant.id = %authz_grant.id,
-        oauth2_session.id = %session.id,
+        oauth_session.id = %session.id,
         scopes = ?requested_scopes,
         openid_requested = session.scope.contains(&scope::OPENID),
         device_ids = ?requested_device_ids,
@@ -395,7 +395,7 @@ pub async fn exchange_authorization_code(
 
     if let Some(user_agent) = user_agent {
         session = repo
-            .oauth2_session()
+            .oauth_session()
             .record_user_agent(session, user_agent)
             .await?;
     }
@@ -405,9 +405,9 @@ pub async fn exchange_authorization_code(
         Some(code) => code,
         None => {
             error!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 authorization_grant.id = %authz_grant.id,
-                oauth2_session.id = %session.id,
+                oauth_session.id = %session.id,
                 "Authorization grant is missing embedded code payload during token exchange"
             );
             return Err(AuthorizationCodeExchangeError::InvalidGrant(authz_grant.id));
@@ -416,9 +416,9 @@ pub async fn exchange_authorization_code(
 
     if client.id != session.client_id {
         warn!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             authorization_grant.id = %authz_grant.id,
-            oauth2_session.id = %session.id,
+            oauth_session.id = %session.id,
             expected_client.id = %session.client_id,
             "Authorization code exchange client mismatch"
         );
@@ -433,9 +433,9 @@ pub async fn exchange_authorization_code(
         // We have a challenge but no verifier (or vice-versa)? Bad request.
         (Some(_), None) | (None, Some(_)) => {
             warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 authorization_grant.id = %authz_grant.id,
-                oauth2_session.id = %session.id,
+                oauth_session.id = %session.id,
                 has_pkce_challenge = code.pkce.is_some(),
                 has_code_verifier = grant.code_verifier.is_some(),
                 "PKCE parameters missing or mismatched during authorization_code exchange"
@@ -450,10 +450,10 @@ pub async fn exchange_authorization_code(
 
     let Some(user_session_id) = session.user_session_id else {
         warn!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             authorization_grant.id = %authz_grant.id,
-            oauth2_session.id = %session.id,
-            "No user session associated with this OAuth2 session"
+            oauth_session.id = %session.id,
+            "No user session associated with this OAuth session"
         );
         return Err(AuthorizationCodeExchangeError::InvalidGrant(authz_grant.id));
     };
@@ -462,9 +462,9 @@ pub async fn exchange_authorization_code(
         Some(browser_session) => browser_session,
         None => {
             error!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 authorization_grant.id = %authz_grant.id,
-                oauth2_session.id = %session.id,
+                oauth_session.id = %session.id,
                 browser_session.id = %user_session_id,
                 "Browser session missing during authorization_code exchange"
             );
@@ -485,9 +485,9 @@ pub async fn exchange_authorization_code(
 
     let id_token = if session.scope.contains(&scope::OPENID) {
         debug!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             authorization_grant.id = %authz_grant.id,
-            oauth2_session.id = %session.id,
+            oauth_session.id = %session.id,
             browser_session.id = %browser_session.id,
             "Generating ID token because openid scope is present"
         );
@@ -507,9 +507,9 @@ pub async fn exchange_authorization_code(
             )
             .map_err(|err| {
                 error!(
-                    oauth2_client.id = %client.id,
+                    oauth_client.id = %client.id,
                     authorization_grant.id = %authz_grant.id,
-                    oauth2_session.id = %session.id,
+                    oauth_session.id = %session.id,
                     browser_session.id = %browser_session.id,
                     error = %err,
                     error_debug = ?err,
@@ -539,9 +539,9 @@ pub async fn exchange_authorization_code(
     // Look for device to provision
     if !requested_device_ids.is_empty() {
         debug!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             authorization_grant.id = %authz_grant.id,
-            oauth2_session.id = %session.id,
+            oauth_session.id = %session.id,
             browser_session.id = %browser_session.id,
             device_ids = ?requested_device_ids,
             "Provisioning client devices during authorization_code exchange"
@@ -557,9 +557,9 @@ pub async fn exchange_authorization_code(
             .await
             .map_err(|err| {
                 error!(
-                    oauth2_client.id = %client.id,
+                    oauth_client.id = %client.id,
                     authorization_grant.id = %authz_grant.id,
-                    oauth2_session.id = %session.id,
+                    oauth_session.id = %session.id,
                     browser_session.id = %browser_session.id,
                     principal_device.id = %device_id,
                     error = %err,
@@ -570,7 +570,7 @@ pub async fn exchange_authorization_code(
             })?;
     }
 
-    repo.oauth2_authorization_grant()
+    repo.oauth_authorization_grant()
         .exchange(clock, authz_grant)
         .await?;
 
@@ -578,13 +578,13 @@ pub async fn exchange_authorization_code(
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker
-        .record_oauth2_session(clock, &session)
+        .record_oauth_session(clock, &session)
         .await;
 
     debug!(
-        oauth2_client.id = %client.id,
+        oauth_client.id = %client.id,
         authorization_grant.id = %authorization_grant_id,
-        oauth2_session.id = %session.id,
+        oauth_session.id = %session.id,
         browser_session.id = %browser_session.id,
         "Authorization_code token exchange completed"
     );
@@ -614,13 +614,13 @@ pub async fn handle_refresh_token(
     }
 
     let refresh_token = repo
-        .oauth2_refresh_token()
+        .oauth_refresh_token()
         .find_by_token(&grant.refresh_token)
         .await?
         .ok_or(RefreshTokenExchangeError::RefreshTokenNotFound)?;
 
     let mut session = repo
-        .oauth2_session()
+        .oauth_session()
         .lookup(refresh_token.session_id)
         .await?
         .ok_or(RefreshTokenExchangeError::NoSuchOAuthSession(
@@ -631,7 +631,7 @@ pub async fn handle_refresh_token(
     // responsive enough and not too much of a burden on the database.
     if let Some(user_agent) = user_agent {
         session = repo
-            .oauth2_session()
+            .oauth_session()
             .record_user_agent(session, user_agent)
             .await?;
     }
@@ -662,7 +662,7 @@ pub async fn handle_refresh_token(
         };
 
         let Some(next_refresh_token) = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .lookup(next_refresh_token_id)
             .await?
         else {
@@ -691,7 +691,7 @@ pub async fn handle_refresh_token(
 
         // Load it
         let next_access_token = repo
-            .oauth2_access_token()
+            .oauth_access_token()
             .lookup(access_token_id)
             .await?
             .ok_or(RefreshTokenExchangeError::NoSuchNextAccessToken {
@@ -710,23 +710,23 @@ pub async fn handle_refresh_token(
         // the way back. Let's revoke the unused access and refresh tokens, and
         // issue new ones
         info!(
-            oauth2_session.id = %session.id,
-            oauth2_client.id = %client.id,
+            oauth_session.id = %session.id,
+            oauth_client.id = %client.id,
             %refresh_token.id,
             "Refresh token already used, but issued refresh and access tokens are unused. Assuming those were lost; revoking those and reissuing new ones."
         );
 
-        repo.oauth2_access_token()
+        repo.oauth_access_token()
             .revoke(clock, next_access_token)
             .await?;
 
-        repo.oauth2_refresh_token()
+        repo.oauth_refresh_token()
             .revoke(clock, next_refresh_token)
             .await?;
     }
 
     activity_tracker
-        .record_oauth2_session(clock, &session)
+        .record_oauth_session(clock, &session)
         .await;
 
     let ttl = site_config.access_token_ttl;
@@ -734,16 +734,16 @@ pub async fn handle_refresh_token(
         generate_token_pair(rng, clock, &mut repo, &session, ttl).await?;
 
     let refresh_token = repo
-        .oauth2_refresh_token()
+        .oauth_refresh_token()
         .consume(clock, refresh_token, &new_refresh_token)
         .await?;
 
     if let Some(access_token_id) = refresh_token.access_token_id {
-        let access_token = repo.oauth2_access_token().lookup(access_token_id).await?;
+        let access_token = repo.oauth_access_token().lookup(access_token_id).await?;
         if let Some(access_token) = access_token {
             // If it is a double-refresh, it might already be revoked
             if !access_token.state.is_revoked() {
-                repo.oauth2_access_token()
+                repo.oauth_access_token()
                     .revoke(clock, access_token)
                     .await?;
             }
@@ -807,13 +807,13 @@ pub async fn handle_client_credentials(
 
     // Start the session
     let mut session = repo
-        .oauth2_session()
+        .oauth_session()
         .add_from_client_credentials(rng, clock, client, scope)
         .await?;
 
     if let Some(user_agent) = user_agent {
         session = repo
-            .oauth2_session()
+            .oauth_session()
             .record_user_agent(session, user_agent)
             .await?;
     }
@@ -822,7 +822,7 @@ pub async fn handle_client_credentials(
     let access_token_str = TokenType::AccessToken.generate(rng);
 
     let access_token = repo
-        .oauth2_access_token()
+        .oauth_access_token()
         .add(rng, clock, &session, access_token_str, Some(ttl))
         .await?;
 
@@ -832,7 +832,7 @@ pub async fn handle_client_credentials(
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker
-        .record_oauth2_session(clock, &session)
+        .record_oauth_session(clock, &session)
         .await;
 
     if !session.scope.is_empty() {
@@ -845,7 +845,7 @@ pub async fn handle_client_credentials(
 
 /// Exchange a device code for tokens.
 ///
-/// Validates the device code grant state, creates an OAuth 2.0 session,
+/// Validates the device code grant state, creates an OAuth session,
 /// generates tokens (including an optional ID token and refresh token),
 /// and provisions the bound principal device.
 #[allow(clippy::too_many_arguments)]
@@ -864,14 +864,14 @@ pub async fn exchange_device_code(
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), DeviceCodeExchangeError> {
     debug!(
-        oauth2_client.id = %client.id,
+        oauth_client.id = %client.id,
         "Starting device_code token exchange"
     );
 
     // Check that the client is allowed to use this grant type
     if !client.grant_types.contains(&GrantType::DeviceCode) {
         warn!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             "Client attempted device_code exchange without device_code grant enabled"
         );
         return Err(DeviceCodeExchangeError::UnauthorizedClient(client.id));
@@ -885,7 +885,7 @@ pub async fn exchange_device_code(
         Some(grant) => grant,
         None => {
             warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 "Device code grant not found during token exchange"
             );
             return Err(DeviceCodeExchangeError::GrantNotFound);
@@ -896,7 +896,7 @@ pub async fn exchange_device_code(
     // Check that the client match
     if client.id != grant.client_id {
         warn!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             device_code_grant.id = %grant.id,
             expected_client.id = %grant.client_id,
             "Device code exchange client mismatch"
@@ -909,7 +909,7 @@ pub async fn exchange_device_code(
 
     if grant.expires_at < clock.now() {
         warn!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             device_code_grant.id = %grant.id,
             expires_at = %grant.expires_at,
             "Device code grant expired before token exchange"
@@ -920,7 +920,7 @@ pub async fn exchange_device_code(
     let browser_session_id = match &grant.state {
         DeviceCodeGrantState::Pending => {
             debug!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 device_code_grant.id = %grant.id,
                 "Device code grant is still pending"
             );
@@ -928,7 +928,7 @@ pub async fn exchange_device_code(
         }
         DeviceCodeGrantState::Rejected { .. } => {
             warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 device_code_grant.id = %grant.id,
                 "Device code grant was rejected"
             );
@@ -936,7 +936,7 @@ pub async fn exchange_device_code(
         }
         DeviceCodeGrantState::Exchanged { .. } => {
             warn!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 device_code_grant.id = %grant.id,
                 "Device code grant was already exchanged"
             );
@@ -951,7 +951,7 @@ pub async fn exchange_device_code(
         Some(browser_session) => browser_session,
         None => {
             error!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 device_code_grant.id = %grant.id,
                 browser_session.id = %browser_session_id,
                 "Browser session missing during device_code exchange"
@@ -964,16 +964,16 @@ pub async fn exchange_device_code(
 
     // Start the session
     let mut session = repo
-        .oauth2_session()
+        .oauth_session()
         .add_from_browser_session(rng, clock, client, &browser_session, grant.scope.clone())
         .await?;
 
     let requested_scopes = scope_tokens(&session.scope);
     let requested_device_ids = client_device_ids(&session.scope);
     debug!(
-        oauth2_client.id = %client.id,
+        oauth_client.id = %client.id,
         device_code_grant.id = %grant.id,
-        oauth2_session.id = %session.id,
+        oauth_session.id = %session.id,
         browser_session.id = %browser_session.id,
         scopes = ?requested_scopes,
         openid_requested = session.scope.contains(&scope::OPENID),
@@ -988,7 +988,7 @@ pub async fn exchange_device_code(
     // XXX: should we get the user agent from the device code grant instead?
     if let Some(user_agent) = user_agent {
         session = repo
-            .oauth2_session()
+            .oauth_session()
             .record_user_agent(session, user_agent)
             .await?;
     }
@@ -997,7 +997,7 @@ pub async fn exchange_device_code(
     let access_token_str = TokenType::AccessToken.generate(rng);
 
     let access_token = repo
-        .oauth2_access_token()
+        .oauth_access_token()
         .add(rng, clock, &session, access_token_str, Some(ttl))
         .await?;
 
@@ -1010,7 +1010,7 @@ pub async fn exchange_device_code(
         let refresh_token_str = TokenType::RefreshToken.generate(rng);
 
         let refresh_token = repo
-            .oauth2_refresh_token()
+            .oauth_refresh_token()
             .add(rng, clock, &session, &access_token, refresh_token_str)
             .await?;
 
@@ -1020,9 +1020,9 @@ pub async fn exchange_device_code(
     // If the client asked for an ID token, we generate one
     if session.scope.contains(&scope::OPENID) {
         debug!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             device_code_grant.id = %device_code_grant_id,
-            oauth2_session.id = %session.id,
+            oauth_session.id = %session.id,
             browser_session.id = %browser_session.id,
             "Generating ID token because openid scope is present"
         );
@@ -1041,9 +1041,9 @@ pub async fn exchange_device_code(
         )
         .map_err(|err| {
             error!(
-                oauth2_client.id = %client.id,
+                oauth_client.id = %client.id,
                 device_code_grant.id = %device_code_grant_id,
-                oauth2_session.id = %session.id,
+                oauth_session.id = %session.id,
                 browser_session.id = %browser_session.id,
                 error = %err,
                 error_debug = ?err,
@@ -1063,9 +1063,9 @@ pub async fn exchange_device_code(
     // Look for device to provision
     if !requested_device_ids.is_empty() {
         debug!(
-            oauth2_client.id = %client.id,
+            oauth_client.id = %client.id,
             device_code_grant.id = %device_code_grant_id,
-            oauth2_session.id = %session.id,
+            oauth_session.id = %session.id,
             browser_session.id = %browser_session.id,
             device_ids = ?requested_device_ids,
             "Provisioning client devices during device_code exchange"
@@ -1077,9 +1077,9 @@ pub async fn exchange_device_code(
             .await
             .map_err(|err| {
                 error!(
-                    oauth2_client.id = %client.id,
+                    oauth_client.id = %client.id,
                     device_code_grant.id = %device_code_grant_id,
-                    oauth2_session.id = %session.id,
+                    oauth_session.id = %session.id,
                     browser_session.id = %browser_session.id,
                     principal_device.id = %device_id,
                     error = %err,
@@ -1094,7 +1094,7 @@ pub async fn exchange_device_code(
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker
-        .record_oauth2_session(clock, &session)
+        .record_oauth_session(clock, &session)
         .await;
 
     if !session.scope.is_empty() {
@@ -1103,9 +1103,9 @@ pub async fn exchange_device_code(
     }
 
     debug!(
-        oauth2_client.id = %client.id,
+        oauth_client.id = %client.id,
         device_code_grant.id = %device_code_grant_id,
-        oauth2_session.id = %session.id,
+        oauth_session.id = %session.id,
         browser_session.id = %browser_session.id,
         "Device_code token exchange completed"
     );

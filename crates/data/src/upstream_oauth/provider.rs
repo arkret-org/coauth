@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use coauth_iana::jose::JsonWebSignatureAlg;
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ulid::Ulid;
@@ -110,7 +110,7 @@ impl std::fmt::Display for PkceMode {
     }
 }
 
-/// coauth extension: response mode for the upstream OAuth 2.0 authorization
+/// coauth extension: response mode for the upstream OAuth authorization
 /// request.
 #[derive(Debug, Clone, Error)]
 #[error("Invalid response mode {0:?}")]
@@ -124,11 +124,11 @@ pub enum ResponseMode {
     FormPost,
 }
 
-impl From<ResponseMode> for oauth2_types::requests::ResponseMode {
+impl From<ResponseMode> for oauth_types::requests::ResponseMode {
     fn from(value: ResponseMode) -> Self {
         match value {
-            ResponseMode::Query => oauth2_types::requests::ResponseMode::Query,
-            ResponseMode::FormPost => oauth2_types::requests::ResponseMode::FormPost,
+            ResponseMode::Query => oauth_types::requests::ResponseMode::Query,
+            ResponseMode::FormPost => oauth_types::requests::ResponseMode::FormPost,
         }
     }
 }
@@ -210,7 +210,7 @@ impl std::fmt::Display for TokenAuthMethod {
 }
 
 impl std::str::FromStr for TokenAuthMethod {
-    type Err = InvalidUpstreamOAuth2TokenAuthMethod;
+    type Err = InvalidUpstreamOAuthTokenAuthMethod;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -226,14 +226,14 @@ impl std::str::FromStr for TokenAuthMethod {
             "dingtalk" => Ok(Self::DingTalk),
             "wechat" => Ok(Self::WeChat),
             "wecom" => Ok(Self::WeCom),
-            s => Err(InvalidUpstreamOAuth2TokenAuthMethod(s.to_owned())),
+            s => Err(InvalidUpstreamOAuthTokenAuthMethod(s.to_owned())),
         }
     }
 }
 
 #[derive(Debug, Clone, Error)]
-#[error("Invalid upstream OAuth 2.0 token auth method: {0}")]
-pub struct InvalidUpstreamOAuth2TokenAuthMethod(String);
+#[error("Invalid upstream OAuth token auth method: {0}")]
+pub struct InvalidUpstreamOAuthTokenAuthMethod(String);
 
 /// coauth extension: behaviour on receiving a backchannel logout from an
 /// upstream provider.
@@ -263,21 +263,21 @@ impl std::fmt::Display for OnBackchannelLogout {
 }
 
 impl std::str::FromStr for OnBackchannelLogout {
-    type Err = InvalidUpstreamOAuth2OnBackchannelLogout;
+    type Err = InvalidUpstreamOAuthOnBackchannelLogout;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "do_nothing" => Ok(Self::DoNothing),
             "logout_browser_only" => Ok(Self::LogoutBrowserOnly),
             "logout_all" => Ok(Self::LogoutAll),
-            s => Err(InvalidUpstreamOAuth2OnBackchannelLogout(s.to_owned())),
+            s => Err(InvalidUpstreamOAuthOnBackchannelLogout(s.to_owned())),
         }
     }
 }
 
 #[derive(Debug, Clone, Error)]
-#[error("Invalid upstream OAuth 2.0 'on backchannel logout': {0}")]
-pub struct InvalidUpstreamOAuth2OnBackchannelLogout(String);
+#[error("Invalid upstream OAuth 'on backchannel logout': {0}")]
+pub struct InvalidUpstreamOAuthOnBackchannelLogout(String);
 
 /// The origin of an upstream OAuth provider row.
 ///
@@ -509,18 +509,18 @@ impl ImportAction {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum OnConflict {
-    /// Fails the upstream OAuth 2.0 login on conflict
+    /// Fails the upstream OAuth login on conflict
     #[default]
     Fail,
 
-    /// Adds the upstream OAuth 2.0 identity link, regardless of whether there
+    /// Adds the upstream OAuth identity link, regardless of whether there
     /// is an existing link or not
     Add,
 
-    /// Replace any existing upstream OAuth 2.0 identity link
+    /// Replace any existing upstream OAuth identity link
     Replace,
 
-    /// Adds the upstream OAuth 2.0 identity link *only* if there is no existing
+    /// Adds the upstream OAuth identity link *only* if there is no existing
     /// link for this provider on the matching user
     Set,
 }

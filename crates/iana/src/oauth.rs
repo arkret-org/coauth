@@ -1,4 +1,4 @@
-//! OAuth 2.0 IANA registry values.
+//! OAuth IANA registry values.
 //!
 //! See <https://www.iana.org/assignments/oauth-parameters/oauth-parameters.xhtml>
 

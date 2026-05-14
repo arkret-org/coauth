@@ -9,7 +9,7 @@ use crate::salvo_utils::{
 };
 use coauth_data::{
     RepositoryAccess,
-    upstream_oauth2::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
+    upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
     user::UserRepository,
 };
 use coauth_templates::{
@@ -24,7 +24,7 @@ use ulid::Ulid;
 use super::UpstreamSessionsCookie;
 use crate::handlers::{
     METER, common::DepotExt,
-    upstream_oauth2::link_workflow::{
+    upstream_oauth::link_workflow::{
         LoadUpstreamLinkOutcome, SubmitUpstreamLinkError, SubmitUpstreamLinkOutcome,
         UpstreamLinkAction, UpstreamLinkRegistrationAction, UpstreamLinkWorkflowError,
         load_upstream_link_context, load_upstream_link_state, submit_upstream_link_action,
@@ -34,15 +34,15 @@ use crate::handlers::{
 
 static LOGIN_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("coauth.upstream_oauth2.login")
-        .with_description("Successful upstream OAuth 2.0 login to existing accounts")
+        .u64_counter("coauth.upstream_oauth.login")
+        .with_description("Successful upstream OAuth login to existing accounts")
         .with_unit("{login}")
         .build()
 });
 static REGISTRATION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
-        .u64_counter("coauth.upstream_oauth2.registration")
-        .with_description("Successful upstream OAuth 2.0 registration")
+        .u64_counter("coauth.upstream_oauth.registration")
+        .with_description("Successful upstream OAuth registration")
         .with_unit("{registration}")
         .build()
 });
@@ -120,7 +120,7 @@ impl ToFormState for FormData {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.upstream_oauth2.link.get", skip_all)]
+#[tracing::instrument(name = "handlers.upstream_oauth.link.get", skip_all)]
 pub async fn get(
     req: &mut Request,
     depot: &mut Depot,
@@ -287,7 +287,7 @@ pub async fn get(
 
             cookie_jar.finalize(
                 res,
-                Text::Html(templates.render_upstream_oauth2_link_mismatch(&ctx)?),
+                Text::Html(templates.render_upstream_oauth_link_mismatch(&ctx)?),
             );
         }
 
@@ -314,7 +314,7 @@ pub async fn get(
 
             cookie_jar.finalize(
                 res,
-                Text::Html(templates.render_upstream_oauth2_suggest_link(&ctx)?),
+                Text::Html(templates.render_upstream_oauth_suggest_link(&ctx)?),
             );
         }
 
@@ -337,7 +337,7 @@ pub async fn get(
 
             cookie_jar.finalize(
                 res,
-                Text::Html(templates.render_upstream_oauth2_do_register(&ctx)?),
+                Text::Html(templates.render_upstream_oauth_do_register(&ctx)?),
             );
         }
 
@@ -397,7 +397,7 @@ pub async fn get(
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.upstream_oauth2.link.post", skip_all)]
+#[tracing::instrument(name = "handlers.upstream_oauth.link.post", skip_all)]
 pub async fn post(
     req: &mut Request,
     depot: &mut Depot,
@@ -567,7 +567,7 @@ pub async fn post(
 
             cookie_jar.finalize(
                 res,
-                Text::Html(templates.render_upstream_oauth2_do_register(&ctx)?),
+                Text::Html(templates.render_upstream_oauth_do_register(&ctx)?),
             );
             Ok(())
         }
@@ -579,7 +579,7 @@ pub async fn post(
 #[cfg(test)]
 mod tests {
     use hyper::{Request, StatusCode, header::CONTENT_TYPE};
-    use oauth2_types::scope::{OPENID, Scope};
+    use oauth_types::scope::{OPENID, Scope};
     use coauth_data::{
         UpstreamOAuthAuthorizationSession, UpstreamOAuthLink, UpstreamOAuthProviderClaimsImports,
         UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderHandlePreference,
@@ -589,7 +589,7 @@ mod tests {
     use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
     use coauth_keystore::Keystore;
     use coauth_data::{
-        Repository, RepositoryError, upstream_oauth2::UpstreamOAuthProviderParams,
+        Repository, RepositoryError, upstream_oauth::UpstreamOAuthProviderParams,
     };
     use rand_chacha::ChaChaRng;
     use serde_json::Value;

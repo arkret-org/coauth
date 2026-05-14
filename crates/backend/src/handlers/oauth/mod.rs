@@ -3,9 +3,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//! OAuth 2.0 and OpenID Connect protocol endpoint handlers.
+//! OAuth and OpenID Connect protocol endpoint handlers.
 //!
-//! This module implements the server-side of the OAuth 2.0 / OIDC flows:
+//! This module implements the server-side of the OAuth / OIDC flows:
 //!
 //! - [`authorization`] — Authorization endpoint (authorization code grant)
 //! - [`token`] — Token endpoint (exchange codes / credentials for tokens)
@@ -154,7 +154,7 @@ pub(crate) fn generate_id_token(
     Ok(id_token.into_string())
 }
 
-/// Generate a new access-token / refresh-token pair for an OAuth 2.0 session
+/// Generate a new access-token / refresh-token pair for an OAuth session
 /// and persist them in the repository.
 pub(crate) async fn generate_token_pair<R: RepositoryAccess>(
     rng: &mut (impl rand_core::RngCore + Send),
@@ -167,12 +167,12 @@ pub(crate) async fn generate_token_pair<R: RepositoryAccess>(
     let refresh_token_str = TokenType::RefreshToken.generate(rng);
 
     let access_token = repo
-        .oauth2_access_token()
+        .oauth_access_token()
         .add(rng, clock, session, access_token_str, Some(ttl))
         .await?;
 
     let refresh_token = repo
-        .oauth2_refresh_token()
+        .oauth_refresh_token()
         .add(rng, clock, session, &access_token, refresh_token_str)
         .await?;
 

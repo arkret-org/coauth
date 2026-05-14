@@ -1,6 +1,6 @@
 //! # Provider adapter boundary
 //!
-//! Upstream OAuth2 integration spans two layers:
+//! Upstream OAuth integration spans two layers:
 //!
 //! - **Connector layer** (`crates/oidc-client/`): Protocol-level operations
 //!   (discovery, authorization URL, token exchange, userinfo). These are
@@ -12,7 +12,7 @@
 //!   logic is delegated to `upstream_link_workflow.rs`.
 //!
 //! The `ConnectorRegistry` provides runtime provider lookup. Each upstream
-//! OAuth2 provider is NOT a `ConnectorProvider` (that's for PrincipalServers).
+//! OAuth provider is NOT a `ConnectorProvider` (that's for PrincipalServers).
 //! Instead, upstream providers are managed through
 //! `UpstreamOAuthProviderRepository`.
 

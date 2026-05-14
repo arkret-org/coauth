@@ -9,14 +9,14 @@ use uuid::Uuid;
 
 use crate::{DatabaseError, schema::oauth_access_tokens};
 
-/// An implementation of [`OAuth2AccessTokenRepository`] for a PostgreSQL
+/// An implementation of [`OAuthAccessTokenRepository`] for a PostgreSQL
 /// connection
-pub struct PgOAuth2AccessTokenRepository<'c> {
+pub struct PgOAuthAccessTokenRepository<'c> {
     conn: &'c mut diesel_async::AsyncPgConnection,
 }
 
-impl<'c> PgOAuth2AccessTokenRepository<'c> {
-    /// Create a new [`PgOAuth2AccessTokenRepository`] from an active PostgreSQL
+impl<'c> PgOAuthAccessTokenRepository<'c> {
+    /// Create a new [`PgOAuthAccessTokenRepository`] from an active PostgreSQL
     /// connection
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
@@ -26,7 +26,7 @@ impl<'c> PgOAuth2AccessTokenRepository<'c> {
 /// Row type for loading access tokens from the database
 #[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = oauth_access_tokens)]
-struct OAuth2AccessTokenRow {
+struct OAuthAccessTokenRow {
     id: Uuid,
     oauth_session_id: Uuid,
     access_token: String,
@@ -36,8 +36,8 @@ struct OAuth2AccessTokenRow {
     first_used_at: Option<DateTime<Utc>>,
 }
 
-impl From<OAuth2AccessTokenRow> for AccessToken {
-    fn from(value: OAuth2AccessTokenRow) -> Self {
+impl From<OAuthAccessTokenRow> for AccessToken {
+    fn from(value: OAuthAccessTokenRow) -> Self {
         let state = match value.revoked_at {
             None => AccessTokenState::Valid,
             Some(revoked_at) => AccessTokenState::Revoked { revoked_at },
@@ -58,7 +58,7 @@ impl From<OAuth2AccessTokenRow> for AccessToken {
 /// Insertable row for creating a new access token
 #[derive(Insertable)]
 #[diesel(table_name = oauth_access_tokens)]
-struct NewOAuth2AccessToken {
+struct NewOAuthAccessToken {
     id: Uuid,
     oauth_session_id: Uuid,
     access_token: String,
@@ -76,11 +76,11 @@ struct CleanupResult {
 }
 
 #[async_trait]
-impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRepository<'_> {
+impl coauth_data::oauth::OAuthAccessTokenRepository for PgOAuthAccessTokenRepository<'_> {
     type Error = DatabaseError;
 
     #[tracing::instrument(
-        name = "db.oauth2_access_token.lookup",
+        name = "db.oauth_access_token.lookup",
         skip_all,
         fields(access_token.id = %id),
         err,
@@ -88,23 +88,23 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
     async fn lookup(&mut self, id: Ulid) -> Result<Option<AccessToken>, Self::Error> {
         let res = oauth_access_tokens::table
             .find(Uuid::from(id))
-            .select(OAuth2AccessTokenRow::as_select())
-            .first::<OAuth2AccessTokenRow>(self.conn)
+            .select(OAuthAccessTokenRow::as_select())
+            .first::<OAuthAccessTokenRow>(self.conn)
             .await
             .optional()?;
 
         Ok(res.map(AccessToken::from))
     }
 
-    #[tracing::instrument(name = "db.oauth2_access_token.find_by_token", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_access_token.find_by_token", skip_all, err)]
     async fn find_by_token(
         &mut self,
         access_token: &str,
     ) -> Result<Option<AccessToken>, Self::Error> {
         let res = oauth_access_tokens::table
             .filter(oauth_access_tokens::access_token.eq(access_token))
-            .select(OAuth2AccessTokenRow::as_select())
-            .first::<OAuth2AccessTokenRow>(self.conn)
+            .select(OAuthAccessTokenRow::as_select())
+            .first::<OAuthAccessTokenRow>(self.conn)
             .await
             .optional()?;
 
@@ -112,7 +112,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_access_token.add",
+        name = "db.oauth_access_token.add",
         skip_all,
         fields(
             %session.id,
@@ -135,7 +135,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
 
         tracing::Span::current().record("access_token.id", tracing::field::display(id));
 
-        let new_row = NewOAuth2AccessToken {
+        let new_row = NewOAuthAccessToken {
             id: Uuid::from(id),
             oauth_session_id: Uuid::from(session.id),
             access_token: access_token.clone(),
@@ -160,7 +160,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_access_token.revoke",
+        name = "db.oauth_access_token.revoke",
         skip_all,
         fields(
             session.id = %access_token.session_id,
@@ -188,7 +188,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_access_token.mark_used",
+        name = "db.oauth_access_token.mark_used",
         skip_all,
         fields(
             session.id = %access_token.session_id,
@@ -216,7 +216,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_access_token.cleanup_revoked",
+        name = "db.oauth_access_token.cleanup_revoked",
         skip_all,
         fields(
             since = since.map(tracing::field::display),
@@ -270,7 +270,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_access_token.cleanup_expired",
+        name = "db.oauth_access_token.cleanup_expired",
         skip_all,
         fields(
             since = since.map(tracing::field::display),

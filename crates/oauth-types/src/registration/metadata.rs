@@ -27,7 +27,7 @@ use crate::{
 /// All the fields with a default value are accessible via methods.
 ///
 /// Fields are organized by spec section:
-/// - RFC 7591 (OAuth 2.0 Dynamic Client Registration) core fields
+/// - RFC 7591 (OAuth Dynamic Client Registration) core fields
 /// - OpenID Connect Registration 1.0 fields
 /// - RFC 9101 / RFC 9126 extension fields
 /// - Token introspection extension fields
@@ -37,7 +37,7 @@ use crate::{
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 #[serde(from = "ClientMetadataSerdeHelper", into = "ClientMetadataSerdeHelper")]
 pub struct ClientMetadata {
-    // -- RFC 7591: OAuth 2.0 Dynamic Client Registration Protocol --
+    // -- RFC 7591: OAuth Dynamic Client Registration Protocol --
     /// Array of redirection URIs for use in redirect-based flows such as the
     /// [authorization code flow].
     ///
@@ -49,7 +49,7 @@ pub struct ClientMetadata {
     /// [authorization code flow]: https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
     pub redirect_uris: Option<Vec<Url>>,
 
-    /// Array of the [OAuth 2.0 `response_type` values] that the client can use
+    /// Array of the [OAuth `response_type` values] that the client can use
     /// at the [authorization endpoint].
     ///
     /// All the types used by the client in an authorization request's
@@ -57,11 +57,11 @@ pub struct ClientMetadata {
     ///
     /// Defaults to [`DEFAULT_RESPONSE_TYPES`].
     ///
-    /// [OAuth 2.0 `response_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
+    /// [OAuth `response_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
     /// [authorization endpoint]: https://www.rfc-editor.org/rfc/rfc6749.html#section-3.1
     pub response_types: Option<Vec<ResponseType>>,
 
-    /// Array of [OAuth 2.0 `grant_type` values] that the client can use at the
+    /// Array of [OAuth `grant_type` values] that the client can use at the
     /// [token endpoint].
     ///
     /// The possible grant types depend on the response types. Declaring support
@@ -73,7 +73,7 @@ pub struct ClientMetadata {
     ///
     /// Defaults to [`DEFAULT_GRANT_TYPES`].
     ///
-    /// [OAuth 2.0 `grant_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
+    /// [OAuth `grant_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
     /// [token endpoint]: https://www.rfc-editor.org/rfc/rfc6749.html#section-3.2
     pub grant_types: Option<Vec<GrantType>>,
 
@@ -555,7 +555,7 @@ impl ClientMetadata {
         self
     }
 
-    /// Array of the [OAuth 2.0 `response_type` values] that the client can use
+    /// Array of the [OAuth `response_type` values] that the client can use
     /// at the [authorization endpoint].
     ///
     /// All the types used by the client in an authorization request's
@@ -563,7 +563,7 @@ impl ClientMetadata {
     ///
     /// Defaults to [`DEFAULT_RESPONSE_TYPES`].
     ///
-    /// [OAuth 2.0 `response_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
+    /// [OAuth `response_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
     /// [authorization endpoint]: https://www.rfc-editor.org/rfc/rfc6749.html#section-3.1
     #[must_use]
     pub fn response_types(&self) -> Vec<ResponseType> {
@@ -575,7 +575,7 @@ impl ClientMetadata {
         })
     }
 
-    /// Array of [OAuth 2.0 `grant_type` values] that the client can use at the
+    /// Array of [OAuth `grant_type` values] that the client can use at the
     /// [token endpoint].
     ///
     /// Note that the possible grant types depend on the response types.
@@ -585,7 +585,7 @@ impl ClientMetadata {
     ///
     /// Defaults to [`DEFAULT_GRANT_TYPES`].
     ///
-    /// [OAuth 2.0 `grant_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
+    /// [OAuth `grant_type` values]: https://www.rfc-editor.org/rfc/rfc7591#page-9
     /// [token endpoint]: https://www.rfc-editor.org/rfc/rfc6749.html#section-3.2
     #[must_use]
     pub fn grant_types(&self) -> &[GrantType] {

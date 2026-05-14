@@ -2,8 +2,8 @@ use anyhow::Context;
 use coauth_data::{PostAuthAction, UrlBuilder};
 use coauth_data::{
     RepositoryAccess,
-    oauth2::OAuth2AuthorizationGrantRepository,
-    upstream_oauth2::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
+    oauth::OAuthAuthorizationGrantRepository,
+    upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
 };
 use coauth_templates::{PostAuthContext, PostAuthContextInner};
 use serde::{Deserialize, Serialize};
@@ -48,7 +48,7 @@ impl OptionalPostAuthAction {
         let ctx = match action {
             PostAuthAction::ContinueAuthorizationGrant { id } => {
                 let grant = repo
-                    .oauth2_authorization_grant()
+                    .oauth_authorization_grant()
                     .lookup(id)
                     .await?
                     .context("Failed to load authorization grant")?;
@@ -73,13 +73,13 @@ impl OptionalPostAuthAction {
                     .upstream_oauth_link()
                     .lookup(id)
                     .await?
-                    .context("Failed to load upstream OAuth 2.0 link")?;
+                    .context("Failed to load upstream OAuth link")?;
 
                 let provider = repo
                     .upstream_oauth_provider()
                     .lookup(link.provider_id)
                     .await?
-                    .context("Failed to load upstream OAuth 2.0 provider")?;
+                    .context("Failed to load upstream OAuth provider")?;
 
                 let provider = Box::new(provider);
                 let link = Box::new(link);

@@ -118,7 +118,7 @@ pub struct PrincipalServerConfig {
     pub did: Option<String>,
 
     /// Optional static bearer token accepted when this Principal Server calls
-    /// coauth's OAuth 2.0 introspection endpoint. This is intended for
+    /// coauth's OAuth introspection endpoint. This is intended for
     /// server-to-server resource-server authentication, not for browser
     /// clients.
     #[serde(default, skip_serializing_if = "Option::is_none")]

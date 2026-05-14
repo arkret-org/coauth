@@ -5,7 +5,7 @@ use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
-use oauth2_types::{
+use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     requests::{
         AccessTokenRequest, AccessTokenResponse,
@@ -262,7 +262,7 @@ fn login_hint_matches_user(
 }
 
 /// OIDC authorization-code exchange bridge that now validates the incoming
-/// authorization code against coauth's local OAuth2 authorization-grant store
+/// authorization code against coauth's local OAuth authorization-grant store
 /// before minting a temporary audience-bound Contrix session grant.
 #[endpoint]
 pub async fn oidc_code_exchange(
@@ -839,7 +839,7 @@ pub async fn oidc_code_exchange(
     }
 
     let Some(authz_grant) = repo
-        .oauth2_authorization_grant()
+        .oauth_authorization_grant()
         .find_by_code(input.authorization_code.trim())
         .await?
     else {
@@ -849,7 +849,7 @@ pub async fn oidc_code_exchange(
             viewer: None,
             session_grant: None,
             warnings: vec![
-                "authorization_code was not issued by this coauth OAuth2 authorization server"
+                "authorization_code was not issued by this coauth OAuth authorization server"
                     .to_owned(),
             ],
         }));
@@ -894,7 +894,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
 
-    let exchangeable_oauth2_session_id = match &authz_grant.stage {
+    let exchangeable_oauth_session_id = match &authz_grant.stage {
         coauth_data::AuthorizationGrantStage::Fulfilled { session_id, .. } => Some(*session_id),
         _ => None,
     };
@@ -931,20 +931,20 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
 
-    let Some(oauth2_client) = repo.oauth2_client().lookup(authz_grant.client_id).await? else {
+    let Some(oauth_client) = repo.oauth_client().lookup(authz_grant.client_id).await? else {
         res.render(Json(LoginResponse {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
             session_grant: None,
             warnings: vec![format!(
-                "authorization_code references missing oauth2_client={}",
+                "authorization_code references missing oauth_client={}",
                 authz_grant.client_id
             )],
         }));
         return Ok(());
     };
-    if oauth2_client
+    if oauth_client
         .resolve_redirect_uri(&Some(redirect_uri.clone()))
         .is_err()
     {
@@ -955,12 +955,12 @@ pub async fn oidc_code_exchange(
             session_grant: None,
             warnings: vec![format!(
                 "authorization_code client={} no longer allows redirect_uri={}",
-                oauth2_client.client_id, redirect_uri
+                oauth_client.client_id, redirect_uri
             )],
         }));
         return Ok(());
     }
-    if oauth2_client.client_id != input.client_id.trim() {
+    if oauth_client.client_id != input.client_id.trim() {
         res.render(Json(LoginResponse {
             status: "error",
             error: Some("invalid_client"),
@@ -968,13 +968,13 @@ pub async fn oidc_code_exchange(
             session_grant: None,
             warnings: vec![format!(
                 "authorization_code was issued for client_id={} rather than {}",
-                oauth2_client.client_id,
+                oauth_client.client_id,
                 input.client_id.trim()
             )],
         }));
         return Ok(());
     }
-    if oauth2_client.token_endpoint_auth_method.as_ref()
+    if oauth_client.token_endpoint_auth_method.as_ref()
         != Some(&OAuthClientAuthenticationMethod::None)
     {
         res.render(Json(LoginResponse {
@@ -984,8 +984,8 @@ pub async fn oidc_code_exchange(
             session_grant: None,
             warnings: vec![format!(
                 "authorization_code client_id={} requires token_endpoint_auth_method={}; the browser OIDC bridge only supports public clients with token_endpoint_auth_method=none",
-                oauth2_client.client_id,
-                oauth2_client
+                oauth_client.client_id,
+                oauth_client
                     .token_endpoint_auth_method
                     .as_ref()
                     .map(ToString::to_string)
@@ -1002,7 +1002,7 @@ pub async fn oidc_code_exchange(
     };
     let oauth_token_request = AccessTokenRequest::AuthorizationCode(oauth_code_grant.clone());
     let local_token_credentials = ClientCredentials::None {
-        client_id: oauth2_client.client_id.clone(),
+        client_id: oauth_client.client_id.clone(),
     };
     let oauth_token_http_request = local_token_credentials
         .authenticated_form(
@@ -1028,10 +1028,10 @@ pub async fn oidc_code_exchange(
             return Err(RouteError::Internal(Box::new(std::io::Error::other(
                 match token_error {
                     Ok(error) => {
-                        format!("local OAuth2 token endpoint returned server_error: {error:?}")
+                        format!("local OAuth token endpoint returned server_error: {error:?}")
                     }
                     Err(error) => format!(
-                        "local OAuth2 token endpoint returned {status} and its error body could not be decoded: {error}"
+                        "local OAuth token endpoint returned {status} and its error body could not be decoded: {error}"
                     ),
                 },
             ))));
@@ -1042,7 +1042,7 @@ pub async fn oidc_code_exchange(
                     .error_description
                     .as_deref()
                     .unwrap_or(
-                        "local OAuth2 token endpoint rejected the authorization_code exchange",
+                        "local OAuth token endpoint rejected the authorization_code exchange",
                     )
                     .to_owned();
                 let lower_description = error_description.to_ascii_lowercase();
@@ -1066,7 +1066,7 @@ pub async fn oidc_code_exchange(
                     viewer: None,
                     session_grant: None,
                     warnings: vec![format!(
-                        "local OAuth2 token endpoint rejected the authorization_code exchange: {error_kind}"
+                        "local OAuth token endpoint rejected the authorization_code exchange: {error_kind}"
                     )],
                 }));
                 return Ok(());
@@ -1074,7 +1074,7 @@ pub async fn oidc_code_exchange(
             Err(error) => {
                 return Err(RouteError::Internal(Box::new(std::io::Error::other(
                     format!(
-                        "local OAuth2 token endpoint returned {status} and its error body could not be decoded: {error}"
+                        "local OAuth token endpoint returned {status} and its error body could not be decoded: {error}"
                     ),
                 ))));
             }
@@ -1086,28 +1086,28 @@ pub async fn oidc_code_exchange(
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
     let mut repo = depot.repo().await?;
 
-    let oauth_session_id = exchangeable_oauth2_session_id.ok_or_else(|| {
+    let oauth_session_id = exchangeable_oauth_session_id.ok_or_else(|| {
         RouteError::Internal(Box::new(std::io::Error::other(
-            "authorization_code exchanged successfully without a fulfilled oauth2 session id",
+            "authorization_code exchanged successfully without a fulfilled oauth session id",
         )))
     })?;
-    let Some(oauth2_session) = repo.oauth2_session().lookup(oauth_session_id).await? else {
+    let Some(oauth_session) = repo.oauth_session().lookup(oauth_session_id).await? else {
         return Err(RouteError::Internal(Box::new(std::io::Error::other(
             format!(
-                "authorization_code exchange succeeded but oauth2_session={oauth_session_id} could not be loaded",
+                "authorization_code exchange succeeded but oauth_session={oauth_session_id} could not be loaded",
             ),
         ))));
     };
-    if oauth2_session.client_id != authz_grant.client_id {
+    if oauth_session.client_id != authz_grant.client_id {
         return Err(RouteError::Internal(Box::new(std::io::Error::other(
             format!(
                 "authorization_code exchange succeeded with mismatched client binding: grant client={} session client={}",
-                authz_grant.client_id, oauth2_session.client_id
+                authz_grant.client_id, oauth_session.client_id
             ),
         ))));
     }
 
-    let Some(user_session_id) = oauth2_session.user_session_id else {
+    let Some(user_session_id) = oauth_session.user_session_id else {
         res.render(Json(LoginResponse {
             status: "error",
             error: Some("invalid_authorization_code"),
@@ -1132,7 +1132,7 @@ pub async fn oidc_code_exchange(
     };
     let expected_subject =
         contrix::user_did_for(&url_builder, &contrix_config, &browser_session.user);
-    let oauth_introspection = match crate::handlers::oauth2::introspection_service::introspect_token(
+    let oauth_introspection = match crate::handlers::oauth::introspection_service::introspect_token(
         &mut repo,
         &clock,
         &url_builder,
@@ -1145,11 +1145,11 @@ pub async fn oidc_code_exchange(
     {
         Ok(reply) => reply,
         Err(
-            crate::handlers::oauth2::introspection_service::IntrospectionError::Repository(_)
-            | crate::handlers::oauth2::introspection_service::IntrospectionError::CantLoadOAuthSession(_)
-            | crate::handlers::oauth2::introspection_service::IntrospectionError::CantLoadPersonalSession(_)
-            | crate::handlers::oauth2::introspection_service::IntrospectionError::CantLoadUser(_)
-            | crate::handlers::oauth2::introspection_service::IntrospectionError::CantLoadOAuth2Client(_),
+            crate::handlers::oauth::introspection_service::IntrospectionError::Repository(_)
+            | crate::handlers::oauth::introspection_service::IntrospectionError::CantLoadOAuthSession(_)
+            | crate::handlers::oauth::introspection_service::IntrospectionError::CantLoadPersonalSession(_)
+            | crate::handlers::oauth::introspection_service::IntrospectionError::CantLoadUser(_)
+            | crate::handlers::oauth::introspection_service::IntrospectionError::CantLoadOAuthClient(_),
         ) => {
             return Err(RouteError::Internal(Box::new(std::io::Error::other(
                 "fresh OAuth token could not be introspected because local session state could not be loaded",
@@ -1209,7 +1209,7 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
-    let expected_oauth_client_id = oauth2_session.client_id.to_string();
+    let expected_oauth_client_id = oauth_session.client_id.to_string();
     if oauth_introspection.client_id.as_deref() != Some(expected_oauth_client_id.as_str()) {
         res.render(Json(LoginResponse {
             status: "error",
@@ -1253,8 +1253,8 @@ pub async fn oidc_code_exchange(
             &userinfo_endpoint,
             &expected_issuer,
             &oauth_token_reply.access_token,
-            &oauth2_client.client_id,
-            oauth2_client.userinfo_signed_response_alg.as_ref(),
+            &oauth_client.client_id,
+            oauth_client.userinfo_signed_response_alg.as_ref(),
         )
         .await
     {
@@ -1411,9 +1411,9 @@ pub async fn oidc_code_exchange(
             format!("issuer={issuer}"),
             format!("token_endpoint={token_endpoint}"),
             format!("userinfo_endpoint={userinfo_endpoint}"),
-            format!("client_id={}", oauth2_client.client_id),
+            format!("client_id={}", oauth_client.client_id),
             format!("oauth_session_id={oauth_session_id}"),
-            format!("oauth_client_id={}", oauth2_client.client_id),
+            format!("oauth_client_id={}", oauth_client.client_id),
             format!("browser_session_id={user_session_id}"),
             format!(
                 "oauth_scope={}",
@@ -1533,7 +1533,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
         upstream_modes_supported: vec![
             "local_coauth",
             "local_http_token_exchange",
-            "local_oauth2_introspection",
+            "local_oauth_introspection",
             "local_userinfo_http_validation",
             "federated",
             "federated_upstream_token_endpoint",
@@ -1556,8 +1556,8 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "local_authorization_code_binding",
             "pkce_required_for_authorization_code",
             "public_client_only_for_browser_bridge",
-            "local_http_oauth2_token_exchange",
-            "local_oauth2_introspection_active_check",
+            "local_http_oauth_token_exchange",
+            "local_oauth_introspection_active_check",
             "local_userinfo_subject_principal_session_binding",
             "federated_configured_provider_issuer_match",
             "federated_token_endpoint_exchange",
@@ -1588,8 +1588,8 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "code_verifier": "TODO_PKCE_CODE_VERIFIER",
             "redirect_uri": "http://localhost:8080/auth/callback",
             "issuer": "https://coauth.example",
-            "token_endpoint": "https://coauth.example/oauth2/token",
-            "userinfo_endpoint": "https://coauth.example/oauth2/userinfo",
+            "token_endpoint": "https://coauth.example/oauth/token",
+            "userinfo_endpoint": "https://coauth.example/oauth/userinfo",
             "client_id": "yougen",
             "login_hint": "did:web:alice.example",
             "device_id": "cx:device:01964137-0000-7000-8000-000000000001",

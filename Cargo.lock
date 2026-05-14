@@ -1280,7 +1280,7 @@ dependencies = [
  "mime",
  "minijinja",
  "minijinja-contrib",
- "oauth2-types",
+ "oauth-types",
  "opendal",
  "opentelemetry",
  "opentelemetry-http",
@@ -1391,7 +1391,7 @@ dependencies = [
  "ipnetwork",
  "language-tags",
  "lettre",
- "oauth2-types",
+ "oauth-types",
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "rand 0.10.1",
@@ -1566,7 +1566,7 @@ dependencies = [
  "cedar-policy",
  "chrono",
  "coauth-data",
- "oauth2-types",
+ "oauth-types",
  "reqwest 0.13.2",
  "schemars 1.2.1",
  "serde",
@@ -1601,7 +1601,7 @@ dependencies = [
  "cron",
  "diesel",
  "diesel-async",
- "oauth2-types",
+ "oauth-types",
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "rand 0.10.1",
@@ -1634,7 +1634,7 @@ dependencies = [
  "http",
  "minijinja",
  "minijinja-contrib",
- "oauth2-types",
+ "oauth-types",
  "rand 0.10.1",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
@@ -5505,7 +5505,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oauth2-types"
+name = "oauth-types"
 version = "1.8.0"
 dependencies = [
  "assert_matches",

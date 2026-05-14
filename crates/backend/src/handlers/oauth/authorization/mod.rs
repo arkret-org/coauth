@@ -1,13 +1,13 @@
 use coauth_data::{
     AuthorizationCode, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, Pkce, PostAuthAction,
     RepositoryAccess, SystemClock, UrlBuilder,
-    oauth2::{
-        OAuth2AuthorizationGrantRepository, OAuth2ClientRepository, OAuth2SessionFilter,
-        OAuth2SessionRepository,
+    oauth::{
+        OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthSessionFilter,
+        OAuthSessionRepository,
     },
 };
 use coauth_templates::Templates;
-use oauth2_types::{
+use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     pkce,
     requests::{AuthorizationRequest, GrantType, Prompt, ResponseMode},
@@ -111,7 +111,7 @@ fn resolve_response_mode(
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.authorization.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.authorization.get", skip_all)]
 pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_get(req, depot).await {
         Ok((response, cookie_jar)) => {
@@ -152,7 +152,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
 
     // First, figure out what client it is
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .find_by_client_id(&params.auth.client_id)
         .await?
         .ok_or(RouteError::ClientNotFound)?;
@@ -280,7 +280,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
             };
 
             let grant = repo
-                .oauth2_authorization_grant()
+                .oauth_authorization_grant()
                 .add(
                     &mut rng,
                     &clock,
@@ -367,18 +367,18 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
 
                 Some(user_session) => {
                     // We have a session.  Before auto-consenting, check
-                    // whether it still has active OAuth2 sessions.  If all
+                    // whether it still has active OAuth sessions.  If all
                     // sessions have been finished (user logged out), redirect
                     // to login instead of silently reusing the stale browser
                     // session.
-                    let filter = OAuth2SessionFilter::default().for_browser_session(&user_session);
-                    let total = repo.oauth2_session().count(filter).await?;
-                    let active = repo.oauth2_session().count(filter.active_only()).await?;
+                    let filter = OAuthSessionFilter::default().for_browser_session(&user_session);
+                    let total = repo.oauth_session().count(filter).await?;
+                    let active = repo.oauth_session().count(filter.active_only()).await?;
 
                     repo.save().await?;
 
                     if total > 0 && active == 0 {
-                        // Every prior OAuth2 session was revoked/finished —
+                        // Every prior OAuth session was revoked/finished —
                         // the user has logged out; require fresh credentials.
                         let query_str =
                             serde_urlencoded::to_string(&continue_grant).unwrap_or_default();

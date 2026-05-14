@@ -18,7 +18,7 @@
 
 use chrono::{DateTime, Utc};
 use coauth_jose::claims::{self, TokenHash};
-use oauth2_types::{
+use oauth_types::{
     requests::{AccessTokenRequest, AccessTokenResponse, RefreshTokenGrant},
     scope::Scope,
 };

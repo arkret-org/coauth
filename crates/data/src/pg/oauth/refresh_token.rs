@@ -9,14 +9,14 @@ use uuid::Uuid;
 
 use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_refresh_tokens};
 
-/// An implementation of [`OAuth2RefreshTokenRepository`] for a PostgreSQL
+/// An implementation of [`OAuthRefreshTokenRepository`] for a PostgreSQL
 /// connection
-pub struct PgOAuth2RefreshTokenRepository<'c> {
+pub struct PgOAuthRefreshTokenRepository<'c> {
     conn: &'c mut diesel_async::AsyncPgConnection,
 }
 
-impl<'c> PgOAuth2RefreshTokenRepository<'c> {
-    /// Create a new [`PgOAuth2RefreshTokenRepository`] from an active
+impl<'c> PgOAuthRefreshTokenRepository<'c> {
+    /// Create a new [`PgOAuthRefreshTokenRepository`] from an active
     /// PostgreSQL connection
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
@@ -26,7 +26,7 @@ impl<'c> PgOAuth2RefreshTokenRepository<'c> {
 /// Row type for loading refresh tokens from the database
 #[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = oauth_refresh_tokens)]
-struct OAuth2RefreshTokenRow {
+struct OAuthRefreshTokenRow {
     id: Uuid,
     refresh_token: String,
     created_at: DateTime<Utc>,
@@ -37,10 +37,10 @@ struct OAuth2RefreshTokenRow {
     next_oauth_refresh_token_id: Option<Uuid>,
 }
 
-impl TryFrom<OAuth2RefreshTokenRow> for RefreshToken {
+impl TryFrom<OAuthRefreshTokenRow> for RefreshToken {
     type Error = DatabaseInconsistencyError;
 
-    fn try_from(value: OAuth2RefreshTokenRow) -> Result<Self, Self::Error> {
+    fn try_from(value: OAuthRefreshTokenRow) -> Result<Self, Self::Error> {
         let id = value.id.into();
         let state = match (
             value.revoked_at,
@@ -78,7 +78,7 @@ impl TryFrom<OAuth2RefreshTokenRow> for RefreshToken {
 /// Insertable row for creating a new refresh token
 #[derive(Insertable)]
 #[diesel(table_name = oauth_refresh_tokens)]
-struct NewOAuth2RefreshToken {
+struct NewOAuthRefreshToken {
     id: Uuid,
     oauth_session_id: Uuid,
     oauth_access_token_id: Uuid,
@@ -96,11 +96,11 @@ struct CleanupResult {
 }
 
 #[async_trait]
-impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenRepository<'_> {
+impl coauth_data::oauth::OAuthRefreshTokenRepository for PgOAuthRefreshTokenRepository<'_> {
     type Error = DatabaseError;
 
     #[tracing::instrument(
-        name = "db.oauth2_refresh_token.lookup",
+        name = "db.oauth_refresh_token.lookup",
         skip_all,
         fields(refresh_token.id = %id),
         err,
@@ -108,8 +108,8 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
     async fn lookup(&mut self, id: Ulid) -> Result<Option<RefreshToken>, Self::Error> {
         let res = oauth_refresh_tokens::table
             .find(Uuid::from(id))
-            .select(OAuth2RefreshTokenRow::as_select())
-            .first::<OAuth2RefreshTokenRow>(self.conn)
+            .select(OAuthRefreshTokenRow::as_select())
+            .first::<OAuthRefreshTokenRow>(self.conn)
             .await
             .optional()?;
 
@@ -118,15 +118,15 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
         Ok(Some(res.try_into()?))
     }
 
-    #[tracing::instrument(name = "db.oauth2_refresh_token.find_by_token", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_refresh_token.find_by_token", skip_all, err)]
     async fn find_by_token(
         &mut self,
         refresh_token: &str,
     ) -> Result<Option<RefreshToken>, Self::Error> {
         let res = oauth_refresh_tokens::table
             .filter(oauth_refresh_tokens::refresh_token.eq(refresh_token))
-            .select(OAuth2RefreshTokenRow::as_select())
-            .first::<OAuth2RefreshTokenRow>(self.conn)
+            .select(OAuthRefreshTokenRow::as_select())
+            .first::<OAuthRefreshTokenRow>(self.conn)
             .await
             .optional()?;
 
@@ -136,7 +136,7 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_refresh_token.add",
+        name = "db.oauth_refresh_token.add",
         skip_all,
         fields(
             %session.id,
@@ -157,7 +157,7 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
         let id = new_id(created_at, rng);
         tracing::Span::current().record("refresh_token.id", tracing::field::display(id));
 
-        let new_row = NewOAuth2RefreshToken {
+        let new_row = NewOAuthRefreshToken {
             id: Uuid::from(id),
             oauth_session_id: Uuid::from(session.id),
             oauth_access_token_id: Uuid::from(access_token.id),
@@ -181,7 +181,7 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_refresh_token.consume",
+        name = "db.oauth_refresh_token.consume",
         skip_all,
         fields(
             %refresh_token.id,
@@ -214,7 +214,7 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_refresh_token.revoke",
+        name = "db.oauth_refresh_token.revoke",
         skip_all,
         fields(
             %refresh_token.id,
@@ -241,7 +241,7 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
             .map_err(DatabaseError::to_invalid_operation)
     }
 
-    #[tracing::instrument(name = "db.oauth2_refresh_token.cleanup_revoked", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_refresh_token.cleanup_revoked", skip_all, err)]
     async fn cleanup_revoked(
         &mut self,
         since: Option<DateTime<Utc>>,
@@ -286,7 +286,7 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
         Ok((res.count.try_into().unwrap_or(usize::MAX), res.last_ts))
     }
 
-    #[tracing::instrument(name = "db.oauth2_refresh_token.cleanup_consumed", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_refresh_token.cleanup_consumed", skip_all, err)]
     async fn cleanup_consumed(
         &mut self,
         since: Option<DateTime<Utc>>,

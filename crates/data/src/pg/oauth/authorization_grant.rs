@@ -2,12 +2,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, Clock, Pkce, Session,
-    new_id, oauth2::OAuth2AuthorizationGrantRepository,
+    new_id, oauth::OAuthAuthorizationGrantRepository,
 };
 use coauth_iana::oauth::PkceCodeChallengeMethod;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth2_types::{requests::ResponseMode, scope::Scope};
+use oauth_types::{requests::ResponseMode, scope::Scope};
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
@@ -15,14 +15,14 @@ use uuid::Uuid;
 
 use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_authorization_grants};
 
-/// An implementation of [`OAuth2AuthorizationGrantRepository`] for a PostgreSQL
+/// An implementation of [`OAuthAuthorizationGrantRepository`] for a PostgreSQL
 /// connection
-pub struct PgOAuth2AuthorizationGrantRepository<'c> {
+pub struct PgOAuthAuthorizationGrantRepository<'c> {
     conn: &'c mut diesel_async::AsyncPgConnection,
 }
 
-impl<'c> PgOAuth2AuthorizationGrantRepository<'c> {
-    /// Create a new [`PgOAuth2AuthorizationGrantRepository`] from an active
+impl<'c> PgOAuthAuthorizationGrantRepository<'c> {
+    /// Create a new [`PgOAuthAuthorizationGrantRepository`] from an active
     /// PostgreSQL connection
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
@@ -186,11 +186,11 @@ struct NewAuthorizationGrant {
 }
 
 #[async_trait]
-impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository<'_> {
+impl OAuthAuthorizationGrantRepository for PgOAuthAuthorizationGrantRepository<'_> {
     type Error = DatabaseError;
 
     #[tracing::instrument(
-        name = "db.oauth2_authorization_grant.add",
+        name = "db.oauth_authorization_grant.add",
         skip_all,
         fields(
             grant.id,
@@ -269,7 +269,7 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_authorization_grant.lookup",
+        name = "db.oauth_authorization_grant.lookup",
         skip_all,
         fields(
             grant.id = %id,
@@ -289,7 +289,7 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
         Ok(Some(res.try_into()?))
     }
 
-    #[tracing::instrument(name = "db.oauth2_authorization_grant.find_by_code", skip_all, err)]
+    #[tracing::instrument(name = "db.oauth_authorization_grant.find_by_code", skip_all, err)]
     async fn find_by_code(
         &mut self,
         code: &str,
@@ -307,7 +307,7 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_authorization_grant.fulfill",
+        name = "db.oauth_authorization_grant.fulfill",
         skip_all,
         fields(
             %grant.id,
@@ -343,7 +343,7 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_authorization_grant.exchange",
+        name = "db.oauth_authorization_grant.exchange",
         skip_all,
         fields(
             %grant.id,
@@ -373,7 +373,7 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_authorization_grant.cleanup",
+        name = "db.oauth_authorization_grant.cleanup",
         skip_all,
         fields(
             since = since.map(tracing::field::display),

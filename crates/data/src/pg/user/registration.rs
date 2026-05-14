@@ -550,11 +550,11 @@ mod tests {
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
         UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
         UpstreamOAuthProviderTokenAuthMethod, UserRegistration, UserRegistrationPassword,
-        clock::MockClock, upstream_oauth2::UpstreamOAuthProviderParams,
+        clock::MockClock, upstream_oauth::UpstreamOAuthProviderParams,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use ipnetwork::IpNetwork;
-    use oauth2_types::scope::Scope;
+    use oauth_types::scope::Scope;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use uuid::Uuid;
@@ -1067,7 +1067,7 @@ mod tests {
                     issuer: Some("https://example.com/".to_owned()),
                     human_name: Some("Example Ltd.".to_owned()),
                     brand_name: None,
-                    scope: Scope::from_iter([oauth2_types::scope::OPENID]),
+                    scope: Scope::from_iter([oauth_types::scope::OPENID]),
                     token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
                     token_endpoint_signing_alg: None,
                     id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,

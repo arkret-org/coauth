@@ -144,7 +144,7 @@ enum Subcommand {
         #[arg(short, long = "email", action = ArgAction::Append, help_heading = USER_ATTRIBUTES_HEADING)]
         emails: Vec<Address>,
 
-        /// Upstream OAuth 2.0 provider mapping to add
+        /// Upstream OAuth provider mapping to add
         #[arg(
             short = 'm',
             long = "upstream-provider-mapping",

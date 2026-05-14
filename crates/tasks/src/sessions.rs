@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{
     BoxRepository, Clock,
-    oauth2::OAuth2SessionFilter,
+    oauth::OAuthSessionFilter,
     queue::{
         ExpireInactiveOAuthSessionsJob, ExpireInactiveSessionsJob, ExpireInactiveUserSessionsJob,
         InsertableJob, QueueJobRepositoryExt, SyncDevicesJob,
@@ -103,8 +103,8 @@ async fn enqueue_expiration_children(
     Ok(scheduled_any)
 }
 
-fn oauth_inactivity_filter(threshold: DateTime<Utc>) -> OAuth2SessionFilter<'static> {
-    OAuth2SessionFilter::new()
+fn oauth_inactivity_filter(threshold: DateTime<Utc>) -> OAuthSessionFilter<'static> {
+    OAuthSessionFilter::new()
         .with_last_active_before(threshold)
         .for_any_user()
         .only_dynamic_clients()
@@ -145,7 +145,7 @@ impl RunnableJob for ExpireInactiveOAuthSessionsJob {
         let mut repo = state.repository().await.map_err(JobError::retry)?;
 
         let page = repo
-            .oauth2_session()
+            .oauth_session()
             .list(
                 oauth_inactivity_filter(self.threshold()),
                 self.pagination(SESSION_BATCH_SIZE),
@@ -181,7 +181,7 @@ impl RunnableJob for ExpireInactiveOAuthSessionsJob {
                 }
             }
 
-            repo.oauth2_session()
+            repo.oauth_session()
                 .finish(clock, edge.node)
                 .await
                 .map_err(JobError::retry)?;

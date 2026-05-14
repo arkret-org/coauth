@@ -5,11 +5,11 @@
 //!
 //! - [`admin`] — Admin API handlers for managing users, sessions, and clients
 //! - [`health`] — Health-check endpoint
-//! - [`oauth2`] — OAuth 2.0 / OpenID Connect endpoints (token, authorization,
+//! - [`oauth`] — OAuth / OpenID Connect endpoints (token, authorization,
 //!   discovery, userinfo, etc.)
 //! - [`rest`] — REST API endpoints for the account management frontend (JSON)
 //! - [`spa`] — SPA shell handler (serves the Dioxus frontend HTML wrapper)
-//! - [`upstream_oauth2`] — Upstream SSO / federated identity provider flows
+//! - [`upstream_oauth`] — Upstream SSO / federated identity provider flows
 //! - [`passwords`] — Password hashing and verification utilities
 //!
 //! All user-facing pages are rendered by the Dioxus frontend
@@ -80,16 +80,16 @@ pub mod email_webhooks;
 pub mod flow;
 /// Health-check endpoint (`/health`).
 pub mod health;
-/// OAuth 2.0 and OpenID Connect protocol endpoints.
-pub mod oauth2;
+/// OAuth and OpenID Connect protocol endpoints.
+pub mod oauth;
 /// Password hashing, verification, and complexity checking.
 pub mod passwords;
 /// Post-authentication action utilities (shared across handlers).
 pub mod post_auth;
 /// SPA shell serving (renders the Dioxus frontend HTML wrapper).
 pub mod spa;
-/// Upstream (federated) OAuth 2.0 / OIDC provider integration.
-pub mod upstream_oauth2;
+/// Upstream (federated) OAuth / OIDC provider integration.
+pub mod upstream_oauth;
 /// Canonical SSR prelude for server-rendered view handlers (round 25).
 pub mod view_prelude;
 
@@ -118,6 +118,6 @@ pub use self::{
     notification_language::notification_language,
     preferred_language::preferred_language,
     rate_limit::{Limiter, RequesterFingerprint},
-    upstream_oauth2::cache::MetadataCache,
+    upstream_oauth::cache::MetadataCache,
 };
 pub use crate::salvo_utils::cookies::CookieManager;

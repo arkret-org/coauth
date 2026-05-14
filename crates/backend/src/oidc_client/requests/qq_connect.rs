@@ -1,6 +1,6 @@
-//! QQ Connect OAuth2 specific request implementations.
+//! QQ Connect OAuth specific request implementations.
 //!
-//! QQ Connect uses a non-standard OAuth2 flow:
+//! QQ Connect uses a non-standard OAuth flow:
 //! - Token endpoint returns URL-encoded by default (use `fmt=json` for JSON)
 //! - A separate `/me` endpoint is needed to get the user's OpenID
 //! - UserInfo endpoint requires `openid` and `oauth_consumer_key` as query
@@ -15,7 +15,7 @@ use url::Url;
 use super::super::error::{TokenRequestError, UserInfoError};
 use crate::outbound_http::RequestBuilderExt;
 
-const QQ_ME_ENDPOINT: &str = "https://graph.qq.com/oauth2.0/me";
+const QQ_ME_ENDPOINT: &str = "https://graph.qq.com/oauth.0/me";
 const QQ_USERINFO_ENDPOINT: &str = "https://graph.qq.com/user/get_user_info";
 
 /// QQ token endpoint response.
@@ -108,7 +108,7 @@ fn strip_jsonp(text: &str) -> &str {
 
 /// Fetch the user's OpenID from QQ's `/me` endpoint.
 ///
-/// `GET https://graph.qq.com/oauth2.0/me?access_token=xxx&fmt=json`
+/// `GET https://graph.qq.com/oauth.0/me?access_token=xxx&fmt=json`
 #[tracing::instrument(skip_all)]
 pub async fn fetch_openid(
     http_client: &reqwest::Client,

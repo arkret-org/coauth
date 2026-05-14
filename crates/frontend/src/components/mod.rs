@@ -10,7 +10,7 @@ pub mod last_active;
 pub mod layout;
 pub mod loading;
 pub mod nav_bar;
-pub mod oauth2_session;
+pub mod oauth_session;
 pub mod page_heading;
 pub mod pagination;
 pub mod password_input;

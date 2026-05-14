@@ -5,7 +5,7 @@ use coauth_data::{
     BoxRepository, BrowserSession, Clock, Pagination, PostAuthAction, RepositoryAccess,
     RepositoryError, SiteConfig, UpstreamOAuthAuthorizationSession, UpstreamOAuthLink,
     UpstreamOAuthProvider, UpstreamOAuthProviderOnConflict, UrlBuilder, User, UserRegistration,
-    upstream_oauth2::{
+    upstream_oauth::{
         UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
         UpstreamOAuthSessionRepository,
     },
@@ -25,7 +25,7 @@ use ulid::Ulid;
 use crate::{
     handlers::{
         post_auth::OptionalPostAuthAction,
-        upstream_oauth2::{
+        upstream_oauth::{
             UpstreamSessionsCookie,
             template::{AttributeMappingContext, environment},
         },
@@ -635,7 +635,7 @@ async fn pre_check_handle(
     // Run policy check on the suggested username
     let eval_result = policy
         .evaluate_register(RegisterInput {
-            registration_method: RegistrationMethod::UpstreamOAuth2,
+            registration_method: RegistrationMethod::UpstreamOAuth,
             handle: &username,
             email,
             requester: PolicyRequester {
@@ -981,7 +981,7 @@ async fn validate_registration_action(
 
     let eval_result = policy
         .evaluate_register(RegisterInput {
-            registration_method: RegistrationMethod::UpstreamOAuth2,
+            registration_method: RegistrationMethod::UpstreamOAuth,
             handle: username,
             email,
             requester: PolicyRequester {

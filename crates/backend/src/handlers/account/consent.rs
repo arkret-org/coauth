@@ -1,4 +1,4 @@
-//! REST API endpoints for OAuth2 consent and device-code flows.
+//! REST API endpoints for OAuth consent and device-code flows.
 //!
 //! These endpoints are consumed by the Dioxus SPA frontend and return JSON
 //! responses. They replace the server-rendered HTML consent pages.
@@ -11,8 +11,8 @@ use super::{
     DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, make_clock,
     make_rng,
 };
-use crate::handlers::oauth2::access::{
-    ConsentScreen, DeviceConsentAction, DeviceConsentStatus, OAuth2AccessError,
+use crate::handlers::oauth::access::{
+    ConsentScreen, DeviceConsentAction, DeviceConsentStatus, OAuthAccessError,
     accept_authorization_consent, load_authorization_consent, load_device_consent,
     lookup_device_link, submit_device_consent,
 };
@@ -104,14 +104,14 @@ fn consent_get_response(screen: ConsentScreen) -> ConsentGetResponse {
     }
 }
 
-fn map_oauth2_access_error(error: OAuth2AccessError) -> RouteError {
+fn map_oauth_access_error(error: OAuthAccessError) -> RouteError {
     match error {
-        OAuth2AccessError::NotFound => RouteError::NotFound,
-        OAuth2AccessError::GrantNotPending => RouteError::BadRequest("grant is not pending".into()),
-        OAuth2AccessError::GrantExpired => RouteError::BadRequest("grant is expired".into()),
-        OAuth2AccessError::PolicyViolation => RouteError::BadRequest("policy_violation".into()),
-        OAuth2AccessError::Repository(error) => RouteError::from(error),
-        OAuth2AccessError::Internal(error) => RouteError::Internal(error),
+        OAuthAccessError::NotFound => RouteError::NotFound,
+        OAuthAccessError::GrantNotPending => RouteError::BadRequest("grant is not pending".into()),
+        OAuthAccessError::GrantExpired => RouteError::BadRequest("grant is expired".into()),
+        OAuthAccessError::PolicyViolation => RouteError::BadRequest("policy_violation".into()),
+        OAuthAccessError::Repository(error) => RouteError::from(error),
+        OAuthAccessError::Internal(error) => RouteError::Internal(error),
     }
 }
 
@@ -143,13 +143,13 @@ async fn require_authenticated_session(
     Ok(Some(session))
 }
 
-// ── GET /api/v1/oauth2/consent/:grant_id ───────────────────────
+// ── GET /api/v1/oauth/consent/:grant_id ───────────────────────
 
-/// Return the data needed to render a consent page for an OAuth2 authorization
+/// Return the data needed to render a consent page for an OAuth authorization
 /// grant.
 #[endpoint]
-#[tracing::instrument(name = "handlers.rest.consent.oauth2_get", skip_all)]
-pub async fn oauth2_consent_get(
+#[tracing::instrument(name = "handlers.rest.consent.oauth_get", skip_all)]
+pub async fn oauth_consent_get(
     req: &mut Request,
     depot: &Depot,
     res: &mut Response,
@@ -183,19 +183,19 @@ pub async fn oauth2_consent_get(
         user_agent,
     )
     .await
-    .map_err(map_oauth2_access_error)?;
+    .map_err(map_oauth_access_error)?;
 
     res.render(Json(consent_get_response(info.into())));
     Ok(())
 }
 
-// ── POST /api/v1/oauth2/consent/:grant_id ──────────────────────
+// ── POST /api/v1/oauth/consent/:grant_id ──────────────────────
 
-/// Accept the OAuth2 authorization consent: create an OAuth2 session, fulfill
+/// Accept the OAuth authorization consent: create an OAuth session, fulfill
 /// the grant, and return the callback redirect URL.
 #[endpoint]
-#[tracing::instrument(name = "handlers.rest.consent.oauth2_post", skip_all, err)]
-pub async fn oauth2_consent_post(
+#[tracing::instrument(name = "handlers.rest.consent.oauth_post", skip_all, err)]
+pub async fn oauth_consent_post(
     req: &mut Request,
     depot: &Depot,
     res: &mut Response,
@@ -244,13 +244,13 @@ pub async fn oauth2_consent_post(
         user_agent,
     )
     .await
-    .map_err(map_oauth2_access_error)?;
+    .map_err(map_oauth_access_error)?;
 
     activity_tracker
-        .record_oauth2_session(&clock, &decision.session)
+        .record_oauth_session(&clock, &decision.session)
         .await;
 
-    let redirect_url = decision.redirect_url().map_err(map_oauth2_access_error)?;
+    let redirect_url = decision.redirect_url().map_err(map_oauth_access_error)?;
 
     res.render(Json(ConsentPostResponse {
         status: "success",
@@ -287,7 +287,7 @@ pub async fn device_link_get(
     let code = code.to_uppercase();
     if let Some(grant_id) = lookup_device_link(repo, &clock, &code)
         .await
-        .map_err(map_oauth2_access_error)?
+        .map_err(map_oauth_access_error)?
     {
         res.render(Json(DeviceLinkResponse {
             status: "valid",
@@ -341,7 +341,7 @@ pub async fn device_consent_get(
         user_agent,
     )
     .await
-    .map_err(map_oauth2_access_error)?;
+    .map_err(map_oauth_access_error)?;
 
     res.render(Json(consent_get_response(screen)));
     Ok(())
@@ -396,7 +396,7 @@ pub async fn device_consent_post(
         user_agent,
     )
     .await
-    .map_err(map_oauth2_access_error)?
+    .map_err(map_oauth_access_error)?
     {
         DeviceConsentStatus::Fulfilled => "fulfilled",
         DeviceConsentStatus::Rejected => "rejected",

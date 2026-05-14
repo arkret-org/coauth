@@ -13,7 +13,7 @@ use coauth_data::{
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -81,7 +81,7 @@ impl TryFrom<PersonalSessionRow> for PersonalSession {
         let owner = match (value.owner_user_id, value.owner_oauth_client_id) {
             (Some(owner_user_id), None) => PersonalSessionOwner::User(Ulid::from(owner_user_id)),
             (None, Some(owner_oauth_client_id)) => {
-                PersonalSessionOwner::OAuth2Client(Ulid::from(owner_oauth_client_id))
+                PersonalSessionOwner::OAuthClient(Ulid::from(owner_oauth_client_id))
             }
             _ => {
                 return Err(DatabaseInconsistencyError::on("personal_sessions")
@@ -266,7 +266,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
 
         let (owner_user_id, owner_oauth_client_id) = match owner {
             PersonalSessionOwner::User(ulid) => (Some(Uuid::from(ulid)), None),
-            PersonalSessionOwner::OAuth2Client(ulid) => (None, Some(Uuid::from(ulid))),
+            PersonalSessionOwner::OAuthClient(ulid) => (None, Some(Uuid::from(ulid))),
         };
 
         let new_session = NewPersonalSession {
@@ -360,7 +360,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
             sub = sub.filter(personal_sessions::owner_user_id.eq(Uuid::from(user.id)));
         }
 
-        if let Some(client) = filter.owner_oauth2_client() {
+        if let Some(client) = filter.owner_oauth_client() {
             sub = sub.filter(personal_sessions::owner_oauth_client_id.eq(Uuid::from(client.id)));
         }
 
@@ -448,7 +448,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
             query = query.filter(personal_sessions::owner_user_id.eq(Uuid::from(user.id)));
         }
 
-        if let Some(client) = filter.owner_oauth2_client() {
+        if let Some(client) = filter.owner_oauth_client() {
             query =
                 query.filter(personal_sessions::owner_oauth_client_id.eq(Uuid::from(client.id)));
         }
@@ -552,7 +552,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
             query = query.filter(personal_sessions::owner_user_id.eq(Uuid::from(user.id)));
         }
 
-        if let Some(client) = filter.owner_oauth2_client() {
+        if let Some(client) = filter.owner_oauth_client() {
             query =
                 query.filter(personal_sessions::owner_oauth_client_id.eq(Uuid::from(client.id)));
         }

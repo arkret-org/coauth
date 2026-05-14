@@ -1,5 +1,5 @@
 //! A module containing the PostgreSQL implementation of the repositories
-//! related to the upstream OAuth 2.0 providers
+//! related to the upstream OAuth providers
 
 mod link;
 mod provider;
@@ -18,7 +18,7 @@ mod tests {
         RepositoryTransaction as _, UpstreamOAuthLinkPatch, UpstreamOAuthProviderClaimsImports,
         UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderTokenAuthMethod,
         clock::MockClock,
-        upstream_oauth2::{
+        upstream_oauth::{
             UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderFilter,
             UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
             UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository,
@@ -26,7 +26,7 @@ mod tests {
         user::UserRepository,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
-    use oauth2_types::scope::{OPENID, Scope};
+    use oauth_types::scope::{OPENID, Scope};
     use rand_core::SeedableRng;
 
     use crate::PgRepositoryFactory;

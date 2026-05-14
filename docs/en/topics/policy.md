@@ -162,7 +162,7 @@ You can implement your own policy backend by implementing the `PolicyProviderFac
 The policy engine mainly restricts three operations:
 
  - **User attributes**, which includes user registration, user profile updates, and user password changes.
- - **Client registration**, when an OAuth 2.0 dynamic client registration is requested.
+ - **Client registration**, when an OAuth dynamic client registration is requested.
  - **Authorization requests**, when a client requests an access token.
 
 Policies are only evaluated in user-facing contexts, and not in administrative contexts.
@@ -172,19 +172,19 @@ As such, they usually can be bypassed through the admin API or the CLI if needed
 
 The policy is evaluated in the following different scenarios:
 
- - During user registration, either with password credentials or with an upstream OAuth 2.0 provider. This calls the email policy as well.
+ - During user registration, either with password credentials or with an upstream OAuth provider. This calls the email policy as well.
  - When a user adds a new email address to their account.
 
 ### Client registration
 
-The policy is evaluated when a client sends their metadata through the OAuth 2.0 dynamic client registration API.
+The policy is evaluated when a client sends their metadata through the OAuth dynamic client registration API.
 By default, it enforces a set of strict rules to make sure clients provide enough information about themselves, with coherent URLs.
 This is useful in production environments, but can be relaxed in development environments.
 
 ### Authorization requests
 
 The policy is evaluated when a client requests an access token.
-This covers OAuth 2.0 sessions.
+This covers OAuth sessions.
 It is evaluated for the authorization code grant, the client credentials grant and the device authorization grant.
 
 This is probably the most interesting policy, as it defines which scope can be granted to which user and which client.

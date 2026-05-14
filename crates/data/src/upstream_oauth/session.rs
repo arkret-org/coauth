@@ -41,11 +41,11 @@ pub enum UpstreamOAuthAuthorizationSessionState {
 }
 
 impl UpstreamOAuthAuthorizationSessionState {
-    /// Mark the upstream OAuth 2.0 authorization session as completed.
+    /// Mark the upstream OAuth authorization session as completed.
     ///
     /// # Errors
     ///
-    /// Returns an error if the upstream OAuth 2.0 authorization session state
+    /// Returns an error if the upstream OAuth authorization session state
     /// is not [`Pending`].
     ///
     /// [`Pending`]: UpstreamOAuthAuthorizationSessionState::Pending
@@ -73,11 +73,11 @@ impl UpstreamOAuthAuthorizationSessionState {
         }
     }
 
-    /// Mark the upstream OAuth 2.0 authorization session as consumed.
+    /// Mark the upstream OAuth authorization session as consumed.
     ///
     /// # Errors
     ///
-    /// Returns an error if the upstream OAuth 2.0 authorization session state
+    /// Returns an error if the upstream OAuth authorization session state
     /// is not [`Completed`].
     ///
     /// [`Completed`]: UpstreamOAuthAuthorizationSessionState::Completed
@@ -105,9 +105,9 @@ impl UpstreamOAuthAuthorizationSessionState {
         }
     }
 
-    /// Get the link ID for the upstream OAuth 2.0 authorization session.
+    /// Get the link ID for the upstream OAuth authorization session.
     ///
-    /// Returns `None` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `None` if the upstream OAuth authorization session state is
     /// [`Pending`].
     ///
     /// [`Pending`]: UpstreamOAuthAuthorizationSessionState::Pending
@@ -119,10 +119,10 @@ impl UpstreamOAuthAuthorizationSessionState {
         }
     }
 
-    /// Get the time at which the upstream OAuth 2.0 authorization session was
+    /// Get the time at which the upstream OAuth authorization session was
     /// completed.
     ///
-    /// Returns `None` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `None` if the upstream OAuth authorization session state is
     /// [`Pending`].
     ///
     /// [`Pending`]: UpstreamOAuthAuthorizationSessionState::Pending
@@ -136,9 +136,9 @@ impl UpstreamOAuthAuthorizationSessionState {
         }
     }
 
-    /// Get the ID token for the upstream OAuth 2.0 authorization session.
+    /// Get the ID token for the upstream OAuth authorization session.
     ///
-    /// Returns `None` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `None` if the upstream OAuth authorization session state is
     /// [`Pending`].
     ///
     /// [`Pending`]: UpstreamOAuthAuthorizationSessionState::Pending
@@ -152,10 +152,10 @@ impl UpstreamOAuthAuthorizationSessionState {
         }
     }
 
-    /// coauth extension: get the ID token claims for the upstream OAuth 2.0
+    /// coauth extension: get the ID token claims for the upstream OAuth
     /// authorization session.
     ///
-    /// Returns `None` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `None` if the upstream OAuth authorization session state is
     /// [`Pending`].
     ///
     /// [`Pending`]: UpstreamOAuthAuthorizationSessionState::Pending
@@ -178,7 +178,7 @@ impl UpstreamOAuthAuthorizationSessionState {
     /// coauth extension: get the extra query parameters that were sent to the
     /// upstream provider.
     ///
-    /// Returns `None` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `None` if the upstream OAuth authorization session state is
     /// [`Pending`].
     ///
     /// [`Pending`]: UpstreamOAuthAuthorizationSessionState::Pending
@@ -206,10 +206,10 @@ impl UpstreamOAuthAuthorizationSessionState {
         }
     }
 
-    /// Get the time at which the upstream OAuth 2.0 authorization session was
+    /// Get the time at which the upstream OAuth authorization session was
     /// consumed.
     ///
-    /// Returns `None` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `None` if the upstream OAuth authorization session state is
     /// not [`Consumed`].
     ///
     /// [`Consumed`]: UpstreamOAuthAuthorizationSessionState::Consumed
@@ -222,10 +222,10 @@ impl UpstreamOAuthAuthorizationSessionState {
         }
     }
 
-    /// coauth extension: get the time at which the upstream OAuth 2.0
+    /// coauth extension: get the time at which the upstream OAuth
     /// authorization session was unlinked.
     ///
-    /// Returns `None` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `None` if the upstream OAuth authorization session state is
     /// not [`Unlinked`].
     ///
     /// [`Unlinked`]: UpstreamOAuthAuthorizationSessionState::Unlinked
@@ -237,7 +237,7 @@ impl UpstreamOAuthAuthorizationSessionState {
         }
     }
 
-    /// Returns `true` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `true` if the upstream OAuth authorization session state is
     /// [`Pending`].
     ///
     /// [`Pending`]: UpstreamOAuthAuthorizationSessionState::Pending
@@ -246,7 +246,7 @@ impl UpstreamOAuthAuthorizationSessionState {
         matches!(self, Self::Pending)
     }
 
-    /// Returns `true` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `true` if the upstream OAuth authorization session state is
     /// [`Completed`].
     ///
     /// [`Completed`]: UpstreamOAuthAuthorizationSessionState::Completed
@@ -255,7 +255,7 @@ impl UpstreamOAuthAuthorizationSessionState {
         matches!(self, Self::Completed { .. })
     }
 
-    /// Returns `true` if the upstream OAuth 2.0 authorization session state is
+    /// Returns `true` if the upstream OAuth authorization session state is
     /// [`Consumed`].
     ///
     /// [`Consumed`]: UpstreamOAuthAuthorizationSessionState::Consumed
@@ -264,7 +264,7 @@ impl UpstreamOAuthAuthorizationSessionState {
         matches!(self, Self::Consumed { .. })
     }
 
-    /// coauth extension: returns `true` if the upstream OAuth 2.0 authorization
+    /// coauth extension: returns `true` if the upstream OAuth authorization
     /// session state is [`Unlinked`].
     ///
     /// [`Unlinked`]: UpstreamOAuthAuthorizationSessionState::Unlinked
@@ -295,12 +295,12 @@ impl std::ops::Deref for UpstreamOAuthAuthorizationSession {
 }
 
 impl UpstreamOAuthAuthorizationSession {
-    /// Mark the upstream OAuth 2.0 authorization session as completed. Returns
+    /// Mark the upstream OAuth authorization session as completed. Returns
     /// the updated session.
     ///
     /// # Errors
     ///
-    /// Returns an error if the upstream OAuth 2.0 authorization session state
+    /// Returns an error if the upstream OAuth authorization session state
     /// is not [`Pending`].
     ///
     /// [`Pending`]: UpstreamOAuthAuthorizationSessionState::Pending
@@ -324,12 +324,12 @@ impl UpstreamOAuthAuthorizationSession {
         Ok(self)
     }
 
-    /// Mark the upstream OAuth 2.0 authorization session as consumed. Returns
+    /// Mark the upstream OAuth authorization session as consumed. Returns
     /// the updated session.
     ///
     /// # Errors
     ///
-    /// Returns an error if the upstream OAuth 2.0 authorization session state
+    /// Returns an error if the upstream OAuth authorization session state
     /// is not [`Completed`].
     ///
     /// [`Completed`]: UpstreamOAuthAuthorizationSessionState::Completed

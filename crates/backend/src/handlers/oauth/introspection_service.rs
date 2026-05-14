@@ -2,14 +2,14 @@ use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, TokenFormatError, TokenType,
     UrlBuilder,
-    oauth2::{OAuth2AccessTokenRepository, OAuth2RefreshTokenRepository, OAuth2SessionRepository},
+    oauth::{OAuthAccessTokenRepository, OAuthRefreshTokenRepository, OAuthSessionRepository},
     personal::{
         PersonalAccessTokenRepository, PersonalSessionRepository, session::PersonalSessionOwner,
     },
     user::UserRepository,
 };
 use coauth_iana::oauth::OAuthTokenTypeHint;
-use oauth2_types::requests::IntrospectionResponse;
+use oauth_types::requests::IntrospectionResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -52,8 +52,8 @@ pub enum IntrospectionError {
     #[error("unknown user {0}")]
     CantLoadUser(Ulid),
 
-    #[error("unknown OAuth2 client {0}")]
-    CantLoadOAuth2Client(Ulid),
+    #[error("unknown OAuth client {0}")]
+    CantLoadOAuthClient(Ulid),
 }
 
 /// Look up a token, check its validity, load associated session info, and
@@ -83,7 +83,7 @@ pub async fn introspect_token(
     let reply = match token_type {
         TokenType::AccessToken => {
             let mut access_token = repo
-                .oauth2_access_token()
+                .oauth_access_token()
                 .find_by_token(token_str)
                 .await?
                 .ok_or(IntrospectionError::UnknownToken(TokenType::AccessToken))?;
@@ -93,7 +93,7 @@ pub async fn introspect_token(
             }
 
             let session = repo
-                .oauth2_session()
+                .oauth_session()
                 .lookup(access_token.session_id)
                 .await?
                 .ok_or(IntrospectionError::CantLoadOAuthSession(
@@ -107,7 +107,7 @@ pub async fn introspect_token(
             // If this is the first time we're using this token, mark it as used
             if !access_token.is_used() {
                 access_token = repo
-                    .oauth2_access_token()
+                    .oauth_access_token()
                     .mark_used(clock, access_token)
                     .await?;
             }
@@ -134,7 +134,7 @@ pub async fn introspect_token(
             };
 
             activity_tracker
-                .record_oauth2_session(clock, &session, ip)
+                .record_oauth_session(clock, &session, ip)
                 .await;
 
             let device_id = contrix::primary_device_id(&session.scope);
@@ -165,7 +165,7 @@ pub async fn introspect_token(
 
         TokenType::RefreshToken => {
             let refresh_token = repo
-                .oauth2_refresh_token()
+                .oauth_refresh_token()
                 .find_by_token(token_str)
                 .await?
                 .ok_or(IntrospectionError::UnknownToken(TokenType::RefreshToken))?;
@@ -175,7 +175,7 @@ pub async fn introspect_token(
             }
 
             let session = repo
-                .oauth2_session()
+                .oauth_session()
                 .lookup(refresh_token.session_id)
                 .await?
                 .ok_or(IntrospectionError::CantLoadOAuthSession(
@@ -208,7 +208,7 @@ pub async fn introspect_token(
             };
 
             activity_tracker
-                .record_oauth2_session(clock, &session, ip)
+                .record_oauth_session(clock, &session, ip)
                 .await;
 
             let device_id = contrix::primary_device_id(&session.scope);
@@ -282,12 +282,12 @@ pub async fn introspect_token(
 
                     None
                 }
-                PersonalSessionOwner::OAuth2Client(owner_client_id) => {
+                PersonalSessionOwner::OAuthClient(owner_client_id) => {
                     let owner_client = repo
-                        .oauth2_client()
+                        .oauth_client()
                         .lookup(owner_client_id)
                         .await?
-                        .ok_or(IntrospectionError::CantLoadOAuth2Client(owner_client_id))?;
+                        .ok_or(IntrospectionError::CantLoadOAuthClient(owner_client_id))?;
 
                     Some(owner_client.client_id.clone())
                 }

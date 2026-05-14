@@ -1,21 +1,21 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
-use coauth_data::oauth2::OAuth2ClientI18n;
+use coauth_data::oauth::OAuthClientI18n;
 use coauth_data::{Client, Clock, LocalizedClientMetadata};
 use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
-use oauth2_types::{oidc::ApplicationType, requests::GrantType};
+use oauth_types::{oidc::ApplicationType, requests::GrantType};
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
 
 use crate::repository_impl;
 
-/// An [`OAuth2ClientRepository`] helps interacting with [`Client`] saved in the
+/// An [`OAuthClientRepository`] helps interacting with [`Client`] saved in the
 /// storage backend
 #[async_trait]
-pub trait OAuth2ClientRepository: Send + Sync {
+pub trait OAuthClientRepository: Send + Sync {
     /// The error type returned by the repository
     type Error;
 
@@ -228,7 +228,7 @@ pub trait OAuth2ClientRepository: Send + Sync {
     /// # Errors
     ///
     /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuth2ClientI18n, Self::Error>;
+    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuthClientI18n, Self::Error>;
 
     /// Upsert a single (locale, display_name, description) entry into the
     /// client's `i18n` JSONB column. Other locales are left untouched.
@@ -246,10 +246,10 @@ pub trait OAuth2ClientRepository: Send + Sync {
         locale: String,
         display_name: String,
         description: Option<String>,
-    ) -> Result<OAuth2ClientI18n, Self::Error>;
+    ) -> Result<OAuthClientI18n, Self::Error>;
 }
 
-repository_impl!(OAuth2ClientRepository:
+repository_impl!(OAuthClientRepository:
     async fn lookup(&mut self, id: Ulid) -> Result<Option<Client>, Self::Error>;
 
     async fn find_by_metadata_digest(
@@ -313,7 +313,7 @@ repository_impl!(OAuth2ClientRepository:
         metadata: &LocalizedClientMetadata,
     ) -> Result<(), Self::Error>;
 
-    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuth2ClientI18n, Self::Error>;
+    async fn load_i18n(&mut self, id: Ulid) -> Result<OAuthClientI18n, Self::Error>;
 
     async fn set_i18n_entry(
         &mut self,
@@ -321,5 +321,5 @@ repository_impl!(OAuth2ClientRepository:
         locale: String,
         display_name: String,
         description: Option<String>,
-    ) -> Result<OAuth2ClientI18n, Self::Error>;
+    ) -> Result<OAuthClientI18n, Self::Error>;
 );

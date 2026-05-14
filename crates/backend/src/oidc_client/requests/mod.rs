@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Methods to interact with OpenID Connect and OAuth2.0 endpoints.
+//! Methods to interact with OpenID Connect and OAuth endpoints.
 
 pub mod authorization_code;
 pub mod client_credentials;

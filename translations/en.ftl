@@ -209,34 +209,34 @@ coauth-scope-view-messages = Read Contrix message metadata
 # Displayed when the 'openid' scope is requested
 coauth-scope-view-profile = See your coauth profile info and contact details
 # Page shown when the user tries to link an upstream account that is already linked to another account
-coauth-upstream-oauth2-link-mismatch-heading = This upstream account is already linked to another account.
-coauth-upstream-oauth2-register-choose-handle-description = This cannot be changed later.
+coauth-upstream-oauth-link-mismatch-heading = This upstream account is already linked to another account.
+coauth-upstream-oauth-register-choose-handle-description = This cannot be changed later.
 # Displayed when creating a new account from an SSO login, and the username is not forced
-coauth-upstream-oauth2-register-choose-handle-heading = Choose your username
+coauth-upstream-oauth-register-choose-handle-heading = Choose your username
 # Displayed when creating a new account from an SSO login, and the username is pre-filled and forced
-coauth-upstream-oauth2-register-create-account = Create a new account
-coauth-upstream-oauth2-register-enforced-by-policy = Enforced by server policy
+coauth-upstream-oauth-register-create-account = Create a new account
+coauth-upstream-oauth-register-enforced-by-policy = Enforced by server policy
 # Tells the user what display name will be imported
-coauth-upstream-oauth2-register-forced-display-name = Will use the following display name
+coauth-upstream-oauth-register-forced-display-name = Will use the following display name
 # Tells the user which email address will be imported
-coauth-upstream-oauth2-register-forced-email = Will use the following email address
+coauth-upstream-oauth-register-forced-email = Will use the following email address
 # Tells the user which username will be used
-coauth-upstream-oauth2-register-forced-handle = Will use the following username
-coauth-upstream-oauth2-register-import-data-description = Confirm the information that will be linked to your new { $server_name } account.
-coauth-upstream-oauth2-register-import-data-heading = Import your data
-coauth-upstream-oauth2-register-imported-from-upstream = Imported from your upstream account
-coauth-upstream-oauth2-register-imported-from-upstream-with-name = Imported from your { $human_name } account
+coauth-upstream-oauth-register-forced-handle = Will use the following username
+coauth-upstream-oauth-register-import-data-description = Confirm the information that will be linked to your new { $server_name } account.
+coauth-upstream-oauth-register-import-data-heading = Import your data
+coauth-upstream-oauth-register-imported-from-upstream = Imported from your upstream account
+coauth-upstream-oauth-register-imported-from-upstream-with-name = Imported from your { $human_name } account
 # Button to link an existing account after an SSO login
-coauth-upstream-oauth2-register-link-existing = Link to an existing account
-coauth-upstream-oauth2-register-provider-name = { $human_name } account
-coauth-upstream-oauth2-register-signup-with-upstream-heading = Continue signing up with your { $human_name } account
+coauth-upstream-oauth-register-link-existing = Link to an existing account
+coauth-upstream-oauth-register-provider-name = { $human_name } account
+coauth-upstream-oauth-register-signup-with-upstream-heading = Continue signing up with your { $human_name } account
 # Option to let the user import their display name after an SSO login
-coauth-upstream-oauth2-register-suggested-display-name = Import display name
+coauth-upstream-oauth-register-suggested-display-name = Import display name
 # Option to let the user import their email address after an SSO login
-coauth-upstream-oauth2-register-suggested-email = Import email address
-coauth-upstream-oauth2-register-use = Use
-coauth-upstream-oauth2-suggest-link-action = Link
-coauth-upstream-oauth2-suggest-link-heading = Link to your existing account
+coauth-upstream-oauth-register-suggested-email = Import email address
+coauth-upstream-oauth-register-use = Use
+coauth-upstream-oauth-suggest-link-action = Link
+coauth-upstream-oauth-suggest-link-heading = Link to your existing account
 coauth-verify-email-6-digit-code = 6-digit code
 coauth-verify-email-description = Enter the 6-digit code sent to: <em>{ $email }</em>
 coauth-verify-email-headline = Verify your email

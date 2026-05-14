@@ -7,7 +7,7 @@ use coauth_data::{
     BoxClock, BoxRepository, RepositoryError, Session, TokenFormatError, TokenType, User,
     personal::session::{PersonalSession, PersonalSessionOwner},
 };
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use salvo::{http::StatusCode, prelude::*};
 use ulid::Ulid;
 
@@ -153,14 +153,14 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
         TokenType::AccessToken => {
             // Look for the access token in the database
             let access_token = repo
-                .oauth2_access_token()
+                .oauth_access_token()
                 .find_by_token(token)
                 .await?
                 .ok_or(Rejection::UnknownAccessToken)?;
 
             // Look for the associated session in the database
             let session = repo
-                .oauth2_session()
+                .oauth_session()
                 .lookup(access_token.session_id)
                 .await?
                 .ok_or_else(|| Rejection::LoadSession(access_token.session_id))?;
@@ -175,10 +175,10 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
 
             // Record the activity on the session
             activity_tracker
-                .record_oauth2_session(&clock, &session)
+                .record_oauth_session(&clock, &session)
                 .await;
 
-            CallerSession::OAuth2Session(session)
+            CallerSession::OAuthSession(session)
         }
         TokenType::PersonalAccessToken => {
             // Look for the access token in the database
@@ -215,7 +215,7 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
                         return Err(Rejection::UserLocked);
                     }
                 }
-                PersonalSessionOwner::OAuth2Client(_) => {
+                PersonalSessionOwner::OAuthClient(_) => {
                     // nop: Client owners are always valid
                 }
             }
@@ -241,8 +241,8 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
             .ok_or_else(|| Rejection::LoadUser(user_id))?;
 
         match session {
-            CallerSession::OAuth2Session(_) => {
-                // For OAuth2 sessions: check that the user is valid enough
+            CallerSession::OAuthSession(_) => {
+                // For OAuth sessions: check that the user is valid enough
                 // to be a user.
                 if !user.is_valid() {
                     return Err(Rejection::UserLocked);
@@ -260,7 +260,7 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
         Some(user)
     } else {
         // Double check we're not using a PersonalSession
-        assert!(matches!(session, CallerSession::OAuth2Session(_)));
+        assert!(matches!(session, CallerSession::OAuthSession(_)));
         None
     };
 
@@ -281,21 +281,21 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
 /// The session representing the caller of the Admin API;
 /// could either be an OAuth session or a personal session.
 pub enum CallerSession {
-    OAuth2Session(Session),
+    OAuthSession(Session),
     PersonalSession(PersonalSession),
 }
 
 impl CallerSession {
     pub fn scope(&self) -> &Scope {
         match self {
-            CallerSession::OAuth2Session(session) => &session.scope,
+            CallerSession::OAuthSession(session) => &session.scope,
             CallerSession::PersonalSession(session) => &session.scope,
         }
     }
 
     pub fn user_id(&self) -> Option<Ulid> {
         match self {
-            CallerSession::OAuth2Session(session) => session.user_id,
+            CallerSession::OAuthSession(session) => session.user_id,
             CallerSession::PersonalSession(session) => Some(session.actor_user_id),
         }
     }

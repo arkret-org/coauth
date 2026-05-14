@@ -33,9 +33,9 @@ It generates random signing keys (`.secrets.keys`) and the cookie encryption sec
 
 ```console
 $ coauth config generate > config.yaml
-INFO generate: coauth_config::oauth2: Generating keys...
-INFO generate:rsa: coauth_config::oauth2: Done generating RSA key
-INFO generate:ecdsa: coauth_config::oauth2: Done generating ECDSA key
+INFO generate: coauth_config::oauth: Generating keys...
+INFO generate:rsa: coauth_config::oauth: Done generating RSA key
+INFO generate:ecdsa: coauth_config::oauth: Done generating ECDSA key
 ```
 
 The `--output` option can be used to specify the output file. If not specified, the output will be written to stdout.

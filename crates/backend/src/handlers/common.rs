@@ -1,7 +1,7 @@
 //! Shared infrastructure types used across all handler modules.
 //!
 //! This module provides the core building blocks that every API surface
-//! (account, admin, OAuth 2.0, views, etc.) depends on:
+//! (account, admin, OAuth, views, etc.) depends on:
 //!
 //! - [`DepotExt`] — typed access to shared application state
 //! - [`RouteError`] — common HTTP error type
@@ -33,7 +33,7 @@ use crate::{
 /// The authenticated entity making an API request, together with
 /// connection metadata (IP address, user-agent).
 pub struct Requester {
-    /// Who is making the request (anonymous, browser session, or OAuth 2.0
+    /// Who is making the request (anonymous, browser session, or OAuth
     /// session).
     pub entity: RequestingEntity,
     /// Client IP address (after trusted-proxy unwrapping).
@@ -68,8 +68,8 @@ pub enum RequestingEntity {
     Anonymous,
     /// A logged-in user via a browser session cookie.
     BrowserSession(Box<BrowserSession>),
-    /// An OAuth 2.0 client acting on behalf of (optionally) a user.
-    OAuth2Session(Box<(Session, Option<User>)>),
+    /// An OAuth client acting on behalf of (optionally) a user.
+    OAuthSession(Box<(Session, Option<User>)>),
 }
 
 impl RequestingEntity {
@@ -83,14 +83,14 @@ impl RequestingEntity {
     pub fn user(&self) -> Option<&User> {
         match self {
             Self::BrowserSession(session) => Some(&session.user),
-            Self::OAuth2Session(tuple) => tuple.1.as_ref(),
+            Self::OAuthSession(tuple) => tuple.1.as_ref(),
             Self::Anonymous => None,
         }
     }
 
-    pub fn oauth2_session(&self) -> Option<&Session> {
+    pub fn oauth_session(&self) -> Option<&Session> {
         match self {
-            Self::OAuth2Session(tuple) => Some(&tuple.0),
+            Self::OAuthSession(tuple) => Some(&tuple.0),
             _ => None,
         }
     }
@@ -110,7 +110,7 @@ impl RequestingEntity {
 
     pub fn is_admin(&self) -> bool {
         match self {
-            Self::OAuth2Session(tuple) => crate::handlers::admin::has_admin_scope(&tuple.0.scope),
+            Self::OAuthSession(tuple) => crate::handlers::admin::has_admin_scope(&tuple.0.scope),
             _ => false,
         }
     }

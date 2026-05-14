@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//! OAuth 2.0 access token scope types per [RFC 6749 Section 3.3].
+//! OAuth access token scope types per [RFC 6749 Section 3.3].
 //!
 //! [RFC 6749 Section 3.3]: https://www.rfc-editor.org/rfc/rfc6749#section-3.3
 

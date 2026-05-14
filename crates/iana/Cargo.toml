@@ -1,6 +1,6 @@
 [package]
 name = "coauth-iana"
-description = "IANA registry data for JOSE and OAuth 2.0"
+description = "IANA registry data for JOSE and OAuth"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

@@ -1,6 +1,6 @@
 // ── Provider Configuration ──
 //
-// Defines the full configuration for a single upstream OAuth 2.0 / OIDC
+// Defines the full configuration for a single upstream OAuth / OIDC
 // provider, including authentication methods and endpoint overrides.
 
 use std::collections::BTreeMap;
@@ -59,22 +59,22 @@ pub enum TokenAuthMethod {
     /// `sign_in_with_apple`: Apple-specific authentication flow
     SignInWithApple,
 
-    /// `qq_connect`: QQ Connect OAuth2 flow
+    /// `qq_connect`: QQ Connect OAuth flow
     QQConnect,
 
-    /// `feishu`: Feishu (Lark China) OAuth2 flow
+    /// `feishu`: Feishu (Lark China) OAuth flow
     Feishu,
 
-    /// `lark`: Lark (international Feishu) OAuth2 flow
+    /// `lark`: Lark (international Feishu) OAuth flow
     Lark,
 
-    /// `dingtalk`: DingTalk OAuth2 flow
+    /// `dingtalk`: DingTalk OAuth flow
     DingTalk,
 
-    /// `wechat`: WeChat Open Platform OAuth2 flow
+    /// `wechat`: WeChat Open Platform OAuth flow
     WeChat,
 
-    /// `wecom`: WeCom (Enterprise WeChat) OAuth2 flow
+    /// `wecom`: WeCom (Enterprise WeChat) OAuth flow
     WeCom,
 }
 
@@ -130,7 +130,7 @@ fn signed_response_alg_default() -> JsonWebSignatureAlg {
 
 // ── Provider Struct ──
 
-/// Full configuration for a single upstream OAuth 2.0 / OIDC provider
+/// Full configuration for a single upstream OAuth / OIDC provider
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

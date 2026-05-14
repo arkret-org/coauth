@@ -8,17 +8,17 @@ use coauth_data::{
     UpstreamOAuthProviderTokenAuthMethod,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
 
 use crate::{
-    Pagination, pagination::Page, repository_impl, upstream_oauth2::UpstreamOAuthProviderSource,
+    Pagination, pagination::Page, repository_impl, upstream_oauth::UpstreamOAuthProviderSource,
 };
 
 /// Structure which holds parameters when inserting or updating an upstream
-/// OAuth 2.0 provider
+/// OAuth provider
 pub struct UpstreamOAuthProviderParams {
     /// The OIDC issuer of the provider
     pub issuer: Option<String>,
@@ -106,7 +106,7 @@ pub struct UpstreamOAuthProviderParams {
     pub source: UpstreamOAuthProviderSource,
 }
 
-/// Filter parameters for listing upstream OAuth 2.0 providers
+/// Filter parameters for listing upstream OAuth providers
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct UpstreamOAuthProviderFilter<'a> {
     /// Filter by whether the provider is enabled

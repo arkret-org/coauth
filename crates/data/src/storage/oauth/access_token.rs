@@ -6,10 +6,10 @@ use ulid::Ulid;
 
 use crate::repository_impl;
 
-/// An [`OAuth2AccessTokenRepository`] helps interacting with [`AccessToken`]
+/// An [`OAuthAccessTokenRepository`] helps interacting with [`AccessToken`]
 /// saved in the storage backend
 #[async_trait]
-pub trait OAuth2AccessTokenRepository: Send + Sync {
+pub trait OAuthAccessTokenRepository: Send + Sync {
     /// The error type returned by the repository
     type Error;
 
@@ -146,7 +146,7 @@ pub trait OAuth2AccessTokenRepository: Send + Sync {
     ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error>;
 }
 
-repository_impl!(OAuth2AccessTokenRepository:
+repository_impl!(OAuthAccessTokenRepository:
     async fn lookup(&mut self, id: Ulid) -> Result<Option<AccessToken>, Self::Error>;
 
     async fn find_by_token(

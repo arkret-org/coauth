@@ -2,10 +2,10 @@
 //!
 //! # Scope
 //!
-//! The scope of this crate is to support the OIDC and OAuth 2.0 features
+//! The scope of this crate is to support the OIDC and OAuth features
 //! needed by the Contrix/Soland auth flows.
 //!
-//! # OpenID Connect and OAuth 2.0 Features
+//! # OpenID Connect and OAuth Features
 //!
 //! - Grant Types:
 //!   - [Authorization Code](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)
@@ -16,7 +16,7 @@
 //! - [PKCE](https://www.rfc-editor.org/rfc/rfc7636)
 //!
 //! [OpenID Connect]: https://openid.net/connect/
-//! [OAuth 2.0]: https://oauth.net/2/
+//! [OAuth]: https://oauth.net/2/
 
 pub mod error;
 pub mod requests;

@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
-use oauth2_types::scope::Scope;
+use oauth_types::scope::Scope;
 use serde::Serialize;
 use ulid::Ulid;
 
@@ -44,7 +44,7 @@ pub enum DeviceCodeGrantState {
         /// The time at which this device code grant was exchanged.
         exchanged_at: DateTime<Utc>,
 
-        /// The OAuth 2.0 session ID which was created by this device code
+        /// The OAuth session ID which was created by this device code
         /// grant.
         session_id: Ulid,
     },

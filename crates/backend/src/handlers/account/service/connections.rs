@@ -1,7 +1,7 @@
 use coauth_data::{
     BoxRepository, Client, Clock, Pagination, RepositoryAccess, RepositoryError, User,
-    oauth2::OAuth2ClientRepository,
-    upstream_oauth2::{
+    oauth::OAuthClientRepository,
+    upstream_oauth::{
         UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
     },
 };
@@ -33,7 +33,7 @@ pub enum LinkedAccountError {
 }
 
 #[derive(Debug, Error)]
-pub enum OAuth2ClientLookupError {
+pub enum OAuthClientLookupError {
     #[error("not found")]
     NotFound,
 
@@ -125,15 +125,15 @@ pub async fn unlink_linked_account(
     Ok(())
 }
 
-pub async fn load_oauth2_client(
+pub async fn load_oauth_client(
     mut repo: BoxRepository,
     client_id: Ulid,
-) -> Result<Client, OAuth2ClientLookupError> {
+) -> Result<Client, OAuthClientLookupError> {
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .lookup(client_id)
         .await?
-        .ok_or(OAuth2ClientLookupError::NotFound)?;
+        .ok_or(OAuthClientLookupError::NotFound)?;
 
     repo.cancel().await?;
 

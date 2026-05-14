@@ -1,4 +1,4 @@
-//! Upstream OAuth 2.0 provider template contexts.
+//! Upstream OAuth provider template contexts.
 
 use std::collections::BTreeMap;
 
@@ -8,7 +8,7 @@ use coauth_data::{
     UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod, User,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
-use oauth2_types::scope::{OPENID, Scope};
+use oauth_types::scope::{OPENID, Scope};
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -18,7 +18,7 @@ use crate::{FormField, FormState};
 
 // -- Existing link ----------------------------------------------------------
 
-/// Data for the `pages/upstream_oauth2/link_mismatch.html` template.
+/// Data for the `pages/upstream_oauth/link_mismatch.html` template.
 #[derive(Serialize)]
 pub struct UpstreamExistingLinkContext {
     linked_user: User,
@@ -49,7 +49,7 @@ impl TemplateContext for UpstreamExistingLinkContext {
 
 // -- Suggest link -----------------------------------------------------------
 
-/// Data for the `pages/upstream_oauth2/suggest_link.html` template.
+/// Data for the `pages/upstream_oauth/suggest_link.html` template.
 #[derive(Serialize)]
 pub struct UpstreamSuggestLink {
     post_logout_action: PostAuthAction,
@@ -98,7 +98,7 @@ impl FormField for UpstreamRegisterFormField {
     }
 }
 
-/// Data for the `pages/upstream_oauth2/do_register.html` template.
+/// Data for the `pages/upstream_oauth/do_register.html` template.
 #[derive(Serialize)]
 pub struct UpstreamRegister {
     upstream_oauth_link: UpstreamOAuthLink,

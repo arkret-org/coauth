@@ -1,6 +1,6 @@
 # coauth
 
-`coauth` 是 Contrix 的 Auth / Account Server，负责提供 OIDC/OAuth2 登录、
+`coauth` 是 Contrix 的 Auth / Account Server，负责提供 OIDC/OAuth 登录、
 账号生命周期管理、短时 session grant、策略钩子、通知能力，以及稳定的管理 API。
 
 `coauth` 不是 DID Registry。它负责证明“谁登录了哪个本地账号、设备和会话”，再把这
@@ -29,7 +29,7 @@ receipt 等能力属于委托的 public DID resolver / DID 服务。
 - OpenID Connect Provider，支持 authorization code、refresh token、
   client credentials 和 device code grant
 - Contrix discovery、service DID document、handle 解析、短时 session grant
-- 本地账号生命周期、密码登录、上游 OAuth2 联邦、恢复流程
+- 本地账号生命周期、密码登录、上游 OAuth 联邦、恢复流程
 - 面向 session、token、user、client、template、connector、policy data 的管理 API
 - Email / SMS 通知、限流、CAPTCHA 钩子、telemetry、策略执行
 

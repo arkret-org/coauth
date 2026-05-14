@@ -1,14 +1,14 @@
 use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock, UrlBuilder,
-    oauth2::OAuth2ClientRepository,
+    oauth::OAuthClientRepository,
 };
 use coauth_jose::{
     constraints::Constrainable,
     jwt::{JsonWebSignatureHeader, Jwt},
 };
 use coauth_keystore::Keystore;
-use oauth2_types::scope::OPENID;
+use oauth_types::scope::OPENID;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::{Extractible, prelude::*};
@@ -102,7 +102,7 @@ impl Scribe for RouteError {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth2.userinfo.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.userinfo.get", skip_all)]
 pub async fn get(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     match handle_get(req, depot).await {
         Ok(response) => match response {
@@ -164,7 +164,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
     };
 
     activity_tracker
-        .record_oauth2_session(&clock, &session)
+        .record_oauth_session(&clock, &session)
         .await;
 
     let user = repo
@@ -186,7 +186,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
     };
 
     let client = repo
-        .oauth2_client()
+        .oauth_client()
         .lookup(session.client_id)
         .await?
         .ok_or(RouteError::NoSuchClient(session.client_id))?;

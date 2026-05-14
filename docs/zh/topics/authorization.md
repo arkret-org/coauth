@@ -1,6 +1,6 @@
 # 授权与会话
 
-`coauth` 负责认证用户和客户端，然后签发 OAuth 2.0/OIDC token 或 Contrix
+`coauth` 负责认证用户和客户端，然后签发 OAuth/OIDC token 或 Contrix
 session grant，供下游服务验证。
 
 ## 会话类型
@@ -9,7 +9,7 @@ session grant，供下游服务验证。
 
 用户通过 Web UI 登录后，`coauth` 会创建浏览器会话，并以加密 Cookie 保存。
 
-### OAuth 2.0 会话
+### OAuth 会话
 
 OAuth 会话在客户端完成授权流程后创建，关联以下信息：
 
