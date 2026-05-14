@@ -46,14 +46,14 @@ pub(super) struct Options {
 #[derive(Parser, Debug)]
 enum Subcommand {
     /// Add an email address to the specified user
-    AddEmail { username: String, email: String },
+    AddEmail { handle: String, email: String },
 
     /// (DEPRECATED) Mark email address as verified
-    VerifyEmail { username: String, email: String },
+    VerifyEmail { handle: String, email: String },
 
     /// Set a user password
     SetPassword {
-        username: String,
+        handle: String,
         password: String,
         /// Don't enforce that the password provided is above the minimum
         /// configured complexity.
@@ -62,10 +62,10 @@ enum Subcommand {
     },
 
     /// Make a user admin
-    PromoteAdmin { username: String },
+    PromoteAdmin { handle: String },
 
     /// Make a user non-admin
-    DemoteAdmin { username: String },
+    DemoteAdmin { handle: String },
 
     /// List all users with admin privileges
     ListAdminUsers,
@@ -99,7 +99,7 @@ enum Subcommand {
     /// Kill all sessions for a user
     KillSessions {
         /// User for which to kill sessions
-        username: String,
+        handle: String,
 
         /// Do a dry run
         #[arg(long)]
@@ -109,7 +109,7 @@ enum Subcommand {
     /// Lock a user
     LockUser {
         /// User to lock
-        username: String,
+        handle: String,
 
         /// Whether to deactivate the user
         #[arg(long)]
@@ -119,7 +119,7 @@ enum Subcommand {
     /// Unlock a user
     UnlockUser {
         /// User to unlock
-        username: String,
+        handle: String,
 
         /// Whether to reactivate the user if it had been deactivated
         #[arg(long)]
@@ -132,9 +132,9 @@ enum Subcommand {
     /// `--yes` flag is set. It bypasses any policy check on the password,
     /// email, etc.
     RegisterUser {
-        /// Username to register
+        /// handle to register
         #[arg(help_heading = USER_ATTRIBUTES_HEADING, required_if_eq("yes", "true"))]
-        username: Option<String>,
+        handle: Option<String>,
 
         /// Password to set
         #[arg(short, long, help_heading = USER_ATTRIBUTES_HEADING)]
@@ -183,33 +183,33 @@ impl Options {
 
         match self.subcommand {
             SC::SetPassword {
-                username,
+                handle,
                 password,
                 ignore_complexity,
             } => {
                 command_handlers::handle_set_password(
                     figment,
-                    username,
+                    handle,
                     password,
                     ignore_complexity,
                 )
                 .await
             }
 
-            SC::AddEmail { username, email } => {
-                command_handlers::handle_add_email(figment, username, email).await
+            SC::AddEmail { handle, email } => {
+                command_handlers::handle_add_email(figment, handle, email).await
             }
 
-            SC::VerifyEmail { username, email } => {
-                command_handlers::handle_verify_email(username, email).await
+            SC::VerifyEmail { handle, email } => {
+                command_handlers::handle_verify_email(handle, email).await
             }
 
-            SC::PromoteAdmin { username } => {
-                command_handlers::handle_promote_admin(figment, username).await
+            SC::PromoteAdmin { handle } => {
+                command_handlers::handle_promote_admin(figment, handle).await
             }
 
-            SC::DemoteAdmin { username } => {
-                command_handlers::handle_demote_admin(figment, username).await
+            SC::DemoteAdmin { handle } => {
+                command_handlers::handle_demote_admin(figment, handle).await
             }
 
             SC::ListAdminUsers => command_handlers::handle_list_admin_users(figment).await,
@@ -232,22 +232,22 @@ impl Options {
 
             SC::ProvisionAllUsers => command_handlers::handle_provision_all_users(figment).await,
 
-            SC::KillSessions { username, dry_run } => {
-                command_handlers::handle_kill_sessions(figment, username, dry_run).await
+            SC::KillSessions { handle, dry_run } => {
+                command_handlers::handle_kill_sessions(figment, handle, dry_run).await
             }
 
             SC::LockUser {
-                username,
+                handle,
                 deactivate,
-            } => command_handlers::handle_lock_user(figment, username, deactivate).await,
+            } => command_handlers::handle_lock_user(figment, handle, deactivate).await,
 
             SC::UnlockUser {
-                username,
+                handle,
                 reactivate,
-            } => command_handlers::handle_unlock_user(figment, username, reactivate).await,
+            } => command_handlers::handle_unlock_user(figment, handle, reactivate).await,
 
             SC::RegisterUser {
-                username,
+                handle,
                 password,
                 emails,
                 upstream_provider_mappings,
@@ -259,7 +259,7 @@ impl Options {
             } => {
                 register_user::handle_register_user(
                     figment,
-                    username,
+                    handle,
                     password,
                     emails,
                     upstream_provider_mappings,

@@ -26,9 +26,9 @@ pub enum SessionLoadError {
 #[derive(Debug, Clone)]
 pub enum AccountError {
     /// The user's account has been deactivated.
-    Deactivated { username: String },
+    Deactivated { handle: String },
     /// The user's account has been locked by an administrator.
-    Locked { username: String },
+    Locked { handle: String },
     /// The browser session was ended remotely.
     SessionEnded,
 }
@@ -80,7 +80,7 @@ pub async fn load_session_or_fallback(
         return Ok(SessionOrFallback::AccountError {
             cookie_jar,
             error: AccountError::Deactivated {
-                username: browser_session.user.username.clone(),
+                handle: browser_session.user.handle.clone(),
             },
         });
     }
@@ -90,7 +90,7 @@ pub async fn load_session_or_fallback(
         return Ok(SessionOrFallback::AccountError {
             cookie_jar,
             error: AccountError::Locked {
-                username: browser_session.user.username.clone(),
+                handle: browser_session.user.handle.clone(),
             },
         });
     }

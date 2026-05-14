@@ -37,7 +37,7 @@ common-loading = Loading…
 common-account-id = Account ID
 common-password = Password
 common-password-confirm = Confirm password
-common-username = Username
+common-handle = Username
 
 ## error
 
@@ -97,7 +97,7 @@ coauth-email-in-use-description =
     If you have forgotten your account credentials, you can recover your account. You can also start over and use a different email address.
 coauth-email-in-use-title = The email address <span>{ $email }</span> is already in use
 # Greeting at the top of emails sent to the user
-coauth-emails-greeting = Hello { $username },
+coauth-emails-greeting = Hello { $handle },
 coauth-emails-recovery-click-button = Click on the button below to create a new password:
 coauth-emails-recovery-copy-link = Copy the following link and paste it into a browser to create a new password:
 coauth-emails-recovery-create-new-password = Create new password
@@ -122,15 +122,15 @@ coauth-errors-field-required = This field is required
 coauth-errors-invalid-credentials = Invalid credentials
 coauth-errors-password-mismatch = Password fields don't match
 coauth-errors-rate-limit-exceeded = You've made too many requests in a short period. Please wait a few minutes and try again.
-coauth-errors-username-all-numeric = Username cannot consist solely of numbers
+coauth-errors-handle-all-numeric = Username cannot consist solely of numbers
 # Error message shown on registration, when the username matches a pattern that is banned by the server policy.
-coauth-errors-username-banned = Username is banned by the server policy
-coauth-errors-username-invalid-chars = Username contains invalid characters. Use lowercase letters, numbers, dashes and underscores only.
+coauth-errors-handle-banned = Username is banned by the server policy
+coauth-errors-handle-invalid-chars = Username contains invalid characters. Use lowercase letters, numbers, dashes and underscores only.
 # Error message shown on registration, when the username *does not match* any of the patterns that are allowed by the server policy.
-coauth-errors-username-not-allowed = Username is not allowed by the server policy
-coauth-errors-username-taken = This username is already taken
-coauth-errors-username-too-long = Username is too long
-coauth-errors-username-too-short = Username is too short
+coauth-errors-handle-not-allowed = Username is not allowed by the server policy
+coauth-errors-handle-taken = This username is already taken
+coauth-errors-handle-too-long = Username is too long
+coauth-errors-handle-too-short = Username is too short
 coauth-legacy-consent-this-will-setup = This will set up <span>{ $client_name }</span> with your <span>{ $server_name }</span> account.
 coauth-login-call-to-register = Don't have an account yet?
 # Button to log in with an upstream provider
@@ -142,15 +142,15 @@ coauth-login-headline = Sign in
 coauth-login-link-description = Linking your <span class="break-keep text-links">{ $provider }</span> account
 coauth-login-link-headline = Sign in to link
 coauth-login-no-login-methods = No login methods available.
-coauth-login-username-or-email = Username or Email
+coauth-login-handle-or-email = Username or Email
 coauth-navbar-my-account = My account
 coauth-navbar-register = Create an account
 # Displayed in the navbar when the user is signed in
-coauth-navbar-signed-in-as = Signed in as <span class="font-semibold">{ $username }</span>.
+coauth-navbar-signed-in-as = Signed in as <span class="font-semibold">{ $handle }</span>.
 coauth-not-found-description = The page you were looking for doesn't exist or has been moved
 coauth-not-found-heading = Page not found
 # Suggestions for the user to log in as a different user
-coauth-not-you = Not { $username }?
+coauth-not-you = Not { $handle }?
 # Separator between the login methods
 coauth-or-separator = Or
 # Displayed when an authorization request is denied by the policy
@@ -158,7 +158,7 @@ coauth-policy-violation-description =
     This might be because of the client which authored the request, the currently logged in user, or the request itself.
 # Displayed when an authorization request is denied by the policy
 coauth-policy-violation-heading = The authorization request was denied by the policy enforced by this service
-coauth-policy-violation-logged-as = Logged as <span class="font-semibold">{ $username }</span>
+coauth-policy-violation-logged-as = Logged as <span class="font-semibold">{ $handle }</span>
 # Description on the error page shown when a user tries to use a recovery link that has already been used
 coauth-recovery-consumed-description = To create a new password, start over and select “Forgot password”.
 # Title on the error page shown when a user tries to use a recovery link that has already been used
@@ -210,9 +210,9 @@ coauth-scope-view-messages = Read Contrix message metadata
 coauth-scope-view-profile = See your coauth profile info and contact details
 # Page shown when the user tries to link an upstream account that is already linked to another account
 coauth-upstream-oauth2-link-mismatch-heading = This upstream account is already linked to another account.
-coauth-upstream-oauth2-register-choose-username-description = This cannot be changed later.
+coauth-upstream-oauth2-register-choose-handle-description = This cannot be changed later.
 # Displayed when creating a new account from an SSO login, and the username is not forced
-coauth-upstream-oauth2-register-choose-username-heading = Choose your username
+coauth-upstream-oauth2-register-choose-handle-heading = Choose your username
 # Displayed when creating a new account from an SSO login, and the username is pre-filled and forced
 coauth-upstream-oauth2-register-create-account = Create a new account
 coauth-upstream-oauth2-register-enforced-by-policy = Enforced by server policy
@@ -221,7 +221,7 @@ coauth-upstream-oauth2-register-forced-display-name = Will use the following dis
 # Tells the user which email address will be imported
 coauth-upstream-oauth2-register-forced-email = Will use the following email address
 # Tells the user which username will be used
-coauth-upstream-oauth2-register-forced-username = Will use the following username
+coauth-upstream-oauth2-register-forced-handle = Will use the following username
 coauth-upstream-oauth2-register-import-data-description = Confirm the information that will be linked to your new { $server_name } account.
 coauth-upstream-oauth2-register-import-data-heading = Import your data
 coauth-upstream-oauth2-register-imported-from-upstream = Imported from your upstream account

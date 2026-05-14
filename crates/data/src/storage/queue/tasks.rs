@@ -563,7 +563,7 @@ impl InsertableJob for CleanupFinishedOAuth2SessionsJob {
     const QUEUE_NAME: &'static str = "cleanup-finished-oauth2-sessions";
 }
 
-/// Cleanup expired Contrix session grants (`oauth2_session_grants`)
+/// Cleanup expired Contrix session grants (`oauth_session_grants`)
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupExpiredSessionGrantsJob;
 

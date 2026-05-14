@@ -213,7 +213,7 @@ impl Worker {
         let mut repo = self.repository_factory.create().await?;
 
         let mut browser_sessions = Vec::new();
-        let mut oauth2_sessions = Vec::new();
+        let mut oauth_sessions = Vec::new();
         let mut personal_sessions = Vec::new();
 
         for ((kind, id), record) in pending_records {
@@ -222,7 +222,7 @@ impl Worker {
                     browser_sessions.push((*id, record.end_time, record.ip));
                 }
                 SessionKind::OAuth2 => {
-                    oauth2_sessions.push((*id, record.end_time, record.ip));
+                    oauth_sessions.push((*id, record.end_time, record.ip));
                 }
                 SessionKind::Personal => {
                     personal_sessions.push((*id, record.end_time, record.ip));
@@ -239,7 +239,7 @@ impl Worker {
             .record_batch_activity(browser_sessions)
             .await?;
         repo.oauth2_session()
-            .record_batch_activity(oauth2_sessions)
+            .record_batch_activity(oauth_sessions)
             .await?;
         repo.personal_session()
             .record_batch_activity(personal_sessions)

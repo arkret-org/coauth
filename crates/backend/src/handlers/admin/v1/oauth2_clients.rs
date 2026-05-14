@@ -7,8 +7,8 @@
 //! This module currently exposes the **localised** metadata side of the
 //! house — the per-locale variants of `client_name`, `logo_uri`,
 //! `client_uri`, `policy_uri`, and `tos_uri` — because the non-localised
-//! defaults are already stored on the `oauth2_clients` row at registration
-//! time. The companion table `oauth2_client_localized_metadata` (see
+//! defaults are already stored on the `oauth_clients` row at registration
+//! time. The companion table `oauth_client_localized_metadata` (see
 //! migration `00000000000000_initial`) stores one row per (`client_id`,
 //! `locale`, `field`) triple, and this handler is the only public surface
 //! that lets an operator edit them after the fact.
@@ -32,7 +32,7 @@ use crate::{
 /// JSON shape for the localised metadata of a single OAuth 2.0 client.
 ///
 /// Field naming mirrors the column names on
-/// `oauth2_client_localized_metadata`. Each map is keyed by BCP-47 locale
+/// `oauth_client_localized_metadata`. Each map is keyed by BCP-47 locale
 /// tag (e.g. `"ja"`, `"zh-Hans"`, `"en-GB"`) and the values are plain
 /// strings — URL fields are validated server-side at write time so the
 /// admin UI can stay schema-free.
@@ -134,7 +134,7 @@ pub struct LocalizedMetadataResponse {
 /// round-trip an edit without normalising on the client side.
 #[endpoint]
 #[tracing::instrument(
-    name = "handler.admin.v1.oauth2_clients.get_localized_metadata",
+    name = "handler.admin.v1.oauth_clients.get_localized_metadata",
     skip_all
 )]
 pub async fn get_localized_metadata(
@@ -172,7 +172,7 @@ pub async fn get_localized_metadata(
 /// `field` and `locale` so the UI can highlight the right input.
 #[endpoint]
 #[tracing::instrument(
-    name = "handler.admin.v1.oauth2_clients.replace_localized_metadata",
+    name = "handler.admin.v1.oauth_clients.replace_localized_metadata",
     skip_all
 )]
 pub async fn replace_localized_metadata(

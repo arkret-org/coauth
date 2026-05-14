@@ -29,7 +29,7 @@ pub struct Anonymous {
 pub struct User {
     pub id: String,
     #[serde(default)]
-    pub username: String,
+    pub handle: String,
     #[serde(default)]
     pub can_request_admin: bool,
     #[serde(default)]
@@ -556,7 +556,7 @@ pub type ResendEmailAuthCodeResult = ResendEmailAuthCodePayload;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct LoginRequest {
-    pub username: String,
+    pub handle: String,
     pub password: String,
 }
 
@@ -576,9 +576,9 @@ pub struct LoginResponse {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct LoginViewerInfo {
     pub id: String,
-    pub username: String,
-    pub did: String,
     pub handle: String,
+    pub did: String,
+    pub federated_handle: String,
     pub principal_id: String,
     #[serde(default)]
     pub display_name: Option<String>,
@@ -622,7 +622,7 @@ pub struct ProvidersResponse {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RegisterRequest {
-    pub username: String,
+    pub handle: String,
     #[serde(default)]
     pub email: Option<String>,
     pub password: String,
@@ -647,7 +647,7 @@ pub struct RegisterResponse {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RegisterStatusResponse {
     pub id: String,
-    pub username: String,
+    pub handle: String,
     #[serde(default)]
     pub email_pending: bool,
     #[serde(default)]

@@ -210,7 +210,7 @@ pub trait RepositoryAccess: Send {
     ) -> Box<dyn OAuth2RefreshTokenRepository<Error = Self::Error> + 'c>;
 
     /// Get an [`OAuth2DeviceCodeGrantRepository`]
-    fn oauth2_device_code_grant<'c>(
+    fn oauth_device_code_grant<'c>(
         &'c mut self,
     ) -> Box<dyn OAuth2DeviceCodeGrantRepository<Error = Self::Error> + 'c>;
 
@@ -470,11 +470,11 @@ mod impls {
             ))
         }
 
-        fn oauth2_device_code_grant<'c>(
+        fn oauth_device_code_grant<'c>(
             &'c mut self,
         ) -> Box<dyn OAuth2DeviceCodeGrantRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
-                self.inner.oauth2_device_code_grant(),
+                self.inner.oauth_device_code_grant(),
                 &mut self.mapper,
             ))
         }
@@ -657,10 +657,10 @@ mod impls {
             (**self).oauth2_refresh_token()
         }
 
-        fn oauth2_device_code_grant<'c>(
+        fn oauth_device_code_grant<'c>(
             &'c mut self,
         ) -> Box<dyn OAuth2DeviceCodeGrantRepository<Error = Self::Error> + 'c> {
-            (**self).oauth2_device_code_grant()
+            (**self).oauth_device_code_grant()
         }
 
         fn personal_access_token<'c>(

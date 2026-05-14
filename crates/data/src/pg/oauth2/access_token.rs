@@ -7,7 +7,7 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, schema::oauth2_access_tokens};
+use crate::{DatabaseError, schema::oauth_access_tokens};
 
 /// An implementation of [`OAuth2AccessTokenRepository`] for a PostgreSQL
 /// connection
@@ -25,10 +25,10 @@ impl<'c> PgOAuth2AccessTokenRepository<'c> {
 
 /// Row type for loading access tokens from the database
 #[derive(Debug, Clone, Queryable, Selectable)]
-#[diesel(table_name = oauth2_access_tokens)]
+#[diesel(table_name = oauth_access_tokens)]
 struct OAuth2AccessTokenRow {
     id: Uuid,
-    oauth2_session_id: Uuid,
+    oauth_session_id: Uuid,
     access_token: String,
     created_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
@@ -46,7 +46,7 @@ impl From<OAuth2AccessTokenRow> for AccessToken {
         Self {
             id: value.id.into(),
             state,
-            session_id: value.oauth2_session_id.into(),
+            session_id: value.oauth_session_id.into(),
             access_token: value.access_token,
             created_at: value.created_at,
             expires_at: value.expires_at,
@@ -57,10 +57,10 @@ impl From<OAuth2AccessTokenRow> for AccessToken {
 
 /// Insertable row for creating a new access token
 #[derive(Insertable)]
-#[diesel(table_name = oauth2_access_tokens)]
+#[diesel(table_name = oauth_access_tokens)]
 struct NewOAuth2AccessToken {
     id: Uuid,
-    oauth2_session_id: Uuid,
+    oauth_session_id: Uuid,
     access_token: String,
     created_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
@@ -86,7 +86,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
         err,
     )]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<AccessToken>, Self::Error> {
-        let res = oauth2_access_tokens::table
+        let res = oauth_access_tokens::table
             .find(Uuid::from(id))
             .select(OAuth2AccessTokenRow::as_select())
             .first::<OAuth2AccessTokenRow>(self.conn)
@@ -101,8 +101,8 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
         &mut self,
         access_token: &str,
     ) -> Result<Option<AccessToken>, Self::Error> {
-        let res = oauth2_access_tokens::table
-            .filter(oauth2_access_tokens::access_token.eq(access_token))
+        let res = oauth_access_tokens::table
+            .filter(oauth_access_tokens::access_token.eq(access_token))
             .select(OAuth2AccessTokenRow::as_select())
             .first::<OAuth2AccessTokenRow>(self.conn)
             .await
@@ -137,13 +137,13 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
 
         let new_row = NewOAuth2AccessToken {
             id: Uuid::from(id),
-            oauth2_session_id: Uuid::from(session.id),
+            oauth_session_id: Uuid::from(session.id),
             access_token: access_token.clone(),
             created_at,
             expires_at,
         };
 
-        diesel::insert_into(oauth2_access_tokens::table)
+        diesel::insert_into(oauth_access_tokens::table)
             .values(&new_row)
             .execute(self.conn)
             .await?;
@@ -175,8 +175,8 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
     ) -> Result<AccessToken, Self::Error> {
         let revoked_at = clock.now();
         let rows_affected =
-            diesel::update(oauth2_access_tokens::table.find(Uuid::from(access_token.id)))
-                .set(oauth2_access_tokens::revoked_at.eq(Some(revoked_at)))
+            diesel::update(oauth_access_tokens::table.find(Uuid::from(access_token.id)))
+                .set(oauth_access_tokens::revoked_at.eq(Some(revoked_at)))
                 .execute(self.conn)
                 .await?;
 
@@ -203,8 +203,8 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
     ) -> Result<AccessToken, Self::Error> {
         let now = clock.now();
         let rows_affected =
-            diesel::update(oauth2_access_tokens::table.find(Uuid::from(access_token.id)))
-                .set(oauth2_access_tokens::first_used_at.eq(Some(now)))
+            diesel::update(oauth_access_tokens::table.find(Uuid::from(access_token.id)))
+                .set(oauth_access_tokens::first_used_at.eq(Some(now)))
                 .execute(self.conn)
                 .await?;
 
@@ -238,7 +238,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
                 WITH
                     to_delete AS (
                         SELECT id
-                        FROM oauth2_access_tokens
+                        FROM oauth_access_tokens
                         WHERE revoked_at IS NOT NULL
                           AND ($1::timestamptz IS NULL OR revoked_at >= $1::timestamptz)
                           AND revoked_at < $2::timestamptz
@@ -248,10 +248,10 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
                     ),
 
                     deleted AS (
-                        DELETE FROM oauth2_access_tokens
+                        DELETE FROM oauth_access_tokens
                         USING to_delete
-                        WHERE oauth2_access_tokens.id = to_delete.id
-                        RETURNING oauth2_access_tokens.revoked_at
+                        WHERE oauth_access_tokens.id = to_delete.id
+                        RETURNING oauth_access_tokens.revoked_at
                     )
 
                 SELECT
@@ -292,7 +292,7 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
                 WITH
                     to_delete AS (
                         SELECT id
-                        FROM oauth2_access_tokens
+                        FROM oauth_access_tokens
                         WHERE expires_at IS NOT NULL
                           AND ($1::timestamptz IS NULL OR expires_at >= $1::timestamptz)
                           AND expires_at < $2::timestamptz
@@ -302,10 +302,10 @@ impl coauth_data::oauth2::OAuth2AccessTokenRepository for PgOAuth2AccessTokenRep
                     ),
 
                     deleted AS (
-                        DELETE FROM oauth2_access_tokens
+                        DELETE FROM oauth_access_tokens
                         USING to_delete
-                        WHERE oauth2_access_tokens.id = to_delete.id
-                        RETURNING oauth2_access_tokens.expires_at
+                        WHERE oauth_access_tokens.id = to_delete.id
+                        RETURNING oauth_access_tokens.expires_at
                     )
 
                 SELECT

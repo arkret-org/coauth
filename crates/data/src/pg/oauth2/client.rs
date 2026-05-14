@@ -18,8 +18,8 @@ use uuid::Uuid;
 use crate::{
     DatabaseError, DatabaseInconsistencyError,
     schema::{
-        oauth2_access_tokens, oauth2_authorization_grants, oauth2_client_localized_metadata,
-        oauth2_clients, oauth2_refresh_tokens, oauth2_sessions, personal_access_tokens,
+        oauth_access_tokens, oauth_authorization_grants, oauth_client_localized_metadata,
+        oauth_clients, oauth_refresh_tokens, oauth_sessions, personal_access_tokens,
         personal_sessions,
     },
 };
@@ -48,13 +48,13 @@ impl<'c> PgOAuth2ClientRepository<'c> {
             return Ok(BTreeMap::new());
         }
 
-        let rows: Vec<(Uuid, String, String, String)> = oauth2_client_localized_metadata::table
-            .filter(oauth2_client_localized_metadata::client_id.eq_any(client_ids))
+        let rows: Vec<(Uuid, String, String, String)> = oauth_client_localized_metadata::table
+            .filter(oauth_client_localized_metadata::client_id.eq_any(client_ids))
             .select((
-                oauth2_client_localized_metadata::client_id,
-                oauth2_client_localized_metadata::locale,
-                oauth2_client_localized_metadata::field,
-                oauth2_client_localized_metadata::value,
+                oauth_client_localized_metadata::client_id,
+                oauth_client_localized_metadata::locale,
+                oauth_client_localized_metadata::field,
+                oauth_client_localized_metadata::value,
             ))
             .load(self.conn)
             .await?;
@@ -84,7 +84,7 @@ impl<'c> PgOAuth2ClientRepository<'c> {
 /// Row type for loading OAuth2 clients from the database
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Queryable, Selectable)]
-#[diesel(table_name = oauth2_clients)]
+#[diesel(table_name = oauth_clients)]
 struct OAuth2ClientRow {
     id: Uuid,
     metadata_digest: Option<String>,
@@ -118,7 +118,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
         let redirect_uris: Result<Vec<Url>, _> =
             row.redirect_uris.iter().map(|s| s.parse()).collect();
         let redirect_uris = redirect_uris.map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_clients")
+            DatabaseInconsistencyError::on("oauth_clients")
                 .column("redirect_uris")
                 .row(id)
                 .source(e)
@@ -129,7 +129,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             .map(|s| s.parse())
             .transpose()
             .map_err(|e| {
-                DatabaseInconsistencyError::on("oauth2_clients")
+                DatabaseInconsistencyError::on("oauth_clients")
                     .column("application_type")
                     .row(id)
                     .source(e)
@@ -150,28 +150,28 @@ impl TryFrom<OAuth2ClientRow> for Client {
         }
 
         let logo_uri = row.logo_uri.map(|s| s.parse()).transpose().map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_clients")
+            DatabaseInconsistencyError::on("oauth_clients")
                 .column("logo_uri")
                 .row(id)
                 .source(e)
         })?;
 
         let client_uri = row.client_uri.map(|s| s.parse()).transpose().map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_clients")
+            DatabaseInconsistencyError::on("oauth_clients")
                 .column("client_uri")
                 .row(id)
                 .source(e)
         })?;
 
         let policy_uri = row.policy_uri.map(|s| s.parse()).transpose().map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_clients")
+            DatabaseInconsistencyError::on("oauth_clients")
                 .column("policy_uri")
                 .row(id)
                 .source(e)
         })?;
 
         let tos_uri = row.tos_uri.map(|s| s.parse()).transpose().map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_clients")
+            DatabaseInconsistencyError::on("oauth_clients")
                 .column("tos_uri")
                 .row(id)
                 .source(e)
@@ -182,7 +182,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             .map(|s| s.parse())
             .transpose()
             .map_err(|e| {
-                DatabaseInconsistencyError::on("oauth2_clients")
+                DatabaseInconsistencyError::on("oauth_clients")
                     .column("id_token_signed_response_alg")
                     .row(id)
                     .source(e)
@@ -193,7 +193,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             .map(|s| s.parse())
             .transpose()
             .map_err(|e| {
-                DatabaseInconsistencyError::on("oauth2_clients")
+                DatabaseInconsistencyError::on("oauth_clients")
                     .column("userinfo_signed_response_alg")
                     .row(id)
                     .source(e)
@@ -204,7 +204,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             .map(|s| s.parse())
             .transpose()
             .map_err(|e| {
-                DatabaseInconsistencyError::on("oauth2_clients")
+                DatabaseInconsistencyError::on("oauth_clients")
                     .column("token_endpoint_auth_method")
                     .row(id)
                     .source(e)
@@ -215,7 +215,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             .map(|s| s.parse())
             .transpose()
             .map_err(|e| {
-                DatabaseInconsistencyError::on("oauth2_clients")
+                DatabaseInconsistencyError::on("oauth_clients")
                     .column("token_endpoint_auth_signing_alg")
                     .row(id)
                     .source(e)
@@ -226,7 +226,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             .map(|s| s.parse())
             .transpose()
             .map_err(|e| {
-                DatabaseInconsistencyError::on("oauth2_clients")
+                DatabaseInconsistencyError::on("oauth_clients")
                     .column("initiate_login_uri")
                     .row(id)
                     .source(e)
@@ -236,7 +236,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             (None, None) => None,
             (Some(jwks), None) => {
                 let jwks = serde_json::from_value(jwks).map_err(|e| {
-                    DatabaseInconsistencyError::on("oauth2_clients")
+                    DatabaseInconsistencyError::on("oauth_clients")
                         .column("jwks")
                         .row(id)
                         .source(e)
@@ -245,7 +245,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             }
             (None, Some(jwks_uri)) => {
                 let jwks_uri = jwks_uri.parse().map_err(|e| {
-                    DatabaseInconsistencyError::on("oauth2_clients")
+                    DatabaseInconsistencyError::on("oauth_clients")
                         .column("jwks_uri")
                         .row(id)
                         .source(e)
@@ -254,7 +254,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
                 Some(JwksOrJwksUri::JwksUri(jwks_uri))
             }
             _ => {
-                return Err(DatabaseInconsistencyError::on("oauth2_clients")
+                return Err(DatabaseInconsistencyError::on("oauth_clients")
                     .column("jwks(_uri)")
                     .row(id));
             }
@@ -276,7 +276,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
             // Localised variants are joined in by the repository methods
             // (`lookup`, `find_by_client_id`, etc.) after this `TryFrom`
             // returns; the row-level conversion only sees the non-localised
-            // columns of `oauth2_clients`.
+            // columns of `oauth_clients`.
             localized_metadata: coauth_data::LocalizedClientMetadata::default(),
             jwks,
             id_token_signed_response_alg,
@@ -290,7 +290,7 @@ impl TryFrom<OAuth2ClientRow> for Client {
 
 /// Insertable row for creating a new OAuth2 client
 #[derive(Insertable)]
-#[diesel(table_name = oauth2_clients)]
+#[diesel(table_name = oauth_clients)]
 struct NewOAuth2Client {
     id: Uuid,
     metadata_digest: Option<String>,
@@ -329,7 +329,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         err,
     )]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<Client>, Self::Error> {
-        let res = oauth2_clients::table
+        let res = oauth_clients::table
             .find(Uuid::from(id))
             .select(OAuth2ClientRow::as_select())
             .first::<OAuth2ClientRow>(self.conn)
@@ -352,8 +352,8 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         &mut self,
         digest: &str,
     ) -> Result<Option<Client>, Self::Error> {
-        let res = oauth2_clients::table
-            .filter(oauth2_clients::metadata_digest.eq(digest))
+        let res = oauth_clients::table
+            .filter(oauth_clients::metadata_digest.eq(digest))
             .select(OAuth2ClientRow::as_select())
             .first::<OAuth2ClientRow>(self.conn)
             .await
@@ -377,8 +377,8 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
     ) -> Result<BTreeMap<Ulid, Client>, Self::Error> {
         let ids: Vec<Uuid> = ids.into_iter().map(Uuid::from).collect();
 
-        let res: Vec<OAuth2ClientRow> = oauth2_clients::table
-            .filter(oauth2_clients::id.eq_any(&ids))
+        let res: Vec<OAuth2ClientRow> = oauth_clients::table
+            .filter(oauth_clients::id.eq_any(&ids))
             .select(OAuth2ClientRow::as_select())
             .load(self.conn)
             .await?;
@@ -472,7 +472,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
             is_static: Some(false),
         };
 
-        diesel::insert_into(oauth2_clients::table)
+        diesel::insert_into(oauth_clients::table)
             .values(&new_client)
             .execute(self.conn)
             .await?;
@@ -562,22 +562,22 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
             is_static: Some(true),
         };
 
-        diesel::insert_into(oauth2_clients::table)
+        diesel::insert_into(oauth_clients::table)
             .values(&new_client)
-            .on_conflict(oauth2_clients::id)
+            .on_conflict(oauth_clients::id)
             .do_update()
             .set((
-                oauth2_clients::encrypted_client_secret.eq(encrypted_client_secret.clone()),
-                oauth2_clients::redirect_uris.eq(&redirect_uris_array),
-                oauth2_clients::grant_type_authorization_code.eq(true),
-                oauth2_clients::grant_type_refresh_token.eq(true),
-                oauth2_clients::grant_type_client_credentials.eq(true),
-                oauth2_clients::grant_type_device_code.eq(Some(true)),
-                oauth2_clients::token_endpoint_auth_method.eq(&client_auth_method_str),
-                oauth2_clients::jwks.eq(&jwks_json),
-                oauth2_clients::client_name.eq(&client_name),
-                oauth2_clients::jwks_uri.eq(jwks_uri.as_ref().map(Url::to_string)),
-                oauth2_clients::is_static.eq(Some(true)),
+                oauth_clients::encrypted_client_secret.eq(encrypted_client_secret.clone()),
+                oauth_clients::redirect_uris.eq(&redirect_uris_array),
+                oauth_clients::grant_type_authorization_code.eq(true),
+                oauth_clients::grant_type_refresh_token.eq(true),
+                oauth_clients::grant_type_client_credentials.eq(true),
+                oauth_clients::grant_type_device_code.eq(Some(true)),
+                oauth_clients::token_endpoint_auth_method.eq(&client_auth_method_str),
+                oauth_clients::jwks.eq(&jwks_json),
+                oauth_clients::client_name.eq(&client_name),
+                oauth_clients::jwks_uri.eq(jwks_uri.as_ref().map(Url::to_string)),
+                oauth_clients::is_static.eq(Some(true)),
             ))
             .execute(self.conn)
             .await?;
@@ -618,8 +618,8 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
 
     #[tracing::instrument(name = "db.oauth2_client.all_static", skip_all, err)]
     async fn all_static(&mut self) -> Result<Vec<Client>, Self::Error> {
-        let res: Vec<OAuth2ClientRow> = oauth2_clients::table
-            .filter(oauth2_clients::is_static.eq(Some(true)))
+        let res: Vec<OAuth2ClientRow> = oauth_clients::table
+            .filter(oauth_clients::is_static.eq(Some(true)))
             .select(OAuth2ClientRow::as_select())
             .load(self.conn)
             .await?;
@@ -652,19 +652,19 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
 
         // Delete the authorization grants
         diesel::delete(
-            oauth2_authorization_grants::table
-                .filter(oauth2_authorization_grants::oauth2_client_id.eq(client_uuid)),
+            oauth_authorization_grants::table
+                .filter(oauth_authorization_grants::oauth_client_id.eq(client_uuid)),
         )
         .execute(self.conn)
         .await?;
 
         // Delete the OAuth 2 sessions related data: access tokens
         diesel::delete(
-            oauth2_access_tokens::table.filter(
-                oauth2_access_tokens::oauth2_session_id.eq_any(
-                    oauth2_sessions::table
-                        .filter(oauth2_sessions::oauth2_client_id.eq(client_uuid))
-                        .select(oauth2_sessions::id),
+            oauth_access_tokens::table.filter(
+                oauth_access_tokens::oauth_session_id.eq_any(
+                    oauth_sessions::table
+                        .filter(oauth_sessions::oauth_client_id.eq(client_uuid))
+                        .select(oauth_sessions::id),
                 ),
             ),
         )
@@ -673,11 +673,11 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
 
         // Delete refresh tokens
         diesel::delete(
-            oauth2_refresh_tokens::table.filter(
-                oauth2_refresh_tokens::oauth2_session_id.eq_any(
-                    oauth2_sessions::table
-                        .filter(oauth2_sessions::oauth2_client_id.eq(client_uuid))
-                        .select(oauth2_sessions::id),
+            oauth_refresh_tokens::table.filter(
+                oauth_refresh_tokens::oauth_session_id.eq_any(
+                    oauth_sessions::table
+                        .filter(oauth_sessions::oauth_client_id.eq(client_uuid))
+                        .select(oauth_sessions::id),
                 ),
             ),
         )
@@ -686,7 +686,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
 
         // Delete sessions
         diesel::delete(
-            oauth2_sessions::table.filter(oauth2_sessions::oauth2_client_id.eq(client_uuid)),
+            oauth_sessions::table.filter(oauth_sessions::oauth_client_id.eq(client_uuid)),
         )
         .execute(self.conn)
         .await?;
@@ -696,7 +696,7 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
             personal_access_tokens::table.filter(
                 personal_access_tokens::personal_session_id.eq_any(
                     personal_sessions::table
-                        .filter(personal_sessions::owner_oauth2_client_id.eq(client_uuid))
+                        .filter(personal_sessions::owner_oauth_client_id.eq(client_uuid))
                         .select(personal_sessions::id),
                 ),
             ),
@@ -707,14 +707,14 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         // Delete personal sessions owned by the client
         diesel::delete(
             personal_sessions::table
-                .filter(personal_sessions::owner_oauth2_client_id.eq(client_uuid)),
+                .filter(personal_sessions::owner_oauth_client_id.eq(client_uuid)),
         )
         .execute(self.conn)
         .await?;
 
         // Now delete the client itself (the localised metadata is removed
         // automatically by the `ON DELETE CASCADE` foreign key).
-        let rows_affected = diesel::delete(oauth2_clients::table.find(client_uuid))
+        let rows_affected = diesel::delete(oauth_clients::table.find(client_uuid))
             .execute(self.conn)
             .await?;
 
@@ -752,8 +752,8 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         // Wipe the previous set first; the (client_id, locale, field)
         // primary key would otherwise force us to compute a diff.
         diesel::delete(
-            oauth2_client_localized_metadata::table
-                .filter(oauth2_client_localized_metadata::client_id.eq(client_uuid)),
+            oauth_client_localized_metadata::table
+                .filter(oauth_client_localized_metadata::client_id.eq(client_uuid)),
         )
         .execute(self.conn)
         .await?;
@@ -809,16 +809,16 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
             return Ok(());
         }
 
-        diesel::insert_into(oauth2_client_localized_metadata::table)
+        diesel::insert_into(oauth_client_localized_metadata::table)
             .values(
                 new_rows
                     .into_iter()
                     .map(|(client_id, locale, field, value)| {
                         (
-                            oauth2_client_localized_metadata::client_id.eq(client_id),
-                            oauth2_client_localized_metadata::locale.eq(locale),
-                            oauth2_client_localized_metadata::field.eq(field),
-                            oauth2_client_localized_metadata::value.eq(value),
+                            oauth_client_localized_metadata::client_id.eq(client_id),
+                            oauth_client_localized_metadata::locale.eq(locale),
+                            oauth_client_localized_metadata::field.eq(field),
+                            oauth_client_localized_metadata::value.eq(value),
                         )
                     })
                     .collect::<Vec<_>>(),
@@ -838,9 +838,9 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
     async fn load_i18n(&mut self, id: Ulid) -> Result<OAuth2ClientI18n, Self::Error> {
         let client_uuid = Uuid::from(id);
 
-        let raw: Option<serde_json::Value> = oauth2_clients::table
+        let raw: Option<serde_json::Value> = oauth_clients::table
             .find(client_uuid)
-            .select(oauth2_clients::i18n)
+            .select(oauth_clients::i18n)
             .first::<serde_json::Value>(self.conn)
             .await
             .optional()?;
@@ -890,8 +890,8 @@ impl OAuth2ClientRepository for PgOAuth2ClientRepository<'_> {
         let new_value =
             serde_json::to_value(&current).map_err(crate::DatabaseError::to_invalid_operation)?;
 
-        diesel::update(oauth2_clients::table.find(client_uuid))
-            .set(oauth2_clients::i18n.eq(new_value))
+        diesel::update(oauth_clients::table.find(client_uuid))
+            .set(oauth_clients::i18n.eq(new_value))
             .execute(self.conn)
             .await?;
 

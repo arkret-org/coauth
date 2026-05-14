@@ -150,7 +150,7 @@ pub async fn load_authorization_consent(
 
     repo.cancel().await?;
 
-    let username = &browser_session.user.username;
+    let username = &browser_session.user.handle;
     let user_display_name = fetch_display_name(principal_server, username).await;
 
     Ok(AuthorizationConsentInfo {
@@ -266,7 +266,7 @@ pub async fn lookup_device_link(
     code: &str,
 ) -> Result<Option<Ulid>, OAuth2AccessError> {
     let grant = repo
-        .oauth2_device_code_grant()
+        .oauth_device_code_grant()
         .find_by_user_code(code)
         .await?
         .filter(|grant| grant.is_pending())
@@ -288,7 +288,7 @@ pub async fn load_device_consent(
     user_agent: Option<String>,
 ) -> Result<ConsentScreen, OAuth2AccessError> {
     let grant = repo
-        .oauth2_device_code_grant()
+        .oauth_device_code_grant()
         .lookup(grant_id)
         .await?
         .ok_or(OAuth2AccessError::NotFound)?;
@@ -317,7 +317,7 @@ pub async fn load_device_consent(
 
     repo.cancel().await?;
 
-    let username = &browser_session.user.username;
+    let username = &browser_session.user.handle;
     let user_display_name = fetch_display_name(principal_server, username).await;
 
     Ok(ConsentScreen {
@@ -341,7 +341,7 @@ pub async fn submit_device_consent(
     user_agent: Option<String>,
 ) -> Result<DeviceConsentStatus, OAuth2AccessError> {
     let grant = repo
-        .oauth2_device_code_grant()
+        .oauth_device_code_grant()
         .lookup(grant_id)
         .await?
         .ok_or(OAuth2AccessError::NotFound)?;
@@ -374,13 +374,13 @@ pub async fn submit_device_consent(
     let status = if grant.is_pending() {
         match action {
             DeviceConsentAction::Consent => {
-                repo.oauth2_device_code_grant()
+                repo.oauth_device_code_grant()
                     .fulfill(clock, grant, browser_session)
                     .await?;
                 DeviceConsentStatus::Fulfilled
             }
             DeviceConsentAction::Reject => {
-                repo.oauth2_device_code_grant()
+                repo.oauth_device_code_grant()
                     .reject(clock, grant, browser_session)
                     .await?;
                 DeviceConsentStatus::Rejected

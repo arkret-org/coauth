@@ -52,7 +52,7 @@ macro_rules! select_user_columns {
     () => {
         (
             users::id,
-            users::username,
+            users::handle,
             users::created_at,
             users::updated_at,
             users::locked_at,
@@ -641,9 +641,9 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
                         WHERE us.finished_at IS NOT NULL
                           AND ($1::timestamptz IS NULL OR us.finished_at >= $1)
                           AND us.finished_at < $2
-                          -- Only delete if no oauth2_sessions reference this user_session
+                          -- Only delete if no oauth_sessions reference this user_session
                           AND NOT EXISTS (
-                              SELECT 1 FROM oauth2_sessions os
+                              SELECT 1 FROM oauth_sessions os
                               WHERE os.user_session_id = us.id
                           )
                         ORDER BY us.finished_at ASC

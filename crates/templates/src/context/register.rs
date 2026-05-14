@@ -20,8 +20,8 @@ use crate::{FormField, FormState};
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RegisterFormField {
-    /// Username field
-    Username,
+    /// Handle field
+    Handle,
     /// Email field
     Email,
     /// Password field
@@ -35,7 +35,7 @@ pub enum RegisterFormField {
 impl FormField for RegisterFormField {
     fn keep(&self) -> bool {
         match self {
-            Self::Username | Self::Email | Self::AcceptTerms => true,
+            Self::Handle | Self::Email | Self::AcceptTerms => true,
             Self::Password | Self::PasswordConfirm => false,
         }
     }

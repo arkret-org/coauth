@@ -11,10 +11,10 @@ use crate::{components::layout::Layout, config::AppError};
 pub fn ErrorPage(error: AppError) -> Element {
     match error.kind.as_str() {
         "account_deactivated" => rsx! {
-            AccountDeactivated { username: error.username }
+            AccountDeactivated { handle: error.handle }
         },
         "account_locked" => rsx! {
-            AccountLocked { username: error.username }
+            AccountLocked { handle: error.handle }
         },
         "session_ended" => rsx! {
             SessionEnded {}
@@ -28,7 +28,7 @@ pub fn ErrorPage(error: AppError) -> Element {
 // ── Account deactivated ──────────────────────────────────────────────
 
 #[component]
-fn AccountDeactivated(username: Option<String>) -> Element {
+fn AccountDeactivated(handle: Option<String>) -> Element {
     rsx! {
         Layout {
             div { class: "flex flex-col gap-6 items-center",
@@ -37,7 +37,7 @@ fn AccountDeactivated(username: Option<String>) -> Element {
                 p { class: "text-md text-secondary text-center",
                     "This account has been deactivated."
                 }
-                if let Some(name) = &username {
+                if let Some(name) = &handle {
                     p { class: "text-md text-secondary",
                         "Signed in as {name}"
                     }
@@ -51,7 +51,7 @@ fn AccountDeactivated(username: Option<String>) -> Element {
 // ── Account locked ───────────────────────────────────────────────────
 
 #[component]
-fn AccountLocked(username: Option<String>) -> Element {
+fn AccountLocked(handle: Option<String>) -> Element {
     rsx! {
         Layout {
             div { class: "flex flex-col gap-6 items-center",
@@ -60,7 +60,7 @@ fn AccountLocked(username: Option<String>) -> Element {
                 p { class: "text-md text-secondary text-center",
                     "This account has been locked by an administrator."
                 }
-                if let Some(name) = &username {
+                if let Some(name) = &handle {
                     p { class: "text-md text-secondary",
                         "Signed in as {name}"
                     }

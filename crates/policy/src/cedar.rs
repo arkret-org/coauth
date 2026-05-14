@@ -19,13 +19,13 @@
 //! ## Example Cedar Policy
 //!
 //! ```cedar
-//! // Block registration with short usernames
+//! // Block registration with short handles
 //! forbid(
 //!     principal,
 //!     action == Action::"register",
 //!     resource
 //! ) when {
-//!     context.username.size() < 3
+//!     context.handle.size() < 3
 //! };
 //!
 //! // Block banned email domains

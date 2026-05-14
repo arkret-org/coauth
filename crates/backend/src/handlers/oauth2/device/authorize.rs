@@ -161,7 +161,7 @@ async fn handle_post(
         .to_uppercase();
 
     let device_code = repo
-        .oauth2_device_code_grant()
+        .oauth_device_code_grant()
         .add(
             &mut rng,
             &clock,

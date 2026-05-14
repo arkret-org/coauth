@@ -148,9 +148,9 @@ impl RunnableJob for DeactivateUserJob {
         repo.save().await.map_err(JobError::retry)?;
 
         // Finally, tell the principal to remove / erase the account.
-        info!(username = %target.username, "requesting principal deactivation");
+        info!(handle = %target.handle, "requesting principal deactivation");
         principal
-            .delete_user(&target.username, self.principal_erase())
+            .delete_user(&target.handle, self.principal_erase())
             .await
             .map_err(JobError::retry)?;
 
@@ -184,9 +184,9 @@ impl RunnableJob for ReactivateUserJob {
         // Re-enable the account on the principal *before* flipping the local
         // flag -- this way the user cannot authenticate until the downstream
         // principal system is ready.
-        info!(username = %target.username, "requesting principal reactivation");
+        info!(handle = %target.handle, "requesting principal reactivation");
         principal
-            .reactivate_user(&target.username)
+            .reactivate_user(&target.handle)
             .await
             .map_err(JobError::retry)?;
 

@@ -8,7 +8,7 @@
 //!
 //! Accepts the standard RFC 7591 request payload (client_name,
 //! redirect_uris, grant_types, token_endpoint_auth_method, scope) and
-//! persists a new entry to `oauth2_clients`. Returns the standard
+//! persists a new entry to `oauth_clients`. Returns the standard
 //! response shape — `client_id`, `client_secret` (only for confidential
 //! clients), `client_id_issued_at`, `client_secret_expires_at`, and a
 //! `registration_access_token` so the operator can re-edit the
@@ -210,7 +210,7 @@ fn ensure_redirect_for_grants(grants: &[GrantType], redirect_uris: &[Url]) -> Re
 }
 
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.oauth2_clients.register", skip_all)]
+#[tracing::instrument(name = "handler.admin.v1.oauth_clients.register", skip_all)]
 pub async fn register(
     req: &mut Request,
     depot: &Depot,

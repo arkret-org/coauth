@@ -35,7 +35,7 @@ common-loading = 加载中...
 common-account-id = 账号标识
 common-password = 密码
 common-password-confirm = 确认密码
-common-username = 用户名
+common-handle = 用户名
 
 ## error
 
@@ -82,7 +82,7 @@ coauth-device-display-name-name-for-platform = { $name } { $platform }
 coauth-device-display-name-unknown-device = 未知设备
 coauth-email-in-use-description = 如果你忘记了账户凭证，你可以恢复账户。你也可以使用另一邮件地址重新开始。
 coauth-email-in-use-title = 此邮件地址 <span>{ $email }</span> 已被使用
-coauth-emails-greeting = { $username } 你好，
+coauth-emails-greeting = { $handle } 你好，
 coauth-emails-recovery-click-button = 点击下面的按钮创建新密码：
 coauth-emails-recovery-copy-link = 复制以下链接并粘贴到浏览器中以创建新密码：
 coauth-emails-recovery-create-new-password = 创建新密码
@@ -103,13 +103,13 @@ coauth-errors-field-required = 此字段为必填项
 coauth-errors-invalid-credentials = 无效的凭据
 coauth-errors-password-mismatch = 密码字段不匹配
 coauth-errors-rate-limit-exceeded = 你在短时间内发出了过多请求。请于几分钟后重试。
-coauth-errors-username-all-numeric = 用户名不能仅由数字组成
-coauth-errors-username-banned = 由于服务器策略，用户名已被禁止
-coauth-errors-username-invalid-chars = 用户名包含无效字符。仅能使用小写字母、数字、短横线或下划线。
-coauth-errors-username-not-allowed = 由于服务器策略，用户名不被允许
-coauth-errors-username-taken = 此用户名已被使用
-coauth-errors-username-too-long = 用户名太长
-coauth-errors-username-too-short = 用户名太短
+coauth-errors-handle-all-numeric = 用户名不能仅由数字组成
+coauth-errors-handle-banned = 由于服务器策略，用户名已被禁止
+coauth-errors-handle-invalid-chars = 用户名包含无效字符。仅能使用小写字母、数字、短横线或下划线。
+coauth-errors-handle-not-allowed = 由于服务器策略，用户名不被允许
+coauth-errors-handle-taken = 此用户名已被使用
+coauth-errors-handle-too-long = 用户名太长
+coauth-errors-handle-too-short = 用户名太短
 coauth-login-call-to-register = 还没有账户？
 coauth-login-continue-with-provider = 以 { $provider } 继续
 coauth-login-description = 请登录以继续：
@@ -119,17 +119,17 @@ coauth-login-link-description = 正在链接您的<span class="break-keep text-l
 coauth-login-link-headline = 登录以链接
 coauth-login-no-login-methods = 没有可用的登录途径。
 coauth-login-separator = 或
-coauth-login-username-or-email = 用户名或邮件地址
+coauth-login-handle-or-email = 用户名或邮件地址
 coauth-navbar-my-account = 我的账户
 coauth-navbar-register = 创建账户
-coauth-navbar-signed-in-as = 登录为 <span class="font-semibold">{ $username }</span>。
+coauth-navbar-signed-in-as = 登录为 <span class="font-semibold">{ $handle }</span>。
 coauth-not-found-description = 你要查找的页面不存在或已被移动
 coauth-not-found-heading = 页面未找到
-coauth-not-you = 不是 { $username }？
+coauth-not-you = 不是 { $handle }？
 coauth-or-separator = 或
 coauth-policy-violation-description = 这可能是由于创建请求的客户端、当前登录的用户或请求本身造成的。
 coauth-policy-violation-heading = 授权请求被该服务执行的策略拒绝
-coauth-policy-violation-logged-as = 登录为 <span class="font-semibold">{ $username }</span>
+coauth-policy-violation-logged-as = 登录为 <span class="font-semibold">{ $handle }</span>
 coauth-recovery-consumed-description = 要创建新密码，请重新开始并选择 "忘记密码"。
 coauth-recovery-consumed-heading = 重置密码的链接已被使用
 coauth-recovery-disabled-description = 如果你丢失了凭据，请联系管理员以恢复账户。
@@ -166,15 +166,15 @@ coauth-scope-view-messages = 读取 Contrix 消息元数据
 coauth-scope-view-profile = 查看 coauth 个人资料和联系方式
 coauth-upstream-oauth2-link-mismatch-heading = 此上游账户已与另一个账户关联。
 coauth-upstream-oauth2-login-link-action = 继续
-coauth-upstream-oauth2-login-link-description = 此用户名（{ $username }）已存在于一个账户，它将与该上游账户关联。
+coauth-upstream-oauth2-login-link-description = 此用户名（{ $handle }）已存在于一个账户，它将与该上游账户关联。
 coauth-upstream-oauth2-login-link-heading = 链接到现有账户
-coauth-upstream-oauth2-register-choose-username-description = 以后无法更改。
-coauth-upstream-oauth2-register-choose-username-heading = 选择用户名
+coauth-upstream-oauth2-register-choose-handle-description = 以后无法更改。
+coauth-upstream-oauth2-register-choose-handle-heading = 选择用户名
 coauth-upstream-oauth2-register-create-account = 创建新账户
 coauth-upstream-oauth2-register-enforced-by-policy = 由服务器策略强制执行
 coauth-upstream-oauth2-register-forced-display-name = 将使用以下显示名称
 coauth-upstream-oauth2-register-forced-email = 将使用以下电子邮件地址
-coauth-upstream-oauth2-register-forced-username = 将使用以下用户名
+coauth-upstream-oauth2-register-forced-handle = 将使用以下用户名
 coauth-upstream-oauth2-register-import-data-description = 确认将链接到新{ $server_name } 账户的信息。
 coauth-upstream-oauth2-register-import-data-heading = 导入数据
 coauth-upstream-oauth2-register-imported-from-upstream = 从上游账户导入

@@ -58,7 +58,7 @@ impl OptionalPostAuthAction {
 
             PostAuthAction::ContinueDeviceCodeGrant { id } => {
                 let grant = repo
-                    .oauth2_device_code_grant()
+                    .oauth_device_code_grant()
                     .lookup(id)
                     .await?
                     .context("Failed to load device code grant")?;

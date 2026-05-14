@@ -214,7 +214,7 @@ async fn find_user_by_email_or_by_username(
         }
     }
 
-    repo.user().find_by_username(username_or_email).await
+    repo.user().find_by_handle(username_or_email).await
 }
 
 async fn find_user_by_login_identifier(
@@ -232,7 +232,7 @@ async fn find_user_by_login_identifier(
     }
 
     if let Some(username) = contrix::parse_local_handle(url_builder, identifier)
-        && let Some(user) = repo.user().find_by_username(&username).await?
+        && let Some(user) = repo.user().find_by_handle(&username).await?
     {
         return Ok(Some(user));
     }

@@ -44,7 +44,7 @@ impl<'c> PgPersonalSessionRepository<'c> {
 struct PersonalSessionRow {
     id: Uuid,
     owner_user_id: Option<Uuid>,
-    owner_oauth2_client_id: Option<Uuid>,
+    owner_oauth_client_id: Option<Uuid>,
     actor_user_id: Uuid,
     human_name: String,
     scope_list: Vec<String>,
@@ -78,14 +78,14 @@ impl TryFrom<PersonalSessionRow> for PersonalSession {
             Some(revoked_at) => SessionState::Revoked { revoked_at },
         };
 
-        let owner = match (value.owner_user_id, value.owner_oauth2_client_id) {
+        let owner = match (value.owner_user_id, value.owner_oauth_client_id) {
             (Some(owner_user_id), None) => PersonalSessionOwner::User(Ulid::from(owner_user_id)),
-            (None, Some(owner_oauth2_client_id)) => {
-                PersonalSessionOwner::OAuth2Client(Ulid::from(owner_oauth2_client_id))
+            (None, Some(owner_oauth_client_id)) => {
+                PersonalSessionOwner::OAuth2Client(Ulid::from(owner_oauth_client_id))
             }
             _ => {
                 return Err(DatabaseInconsistencyError::on("personal_sessions")
-                    .column("owner_user_id, owner_oauth2_client_id")
+                    .column("owner_user_id, owner_oauth_client_id")
                     .row(id));
             }
         };
@@ -110,7 +110,7 @@ struct PersonalSessionAndAccessTokenRow {
     // personal_sessions fields
     id: Uuid,
     owner_user_id: Option<Uuid>,
-    owner_oauth2_client_id: Option<Uuid>,
+    owner_oauth_client_id: Option<Uuid>,
     actor_user_id: Uuid,
     human_name: String,
     scope_list: Vec<String>,
@@ -137,7 +137,7 @@ impl TryFrom<PersonalSessionAndAccessTokenRow> for (PersonalSession, Option<Pers
         let session = PersonalSession::try_from(PersonalSessionRow {
             id: value.id,
             owner_user_id: value.owner_user_id,
-            owner_oauth2_client_id: value.owner_oauth2_client_id,
+            owner_oauth_client_id: value.owner_oauth_client_id,
             actor_user_id: value.actor_user_id,
             human_name: value.human_name,
             scope_list: value.scope_list,
@@ -174,7 +174,7 @@ impl TryFrom<PersonalSessionAndAccessTokenRow> for (PersonalSession, Option<Pers
 struct NewPersonalSession {
     id: Uuid,
     owner_user_id: Option<Uuid>,
-    owner_oauth2_client_id: Option<Uuid>,
+    owner_oauth_client_id: Option<Uuid>,
     actor_user_id: Uuid,
     human_name: String,
     scope_list: Vec<String>,
@@ -186,7 +186,7 @@ struct NewPersonalSession {
 fn session_with_token_select() -> (
     personal_sessions::id,
     personal_sessions::owner_user_id,
-    personal_sessions::owner_oauth2_client_id,
+    personal_sessions::owner_oauth_client_id,
     personal_sessions::actor_user_id,
     personal_sessions::human_name,
     personal_sessions::scope_list,
@@ -201,7 +201,7 @@ fn session_with_token_select() -> (
     (
         personal_sessions::id,
         personal_sessions::owner_user_id,
-        personal_sessions::owner_oauth2_client_id,
+        personal_sessions::owner_oauth_client_id,
         personal_sessions::actor_user_id,
         personal_sessions::human_name,
         personal_sessions::scope_list,
@@ -264,7 +264,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
 
         let scope_list: Vec<String> = scope.iter().map(|s| s.as_str().to_owned()).collect();
 
-        let (owner_user_id, owner_oauth2_client_id) = match owner {
+        let (owner_user_id, owner_oauth_client_id) = match owner {
             PersonalSessionOwner::User(ulid) => (Some(Uuid::from(ulid)), None),
             PersonalSessionOwner::OAuth2Client(ulid) => (None, Some(Uuid::from(ulid))),
         };
@@ -272,7 +272,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
         let new_session = NewPersonalSession {
             id: Uuid::from(id),
             owner_user_id,
-            owner_oauth2_client_id,
+            owner_oauth_client_id,
             actor_user_id: Uuid::from(actor_user.id),
             human_name: human_name.clone(),
             scope_list,
@@ -361,7 +361,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
         }
 
         if let Some(client) = filter.owner_oauth2_client() {
-            sub = sub.filter(personal_sessions::owner_oauth2_client_id.eq(Uuid::from(client.id)));
+            sub = sub.filter(personal_sessions::owner_oauth_client_id.eq(Uuid::from(client.id)));
         }
 
         if let Some(user) = filter.actor_user() {
@@ -450,7 +450,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
 
         if let Some(client) = filter.owner_oauth2_client() {
             query =
-                query.filter(personal_sessions::owner_oauth2_client_id.eq(Uuid::from(client.id)));
+                query.filter(personal_sessions::owner_oauth_client_id.eq(Uuid::from(client.id)));
         }
 
         if let Some(user) = filter.actor_user() {
@@ -554,7 +554,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
 
         if let Some(client) = filter.owner_oauth2_client() {
             query =
-                query.filter(personal_sessions::owner_oauth2_client_id.eq(Uuid::from(client.id)));
+                query.filter(personal_sessions::owner_oauth_client_id.eq(Uuid::from(client.id)));
         }
 
         if let Some(user) = filter.actor_user() {

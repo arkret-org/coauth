@@ -256,7 +256,7 @@ fn login_hint_matches_user(
     login_hint: &str,
 ) -> bool {
     let login_hint = login_hint.trim();
-    login_hint == user.username
+    login_hint == user.handle
         || login_hint == contrix::user_did_for(url_builder, contrix_config, user)
         || login_hint == contrix::user_handle(url_builder, user)
 }
@@ -665,7 +665,7 @@ pub async fn oidc_code_exchange(
                 session_grant: None,
                 warnings: vec![format!(
                     "linked local account username={} is locked or deactivated",
-                    user.username
+                    user.handle
                 )],
             }));
             return Ok(());
@@ -686,7 +686,7 @@ pub async fn oidc_code_exchange(
                 warnings: vec![format!(
                     "login_hint={} does not match linked local account username={}",
                     input.login_hint.trim(),
-                    user.username
+                    user.handle
                 )],
             }));
             return Ok(());
@@ -759,7 +759,7 @@ pub async fn oidc_code_exchange(
         .await?;
         repo.save().await?;
 
-        let display_name = match principal_server.query_user(&user.username).await {
+        let display_name = match principal_server.query_user(&user.handle).await {
             Ok(info) => info.displayname,
             Err(_) => None,
         };
@@ -769,10 +769,10 @@ pub async fn oidc_code_exchange(
             error: None,
             viewer: Some(ViewerInfo {
                 id: NodeType::User.serialize(user.id),
-                username: user.username.clone(),
+                handle: user.handle.clone(),
                 did: principal_did,
-                handle: contrix::user_handle(&url_builder, &user),
-                principal_id: principal_server.principal_id(&user.username),
+                federated_handle: contrix::user_handle(&url_builder, &user),
+                principal_id: principal_server.principal_id(&user.handle),
                 display_name,
             }),
             session_grant: Some(SessionGrantInfo {
@@ -1086,15 +1086,15 @@ pub async fn oidc_code_exchange(
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
     let mut repo = depot.repo().await?;
 
-    let oauth2_session_id = exchangeable_oauth2_session_id.ok_or_else(|| {
+    let oauth_session_id = exchangeable_oauth2_session_id.ok_or_else(|| {
         RouteError::Internal(Box::new(std::io::Error::other(
             "authorization_code exchanged successfully without a fulfilled oauth2 session id",
         )))
     })?;
-    let Some(oauth2_session) = repo.oauth2_session().lookup(oauth2_session_id).await? else {
+    let Some(oauth2_session) = repo.oauth2_session().lookup(oauth_session_id).await? else {
         return Err(RouteError::Internal(Box::new(std::io::Error::other(
             format!(
-                "authorization_code exchange succeeded but oauth2_session={oauth2_session_id} could not be loaded",
+                "authorization_code exchange succeeded but oauth2_session={oauth_session_id} could not be loaded",
             ),
         ))));
     };
@@ -1224,7 +1224,7 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
-    let expected_oauth_session_id = oauth2_session_id.to_string();
+    let expected_oauth_session_id = oauth_session_id.to_string();
     if oauth_introspection.contrix_session_id.as_deref() != Some(expected_oauth_session_id.as_str())
     {
         res.render(Json(LoginResponse {
@@ -1374,7 +1374,7 @@ pub async fn oidc_code_exchange(
     .await?;
     repo.save().await?;
 
-    let display_name = match principal_server.query_user(&user.username).await {
+    let display_name = match principal_server.query_user(&user.handle).await {
         Ok(info) => info.displayname,
         Err(_) => None,
     };
@@ -1384,10 +1384,10 @@ pub async fn oidc_code_exchange(
         error: None,
         viewer: Some(ViewerInfo {
             id: NodeType::User.serialize(user.id),
-            username: user.username.clone(),
-            did: principal_did,
-            handle: contrix::user_handle(&url_builder, user),
-            principal_id: principal_server.principal_id(&user.username),
+                handle: user.handle.clone(),
+                did: principal_did,
+                federated_handle: contrix::user_handle(&url_builder, user),
+            principal_id: principal_server.principal_id(&user.handle),
             display_name,
         }),
         session_grant: Some(SessionGrantInfo {
@@ -1412,8 +1412,8 @@ pub async fn oidc_code_exchange(
             format!("token_endpoint={token_endpoint}"),
             format!("userinfo_endpoint={userinfo_endpoint}"),
             format!("client_id={}", oauth2_client.client_id),
-            format!("oauth2_session_id={oauth2_session_id}"),
-            format!("oauth2_client_id={}", oauth2_client.client_id),
+            format!("oauth_session_id={oauth_session_id}"),
+            format!("oauth_client_id={}", oauth2_client.client_id),
             format!("browser_session_id={user_session_id}"),
             format!(
                 "oauth_scope={}",

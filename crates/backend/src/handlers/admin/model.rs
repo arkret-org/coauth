@@ -29,8 +29,8 @@ pub struct User {
     #[serde(skip)]
     id: Ulid,
 
-    /// The username of the user.
-    username: String,
+    /// The handle of the user.
+    handle: String,
 
     /// When the user was created
     created_at: DateTime<Utc>,
@@ -66,7 +66,7 @@ impl User {
         [
             Self {
                 id: Ulid::from_bytes([0x01; 16]),
-                username: "alice".to_owned(),
+                handle: "alice".to_owned(),
                 created_at: DateTime::default(),
                 updated_at: DateTime::default(),
                 locked_at: None,
@@ -79,7 +79,7 @@ impl User {
             },
             Self {
                 id: Ulid::from_bytes([0x02; 16]),
-                username: "bob".to_owned(),
+                handle: "bob".to_owned(),
                 created_at: DateTime::default(),
                 updated_at: DateTime::default(),
                 locked_at: None,
@@ -92,7 +92,7 @@ impl User {
             },
             Self {
                 id: Ulid::from_bytes([0x03; 16]),
-                username: "charlie".to_owned(),
+                handle: "charlie".to_owned(),
                 created_at: DateTime::default(),
                 updated_at: DateTime::default(),
                 locked_at: Some(DateTime::default()),
@@ -111,7 +111,7 @@ impl From<coauth_data::User> for User {
     fn from(user: coauth_data::User) -> Self {
         Self {
             id: user.id,
-            username: user.username,
+            handle: user.handle,
             created_at: user.created_at,
             updated_at: user.updated_at,
             locked_at: user.locked_at,

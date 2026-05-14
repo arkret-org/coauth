@@ -2,8 +2,8 @@
 ALTER TABLE users
     DROP COLUMN IF EXISTS starid_backend;
 
--- Consolidated from 20260510000100_oauth2_clients_i18n/down.sql
-ALTER TABLE oauth2_clients DROP COLUMN IF EXISTS i18n;
+-- Consolidated from 20260510000100_oauth_clients_i18n/down.sql
+ALTER TABLE oauth_clients DROP COLUMN IF EXISTS i18n;
 
 -- Consolidated from 20260509000300_webauthn_credentials/down.sql
 DROP TABLE IF EXISTS webauthn_credentials;
@@ -18,7 +18,7 @@ DROP TABLE IF EXISTS invite_quarantine_queue;
 DROP TABLE IF EXISTS account_claims;
 
 -- Consolidated from 20260429000100_session_grants/down.sql
-DROP TABLE IF EXISTS oauth2_session_grants;
+DROP TABLE IF EXISTS oauth_session_grants;
 
 -- Consolidated from 20260420000100_notification_delivery_provider_lookup/down.sql
 DROP INDEX IF EXISTS notification_deliveries_provider_message_lookup;
@@ -67,13 +67,13 @@ DROP TABLE IF EXISTS queue_jobs CASCADE;
 DROP TABLE IF EXISTS queue_schedules CASCADE;
 DROP TABLE IF EXISTS queue_workers CASCADE;
 DROP TABLE IF EXISTS policy_data CASCADE;
-DROP TABLE IF EXISTS oauth2_device_code_grant CASCADE;
-DROP TABLE IF EXISTS oauth2_authorization_grants CASCADE;
-DROP TABLE IF EXISTS oauth2_refresh_tokens CASCADE;
-DROP TABLE IF EXISTS oauth2_access_tokens CASCADE;
-DROP TABLE IF EXISTS oauth2_sessions CASCADE;
-DROP TABLE IF EXISTS oauth2_client_localized_metadata CASCADE;
-DROP TABLE IF EXISTS oauth2_clients CASCADE;
+DROP TABLE IF EXISTS oauth_device_code_grant CASCADE;
+DROP TABLE IF EXISTS oauth_authorization_grants CASCADE;
+DROP TABLE IF EXISTS oauth_refresh_tokens CASCADE;
+DROP TABLE IF EXISTS oauth_access_tokens CASCADE;
+DROP TABLE IF EXISTS oauth_sessions CASCADE;
+DROP TABLE IF EXISTS oauth_client_localized_metadata CASCADE;
+DROP TABLE IF EXISTS oauth_clients CASCADE;
 DROP TABLE IF EXISTS user_unsupported_third_party_ids CASCADE;
 DROP TABLE IF EXISTS user_phones CASCADE;
 DROP TABLE IF EXISTS user_terms CASCADE;

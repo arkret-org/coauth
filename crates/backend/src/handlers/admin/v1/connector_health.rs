@@ -50,7 +50,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
     } else {
         let principal_server = depot.principal_server()?;
         let (status, error) = match principal_server
-            .is_username_available("__health_check__")
+            .is_handle_available("__health_check__")
             .await
         {
             Ok(_) => ("healthy".to_string(), None),

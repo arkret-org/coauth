@@ -79,27 +79,27 @@ impl SubjectImportPreference {
     }
 }
 
-// ── Username Import ──
+// ── Handle Import ──
 
-/// Controls how the local account username is imported from upstream claims.
+/// Controls how the local account handle is imported from upstream claims.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct UsernameImportPreference {
-    /// How to handle the username attribute
+pub struct HandleImportPreference {
+    /// How to handle the handle attribute
     #[serde(default, skip_serializing_if = "ImportAction::is_default")]
     pub action: ImportAction,
 
-    /// A Jinja2 template for the username attribute.
+    /// A Jinja2 template for the handle attribute.
     ///
     /// Defaults to `{{ user.preferred_username }}` when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
 
-    /// How to handle conflicts on the username claim
+    /// How to handle conflicts on the handle claim
     #[serde(default, skip_serializing_if = "OnConflict::is_default")]
     pub on_conflict: OnConflict,
 }
 
-impl UsernameImportPreference {
+impl HandleImportPreference {
     pub(crate) const fn is_default(&self) -> bool {
         self.action.is_default() && self.template.is_none()
     }
@@ -199,14 +199,14 @@ pub struct ClaimsImports {
     pub subject: SubjectImportPreference,
 
     /// When `true`, the interactive confirmation screen is skipped.
-    /// Requires `username.action` to be `require` and other attribute
+    /// Requires `handle.action` to be `require` and other attribute
     /// actions to be `ignore`, `force`, or `require`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub skip_confirmation: bool,
 
-    /// Import the local account username.
-    #[serde(default, skip_serializing_if = "UsernameImportPreference::is_default")]
-    pub username: UsernameImportPreference,
+    /// Import the local account handle.
+    #[serde(default, skip_serializing_if = "HandleImportPreference::is_default")]
+    pub handle: HandleImportPreference,
 
     /// Import the displayname of the user
     #[serde(
@@ -234,7 +234,7 @@ pub struct ClaimsImports {
 impl ClaimsImports {
     pub(crate) const fn is_default(&self) -> bool {
         self.subject.is_default()
-            && self.username.is_default()
+            && self.handle.is_default()
             && !self.skip_confirmation
             && self.displayname.is_default()
             && self.email.is_default()

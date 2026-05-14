@@ -33,7 +33,7 @@ use crate::{
 /// user, a device-sync job is enqueued so that downstream PrincipalServers learn
 /// about the revocation promptly.
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.oauth2_sessions.finish", skip_all)]
+#[tracing::instrument(name = "handler.admin.v1.oauth_sessions.finish", skip_all)]
 pub async fn finish_session(
     req: &mut Request,
     depot: &Depot,
@@ -224,7 +224,7 @@ impl std::fmt::Display for FilterParams {
 }
 
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.oauth2_sessions.list", skip_all)]
+#[tracing::instrument(name = "handler.admin.v1.oauth_sessions.list", skip_all)]
 pub async fn list_sessions(
     req: &mut Request,
     depot: &Depot,

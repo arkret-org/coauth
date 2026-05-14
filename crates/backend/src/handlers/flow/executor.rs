@@ -129,11 +129,11 @@ fn challenge_for_stage(stage: &StageKind, context: &Value) -> StageChallenge {
         },
         StageKind::UserWrite { .. } => {
             let suggested = context
-                .get("username")
+                .get("handle")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_owned());
             StageChallenge::UserWrite {
-                suggested_username: suggested,
+                suggested_handle: suggested,
             }
         }
         StageKind::Captcha => StageChallenge::Captcha {
@@ -266,12 +266,12 @@ async fn validate_response(
         (
             StageKind::UserWrite { .. },
             StageResponse::UserWrite {
-                username,
+                handle,
                 display_name,
             },
         ) => {
             if let Some(ctx) = context.as_object_mut() {
-                ctx.insert("username".into(), Value::String(username.clone()));
+                ctx.insert("handle".into(), Value::String(handle.clone()));
                 if let Some(dn) = display_name {
                     ctx.insert("display_name".into(), Value::String(dn.clone()));
                 }

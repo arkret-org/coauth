@@ -54,7 +54,7 @@ macro_rules! select_user_columns {
     () => {
         (
             users::id,
-            users::username,
+            users::handle,
             users::created_at,
             users::updated_at,
             users::locked_at,
@@ -74,7 +74,7 @@ macro_rules! select_user_columns {
 #[diesel(table_name = users)]
 struct NewUser {
     id: Uuid,
-    username: String,
+    handle: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -101,16 +101,16 @@ impl UserRepository for PgUserRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.user.find_by_username",
+        name = "db.user.find_by_handle",
         skip_all,
-        fields(user.username = username),
+        fields(user.handle = handle),
         err,
     )]
-    async fn find_by_username(&mut self, username: &str) -> Result<Option<User>, Self::Error> {
+    async fn find_by_handle(&mut self, handle: &str) -> Result<Option<User>, Self::Error> {
         use crate::lower;
 
         let res: Vec<User> = users::table
-            .filter(lower(users::username).eq(username.to_lowercase()))
+            .filter(lower(users::handle).eq(handle.to_lowercase()))
             .select(select_user_columns!())
             .load(self.conn)
             .await?;
@@ -119,7 +119,7 @@ impl UserRepository for PgUserRepository<'_> {
             [user] => Ok(Some(user.clone())),
             [] => Ok(None),
             list => {
-                if let Some(user) = list.iter().find(|u| u.username == username) {
+                if let Some(user) = list.iter().find(|u| u.handle == handle) {
                     Ok(Some(user.clone()))
                 } else {
                     Ok(None)
@@ -131,14 +131,14 @@ impl UserRepository for PgUserRepository<'_> {
     #[tracing::instrument(
         name = "db.user.add",
         skip_all,
-        fields(user.username = username, user.id),
+        fields(user.handle = handle, user.id),
         err,
     )]
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        username: String,
+        handle: String,
     ) -> Result<User, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
@@ -146,14 +146,14 @@ impl UserRepository for PgUserRepository<'_> {
 
         let new_user = NewUser {
             id: Uuid::from(id),
-            username: username.clone(),
+            handle: handle.clone(),
             created_at,
             updated_at: created_at,
         };
 
         let rows_affected = diesel::insert_into(users::table)
             .values(&new_user)
-            .on_conflict(users::username)
+            .on_conflict(users::handle)
             .do_nothing()
             .execute(self.conn)
             .await?;
@@ -162,7 +162,7 @@ impl UserRepository for PgUserRepository<'_> {
 
         Ok(User {
             id,
-            username,
+            handle,
             sub: id.to_string(),
             created_at,
             updated_at: created_at,
@@ -284,16 +284,16 @@ impl UserRepository for PgUserRepository<'_> {
     #[tracing::instrument(
         name = "db.user.exists",
         skip_all,
-        fields(user.username = username),
+        fields(user.handle = handle),
         err,
     )]
-    async fn exists(&mut self, username: &str) -> Result<bool, Self::Error> {
+    async fn exists(&mut self, handle: &str) -> Result<bool, Self::Error> {
         use diesel::dsl::{exists, select};
 
         use crate::lower;
 
         let result = select(exists(
-            users::table.filter(lower(users::username).eq(username.to_lowercase())),
+            users::table.filter(lower(users::handle).eq(handle.to_lowercase())),
         ))
         .get_result::<bool>(self.conn)
         .await?;
@@ -481,7 +481,7 @@ impl UserRepository for PgUserRepository<'_> {
 
         if let Some(search) = filter.search() {
             let pattern = format!("%{search}%");
-            query = query.filter(users::username.ilike(pattern));
+            query = query.filter(users::handle.ilike(pattern));
         }
 
         // Apply pagination
@@ -540,7 +540,7 @@ impl UserRepository for PgUserRepository<'_> {
 
         if let Some(search) = filter.search() {
             let pattern = format!("%{search}%");
-            query = query.filter(users::username.ilike(pattern));
+            query = query.filter(users::handle.ilike(pattern));
         }
 
         let count: i64 = query.count().get_result(self.conn).await?;

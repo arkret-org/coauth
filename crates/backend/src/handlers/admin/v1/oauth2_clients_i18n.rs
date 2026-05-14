@@ -7,7 +7,7 @@
 //! Body:
 //!     { "locale": "zh-CN", "display_name": "示例", "description": "..." }
 //!
-//! The handler upserts the entry into the `oauth2_clients.i18n` JSONB
+//! The handler upserts the entry into the `oauth_clients.i18n` JSONB
 //! column (see migration `20260510000100_oauth2_clients_i18n`). Other
 //! locales are left untouched. Pass an empty `display_name` to delete
 //! the entry for that locale.

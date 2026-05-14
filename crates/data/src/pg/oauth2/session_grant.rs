@@ -12,7 +12,7 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth2_session_grants};
+use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_session_grants};
 
 /// PostgreSQL implementation of [`SessionGrantRepository`].
 pub struct PgOAuth2SessionGrantRepository<'c> {
@@ -27,7 +27,7 @@ impl<'c> PgOAuth2SessionGrantRepository<'c> {
 }
 
 #[derive(Debug, Clone, Queryable, Selectable)]
-#[diesel(table_name = oauth2_session_grants)]
+#[diesel(table_name = oauth_session_grants)]
 struct SessionGrantLookup {
     id: Uuid,
     user_session_id: Uuid,
@@ -60,7 +60,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
             .map(|s| s.parse::<ScopeToken>())
             .collect();
         let scope = scope.map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_session_grants")
+            DatabaseInconsistencyError::on("oauth_session_grants")
                 .column("scope_list")
                 .row(id)
                 .source(e)
@@ -84,7 +84,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = oauth2_session_grants)]
+#[diesel(table_name = oauth_session_grants)]
 struct NewSessionGrantRow<'a> {
     id: Uuid,
     user_session_id: Uuid,
@@ -104,25 +104,25 @@ macro_rules! apply_session_grant_filter {
         let mut q = $query;
 
         if let Some(user_session_id) = $filter.browser_session_id() {
-            q = q.filter(oauth2_session_grants::user_session_id.eq(Uuid::from(user_session_id)));
+            q = q.filter(oauth_session_grants::user_session_id.eq(Uuid::from(user_session_id)));
         }
 
         if let Some(subject) = $filter.subject() {
-            q = q.filter(oauth2_session_grants::subject.eq(subject));
+            q = q.filter(oauth_session_grants::subject.eq(subject));
         }
 
         if let Some(device_id) = $filter.device_id() {
-            q = q.filter(oauth2_session_grants::device_id.eq(device_id));
+            q = q.filter(oauth_session_grants::device_id.eq(device_id));
         }
 
         if let Some(audience) = $filter.audience() {
-            q = q.filter(oauth2_session_grants::audience.eq(audience));
+            q = q.filter(oauth_session_grants::audience.eq(audience));
         }
 
         if let Some(active_at) = $filter.active_at_value() {
             q = q
-                .filter(oauth2_session_grants::revoked_at.is_null())
-                .filter(oauth2_session_grants::expires_at.gt(active_at));
+                .filter(oauth_session_grants::revoked_at.is_null())
+                .filter(oauth_session_grants::expires_at.gt(active_at));
         }
 
         q
@@ -162,7 +162,7 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
             expires_at: grant.expires_at,
         };
 
-        diesel::insert_into(oauth2_session_grants::table)
+        diesel::insert_into(oauth_session_grants::table)
             .values(&row)
             .execute(self.conn)
             .await?;
@@ -185,7 +185,7 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
 
     #[tracing::instrument(name = "db.oauth2_session_grant.lookup", skip_all, err)]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error> {
-        let row = oauth2_session_grants::table
+        let row = oauth_session_grants::table
             .find(Uuid::from(id))
             .select(SessionGrantLookup::as_select())
             .first::<SessionGrantLookup>(self.conn)
@@ -202,8 +202,8 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
         &mut self,
         grant_jwt: &str,
     ) -> Result<Option<SessionGrant>, Self::Error> {
-        let row = oauth2_session_grants::table
-            .filter(oauth2_session_grants::grant_jwt.eq(grant_jwt))
+        let row = oauth_session_grants::table
+            .filter(oauth_session_grants::grant_jwt.eq(grant_jwt))
             .select(SessionGrantLookup::as_select())
             .first::<SessionGrantLookup>(self.conn)
             .await
@@ -221,28 +221,28 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
         pagination: Pagination,
     ) -> Result<Page<SessionGrant>, Self::Error> {
         let mut query = apply_session_grant_filter!(
-            oauth2_session_grants::table
+            oauth_session_grants::table
                 .select(SessionGrantLookup::as_select())
                 .into_boxed(),
             filter
         );
 
         if let Some(after) = pagination.after {
-            query = query.filter(oauth2_session_grants::id.gt(Uuid::from(after)));
+            query = query.filter(oauth_session_grants::id.gt(Uuid::from(after)));
         }
         if let Some(before) = pagination.before {
-            query = query.filter(oauth2_session_grants::id.lt(Uuid::from(before)));
+            query = query.filter(oauth_session_grants::id.lt(Uuid::from(before)));
         }
 
         match pagination.direction {
             PaginationDirection::Forward => {
                 query = query
-                    .order(oauth2_session_grants::id.asc())
+                    .order(oauth_session_grants::id.asc())
                     .limit((pagination.count + 1) as i64);
             }
             PaginationDirection::Backward => {
                 query = query
-                    .order(oauth2_session_grants::id.desc())
+                    .order(oauth_session_grants::id.desc())
                     .limit((pagination.count + 1) as i64);
             }
         }
@@ -261,8 +261,8 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
         grant: SessionGrant,
     ) -> Result<SessionGrant, Self::Error> {
         let revoked_at = clock.now();
-        let rows_affected = diesel::update(oauth2_session_grants::table.find(Uuid::from(grant.id)))
-            .set(oauth2_session_grants::revoked_at.eq(Some(revoked_at)))
+        let rows_affected = diesel::update(oauth_session_grants::table.find(Uuid::from(grant.id)))
+            .set(oauth_session_grants::revoked_at.eq(Some(revoked_at)))
             .execute(self.conn)
             .await?;
 
@@ -293,7 +293,7 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
             r#"
                 WITH to_delete AS (
                     SELECT id, expires_at
-                    FROM oauth2_session_grants
+                    FROM oauth_session_grants
                     WHERE ($1::timestamptz IS NULL OR expires_at >= $1)
                       AND expires_at < $2
                     ORDER BY expires_at ASC
@@ -301,9 +301,9 @@ impl SessionGrantRepository for PgOAuth2SessionGrantRepository<'_> {
                     FOR UPDATE
                 ),
                 deleted AS (
-                    DELETE FROM oauth2_session_grants USING to_delete
-                    WHERE oauth2_session_grants.id = to_delete.id
-                    RETURNING oauth2_session_grants.expires_at
+                    DELETE FROM oauth_session_grants USING to_delete
+                    WHERE oauth_session_grants.id = to_delete.id
+                    RETURNING oauth_session_grants.expires_at
                 )
                 SELECT COUNT(*) as count, MAX(expires_at) as last_ts FROM deleted
             "#,

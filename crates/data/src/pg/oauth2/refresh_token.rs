@@ -7,7 +7,7 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth2_refresh_tokens};
+use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_refresh_tokens};
 
 /// An implementation of [`OAuth2RefreshTokenRepository`] for a PostgreSQL
 /// connection
@@ -25,16 +25,16 @@ impl<'c> PgOAuth2RefreshTokenRepository<'c> {
 
 /// Row type for loading refresh tokens from the database
 #[derive(Debug, Clone, Queryable, Selectable)]
-#[diesel(table_name = oauth2_refresh_tokens)]
+#[diesel(table_name = oauth_refresh_tokens)]
 struct OAuth2RefreshTokenRow {
     id: Uuid,
     refresh_token: String,
     created_at: DateTime<Utc>,
     consumed_at: Option<DateTime<Utc>>,
     revoked_at: Option<DateTime<Utc>>,
-    oauth2_access_token_id: Option<Uuid>,
-    oauth2_session_id: Uuid,
-    next_oauth2_refresh_token_id: Option<Uuid>,
+    oauth_access_token_id: Option<Uuid>,
+    oauth_session_id: Uuid,
+    next_oauth_refresh_token_id: Option<Uuid>,
 }
 
 impl TryFrom<OAuth2RefreshTokenRow> for RefreshToken {
@@ -45,7 +45,7 @@ impl TryFrom<OAuth2RefreshTokenRow> for RefreshToken {
         let state = match (
             value.revoked_at,
             value.consumed_at,
-            value.next_oauth2_refresh_token_id,
+            value.next_oauth_refresh_token_id,
         ) {
             (None, None, None) => RefreshTokenState::Valid,
             (Some(revoked_at), None, None) => RefreshTokenState::Revoked { revoked_at },
@@ -58,8 +58,8 @@ impl TryFrom<OAuth2RefreshTokenRow> for RefreshToken {
                 next_refresh_token_id: Some(Ulid::from(id)),
             },
             _ => {
-                return Err(DatabaseInconsistencyError::on("oauth2_refresh_tokens")
-                    .column("next_oauth2_refresh_token_id")
+                return Err(DatabaseInconsistencyError::on("oauth_refresh_tokens")
+                    .column("next_oauth_refresh_token_id")
                     .row(id));
             }
         };
@@ -67,21 +67,21 @@ impl TryFrom<OAuth2RefreshTokenRow> for RefreshToken {
         Ok(RefreshToken {
             id,
             state,
-            session_id: value.oauth2_session_id.into(),
+            session_id: value.oauth_session_id.into(),
             refresh_token: value.refresh_token,
             created_at: value.created_at,
-            access_token_id: value.oauth2_access_token_id.map(Ulid::from),
+            access_token_id: value.oauth_access_token_id.map(Ulid::from),
         })
     }
 }
 
 /// Insertable row for creating a new refresh token
 #[derive(Insertable)]
-#[diesel(table_name = oauth2_refresh_tokens)]
+#[diesel(table_name = oauth_refresh_tokens)]
 struct NewOAuth2RefreshToken {
     id: Uuid,
-    oauth2_session_id: Uuid,
-    oauth2_access_token_id: Uuid,
+    oauth_session_id: Uuid,
+    oauth_access_token_id: Uuid,
     refresh_token: String,
     created_at: DateTime<Utc>,
 }
@@ -106,7 +106,7 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
         err,
     )]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<RefreshToken>, Self::Error> {
-        let res = oauth2_refresh_tokens::table
+        let res = oauth_refresh_tokens::table
             .find(Uuid::from(id))
             .select(OAuth2RefreshTokenRow::as_select())
             .first::<OAuth2RefreshTokenRow>(self.conn)
@@ -123,8 +123,8 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
         &mut self,
         refresh_token: &str,
     ) -> Result<Option<RefreshToken>, Self::Error> {
-        let res = oauth2_refresh_tokens::table
-            .filter(oauth2_refresh_tokens::refresh_token.eq(refresh_token))
+        let res = oauth_refresh_tokens::table
+            .filter(oauth_refresh_tokens::refresh_token.eq(refresh_token))
             .select(OAuth2RefreshTokenRow::as_select())
             .first::<OAuth2RefreshTokenRow>(self.conn)
             .await
@@ -159,13 +159,13 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
 
         let new_row = NewOAuth2RefreshToken {
             id: Uuid::from(id),
-            oauth2_session_id: Uuid::from(session.id),
-            oauth2_access_token_id: Uuid::from(access_token.id),
+            oauth_session_id: Uuid::from(session.id),
+            oauth_access_token_id: Uuid::from(access_token.id),
             refresh_token: refresh_token.clone(),
             created_at,
         };
 
-        diesel::insert_into(oauth2_refresh_tokens::table)
+        diesel::insert_into(oauth_refresh_tokens::table)
             .values(&new_row)
             .execute(self.conn)
             .await?;
@@ -197,10 +197,10 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
     ) -> Result<RefreshToken, Self::Error> {
         let consumed_at = clock.now();
         let rows_affected =
-            diesel::update(oauth2_refresh_tokens::table.find(Uuid::from(refresh_token.id)))
+            diesel::update(oauth_refresh_tokens::table.find(Uuid::from(refresh_token.id)))
                 .set((
-                    oauth2_refresh_tokens::consumed_at.eq(Some(consumed_at)),
-                    oauth2_refresh_tokens::next_oauth2_refresh_token_id
+                    oauth_refresh_tokens::consumed_at.eq(Some(consumed_at)),
+                    oauth_refresh_tokens::next_oauth_refresh_token_id
                         .eq(Some(Uuid::from(replaced_by.id))),
                 ))
                 .execute(self.conn)
@@ -229,8 +229,8 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
     ) -> Result<RefreshToken, Self::Error> {
         let revoked_at = clock.now();
         let rows_affected =
-            diesel::update(oauth2_refresh_tokens::table.find(Uuid::from(refresh_token.id)))
-                .set(oauth2_refresh_tokens::revoked_at.eq(Some(revoked_at)))
+            diesel::update(oauth_refresh_tokens::table.find(Uuid::from(refresh_token.id)))
+                .set(oauth_refresh_tokens::revoked_at.eq(Some(revoked_at)))
                 .execute(self.conn)
                 .await?;
 
@@ -255,7 +255,7 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
                 WITH
                     to_delete AS (
                         SELECT id
-                        FROM oauth2_refresh_tokens
+                        FROM oauth_refresh_tokens
                         WHERE revoked_at IS NOT NULL
                           AND ($1::timestamptz IS NULL OR revoked_at >= $1::timestamptz)
                           AND revoked_at < $2::timestamptz
@@ -265,10 +265,10 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
                     ),
 
                     deleted AS (
-                        DELETE FROM oauth2_refresh_tokens
+                        DELETE FROM oauth_refresh_tokens
                         USING to_delete
-                        WHERE oauth2_refresh_tokens.id = to_delete.id
-                        RETURNING oauth2_refresh_tokens.revoked_at
+                        WHERE oauth_refresh_tokens.id = to_delete.id
+                        RETURNING oauth_refresh_tokens.revoked_at
                     )
 
                 SELECT
@@ -300,11 +300,11 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
                 WITH
                     to_delete AS (
                         SELECT rts_to_del.id
-                        FROM oauth2_refresh_tokens rts_to_del
-                        LEFT JOIN oauth2_refresh_tokens next_rts
-                          ON rts_to_del.next_oauth2_refresh_token_id = next_rts.id
+                        FROM oauth_refresh_tokens rts_to_del
+                        LEFT JOIN oauth_refresh_tokens next_rts
+                          ON rts_to_del.next_oauth_refresh_token_id = next_rts.id
                         WHERE rts_to_del.consumed_at IS NOT NULL
-                          AND (rts_to_del.next_oauth2_refresh_token_id IS NULL OR next_rts.consumed_at IS NOT NULL)
+                          AND (rts_to_del.next_oauth_refresh_token_id IS NULL OR next_rts.consumed_at IS NOT NULL)
                           AND ($1::timestamptz IS NULL OR rts_to_del.consumed_at >= $1::timestamptz)
                           AND rts_to_del.consumed_at < $2::timestamptz
                         ORDER BY rts_to_del.consumed_at ASC
@@ -312,10 +312,10 @@ impl coauth_data::oauth2::OAuth2RefreshTokenRepository for PgOAuth2RefreshTokenR
                     ),
 
                     deleted AS (
-                        DELETE FROM oauth2_refresh_tokens
+                        DELETE FROM oauth_refresh_tokens
                         USING to_delete
-                        WHERE oauth2_refresh_tokens.id = to_delete.id
-                        RETURNING oauth2_refresh_tokens.consumed_at
+                        WHERE oauth_refresh_tokens.id = to_delete.id
+                        RETURNING oauth_refresh_tokens.consumed_at
                     )
 
                 SELECT

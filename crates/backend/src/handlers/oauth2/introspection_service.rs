@@ -127,7 +127,7 @@ pub async fn introspect_token(
 
                 (
                     Some(contrix::user_did_for(url_builder, contrix_config, &user)),
-                    Some(user.username),
+                    Some(user.handle),
                 )
             } else {
                 (None, None)
@@ -201,7 +201,7 @@ pub async fn introspect_token(
 
                 (
                     Some(contrix::user_did_for(url_builder, contrix_config, &user)),
-                    Some(user.username),
+                    Some(user.handle),
                 )
             } else {
                 (None, None)
@@ -305,7 +305,7 @@ pub async fn introspect_token(
                 active: true,
                 scope: Some(scope),
                 client_id,
-                username: Some(actor_user.username),
+                username: Some(actor_user.handle),
                 token_type: Some(OAuthTokenTypeHint::AccessToken),
                 exp: access_token.expires_at,
                 expires_in: access_token

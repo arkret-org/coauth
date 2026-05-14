@@ -285,7 +285,7 @@ mod tests {
     fn sample_user(id: Ulid) -> coauth_data::User {
         coauth_data::User {
             id,
-            username: "alice".to_owned(),
+            handle: "alice".to_owned(),
             sub: id.to_string(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),

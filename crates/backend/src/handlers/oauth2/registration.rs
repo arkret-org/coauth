@@ -398,7 +398,7 @@ async fn handle_post(req: &mut Request, depot: &Depot) -> Result<RouteResponse, 
 /// [`LocalizedClientMetadata`] suitable for
 /// [`OAuth2ClientRepository::replace_localized_metadata`]. The
 /// non-localised default is *not* copied — that already lives on the
-/// `oauth2_clients` row itself.
+/// `oauth_clients` row itself.
 fn collect_localized_metadata(metadata: &VerifiedClientMetadata) -> LocalizedClientMetadata {
     let mut out = LocalizedClientMetadata::default();
 

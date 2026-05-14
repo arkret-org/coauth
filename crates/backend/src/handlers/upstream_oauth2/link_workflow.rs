@@ -33,7 +33,7 @@ use crate::{
     salvo_utils::SessionInfo,
 };
 
-const DEFAULT_USERNAME_TEMPLATE: &str = "{{ user.preferred_username }}";
+const DEFAULT_HANDLE_TEMPLATE: &str = "{{ user.preferred_username }}";
 const DEFAULT_DISPLAYNAME_TEMPLATE: &str = "{{ user.name }}";
 const DEFAULT_EMAIL_TEMPLATE: &str = "{{ user.email }}";
 const DEFAULT_AVATAR_TEMPLATE: &str = "{{ user.picture }}";
@@ -69,18 +69,18 @@ pub enum UpstreamLinkWorkflowError {
     },
 
     #[error("username conflict: existing user cannot be linked (on_conflict=fail)")]
-    ConflictFail { username: String },
+    ConflictFail { handle: String },
 
     #[error(
         "username conflict: existing user already has a link to this provider (on_conflict=set)"
     )]
-    ConflictSetBlocked { username: String },
+    ConflictSetBlocked { handle: String },
 
     #[error("policy denied the suggested username")]
-    PolicyDeniedUsername { username: String, detail: String },
+    PolicyDeniedHandle { handle: String, detail: String },
 
     #[error("username not available on principal server")]
-    UsernameUnavailable { username: String },
+    HandleUnavailable { handle: String },
 
     #[error("principal server admin call failed")]
     PrincipalServerAdmin(#[source] AnyhowError),
@@ -115,8 +115,8 @@ pub struct LoadedUpstreamLinkContext {
 pub struct UpstreamRegisterScreen {
     pub link: UpstreamOAuthLink,
     pub provider: UpstreamOAuthProvider,
-    pub suggested_username: Option<String>,
-    pub username_forced: bool,
+    pub suggested_handle: Option<String>,
+    pub handle_forced: bool,
     pub suggested_display_name: Option<String>,
     pub display_name_forced: bool,
     pub suggested_email: Option<String>,
@@ -136,7 +136,7 @@ pub enum LoadUpstreamLinkOutcome {
         provider_id: Ulid,
     },
     LinkMismatch {
-        existing_username: String,
+        existing_handle: String,
     },
     SuggestLink {
         provider_name: Option<String>,
@@ -151,10 +151,10 @@ pub enum LoadUpstreamLinkOutcome {
         provider_id: Ulid,
     },
     AccountDeactivated {
-        username: String,
+        handle: String,
     },
     AccountLocked {
-        username: String,
+        handle: String,
     },
 }
 
@@ -164,7 +164,7 @@ pub enum UpstreamLinkAction {
 }
 
 pub struct UpstreamLinkRegistrationAction {
-    pub username: Option<String>,
+    pub handle: Option<String>,
     pub import_email: bool,
     pub import_display_name: bool,
     pub accept_terms: bool,
@@ -280,7 +280,7 @@ pub async fn load_upstream_link_state(
                 .ok_or(UpstreamLinkWorkflowError::UserNotFound)?;
 
             Ok(LoadUpstreamLinkOutcome::LinkMismatch {
-                existing_username: user.username,
+                existing_handle: user.handle,
             })
         }
 
@@ -306,13 +306,13 @@ pub async fn load_upstream_link_state(
 
             if user.deactivated_at.is_some() {
                 return Ok(LoadUpstreamLinkOutcome::AccountDeactivated {
-                    username: user.username,
+                    handle: user.handle,
                 });
             }
 
             if user.locked_at.is_some() {
                 return Ok(LoadUpstreamLinkOutcome::AccountLocked {
-                    username: user.username,
+                    handle: user.handle,
                 });
             }
 
@@ -421,7 +421,7 @@ pub async fn submit_upstream_link_action(
                 site_config,
                 ip_address,
                 user_agent.clone(),
-                &attributes.username,
+                &attributes.handle,
                 attributes.email.as_deref(),
                 action.accept_terms,
             )
@@ -438,7 +438,7 @@ pub async fn submit_upstream_link_action(
                 clock,
                 repo,
                 upstream_session,
-                attributes.username,
+                attributes.handle,
                 attributes.display_name,
                 attributes.email,
                 attributes.avatar_url,
@@ -494,22 +494,22 @@ async fn load_upstream_registration_screen(
 
     // If we have a suggested username, run pre-checks (policy, conflicts,
     // PrincipalServer availability)
-    let username = match pre_check_username(
+    let username = match pre_check_handle(
         repo,
         clock,
         principal_server,
         policy,
         &provider,
         &link,
-        suggestions.suggested_username,
+        suggestions.suggested_handle,
         suggestions.suggested_email.as_deref(),
         user_agent.clone(),
         ip_address,
     )
     .await?
     {
-        UsernamePreCheckResult::Available(username) => username,
-        UsernamePreCheckResult::ConflictResolved {
+        HandlePreCheckResult::Available(username) => username,
+        HandlePreCheckResult::ConflictResolved {
             user: existing_user,
             provider_id,
         } => {
@@ -517,13 +517,13 @@ async fn load_upstream_registration_screen(
             // user status and log them in.
             if existing_user.deactivated_at.is_some() {
                 return Ok(LoadUpstreamLinkOutcome::AccountDeactivated {
-                    username: existing_user.username,
+                    handle: existing_user.handle,
                 });
             }
 
             if existing_user.locked_at.is_some() {
                 return Ok(LoadUpstreamLinkOutcome::AccountLocked {
-                    username: existing_user.username,
+                    handle: existing_user.handle,
                 });
             }
 
@@ -579,7 +579,7 @@ async fn load_upstream_registration_screen(
         });
     }
 
-    let username_forced = provider.claims_imports.username.is_forced_or_required();
+    let handle_forced = provider.claims_imports.handle.is_forced_or_required();
     let display_name_forced = provider.claims_imports.displayname.is_forced_or_required();
     let email_forced = provider.claims_imports.email.is_forced_or_required();
     let provider_name = provider.human_name.clone();
@@ -587,8 +587,8 @@ async fn load_upstream_registration_screen(
         screen: UpstreamRegisterScreen {
             link,
             provider,
-            suggested_username: username,
-            username_forced,
+            suggested_handle: username,
+            handle_forced,
             suggested_display_name: suggestions.suggested_display_name,
             display_name_forced,
             suggested_email: suggestions.suggested_email,
@@ -600,7 +600,7 @@ async fn load_upstream_registration_screen(
 }
 
 /// Result of pre-checking a suggested username from the upstream provider.
-enum UsernamePreCheckResult {
+enum HandlePreCheckResult {
     /// The username is valid and available for registration.
     Available(Option<String>),
     /// The username matched an existing user whose conflict was resolved by
@@ -614,29 +614,29 @@ enum UsernamePreCheckResult {
 /// `on_conflict` setting), and PrincipalServer availability checks on the suggested
 /// username.
 #[allow(clippy::too_many_arguments)]
-async fn pre_check_username(
+async fn pre_check_handle(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
     principal_server: &dyn PrincipalServerAdmin,
     policy: &mut Policy,
     provider: &UpstreamOAuthProvider,
     link: &UpstreamOAuthLink,
-    suggested_username: Option<String>,
+    suggested_handle: Option<String>,
     email: Option<&str>,
     user_agent: Option<String>,
     ip_address: Option<IpAddr>,
-) -> Result<UsernamePreCheckResult, UpstreamLinkWorkflowError> {
-    let Some(username) = suggested_username else {
-        return Ok(UsernamePreCheckResult::Available(None));
+) -> Result<HandlePreCheckResult, UpstreamLinkWorkflowError> {
+    let Some(username) = suggested_handle else {
+        return Ok(HandlePreCheckResult::Available(None));
     };
 
-    let forced_or_required = provider.claims_imports.username.is_forced_or_required();
+    let forced_or_required = provider.claims_imports.handle.is_forced_or_required();
 
     // Run policy check on the suggested username
     let eval_result = policy
         .evaluate_register(RegisterInput {
             registration_method: RegistrationMethod::UpstreamOAuth2,
-            username: &username,
+            handle: &username,
             email,
             requester: PolicyRequester {
                 ip_address,
@@ -651,7 +651,7 @@ async fn pre_check_username(
     if eval_result
         .violations
         .iter()
-        .any(|violation| violation.field.as_deref() == Some("username"))
+        .any(|violation| violation.field.as_deref() == Some("handle"))
     {
         if !forced_or_required {
             tracing::warn!(
@@ -659,17 +659,17 @@ async fn pre_check_username(
                 upstream_oauth_link.id = %link.id,
                 "Upstream provider returned a username {username:?} which was denied by the policy ({eval_result}). As the username is just a suggestion, it was ignored."
             );
-            return Ok(UsernamePreCheckResult::Available(None));
+            return Ok(HandlePreCheckResult::Available(None));
         }
 
-        return Err(UpstreamLinkWorkflowError::PolicyDeniedUsername {
-            username,
+        return Err(UpstreamLinkWorkflowError::PolicyDeniedHandle {
+            handle: username,
             detail: eval_result.to_string(),
         });
     }
 
     // Check if the username conflicts with an existing user
-    let maybe_existing_user = repo.user().find_by_username(&username).await?;
+    let maybe_existing_user = repo.user().find_by_handle(&username).await?;
     if let Some(existing_user) = maybe_existing_user {
         if !forced_or_required {
             tracing::warn!(
@@ -678,11 +678,11 @@ async fn pre_check_username(
                 user.id = %existing_user.id,
                 "Upstream provider returned a username {username:?} which is already used by another user. As the username is just a suggestion, it was ignored."
             );
-            return Ok(UsernamePreCheckResult::Available(None));
+            return Ok(HandlePreCheckResult::Available(None));
         }
 
         // Apply conflict resolution
-        match provider.claims_imports.username.on_conflict {
+        match provider.claims_imports.handle.on_conflict {
             UpstreamOAuthProviderOnConflict::Fail => {
                 tracing::warn!(
                     upstream_oauth_provider.id = %provider.id,
@@ -690,7 +690,7 @@ async fn pre_check_username(
                     user.id = %existing_user.id,
                     "Upstream provider returned a username {username:?} which is already used by another user. Configuration doesn't allow for automatic linking of existing users."
                 );
-                return Err(UpstreamLinkWorkflowError::ConflictFail { username });
+                return Err(UpstreamLinkWorkflowError::ConflictFail { handle: username });
             }
 
             UpstreamOAuthProviderOnConflict::Add => {
@@ -761,7 +761,7 @@ async fn pre_check_username(
                         user.id = %existing_user.id,
                         "Upstream provider returned a username {username:?} matching an existing user who already has {count} link(s) to this provider, which isn't allowed by the conflict resolution"
                     );
-                    return Err(UpstreamLinkWorkflowError::ConflictSetBlocked { username });
+                    return Err(UpstreamLinkWorkflowError::ConflictSetBlocked { handle: username });
                 }
 
                 repo.upstream_oauth_link()
@@ -771,7 +771,7 @@ async fn pre_check_username(
         }
 
         // Conflict resolved by linking. The caller should log this user in.
-        return Ok(UsernamePreCheckResult::ConflictResolved {
+        return Ok(HandlePreCheckResult::ConflictResolved {
             user: existing_user,
             provider_id: provider.id,
         });
@@ -779,7 +779,7 @@ async fn pre_check_username(
 
     // Check PrincipalServer availability
     let is_available = principal_server
-        .is_username_available(&username)
+        .is_handle_available(&username)
         .await
         .map_err(UpstreamLinkWorkflowError::principal_server)?;
 
@@ -790,24 +790,24 @@ async fn pre_check_username(
                 upstream_oauth_link.id = %link.id,
                 "Upstream provider returned a username {username:?} which isn't available on the principal_server. As the username is just a suggestion, it was ignored."
             );
-            return Ok(UsernamePreCheckResult::Available(None));
+            return Ok(HandlePreCheckResult::Available(None));
         }
 
-        return Err(UpstreamLinkWorkflowError::UsernameUnavailable { username });
+        return Err(UpstreamLinkWorkflowError::HandleUnavailable { handle: username });
     }
 
-    Ok(UsernamePreCheckResult::Available(Some(username)))
+    Ok(HandlePreCheckResult::Available(Some(username)))
 }
 
 struct RegistrationSuggestions {
-    suggested_username: Option<String>,
+    suggested_handle: Option<String>,
     suggested_display_name: Option<String>,
     suggested_email: Option<String>,
     suggested_avatar_url: Option<String>,
 }
 
 struct SelectedRegistrationAttributes {
-    username: String,
+    handle: String,
     display_name: Option<String>,
     email: Option<String>,
     avatar_url: Option<String>,
@@ -844,15 +844,15 @@ fn resolve_registration_suggestions(
         )?
     };
 
-    let suggested_username = if provider.claims_imports.username.ignore() {
+    let suggested_handle = if provider.claims_imports.handle.ignore() {
         None
     } else {
         render_imported_attribute(
             &env,
-            provider.claims_imports.username.template.as_deref(),
-            DEFAULT_USERNAME_TEMPLATE,
+            provider.claims_imports.handle.template.as_deref(),
+            DEFAULT_HANDLE_TEMPLATE,
             &context,
-            provider.claims_imports.username.is_required(),
+            provider.claims_imports.handle.is_required(),
         )?
     };
 
@@ -869,7 +869,7 @@ fn resolve_registration_suggestions(
     };
 
     Ok(RegistrationSuggestions {
-        suggested_username,
+        suggested_handle,
         suggested_display_name,
         suggested_email,
         suggested_avatar_url,
@@ -916,16 +916,16 @@ fn resolve_registration_attributes(
         None
     };
 
-    let username = if provider.claims_imports.username.is_forced_or_required() {
+    let username = if provider.claims_imports.handle.is_forced_or_required() {
         render_imported_attribute(
             &env,
-            provider.claims_imports.username.template.as_deref(),
-            DEFAULT_USERNAME_TEMPLATE,
+            provider.claims_imports.handle.template.as_deref(),
+            DEFAULT_HANDLE_TEMPLATE,
             &context,
             true,
         )?
     } else {
-        action.username.clone()
+        action.handle.clone()
     }
     .unwrap_or_default();
 
@@ -943,7 +943,7 @@ fn resolve_registration_attributes(
     };
 
     Ok(SelectedRegistrationAttributes {
-        username,
+        handle: username,
         display_name,
         email,
         avatar_url,
@@ -964,15 +964,15 @@ async fn validate_registration_action(
     let mut field_errors = JsonMap::new();
 
     if username.is_empty() {
-        field_errors.insert("username".into(), serde_json::json!("required"));
+        field_errors.insert("handle".into(), serde_json::json!("required"));
     } else if repo.user().exists(username).await? {
-        field_errors.insert("username".into(), serde_json::json!("exists"));
+        field_errors.insert("handle".into(), serde_json::json!("exists"));
     } else if !principal_server
-        .is_username_available(username)
+        .is_handle_available(username)
         .await
         .map_err(UpstreamLinkWorkflowError::principal_server)?
     {
-        field_errors.insert("username".into(), serde_json::json!("exists"));
+        field_errors.insert("handle".into(), serde_json::json!("exists"));
     }
 
     if site_config.tos_uri.is_some() && !accept_terms {
@@ -982,7 +982,7 @@ async fn validate_registration_action(
     let eval_result = policy
         .evaluate_register(RegisterInput {
             registration_method: RegistrationMethod::UpstreamOAuth2,
-            username,
+            handle: username,
             email,
             requester: PolicyRequester {
                 ip_address,
@@ -1001,8 +1001,8 @@ async fn validate_registration_action(
         };
 
         match violation.field.as_deref() {
-            Some("username") => {
-                field_errors.insert("username".into(), code);
+            Some("handle") => {
+                field_errors.insert("handle".into(), code);
             }
             _ => {
                 field_errors.insert("_form".into(), code);

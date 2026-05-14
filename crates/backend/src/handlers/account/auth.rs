@@ -44,7 +44,7 @@ const RESULT: Key = Key::from_static_str("result");
 
 #[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
-    pub username: String,
+    pub handle: String,
     pub password: String,
     /// Audience the client wants the issued session grant to be bound to.
     /// Must exactly match a configured principal-server audience. When
@@ -76,9 +76,9 @@ pub struct LoginResponse {
 #[derive(Serialize, ToSchema)]
 pub struct ViewerInfo {
     pub id: String,
-    pub username: String,
-    pub did: String,
     pub handle: String,
+    pub did: String,
+    pub federated_handle: String,
     pub principal_id: String,
     pub display_name: Option<String>,
 }
@@ -167,7 +167,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
     // Validate fields
-    if input.username.is_empty() || input.password.is_empty() {
+    if input.handle.is_empty() || input.password.is_empty() {
         PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
         res.render(Json(LoginResponse {
             status: "error",
@@ -216,7 +216,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         &contrix_config,
         &site_config,
         PasswordLoginRequest {
-            username_or_email: input.username,
+            username_or_email: input.handle,
             password: zeroize::Zeroizing::new(input.password),
             user_agent,
             requester,
@@ -295,7 +295,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 .await;
 
             let cookie_jar = cookie_jar.set_session(&user_session);
-            let display_name = match principal_server.query_user(&user.username).await {
+            let display_name = match principal_server.query_user(&user.handle).await {
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
@@ -350,10 +350,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     error: None,
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
-                        username: user.username.clone(),
-                        did: contrix::user_did_for(&url_builder, &contrix_config, &user),
-                        handle: contrix::user_handle(&url_builder, &user),
-                        principal_id: principal_server.principal_id(&user.username),
+                handle: user.handle.clone(),
+                did: contrix::user_did_for(&url_builder, &contrix_config, &user),
+                federated_handle: contrix::user_handle(&url_builder, &user),
+                        principal_id: principal_server.principal_id(&user.handle),
                         display_name,
                     }),
                     session_grant: Some(SessionGrantInfo {

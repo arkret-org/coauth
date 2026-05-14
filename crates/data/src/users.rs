@@ -48,7 +48,7 @@ pub struct PrincipalUser {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct User {
     pub id: Ulid,
-    pub username: String,
+    pub handle: String,
     pub sub: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -79,7 +79,7 @@ impl Queryable<UserSqlType, Pg> for User {
     fn build(row: Self::Row) -> deserialize::Result<Self> {
         let (
             id,
-            username,
+            handle,
             created_at,
             updated_at,
             locked_at,
@@ -95,7 +95,7 @@ impl Queryable<UserSqlType, Pg> for User {
 
         Ok(Self {
             id,
-            username,
+            handle,
             sub: id.to_string(),
             created_at,
             updated_at,
@@ -155,7 +155,7 @@ impl User {
     pub fn samples(now: chrono::DateTime<Utc>, rng: &mut (impl RngCore + ?Sized)) -> Vec<Self> {
         vec![User {
             id: new_id(now, rng),
-            username: "john".to_owned(),
+            handle: "john".to_owned(),
             sub: "123-456".to_owned(),
             created_at: now,
             updated_at: now,
@@ -497,7 +497,7 @@ impl UserRegistrationToken {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserRegistration {
     pub id: Ulid,
-    pub username: String,
+    pub handle: String,
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
     pub terms_url: Option<url::Url>,

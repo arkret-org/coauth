@@ -13,7 +13,7 @@ use ulid::Ulid;
 use url::Url;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth2_authorization_grants};
+use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_authorization_grants};
 
 /// An implementation of [`OAuth2AuthorizationGrantRepository`] for a PostgreSQL
 /// connection
@@ -31,7 +31,7 @@ impl<'c> PgOAuth2AuthorizationGrantRepository<'c> {
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Queryable, Selectable)]
-#[diesel(table_name = oauth2_authorization_grants)]
+#[diesel(table_name = oauth_authorization_grants)]
 struct GrantLookup {
     id: Uuid,
     created_at: DateTime<Utc>,
@@ -50,8 +50,8 @@ struct GrantLookup {
     code_challenge_method: Option<String>,
     login_hint: Option<String>,
     locale: Option<String>,
-    oauth2_client_id: Uuid,
-    oauth2_session_id: Option<Uuid>,
+    oauth_client_id: Uuid,
+    oauth_session_id: Option<Uuid>,
 }
 
 impl TryFrom<GrantLookup> for AuthorizationGrant {
@@ -60,7 +60,7 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
     fn try_from(value: GrantLookup) -> Result<Self, Self::Error> {
         let id = value.id.into();
         let scope: Scope = value.scope.parse().map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_authorization_grants")
+            DatabaseInconsistencyError::on("oauth_authorization_grants")
                 .column("scope")
                 .row(id)
                 .source(e)
@@ -70,7 +70,7 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
             value.fulfilled_at,
             value.exchanged_at,
             value.cancelled_at,
-            value.oauth2_session_id,
+            value.oauth_session_id,
         ) {
             (None, None, None, None) => AuthorizationGrantStage::Pending,
             (Some(fulfilled_at), None, None, Some(session_id)) => {
@@ -91,7 +91,7 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
             }
             _ => {
                 return Err(
-                    DatabaseInconsistencyError::on("oauth2_authorization_grants")
+                    DatabaseInconsistencyError::on("oauth_authorization_grants")
                         .column("stage")
                         .row(id),
                 );
@@ -112,7 +112,7 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
             (None, None) => None,
             _ => {
                 return Err(
-                    DatabaseInconsistencyError::on("oauth2_authorization_grants")
+                    DatabaseInconsistencyError::on("oauth_authorization_grants")
                         .column("code_challenge_method")
                         .row(id),
                 );
@@ -125,7 +125,7 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
                 (true, Some(code), pkce) => Some(AuthorizationCode { code, pkce }),
                 _ => {
                     return Err(
-                        DatabaseInconsistencyError::on("oauth2_authorization_grants")
+                        DatabaseInconsistencyError::on("oauth_authorization_grants")
                             .column("authorization_code")
                             .row(id),
                     );
@@ -133,14 +133,14 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
             };
 
         let redirect_uri = value.redirect_uri.parse().map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_authorization_grants")
+            DatabaseInconsistencyError::on("oauth_authorization_grants")
                 .column("redirect_uri")
                 .row(id)
                 .source(e)
         })?;
 
         let response_mode = value.response_mode.parse().map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_authorization_grants")
+            DatabaseInconsistencyError::on("oauth_authorization_grants")
                 .column("response_mode")
                 .row(id)
                 .source(e)
@@ -149,7 +149,7 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
         Ok(AuthorizationGrant {
             id,
             stage,
-            client_id: value.oauth2_client_id.into(),
+            client_id: value.oauth_client_id.into(),
             code,
             scope,
             state: value.state,
@@ -166,10 +166,10 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
 
 /// Insertable row for creating a new authorization grant
 #[derive(Insertable)]
-#[diesel(table_name = oauth2_authorization_grants)]
+#[diesel(table_name = oauth_authorization_grants)]
 struct NewAuthorizationGrant {
     id: Uuid,
-    oauth2_client_id: Uuid,
+    oauth_client_id: Uuid,
     redirect_uri: String,
     scope: String,
     state: Option<String>,
@@ -230,7 +230,7 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
 
         let new_grant = NewAuthorizationGrant {
             id: Uuid::from(id),
-            oauth2_client_id: Uuid::from(client.id),
+            oauth_client_id: Uuid::from(client.id),
             redirect_uri: redirect_uri.to_string(),
             scope: scope.to_string(),
             state: state.clone(),
@@ -246,7 +246,7 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
             created_at,
         };
 
-        diesel::insert_into(oauth2_authorization_grants::table)
+        diesel::insert_into(oauth_authorization_grants::table)
             .values(&new_grant)
             .execute(self.conn)
             .await?;
@@ -277,7 +277,7 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
         err,
     )]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<AuthorizationGrant>, Self::Error> {
-        let res = oauth2_authorization_grants::table
+        let res = oauth_authorization_grants::table
             .find(Uuid::from(id))
             .select(GrantLookup::as_select())
             .first::<GrantLookup>(self.conn)
@@ -294,8 +294,8 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
         &mut self,
         code: &str,
     ) -> Result<Option<AuthorizationGrant>, Self::Error> {
-        let res = oauth2_authorization_grants::table
-            .filter(oauth2_authorization_grants::authorization_code.eq(code))
+        let res = oauth_authorization_grants::table
+            .filter(oauth_authorization_grants::authorization_code.eq(code))
             .select(GrantLookup::as_select())
             .first::<GrantLookup>(self.conn)
             .await
@@ -324,10 +324,10 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
     ) -> Result<AuthorizationGrant, Self::Error> {
         let fulfilled_at = clock.now();
         let rows_affected =
-            diesel::update(oauth2_authorization_grants::table.find(Uuid::from(grant.id)))
+            diesel::update(oauth_authorization_grants::table.find(Uuid::from(grant.id)))
                 .set((
-                    oauth2_authorization_grants::fulfilled_at.eq(Some(fulfilled_at)),
-                    oauth2_authorization_grants::oauth2_session_id.eq(Some(Uuid::from(session.id))),
+                    oauth_authorization_grants::fulfilled_at.eq(Some(fulfilled_at)),
+                    oauth_authorization_grants::oauth_session_id.eq(Some(Uuid::from(session.id))),
                 ))
                 .execute(self.conn)
                 .await?;
@@ -358,8 +358,8 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
     ) -> Result<AuthorizationGrant, Self::Error> {
         let exchanged_at = clock.now();
         let rows_affected =
-            diesel::update(oauth2_authorization_grants::table.find(Uuid::from(grant.id)))
-                .set(oauth2_authorization_grants::exchanged_at.eq(Some(exchanged_at)))
+            diesel::update(oauth_authorization_grants::table.find(Uuid::from(grant.id)))
+                .set(oauth_authorization_grants::exchanged_at.eq(Some(exchanged_at)))
                 .execute(self.conn)
                 .await?;
 
@@ -396,16 +396,16 @@ impl OAuth2AuthorizationGrantRepository for PgOAuth2AuthorizationGrantRepository
             r#"
                 WITH to_delete AS (
                     SELECT id
-                    FROM oauth2_authorization_grants
+                    FROM oauth_authorization_grants
                     WHERE ($1::uuid IS NULL OR id > $1)
                     AND id <= $2
                     ORDER BY id
                     LIMIT $3
                 )
-                DELETE FROM oauth2_authorization_grants
+                DELETE FROM oauth_authorization_grants
                 USING to_delete
-                WHERE oauth2_authorization_grants.id = to_delete.id
-                RETURNING oauth2_authorization_grants.id
+                WHERE oauth_authorization_grants.id = to_delete.id
+                RETURNING oauth_authorization_grants.id
             "#,
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(since.map(Uuid::from))

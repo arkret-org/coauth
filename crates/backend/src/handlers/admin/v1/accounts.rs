@@ -114,7 +114,7 @@ impl AccountRecord {
         Self {
             id: user.id,
             attributes: AdminAccountAttributes {
-                username: user.username,
+                handle: user.handle,
                 status,
                 created_at: Some(user.created_at),
                 updated_at: Some(user.updated_at),

@@ -788,7 +788,7 @@ mod tests {
 
         // Create a device code grant
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .add(
                 &mut rng,
                 &clock,
@@ -809,12 +809,12 @@ mod tests {
 
         // Check that we can find the grant by ID
         let id = grant.id;
-        let lookup = repo.oauth2_device_code_grant().lookup(id).await.unwrap();
+        let lookup = repo.oauth_device_code_grant().lookup(id).await.unwrap();
         assert_eq!(lookup.as_ref(), Some(&grant));
 
         // Check that we can find the grant by device code
         let lookup = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .find_by_device_code(device_code)
             .await
             .unwrap();
@@ -822,7 +822,7 @@ mod tests {
 
         // Check that we can find the grant by user code
         let lookup = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .find_by_user_code(user_code)
             .await
             .unwrap();
@@ -830,7 +830,7 @@ mod tests {
 
         // Let's mark it as fulfilled
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .fulfill(&clock, grant, &browser_session)
             .await
             .unwrap();
@@ -839,14 +839,14 @@ mod tests {
 
         // Check that we can't mark it as rejected now
         let res = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .reject(&clock, grant, &browser_session)
             .await;
         assert!(res.is_err());
 
         // Look it up again
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .lookup(id)
             .await
             .unwrap()
@@ -854,14 +854,14 @@ mod tests {
 
         // We can't mark it as fulfilled again
         let res = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .fulfill(&clock, grant, &browser_session)
             .await;
         assert!(res.is_err());
 
         // Look it up again
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .lookup(id)
             .await
             .unwrap()
@@ -876,7 +876,7 @@ mod tests {
 
         // We can mark it as exchanged
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .exchange(&clock, grant, &session)
             .await
             .unwrap();
@@ -886,14 +886,14 @@ mod tests {
 
         // We can't mark it as exchanged again
         let res = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .exchange(&clock, grant, &session)
             .await;
         assert!(res.is_err());
 
         // Do a new grant to reject it
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .add(
                 &mut rng,
                 &clock,
@@ -914,7 +914,7 @@ mod tests {
 
         // We can mark it as rejected
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .reject(&clock, grant, &browser_session)
             .await
             .unwrap();
@@ -923,14 +923,14 @@ mod tests {
 
         // We can't mark it as rejected again
         let res = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .reject(&clock, grant, &browser_session)
             .await;
         assert!(res.is_err());
 
         // Look it up again
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .lookup(id)
             .await
             .unwrap()
@@ -938,14 +938,14 @@ mod tests {
 
         // We can't mark it as fulfilled
         let res = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .fulfill(&clock, grant, &browser_session)
             .await;
         assert!(res.is_err());
 
         // Look it up again
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .lookup(id)
             .await
             .unwrap()
@@ -953,7 +953,7 @@ mod tests {
 
         // We can't mark it as exchanged
         let res = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .exchange(&clock, grant, &session)
             .await;
         assert!(res.is_err());

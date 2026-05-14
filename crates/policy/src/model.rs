@@ -20,23 +20,23 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Code {
-    /// The chosen username does not meet the minimum length requirement.
-    UsernameTooShort,
+    /// The chosen handle does not meet the minimum length requirement.
+    HandleTooShort,
 
-    /// The chosen username exceeds the maximum allowed length.
-    UsernameTooLong,
+    /// The chosen handle exceeds the maximum allowed length.
+    HandleTooLong,
 
-    /// The chosen username contains characters that are not permitted.
-    UsernameInvalidChars,
+    /// The chosen handle contains characters that are not permitted.
+    HandleInvalidChars,
 
-    /// The chosen username is composed entirely of numeric digits.
-    UsernameAllNumeric,
+    /// The chosen handle is composed entirely of numeric digits.
+    HandleAllNumeric,
 
-    /// The chosen username has been banned by policy.
-    UsernameBanned,
+    /// The chosen handle has been banned by policy.
+    HandleBanned,
 
-    /// The chosen username is not on the allowlist.
-    UsernameNotAllowed,
+    /// The chosen handle is not on the allowlist.
+    HandleNotAllowed,
 
     /// The domain portion of the email address is not permitted.
     EmailDomainNotAllowed,
@@ -60,12 +60,12 @@ impl Code {
     #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::UsernameTooShort => "username-too-short",
-            Self::UsernameTooLong => "username-too-long",
-            Self::UsernameInvalidChars => "username-invalid-chars",
-            Self::UsernameAllNumeric => "username-all-numeric",
-            Self::UsernameBanned => "username-banned",
-            Self::UsernameNotAllowed => "username-not-allowed",
+            Self::HandleTooShort => "handle-too-short",
+            Self::HandleTooLong => "handle-too-long",
+            Self::HandleInvalidChars => "handle-invalid-chars",
+            Self::HandleAllNumeric => "handle-all-numeric",
+            Self::HandleBanned => "handle-banned",
+            Self::HandleNotAllowed => "handle-not-allowed",
             Self::EmailDomainNotAllowed => "email-domain-not-allowed",
             Self::EmailDomainBanned => "email-domain-banned",
             Self::EmailNotAllowed => "email-not-allowed",
@@ -171,8 +171,8 @@ pub struct RegisterInput<'a> {
     /// The method used for registration
     pub registration_method: RegistrationMethod,
 
-    /// The requested username
-    pub username: &'a str,
+    /// The requested handle
+    pub handle: &'a str,
 
     /// Optional email address provided during registration
     #[serde(skip_serializing_if = "Option::is_none")]

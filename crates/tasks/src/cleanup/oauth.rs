@@ -19,7 +19,7 @@ cleanup_ulid_cursor_job!(
 cleanup_ulid_cursor_job!(
     job = CleanupOAuthDeviceCodeGrantsJob,
     span = "job.cleanup_oauth_device_code_grants",
-    repo = oauth2_device_code_grant,
+    repo = oauth_device_code_grant,
     method = cleanup,
     cutoff = |state: &crate::State| state.clock().now() - chrono::Duration::days(7),
     timeout_secs = 10 * 60,

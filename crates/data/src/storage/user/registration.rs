@@ -39,7 +39,7 @@ pub trait UserRegistrationRepository: Send + Sync {
     ///
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock used to generate timestamps
-    /// * `username`: The username of the user
+    /// * `handle`: The handle of the user
     /// * `ip_address`: The IP address of the user agent, if any
     /// * `user_agent`: The user agent of the user agent, if any
     /// * `post_auth_action`: The post auth action to execute after the
@@ -52,7 +52,7 @@ pub trait UserRegistrationRepository: Send + Sync {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        username: String,
+        handle: String,
         ip_address: Option<IpAddr>,
         user_agent: Option<String>,
         post_auth_action: Option<serde_json::Value>,
@@ -249,7 +249,7 @@ repository_impl!(UserRegistrationRepository:
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        username: String,
+        handle: String,
         ip_address: Option<IpAddr>,
         user_agent: Option<String>,
         post_auth_action: Option<serde_json::Value>,

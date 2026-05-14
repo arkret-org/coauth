@@ -60,7 +60,7 @@ impl LocalizableField {
 
 /// Localised counterparts of the five `Client` metadata strings, indexed by
 /// BCP-47 locale tag (the `value` column from
-/// `oauth2_client_localized_metadata`).
+/// `oauth_client_localized_metadata`).
 ///
 /// `BTreeMap` is used so iteration order is deterministic — config sync,
 /// JSON serialisation and tests all rely on a stable ordering.
@@ -169,7 +169,7 @@ pub struct Client {
     pub tos_uri: Option<Url>,
 
     /// Per-locale variants of the five metadata fields above. Loaded from
-    /// the `oauth2_client_localized_metadata` table; an empty value means
+    /// the `oauth_client_localized_metadata` table; an empty value means
     /// the client only registered the non-localised default.
     pub localized_metadata: LocalizedClientMetadata,
 

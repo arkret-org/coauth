@@ -13,7 +13,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::{
-    DatabaseError, pg::errors::DatabaseInconsistencyError, schema::oauth2_device_code_grant,
+    DatabaseError, pg::errors::DatabaseInconsistencyError, schema::oauth_device_code_grant,
 };
 
 /// An implementation of [`OAuth2DeviceCodeGrantRepository`] for a PostgreSQL
@@ -31,10 +31,10 @@ impl<'c> PgOAuth2DeviceCodeGrantRepository<'c> {
 }
 
 #[derive(Debug, Clone, Queryable, Selectable)]
-#[diesel(table_name = oauth2_device_code_grant)]
+#[diesel(table_name = oauth_device_code_grant)]
 struct OAuth2DeviceGrantLookup {
     id: Uuid,
-    oauth2_client_id: Uuid,
+    oauth_client_id: Uuid,
     scope: String,
     device_code: String,
     user_code: String,
@@ -44,7 +44,7 @@ struct OAuth2DeviceGrantLookup {
     rejected_at: Option<DateTime<Utc>>,
     exchanged_at: Option<DateTime<Utc>>,
     user_session_id: Option<Uuid>,
-    oauth2_session_id: Option<Uuid>,
+    oauth_session_id: Option<Uuid>,
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
 }
@@ -55,7 +55,7 @@ impl TryFrom<OAuth2DeviceGrantLookup> for DeviceCodeGrant {
     fn try_from(
         OAuth2DeviceGrantLookup {
             id,
-            oauth2_client_id,
+            oauth_client_id,
             scope,
             device_code,
             user_code,
@@ -65,16 +65,16 @@ impl TryFrom<OAuth2DeviceGrantLookup> for DeviceCodeGrant {
             rejected_at,
             exchanged_at,
             user_session_id,
-            oauth2_session_id,
+            oauth_session_id,
             ip_address,
             user_agent,
         }: OAuth2DeviceGrantLookup,
     ) -> Result<Self, Self::Error> {
         let id = Ulid::from(id);
-        let client_id = Ulid::from(oauth2_client_id);
+        let client_id = Ulid::from(oauth_client_id);
 
         let scope: Scope = scope.parse().map_err(|e| {
-            DatabaseInconsistencyError::on("oauth2_device_code_grant")
+            DatabaseInconsistencyError::on("oauth_device_code_grant")
                 .column("scope")
                 .row(id)
                 .source(e)
@@ -85,7 +85,7 @@ impl TryFrom<OAuth2DeviceGrantLookup> for DeviceCodeGrant {
             rejected_at,
             exchanged_at,
             user_session_id,
-            oauth2_session_id,
+            oauth_session_id,
         ) {
             (None, None, None, None, None) => DeviceCodeGrantState::Pending,
 
@@ -108,15 +108,15 @@ impl TryFrom<OAuth2DeviceGrantLookup> for DeviceCodeGrant {
                 None,
                 Some(exchanged_at),
                 Some(user_session_id),
-                Some(oauth2_session_id),
+                Some(oauth_session_id),
             ) => DeviceCodeGrantState::Exchanged {
                 browser_session_id: Ulid::from(user_session_id),
-                session_id: Ulid::from(oauth2_session_id),
+                session_id: Ulid::from(oauth_session_id),
                 fulfilled_at,
                 exchanged_at,
             },
 
-            _ => return Err(DatabaseInconsistencyError::on("oauth2_device_code_grant").row(id)),
+            _ => return Err(DatabaseInconsistencyError::on("oauth_device_code_grant").row(id)),
         };
 
         Ok(DeviceCodeGrant {
@@ -136,10 +136,10 @@ impl TryFrom<OAuth2DeviceGrantLookup> for DeviceCodeGrant {
 
 /// Insertable row for creating a new device code grant
 #[derive(Insertable)]
-#[diesel(table_name = oauth2_device_code_grant)]
+#[diesel(table_name = oauth_device_code_grant)]
 struct NewDeviceCodeGrant {
     id: Uuid,
-    oauth2_client_id: Uuid,
+    oauth_client_id: Uuid,
     scope: String,
     device_code: String,
     user_code: String,
@@ -154,7 +154,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     type Error = DatabaseError;
 
     #[tracing::instrument(
-        name = "db.oauth2_device_code_grant.add",
+        name = "db.oauth_device_code_grant.add",
         skip_all,
         fields(
             oauth2_device_code.id,
@@ -179,7 +179,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
 
         let new_grant = NewDeviceCodeGrant {
             id: Uuid::from(id),
-            oauth2_client_id: Uuid::from(client_id),
+            oauth_client_id: Uuid::from(client_id),
             scope: params.scope.to_string(),
             device_code: params.device_code.clone(),
             user_code: params.user_code.clone(),
@@ -189,7 +189,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
             user_agent: params.user_agent.clone(),
         };
 
-        diesel::insert_into(oauth2_device_code_grant::table)
+        diesel::insert_into(oauth_device_code_grant::table)
             .values(&new_grant)
             .execute(self.conn)
             .await?;
@@ -209,7 +209,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_device_code_grant.lookup",
+        name = "db.oauth_device_code_grant.lookup",
         skip_all,
         fields(
             oauth2_device_code.id = %id,
@@ -217,7 +217,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         err,
     )]
     async fn lookup(&mut self, id: Ulid) -> Result<Option<DeviceCodeGrant>, Self::Error> {
-        let res = oauth2_device_code_grant::table
+        let res = oauth_device_code_grant::table
             .find(Uuid::from(id))
             .select(OAuth2DeviceGrantLookup::as_select())
             .first::<OAuth2DeviceGrantLookup>(self.conn)
@@ -230,7 +230,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_device_code_grant.find_by_user_code",
+        name = "db.oauth_device_code_grant.find_by_user_code",
         skip_all,
         fields(
             oauth2_device_code.user_code = %user_code,
@@ -241,8 +241,8 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         &mut self,
         user_code: &str,
     ) -> Result<Option<DeviceCodeGrant>, Self::Error> {
-        let res = oauth2_device_code_grant::table
-            .filter(oauth2_device_code_grant::user_code.eq(user_code))
+        let res = oauth_device_code_grant::table
+            .filter(oauth_device_code_grant::user_code.eq(user_code))
             .select(OAuth2DeviceGrantLookup::as_select())
             .first::<OAuth2DeviceGrantLookup>(self.conn)
             .await
@@ -254,7 +254,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_device_code_grant.find_by_device_code",
+        name = "db.oauth_device_code_grant.find_by_device_code",
         skip_all,
         fields(
             oauth2_device_code.device_code = %device_code,
@@ -265,8 +265,8 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
         &mut self,
         device_code: &str,
     ) -> Result<Option<DeviceCodeGrant>, Self::Error> {
-        let res = oauth2_device_code_grant::table
-            .filter(oauth2_device_code_grant::device_code.eq(device_code))
+        let res = oauth_device_code_grant::table
+            .filter(oauth_device_code_grant::device_code.eq(device_code))
             .select(OAuth2DeviceGrantLookup::as_select())
             .first::<OAuth2DeviceGrantLookup>(self.conn)
             .await
@@ -278,7 +278,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_device_code_grant.fulfill",
+        name = "db.oauth_device_code_grant.fulfill",
         skip_all,
         fields(
             oauth2_device_code.id = %device_code_grant.id,
@@ -300,10 +300,10 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
             .map_err(DatabaseError::to_invalid_operation)?;
 
         let rows_affected =
-            diesel::update(oauth2_device_code_grant::table.find(Uuid::from(device_code_grant.id)))
+            diesel::update(oauth_device_code_grant::table.find(Uuid::from(device_code_grant.id)))
                 .set((
-                    oauth2_device_code_grant::fulfilled_at.eq(Some(fulfilled_at)),
-                    oauth2_device_code_grant::user_session_id
+                    oauth_device_code_grant::fulfilled_at.eq(Some(fulfilled_at)),
+                    oauth_device_code_grant::user_session_id
                         .eq(Some(Uuid::from(browser_session.id))),
                 ))
                 .execute(self.conn)
@@ -315,7 +315,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_device_code_grant.reject",
+        name = "db.oauth_device_code_grant.reject",
         skip_all,
         fields(
             oauth2_device_code.id = %device_code_grant.id,
@@ -337,10 +337,10 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
             .map_err(DatabaseError::to_invalid_operation)?;
 
         let rows_affected =
-            diesel::update(oauth2_device_code_grant::table.find(Uuid::from(device_code_grant.id)))
+            diesel::update(oauth_device_code_grant::table.find(Uuid::from(device_code_grant.id)))
                 .set((
-                    oauth2_device_code_grant::rejected_at.eq(Some(fulfilled_at)),
-                    oauth2_device_code_grant::user_session_id
+                    oauth_device_code_grant::rejected_at.eq(Some(fulfilled_at)),
+                    oauth_device_code_grant::user_session_id
                         .eq(Some(Uuid::from(browser_session.id))),
                 ))
                 .execute(self.conn)
@@ -352,7 +352,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_device_code_grant.exchange",
+        name = "db.oauth_device_code_grant.exchange",
         skip_all,
         fields(
             oauth2_device_code.id = %device_code_grant.id,
@@ -373,10 +373,10 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
             .map_err(DatabaseError::to_invalid_operation)?;
 
         let rows_affected =
-            diesel::update(oauth2_device_code_grant::table.find(Uuid::from(device_code_grant.id)))
+            diesel::update(oauth_device_code_grant::table.find(Uuid::from(device_code_grant.id)))
                 .set((
-                    oauth2_device_code_grant::exchanged_at.eq(Some(exchanged_at)),
-                    oauth2_device_code_grant::oauth2_session_id.eq(Some(Uuid::from(session.id))),
+                    oauth_device_code_grant::exchanged_at.eq(Some(exchanged_at)),
+                    oauth_device_code_grant::oauth_session_id.eq(Some(Uuid::from(session.id))),
                 ))
                 .execute(self.conn)
                 .await?;
@@ -387,7 +387,7 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
     }
 
     #[tracing::instrument(
-        name = "db.oauth2_device_code_grant.cleanup",
+        name = "db.oauth_device_code_grant.cleanup",
         skip_all,
         fields(
             since = since.map(tracing::field::display),
@@ -410,16 +410,16 @@ impl OAuth2DeviceCodeGrantRepository for PgOAuth2DeviceCodeGrantRepository<'_> {
             r#"
                 WITH to_delete AS (
                     SELECT id
-                    FROM oauth2_device_code_grant
+                    FROM oauth_device_code_grant
                     WHERE ($1::uuid IS NULL OR id > $1)
                     AND id <= $2
                     ORDER BY id
                     LIMIT $3
                 )
-                DELETE FROM oauth2_device_code_grant
+                DELETE FROM oauth_device_code_grant
                 USING to_delete
-                WHERE oauth2_device_code_grant.id = to_delete.id
-                RETURNING oauth2_device_code_grant.id
+                WHERE oauth_device_code_grant.id = to_delete.id
+                RETURNING oauth_device_code_grant.id
             "#,
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(since.map(Uuid::from))

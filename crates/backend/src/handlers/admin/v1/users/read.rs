@@ -42,7 +42,7 @@ pub async fn get_by_username(req: &mut Request, depot: &Depot) -> JsonResult<Sin
     let self_path = format!("/api/admin/v1/users/by-username/{username}");
     let user = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&username)
         .await?
         .ok_or_else(|| AppError::not_found(format!("User with username {username:?} not found")))?;
 

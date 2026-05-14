@@ -99,8 +99,8 @@ pub async fn load_viewer_profile(
     principal_server: &dyn PrincipalServerAdmin,
     user: &User,
 ) -> Result<ViewerProfile, UserProfileServiceError> {
-    let principal_id = principal_server.principal_id(&user.username);
-    let principal_display_name = match principal_server.query_user(&user.username).await {
+    let principal_id = principal_server.principal_id(&user.handle);
+    let principal_display_name = match principal_server.query_user(&user.handle).await {
         Ok(info) => info.displayname.or_else(|| user.display_name.clone()),
         Err(_) => user.display_name.clone(),
     };
@@ -238,11 +238,11 @@ pub(crate) async fn sync_display_name_patch(
 
     match display_name {
         Some(name) => principal_server
-            .set_displayname(&user.username, &name)
+            .set_displayname(&user.handle, &name)
             .await
             .map_err(UserProfileServiceError::PrincipalServer),
         None => principal_server
-            .unset_displayname(&user.username)
+            .unset_displayname(&user.handle)
             .await
             .map_err(UserProfileServiceError::PrincipalServer),
     }

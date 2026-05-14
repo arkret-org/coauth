@@ -537,7 +537,7 @@ mod tests {
 
         let alice = User {
             id: coauth_data::new_id(now, &mut rng),
-            username: "alice".to_owned(),
+            handle: "alice".to_owned(),
             sub: "123-456".to_owned(),
             created_at: now,
             updated_at: now,
@@ -553,7 +553,7 @@ mod tests {
 
         let bob = User {
             id: coauth_data::new_id(now, &mut rng),
-            username: "bob".to_owned(),
+            handle: "bob".to_owned(),
             sub: "123-456".to_owned(),
             created_at: now,
             updated_at: now,

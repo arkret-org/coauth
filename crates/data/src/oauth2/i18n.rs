@@ -10,7 +10,7 @@
 //! it includes a free-form `description` field that has no place in the
 //! OIDC dynamic-registration metadata vocabulary.
 //!
-//! Persisted as a JSONB column (`oauth2_clients.i18n`); see migration
+//! Persisted as a JSONB column (`oauth_clients.i18n`); see migration
 //! `20260510000100_oauth2_clients_i18n`.
 
 use std::collections::BTreeMap;

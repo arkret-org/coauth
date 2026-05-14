@@ -109,9 +109,9 @@ impl std::fmt::Display for AdminAccountStatus {
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 pub struct AdminAccountAttributes {
-    /// Stable account handle / username.
+    /// Stable account handle.
     #[serde(default)]
-    pub username: String,
+    pub handle: String,
 
     /// Contrix account lifecycle state.
     #[serde(default)]
@@ -229,11 +229,11 @@ mod tests {
     #[test]
     fn omit_unset_optional_timestamp_fields_on_serialize() {
         let a = AdminAccountAttributes {
-            username: "alice".into(),
+            handle: "alice".into(),
             ..AdminAccountAttributes::default()
         };
         let s = serde_json::to_string(&a).unwrap();
-        assert!(s.contains("\"username\":\"alice\""));
+        assert!(s.contains("\"handle\":\"alice\""));
         assert!(s.contains("\"status\":\"active\""));
         assert!(!s.contains("\"locked_at\""));
         assert!(!s.contains("\"disabled_at\""));
@@ -247,7 +247,7 @@ mod tests {
     fn deserialize_matches_backend_wire_with_locked_and_disabled_at() {
         // Mirrors what the coauth backend emits for a locked account.
         let wire = r#"{
-            "username": "alice",
+            "handle": "alice",
             "status": "locked",
             "created_at": "2026-05-01T00:00:00Z",
             "updated_at": "2026-05-02T00:00:00Z",

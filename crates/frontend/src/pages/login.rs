@@ -126,7 +126,7 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
 
 #[component]
 fn LoginForm(providers: ProvidersResponse) -> Element {
-    let mut username = use_signal(String::new);
+    let mut handle = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
@@ -153,7 +153,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                         onsubmit: move |e| {
                             e.prevent_default();
                             e.stop_propagation();
-                            let user = username.to_string();
+                            let user = handle.to_string();
                             let pass = password.to_string();
 
                             if user.is_empty() || pass.is_empty() {
@@ -169,7 +169,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                                 let result = crate::api::api_post::<LoginResponse>(
                                     "/auth/login",
                                     serde_json::json!({
-                                        "username": user,
+                                        "handle": user,
                                         "password": pass,
                                     }),
                                 ).await;
@@ -218,8 +218,8 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                                 autocomplete: "username",
                                 required: true,
                                 placeholder: "Username or email",
-                                value: "{username}",
-                                oninput: move |e| username.set(e.value()),
+                                value: "{handle}",
+                                oninput: move |e| handle.set(e.value()),
                             }
                         }
 

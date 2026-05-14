@@ -59,7 +59,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(user.username, "alice");
+        assert_eq!(user.handle, "alice");
 
         // Check that the user was created on the PrincipalServer
         let result = state.principal_server_admin.query_user("alice").await;
@@ -133,7 +133,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         // Reserve a username on the PrincipalServer and try to add it
-        state.principal_server_admin.reserve_username("bob").await;
+        state.principal_server_admin.reserve_handle("bob").await;
 
         let request = Request::post("/api/admin/v1/users")
             .bearer(&token)
@@ -173,7 +173,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(user.username, "bob");
+        assert_eq!(user.handle, "bob");
     }
 
     #[tokio::test]
@@ -577,7 +577,7 @@ mod tests {
             .unwrap();
         state
             .principal_server_admin
-            .provision_user(&PrincipalProvisionRequest::new(&user.username, &user.sub))
+            .provision_user(&PrincipalProvisionRequest::new(&user.handle, &user.sub))
             .await
             .unwrap();
         repo.save().await.unwrap();
@@ -632,12 +632,12 @@ mod tests {
 
         state
             .principal_server_admin
-            .provision_user(&PrincipalProvisionRequest::new(&user.username, &user.sub))
+            .provision_user(&PrincipalProvisionRequest::new(&user.handle, &user.sub))
             .await
             .unwrap();
         state
             .principal_server_admin
-            .delete_user(&user.username, true)
+            .delete_user(&user.handle, true)
             .await
             .unwrap();
 
@@ -657,7 +657,7 @@ mod tests {
 
         let principal_user = state
             .principal_server_admin
-            .query_user(&user.username)
+            .query_user(&user.handle)
             .await
             .unwrap();
         assert!(!principal_user.deactivated);

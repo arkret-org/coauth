@@ -20,14 +20,14 @@ struct UserRecord {
 /// Holds the full in-memory state backing a [`PrincipalServerAdmin`].
 struct ServerState {
     accounts: HashMap<String, UserRecord>,
-    blocked_usernames: HashSet<&'static str>,
+    blocked_handles: HashSet<&'static str>,
 }
 
 impl ServerState {
     fn new() -> Self {
         Self {
             accounts: HashMap::new(),
-            blocked_usernames: HashSet::new(),
+            blocked_handles: HashSet::new(),
         }
     }
 
@@ -69,8 +69,8 @@ impl PrincipalServerAdmin {
         }
     }
 
-    pub async fn reserve_username(&self, username: &'static str) {
-        self.state.write().await.blocked_usernames.insert(username);
+    pub async fn reserve_handle(&self, handle: &'static str) {
+        self.state.write().await.blocked_handles.insert(handle);
     }
 }
 
@@ -84,8 +84,8 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
         Ok(token == Self::VALID_BEARER_TOKEN)
     }
 
-    async fn query_user(&self, username: &str) -> Result<PrincipalAccountProfile, anyhow::Error> {
-        let full_id = self.principal_id(username);
+    async fn query_user(&self, handle: &str) -> Result<PrincipalAccountProfile, anyhow::Error> {
+        let full_id = self.principal_id(handle);
         let guard = self.state.read().await;
         let record = guard.account(&full_id)?;
         Ok(PrincipalAccountProfile {
@@ -99,7 +99,7 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
         &self,
         request: &PrincipalProvisionRequest,
     ) -> Result<bool, anyhow::Error> {
-        let full_id = self.principal_id(request.username());
+        let full_id = self.principal_id(request.handle());
         let mut guard = self.state.write().await;
 
         let is_new_account = !guard.accounts.contains_key(&full_id);
@@ -133,24 +133,24 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
         Ok(is_new_account)
     }
 
-    async fn is_username_available(&self, username: &str) -> Result<bool, anyhow::Error> {
+    async fn is_handle_available(&self, handle: &str) -> Result<bool, anyhow::Error> {
         let guard = self.state.read().await;
 
-        if guard.blocked_usernames.contains(username) {
+        if guard.blocked_handles.contains(handle) {
             return Ok(false);
         }
 
-        let full_id = self.principal_id(username);
+        let full_id = self.principal_id(handle);
         Ok(!guard.accounts.contains_key(&full_id))
     }
 
     async fn upsert_device(
         &self,
-        username: &str,
+        handle: &str,
         device_id: &str,
         _initial_display_name: Option<&str>,
     ) -> Result<(), anyhow::Error> {
-        let full_id = self.principal_id(username);
+        let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;
         record.device_ids.insert(device_id.to_owned());
@@ -159,19 +159,19 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
 
     async fn update_device_display_name(
         &self,
-        username: &str,
+        handle: &str,
         device_id: &str,
         _display_name: &str,
     ) -> Result<(), anyhow::Error> {
-        let full_id = self.principal_id(username);
+        let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;
         anyhow::ensure!(record.device_ids.contains(device_id), "Device not found");
         Ok(())
     }
 
-    async fn delete_device(&self, username: &str, device_id: &str) -> Result<(), anyhow::Error> {
-        let full_id = self.principal_id(username);
+    async fn delete_device(&self, handle: &str, device_id: &str) -> Result<(), anyhow::Error> {
+        let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;
         record.device_ids.remove(device_id);
@@ -180,18 +180,18 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
 
     async fn sync_devices(
         &self,
-        username: &str,
+        handle: &str,
         devices: HashSet<String>,
     ) -> Result<(), anyhow::Error> {
-        let full_id = self.principal_id(username);
+        let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;
         record.device_ids = devices;
         Ok(())
     }
 
-    async fn delete_user(&self, username: &str, erase: bool) -> Result<(), anyhow::Error> {
-        let full_id = self.principal_id(username);
+    async fn delete_user(&self, handle: &str, erase: bool) -> Result<(), anyhow::Error> {
+        let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;
 
@@ -207,8 +207,8 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
         Ok(())
     }
 
-    async fn reactivate_user(&self, username: &str) -> Result<(), anyhow::Error> {
-        let full_id = self.principal_id(username);
+    async fn reactivate_user(&self, handle: &str) -> Result<(), anyhow::Error> {
+        let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;
         record.is_deactivated = false;
@@ -217,18 +217,18 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
 
     async fn set_displayname(
         &self,
-        username: &str,
+        handle: &str,
         displayname: &str,
     ) -> Result<(), anyhow::Error> {
-        let full_id = self.principal_id(username);
+        let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;
         record.displayname = Some(displayname.to_owned());
         Ok(())
     }
 
-    async fn unset_displayname(&self, username: &str) -> Result<(), anyhow::Error> {
-        let full_id = self.principal_id(username);
+    async fn unset_displayname(&self, handle: &str) -> Result<(), anyhow::Error> {
+        let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;
         record.displayname = None;
@@ -290,12 +290,12 @@ mod tests {
         assert!(conn.delete_device("test", device).await.is_ok());
 
         // The user we just created should be not available
-        assert!(!conn.is_username_available("test").await.unwrap());
+        assert!(!conn.is_handle_available("test").await.unwrap());
         // But another user should be
-        assert!(conn.is_username_available("alice").await.unwrap());
+        assert!(conn.is_handle_available("alice").await.unwrap());
 
-        // Reserve the username, it should not be available anymore
-        conn.reserve_username("alice").await;
-        assert!(!conn.is_username_available("alice").await.unwrap());
+        // Reserve the handle, it should not be available anymore
+        conn.reserve_handle("alice").await;
+        assert!(!conn.is_handle_available("alice").await.unwrap());
     }
 }

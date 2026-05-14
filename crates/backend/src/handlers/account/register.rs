@@ -49,7 +49,7 @@ use crate::{
 
 #[derive(Deserialize, ToSchema)]
 pub struct RegisterInput {
-    pub username: String,
+    pub handle: String,
     #[serde(default)]
     pub email: Option<String>,
     #[serde(default)]
@@ -146,7 +146,7 @@ pub async fn post_register(
         policy_factory.as_ref(),
         &limiter,
         BeginPasswordRegistrationRequest {
-            username: input.username,
+            handle: input.handle,
             email: input.email,
             phone: if site_config.phone_verification_enabled {
                 input.phone
@@ -248,7 +248,7 @@ pub async fn post_register(
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationStartInput {
-    pub username: String,
+    pub handle: String,
     #[serde(default)]
     pub principal_server_url: Option<String>,
 }
@@ -290,7 +290,7 @@ pub async fn post_webvh_start(
         }));
     }
 
-    let username = input.username.trim().to_owned();
+    let username = input.handle.trim().to_owned();
     if username.is_empty() {
         return Ok(Json(WebvhRegistrationStartResponse {
             status: "error",
@@ -324,11 +324,11 @@ pub async fn post_webvh_start(
             provider_id: None,
             email_verification_bypass_allowed: site_config
                 .registration_email_delivery_bypass_allowed,
-            error: Some("username_exists".into()),
+            error: Some("handle_exists".into()),
         }));
     }
     if matches!(
-        principal_server.is_username_available(&username).await,
+        principal_server.is_handle_available(&username).await,
         Ok(false)
     ) {
         return Ok(Json(WebvhRegistrationStartResponse {
@@ -338,7 +338,7 @@ pub async fn post_webvh_start(
             provider_id: None,
             email_verification_bypass_allowed: site_config
                 .registration_email_delivery_bypass_allowed,
-            error: Some("username_exists".into()),
+            error: Some("handle_exists".into()),
         }));
     }
 
@@ -599,7 +599,7 @@ pub struct WebvhRegistrationFinishResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
+    pub handle: Option<String>,
     pub did: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub did_key_id: Option<String>,
@@ -705,7 +705,7 @@ pub async fn post_webvh_finish(
     let webvh = register_soland_webvh(
         http_client,
         &target,
-        registration.username.as_str(),
+        registration.handle.as_str(),
         input.did_public_key_multibase.trim(),
         input.update_public_key_multibase.trim(),
         input.did_key_id.as_deref().unwrap_or("did-key-1"),
@@ -747,7 +747,7 @@ pub async fn post_webvh_finish(
     Ok(Json(WebvhRegistrationFinishResponse {
         status: "success",
         error: None,
-        username: Some(completed.user.username),
+        handle: Some(completed.user.handle),
         did: webvh.did,
         did_key_id: webvh.did_key_id,
         update_key_id: webvh.update_key_id,
@@ -768,7 +768,7 @@ pub async fn post_webvh_finish(
 pub struct ExistingDidRegistrationInput {
     pub did: String,
     #[serde(default)]
-    pub username: Option<String>,
+    pub handle: Option<String>,
     #[serde(default)]
     pub device_id: Option<String>,
 }
@@ -822,7 +822,7 @@ fn webvh_finish_error(error: impl Into<String>) -> WebvhRegistrationFinishRespon
     WebvhRegistrationFinishResponse {
         status: "error",
         error: Some(error.into()),
-        username: None,
+        handle: None,
         did: String::new(),
         did_key_id: None,
         update_key_id: None,
@@ -976,7 +976,7 @@ fn normalize_webvh_local_id(value: &str) -> Option<String> {
 #[derive(Serialize, ToSchema)]
 pub struct RegistrationStatusResponse {
     pub id: String,
-    pub username: String,
+    pub handle: String,
     pub email_pending: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_email: Option<String>,
@@ -1010,7 +1010,7 @@ pub async fn get_registration(
 
     Ok(Json(RegistrationStatusResponse {
         id: status.registration.id.to_string(),
-        username: status.registration.username,
+        handle: status.registration.handle,
         email_pending: status.email_pending,
         pending_email: status.pending_email,
         phone_pending: status.phone_pending,

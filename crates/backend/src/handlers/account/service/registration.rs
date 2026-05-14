@@ -39,7 +39,7 @@ use crate::handlers::{
 };
 
 pub struct StartPasswordRegistrationRequest {
-    pub username: String,
+    pub handle: String,
     pub email: Option<String>,
     pub phone: Option<String>,
     pub password: Zeroizing<String>,
@@ -51,7 +51,7 @@ pub struct StartPasswordRegistrationRequest {
 }
 
 pub struct BeginPasswordRegistrationRequest {
-    pub username: String,
+    pub handle: String,
     pub email: Option<String>,
     pub phone: Option<String>,
     pub password: String,
@@ -76,8 +76,8 @@ pub enum EmailAvailabilityCheck {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BeginPasswordRegistrationIssue {
     RegistrationDisabled,
-    UsernameRequired,
-    UsernameExists,
+    HandleRequired,
+    HandleExists,
     EmailOrPhoneRequired,
     EmailInvalid,
     EmailInUse,
@@ -99,8 +99,8 @@ impl BeginPasswordRegistrationIssue {
     pub fn as_api_error(&self) -> String {
         match self {
             Self::RegistrationDisabled => "registration_disabled".into(),
-            Self::UsernameRequired => "username_required".into(),
-            Self::UsernameExists => "username_exists".into(),
+            Self::HandleRequired => "handle_required".into(),
+            Self::HandleExists => "handle_exists".into(),
             Self::EmailOrPhoneRequired => "email_or_phone_required".into(),
             Self::EmailInvalid => "email_invalid".into(),
             Self::EmailInUse => "email_in_use".into(),
@@ -665,13 +665,13 @@ pub enum CheckRegistrationFinishEligibilityError {
     #[error("registration does not belong to this browser")]
     BrowserSessionMissing,
 
-    #[error("username is already taken")]
-    UsernameTaken,
+    #[error("handle is already taken")]
+    HandleTaken,
 
-    #[error("username is not available")]
-    UsernameNotAvailable,
+    #[error("handle is not available")]
+    HandleNotAvailable,
 
-    #[error("failed to verify username availability")]
+    #[error("failed to verify handle availability")]
     PrincipalServerUnavailable(#[source] AnyhowError),
 
     #[error(transparent)]
@@ -1017,7 +1017,7 @@ pub async fn start_password_registration(
         .add(
             rng,
             clock,
-            request.username,
+            request.handle,
             request.ip_address,
             request.user_agent,
             request.post_auth_action,
@@ -1119,16 +1119,16 @@ pub async fn begin_password_registration(
 
     let mut issues: Vec<BeginPasswordRegistrationIssue> = Vec::new();
 
-    if request.username.is_empty() {
-        issues.push(BeginPasswordRegistrationIssue::UsernameRequired);
-    } else if repo.user().exists(&request.username).await? {
-        issues.push(BeginPasswordRegistrationIssue::UsernameExists);
+    if request.handle.is_empty() {
+        issues.push(BeginPasswordRegistrationIssue::HandleRequired);
+    } else if repo.user().exists(&request.handle).await? {
+        issues.push(BeginPasswordRegistrationIssue::HandleExists);
     } else {
         match principal_server
-            .is_username_available(&request.username)
+            .is_handle_available(&request.handle)
             .await
         {
-            Ok(false) => issues.push(BeginPasswordRegistrationIssue::UsernameExists),
+            Ok(false) => issues.push(BeginPasswordRegistrationIssue::HandleExists),
             Ok(true) => {}
             Err(error) => {
                 tracing::warn!(
@@ -1208,7 +1208,7 @@ pub async fn begin_password_registration(
         let result = policy
             .evaluate_register(coauth_policy::RegisterInput {
                 registration_method: coauth_policy::RegistrationMethod::Password,
-                username: &request.username,
+                handle: &request.handle,
                 email: email.as_deref(),
                 requester: coauth_policy::Requester {
                     ip_address: request.ip_address,
@@ -1269,7 +1269,7 @@ pub async fn begin_password_registration(
         clock,
         password_manager,
         StartPasswordRegistrationRequest {
-            username: request.username,
+            handle: request.handle,
             email,
             phone,
             password: Zeroizing::new(request.password),
@@ -1510,7 +1510,7 @@ pub async fn set_registration_display_name(
     }
 
     let display_name = if skip {
-        registration.username.clone()
+        registration.handle.clone()
     } else {
         let display_name = display_name.as_deref().unwrap_or("").trim().to_owned();
 
@@ -1758,16 +1758,16 @@ pub async fn check_registration_finish_eligibility(
         return Err(CheckRegistrationFinishEligibilityError::BrowserSessionMissing);
     }
 
-    if repo.user().exists(&registration.username).await? {
-        return Err(CheckRegistrationFinishEligibilityError::UsernameTaken);
+    if repo.user().exists(&registration.handle).await? {
+        return Err(CheckRegistrationFinishEligibilityError::HandleTaken);
     }
 
     match principal_server
-        .is_username_available(&registration.username)
+        .is_handle_available(&registration.handle)
         .await
     {
         Ok(true) => Ok(()),
-        Ok(false) => Err(CheckRegistrationFinishEligibilityError::UsernameNotAvailable),
+        Ok(false) => Err(CheckRegistrationFinishEligibilityError::HandleNotAvailable),
         Err(error) => match principal_server_check_mode {
             PrincipalServerCheckMode::Strict => {
                 Err(CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error))
@@ -2009,7 +2009,7 @@ pub async fn complete_registration(
 
     let mut user = repo
         .user()
-        .add(rng, clock, registration.username.clone())
+        .add(rng, clock, registration.handle.clone())
         .await?;
 
     if grant_admin {
@@ -2151,14 +2151,14 @@ pub async fn finish_registration(
                     error: "registration_expired",
                 });
             }
-            CheckRegistrationFinishEligibilityError::UsernameTaken => {
+            CheckRegistrationFinishEligibilityError::HandleTaken => {
                 return Ok(RegistrationFinishOutcome::Rejected {
-                    error: "username_taken",
+                    error: "handle_taken",
                 });
             }
-            CheckRegistrationFinishEligibilityError::UsernameNotAvailable => {
+            CheckRegistrationFinishEligibilityError::HandleNotAvailable => {
                 return Ok(RegistrationFinishOutcome::Rejected {
-                    error: "username_not_available",
+                    error: "handle_not_available",
                 });
             }
             CheckRegistrationFinishEligibilityError::BrowserSessionMissing => {
@@ -2292,7 +2292,7 @@ mod tests {
     fn sample_registration(created_at: DateTime<Utc>) -> UserRegistration {
         UserRegistration {
             id: Ulid::new(),
-            username: "alice".into(),
+            handle: "alice".into(),
             display_name: None,
             avatar_url: None,
             terms_url: None,

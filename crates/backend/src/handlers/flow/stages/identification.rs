@@ -1,6 +1,6 @@
 //! Identification stage side effects.
 //!
-//! Looks up a user by username or email address and stores the resolved
+//! Looks up a user by handle or email address and stores the resolved
 //! `user_id` in the flow context for subsequent stages.
 
 use coauth_data::{
@@ -12,9 +12,9 @@ use super::StageExecutionError;
 
 /// Execute the identification stage.
 ///
-/// Tries to find the user by username first, then by email if the
+/// Tries to find the user by handle first, then by email if the
 /// identifier contains an `@` sign.  On success the user's `id` and
-/// `username` are written into the flow context.
+/// `handle` are written into the flow context.
 pub async fn execute(
     repo: &mut BoxRepository,
     _clock: &dyn Clock,
@@ -22,8 +22,8 @@ pub async fn execute(
     _password: Option<&str>, // Password validation handled by a separate stage
     context: &mut serde_json::Value,
 ) -> Result<StageOutcome, StageExecutionError> {
-    // Try to find user by username first
-    let user = repo.user().find_by_username(uid_field).await?;
+    // Try to find user by handle first
+    let user = repo.user().find_by_handle(uid_field).await?;
 
     let user = if let Some(user) = user {
         user
@@ -79,7 +79,7 @@ pub async fn execute(
     // Store user_id in context for subsequent stages
     if let Some(ctx) = context.as_object_mut() {
         ctx.insert("user_id".into(), serde_json::json!(user.id.to_string()));
-        ctx.insert("username".into(), serde_json::json!(user.username));
+        ctx.insert("handle".into(), serde_json::json!(user.handle));
     }
 
     Ok(StageOutcome::Continue)

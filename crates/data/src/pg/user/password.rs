@@ -52,7 +52,7 @@ impl UserPasswordRepository for PgUserPasswordRepository<'_> {
         skip_all,
         fields(
             %user.id,
-            %user.username,
+            %user.handle,
         ),
         err,
     )]
@@ -94,7 +94,7 @@ impl UserPasswordRepository for PgUserPasswordRepository<'_> {
         skip_all,
         fields(
             %user.id,
-            %user.username,
+            %user.handle,
             user_password.id,
             user_password.version = version,
         ),

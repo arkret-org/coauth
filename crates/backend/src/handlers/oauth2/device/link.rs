@@ -43,7 +43,7 @@ async fn handle_get(
         // Find the code in the database
         let code = code.to_uppercase();
         let grant = repo
-            .oauth2_device_code_grant()
+            .oauth_device_code_grant()
             .find_by_user_code(&code)
             .await?
             // XXX: We should have different error messages for already exchanged and expired

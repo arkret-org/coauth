@@ -305,7 +305,7 @@ pub trait BrowserSessionRepository: Send + Sync {
     /// Cleanup finished [`BrowserSession`]s
     ///
     /// Deletes sessions finished between `since` and `until`, but only if they
-    /// have no child sessions (`oauth2_sessions`). Returns
+    /// have no child sessions (`oauth_sessions`). Returns
     /// the number of deleted sessions and the timestamp of the last deleted
     /// session for pagination.
     ///

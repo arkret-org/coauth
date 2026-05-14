@@ -1,10 +1,10 @@
 {%- if browser_session is defined -%}
-  {%- set username = browser_session.user.username -%}
+  {%- set handle = browser_session.user.handle -%}
 {%- elif user_registration is defined -%}
-  {%- set username = user_registration.username -%}
+  {%- set handle = user_registration.handle -%}
 {%- endif -%}
 
-Hello {{ username|default("user") }},<br />
+Hello {{ handle|default("user") }},<br />
 <br />
 Your email verification code for <strong>{{ branding.server_name }}</strong> is:
 <strong>{{ authentication_code.code }}</strong><br />

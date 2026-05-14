@@ -197,11 +197,11 @@ fn check_claims_import_consistency(
     let imports = &provider.claims_imports;
 
     if imports.skip_confirmation {
-        if imports.username.action != ImportAction::Require {
+        if imports.handle.action != ImportAction::Require {
             return Err(annotate(figment::Error::custom(
                 "The field `action` must be `require` when `skip_confirmation` is set to `true`",
             ))
-            .with_path("claims_imports.username")
+            .with_path("claims_imports.handle")
             .into());
         }
 
@@ -222,13 +222,13 @@ fn check_claims_import_consistency(
         }
     }
 
-    // Username on_conflict requires force/require action
+    // Handle on_conflict requires force/require action
     let conflict_requires_force = matches!(
-        imports.username.on_conflict,
+        imports.handle.on_conflict,
         OnConflict::Add | OnConflict::Replace | OnConflict::Set
     );
     let action_is_force_or_require = matches!(
-        imports.username.action,
+        imports.handle.action,
         ImportAction::Force | ImportAction::Require
     );
 
@@ -236,7 +236,7 @@ fn check_claims_import_consistency(
         return Err(annotate(figment::Error::custom(
             "The field `action` must be either `force` or `require` when `on_conflict` is set to `add`, `replace` or `set`",
         ))
-        .with_path("claims_imports.username")
+        .with_path("claims_imports.handle")
         .into());
     }
 

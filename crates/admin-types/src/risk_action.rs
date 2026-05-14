@@ -130,9 +130,9 @@ pub struct AccountRiskActionProposalResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_by: Option<String>,
 
-    /// Admin username that submitted the proposal scaffold, if available.
+    /// Admin handle that submitted the proposal scaffold, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requested_by_username: Option<String>,
+    pub requested_by_handle: Option<String>,
 
     /// Previous lifecycle state before this transition.
     #[serde(default)]
@@ -222,9 +222,9 @@ pub struct AccountRiskActionApprovalResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_by: Option<String>,
 
-    /// Admin username that approved the proposal, if available.
+    /// Admin handle that approved the proposal, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approved_by_username: Option<String>,
+    pub approved_by_handle: Option<String>,
 
     /// Human approval note for the scaffold trail.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -310,9 +310,9 @@ pub struct AccountRiskActionCurrentResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recorded_by: Option<String>,
 
-    /// Admin username associated with the latest state record.
+    /// Admin handle associated with the latest state record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recorded_by_username: Option<String>,
+    pub recorded_by_handle: Option<String>,
 
     /// Execution endpoint referenced by the latest proposal/approval state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -412,9 +412,9 @@ pub struct AccountRiskActionTransitionRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recorded_by: Option<String>,
 
-    /// Admin username associated with the transition.
+    /// Admin handle associated with the transition.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recorded_by_username: Option<String>,
+    pub recorded_by_handle: Option<String>,
 
     /// Execution endpoint referenced by this transition, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]

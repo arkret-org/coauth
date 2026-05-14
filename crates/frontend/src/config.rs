@@ -6,7 +6,7 @@ pub struct AppError {
     /// `generic`.
     pub kind: String,
     /// The local username (without `@` prefix or `:server` suffix), if known.
-    pub username: Option<String>,
+    pub handle: Option<String>,
     /// Human-readable error description, if any.
     pub description: Option<String>,
 }

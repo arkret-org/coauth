@@ -48,7 +48,7 @@ pub fn Register() -> Element {
 
 #[component]
 fn RegisterPage(providers: ProvidersResponse) -> Element {
-    let mut username = use_signal(String::new);
+    let mut handle = use_signal(String::new);
     let mut email = use_signal(String::new);
     let mut phone = use_signal(String::new);
     let new_password = use_signal(String::new);
@@ -76,7 +76,7 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
                         onsubmit: move |e| {
                             e.prevent_default();
                             e.stop_propagation();
-                            let user = username.to_string();
+                            let user = handle.to_string();
                             let em = email.to_string();
                             let ph = phone.to_string();
                             let pw = new_password.to_string();
@@ -103,7 +103,7 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
                                 let result = crate::api::api_post::<RegisterResponse>(
                                     "/auth/register",
                                     serde_json::json!({
-                                        "username": user,
+                                        "handle": user,
                                         "email": if em.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(em) },
                                         "phone": if ph.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(ph) },
                                         "password": pw,
@@ -147,8 +147,8 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
                                 autocomplete: "username",
                                 required: true,
                                 placeholder: "Choose a username",
-                                value: "{username}",
-                                oninput: move |e| username.set(e.value()),
+                                value: "{handle}",
+                                oninput: move |e| handle.set(e.value()),
                             }
                         }
 

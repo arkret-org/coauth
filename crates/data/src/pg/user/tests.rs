@@ -43,7 +43,7 @@ async fn test_user_repo() {
     assert!(!repo.user().exists(USERNAME).await.unwrap());
     assert!(
         repo.user()
-            .find_by_username(USERNAME)
+            .find_by_handle(USERNAME)
             .await
             .unwrap()
             .is_none()
@@ -67,7 +67,7 @@ async fn test_user_repo() {
     assert!(repo.user().exists(USERNAME).await.unwrap());
     assert!(
         repo.user()
-            .find_by_username(USERNAME)
+            .find_by_handle(USERNAME)
             .await
             .unwrap()
             .is_some()
@@ -233,9 +233,9 @@ async fn test_user_repo() {
     repo.save().await.unwrap();
 }
 
-/// Test [`UserRepository::find_by_username`] with different casings.
+/// Test [`UserRepository::find_by_handle`] with different casings.
 #[tokio::test]
-async fn test_user_repo_find_by_username() {
+async fn test_user_repo_find_by_handle() {
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
     };
@@ -264,23 +264,23 @@ async fn test_user_repo_find_by_username() {
 
     // This is fine, we can do a case-insensitive search
     assert_eq!(
-        repo.user().find_by_username("alice").await.unwrap(),
+        repo.user().find_by_handle("alice").await.unwrap(),
         Some(alice)
     );
 
     // In case there are multiple users with the same username, we should return the
     // one that matches the exact casing
     assert_eq!(
-        repo.user().find_by_username("Bob").await.unwrap(),
+        repo.user().find_by_handle("Bob").await.unwrap(),
         Some(bob1)
     );
     assert_eq!(
-        repo.user().find_by_username("BOB").await.unwrap(),
+        repo.user().find_by_handle("BOB").await.unwrap(),
         Some(bob2)
     );
 
     // If none match, we should return None
-    assert!(repo.user().find_by_username("bob").await.unwrap().is_none());
+    assert!(repo.user().find_by_handle("bob").await.unwrap().is_none());
 }
 
 #[tokio::test]

@@ -5,7 +5,7 @@
 
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY,
-    username TEXT NOT NULL UNIQUE,
+    handle TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL,
     locked_at TIMESTAMPTZ,
     can_request_admin BOOLEAN NOT NULL DEFAULT FALSE,
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS user_registrations (
     ip_address INET,
     user_agent TEXT,
     post_auth_action JSONB,
-    username TEXT NOT NULL,
+    handle TEXT NOT NULL,
     display_name TEXT,
     avatar_url TEXT,
     terms_url TEXT,
@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS user_unsupported_third_party_ids (
 
 -- ── OAuth2 ──────────────────────────────────────────────────────
 
-CREATE TABLE IF NOT EXISTS oauth2_clients (
+CREATE TABLE IF NOT EXISTS oauth_clients (
     id UUID PRIMARY KEY,
     encrypted_client_secret TEXT,
     grant_type_authorization_code BOOLEAN NOT NULL,
@@ -264,29 +264,29 @@ CREATE TABLE IF NOT EXISTS oauth2_clients (
 );
 
 -- Localised counterparts for the OIDC `*#<locale>` metadata fields. The
--- non-localised columns on `oauth2_clients` (above) carry the default value;
+-- non-localised columns on `oauth_clients` (above) carry the default value;
 -- this table holds variants keyed by BCP-47 locale tag.
 --
 -- Field names match the JSON keys defined in OIDC Core 1.0 §2 / Dynamic
 -- Client Registration §2 and are limited to a small allow-list to keep the
 -- schema simple. Adding more is a one-line check constraint change.
-CREATE TABLE IF NOT EXISTS oauth2_client_localized_metadata (
-    client_id UUID NOT NULL REFERENCES oauth2_clients(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS oauth_client_localized_metadata (
+    client_id UUID NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
     locale TEXT NOT NULL,
     field TEXT NOT NULL,
     value TEXT NOT NULL,
     PRIMARY KEY (client_id, locale, field),
-    CONSTRAINT oauth2_client_localized_metadata_field_check
+    CONSTRAINT oauth_client_localized_metadata_field_check
         CHECK (field IN ('client_name', 'logo_uri', 'client_uri', 'policy_uri', 'tos_uri'))
 );
 
-CREATE INDEX IF NOT EXISTS oauth2_client_localized_metadata_client_idx
-    ON oauth2_client_localized_metadata (client_id);
+CREATE INDEX IF NOT EXISTS oauth_client_localized_metadata_client_idx
+    ON oauth_client_localized_metadata (client_id);
 
-CREATE TABLE IF NOT EXISTS oauth2_sessions (
+CREATE TABLE IF NOT EXISTS oauth_sessions (
     id UUID PRIMARY KEY,
     user_session_id UUID REFERENCES user_sessions(id) ON DELETE SET NULL,
-    oauth2_client_id UUID NOT NULL REFERENCES oauth2_clients(id),
+    oauth_client_id UUID NOT NULL REFERENCES oauth_clients(id),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     scope_list TEXT[] NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
@@ -297,9 +297,9 @@ CREATE TABLE IF NOT EXISTS oauth2_sessions (
     human_name TEXT
 );
 
-CREATE TABLE IF NOT EXISTS oauth2_access_tokens (
+CREATE TABLE IF NOT EXISTS oauth_access_tokens (
     id UUID PRIMARY KEY,
-    oauth2_session_id UUID NOT NULL REFERENCES oauth2_sessions(id),
+    oauth_session_id UUID NOT NULL REFERENCES oauth_sessions(id),
     access_token TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL,
     expires_at TIMESTAMPTZ,
@@ -307,21 +307,21 @@ CREATE TABLE IF NOT EXISTS oauth2_access_tokens (
     first_used_at TIMESTAMPTZ
 );
 
-CREATE TABLE IF NOT EXISTS oauth2_refresh_tokens (
+CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
     id UUID PRIMARY KEY,
-    oauth2_session_id UUID NOT NULL REFERENCES oauth2_sessions(id),
-    oauth2_access_token_id UUID REFERENCES oauth2_access_tokens(id) ON DELETE SET NULL,
+    oauth_session_id UUID NOT NULL REFERENCES oauth_sessions(id),
+    oauth_access_token_id UUID REFERENCES oauth_access_tokens(id) ON DELETE SET NULL,
     refresh_token TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL,
     consumed_at TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ,
-    next_oauth2_refresh_token_id UUID REFERENCES oauth2_refresh_tokens(id) ON DELETE SET NULL
+    next_oauth_refresh_token_id UUID REFERENCES oauth_refresh_tokens(id) ON DELETE SET NULL
 );
 
-CREATE TABLE IF NOT EXISTS oauth2_authorization_grants (
+CREATE TABLE IF NOT EXISTS oauth_authorization_grants (
     id UUID PRIMARY KEY,
-    oauth2_client_id UUID NOT NULL REFERENCES oauth2_clients(id),
-    oauth2_session_id UUID REFERENCES oauth2_sessions(id),
+    oauth_client_id UUID NOT NULL REFERENCES oauth_clients(id),
+    oauth_session_id UUID REFERENCES oauth_sessions(id),
     authorization_code TEXT UNIQUE,
     redirect_uri TEXT NOT NULL,
     scope TEXT NOT NULL,
@@ -341,9 +341,9 @@ CREATE TABLE IF NOT EXISTS oauth2_authorization_grants (
     locale TEXT
 );
 
-CREATE TABLE IF NOT EXISTS oauth2_device_code_grant (
+CREATE TABLE IF NOT EXISTS oauth_device_code_grant (
     id UUID PRIMARY KEY,
-    oauth2_client_id UUID NOT NULL REFERENCES oauth2_clients(id) ON DELETE CASCADE,
+    oauth_client_id UUID NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
     scope TEXT NOT NULL,
     user_code TEXT NOT NULL UNIQUE,
     device_code TEXT NOT NULL UNIQUE,
@@ -352,7 +352,7 @@ CREATE TABLE IF NOT EXISTS oauth2_device_code_grant (
     fulfilled_at TIMESTAMPTZ,
     rejected_at TIMESTAMPTZ,
     exchanged_at TIMESTAMPTZ,
-    oauth2_session_id UUID REFERENCES oauth2_sessions(id) ON DELETE CASCADE,
+    oauth_session_id UUID REFERENCES oauth_sessions(id) ON DELETE CASCADE,
     user_session_id UUID REFERENCES user_sessions(id),
     ip_address INET,
     user_agent TEXT
@@ -408,7 +408,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS queue_leader (
 CREATE TABLE IF NOT EXISTS personal_sessions (
     id UUID PRIMARY KEY,
     owner_user_id UUID REFERENCES users(id),
-    owner_oauth2_client_id UUID REFERENCES oauth2_clients(id),
+    owner_oauth_client_id UUID REFERENCES oauth_clients(id),
     actor_user_id UUID NOT NULL REFERENCES users(id),
     human_name TEXT NOT NULL,
     scope_list TEXT[] NOT NULL,
@@ -754,7 +754,7 @@ CREATE UNIQUE INDEX notification_deliveries_provider_message_lookup
       AND provider_message_id IS NOT NULL;
 
 -- Consolidated from 20260429000100_session_grants/up.sql
-CREATE TABLE IF NOT EXISTS oauth2_session_grants (
+CREATE TABLE IF NOT EXISTS oauth_session_grants (
     id UUID PRIMARY KEY,
     user_session_id UUID NOT NULL REFERENCES user_sessions(id) ON DELETE CASCADE,
     issuer TEXT NOT NULL,
@@ -769,21 +769,21 @@ CREATE TABLE IF NOT EXISTS oauth2_session_grants (
     revoked_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS oauth2_session_grants_user_session_idx
-    ON oauth2_session_grants(user_session_id);
+CREATE INDEX IF NOT EXISTS oauth_session_grants_user_session_idx
+    ON oauth_session_grants(user_session_id);
 
-CREATE INDEX IF NOT EXISTS oauth2_session_grants_subject_idx
-    ON oauth2_session_grants(subject);
+CREATE INDEX IF NOT EXISTS oauth_session_grants_subject_idx
+    ON oauth_session_grants(subject);
 
-CREATE UNIQUE INDEX IF NOT EXISTS oauth2_session_grants_grant_jwt_idx
-    ON oauth2_session_grants(grant_jwt);
+CREATE UNIQUE INDEX IF NOT EXISTS oauth_session_grants_grant_jwt_idx
+    ON oauth_session_grants(grant_jwt);
 
-CREATE INDEX IF NOT EXISTS oauth2_session_grants_device_id_idx
-    ON oauth2_session_grants(device_id)
+CREATE INDEX IF NOT EXISTS oauth_session_grants_device_id_idx
+    ON oauth_session_grants(device_id)
     WHERE device_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS oauth2_session_grants_active_idx
-    ON oauth2_session_grants(expires_at)
+CREATE INDEX IF NOT EXISTS oauth_session_grants_active_idx
+    ON oauth_session_grants(expires_at)
     WHERE revoked_at IS NULL;
 
 -- Consolidated from 20260506000200_account_claims/up.sql
@@ -924,10 +924,10 @@ CREATE INDEX IF NOT EXISTS webauthn_credentials_account_idx
     ON webauthn_credentials(account_id, created_at DESC)
     WHERE revoked_at IS NULL;
 
--- Consolidated from 20260510000100_oauth2_clients_i18n/up.sql
+-- Consolidated from 20260510000100_oauth_clients_i18n/up.sql
 -- OAuth2 client display-name + description, indexed by BCP-47 locale tag.
 --
--- This is a separate concern from `oauth2_client_localized_metadata`: that
+-- This is a separate concern from `oauth_client_localized_metadata`: that
 -- table backs the OIDC `*#<locale>` metadata fields (client_name, logo_uri,
 -- client_uri, policy_uri, tos_uri) which are restricted to the published
 -- spec. The new `i18n` column carries free-form admin-curated translations
@@ -938,10 +938,10 @@ CREATE INDEX IF NOT EXISTS webauthn_credentials_account_idx
 --   {"<locale>": {"display_name": "...", "description": "..."}, ...}
 --
 -- The default `'{}'::jsonb` keeps existing rows valid — the consent screen
--- falls back to `oauth2_clients.client_name` when no entry exists for the
+-- falls back to `oauth_clients.client_name` when no entry exists for the
 -- requested locale.
 
-ALTER TABLE oauth2_clients
+ALTER TABLE oauth_clients
     ADD COLUMN IF NOT EXISTS i18n JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- Consolidated from 20260510000200_account_starid_backend_marker/up.sql

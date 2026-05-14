@@ -397,7 +397,7 @@ pub struct ClaimsImports {
     pub skip_confirmation: bool,
 
     #[serde(default)]
-    pub username: UsernamePreference,
+    pub handle: HandlePreference,
 
     #[serde(default)]
     pub displayname: ImportPreference,
@@ -416,16 +416,16 @@ pub struct ClaimsImports {
 /// Template-based preference used by simple subject/display-name claim
 /// imports. The type is deliberately minimal — just an optional template
 /// string — so it can be shared by every field that doesn't need conflict
-/// resolution (see [`UsernamePreference`] below for the richer variant).
+/// resolution (see [`HandlePreference`] below for the richer variant).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct SubjectPreference {
     #[serde(default)]
     pub template: Option<String>,
 }
 
-/// coauth extension: username preference with conflict-resolution strategy.
+/// coauth extension: handle preference with conflict-resolution strategy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct UsernamePreference {
+pub struct HandlePreference {
     #[serde(default)]
     pub action: ImportAction,
 
@@ -436,7 +436,7 @@ pub struct UsernamePreference {
     pub on_conflict: OnConflict,
 }
 
-impl std::ops::Deref for UsernamePreference {
+impl std::ops::Deref for HandlePreference {
     type Target = ImportAction;
 
     fn deref(&self) -> &Self::Target {
@@ -504,7 +504,7 @@ impl ImportAction {
     }
 }
 
-/// coauth extension: conflict-resolution strategy for upstream username
+/// coauth extension: conflict-resolution strategy for upstream handle
 /// imports.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]

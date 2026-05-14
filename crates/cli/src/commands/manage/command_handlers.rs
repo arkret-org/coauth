@@ -31,14 +31,14 @@ use zeroize::Zeroizing;
 
 pub(super) async fn handle_set_password(
     figment: &Figment,
-    username: String,
+    handle: String,
     password: String,
     ignore_complexity: bool,
 ) -> anyhow::Result<ExitCode> {
     let clock = SystemClock::default();
     let mut rng = rand_chacha::ChaChaRng::from_entropy();
 
-    let _span = info_span!("cli.manage.set_password", user.username = %username).entered();
+    let _span = info_span!("cli.manage.set_password", user.handle = %handle).entered();
 
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
@@ -55,7 +55,7 @@ pub(super) async fn handle_set_password(
     let mut repo = PgRepository::new(conn);
     let user = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&handle)
         .await?
         .context("User not found")?;
 
@@ -72,14 +72,14 @@ pub(super) async fn handle_set_password(
         .add(&mut rng, &clock, &user, version, hashed_password, None)
         .await?;
 
-    info!(%user.id, %user.username, "Password changed");
+    info!(%user.id, %user.handle, "Password changed");
 
     Ok(ExitCode::SUCCESS)
 }
 
 pub(super) async fn handle_add_email(
     figment: &Figment,
-    username: String,
+    handle: String,
     email: String,
 ) -> anyhow::Result<ExitCode> {
     let clock = SystemClock::default();
@@ -87,7 +87,7 @@ pub(super) async fn handle_add_email(
 
     let _span = info_span!(
         "cli.manage.add_email",
-        user.username = username,
+        user.handle = handle,
         user_email.email = email
     )
     .entered();
@@ -103,7 +103,7 @@ pub(super) async fn handle_add_email(
 
     let user = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&handle)
         .await?
         .context("User not found")?;
 
@@ -119,7 +119,7 @@ pub(super) async fn handle_add_email(
     };
     info!(
         %user.id,
-        %user.username,
+        %user.handle,
         %email.id,
         %email.email,
         "Email added"
@@ -129,12 +129,12 @@ pub(super) async fn handle_add_email(
 }
 
 pub(super) async fn handle_verify_email(
-    username: String,
+    handle: String,
     email: String,
 ) -> anyhow::Result<ExitCode> {
     let _span = info_span!(
         "cli.manage.verify_email",
-        user.username = username,
+        user.handle = handle,
         user_email.email = email
     )
     .entered();
@@ -148,9 +148,9 @@ pub(super) async fn handle_verify_email(
 
 pub(super) async fn handle_promote_admin(
     figment: &Figment,
-    username: String,
+    handle: String,
 ) -> anyhow::Result<ExitCode> {
-    let _span = info_span!("cli.manage.promote_admin", user.username = username,).entered();
+    let _span = info_span!("cli.manage.promote_admin", user.handle = handle,).entered();
 
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
@@ -163,22 +163,22 @@ pub(super) async fn handle_promote_admin(
 
     let user = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&handle)
         .await?
         .context("User not found")?;
 
     let user = repo.user().set_can_request_admin(user, true).await?;
 
-    info!(%user.id, %user.username, "User promoted to admin");
+    info!(%user.id, %user.handle, "User promoted to admin");
 
     Ok(ExitCode::SUCCESS)
 }
 
 pub(super) async fn handle_demote_admin(
     figment: &Figment,
-    username: String,
+    handle: String,
 ) -> anyhow::Result<ExitCode> {
-    let _span = info_span!("cli.manage.demote_admin", user.username = username,).entered();
+    let _span = info_span!("cli.manage.demote_admin", user.handle = handle,).entered();
 
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
@@ -191,13 +191,13 @@ pub(super) async fn handle_demote_admin(
 
     let user = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&handle)
         .await?
         .context("User not found")?;
 
     let user = repo.user().set_can_request_admin(user, false).await?;
 
-    info!(%user.id, %user.username, "User is no longer admin");
+    info!(%user.id, %user.handle, "User is no longer admin");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -222,7 +222,7 @@ pub(super) async fn handle_list_admin_users(figment: &Figment) -> anyhow::Result
         let page = repo.user().list(filter, cursor).await?;
         for edge in page.edges {
             let user = edge.node;
-            info!(%user.id, username = %user.username);
+            info!(%user.id, handle = %user.handle);
             cursor = cursor.after(edge.cursor);
         }
 
@@ -324,13 +324,13 @@ pub(super) async fn handle_provision_all_users(figment: &Figment) -> anyhow::Res
 
 pub(super) async fn handle_kill_sessions(
     figment: &Figment,
-    username: String,
+    handle: String,
     dry_run: bool,
 ) -> anyhow::Result<ExitCode> {
     let clock = SystemClock::default();
     let mut rng = rand_chacha::ChaChaRng::from_entropy();
 
-    let _span = info_span!("cli.manage.kill_sessions", user.username = username).entered();
+    let _span = info_span!("cli.manage.kill_sessions", user.handle = handle).entered();
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&database_config).await?;
@@ -342,7 +342,7 @@ pub(super) async fn handle_kill_sessions(
 
     let user = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&handle)
         .await?
         .context("User not found")?;
 
@@ -387,13 +387,13 @@ pub(super) async fn handle_kill_sessions(
 
 pub(super) async fn handle_lock_user(
     figment: &Figment,
-    username: String,
+    handle: String,
     deactivate: bool,
 ) -> anyhow::Result<ExitCode> {
     let clock = SystemClock::default();
     let mut rng = rand_chacha::ChaChaRng::from_entropy();
 
-    let _span = info_span!("cli.manage.lock_user", user.username = username).entered();
+    let _span = info_span!("cli.manage.lock_user", user.handle = handle).entered();
     let config = DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&config).await?;
     let conn = pool
@@ -404,7 +404,7 @@ pub(super) async fn handle_lock_user(
 
     let user = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&handle)
         .await?
         .context("User not found")?;
 
@@ -427,13 +427,13 @@ pub(super) async fn handle_lock_user(
 
 pub(super) async fn handle_unlock_user(
     figment: &Figment,
-    username: String,
+    handle: String,
     reactivate: bool,
 ) -> anyhow::Result<ExitCode> {
     let clock = SystemClock::default();
     let mut rng = rand_chacha::ChaChaRng::from_entropy();
 
-    let _span = info_span!("cli.manage.unlock_user", user.username = username).entered();
+    let _span = info_span!("cli.manage.unlock_user", user.handle = handle).entered();
     let config = DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&config).await?;
     let conn = pool
@@ -444,7 +444,7 @@ pub(super) async fn handle_unlock_user(
 
     let user = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&handle)
         .await?
         .context("User not found")?;
 

@@ -30,9 +30,9 @@
 //! {
 //!     "violations": [
 //!         {
-//!             "msg": "Username too short",
-//!             "field": "username",
-//!             "code": "username-too-short",
+//!             "msg": "Handle too short",
+//!             "field": "handle",
+//!             "code": "handle-too-short",
 //!             "redirect_uri": null
 //!         }
 //!     ]

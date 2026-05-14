@@ -362,7 +362,7 @@ async fn derive_account_id_from_subject(
 
     Ok(repo
         .user()
-        .find_by_username(subject)
+        .find_by_handle(subject)
         .await?
         .map(|user| user.id))
 }

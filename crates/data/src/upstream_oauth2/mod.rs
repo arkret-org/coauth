@@ -15,7 +15,7 @@ pub use self::{
         ResponseMode as UpstreamOAuthProviderResponseMode,
         SubjectPreference as UpstreamOAuthProviderSubjectPreference,
         TokenAuthMethod as UpstreamOAuthProviderTokenAuthMethod, UpstreamOAuthProvider,
-        UsernamePreference as UpstreamOAuthProviderUsernamePreference,
+        HandlePreference as UpstreamOAuthProviderHandlePreference,
     },
     session::{UpstreamOAuthAuthorizationSession, UpstreamOAuthAuthorizationSessionState},
 };

@@ -19,11 +19,11 @@ pub enum LinkState {
         upstream_subject: Option<String>,
     },
     LinkMismatch {
-        existing_username: String,
+        existing_handle: String,
     },
     Register {
-        suggested_username: Option<String>,
-        username_forced: bool,
+        suggested_handle: Option<String>,
+        handle_forced: bool,
         suggested_display_name: Option<String>,
         display_name_forced: bool,
         suggested_email: Option<String>,
@@ -110,12 +110,12 @@ fn LinkStateView(id: String, state: LinkState) -> Element {
                 upstream_subject,
             }
         },
-        LinkState::LinkMismatch { existing_username } => rsx! {
-            LinkMismatchView { existing_username }
+        LinkState::LinkMismatch { existing_handle } => rsx! {
+            LinkMismatchView { existing_handle }
         },
         LinkState::Register {
-            suggested_username,
-            username_forced,
+            suggested_handle,
+            handle_forced,
             suggested_display_name,
             display_name_forced,
             suggested_email,
@@ -125,8 +125,8 @@ fn LinkStateView(id: String, state: LinkState) -> Element {
         } => rsx! {
             RegisterView {
                 id,
-                suggested_username,
-                username_forced,
+                suggested_handle,
+                handle_forced,
                 suggested_display_name,
                 display_name_forced,
                 suggested_email,
@@ -241,14 +241,14 @@ fn SuggestLinkView(
 // ── Link Mismatch ───────────────────────────────────────────────
 
 #[component]
-fn LinkMismatchView(existing_username: String) -> Element {
+fn LinkMismatchView(existing_handle: String) -> Element {
     rsx! {
         div { class: "login-page",
             div { class: "login-container",
                 h1 { class: "heading-md login-title", "Account Mismatch" }
                 p { class: "text-secondary",
                     "This external account is already linked to another user: "
-                    strong { "{existing_username}" }
+                    strong { "{existing_handle}" }
                     "."
                 }
                 p { class: "text-secondary", "Please log out and sign in with the correct account, or contact your administrator." }
@@ -263,8 +263,8 @@ fn LinkMismatchView(existing_username: String) -> Element {
 #[component]
 fn RegisterView(
     id: String,
-    suggested_username: Option<String>,
-    username_forced: bool,
+    suggested_handle: Option<String>,
+    handle_forced: bool,
     suggested_display_name: Option<String>,
     display_name_forced: bool,
     suggested_email: Option<String>,
@@ -272,7 +272,7 @@ fn RegisterView(
     provider_name: Option<String>,
     has_tos: bool,
 ) -> Element {
-    let mut username = use_signal(|| suggested_username.clone().unwrap_or_default());
+    let mut handle = use_signal(|| suggested_handle.clone().unwrap_or_default());
     let mut import_email = use_signal(|| suggested_email.is_some());
     let mut import_display_name = use_signal(|| suggested_display_name.is_some());
     let mut accept_terms = use_signal(|| false);
@@ -303,7 +303,7 @@ fn RegisterView(
                             e.prevent_default();
                             e.stop_propagation();
                             let id = id.clone();
-                            let user = username.to_string();
+                            let user = handle.to_string();
                             let ie = *import_email.read();
                             let idn = *import_display_name.read();
                             let at = *accept_terms.read();
@@ -315,7 +315,7 @@ fn RegisterView(
                             spawn(async move {
                                 let body = serde_json::json!({
                                     "action": "register",
-                                    "username": user,
+                                    "handle": user,
                                     "import_email": ie,
                                     "import_display_name": idn,
                                     "accept_terms": at,
@@ -355,9 +355,9 @@ fn RegisterView(
                             r#type: "text",
                             class: "form-input",
                             required: true,
-                            disabled: username_forced,
-                            value: "{username}",
-                            oninput: move |e| username.set(e.value()),
+                            disabled: handle_forced,
+                            value: "{handle}",
+                            oninput: move |e| handle.set(e.value()),
                         }
                         if let Some(ref fe) = *field_errors.read() {
                             if let Some(err) = fe.get("username") {

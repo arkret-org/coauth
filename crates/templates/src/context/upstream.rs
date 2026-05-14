@@ -86,8 +86,8 @@ impl TemplateContext for UpstreamSuggestLink {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum UpstreamRegisterFormField {
-    /// Username field
-    Username,
+    /// Handle field
+    Handle,
     /// Terms-of-service acceptance
     AcceptTerms,
 }
@@ -103,8 +103,8 @@ impl FormField for UpstreamRegisterFormField {
 pub struct UpstreamRegister {
     upstream_oauth_link: UpstreamOAuthLink,
     upstream_oauth_provider: UpstreamOAuthProvider,
-    imported_username: Option<String>,
-    force_username: bool,
+    imported_handle: Option<String>,
+    force_handle: bool,
     imported_display_name: Option<String>,
     force_display_name: bool,
     imported_email: Option<String>,
@@ -122,8 +122,8 @@ impl UpstreamRegister {
         Self {
             upstream_oauth_link,
             upstream_oauth_provider,
-            imported_username: None,
-            force_username: false,
+            imported_handle: None,
+            force_handle: false,
             imported_display_name: None,
             force_display_name: false,
             imported_email: None,
@@ -132,18 +132,18 @@ impl UpstreamRegister {
         }
     }
 
-    /// Set the imported username
-    pub fn set_username(&mut self, username: String, force: bool) {
-        self.imported_username = Some(username);
-        self.force_username = force;
+    /// Set the imported handle
+    pub fn set_handle(&mut self, handle: String, force: bool) {
+        self.imported_handle = Some(handle);
+        self.force_handle = force;
     }
 
-    /// Set the imported username
+    /// Set the imported handle
     #[must_use]
-    pub fn with_username(self, username: String, force: bool) -> Self {
+    pub fn with_handle(self, handle: String, force: bool) -> Self {
         Self {
-            imported_username: Some(username),
-            force_username: force,
+            imported_handle: Some(handle),
+            force_handle: force,
             ..self
         }
     }

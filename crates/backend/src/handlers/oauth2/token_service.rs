@@ -550,7 +550,7 @@ pub async fn exchange_authorization_code(
     for device_id in &requested_device_ids {
         principal_server
             .upsert_device(
-                &browser_session.user.username,
+                &browser_session.user.handle,
                 device_id,
                 Some(&device_name),
             )
@@ -878,7 +878,7 @@ pub async fn exchange_device_code(
     }
 
     let grant = match repo
-        .oauth2_device_code_grant()
+        .oauth_device_code_grant()
         .find_by_device_code(&grant.device_code)
         .await?
     {
@@ -981,7 +981,7 @@ pub async fn exchange_device_code(
         "Started OAuth session for device_code exchange"
     );
 
-    repo.oauth2_device_code_grant()
+    repo.oauth_device_code_grant()
         .exchange(clock, grant, &session)
         .await?;
 
@@ -1073,7 +1073,7 @@ pub async fn exchange_device_code(
     }
     for device_id in &requested_device_ids {
         principal_server
-            .upsert_device(&browser_session.user.username, device_id, None)
+            .upsert_device(&browser_session.user.handle, device_id, None)
             .await
             .map_err(|err| {
                 error!(

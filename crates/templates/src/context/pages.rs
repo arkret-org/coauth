@@ -49,9 +49,9 @@ pub struct AppErrorState {
     /// One of: `account_deactivated`, `account_locked`, `session_ended`,
     /// `generic`.
     pub kind: String,
-    /// The local username (without `@` / `:server`), if known.
+    /// The local handle (without `@` / `:server`), if known.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
+    pub handle: Option<String>,
     /// Human-readable description, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

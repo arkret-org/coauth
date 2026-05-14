@@ -46,25 +46,25 @@ impl std::fmt::Display for HumanReadable<&UpstreamOAuthProvider> {
     }
 }
 
-async fn check_and_normalize_username<'a>(
-    username: &'a str,
+async fn check_and_normalize_handle<'a>(
+    handle: &'a str,
     repo: &mut dyn RepositoryAccess<Error = DatabaseError>,
 ) -> anyhow::Result<&'a str> {
-    let username = username.trim();
+    let handle = handle.trim();
 
-    if username.is_empty() {
-        return Err(anyhow::anyhow!("Username cannot be empty"));
+    if handle.is_empty() {
+        return Err(anyhow::anyhow!("handle cannot be empty"));
     }
 
-    if repo.user().exists(username).await? {
+    if repo.user().exists(handle).await? {
         return Err(anyhow::anyhow!("User already exists"));
     }
 
-    Ok(username)
+    Ok(handle)
 }
 
 pub(super) struct UserCreationRequest<'a> {
-    username: String,
+    handle: String,
     hashed_password: Option<(u16, String)>,
     emails: Vec<Address>,
     upstream_provider_mappings: Vec<(&'a UpstreamOAuthProvider, String)>,
@@ -123,7 +123,7 @@ impl UserCreationRequest<'_> {
         let value_style = Style::new().green();
         let key_style = Style::new().bold();
         let warning_style = Style::new().italic().red().bright();
-        let username = &self.username;
+        let handle = &self.handle;
 
         term.write_line(&style("User attributes").bold().underlined().to_string())?;
 
@@ -137,7 +137,7 @@ impl UserCreationRequest<'_> {
             };
         }
 
-        display!("Username", username);
+        display!("handle", handle);
         if let Some(display_name) = &self.display_name {
             display!("Display name", display_name);
         }
@@ -187,14 +187,14 @@ impl UserCreationRequest<'_> {
         clock: &dyn Clock,
     ) -> Result<User, E> {
         let Self {
-            username,
+            handle,
             hashed_password,
             emails,
             upstream_provider_mappings,
             display_name,
             admin,
         } = self;
-        let mut user = repo.user().add(rng, clock, username).await?;
+        let mut user = repo.user().add(rng, clock, handle).await?;
 
         if let Some((version, hashed_password)) = hashed_password {
             repo.user_password()
@@ -252,7 +252,7 @@ impl std::fmt::Display for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Action::CreateUser => write!(f, "Create the user"),
-            Action::ChangeUsername => write!(f, "Change the username"),
+            Action::ChangeUsername => write!(f, "Change the handle"),
             Action::SetPassword => write!(f, "Set a password"),
             Action::AddEmail => write!(f, "Add email"),
             Action::SetDisplayName => write!(f, "Set a display name"),
@@ -286,7 +286,7 @@ impl std::fmt::Display for UserCreationCommand<'_> {
             manage.get_name(),
             register_user.get_name(),
             yes_arg.get_long().unwrap(),
-            self.0.username,
+            self.0.handle,
         )?;
 
         for email in &self.0.emails {
@@ -330,7 +330,7 @@ impl std::fmt::Display for UserCreationCommand<'_> {
 #[expect(clippy::too_many_arguments)]
 pub(super) async fn handle_register_user(
     figment: &Figment,
-    username: Option<String>,
+    handle: Option<String>,
     password: Option<String>,
     emails: Vec<Address>,
     upstream_provider_mappings: Vec<UpstreamProviderMapping>,
@@ -364,25 +364,25 @@ pub(super) async fn handle_register_user(
         return Ok(ExitCode::from(1));
     }
 
-    // If the username is provided, check if it's available and normalize it.
-    let username = if let Some(username) = username {
-        check_and_normalize_username(&username, &mut repo)
+    // If the handle is provided, check if it's available and normalize it.
+    let handle = if let Some(handle) = handle {
+        check_and_normalize_handle(&handle, &mut repo)
             .await?
             .to_owned()
     } else {
         // Else we prompt for one until we get a valid one.
         loop {
-            let username = tokio::task::spawn_blocking(|| {
+            let handle = tokio::task::spawn_blocking(|| {
                 Input::<String>::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Username")
+                    .with_prompt("handle")
                     .interact_text()
             })
             .await??;
 
-            match check_and_normalize_username(&username, &mut repo).await {
-                Ok(username) => break username.to_owned(),
+            match check_and_normalize_handle(&handle, &mut repo).await {
+                Ok(handle) => break handle.to_owned(),
                 Err(e) => {
-                    warn!("Invalid username: {e}");
+                    warn!("Invalid handle: {e}");
                 }
             }
         }
@@ -423,7 +423,7 @@ pub(super) async fn handle_register_user(
     };
 
     let mut req = UserCreationRequest {
-        username: username,
+        handle: handle,
         hashed_password,
         emails,
         upstream_provider_mappings,
@@ -459,20 +459,20 @@ pub(super) async fn handle_register_user(
         match action {
             Action::CreateUser => break,
             Action::ChangeUsername => {
-                req.username = loop {
-                    let current_username = req.username.clone();
-                    let username = tokio::task::spawn_blocking(|| {
+                req.handle = loop {
+                    let current_handle = req.handle.clone();
+                    let handle = tokio::task::spawn_blocking(|| {
                         Input::<String>::with_theme(&ColorfulTheme::default())
-                            .with_prompt("Username")
-                            .with_initial_text(current_username)
+                            .with_prompt("handle")
+                            .with_initial_text(current_handle)
                             .interact_text()
                     })
                     .await??;
 
-                    match check_and_normalize_username(&username, &mut repo).await {
-                        Ok(username) => break username.to_owned(),
+                    match check_and_normalize_handle(&handle, &mut repo).await {
+                        Ok(handle) => break handle.to_owned(),
                         Err(e) => {
-                            warn!("Invalid username: {e}");
+                            warn!("Invalid handle: {e}");
                         }
                     }
                 };

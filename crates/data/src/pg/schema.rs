@@ -6,7 +6,7 @@
 diesel::table! {
     users (id) {
         id -> Uuid,
-        username -> Text,
+        handle -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         locked_at -> Nullable<Timestamptz>,
@@ -198,7 +198,7 @@ diesel::table! {
         ip_address -> Nullable<Inet>,
         user_agent -> Nullable<Text>,
         post_auth_action -> Nullable<Jsonb>,
-        username -> Text,
+        handle -> Text,
         display_name -> Nullable<Text>,
         avatar_url -> Nullable<Text>,
         terms_url -> Nullable<Text>,
@@ -265,7 +265,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    oauth2_clients (id) {
+    oauth_clients (id) {
         id -> Uuid,
         encrypted_client_secret -> Nullable<Text>,
         grant_type_authorization_code -> Bool,
@@ -295,7 +295,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    oauth2_client_localized_metadata (client_id, locale, field) {
+    oauth_client_localized_metadata (client_id, locale, field) {
         client_id -> Uuid,
         locale -> Text,
         field -> Text,
@@ -304,10 +304,10 @@ diesel::table! {
 }
 
 diesel::table! {
-    oauth2_sessions (id) {
+    oauth_sessions (id) {
         id -> Uuid,
         user_session_id -> Nullable<Uuid>,
-        oauth2_client_id -> Uuid,
+        oauth_client_id -> Uuid,
         user_id -> Nullable<Uuid>,
         scope_list -> Array<Text>,
         created_at -> Timestamptz,
@@ -320,9 +320,9 @@ diesel::table! {
 }
 
 diesel::table! {
-    oauth2_access_tokens (id) {
+    oauth_access_tokens (id) {
         id -> Uuid,
-        oauth2_session_id -> Uuid,
+        oauth_session_id -> Uuid,
         access_token -> Text,
         created_at -> Timestamptz,
         expires_at -> Nullable<Timestamptz>,
@@ -332,23 +332,23 @@ diesel::table! {
 }
 
 diesel::table! {
-    oauth2_refresh_tokens (id) {
+    oauth_refresh_tokens (id) {
         id -> Uuid,
-        oauth2_session_id -> Uuid,
-        oauth2_access_token_id -> Nullable<Uuid>,
+        oauth_session_id -> Uuid,
+        oauth_access_token_id -> Nullable<Uuid>,
         refresh_token -> Text,
         created_at -> Timestamptz,
         consumed_at -> Nullable<Timestamptz>,
         revoked_at -> Nullable<Timestamptz>,
-        next_oauth2_refresh_token_id -> Nullable<Uuid>,
+        next_oauth_refresh_token_id -> Nullable<Uuid>,
     }
 }
 
 diesel::table! {
-    oauth2_authorization_grants (id) {
+    oauth_authorization_grants (id) {
         id -> Uuid,
-        oauth2_client_id -> Uuid,
-        oauth2_session_id -> Nullable<Uuid>,
+        oauth_client_id -> Uuid,
+        oauth_session_id -> Nullable<Uuid>,
         authorization_code -> Nullable<Text>,
         redirect_uri -> Text,
         scope -> Text,
@@ -370,9 +370,9 @@ diesel::table! {
 }
 
 diesel::table! {
-    oauth2_device_code_grant (id) {
+    oauth_device_code_grant (id) {
         id -> Uuid,
-        oauth2_client_id -> Uuid,
+        oauth_client_id -> Uuid,
         scope -> Text,
         user_code -> Text,
         device_code -> Text,
@@ -381,7 +381,7 @@ diesel::table! {
         fulfilled_at -> Nullable<Timestamptz>,
         rejected_at -> Nullable<Timestamptz>,
         exchanged_at -> Nullable<Timestamptz>,
-        oauth2_session_id -> Nullable<Uuid>,
+        oauth_session_id -> Nullable<Uuid>,
         user_session_id -> Nullable<Uuid>,
         ip_address -> Nullable<Inet>,
         user_agent -> Nullable<Text>,
@@ -389,7 +389,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    oauth2_session_grants (id) {
+    oauth_session_grants (id) {
         id -> Uuid,
         user_session_id -> Uuid,
         issuer -> Text,
@@ -531,7 +531,7 @@ diesel::table! {
     personal_sessions (id) {
         id -> Uuid,
         owner_user_id -> Nullable<Uuid>,
-        owner_oauth2_client_id -> Nullable<Uuid>,
+        owner_oauth_client_id -> Nullable<Uuid>,
         actor_user_id -> Uuid,
         human_name -> Text,
         scope_list -> Array<Text>,
@@ -760,12 +760,12 @@ diesel::joinable!(user_email_authentication_codes -> user_email_authentications 
 diesel::joinable!(user_phone_authentication_codes -> user_phone_authentications (user_phone_authentication_id));
 diesel::joinable!(user_recovery_tickets -> user_recovery_sessions (user_recovery_session_id));
 diesel::joinable!(user_recovery_tickets -> user_emails (user_email_id));
-diesel::joinable!(oauth2_sessions -> oauth2_clients (oauth2_client_id));
-diesel::joinable!(oauth2_access_tokens -> oauth2_sessions (oauth2_session_id));
-diesel::joinable!(oauth2_authorization_grants -> oauth2_clients (oauth2_client_id));
-diesel::joinable!(oauth2_device_code_grant -> oauth2_clients (oauth2_client_id));
-diesel::joinable!(oauth2_session_grants -> user_sessions (user_session_id));
-diesel::joinable!(oauth2_client_localized_metadata -> oauth2_clients (client_id));
+diesel::joinable!(oauth_sessions -> oauth_clients (oauth_client_id));
+diesel::joinable!(oauth_access_tokens -> oauth_sessions (oauth_session_id));
+diesel::joinable!(oauth_authorization_grants -> oauth_clients (oauth_client_id));
+diesel::joinable!(oauth_device_code_grant -> oauth_clients (oauth_client_id));
+diesel::joinable!(oauth_session_grants -> user_sessions (user_session_id));
+diesel::joinable!(oauth_client_localized_metadata -> oauth_clients (client_id));
 diesel::joinable!(upstream_oauth_links -> upstream_oauth_providers (upstream_oauth_provider_id));
 diesel::joinable!(upstream_oauth_authorization_sessions -> upstream_oauth_providers (upstream_oauth_provider_id));
 diesel::joinable!(personal_access_tokens -> personal_sessions (personal_session_id));
@@ -803,14 +803,14 @@ diesel::allow_tables_to_appear_in_same_query!(
     user_phone_authentications,
     user_phone_authentication_codes,
     user_unsupported_third_party_ids,
-    oauth2_clients,
-    oauth2_client_localized_metadata,
-    oauth2_sessions,
-    oauth2_access_tokens,
-    oauth2_refresh_tokens,
-    oauth2_authorization_grants,
-    oauth2_device_code_grant,
-    oauth2_session_grants,
+    oauth_clients,
+    oauth_client_localized_metadata,
+    oauth_sessions,
+    oauth_access_tokens,
+    oauth_refresh_tokens,
+    oauth_authorization_grants,
+    oauth_device_code_grant,
+    oauth_session_grants,
     upstream_oauth_providers,
     upstream_oauth_links,
     upstream_oauth_authorization_sessions,

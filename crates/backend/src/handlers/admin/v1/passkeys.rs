@@ -43,16 +43,16 @@ use crate::{
 
 /// Body for `register/start`. The display fields are surfaced verbatim to
 /// the platform authenticator UI, so admins can override the default
-/// (`account.username`).
+/// (`account.handle`).
 #[derive(Default, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "PasskeyRegisterStartRequest")]
 pub struct PasskeyRegisterStartRequest {
-    /// Override the username string surfaced to the authenticator.
+    /// Override the handle string surfaced to the authenticator.
     #[serde(default)]
-    pub username: Option<String>,
+    pub handle: Option<String>,
 
     /// Override the human-readable display name shown by the
-    /// authenticator. Falls back to `username` when absent.
+    /// authenticator. Falls back to `handle` when absent.
     #[serde(default)]
     pub display_name: Option<String>,
 }
@@ -162,12 +162,12 @@ pub async fn register_start(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
-    let username = body.username.unwrap_or_else(|| account.username.clone());
-    let display_name = body.display_name.unwrap_or_else(|| username.clone());
+    let handle = body.handle.unwrap_or_else(|| account.handle.clone());
+    let display_name = body.display_name.unwrap_or_else(|| handle.clone());
 
     let webauthn = depot.webauthn_service()?;
     let challenge: CreationChallengeResponse = webauthn
-        .register_start(id, &username, &display_name)
+        .register_start(id, &handle, &display_name)
         .await
         .map_err(map_webauthn_error)?;
 

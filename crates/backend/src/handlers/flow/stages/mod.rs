@@ -103,7 +103,7 @@ pub async fn execute_stage(
                 create_users_as_inactive,
             },
             StageResponse::UserWrite {
-                username,
+                handle,
                 display_name,
             },
         ) => {
@@ -112,7 +112,7 @@ pub async fn execute_stage(
                 rng,
                 clock,
                 *create_users_as_inactive,
-                username,
+                handle,
                 display_name.as_deref(),
                 starid_registry,
                 context,

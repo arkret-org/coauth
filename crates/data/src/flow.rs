@@ -304,10 +304,10 @@ pub enum StageChallenge {
         /// Whether the current password must also be provided.
         require_current: bool,
     },
-    /// User write challenge — prompt for username / display name.
+    /// User write challenge — prompt for handle / display name.
     UserWrite {
-        /// A suggested username, if available.
-        suggested_username: Option<String>,
+        /// A suggested handle, if available.
+        suggested_handle: Option<String>,
     },
     /// CAPTCHA challenge.
     Captcha {
@@ -372,8 +372,8 @@ pub enum StageResponse {
     },
     /// Response to a user write challenge.
     UserWrite {
-        /// Chosen username.
-        username: String,
+        /// Chosen handle.
+        handle: String,
         /// Optional display name.
         display_name: Option<String>,
     },

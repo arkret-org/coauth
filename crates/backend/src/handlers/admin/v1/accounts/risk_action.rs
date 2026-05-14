@@ -203,7 +203,7 @@ pub async fn propose(
     } = extract_call_context(req, depot).await?;
     let requested_at = clock.now();
     let requested_by = admin_user.as_ref().map(|user| user.id.to_string());
-    let requested_by_username = admin_user.as_ref().map(|user| user.username.clone());
+    let requested_by_handle = admin_user.as_ref().map(|user| user.handle.clone());
     let id = extract_ulid_param(req)?;
     let account = repo
         .user()
@@ -240,7 +240,7 @@ pub async fn propose(
                         "ticket": params.ticket,
                         "approved_by": params.approved_by,
                         "requested_by": requested_by,
-                        "requested_by_username": requested_by_username,
+                        "requested_by_handle": requested_by_handle,
                         "execution_endpoint": execution_endpoint,
                         "allowed_next_transitions": allowed_next_transitions.clone(),
                         "todo": todo,
@@ -264,7 +264,7 @@ pub async fn propose(
         approved_by: params.approved_by,
         requested_at: Some(requested_at),
         requested_by,
-        requested_by_username,
+        requested_by_handle,
         previous_state: "idle".to_owned(),
         proposal_state: "draft".to_owned(),
         state_revision: 1,
@@ -365,7 +365,7 @@ pub async fn approve(
                         "next_state": "approved",
                         "ticket": params.ticket,
                         "approved_by": params.approved_by,
-                        "approved_by_username": admin_user.username,
+                        "approved_by_handle": admin_user.handle,
                         "approval_note": params.approval_note,
                         "execution_endpoint": execution_endpoint,
                         "allowed_next_transitions": allowed_next_transitions.clone(),
@@ -394,7 +394,7 @@ pub async fn approve(
         approved_by: params
             .approved_by
             .or_else(|| admin_user.as_ref().map(|user| user.id.to_string())),
-        approved_by_username: admin_user.as_ref().map(|user| user.username.clone()),
+        approved_by_handle: admin_user.as_ref().map(|user| user.handle.clone()),
         approval_note: params.approval_note,
         execution_endpoint,
         allowed_next_transitions,
@@ -489,7 +489,7 @@ pub async fn execute(
                         "principal_erase": mutation.principal_erase,
                         "ticket": params.ticket,
                         "executed_by": admin_user.id,
-                        "executed_by_username": admin_user.username,
+                        "executed_by_handle": admin_user.handle,
                         "execution_note": params.execution_note,
                         "mutation_endpoint": mutation_endpoint,
                         "allowed_next_transitions": allowed_next_transitions.clone(),
@@ -614,9 +614,9 @@ pub async fn get_current(
             recorded_by: risk_action_detail_string(&log.details, "requested_by")
                 .or_else(|| risk_action_detail_string(&log.details, "approved_by"))
                 .or_else(|| risk_action_detail_string(&log.details, "executed_by")),
-            recorded_by_username: risk_action_detail_string(&log.details, "requested_by_username")
-                .or_else(|| risk_action_detail_string(&log.details, "approved_by_username"))
-                .or_else(|| risk_action_detail_string(&log.details, "executed_by_username")),
+            recorded_by_handle: risk_action_detail_string(&log.details, "requested_by_handle")
+                .or_else(|| risk_action_detail_string(&log.details, "approved_by_handle"))
+                .or_else(|| risk_action_detail_string(&log.details, "executed_by_handle")),
             execution_endpoint: risk_action_detail_string(&log.details, "execution_endpoint"),
             mutation_endpoint: risk_action_detail_string(&log.details, "mutation_endpoint"),
             state_store_kind: risk_action_detail_string(&log.details, "state_store_kind")
@@ -637,7 +637,7 @@ pub async fn get_current(
             ticket: None,
             recorded_at: None,
             recorded_by: None,
-            recorded_by_username: None,
+            recorded_by_handle: None,
             execution_endpoint: None,
             mutation_endpoint: None,
             state_store_kind: risk_action_state.state_store_kind().to_owned(),
@@ -696,9 +696,9 @@ fn risk_action_transition_record(
         recorded_by: risk_action_detail_string(&log.details, "requested_by")
             .or_else(|| risk_action_detail_string(&log.details, "approved_by"))
             .or_else(|| risk_action_detail_string(&log.details, "executed_by")),
-        recorded_by_username: risk_action_detail_string(&log.details, "requested_by_username")
-            .or_else(|| risk_action_detail_string(&log.details, "approved_by_username"))
-            .or_else(|| risk_action_detail_string(&log.details, "executed_by_username")),
+        recorded_by_handle: risk_action_detail_string(&log.details, "requested_by_handle")
+            .or_else(|| risk_action_detail_string(&log.details, "approved_by_handle"))
+            .or_else(|| risk_action_detail_string(&log.details, "executed_by_handle")),
         execution_endpoint: risk_action_detail_string(&log.details, "execution_endpoint"),
         mutation_endpoint: risk_action_detail_string(&log.details, "mutation_endpoint"),
         approval_note: risk_action_detail_string(&log.details, "approval_note"),

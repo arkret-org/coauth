@@ -59,11 +59,11 @@ pub enum LinkState {
         upstream_subject: Option<String>,
     },
     /// User is logged in, but upstream is linked to a different user.
-    LinkMismatch { existing_username: String },
+    LinkMismatch { existing_handle: String },
     /// No session, no link: show registration form.
     Register {
-        suggested_username: Option<String>,
-        username_forced: bool,
+        suggested_handle: Option<String>,
+        handle_forced: bool,
         suggested_display_name: Option<String>,
         display_name_forced: bool,
         suggested_email: Option<String>,
@@ -72,9 +72,9 @@ pub enum LinkState {
         has_tos: bool,
     },
     /// Account is deactivated.
-    AccountDeactivated { username: String },
+    AccountDeactivated { handle: String },
     /// Account is locked.
-    AccountLocked { username: String },
+    AccountLocked { handle: String },
     /// An error occurred.
     Error { code: String, description: String },
 }
@@ -91,7 +91,7 @@ pub enum LinkAction {
     Link,
     Register {
         #[serde(default)]
-        username: Option<String>,
+        handle: Option<String>,
         #[serde(default)]
         import_email: Option<bool>,
         #[serde(default)]
@@ -217,12 +217,12 @@ pub async fn post_link(
     let action = match input {
         LinkAction::Link => UpstreamLinkAction::LinkCurrentSession,
         LinkAction::Register {
-            username,
+            handle,
             import_email,
             import_display_name,
             accept_terms,
         } => UpstreamLinkAction::Register(UpstreamLinkRegistrationAction {
-            username,
+            handle,
             import_email: import_email.unwrap_or(false),
             import_display_name: import_display_name.unwrap_or(false),
             accept_terms: accept_terms.unwrap_or(false),
@@ -326,11 +326,11 @@ fn render_get_link_outcome(
                 }),
             );
         }
-        LoadUpstreamLinkOutcome::LinkMismatch { existing_username } => {
+        LoadUpstreamLinkOutcome::LinkMismatch { existing_handle } => {
             cookie_jar.finalize(
                 res,
                 Json(LinkResponse {
-                    state: LinkState::LinkMismatch { existing_username },
+                    state: LinkState::LinkMismatch { existing_handle },
                 }),
             );
         }
@@ -353,8 +353,8 @@ fn render_get_link_outcome(
                 res,
                 Json(LinkResponse {
                     state: LinkState::Register {
-                        suggested_username: screen.suggested_username,
-                        username_forced: screen.username_forced,
+                        suggested_handle: screen.suggested_handle,
+                        handle_forced: screen.handle_forced,
                         suggested_display_name: screen.suggested_display_name,
                         display_name_forced: screen.display_name_forced,
                         suggested_email: screen.suggested_email,
@@ -386,19 +386,19 @@ fn render_get_link_outcome(
                 }),
             );
         }
-        LoadUpstreamLinkOutcome::AccountDeactivated { username } => {
+        LoadUpstreamLinkOutcome::AccountDeactivated { handle } => {
             cookie_jar.finalize(
                 res,
                 Json(LinkResponse {
-                    state: LinkState::AccountDeactivated { username },
+                    state: LinkState::AccountDeactivated { handle },
                 }),
             );
         }
-        LoadUpstreamLinkOutcome::AccountLocked { username } => {
+        LoadUpstreamLinkOutcome::AccountLocked { handle } => {
             cookie_jar.finalize(
                 res,
                 Json(LinkResponse {
-                    state: LinkState::AccountLocked { username },
+                    state: LinkState::AccountLocked { handle },
                 }),
             );
         }
@@ -481,8 +481,8 @@ fn map_upstream_link_workflow_error(error: UpstreamLinkWorkflowError) -> RouteEr
         }
         UpstreamLinkWorkflowError::ConflictFail { .. }
         | UpstreamLinkWorkflowError::ConflictSetBlocked { .. }
-        | UpstreamLinkWorkflowError::PolicyDeniedUsername { .. }
-        | UpstreamLinkWorkflowError::UsernameUnavailable { .. } => {
+        | UpstreamLinkWorkflowError::PolicyDeniedHandle { .. }
+        | UpstreamLinkWorkflowError::HandleUnavailable { .. } => {
             RouteError::BadRequest(error.to_string().into())
         }
         UpstreamLinkWorkflowError::RequiredAttributeEmpty { .. }

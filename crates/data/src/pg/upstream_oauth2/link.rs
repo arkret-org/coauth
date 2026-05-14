@@ -189,7 +189,7 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
             %upstream_oauth_link.id,
             %upstream_oauth_link.subject,
             %user.id,
-            %user.username,
+            %user.handle,
         ),
         err,
     )]

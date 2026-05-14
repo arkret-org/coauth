@@ -305,7 +305,7 @@ impl RepositoryAccess for PgRepository {
         Box::new(PgOAuth2RefreshTokenRepository::new(&mut *self.conn))
     }
 
-    fn oauth2_device_code_grant<'c>(
+    fn oauth_device_code_grant<'c>(
         &'c mut self,
     ) -> Box<dyn OAuth2DeviceCodeGrantRepository<Error = Self::Error> + 'c> {
         Box::new(PgOAuth2DeviceCodeGrantRepository::new(&mut *self.conn))

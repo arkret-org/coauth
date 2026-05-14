@@ -32,15 +32,15 @@ use crate::{
         common::DepotExt,
     },
     services::invite_quarantine::EnqueueInviteQuarantine,
-    util::username_valid,
+    util::handle_valid,
 };
 
 /// # JSON payload for the `POST /api/admin/v1/users` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUserRequest")]
 pub struct AddRequest {
-    /// The username of the user to add.
-    username: String,
+    /// The handle of the user to add.
+    handle: String,
 
     /// Skip checking with the PrincipalServer whether the username is available.
     ///
@@ -65,18 +65,18 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     let principal_server = depot.principal_server()?;
     let params: AddRequest = req.parse_json().await.map_err(AppError::internal)?;
 
-    if repo.user().exists(&params.username).await? {
+    if repo.user().exists(&params.handle).await? {
         return Err(AppError::conflict("User already exists"));
     }
 
     // Do some basic check on the username
-    if !username_valid(&params.username) {
+    if !handle_valid(&params.handle) {
         return Err(AppError::bad_request("Username is not valid"));
     }
 
     // Ask the PrincipalServer if the username is available
     let principal_server_available = principal_server
-        .is_username_available(&params.username)
+        .is_handle_available(&params.handle)
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
@@ -90,11 +90,11 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
         // If we skipped the check, we still want to shout about it
         warn!(
             "Skipped PrincipalServer check for username {}",
-            params.username
+            params.handle
         );
     }
 
-    let user = repo.user().add(&mut rng, &clock, params.username).await?;
+    let user = repo.user().add(&mut rng, &clock, params.handle).await?;
 
     // Round 37.4: the starid wire-in is deferred to the first passkey
     // enrolment (see `services::onboarding_starid` +
@@ -104,7 +104,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     // attested credential.
 
     principal_server
-        .provision_user(&PrincipalProvisionRequest::new(&user.username, &user.sub))
+        .provision_user(&PrincipalProvisionRequest::new(&user.handle, &user.sub))
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
@@ -116,7 +116,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
         AdminOperation::UserCreated,
         "user",
         Some(user.id),
-        serde_json::json!({ "username": user.username }),
+        serde_json::json!({ "handle": user.handle }),
     )
     .await?;
 
@@ -443,7 +443,7 @@ pub async fn batch_invite(
                         target_holder_did: gate.target_holder_did.clone(),
                         consent_id: gate.consent_id.clone(),
                         scope: gate.scope.clone(),
-                        requesting_admin_did: admin_user.as_ref().map(|u| u.username.clone()),
+                        requesting_admin_did: admin_user.as_ref().map(|u| u.handle.clone()),
                         payload,
                     })
                     .await;

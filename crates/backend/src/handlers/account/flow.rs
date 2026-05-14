@@ -142,7 +142,7 @@ pub enum FlowChallenge {
         require_current: bool,
     },
     UserWrite {
-        suggested_username: Option<String>,
+        suggested_handle: Option<String>,
     },
     Captcha {
         site_key: String,
@@ -181,8 +181,8 @@ impl From<DomainStageChallenge> for FlowChallenge {
             DomainStageChallenge::PasswordWrite { require_current } => {
                 Self::PasswordWrite { require_current }
             }
-            DomainStageChallenge::UserWrite { suggested_username } => {
-                Self::UserWrite { suggested_username }
+            DomainStageChallenge::UserWrite { suggested_handle } => {
+                Self::UserWrite { suggested_handle }
             }
             DomainStageChallenge::Captcha { site_key } => Self::Captcha { site_key },
             DomainStageChallenge::Consent { scope, client_name } => {
@@ -254,7 +254,7 @@ pub enum FlowStageResponse {
         new_password: String,
     },
     UserWrite {
-        username: String,
+        handle: String,
         display_name: Option<String>,
     },
     Captcha {
@@ -295,10 +295,10 @@ impl From<FlowStageResponse> for DomainStageResponse {
                 new_password,
             },
             FlowStageResponse::UserWrite {
-                username,
+                handle,
                 display_name,
             } => Self::UserWrite {
-                username,
+                handle,
                 display_name,
             },
             FlowStageResponse::Captcha { token } => Self::Captcha { token },

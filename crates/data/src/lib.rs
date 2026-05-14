@@ -159,7 +159,7 @@ pub use self::{
         UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderOnConflict,
         UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderResponseMode,
         UpstreamOAuthProviderSource, UpstreamOAuthProviderSubjectPreference,
-        UpstreamOAuthProviderTokenAuthMethod, UpstreamOAuthProviderUsernamePreference,
+        UpstreamOAuthProviderHandlePreference, UpstreamOAuthProviderTokenAuthMethod,
     },
     url_builder::UrlBuilder,
     user_agent::{DeviceType, UserAgent},

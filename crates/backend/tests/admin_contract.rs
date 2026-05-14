@@ -156,7 +156,7 @@ mod replicas {
     #[derive(Debug, Deserialize)]
     pub struct PasskeyRegisterStartRequest {
         #[serde(default)]
-        pub username: Option<String>,
+        pub handle: Option<String>,
         #[serde(default)]
         pub display_name: Option<String>,
     }
@@ -175,7 +175,7 @@ mod replicas {
 
     #[derive(Debug, Deserialize)]
     pub struct AddUser {
-        pub username: String,
+        pub handle: String,
         #[serde(default)]
         pub skip_principal_server_check: bool,
     }
@@ -369,12 +369,12 @@ fn passkey_register_start_contract() {
     // Empty body is allowed (all fields optional). The negative test
     // uses a non-string `username` because that's a structural type
     // mismatch the deserializer must reject.
-    let happy = json!({ "username": "alice", "display_name": "Alice" });
+    let happy = json!({ "handle": "alice", "display_name": "Alice" });
     let parsed: PasskeyRegisterStartRequest = serde_json::from_value(happy.clone())
         .expect("happy-path passkey register/start body must deserialize");
-    assert_eq!(parsed.username.as_deref(), Some("alice"));
+    assert_eq!(parsed.handle.as_deref(), Some("alice"));
     let invalid: Result<PasskeyRegisterStartRequest, _> =
-        serde_json::from_value(json!({ "username": 42 }));
+        serde_json::from_value(json!({ "handle": 42 }));
     assert!(invalid.is_err(), "non-string username must be rejected");
 }
 
@@ -411,9 +411,9 @@ fn add_user_request_contract() {
     use replicas::AddUser;
     check_pair::<AddUser>(
         "POST /users",
-        json!({ "username": "alice" }),
+        json!({ "handle": "alice" }),
         // `username` must be a string.
-        json!({ "username": 42 }),
+        json!({ "handle": 42 }),
     );
 }
 

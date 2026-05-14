@@ -504,7 +504,7 @@ mod tests {
         // There should be a new registration in the database
         let mut repo = state.repository().await.unwrap();
         let registration = repo.user_registration().lookup(id).await.unwrap().unwrap();
-        assert_eq!(registration.username, "john".to_owned());
+        assert_eq!(registration.handle, "john".to_owned());
         assert!(registration.password.is_some());
 
         let email_authentication = repo
@@ -685,7 +685,7 @@ mod tests {
             .unwrap();
 
         // Reserve "john" on the PrincipalServer
-        state.principal_server_admin.reserve_username("john").await;
+        state.principal_server_admin.reserve_handle("john").await;
 
         // Submit the registration form
         let request = Request::post("/register/password")
@@ -766,7 +766,7 @@ mod tests {
         // There should be a new registration in the database
         let mut repo = state.repository().await.unwrap();
         let registration = repo.user_registration().lookup(id).await.unwrap().unwrap();
-        assert_eq!(registration.username, "alice".to_owned());
+        assert_eq!(registration.handle, "alice".to_owned());
         assert!(registration.password.is_some());
         // Email authentication should be None when email is not required and not
         // provided
@@ -837,7 +837,7 @@ mod tests {
         // There should be a new registration in the database
         let mut repo = state.repository().await.unwrap();
         let registration = repo.user_registration().lookup(id).await.unwrap().unwrap();
-        assert_eq!(registration.username, "charlie".to_owned());
+        assert_eq!(registration.handle, "charlie".to_owned());
         assert!(registration.password.is_some());
 
         // Email authentication should be None when email is not required

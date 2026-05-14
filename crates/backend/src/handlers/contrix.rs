@@ -714,7 +714,7 @@ pub(crate) fn user_did_for(
 pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
         "{}@{}",
-        user.username,
+        user.handle,
         url_builder.public_hostname().to_lowercase()
     )
 }
@@ -1337,7 +1337,7 @@ pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Opti
     let suffix = format!("@{}", url_builder.public_hostname().to_lowercase());
     handle
         .strip_suffix(&suffix)
-        .filter(|username| !username.is_empty())
+        .filter(|h| !h.is_empty())
         .map(ToOwned::to_owned)
 }
 
@@ -1509,14 +1509,14 @@ pub async fn directory_resolve_handle(
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    let Some(username) = parse_local_handle(&url_builder, &body.handle) else {
+    let Some(handle) = parse_local_handle(&url_builder, &body.handle) else {
         return Err(ContrixRouteError::NotFound);
     };
 
     let mut repo = depot.repo().await?;
     let Some(user) = repo
         .user()
-        .find_by_username(&username)
+        .find_by_handle(&handle)
         .await
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
     else {
@@ -1914,7 +1914,7 @@ mod tests {
         );
         assert_eq!(
             user_handle(&url_builder, &user),
-            format!("{}@auth.example.com", user.username)
+            format!("{}@auth.example.com", user.handle)
         );
     }
 
@@ -2400,7 +2400,7 @@ mod tests {
 
         assert_eq!(
             parse_local_handle(&url_builder, &handle),
-            Some(user.username.clone())
+            Some(user.handle.clone())
         );
         assert_eq!(
             parse_local_handle(&url_builder, "alice@elsewhere.example"),

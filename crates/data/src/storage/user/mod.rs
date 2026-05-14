@@ -193,18 +193,18 @@ pub trait UserRepository: Send + Sync {
     /// Returns [`Self::Error`] if the underlying repository fails
     async fn lookup(&mut self, id: Ulid) -> Result<Option<User>, Self::Error>;
 
-    /// Find a [`User`] by its username, in a case-insensitive manner
+    /// Find a [`User`] by its handle, in a case-insensitive manner
     ///
     /// Returns `None` if no [`User`] was found
     ///
     /// # Parameters
     ///
-    /// * `username`: The username of the [`User`] to lookup
+    /// * `handle`: The handle of the [`User`] to lookup
     ///
     /// # Errors
     ///
     /// Returns [`Self::Error`] if the underlying repository fails
-    async fn find_by_username(&mut self, username: &str) -> Result<Option<User>, Self::Error>;
+    async fn find_by_handle(&mut self, handle: &str) -> Result<Option<User>, Self::Error>;
 
     /// Create a new [`User`]
     ///
@@ -214,7 +214,7 @@ pub trait UserRepository: Send + Sync {
     ///
     /// * `rng`: A random number generator to generate the [`User`] ID
     /// * `clock`: The clock used to generate timestamps
-    /// * `username`: The username of the [`User`]
+    /// * `handle`: The handle of the [`User`]
     ///
     /// # Errors
     ///
@@ -223,7 +223,7 @@ pub trait UserRepository: Send + Sync {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        username: String,
+        handle: String,
     ) -> Result<User, Self::Error>;
 
     /// Update the editable profile fields of a [`User`].
@@ -248,12 +248,12 @@ pub trait UserRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `username`: The username of the [`User`] to lookup
+    /// * `handle`: The handle of the [`User`] to lookup
     ///
     /// # Errors
     ///
     /// Returns [`Self::Error`] if the underlying repository fails
-    async fn exists(&mut self, username: &str) -> Result<bool, Self::Error>;
+    async fn exists(&mut self, handle: &str) -> Result<bool, Self::Error>;
 
     /// Lock a [`User`]
     ///
@@ -396,12 +396,12 @@ pub trait UserRepository: Send + Sync {
 
 repository_impl!(UserRepository:
     async fn lookup(&mut self, id: Ulid) -> Result<Option<User>, Self::Error>;
-    async fn find_by_username(&mut self, username: &str) -> Result<Option<User>, Self::Error>;
+    async fn find_by_handle(&mut self, handle: &str) -> Result<Option<User>, Self::Error>;
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        username: String,
+        handle: String,
     ) -> Result<User, Self::Error>;
     async fn update_profile(
         &mut self,
@@ -415,7 +415,7 @@ repository_impl!(UserRepository:
         user: User,
         patch: UserPatch,
     ) -> Result<User, Self::Error>;
-    async fn exists(&mut self, username: &str) -> Result<bool, Self::Error>;
+    async fn exists(&mut self, handle: &str) -> Result<bool, Self::Error>;
     async fn lock(&mut self, clock: &dyn Clock, user: User) -> Result<User, Self::Error>;
     async fn unlock(&mut self, user: User) -> Result<User, Self::Error>;
     async fn deactivate(&mut self, clock: &dyn Clock, user: User) -> Result<User, Self::Error>;

@@ -104,7 +104,7 @@ impl Scribe for RouteError {
 pub enum FormData {
     Register {
         #[serde(default)]
-        username: Option<String>,
+        handle: Option<String>,
         #[serde(default)]
         import_email: Option<String>,
         #[serde(default)]
@@ -173,12 +173,12 @@ pub async fn get(
     {
         Ok(outcome) => outcome,
         Err(
-            UpstreamLinkWorkflowError::ConflictFail { ref username }
-            | UpstreamLinkWorkflowError::ConflictSetBlocked { ref username },
+            UpstreamLinkWorkflowError::ConflictFail { handle: ref username }
+            | UpstreamLinkWorkflowError::ConflictSetBlocked { handle: ref username },
         ) => {
             let err_state = AppErrorState {
                 kind: "generic".to_owned(),
-                username: None,
+                handle: None,
                 description: Some(format!(
                     "Upstream account provider returned {username:?} as username, \
                      which could not be linked automatically."
@@ -193,13 +193,13 @@ pub async fn get(
             res.render(Text::Html(content));
             return Ok(());
         }
-        Err(UpstreamLinkWorkflowError::PolicyDeniedUsername {
-            ref username,
+        Err(UpstreamLinkWorkflowError::PolicyDeniedHandle {
+            handle: ref username,
             ref detail,
         }) => {
             let err_state = AppErrorState {
                 kind: "generic".to_owned(),
-                username: None,
+                handle: None,
                 description: Some(format!(
                     "Upstream account provider returned {username:?} as username, \
                      which does not pass the policy check: {detail}"
@@ -214,10 +214,10 @@ pub async fn get(
             res.render(Text::Html(content));
             return Ok(());
         }
-        Err(UpstreamLinkWorkflowError::UsernameUnavailable { ref username }) => {
+        Err(UpstreamLinkWorkflowError::HandleUnavailable { handle: ref username }) => {
             let err_state = AppErrorState {
                 kind: "generic".to_owned(),
-                username: None,
+                handle: None,
                 description: Some(format!(
                     "Username {username:?} is not available on this PrincipalServer"
                 )),
@@ -262,11 +262,11 @@ pub async fn get(
             cookie_jar.finalize(res, Redirect::other(&redirect_url));
         }
 
-        LoadUpstreamLinkOutcome::LinkMismatch { existing_username } => {
+        LoadUpstreamLinkOutcome::LinkMismatch { existing_handle: existing_username } => {
             // Look up the user again for the template context (needs the full User object)
             let user = repo
                 .user()
-                .find_by_username(&existing_username)
+                .find_by_handle(&existing_username)
                 .await?
                 .ok_or_else(|| {
                     RouteError::Internal(
@@ -321,8 +321,8 @@ pub async fn get(
         LoadUpstreamLinkOutcome::Register { screen } => {
             let mut ctx = UpstreamRegister::new(screen.link, screen.provider);
 
-            if let Some(username) = screen.suggested_username {
-                ctx = ctx.with_username(username, screen.username_forced);
+            if let Some(username) = screen.suggested_handle {
+                ctx = ctx.with_handle(username, screen.handle_forced);
             }
 
             if let Some(display_name) = screen.suggested_display_name {
@@ -364,10 +364,10 @@ pub async fn get(
             );
         }
 
-        LoadUpstreamLinkOutcome::AccountDeactivated { username } => {
+        LoadUpstreamLinkOutcome::AccountDeactivated { handle: username } => {
             let err_state = AppErrorState {
                 kind: "account_deactivated".to_owned(),
-                username: Some(username),
+                handle: Some(username),
                 description: None,
             };
             let ctx = AppContext::new(&url_builder, &depot.frontend_script_src()?)
@@ -378,10 +378,10 @@ pub async fn get(
             cookie_jar.finalize(res, Text::Html(content));
         }
 
-        LoadUpstreamLinkOutcome::AccountLocked { username } => {
+        LoadUpstreamLinkOutcome::AccountLocked { handle: username } => {
             let err_state = AppErrorState {
                 kind: "account_locked".to_owned(),
-                username: Some(username),
+                handle: Some(username),
                 description: None,
             };
             let ctx = AppContext::new(&url_builder, &depot.frontend_script_src()?)
@@ -582,7 +582,7 @@ mod tests {
     use oauth2_types::scope::{OPENID, Scope};
     use coauth_data::{
         UpstreamOAuthAuthorizationSession, UpstreamOAuthLink, UpstreamOAuthProviderClaimsImports,
-        UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderUsernamePreference,
+        UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderHandlePreference,
         UpstreamOAuthProviderTokenAuthMethod, UserEmailAuthentication, UserRegistration,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
@@ -609,7 +609,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            username: UpstreamOAuthProviderUsernamePreference {
+            handle: UpstreamOAuthProviderHandlePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Force,
                 template: None,
                 on_conflict: coauth_data::UpstreamOAuthProviderOnConflict::default(),
@@ -782,7 +782,7 @@ mod tests {
 
         assert_eq!(registration.password, None);
         assert_eq!(registration.completed_at, None);
-        assert_eq!(registration.username, "john");
+        assert_eq!(registration.handle, "john");
 
         let email_auth_id = registration
             .email_authentication_id
@@ -809,7 +809,7 @@ mod tests {
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
             skip_confirmation: true,
-            username: UpstreamOAuthProviderUsernamePreference {
+            handle: UpstreamOAuthProviderHandlePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 on_conflict: coauth_data::UpstreamOAuthProviderOnConflict::default(),
@@ -957,7 +957,7 @@ mod tests {
 
         assert_eq!(registration.password, None);
         assert_eq!(registration.completed_at, None);
-        assert_eq!(registration.username, "john");
+        assert_eq!(registration.handle, "john");
 
         let email_auth_id = registration
             .email_authentication_id
@@ -984,7 +984,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            username: UpstreamOAuthProviderUsernamePreference {
+            handle: UpstreamOAuthProviderHandlePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 // This is the important bit: this will automatically link
@@ -1105,7 +1105,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            username: UpstreamOAuthProviderUsernamePreference {
+            handle: UpstreamOAuthProviderHandlePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 on_conflict: coauth_data::UpstreamOAuthProviderOnConflict::default(),
@@ -1277,7 +1277,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            username: UpstreamOAuthProviderUsernamePreference {
+            handle: UpstreamOAuthProviderHandlePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 // This will replace any existing links for this provider and user
@@ -1428,7 +1428,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            username: UpstreamOAuthProviderUsernamePreference {
+            handle: UpstreamOAuthProviderHandlePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 // This will only link if there are no existing links for this provider and user
@@ -1550,7 +1550,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         let claims_imports = UpstreamOAuthProviderClaimsImports {
-            username: UpstreamOAuthProviderUsernamePreference {
+            handle: UpstreamOAuthProviderHandlePreference {
                 action: coauth_data::UpstreamOAuthProviderImportAction::Require,
                 template: None,
                 // This will only link if there are no existing links for this provider and user

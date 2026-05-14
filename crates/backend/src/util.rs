@@ -41,8 +41,8 @@ fn cleanup_pooled_postgres_connection() -> DieselPoolHook<AsyncPgConnection> {
     })
 }
 
-/// Check whether `c` is a valid character for a username.
-fn valid_username_character(c: char) -> bool {
+/// Check whether `c` is a valid character for a handle.
+fn valid_handle_character(c: char) -> bool {
     c.is_ascii_lowercase()
         || c.is_ascii_digit()
         || c == '='
@@ -53,23 +53,23 @@ fn valid_username_character(c: char) -> bool {
         || c == '+'
 }
 
-/// Check whether `username` is a valid username.
+/// Check whether `handle` is a valid handle.
 ///
-/// Usernames must be non-empty, at most 255 characters, must not start with
+/// Handles must be non-empty, at most 255 characters, must not start with
 /// an underscore, and may only contain lowercase ASCII letters, digits, and
 /// the characters `= _ - . / +`.
-pub fn username_valid(username: &str) -> bool {
-    if username.is_empty() || username.len() > 255 {
+pub fn handle_valid(handle: &str) -> bool {
+    if handle.is_empty() || handle.len() > 255 {
         return false;
     }
 
     // Should not start with an underscore
-    if username.starts_with('_') {
+    if handle.starts_with('_') {
         return false;
     }
 
     // Should only contain valid characters
-    if !username.chars().all(valid_username_character) {
+    if !handle.chars().all(valid_handle_character) {
         return false;
     }
 

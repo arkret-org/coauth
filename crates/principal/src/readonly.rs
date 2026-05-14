@@ -67,8 +67,8 @@ impl<C: PrincipalServerAdmin> PrincipalServerAdmin for ReadOnlyPrincipalServerAd
         self.source.verify_token(token).await
     }
 
-    async fn query_user(&self, username: &str) -> Result<PrincipalAccountProfile, anyhow::Error> {
-        self.source.query_user(username).await
+    async fn query_user(&self, handle: &str) -> Result<PrincipalAccountProfile, anyhow::Error> {
+        self.source.query_user(handle).await
     }
 
     async fn provision_user(
@@ -78,13 +78,13 @@ impl<C: PrincipalServerAdmin> PrincipalServerAdmin for ReadOnlyPrincipalServerAd
         deny_write(BlockedPrincipalWrite::ProvisionUser)
     }
 
-    async fn is_username_available(&self, username: &str) -> Result<bool, anyhow::Error> {
-        self.source.is_username_available(username).await
+    async fn is_handle_available(&self, handle: &str) -> Result<bool, anyhow::Error> {
+        self.source.is_handle_available(handle).await
     }
 
     async fn upsert_device(
         &self,
-        _username: &str,
+        _handle: &str,
         _device_id: &str,
         _initial_display_name: Option<&str>,
     ) -> Result<(), anyhow::Error> {
@@ -93,42 +93,42 @@ impl<C: PrincipalServerAdmin> PrincipalServerAdmin for ReadOnlyPrincipalServerAd
 
     async fn update_device_display_name(
         &self,
-        _username: &str,
+        _handle: &str,
         _device_id: &str,
         _display_name: &str,
     ) -> Result<(), anyhow::Error> {
         deny_write(BlockedPrincipalWrite::UpdateDeviceDisplayName)
     }
 
-    async fn delete_device(&self, _username: &str, _device_id: &str) -> Result<(), anyhow::Error> {
+    async fn delete_device(&self, _handle: &str, _device_id: &str) -> Result<(), anyhow::Error> {
         deny_write(BlockedPrincipalWrite::DeleteDevice)
     }
 
     async fn sync_devices(
         &self,
-        _username: &str,
+        _handle: &str,
         _devices: HashSet<String>,
     ) -> Result<(), anyhow::Error> {
         deny_write(BlockedPrincipalWrite::SyncDevices)
     }
 
-    async fn delete_user(&self, _username: &str, _erase: bool) -> Result<(), anyhow::Error> {
+    async fn delete_user(&self, _handle: &str, _erase: bool) -> Result<(), anyhow::Error> {
         deny_write(BlockedPrincipalWrite::DeleteUser)
     }
 
-    async fn reactivate_user(&self, _username: &str) -> Result<(), anyhow::Error> {
+    async fn reactivate_user(&self, _handle: &str) -> Result<(), anyhow::Error> {
         deny_write(BlockedPrincipalWrite::ReactivateUser)
     }
 
     async fn set_displayname(
         &self,
-        _username: &str,
+        _handle: &str,
         _displayname: &str,
     ) -> Result<(), anyhow::Error> {
         deny_write(BlockedPrincipalWrite::SetDisplayname)
     }
 
-    async fn unset_displayname(&self, _username: &str) -> Result<(), anyhow::Error> {
+    async fn unset_displayname(&self, _handle: &str) -> Result<(), anyhow::Error> {
         deny_write(BlockedPrincipalWrite::UnsetDisplayname)
     }
 }
@@ -173,7 +173,7 @@ mod tests {
     #[tokio::test]
     async fn forwards_read_operations_to_source() {
         let source = MockPrincipalServerAdmin::new("example.org");
-        source.reserve_username("reserved").await;
+        source.reserve_handle("reserved").await;
         source
             .provision_user(
                 &PrincipalProvisionRequest::new("alice", "sub-alice")
@@ -190,8 +190,8 @@ mod tests {
                 .await
                 .unwrap()
         );
-        assert!(!connection.is_username_available("alice").await.unwrap());
-        assert!(!connection.is_username_available("reserved").await.unwrap());
+        assert!(!connection.is_handle_available("alice").await.unwrap());
+        assert!(!connection.is_handle_available("reserved").await.unwrap());
 
         let user = connection.query_user("alice").await.unwrap();
         assert_eq!(user.displayname.as_deref(), Some("Alice"));

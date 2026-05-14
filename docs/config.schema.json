@@ -3575,14 +3575,14 @@
           ]
         },
         "skip_confirmation": {
-          "description": "When `true`, the interactive confirmation screen is skipped.\nRequires `username.action` to be `require` and other attribute\nactions to be `ignore`, `force`, or `require`.",
+          "description": "When `true`, the interactive confirmation screen is skipped.\nRequires `handle.action` to be `require` and other attribute\nactions to be `ignore`, `force`, or `require`.",
           "type": "boolean"
         },
-        "username": {
-          "description": "Import the local account username.",
+        "handle": {
+          "description": "Import the local account handle.",
           "allOf": [
             {
-              "$ref": "#/definitions/UsernameImportPreference"
+              "$ref": "#/definitions/HandleImportPreference"
             }
           ]
         },
@@ -3633,12 +3633,12 @@
         }
       }
     },
-    "UsernameImportPreference": {
-      "description": "Controls how the local account username is imported from upstream claims.",
+    "HandleImportPreference": {
+      "description": "Controls how the local account handle is imported from upstream claims.",
       "type": "object",
       "properties": {
         "action": {
-          "description": "How to handle the username attribute",
+          "description": "How to handle the handle attribute",
           "allOf": [
             {
               "$ref": "#/definitions/ImportAction"
@@ -3646,14 +3646,14 @@
           ]
         },
         "template": {
-          "description": "A Jinja2 template for the username attribute.\n\nDefaults to `{{ user.preferred_username }}` when omitted.",
+          "description": "A Jinja2 template for the handle attribute.\n\nDefaults to `{{ user.preferred_username }}` when omitted.",
           "type": [
             "string",
             "null"
           ]
         },
         "on_conflict": {
-          "description": "How to handle conflicts on the username claim",
+          "description": "How to handle conflicts on the handle claim",
           "allOf": [
             {
               "$ref": "#/definitions/OnConflict"

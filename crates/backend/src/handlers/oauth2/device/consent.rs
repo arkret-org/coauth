@@ -101,7 +101,7 @@ async fn handle_get(
 
     // TODO: better error handling
     let grant = repo
-        .oauth2_device_code_grant()
+        .oauth_device_code_grant()
         .lookup(grant_id)
         .await?
         .context("Device grant not found")
@@ -158,7 +158,7 @@ async fn handle_get(
     // Fetch informations about the user. This is purely cosmetic, so we let it
     // fail and put a 1s timeout to it in case we fail to query it
     // XXX: we're likely to need this in other places
-    let username = &session.user.username;
+    let username = &session.user.handle;
     let display_name = match tokio::time::timeout(
         Duration::from_secs(1),
         principal_server.query_user(username),
@@ -277,7 +277,7 @@ async fn handle_post(
 
     // TODO: better error handling
     let grant = repo
-        .oauth2_device_code_grant()
+        .oauth_device_code_grant()
         .lookup(grant_id)
         .await?
         .context("Device grant not found")
@@ -331,12 +331,12 @@ async fn handle_post(
     let grant = if grant.is_pending() {
         match form.action {
             Action::Consent => {
-                repo.oauth2_device_code_grant()
+                repo.oauth_device_code_grant()
                     .fulfill(&clock, grant, &session)
                     .await?
             }
             Action::Reject => {
-                repo.oauth2_device_code_grant()
+                repo.oauth_device_code_grant()
                     .reject(&clock, grant, &session)
                     .await?
             }
@@ -358,7 +358,7 @@ async fn handle_post(
     // Fetch informations about the user. This is purely cosmetic, so we let it
     // fail and put a 1s timeout to it in case we fail to query it
     // XXX: we're likely to need this in other places
-    let username = &session.user.username;
+    let username = &session.user.handle;
     let display_name = match tokio::time::timeout(
         Duration::from_secs(1),
         principal_server.query_user(username),

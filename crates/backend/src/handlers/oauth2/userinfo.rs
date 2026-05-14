@@ -175,7 +175,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
 
     let user_info = UserInfo {
         sub: contrix::user_did_for(&url_builder, &contrix_config, &user),
-        username: user.username.clone(),
+        username: user.handle.clone(),
         preferred_username: contrix::user_handle(&url_builder, &user),
         principal_did: contrix::user_did_for(&url_builder, &contrix_config, &user),
         device_id: contrix::primary_device_id(&session.scope),

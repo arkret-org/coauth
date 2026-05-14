@@ -232,7 +232,7 @@ impl Policy {
         skip_all,
         fields(
             ?input.registration_method,
-            input.username = input.username,
+            input.handle = input.handle,
             input.email = input.email,
         ),
     )]

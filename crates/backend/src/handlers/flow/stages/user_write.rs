@@ -1,7 +1,7 @@
 //! User write stage side effects.
 //!
-//! Creates a new user account or validates that the chosen username is
-//! available.  Stores the new user's `id` and `username` in the flow
+//! Creates a new user account or validates that the chosen handle is
+//! available.  Stores the new user's `id` and `handle` in the flow
 //! context so subsequent stages can reference them.
 //!
 //! Round 37.4 (rip-and-replace of C35.0): the user-creation flow no
@@ -28,7 +28,7 @@ use crate::services::starid_adapter::StaridRegistryHandle;
 /// Execute the user write stage.
 ///
 /// Creates a new [`User`](coauth_data::User) record with the
-/// given username.  If `create_users_as_inactive` is `true` the
+/// given handle.  If `create_users_as_inactive` is `true` the
 /// caller/admin is expected to activate the user later (the `User`
 /// model doesn't have a dedicated "inactive" flag — the admin would
 /// lock the account).
@@ -43,28 +43,28 @@ pub async fn execute(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     _create_users_as_inactive: bool,
-    username: &str,
+    handle: &str,
     _display_name: Option<&str>,
     _starid_registry: Option<&StaridRegistryHandle>,
     context: &mut serde_json::Value,
 ) -> Result<StageOutcome, StageExecutionError> {
-    if username.is_empty() {
+    if handle.is_empty() {
         return Ok(StageOutcome::Retry {
             errors: vec![StageValidationError {
-                field: Some("username".into()),
-                message: "Username is required".into(),
+                field: Some("handle".into()),
+                message: "Handle is required".into(),
                 code: "required".into(),
             }],
         });
     }
 
-    // Check if username already exists
-    if repo.user().exists(username).await? {
+    // Check if handle already exists
+    if repo.user().exists(handle).await? {
         return Ok(StageOutcome::Retry {
             errors: vec![StageValidationError {
-                field: Some("username".into()),
-                message: "Username is already taken".into(),
-                code: "username_taken".into(),
+                field: Some("handle".into()),
+                message: "Handle is already taken".into(),
+                code: "handle_taken".into(),
             }],
         });
     }
@@ -72,11 +72,11 @@ pub async fn execute(
     // Create the user. starid_backend stays false until the first
     // passkey enrolment lands and `mint_principal_did_for_first_credential`
     // flips it.
-    let user = repo.user().add(rng, clock, username.to_owned()).await?;
+    let user = repo.user().add(rng, clock, handle.to_owned()).await?;
 
     if let Some(ctx) = context.as_object_mut() {
         ctx.insert("user_id".into(), serde_json::json!(user.id.to_string()));
-        ctx.insert("username".into(), serde_json::json!(user.username));
+        ctx.insert("handle".into(), serde_json::json!(user.handle));
         ctx.insert("user_created".into(), serde_json::json!(true));
         ctx.insert(
             "starid_backend".into(),
