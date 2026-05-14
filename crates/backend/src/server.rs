@@ -617,19 +617,6 @@ fn build_human_router(router: Router, _templates: Templates) -> Router {
         .push(Router::with_path("/emails/{**rest}").get(spa::get))
         .push(Router::with_path("/clients/{**rest}").get(spa::get))
         .push(Router::with_path("/devices/{**rest}").get(spa::get))
-        // Legacy account password routes
-        .push(
-            Router::with_path("/account/password/change")
-                .get(account_password_change_redirect_handler),
-        )
-        .push(
-            Router::with_path("/account/password/recovery")
-                .get(account_password_recovery_redirect_handler),
-        )
-        // Legacy /account redirect
-        .push(Router::with_path("/account").get(account_redirect_handler))
-        .push(Router::with_path("/account/").get(spa::get))
-        .push(Router::with_path("/account/{**rest}").get(spa::get))
 }
 
 fn build_oauth_router(router: Router) -> Router {
@@ -1136,18 +1123,6 @@ fn build_admin_openapi_doc(admin_router: &Router) -> salvo::oapi::OpenApi {
 }
 
 #[handler]
-async fn account_redirect_handler(depot: &Depot) -> impl Writer + use<> {
-    use crate::app_state::DepotExt;
-
-    let url_builder = depot.get_url_builder().cloned();
-    if let Some(url_builder) = url_builder {
-        Redirect::found(url_builder.relative_url("/account/"))
-    } else {
-        Redirect::found("/account/")
-    }
-}
-
-#[handler]
 async fn change_password_redirect_handler(depot: &Depot) -> impl Writer + use<> {
     use crate::app_state::DepotExt;
 
@@ -1163,53 +1138,6 @@ fn absolute_redirect_location(url_builder: Option<&UrlBuilder>, path: &str) -> S
         || path.to_owned(),
         |url_builder| url_builder.absolute_url(path).to_string(),
     )
-}
-
-fn relative_redirect_location(
-    url_builder: Option<&UrlBuilder>,
-    path: &str,
-    query: Option<&str>,
-) -> String {
-    let mut location = url_builder.map_or_else(
-        || path.to_owned(),
-        |url_builder| url_builder.relative_url(path),
-    );
-
-    if let Some(query) = query.filter(|query| !query.is_empty()) {
-        location.push('?');
-        location.push_str(query);
-    }
-
-    location
-}
-
-#[handler]
-async fn account_password_change_redirect_handler(
-    req: &Request,
-    depot: &Depot,
-) -> impl Writer + use<> {
-    use crate::app_state::DepotExt;
-
-    let url_builder = depot.get_url_builder().cloned();
-    let location =
-        relative_redirect_location(url_builder.as_ref(), "/password/change", req.uri().query());
-    Redirect::found(location)
-}
-
-#[handler]
-async fn account_password_recovery_redirect_handler(
-    req: &Request,
-    depot: &Depot,
-) -> impl Writer + use<> {
-    use crate::app_state::DepotExt;
-
-    let url_builder = depot.get_url_builder().cloned();
-    let location = relative_redirect_location(
-        url_builder.as_ref(),
-        "/password/recovery",
-        req.uri().query(),
-    );
-    Redirect::found(location)
 }
 
 #[handler]
@@ -1368,9 +1296,7 @@ mod tests {
         test::{ResponseExt, TestClient},
     };
 
-    use super::{
-        absolute_redirect_location, build_admin_router, build_listeners, relative_redirect_location,
-    };
+    use super::{absolute_redirect_location, build_admin_router, build_listeners};
 
     #[test]
     fn bind_error_mentions_requested_address() {
@@ -1390,19 +1316,6 @@ mod tests {
 
         let message = format!("{error:#}");
         assert!(message.contains(&format!("127.0.0.1:{port}")), "{message}");
-    }
-
-    #[test]
-    fn relative_redirect_preserves_prefix_and_query() {
-        let url_builder = UrlBuilder::new("https://example.com/mas/".parse().unwrap(), None, None);
-
-        let location = relative_redirect_location(
-            Some(&url_builder),
-            "/password/recovery",
-            Some("ticket=abc123"),
-        );
-
-        assert_eq!(location, "/mas/password/recovery?ticket=abc123");
     }
 
     #[test]

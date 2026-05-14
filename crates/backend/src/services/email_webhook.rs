@@ -848,14 +848,7 @@ struct SnsEnvelope {
 }
 
 #[derive(Debug, Deserialize)]
-struct SesLegacyMessage {
-    #[serde(rename = "notificationType")]
-    notification_type: String,
-    mail: SesMail,
-}
-
-#[derive(Debug, Deserialize)]
-struct SesEventPublishingMessage {
+struct SesSnsMessage {
     #[serde(rename = "eventType")]
     event_type: String,
     mail: SesMail,
@@ -869,49 +862,17 @@ struct SesMail {
     tags: BTreeMap<String, Vec<String>>,
 }
 
-enum SesSnsMessage {
-    Legacy(SesLegacyMessage),
-    EventPublishing(SesEventPublishingMessage),
-}
-
-impl<'de> Deserialize<'de> for SesSnsMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = Value::deserialize(deserializer)?;
-        if value.get("notificationType").is_some() {
-            return SesLegacyMessage::deserialize(value)
-                .map(Self::Legacy)
-                .map_err(serde::de::Error::custom);
-        }
-
-        SesEventPublishingMessage::deserialize(value)
-            .map(Self::EventPublishing)
-            .map_err(serde::de::Error::custom)
-    }
-}
-
 impl SesSnsMessage {
     fn event_type(&self) -> &str {
-        match self {
-            Self::Legacy(message) => &message.notification_type,
-            Self::EventPublishing(message) => &message.event_type,
-        }
+        &self.event_type
     }
 
     fn mail_message_id(&self) -> Option<String> {
-        match self {
-            Self::Legacy(message) => message.mail.message_id.clone(),
-            Self::EventPublishing(message) => message.mail.message_id.clone(),
-        }
+        self.mail.message_id.clone()
     }
 
     fn mail_tags(&self) -> BTreeMap<String, String> {
-        match self {
-            Self::Legacy(message) => flatten_ses_tags(&message.mail.tags),
-            Self::EventPublishing(message) => flatten_ses_tags(&message.mail.tags),
-        }
+        flatten_ses_tags(&self.mail.tags)
     }
 }
 

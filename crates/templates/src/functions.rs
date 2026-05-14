@@ -27,8 +27,6 @@ pub fn register(
     url_builder: UrlBuilder,
     translator: Arc<Translator>,
 ) {
-    // Third-party compatibility helpers
-    env.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
     minijinja_contrib::add_to_environment(env);
 
     // Tests

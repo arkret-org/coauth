@@ -182,8 +182,6 @@ pub fn environment() -> Environment<'static> {
     env.add_filter("string", string);
     env.add_filter("from_json", from_json);
 
-    env.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
-
     env
 }
 
