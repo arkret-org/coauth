@@ -9,27 +9,6 @@ use ulid::Ulid;
 use super::InsertableJob;
 use crate::{Page, Pagination};
 
-/// This is the previous iteration of the email verification job. It has been
-/// replaced by [`SendEmailAuthenticationCodeJob`]. This struct is kept to be
-/// able to consume jobs that are still in the queue.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct VerifyEmailJob {
-    user_email_id: Ulid,
-    language: Option<String>,
-}
-
-impl VerifyEmailJob {
-    /// The ID of the email address to verify.
-    #[must_use]
-    pub fn user_email_id(&self) -> Ulid {
-        self.user_email_id
-    }
-}
-
-impl InsertableJob for VerifyEmailJob {
-    const QUEUE_NAME: &'static str = "verify-email";
-}
-
 /// A job to send an email authentication code to a user.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SendEmailAuthenticationCodeJob {
@@ -306,71 +285,6 @@ impl InsertableJob for ProvisionUserJob {
     const QUEUE_NAME: &'static str = "provision-user";
 }
 
-/// A job to provision a device for a user on the PrincipalServer.
-///
-/// This job is deprecated, use the `SyncDevicesJob` instead. It is kept to
-/// not break existing jobs in the database.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ProvisionDeviceJob {
-    user_id: Ulid,
-    device_id: String,
-}
-
-impl ProvisionDeviceJob {
-    /// The ID of the user to provision the device for.
-    #[must_use]
-    pub fn user_id(&self) -> Ulid {
-        self.user_id
-    }
-
-    /// The ID of the device to provision.
-    #[must_use]
-    pub fn device_id(&self) -> &str {
-        &self.device_id
-    }
-}
-
-impl InsertableJob for ProvisionDeviceJob {
-    const QUEUE_NAME: &'static str = "provision-device";
-}
-
-/// A job to delete a device for a user on the PrincipalServer.
-///
-/// This job is deprecated, use the `SyncDevicesJob` instead. It is kept to
-/// not break existing jobs in the database.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DeleteDeviceJob {
-    user_id: Ulid,
-    device_id: String,
-}
-
-impl DeleteDeviceJob {
-    /// Create a new job to delete a device for a user on the PrincipalServer.
-    #[must_use]
-    pub fn new(user: &User, device_id: &str) -> Self {
-        Self {
-            user_id: user.id,
-            device_id: device_id.to_owned(),
-        }
-    }
-
-    /// The ID of the user to delete the device for.
-    #[must_use]
-    pub fn user_id(&self) -> Ulid {
-        self.user_id
-    }
-
-    /// The ID of the device to delete.
-    #[must_use]
-    pub fn device_id(&self) -> &str {
-        &self.device_id
-    }
-}
-
-impl InsertableJob for DeleteDeviceJob {
-    const QUEUE_NAME: &'static str = "delete-device";
-}
-
 /// A job which syncs the list of devices of a user with the PrincipalServer
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SyncDevicesJob {
@@ -504,17 +418,6 @@ impl InsertableJob for SendAccountRecoveryEmailsJob {
     const QUEUE_NAME: &'static str = "send-account-recovery-email";
 }
 
-/// Cleanup expired tokens
-///
-/// This job is deprecated. It has been replaced by granular cleanup jobs.
-/// This struct is kept to be able to consume jobs that are still in the queue.
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct CleanupExpiredTokensJob;
-
-impl InsertableJob for CleanupExpiredTokensJob {
-    const QUEUE_NAME: &'static str = "cleanup-expired-tokens";
-}
-
 /// Cleanup revoked OAuth access tokens
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupRevokedOAuthAccessTokensJob;
@@ -637,8 +540,7 @@ impl InsertableJob for CleanupQueueJobsJob {
 
 /// Scheduled job to expire inactive sessions
 ///
-/// This job will trigger jobs to expire inactive compat, oauth and user
-/// sessions.
+/// This job triggers jobs to expire inactive OAuth and user sessions.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExpireInactiveSessionsJob;
 

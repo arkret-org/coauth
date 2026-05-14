@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use async_trait::async_trait;
 use coauth_data::{Clock, RepositoryAccess, queue::InsertableJob};
 use opentelemetry::{
     KeyValue,
@@ -19,22 +18,6 @@ use crate::{METER, State};
 
 type JobResult = (std::time::Duration, Result<(), JobError>);
 type JobFactory = Arc<dyn Fn(JobPayload) -> Box<dyn RunnableJob> + Send + Sync>;
-
-/// Placeholder job used to drain jobs from queues that no longer exist.
-struct DeprecatedJob;
-
-#[async_trait]
-impl RunnableJob for DeprecatedJob {
-    async fn run(&self, _state: &State, context: JobContext) -> Result<(), JobError> {
-        tracing::warn!(
-            job.id = %context.id,
-            job.queue.name = context.queue_name,
-            "Consumed a job from a deprecated queue, which can happen after version upgrades. This did nothing other than removing the job from the queue."
-        );
-
-        Ok(())
-    }
-}
 
 /// Manages running job tasks and records their outcomes.
 pub(super) struct JobTracker {
@@ -88,11 +71,6 @@ impl JobTracker {
         };
 
         self.factories.insert(T::QUEUE_NAME, Arc::new(factory));
-    }
-
-    pub(super) fn register_deprecated_queue(&mut self, queue_name: &'static str) {
-        let factory = |_payload: JobPayload| box_runnable_job(DeprecatedJob);
-        self.factories.insert(queue_name, Arc::new(factory));
     }
 
     /// All queue names this tracker knows about.

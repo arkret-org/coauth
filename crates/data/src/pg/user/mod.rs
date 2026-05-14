@@ -475,10 +475,6 @@ impl UserRepository for PgUserRepository<'_> {
             query = query.filter(users::can_request_admin.eq(can_request_admin));
         }
 
-        if let Some(is_guest) = filter.is_guest() {
-            query = query.filter(users::is_guest.eq(is_guest));
-        }
-
         if let Some(search) = filter.search() {
             let pattern = format!("%{search}%");
             query = query.filter(users::handle.ilike(pattern));
@@ -532,10 +528,6 @@ impl UserRepository for PgUserRepository<'_> {
 
         if let Some(can_request_admin) = filter.can_request_admin() {
             query = query.filter(users::can_request_admin.eq(can_request_admin));
-        }
-
-        if let Some(is_guest) = filter.is_guest() {
-            query = query.filter(users::is_guest.eq(is_guest));
         }
 
         if let Some(search) = filter.search() {

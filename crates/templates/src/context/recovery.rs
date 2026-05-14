@@ -49,7 +49,7 @@ impl TemplateContext for RecoveryStartContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![
             Self::new(),
@@ -90,7 +90,7 @@ impl TemplateContext for RecoveryProgressContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         let sess = UserRecoverySession {
             id: coauth_data::new_id(now, rng),
@@ -135,7 +135,7 @@ impl TemplateContext for RecoveryExpiredContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         let sess = UserRecoverySession {
             id: coauth_data::new_id(now, rng),
@@ -197,7 +197,7 @@ impl TemplateContext for RecoveryFinishContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             User::samples(now, rng)

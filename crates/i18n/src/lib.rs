@@ -13,34 +13,24 @@ pub use icu_calendar;
 pub use icu_datetime;
 pub use icu_locid::{self, Locale, locale};
 
-/// Type alias for backward compatibility -- previously
-/// `icu_provider::DataLocale`, now backed by `icu_locid::Locale` to avoid
-/// conflicts between ICU provider 1.x and 2.x in the dependency tree.
-pub type DataLocale = icu_locid::Locale;
-
-/// Error type for backward compatibility -- previously re-exported from
-/// `icu_provider`.
-///
-/// Wraps an inner error with a static description. This is a thin replacement
-/// for the ICU provider `DataError` to decouple this crate from `icu_provider`
-/// version specifics.
+/// Error type for ICU-backed formatting helpers.
 #[derive(Debug)]
-pub struct DataError {
+pub struct FormatError {
     msg: &'static str,
     #[allow(dead_code)]
     source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
-impl std::fmt::Display for DataError {
+impl std::fmt::Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.msg)
     }
 }
 
-impl std::error::Error for DataError {}
+impl std::error::Error for FormatError {}
 
-impl DataError {
-    /// Create a new `DataError` with a static message.
+impl FormatError {
+    /// Create a new `FormatError` with a static message.
     pub fn new(msg: &'static str) -> Self {
         Self { msg, source: None }
     }

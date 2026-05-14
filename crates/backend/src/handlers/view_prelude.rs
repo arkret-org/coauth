@@ -36,7 +36,7 @@
 //! reasoning.
 
 use coauth_data::{BoxClock, BoxRepository, BoxRng, SiteConfig, UrlBuilder};
-use coauth_i18n::DataLocale;
+use coauth_i18n::Locale;
 use coauth_templates::Templates;
 use salvo::prelude::*;
 
@@ -52,7 +52,7 @@ use crate::salvo_utils::{
 pub struct ViewContext {
     pub rng: BoxRng,
     pub clock: BoxClock,
-    pub locale: DataLocale,
+    pub locale: Locale,
     pub site_config: SiteConfig,
     pub templates: Templates,
     pub url_builder: UrlBuilder,
@@ -116,7 +116,7 @@ pub enum FlashLevel {
 pub struct ViewPrelude {
     pub rng: BoxRng,
     pub clock: BoxClock,
-    pub locale: DataLocale,
+    pub locale: Locale,
     pub site_config: SiteConfig,
     pub templates: Templates,
     pub url_builder: UrlBuilder,

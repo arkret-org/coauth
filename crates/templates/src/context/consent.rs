@@ -50,7 +50,7 @@ impl TemplateContext for ConsentContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             Client::samples(now, rng)
@@ -121,7 +121,7 @@ impl TemplateContext for PolicyViolationContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             Client::samples(now, rng)

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use coauth_i18n::DataLocale;
+use coauth_i18n::Locale;
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 use url::Url;
@@ -20,7 +20,7 @@ impl<T: TemplateContext> TemplateContext for FormPostContext<T> {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        locales: &[DataLocale],
+        locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         T::sample(now, rng, locales)
             .into_iter()
@@ -56,7 +56,7 @@ impl<T> FormPostContext<T> {
     ///
     /// Provided separately from the [`TemplateContext`] trait because the
     /// generic parameter makes blanket implementation awkward.
-    pub fn with_language(self, lang: &DataLocale) -> WithLanguage<Self> {
+    pub fn with_language(self, lang: &Locale) -> WithLanguage<Self> {
         WithLanguage {
             lang: lang.to_string(),
             inner: self,

@@ -27,7 +27,10 @@ use coauth_data::{
 };
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
-use coauth_messaging::{MailTransport, Mailer, NotificationCenter};
+use coauth_messaging::{
+    NotificationCenter,
+    email::{Mailer, Transport as MailTransport},
+};
 use coauth_policy::{InstantiateError, Policy, PolicyFactory};
 use coauth_principal::{MockPrincipalServerAdmin, PrincipalServerAdmin};
 use coauth_tasks::QueueWorker;

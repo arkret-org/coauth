@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use coauth_data::BrowserSession;
-use coauth_i18n::DataLocale;
+use coauth_i18n::Locale;
 use rand_chacha::ChaCha8Rng;
 use rand_core::{RngCore as Rng, SeedableRng};
 use serde::{Serialize, ser::SerializeStruct};
@@ -50,7 +50,7 @@ pub trait TemplateContext: Serialize {
     }
 
     /// Wrap this context with a locale tag.
-    fn with_language(self, lang: DataLocale) -> WithLanguage<Self>
+    fn with_language(self, lang: Locale) -> WithLanguage<Self>
     where
         Self: Sized,
     {
@@ -72,7 +72,7 @@ pub trait TemplateContext: Serialize {
     fn sample<R: Rng>(
         now: DateTime<Utc>,
         rng: &mut R,
-        locales: &[DataLocale],
+        locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self>
     where
         Self: Sized;
@@ -112,7 +112,7 @@ impl TemplateContext for () {
     fn sample<R: Rng>(
         _now: DateTime<Utc>,
         _rng: &mut R,
-        _locales: &[DataLocale],
+        _locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self>
     where
         Self: Sized,
@@ -149,7 +149,7 @@ impl<T: TemplateContext> TemplateContext for WithLanguage<T> {
     fn sample<R: Rng>(
         now: DateTime<Utc>,
         rng: &mut R,
-        locales: &[DataLocale],
+        locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self>
     where
         Self: Sized,
@@ -188,7 +188,7 @@ impl<T: TemplateContext> TemplateContext for WithCsrf<T> {
     fn sample<R: Rng>(
         now: DateTime<Utc>,
         rng: &mut R,
-        locales: &[DataLocale],
+        locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self>
     where
         Self: Sized,
@@ -221,7 +221,7 @@ impl<T: TemplateContext> TemplateContext for WithSession<T> {
     fn sample<R: Rng>(
         now: DateTime<Utc>,
         rng: &mut R,
-        locales: &[DataLocale],
+        locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self>
     where
         Self: Sized,
@@ -259,7 +259,7 @@ impl<T: TemplateContext> TemplateContext for WithOptionalSession<T> {
     fn sample<R: Rng>(
         now: DateTime<Utc>,
         rng: &mut R,
-        locales: &[DataLocale],
+        locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self>
     where
         Self: Sized,
@@ -314,7 +314,7 @@ impl TemplateContext for EmptyContext {
     fn sample<R: Rng>(
         _now: DateTime<Utc>,
         _rng: &mut R,
-        _locales: &[DataLocale],
+        _locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self>
     where
         Self: Sized,

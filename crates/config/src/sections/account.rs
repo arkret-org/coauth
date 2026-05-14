@@ -47,11 +47,7 @@ pub struct AccountConfig {
 
     /// Require at least one verified contact method for password-based
     /// registrations (default: `true`). Has no effect when registration is off.
-    #[serde(
-        default = "enabled_default",
-        skip_serializing_if = "matches_enabled",
-        alias = "password_registration_email_required"
-    )]
+    #[serde(default = "enabled_default", skip_serializing_if = "matches_enabled")]
     pub password_registration_contact_required: bool,
 
     /// Allow registration flows to bypass delivery of verification email in
@@ -151,10 +147,10 @@ mod tests {
     #[test]
     fn loads_bootstrap_admin_token_from_env() {
         figment::Jail::expect_with(|jail| {
-            jail.set_env("PASION_ACCOUNT__BOOTSTRAP_ADMIN_TOKEN", "bootstrap-secret");
+            jail.set_env("COAUTH_ACCOUNT__BOOTSTRAP_ADMIN_TOKEN", "bootstrap-secret");
 
             let figment = Figment::new()
-                .merge(Env::prefixed("PASION_").split("__"))
+                .merge(Env::prefixed("COAUTH_").split("__"))
                 .merge(Yaml::string(""));
 
             let config = figment.extract_inner::<AccountConfig>("account")?;
@@ -172,12 +168,12 @@ mod tests {
     fn loads_admin_portal_url_from_env() {
         figment::Jail::expect_with(|jail| {
             jail.set_env(
-                "PASION_ACCOUNT__ADMIN_PORTAL_URL",
+                "COAUTH_ACCOUNT__ADMIN_PORTAL_URL",
                 "https://admin.example.com/",
             );
 
             let figment = Figment::new()
-                .merge(Env::prefixed("PASION_").split("__"))
+                .merge(Env::prefixed("COAUTH_").split("__"))
                 .merge(Yaml::string(""));
 
             let config = figment.extract_inner::<AccountConfig>("account")?;
@@ -195,12 +191,12 @@ mod tests {
     fn loads_registration_email_delivery_bypass_from_env() {
         figment::Jail::expect_with(|jail| {
             jail.set_env(
-                "PASION_ACCOUNT__REGISTRATION_EMAIL_DELIVERY_BYPASS_ALLOWED",
+                "COAUTH_ACCOUNT__REGISTRATION_EMAIL_DELIVERY_BYPASS_ALLOWED",
                 "true",
             );
 
             let figment = Figment::new()
-                .merge(Env::prefixed("PASION_").split("__"))
+                .merge(Env::prefixed("COAUTH_").split("__"))
                 .merge(Yaml::string(""));
 
             let config = figment.extract_inner::<AccountConfig>("account")?;

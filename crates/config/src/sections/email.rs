@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 use std::{collections::BTreeMap, num::NonZeroU16, str::FromStr};
 
 use lettre::message::Mailbox;

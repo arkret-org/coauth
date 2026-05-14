@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{DeviceType, SessionNode},
+    api::types::{DeviceType, Session},
     components::{
         last_active::LastActive, layout::Layout, loading::LoadingScreen, session_card::*,
     },
@@ -13,7 +13,7 @@ pub fn SessionDetail(id: String) -> Element {
     let id_clone = id.clone();
     let data = use_resource(move || {
         let id = id_clone.clone();
-        async move { crate::api::api_get::<SessionNode>(&format!("/sessions/{}", id)).await }
+        async move { crate::api::api_get::<Session>(&format!("/sessions/{}", id)).await }
     });
     let binding = data.read();
 
@@ -33,9 +33,9 @@ pub fn SessionDetail(id: String) -> Element {
 }
 
 #[component]
-fn SessionDetailView(node: SessionNode) -> Element {
+fn SessionDetailView(node: Session) -> Element {
     match node {
-        SessionNode::BrowserSession(session) => {
+        Session::BrowserSession(session) => {
             let device_type = session
                 .user_agent
                 .as_ref()
@@ -101,7 +101,7 @@ fn SessionDetailView(node: SessionNode) -> Element {
                 }
             }
         }
-        SessionNode::OauthSession(session) => {
+        Session::OauthSession(session) => {
             let device_type = session
                 .user_agent
                 .as_ref()

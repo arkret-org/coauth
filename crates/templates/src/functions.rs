@@ -13,7 +13,7 @@ use std::{
 
 use chrono::Timelike as _;
 use coauth_data::UrlBuilder;
-use coauth_i18n::{DataLocale, Translator};
+use coauth_i18n::{Locale, Translator};
 use minijinja::{
     Error, ErrorKind, State, Value,
     value::{Kwargs, Object, ViaDeserialize, from_args},
@@ -252,7 +252,7 @@ impl Object for TranslatorFactory {
     fn call(self: &Arc<Self>, _state: &State, args: &[Value]) -> Result<Value, Error> {
         let (locale_str,): (&str,) = from_args(args)?;
 
-        let locale: DataLocale = locale_str.parse().map_err(|e| {
+        let locale: Locale = locale_str.parse().map_err(|e| {
             Error::new(ErrorKind::InvalidOperation, "Invalid language").with_source(e)
         })?;
 
@@ -268,7 +268,7 @@ impl Object for TranslatorFactory {
 /// methods.
 struct TranslateHandle {
     translator: Arc<Translator>,
-    locale: DataLocale,
+    locale: Locale,
 }
 
 impl fmt::Debug for TranslateHandle {

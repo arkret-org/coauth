@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Background jobs for principal principal integration:
-//! user provisioning, device synchronization, and legacy device jobs.
+//! user provisioning and device synchronization.
 
 use std::collections::HashSet;
 
@@ -13,10 +13,7 @@ use coauth_data::{
     Pagination, RepositoryAccess,
     oauth::OAuthSessionFilter,
     personal::PersonalSessionFilter,
-    queue::{
-        DeleteDeviceJob, ProvisionDeviceJob, ProvisionUserJob, QueueJobRepositoryExt as _,
-        SyncDevicesJob,
-    },
+    queue::{ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob},
     user::{UserEmailRepository, UserRepository},
 };
 use coauth_principal::PrincipalProvisionRequest;
@@ -98,56 +95,6 @@ impl RunnableJob for ProvisionUserJob {
         repo.save().await.map_err(JobError::retry)?;
         Ok(())
     }
-}
-
-// ── Legacy device jobs (deprecated — delegate to SyncDevicesJob) ─────
-
-/// Deprecated: now just triggers a full device sync.
-#[async_trait]
-impl RunnableJob for ProvisionDeviceJob {
-    #[tracing::instrument(
-        name = "job.provision_device",
-        fields(user.id = %self.user_id(), device.id = %self.device_id()),
-        skip_all,
-    )]
-    async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
-        schedule_device_sync(state, self.user_id()).await
-    }
-}
-
-/// Deprecated: now just triggers a full device sync.
-#[async_trait]
-impl RunnableJob for DeleteDeviceJob {
-    #[tracing::instrument(
-        name = "job.delete_device",
-        fields(user.id = %self.user_id(), device.id = %self.device_id()),
-        skip_all,
-    )]
-    async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
-        schedule_device_sync(state, self.user_id()).await
-    }
-}
-
-/// Shared helper for the two deprecated device jobs.
-async fn schedule_device_sync(state: &State, user_id: ulid::Ulid) -> Result<(), JobError> {
-    let mut repo = state.repository().await.map_err(JobError::retry)?;
-    let mut rng = state.rng();
-    let clock = state.clock();
-
-    let user = repo
-        .user()
-        .lookup(user_id)
-        .await
-        .map_err(JobError::retry)?
-        .context("user not found")
-        .map_err(JobError::fail)?;
-
-    repo.queue_job()
-        .schedule_job(&mut rng, clock, SyncDevicesJob::new(&user))
-        .await
-        .map_err(JobError::retry)?;
-
-    Ok(())
 }
 
 // ── Sync devices ─────────────────────────────────────────────────────

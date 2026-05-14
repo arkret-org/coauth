@@ -10,7 +10,11 @@ use coauth_data::{
     BoxRepositoryFactory, RepositoryAccess, RepositoryFactory, SessionExpirationConfig,
     SessionLimitConfig, SiteConfig, UrlBuilder,
 };
-use coauth_messaging::{MailTransport, Mailer, NotificationCenter, SmsSender, SmsTransport};
+use coauth_messaging::{
+    NotificationCenter,
+    email::{Mailer, SmtpCredentials, SmtpMode, Transport as MailTransport},
+    sms::{SmsSender, SmsTransport},
+};
 use coauth_policy::PolicyFactory;
 use coauth_principal::{ConnectorRegistry, PrincipalServerAdmin};
 use coauth_templates::{SiteConfigExt, Templates};
@@ -180,7 +184,7 @@ pub fn mailer_from_config(
         EmailProviderConfig::Blackhole => MailTransport::blackhole(),
         EmailProviderConfig::Smtp(provider) => {
             let credentials = match (&provider.username, &provider.password) {
-                (Some(username), Some(password)) => Some(coauth_messaging::SmtpCredentials::new(
+                (Some(username), Some(password)) => Some(SmtpCredentials::new(
                     username.to_owned(),
                     password.to_owned(),
                 )),
@@ -191,9 +195,9 @@ pub fn mailer_from_config(
             };
 
             let mode = match provider.mode {
-                EmailSmtpMode::Plain => coauth_messaging::SmtpMode::Plain,
-                EmailSmtpMode::StartTls => coauth_messaging::SmtpMode::StartTls,
-                EmailSmtpMode::Tls => coauth_messaging::SmtpMode::Tls,
+                EmailSmtpMode::Plain => SmtpMode::Plain,
+                EmailSmtpMode::StartTls => SmtpMode::StartTls,
+                EmailSmtpMode::Tls => SmtpMode::Tls,
             };
 
             MailTransport::smtp(mode, &provider.hostname, provider.port, credentials)

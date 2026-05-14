@@ -17,10 +17,6 @@ use thiserror::Error;
 use ulid::Ulid;
 use url::Url;
 
-// `Resource` lives in `coauth_admin_types::envelope` so admin DTOs and
-// their wrappers stay in lock-step on both server and client. Re-exported
-// here for the historical `crate::handlers::admin::model::Resource` path
-// that existing handlers depend on.
 pub use coauth_admin_types::Resource;
 
 /// A user
@@ -47,9 +43,6 @@ pub struct User {
     /// Whether the user can request admin privileges.
     admin: bool,
 
-    /// Whether the user was imported as a legacy guest.
-    legacy_guest: bool,
-
     /// Human-facing display name.
     display_name: Option<String>,
 
@@ -72,7 +65,6 @@ impl User {
                 locked_at: None,
                 deactivated_at: None,
                 admin: false,
-                legacy_guest: false,
                 display_name: Some("Alice".to_owned()),
                 avatar_url: None,
                 preferred_locale: Some("zh-CN".to_owned()),
@@ -85,7 +77,6 @@ impl User {
                 locked_at: None,
                 deactivated_at: None,
                 admin: true,
-                legacy_guest: false,
                 display_name: Some("Bob".to_owned()),
                 avatar_url: Some("mxc://example.org/avatar".to_owned()),
                 preferred_locale: Some("en".to_owned()),
@@ -98,7 +89,6 @@ impl User {
                 locked_at: Some(DateTime::default()),
                 deactivated_at: None,
                 admin: false,
-                legacy_guest: true,
                 display_name: None,
                 avatar_url: None,
                 preferred_locale: None,
@@ -117,7 +107,6 @@ impl From<coauth_data::User> for User {
             locked_at: user.locked_at,
             deactivated_at: user.deactivated_at,
             admin: user.can_request_admin,
-            legacy_guest: user.is_guest,
             display_name: user.display_name,
             avatar_url: user.avatar_url,
             preferred_locale: user.preferred_locale,

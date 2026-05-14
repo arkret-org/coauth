@@ -22,12 +22,6 @@ coauth manage set-password -c config.yaml <用户名>
 coauth manage add-email -c config.yaml <用户名> <邮箱>
 ```
 
-### 验证邮箱
-
-```bash
-coauth manage verify-email -c config.yaml <用户名> <邮箱>
-```
-
 ## 管理员管理
 
 ### 提升为管理员

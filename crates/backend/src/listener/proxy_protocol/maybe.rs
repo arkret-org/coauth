@@ -1,7 +1,7 @@
 use tokio::io::AsyncRead;
 
 use super::{ProxyAcceptor, ProxyProtocolV1Info, acceptor::ProxyAcceptError};
-use crate::listener::rewind::Rewind;
+use crate::listener::stream::BufferedStream;
 
 #[derive(Clone, Copy)]
 pub struct MaybeProxyAcceptor {
@@ -45,7 +45,7 @@ impl MaybeProxyAcceptor {
     pub async fn accept<T>(
         &self,
         stream: T,
-    ) -> Result<(Option<ProxyProtocolV1Info>, Rewind<T>), ProxyAcceptError>
+    ) -> Result<(Option<ProxyProtocolV1Info>, BufferedStream<T>), ProxyAcceptError>
     where
         T: AsyncRead + Unpin,
     {
@@ -53,7 +53,7 @@ impl MaybeProxyAcceptor {
             let (info, stream) = acceptor.accept(stream).await?;
             Ok((Some(info), stream))
         } else {
-            let stream = Rewind::new(stream);
+            let stream = BufferedStream::new(stream);
             Ok((None, stream))
         }
     }

@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 use std::borrow::Cow;
 
 use anyhow::bail;
@@ -248,15 +246,7 @@ pub enum Resource {
     /// Browser-facing HTML pages
     Human,
     /// REST API consumed by the frontend
-    #[serde(alias = "graphql")]
-    RestApi {
-        /// Deprecated -- no longer used
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        playground: bool,
-        /// Deprecated -- no longer used
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        undocumented_oauth_access: bool,
-    },
+    RestApi,
     /// OAuth / OIDC protocol endpoints
     OAuth,
     /// Static frontend assets
@@ -433,10 +423,7 @@ impl Default for HttpConfig {
                         Resource::Discovery,
                         Resource::Human,
                         Resource::OAuth,
-                        Resource::RestApi {
-                            playground: false,
-                            undocumented_oauth_access: false,
-                        },
+                        Resource::RestApi,
                         Resource::Assets {
                             path: http_listener_assets_path_default(),
                         },

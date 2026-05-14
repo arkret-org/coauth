@@ -13,12 +13,12 @@ use coauth_data::{
     AuthorizationGrantStage, BoxRepository, Client, Clock, DeviceCodeGrantState, RepositoryAccess,
     RepositoryError, SiteConfig, TokenType, UrlBuilder,
     oauth::{
-        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository,
-        OAuthRefreshTokenRepository, OAuthSessionRepository,
+        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthRefreshTokenRepository,
+        OAuthSessionRepository,
     },
     user::BrowserSessionRepository,
 };
-use coauth_i18n::DataLocale;
+use coauth_i18n::Locale;
 use coauth_keystore::Keystore;
 use coauth_policy::Policy;
 use coauth_principal::PrincipalServerAdmin;
@@ -84,8 +84,8 @@ pub enum AuthorizationCodeExchangeError {
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
-impl From<coauth_i18n::DataError> for AuthorizationCodeExchangeError {
-    fn from(e: coauth_i18n::DataError) -> Self {
+impl From<coauth_i18n::FormatError> for AuthorizationCodeExchangeError {
+    fn from(e: coauth_i18n::FormatError) -> Self {
         Self::Internal(Box::new(e))
     }
 }
@@ -389,7 +389,7 @@ pub async fn exchange_authorization_code(
     );
 
     // Generate a device name
-    let lang: DataLocale = authz_grant.locale.as_deref().unwrap_or("en").parse()?;
+    let lang: Locale = authz_grant.locale.as_deref().unwrap_or("en").parse()?;
     let ctx = DeviceNameContext::new(client.clone(), user_agent.clone()).with_language(lang);
     let device_name = templates.render_device_name(&ctx)?;
 
@@ -549,11 +549,7 @@ pub async fn exchange_authorization_code(
     }
     for device_id in &requested_device_ids {
         principal_server
-            .upsert_device(
-                &browser_session.user.handle,
-                device_id,
-                Some(&device_name),
-            )
+            .upsert_device(&browser_session.user.handle, device_id, Some(&device_name))
             .await
             .map_err(|err| {
                 error!(
@@ -577,9 +573,7 @@ pub async fn exchange_authorization_code(
     // XXX: there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
-    activity_tracker
-        .record_oauth_session(clock, &session)
-        .await;
+    activity_tracker.record_oauth_session(clock, &session).await;
 
     debug!(
         oauth_client.id = %client.id,
@@ -725,9 +719,7 @@ pub async fn handle_refresh_token(
             .await?;
     }
 
-    activity_tracker
-        .record_oauth_session(clock, &session)
-        .await;
+    activity_tracker.record_oauth_session(clock, &session).await;
 
     let ttl = site_config.access_token_ttl;
     let (new_access_token, new_refresh_token) =
@@ -831,9 +823,7 @@ pub async fn handle_client_credentials(
     // XXX: there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
-    activity_tracker
-        .record_oauth_session(clock, &session)
-        .await;
+    activity_tracker.record_oauth_session(clock, &session).await;
 
     if !session.scope.is_empty() {
         // We only return the scope if it's not empty
@@ -1093,9 +1083,7 @@ pub async fn exchange_device_code(
     // XXX: there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
-    activity_tracker
-        .record_oauth_session(clock, &session)
-        .await;
+    activity_tracker.record_oauth_session(clock, &session).await;
 
     if !session.scope.is_empty() {
         // We only return the scope if it's not empty

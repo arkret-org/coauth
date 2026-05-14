@@ -3,12 +3,10 @@
 use std::collections::BTreeMap;
 
 use coauth_templates::{EmailRecoveryContext, EmailVerificationContext, WithLanguage};
-use lettre::message::Mailbox;
 use thiserror::Error;
 
 use crate::{
-    Mailer,
-    email::{MailerError, SendResult as EmailSendResult},
+    email::{Mailbox, Mailer, MailerError, SendResult as EmailSendResult},
     sms::{SmsSender, SmsTransportError},
 };
 

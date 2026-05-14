@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use coauth_data::CaptchaConfig;
-use coauth_i18n::DataLocale;
 use crate::salvo_utils::{
     InternalError, SessionInfoExt,
     cookies::{CookieJar, TimedCookie},
     csrf::{CsrfExt, CsrfToken, ProtectedForm},
 };
+use coauth_data::CaptchaConfig;
 use coauth_data::RepositoryAccess;
+use coauth_i18n::Locale;
 use coauth_templates::{
     FieldError, FormError, FormState, PasswordRegisterContext, RegisterFormField, TemplateContext,
     Templates, ToFormState,
@@ -24,8 +24,8 @@ use crate::handlers::{
         BeginPasswordRegistrationIssue, BeginPasswordRegistrationRequest,
         BeginPasswordRegistrationResult, EmailAvailabilityCheck, begin_password_registration,
     },
-    captcha::Form as CaptchaForm,
     account::{self, DepotExt},
+    captcha::Form as CaptchaForm,
     views::shared::OptionalPostAuthAction,
 };
 
@@ -95,7 +95,9 @@ pub async fn get(
         } else {
             "/login".to_owned()
         };
-        res.render(salvo::writing::Redirect::other(&url_builder.relative_url(&path)));
+        res.render(salvo::writing::Redirect::other(
+            &url_builder.relative_url(&path),
+        ));
         return Ok(());
     }
 
@@ -287,7 +289,7 @@ pub async fn post(
 }
 
 async fn render(
-    locale: DataLocale,
+    locale: Locale,
     ctx: PasswordRegisterContext,
     action: OptionalPostAuthAction,
     csrf_token: CsrfToken,
@@ -419,7 +421,9 @@ mod tests {
     #[tokio::test]
     async fn test_password_disabled() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -431,20 +435,18 @@ mod tests {
         .await
         .unwrap();
 
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::SEE_OTHER);
         response.assert_header_value(LOCATION, "/login");
 
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": "abc",
-                "username": "john",
-                "email": "john@example.com",
-                "password": "hunter2",
-                "password_confirm": "hunter2",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": "abc",
+            "username": "john",
+            "email": "john@example.com",
+            "password": "hunter2",
+            "password_confirm": "hunter2",
+        }));
         let response = state.request(request).await;
         response.assert_status(StatusCode::METHOD_NOT_ALLOWED);
     }
@@ -453,13 +455,14 @@ mod tests {
     #[tokio::test]
     async fn test_register() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -476,15 +479,14 @@ mod tests {
             .unwrap();
 
         // Submit the registration form
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "john",
-                "email": "john@example.com",
-                "password": "correcthorsebatterystaple",
-                "password_confirm": "correcthorsebatterystaple",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "john",
+            "email": "john@example.com",
+            "password": "correcthorsebatterystaple",
+            "password_confirm": "correcthorsebatterystaple",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -520,13 +522,14 @@ mod tests {
     #[tokio::test]
     async fn test_register_password_mismatch() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -543,15 +546,14 @@ mod tests {
             .unwrap();
 
         // Submit the registration form
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "john",
-                "email": "john@example.com",
-                "password": "hunter2",
-                "password_confirm": "mismatch",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "john",
+            "email": "john@example.com",
+            "password": "hunter2",
+            "password_confirm": "mismatch",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -562,13 +564,14 @@ mod tests {
     #[tokio::test]
     async fn test_register_username_too_long() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -585,15 +588,14 @@ mod tests {
             .unwrap();
 
         // Submit the registration form
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "a".repeat(256),
-                "email": "john@example.com",
-                "password": "hunter2",
-                "password_confirm": "hunter2",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "a".repeat(256),
+            "email": "john@example.com",
+            "password": "hunter2",
+            "password_confirm": "hunter2",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -609,7 +611,9 @@ mod tests {
     #[tokio::test]
     async fn test_register_user_exists() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let mut rng = state.rng();
         let cookies = CookieHelper::new();
@@ -623,8 +627,7 @@ mod tests {
         repo.save().await.unwrap();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -641,15 +644,14 @@ mod tests {
             .unwrap();
 
         // Submit the registration form
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "john",
-                "email": "john@example.com",
-                "password": "hunter2",
-                "password_confirm": "hunter2",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "john",
+            "email": "john@example.com",
+            "password": "hunter2",
+            "password_confirm": "hunter2",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -662,13 +664,14 @@ mod tests {
     #[tokio::test]
     async fn test_register_user_reserved() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -688,15 +691,14 @@ mod tests {
         state.principal_server_admin.reserve_handle("john").await;
 
         // Submit the registration form
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "john",
-                "email": "john@example.com",
-                "password": "hunter2",
-                "password_confirm": "hunter2",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "john",
+            "email": "john@example.com",
+            "password": "hunter2",
+            "password_confirm": "hunter2",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -708,7 +710,9 @@ mod tests {
     #[tokio::test]
     async fn test_register_without_email_when_not_required() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -721,8 +725,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -739,14 +742,13 @@ mod tests {
             .unwrap();
 
         // Submit the registration form without email
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "alice",
-                "password": "correcthorsebatterystaple",
-                "password_confirm": "correcthorsebatterystaple",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "alice",
+            "password": "correcthorsebatterystaple",
+            "password_confirm": "correcthorsebatterystaple",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -778,7 +780,9 @@ mod tests {
     #[tokio::test]
     async fn test_register_with_email_when_not_required() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -791,8 +795,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -809,15 +812,14 @@ mod tests {
             .unwrap();
 
         // Submit the registration form with valid email
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "charlie",
-                "email": "charlie@example.com",
-                "password": "correcthorsebatterystaple",
-                "password_confirm": "correcthorsebatterystaple",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "charlie",
+            "email": "charlie@example.com",
+            "password": "correcthorsebatterystaple",
+            "password_confirm": "correcthorsebatterystaple",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -849,7 +851,9 @@ mod tests {
     #[tokio::test]
     async fn test_register_fails_without_email_when_required() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -862,8 +866,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -880,14 +883,13 @@ mod tests {
             .unwrap();
 
         // Submit the registration form without email
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "david",
-                "password": "correcthorsebatterystaple",
-                "password_confirm": "correcthorsebatterystaple",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "david",
+            "password": "correcthorsebatterystaple",
+            "password_confirm": "correcthorsebatterystaple",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -908,7 +910,9 @@ mod tests {
     #[tokio::test]
     async fn test_register_fails_with_empty_email_when_required() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -921,8 +925,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -939,15 +942,14 @@ mod tests {
             .unwrap();
 
         // Submit the registration form with empty email
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "eve",
-                "email": "",
-                "password": "correcthorsebatterystaple",
-                "password_confirm": "correcthorsebatterystaple",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "eve",
+            "email": "",
+            "password": "correcthorsebatterystaple",
+            "password_confirm": "correcthorsebatterystaple",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -968,7 +970,9 @@ mod tests {
     #[tokio::test]
     async fn test_register_fails_with_invalid_email_when_required() {
         setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
         let state = TestState::from_pool_with_site_config(
             pool.clone(),
             SiteConfig {
@@ -981,8 +985,7 @@ mod tests {
         let cookies = CookieHelper::new();
 
         // Render the registration page and get the CSRF token
-        let request =
-            Request::get("/register/password").empty();
+        let request = Request::get("/register/password").empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);
@@ -999,15 +1002,14 @@ mod tests {
             .unwrap();
 
         // Submit the registration form with invalid email
-        let request = Request::post("/register/password")
-            .form(serde_json::json!({
-                "csrf": csrf_token,
-                "username": "grace",
-                "email": "not-an-email",
-                "password": "correcthorsebatterystaple",
-                "password_confirm": "correcthorsebatterystaple",
-                "accept_terms": "on",
-            }));
+        let request = Request::post("/register/password").form(serde_json::json!({
+            "csrf": csrf_token,
+            "username": "grace",
+            "email": "not-an-email",
+            "password": "correcthorsebatterystaple",
+            "password_confirm": "correcthorsebatterystaple",
+            "accept_terms": "on",
+        }));
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
         cookies.save_cookies(&response);

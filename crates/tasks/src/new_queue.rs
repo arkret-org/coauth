@@ -113,13 +113,6 @@ impl QueueWorker {
         self
     }
 
-    /// Register a queue name whose jobs should simply be consumed and
-    /// discarded.
-    pub(crate) fn register_deprecated_queue(&mut self, queue_name: &'static str) -> &mut Self {
-        self.tracker.register_deprecated_queue(queue_name);
-        self
-    }
-
     /// Add a cron schedule that the leader will evaluate each tick.
     pub(crate) fn add_schedule<T: InsertableJob>(
         &mut self,

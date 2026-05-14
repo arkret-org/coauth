@@ -43,17 +43,6 @@ minor 之间**可能**变化的：
 - 模板变量；自定义模板需要在每次升级时 rebase。
 - Cedar / OPA policy bundle。
 
-## 环境变量迁移
-
-老的 `PASION_CONFIG` / `PASION_*` 仍然兼容，但已被标记为 deprecated。
-下次部署时：
-
-- `PASION_CONFIG` → `COAUTH_CONFIG`。
-- `PASION_FOO__BAR` → `COAUTH_FOO__BAR`（`__` 分隔符与大小写规则不变）。
-
-如果同一变量两侧都设置了，`COAUTH_*` 优先。`1.x` 之后新增的变量只在
-`COAUTH_*` 前缀下读取。
-
 ## 回滚
 
 升级成功后**不一定能安全回滚** —— 新 schema 的 NOT NULL 列旧二进制可能

@@ -52,7 +52,7 @@ impl TemplateContext for EmailRecoveryContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             User::samples(now, rng)
@@ -123,7 +123,7 @@ impl TemplateContext for EmailVerificationContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             BrowserSession::samples(now, rng)

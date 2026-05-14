@@ -30,7 +30,7 @@ impl TemplateContext for IndexContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![Self {
             discovery_url: "https://example.com/.well-known/openid-configuration"
@@ -103,7 +103,7 @@ impl TemplateContext for AppContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         let builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
         sample_list(vec![Self::new(&builder, "/assets/coauth-frontend.js")])
@@ -166,7 +166,7 @@ impl ErrorContext {
 
     /// Set the language tag for the error page.
     #[must_use]
-    pub fn with_language(mut self, lang: &coauth_i18n::DataLocale) -> Self {
+    pub fn with_language(mut self, lang: &coauth_i18n::Locale) -> Self {
         self.lang = Some(lang.to_string());
         self
     }
@@ -194,7 +194,7 @@ impl TemplateContext for ErrorContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![
             Self::new()
@@ -231,7 +231,7 @@ impl TemplateContext for NotFoundContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![
             Self::new(&Method::GET, Version::HTTP_11, &"/".parse().unwrap()),
@@ -266,7 +266,7 @@ impl TemplateContext for AccountInactiveContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             User::samples(now, rng)

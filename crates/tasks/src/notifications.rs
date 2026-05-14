@@ -15,10 +15,10 @@ use coauth_data::{
     },
     user::UserEmailFilter,
 };
-use coauth_i18n::DataLocale;
+use coauth_i18n::Locale;
 use coauth_messaging::{
-    Address, Mailbox, NotificationError, NotificationRequest,
-    email::{DELIVERY_ID_TAG, REQUEST_ID_TAG},
+    NotificationError, NotificationRequest,
+    email::{Address, DELIVERY_ID_TAG, Mailbox, REQUEST_ID_TAG},
 };
 use coauth_templates::{EmailRecoveryContext, EmailVerificationContext, TemplateContext as _};
 use rand_core::RngCore;
@@ -514,7 +514,7 @@ fn notification_failure_from_error(error: &NotificationError) -> NotificationDel
             ),
         },
         NotificationError::Sms(error) => match error {
-            coauth_messaging::SmsTransportError::Http(error) => {
+            coauth_messaging::sms::SmsTransportError::Http(error) => {
                 let is_permanent_tls = is_permanent_tls_validation_error(error);
                 let code = if is_permanent_tls {
                     Some("sms_tls_certificate".to_owned())
@@ -523,7 +523,7 @@ fn notification_failure_from_error(error: &NotificationError) -> NotificationDel
                 };
                 (code, Some(error.to_string()), !is_permanent_tls)
             }
-            coauth_messaging::SmsTransportError::ProviderError { status, .. } => (
+            coauth_messaging::sms::SmsTransportError::ProviderError { status, .. } => (
                 Some(format!("sms_provider_{status}")),
                 Some(format!("SMS provider returned non-success status {status}")),
                 *status >= 500 || *status == 429,
@@ -652,7 +652,7 @@ async fn prepare_delivery(
             let address: Address = email.parse()?;
             let mailbox = Mailbox::new(handle, address);
 
-            let language: DataLocale = payload.language.parse()?;
+            let language: Locale = payload.language.parse()?;
             let context =
                 EmailVerificationContext::new(authentication_code, browser_session, registration)
                     .with_language(language);
@@ -742,7 +742,7 @@ async fn prepare_delivery(
                 .await?
                 .context("Recovery email user not found")?;
 
-            let language: DataLocale = session.locale.parse()?;
+            let language: Locale = session.locale.parse()?;
             let url = url_builder.account_recovery_link(payload.ticket);
 
             let NotificationDestination::Email { email } = &delivery.destination else {
@@ -1159,10 +1159,11 @@ mod tests {
 
     #[test]
     fn sms_provider_failure_redacts_provider_body() {
-        let error = NotificationError::Sms(coauth_messaging::SmsTransportError::ProviderError {
-            status: 400,
-            body: "Your verification code is 123456".to_owned(),
-        });
+        let error =
+            NotificationError::Sms(coauth_messaging::sms::SmsTransportError::ProviderError {
+                status: 400,
+                body: "Your verification code is 123456".to_owned(),
+            });
 
         let failure = notification_failure_from_error(&error);
 

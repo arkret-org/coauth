@@ -245,14 +245,6 @@ impl Limiter {
         })
     }
 
-    /// Start the rate limiter housekeeping task.
-    ///
-    /// With Salvo's [`MokaStore`] cache, expired entries are evicted
-    /// automatically so this is a no-op retained for API compatibility.
-    pub fn start(&self) {
-        // MokaStore handles its own eviction; nothing to do.
-    }
-
     // -----------------------------------------------------------------------
     // Account recovery
     // -----------------------------------------------------------------------

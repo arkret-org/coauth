@@ -6,8 +6,8 @@
 coauth config generate > config.yaml
 ```
 
-`docs/config.schema.json` 来自 `coauth_config::RootConfig` 自动生成。环境变量覆盖目前仍然沿用
-legacy `PASION_` 前缀。
+`docs/config.schema.json` 来自 `coauth_config::RootConfig` 自动生成。环境变量覆盖使用
+`COAUTH_` 前缀。
 
 ## `http`
 

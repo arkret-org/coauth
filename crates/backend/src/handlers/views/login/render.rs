@@ -2,11 +2,8 @@
 //! `login_hint` interpretation logic that turns an inbound username/email
 //! login hint into a pre-filled form value.
 
-use coauth_data::{
-    Clock, RepositoryAccess, SiteConfig,
-    oauth::LoginHint,
-};
-use coauth_i18n::DataLocale;
+use coauth_data::{Clock, RepositoryAccess, SiteConfig, oauth::LoginHint};
+use coauth_i18n::Locale;
 use coauth_principal::PrincipalServerAdmin;
 use coauth_templates::{
     FormState, LoginContext, LoginFormField, PostAuthContext, PostAuthContextInner,
@@ -17,8 +14,8 @@ use salvo::{prelude::*, writing::Text};
 
 use crate::handlers::account::service::access::load_enabled_upstream_providers;
 use crate::handlers::views::shared::OptionalPostAuthAction;
-use crate::salvo_utils::{InternalError, csrf::CsrfExt};
 use crate::salvo_utils::cookies::CookieJar;
+use crate::salvo_utils::{InternalError, csrf::CsrfExt};
 
 /// Apply a login hint coming from an in-flight authorization grant to the
 /// `LoginContext`. The hint pre-fills the username field unless the user
@@ -55,7 +52,7 @@ pub(super) fn handle_login_hint(
 /// validation errors) and the POST path (re-render after a failed login).
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn render(
-    locale: DataLocale,
+    locale: Locale,
     cookie_jar: CookieJar,
     form_state: FormState<LoginFormField>,
     action: OptionalPostAuthAction,

@@ -260,11 +260,11 @@ impl Translator {
     /// # Errors
     ///
     /// Returns an error if the ICU formatter cannot be created for the locale.
-    pub fn relative_date(&self, locale: &Locale, days: i64) -> Result<String, crate::DataError> {
+    pub fn relative_date(&self, locale: &Locale, days: i64) -> Result<String, crate::FormatError> {
         let mut opts = RelativeTimeFormatterOptions::default();
         opts.numeric = Numeric::Auto;
         let formatter = RelativeTimeFormatter::try_new_long_day(locale.into(), opts)
-            .map_err(|_| crate::DataError::new("failed to load relative time formatter"))?;
+            .map_err(|_| crate::FormatError::new("failed to load relative time formatter"))?;
         let writeable = formatter.format(days.into());
         Ok(writeable.write_to_string().into_owned())
     }
@@ -283,12 +283,12 @@ impl Translator {
         &self,
         locale: &Locale,
         time: &icu_datetime::input::Time,
-    ) -> Result<String, crate::DataError> {
+    ) -> Result<String, crate::FormatError> {
         let fmt = icu_datetime::NoCalendarFormatter::try_new(
             locale.into(),
             icu_datetime::fieldsets::T::short(),
         )
-        .map_err(|_| crate::DataError::new("failed to load time formatter"))?;
+        .map_err(|_| crate::FormatError::new("failed to load time formatter"))?;
         Ok(fmt.format(time).to_string())
     }
 

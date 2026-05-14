@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use super::ProxyProtocolV1Info;
-use crate::listener::rewind::Rewind;
+use crate::listener::stream::BufferedStream;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ProxyAcceptor {
@@ -32,7 +32,7 @@ impl ProxyAcceptor {
     pub async fn accept<T>(
         &self,
         mut stream: T,
-    ) -> Result<(ProxyProtocolV1Info, Rewind<T>), ProxyAcceptError>
+    ) -> Result<(ProxyProtocolV1Info, BufferedStream<T>), ProxyAcceptError>
     where
         T: AsyncRead + Unpin,
     {
@@ -47,7 +47,7 @@ impl ProxyAcceptor {
             }
         };
 
-        let stream = Rewind::new_buffered(stream, buf.into());
+        let stream = BufferedStream::new_buffered(stream, buf.into());
 
         Ok((info, stream))
     }

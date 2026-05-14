@@ -179,6 +179,13 @@ pub struct OauthClient {
     pub logo_uri: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(tag = "__typename")]
+pub enum Session {
+    BrowserSession(BrowserSession),
+    OauthSession(OauthSession),
+}
+
 // ── Email ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -426,55 +433,6 @@ pub struct ViewerResponse {
     pub site_config: SiteConfig,
 }
 
-// ── Backward-compatible aliases for page data ──────────────────
-
-pub type CurrentUserGreetingData = ViewerResponse;
-pub type UserProfileData = ViewerResponse;
-pub type SessionsOverviewData = ViewerResponse;
-pub type AppSessionsListData = ViewerResponse;
-pub type BrowserSessionListData = ViewerResponse;
-pub type PasswordChangeData = ViewerResponse;
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct FooterData {
-    pub site_config: SiteConfig,
-}
-
-// REST API returns payloads directly, but keep wrapper types for compat
-pub type SetPasswordResult = SetPasswordPayload;
-pub type SetDisplayNameResult = SetDisplayNamePayload;
-pub type AddEmailResult = AddEmailPayload;
-pub type EndBrowserSessionResult = EndSessionPayload;
-pub type EndOauthSessionResult = EndSessionPayload;
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct PlanManagementData {
-    pub site_config: SiteConfig,
-}
-
-// REST API returns session directly (it IS the node)
-pub type SessionDetailData = SessionNode;
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(tag = "__typename")]
-pub enum SessionNode {
-    BrowserSession(BrowserSession),
-    OauthSession(OauthSession),
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct UserEmailListData {
-    pub viewer_session: ViewerSession,
-}
-
-pub type CompleteEmailAuthResult = CompleteEmailAuthPayload;
-pub type DeactivateUserResult = DeactivateUserPayload;
-
-// ── Client detail ──────────────────────────────────────────────
-
-// REST returns client directly
-pub type ClientDetailData = OauthClientDetail;
-
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "__typename")]
 pub enum ClientNode {
@@ -492,42 +450,17 @@ pub struct OauthClientDetail {
     pub logo_uri: Option<String>,
 }
 
-// ── Device redirect ────────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct DeviceRedirectData {
-    pub viewer: Viewer,
-}
-
-// ── Password recovery ─────────────────────────────────────────
-
-pub type PasswordRecoveryData = ViewerResponse;
-
-// ── Resend recovery email ─────────────────────────────────────
-
-pub type ResendRecoveryEmailResult = ResendRecoveryEmailPayload;
-
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ResendRecoveryEmailPayload {
     pub status: String,
-    #[serde(default, alias = "progressUrl")]
+    #[serde(default)]
     pub progress_url: Option<String>,
 }
-
-// ── Remove email result ───────────────────────────────────────
-
-pub type RemoveEmailResult = RemoveEmailPayload;
-
-// ── Session name mutation results ─────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SetSessionNamePayload {
     pub status: String,
 }
-
-pub type SetOauthSessionNameResult = SetSessionNamePayload;
-
-// ── Email verification query/mutation types ───────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct UserEmailAuthentication {
@@ -542,15 +475,10 @@ pub enum EmailAuthNode {
     UserEmailAuthentication(UserEmailAuthentication),
 }
 
-// REST returns the email auth directly
-pub type VerifyEmailData = UserEmailAuthentication;
-
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ResendEmailAuthCodePayload {
     pub status: String,
 }
-
-pub type ResendEmailAuthCodeResult = ResendEmailAuthCodePayload;
 
 // ── Auth API types ────────────────────────────────────────────
 
@@ -614,7 +542,7 @@ pub struct ProvidersResponse {
     pub providers: Vec<UpstreamProvider>,
     pub password_login_enabled: bool,
     pub password_registration_enabled: bool,
-    #[serde(default, alias = "accountRecoveryAllowed")]
+    #[serde(default)]
     pub account_recovery_allowed: bool,
 }
 

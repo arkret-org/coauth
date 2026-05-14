@@ -15,14 +15,6 @@ Add an email address to the specified user.
 $ coauth manage add-email <username> <email>
 ```
 
-## `manage verify-email`
-
-[DEPRECATED] Mark an email address as verified.
-
-```
-$ coauth manage verify-email <username> <email>
-```
-
 ## `manage promote-admin`
 
 Make a user admin.

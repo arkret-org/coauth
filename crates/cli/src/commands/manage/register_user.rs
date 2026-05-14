@@ -19,7 +19,7 @@ use coauth_data::{
     queue::{ProvisionUserJob, QueueJobRepositoryExt as _},
     user::{UserEmailRepository, UserPasswordRepository, UserRepository},
 };
-use coauth_messaging::Address;
+use coauth_messaging::email::Address;
 use console::{Alignment, Style, Term, pad_str, style};
 use dialoguer::{Confirm, FuzzySelect, Input, Password, theme::ColorfulTheme};
 use figment::Figment;

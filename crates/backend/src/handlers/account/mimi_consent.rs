@@ -142,7 +142,7 @@ pub enum MimiConsentError {
     #[error("mimi consent → move: server_name url not configured")]
     PrincipalServerNotConfigured,
 
-    /// `PASION_CONTRIX__ANCHORER_SIGNING_KEY` was set but malformed.
+    /// `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` was set but malformed.
     #[error("mimi consent: anchorer signing key invalid: {reason}")]
     InvalidAnchorerKey { reason: String },
 
@@ -225,7 +225,7 @@ pub fn update_consent_to_pending_move(
 /// How the anchorer signing key was obtained at process start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnchorerSigningKeyOrigin {
-    /// Loaded from `PASION_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
+    /// Loaded from `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
     Configured,
     /// No env var present — generated at process start. Anything signed
     /// with this key is unverifiable across restarts.
@@ -239,7 +239,7 @@ pub enum AnchorerSigningKeyOrigin {
 /// `Ed25519MoveSigner` so this is no longer a placeholder — `from_seed`
 /// constructs the production signer directly. `from_env` is the
 /// ergonomic variant that loads the seed from
-/// `PASION_CONTRIX__ANCHORER_SIGNING_KEY` and falls back to an ephemeral
+/// `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` and falls back to an ephemeral
 /// key with a warn log.
 pub struct AnchorerSigner {
     inner: Ed25519MoveSigner,
@@ -307,7 +307,7 @@ impl AnchorerSigner {
     }
 
     /// Load the configured anchorer signing key from
-    /// `PASION_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
+    /// `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
     /// Falls back to an ephemeral key with a warn log when the env var
     /// is absent.
     ///
@@ -321,7 +321,7 @@ impl AnchorerSigner {
         use base64ct::{Base64, Encoding as _};
         let issuer_did = issuer_did.into();
         let kid = verification_method_id.into();
-        match std::env::var("PASION_CONTRIX__ANCHORER_SIGNING_KEY") {
+        match std::env::var("COAUTH_CONTRIX__ANCHORER_SIGNING_KEY") {
             Ok(raw) => {
                 let trimmed = raw.trim();
                 let mut buf = [0u8; 48];
@@ -347,7 +347,7 @@ impl AnchorerSigner {
                 use rand::RngExt as _;
                 rand::rng().fill(&mut seed[..]);
                 tracing::warn!(
-                    "PASION_CONTRIX__ANCHORER_SIGNING_KEY not set; using ephemeral \
+                    "COAUTH_CONTRIX__ANCHORER_SIGNING_KEY not set; using ephemeral \
                      anchorer key (anything signed will be unverifiable across \
                      restarts — configure a real key for production anchoring)"
                 );

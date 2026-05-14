@@ -32,11 +32,6 @@ pub(super) struct Options {
     #[arg(long)]
     no_migrate: bool,
 
-    /// DEPRECATED: default is to apply pending migrations, use `--no-migrate`
-    /// to disable
-    #[arg(long, hide = true)]
-    migrate: bool,
-
     /// Do not start the task worker
     #[arg(long)]
     no_worker: bool,
@@ -54,12 +49,6 @@ impl Options {
             .with_timeout(Duration::from_secs(config.http.shutdown_grace_seconds));
 
         info!(version = crate::VERSION, "Starting up");
-
-        if self.migrate {
-            warn!(
-                "The `--migrate` flag is deprecated and will be removed in a future release. Please use `--no-migrate` to disable automatic migrations on startup."
-            );
-        }
 
         // Connect to the database
         info!("Connecting to the database");
@@ -260,8 +249,6 @@ impl Options {
 
         // Explicitly the config to properly zeroize secret keys
         drop(config);
-
-        limiter.start();
 
         let state = {
             let mut s = AppState {

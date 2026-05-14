@@ -23,9 +23,6 @@ pub struct BufferedStream<T> {
     inner: T,
 }
 
-/// Backward-compatible alias used by internal modules.
-pub type Rewind<T> = BufferedStream<T>;
-
 impl<T> BufferedStream<T> {
     /// Wrap a stream without any prefix data.
     pub(crate) fn new(io: T) -> Self {

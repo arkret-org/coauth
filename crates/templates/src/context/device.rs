@@ -65,7 +65,7 @@ impl TemplateContext for DeviceLinkContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![
             Self::new(),
@@ -103,7 +103,7 @@ impl TemplateContext for DeviceConsentContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             Client::samples(now, rng)
@@ -159,7 +159,7 @@ impl TemplateContext for DeviceNameContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             Client::samples(now, rng)

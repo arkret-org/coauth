@@ -36,7 +36,7 @@ impl TemplateContext for UpstreamExistingLinkContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(
             User::samples(now, rng)
@@ -73,7 +73,7 @@ impl TemplateContext for UpstreamSuggestLink {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         let link_id = coauth_data::new_id(now, rng);
         sample_list(vec![Self::for_link_id(link_id)])
@@ -196,7 +196,7 @@ impl TemplateContext for UpstreamRegister {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![Self::new(
             UpstreamOAuthLink {

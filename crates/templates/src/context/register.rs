@@ -74,7 +74,7 @@ impl TemplateContext for RegisterContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![Self {
             providers: Vec::new(),
@@ -113,7 +113,7 @@ impl TemplateContext for PasswordRegisterContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![Self {
             form: FormState::default(),
@@ -166,7 +166,7 @@ impl TemplateContext for RegisterStepsVerifyEmailContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         let auth = UserEmailAuthentication {
             id: coauth_data::new_id(now, rng),
@@ -204,7 +204,7 @@ impl TemplateContext for RegisterStepsEmailInUseContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         let addr = "hello@example.com".to_owned();
         let action = PostAuthAction::continue_grant(Ulid::nil());
@@ -256,7 +256,7 @@ impl TemplateContext for RegisterStepsDisplayNameContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![Self::default()])
     }
@@ -306,7 +306,7 @@ impl TemplateContext for RegisterStepsRegistrationTokenContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![Self::default()])
     }

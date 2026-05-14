@@ -131,7 +131,6 @@ coauth-errors-handle-not-allowed = Username is not allowed by the server policy
 coauth-errors-handle-taken = This username is already taken
 coauth-errors-handle-too-long = Username is too long
 coauth-errors-handle-too-short = Username is too short
-coauth-legacy-consent-this-will-setup = This will set up <span>{ $client_name }</span> with your <span>{ $server_name }</span> account.
 coauth-login-call-to-register = Don't have an account yet?
 # Button to log in with an upstream provider
 coauth-login-continue-with-provider = Continue with { $provider }

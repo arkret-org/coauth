@@ -128,24 +128,6 @@ pub(super) async fn handle_add_email(
     Ok(ExitCode::SUCCESS)
 }
 
-pub(super) async fn handle_verify_email(
-    handle: String,
-    email: String,
-) -> anyhow::Result<ExitCode> {
-    let _span = info_span!(
-        "cli.manage.verify_email",
-        user.handle = handle,
-        user_email.email = email
-    )
-    .entered();
-
-    tracing::warn!(
-        "The 'verify-email' command is deprecated and will be removed in a future version. Use 'add-email' instead."
-    );
-
-    Ok(ExitCode::SUCCESS)
-}
-
 pub(super) async fn handle_promote_admin(
     figment: &Figment,
     handle: String,

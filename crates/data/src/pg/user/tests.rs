@@ -270,14 +270,8 @@ async fn test_user_repo_find_by_handle() {
 
     // In case there are multiple users with the same username, we should return the
     // one that matches the exact casing
-    assert_eq!(
-        repo.user().find_by_handle("Bob").await.unwrap(),
-        Some(bob1)
-    );
-    assert_eq!(
-        repo.user().find_by_handle("BOB").await.unwrap(),
-        Some(bob2)
-    );
+    assert_eq!(repo.user().find_by_handle("Bob").await.unwrap(), Some(bob1));
+    assert_eq!(repo.user().find_by_handle("BOB").await.unwrap(), Some(bob2));
 
     // If none match, we should return None
     assert!(repo.user().find_by_handle("bob").await.unwrap().is_none());

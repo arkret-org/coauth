@@ -96,7 +96,7 @@ fn otel_url_scheme(req: &Request) -> &'static str {
     req.extensions()
         .get::<ConnectionInfo>()
         .map_or("http", |conn_info| {
-            if conn_info.get_tls_ref().is_some() {
+            if conn_info.tls().is_some() {
                 "https"
             } else {
                 "http"
@@ -529,10 +529,7 @@ pub fn build_router(
                         .get(contrix::user_did_json),
                 ),
             coauth_config::HttpResource::Human => build_human_router(router, templates.clone()),
-            coauth_config::HttpResource::RestApi {
-                playground: _,
-                undocumented_oauth_access: _,
-            } => build_account_api_router(router),
+            coauth_config::HttpResource::RestApi => build_account_api_router(router),
             coauth_config::HttpResource::Assets { path } => router
                 .push(Router::with_path("/favicon.ico").get(favicon_handler))
                 .push(

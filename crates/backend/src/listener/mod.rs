@@ -17,9 +17,6 @@ pub mod stream;
 /// TCP / Unix socket binding and accept.
 pub mod unix_or_tcp;
 
-// Keep `rewind` as a hidden alias for internal use within this module tree.
-pub(in crate::listener) use stream as rewind;
-
 /// Metadata collected during connection establishment.
 ///
 /// Aggregates TLS session details, PROXY protocol information, and the
@@ -84,22 +81,5 @@ impl ConnectionInfo {
                 ProxyProtocolV1Info::Unknown => None,
             })
             .or_else(|| self.net_peer_addr.map(|a| a.ip()))
-    }
-
-    // Keep old method names as hidden aliases for backward compat.
-    #[doc(hidden)]
-    #[must_use]
-    pub fn get_tls_ref(&self) -> Option<&TlsStreamInfo> {
-        self.tls()
-    }
-    #[doc(hidden)]
-    #[must_use]
-    pub fn get_proxy_ref(&self) -> Option<&ProxyProtocolV1Info> {
-        self.proxy()
-    }
-    #[doc(hidden)]
-    #[must_use]
-    pub fn get_peer_addr(&self) -> Option<std::net::SocketAddr> {
-        self.peer_addr()
     }
 }

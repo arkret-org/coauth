@@ -53,19 +53,6 @@ Items that **may** change between minor releases without a major bump:
   them on each upgrade.
 - Cedar / OPA policy bundles.
 
-## Environment-variable migration
-
-The legacy `PASION_CONFIG` and `PASION_*` environment variables are
-still read by the binary but are deprecated. On your next deploy:
-
-- Rename `PASION_CONFIG` → `COAUTH_CONFIG`.
-- Rename `PASION_FOO__BAR` → `COAUTH_FOO__BAR` (the `__` separator and
-  case rules are unchanged).
-
-Both prefixes work simultaneously; if the same variable is set under
-both, `COAUTH_*` wins. New variables added after `1.x` will only be
-read under the `COAUTH_*` prefix.
-
 ## Rollback
 
 A rollback after a successful migration is **not always safe**: a newer

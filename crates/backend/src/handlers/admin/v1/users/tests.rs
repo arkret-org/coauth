@@ -217,8 +217,7 @@ mod tests {
                 "created_at": "2022-01-16T14:40:00Z",
                 "locked_at": null,
                 "deactivated_at": null,
-                "admin": false,
-                "legacy_guest": false
+                "admin": false
               },
               "links": {
                 "self": "/api/admin/v1/users/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
@@ -237,8 +236,7 @@ mod tests {
                 "created_at": "2022-01-16T14:40:00Z",
                 "locked_at": null,
                 "deactivated_at": null,
-                "admin": false,
-                "legacy_guest": false
+                "admin": false
               },
               "links": {
                 "self": "/api/admin/v1/users/01FSHN9AG0MZAA6S4AF7CTV32E"
@@ -276,8 +274,7 @@ mod tests {
                 "created_at": "2022-01-16T14:40:00Z",
                 "locked_at": null,
                 "deactivated_at": null,
-                "admin": false,
-                "legacy_guest": false
+                "admin": false
               },
               "links": {
                 "self": "/api/admin/v1/users/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
@@ -296,8 +293,7 @@ mod tests {
                 "created_at": "2022-01-16T14:40:00Z",
                 "locked_at": null,
                 "deactivated_at": null,
-                "admin": false,
-                "legacy_guest": false
+                "admin": false
               },
               "links": {
                 "self": "/api/admin/v1/users/01FSHN9AG0MZAA6S4AF7CTV32E"
@@ -353,8 +349,7 @@ mod tests {
                 "created_at": "2022-01-16T14:40:00Z",
                 "locked_at": null,
                 "deactivated_at": null,
-                "admin": false,
-                "legacy_guest": false
+                "admin": false
               },
               "links": {
                 "self": "/api/admin/v1/users/01FSHN9AG0MZAA6S4AF7CTV32E"

@@ -876,14 +876,6 @@
           "description": "REST API consumed by the frontend",
           "type": "object",
           "properties": {
-            "playground": {
-              "description": "Deprecated -- no longer used",
-              "type": "boolean"
-            },
-            "undocumented_oauth_access": {
-              "description": "Deprecated -- no longer used",
-              "type": "boolean"
-            },
             "name": {
               "type": "string",
               "const": "restapi"
@@ -1403,6 +1395,27 @@
         },
         "did": {
           "description": "Optional DID advertised for this Principal Server.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "oauth_introspection_bearer": {
+          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's OAuth introspection endpoint. This is intended for\nserver-to-server resource-server authentication, not for browser\nclients.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_grant_introspection_bearer": {
+          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's legacy Contrix session-grant introspection endpoint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "embedded_webvh_registration_bearer": {
+          "description": "Optional static bearer token coauth should send when writing embedded\n`did:webvh` registration records into this Principal Server.",
           "type": [
             "string",
             "null"
@@ -3921,6 +3934,10 @@
         },
         "password_registration_contact_required": {
           "description": "Require at least one verified contact method for password-based\nregistrations (default: `true`). Has no effect when registration is off.",
+          "type": "boolean"
+        },
+        "registration_email_delivery_bypass_allowed": {
+          "description": "Allow registration flows to bypass delivery of verification email in\ndev/test deployments (default: `false`). Verification/recovery policy\nremains in coauth; soland only provides DID/webvh primitives.",
           "type": "boolean"
         },
         "password_change_allowed": {

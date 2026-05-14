@@ -15,7 +15,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 use clap::{ArgAction, Parser};
 use coauth_data::Ulid;
-use coauth_messaging::Address;
+use coauth_messaging::email::Address;
 use figment::Figment;
 
 const USER_ATTRIBUTES_HEADING: &str = "User attributes";
@@ -47,9 +47,6 @@ pub(super) struct Options {
 enum Subcommand {
     /// Add an email address to the specified user
     AddEmail { handle: String, email: String },
-
-    /// (DEPRECATED) Mark email address as verified
-    VerifyEmail { handle: String, email: String },
 
     /// Set a user password
     SetPassword {
@@ -187,21 +184,12 @@ impl Options {
                 password,
                 ignore_complexity,
             } => {
-                command_handlers::handle_set_password(
-                    figment,
-                    handle,
-                    password,
-                    ignore_complexity,
-                )
-                .await
+                command_handlers::handle_set_password(figment, handle, password, ignore_complexity)
+                    .await
             }
 
             SC::AddEmail { handle, email } => {
                 command_handlers::handle_add_email(figment, handle, email).await
-            }
-
-            SC::VerifyEmail { handle, email } => {
-                command_handlers::handle_verify_email(handle, email).await
             }
 
             SC::PromoteAdmin { handle } => {
@@ -236,15 +224,13 @@ impl Options {
                 command_handlers::handle_kill_sessions(figment, handle, dry_run).await
             }
 
-            SC::LockUser {
-                handle,
-                deactivate,
-            } => command_handlers::handle_lock_user(figment, handle, deactivate).await,
+            SC::LockUser { handle, deactivate } => {
+                command_handlers::handle_lock_user(figment, handle, deactivate).await
+            }
 
-            SC::UnlockUser {
-                handle,
-                reactivate,
-            } => command_handlers::handle_unlock_user(figment, handle, reactivate).await,
+            SC::UnlockUser { handle, reactivate } => {
+                command_handlers::handle_unlock_user(figment, handle, reactivate).await
+            }
 
             SC::RegisterUser {
                 handle,

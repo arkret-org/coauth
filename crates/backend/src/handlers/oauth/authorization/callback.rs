@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use coauth_data::AuthorizationGrant;
-use coauth_i18n::DataLocale;
+use coauth_i18n::Locale;
 use coauth_templates::{FormPostContext, Templates};
 use oauth_types::requests::ResponseMode;
 use salvo::{
@@ -182,7 +182,7 @@ impl CallbackDestination {
     pub fn go<T: Serialize + Send + Sync>(
         self,
         templates: &Templates,
-        locale: &DataLocale,
+        locale: &Locale,
         params: T,
     ) -> Result<Response, CallbackDestinationError> {
         #[derive(Serialize)]

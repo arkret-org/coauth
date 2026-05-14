@@ -41,15 +41,15 @@ coauth config dump --config=config.yaml
 Multiple config files can be layered. The lookup order is:
 
 1. Every file passed with `--config`
-2. Otherwise the `PASION_CONFIG` environment variable, split by `:`
+2. Otherwise the `COAUTH_CONFIG` environment variable, split by `:`
 3. Otherwise `config.yaml` in the current working directory
 
-Environment overrides also still use the legacy `PASION_` prefix and `__` as
-the nesting separator. For example:
+Environment overrides use the `COAUTH_` prefix and `__` as the nesting
+separator. For example:
 
 ```sh
-PASION_EMAIL__PROVIDER__TYPE=resend
-PASION_EMAIL__PROVIDER__API_KEY=re_xxxxxxxxx
+COAUTH_EMAIL__PROVIDER__TYPE=resend
+COAUTH_EMAIL__PROVIDER__API_KEY=re_xxxxxxxxx
 ```
 
 ## Editor schema

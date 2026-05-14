@@ -169,8 +169,6 @@ fn register_all_handlers(w: &mut QueueWorker) {
     w.register_handler::<queue::ReactivateUserJob>();
 
     // principal device management
-    w.register_handler::<queue::DeleteDeviceJob>();
-    w.register_handler::<queue::ProvisionDeviceJob>();
     w.register_handler::<queue::ProvisionUserJob>();
     w.register_handler::<queue::SyncDevicesJob>();
 
@@ -180,7 +178,6 @@ fn register_all_handlers(w: &mut QueueWorker) {
     w.register_handler::<queue::SendAccountRecoveryEmailsJob>();
     w.register_handler::<queue::SendEmailAuthenticationCodeJob>();
     w.register_handler::<queue::SendSmsAuthenticationCodeJob>();
-    w.register_handler::<queue::VerifyEmailJob>();
 
     // Session expiry
     w.register_handler::<queue::ExpireInactiveSessionsJob>();
@@ -189,12 +186,6 @@ fn register_all_handlers(w: &mut QueueWorker) {
 
     // Policy data pruning
     w.register_handler::<queue::PruneStalePolicyDataJob>();
-
-    // Queues that existed in earlier versions but have been superseded.
-    w.register_deprecated_queue("cleanup-expired-tokens");
-    w.register_deprecated_queue("cleanup-finished-compat-sessions");
-    w.register_deprecated_queue("expire-inactive-compat-sessions");
-    w.register_deprecated_queue("cleanup-inactive-compat-session-ips");
 }
 
 // ── Recurring schedules ─────────────────────────────────────────────────

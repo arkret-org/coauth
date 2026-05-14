@@ -109,7 +109,7 @@ impl TemplateContext for LoginContext {
     fn sample<R: Rng>(
         _now: chrono::DateTime<chrono::Utc>,
         _rng: &mut R,
-        _locales: &[coauth_i18n::DataLocale],
+        _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         sample_list(vec![
             Self::default(),

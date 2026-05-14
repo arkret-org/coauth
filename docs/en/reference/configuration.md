@@ -7,9 +7,7 @@ coauth config generate > config.yaml
 ```
 
 The generated schema in `docs/config.schema.json` is derived from
-`coauth_config::RootConfig`. Environment overrides use the `COAUTH_` prefix
-(the legacy `PASION_` prefix is still honoured for backwards compatibility;
-when both are set, `COAUTH_*` wins).
+`coauth_config::RootConfig`. Environment overrides use the `COAUTH_` prefix.
 
 ## `http`
 

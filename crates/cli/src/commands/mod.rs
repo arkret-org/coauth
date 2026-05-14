@@ -82,13 +82,8 @@ impl Options {
     /// Get a [`Figment`] instance with the configuration loaded
     pub fn figment(&self) -> Figment {
         let configs = if self.config.is_empty() {
-            // Prefer COAUTH_CONFIG; fall back to the legacy PASION_CONFIG so
-            // existing deployments keep working without reconfiguration.
             std::env::var("COAUTH_CONFIG")
-                .or_else(|_| std::env::var("PASION_CONFIG"))
-                // Default to "config.yaml"
                 .unwrap_or_else(|_| "config.yaml".to_owned())
-                // Split the file list on `:`
                 .split(':')
                 .map(Utf8PathBuf::from)
                 .collect()
@@ -96,11 +91,7 @@ impl Options {
             self.config.clone()
         };
 
-        // Layer the legacy PASION_* prefix first, then COAUTH_* so the new
-        // names take precedence when both are set.
-        let base = Figment::new()
-            .merge(Env::prefixed("PASION_").split("__"))
-            .merge(Env::prefixed("COAUTH_").split("__"));
+        let base = Figment::new().merge(Env::prefixed("COAUTH_").split("__"));
 
         configs
             .into_iter()

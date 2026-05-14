@@ -5,13 +5,13 @@
 
 use std::sync::Arc;
 
-use coauth_i18n::{DataLocale, Translator, locale};
+use coauth_i18n::{Locale, Translator, locale};
 use headers::HeaderMapExt as _;
 use salvo::prelude::*;
 
 use crate::salvo_utils::language_detection::AcceptLanguage;
 
-pub fn preferred_language(req: &Request, depot: &Depot) -> DataLocale {
+pub fn preferred_language(req: &Request, depot: &Depot) -> Locale {
     let translator = depot
         .get::<Arc<Translator>>("translator")
         .cloned()

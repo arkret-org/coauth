@@ -39,14 +39,14 @@ coauth config dump --config=config.yaml
 配置文件的加载优先级如下：
 
 1. 所有通过 `--config` 显式传入的文件
-2. 否则读取环境变量 `PASION_CONFIG`，并按 `:` 分隔
+2. 否则读取环境变量 `COAUTH_CONFIG`，并按 `:` 分隔
 3. 否则读取当前工作目录下的 `config.yaml`
 
-环境变量覆盖也仍然沿用 legacy `PASION_` 前缀，并使用 `__` 作为层级分隔符，例如：
+环境变量覆盖使用 `COAUTH_` 前缀，并使用 `__` 作为层级分隔符，例如：
 
 ```bash
-PASION_EMAIL__PROVIDER__TYPE=resend
-PASION_EMAIL__PROVIDER__API_KEY=re_xxxxxxxxx
+COAUTH_EMAIL__PROVIDER__TYPE=resend
+COAUTH_EMAIL__PROVIDER__API_KEY=re_xxxxxxxxx
 ```
 
 ## 编辑器 Schema

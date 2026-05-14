@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use coauth_i18n::DataLocale;
+use coauth_i18n::Locale;
 use minijinja::{
     Value,
     value::{Enumerator, Object},
@@ -114,7 +114,7 @@ impl<T: TemplateContext> TemplateContext for WithCaptcha<T> {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::prelude::Utc>,
         rng: &mut R,
-        locales: &[DataLocale],
+        locales: &[Locale],
     ) -> BTreeMap<SampleIdentifier, Self>
     where
         Self: Sized,
