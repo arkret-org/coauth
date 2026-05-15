@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use super::session_card::*;
+use super::session_card::{SessionCardRoot, SessionCardLinkBody, SessionCardHeader, SessionCardName, SessionCardClient, SessionCardMetadata, SessionCardInfo};
 use crate::{
     api::types::{DeviceType, OauthSession as OauthSessionData},
     pages::Route,
@@ -16,7 +16,7 @@ fn session_display_name(session: &OauthSessionData) -> String {
         }
         return client.client_id.clone();
     }
-    "Unknown app".to_string()
+    "Unknown app".to_owned()
 }
 
 #[component]
@@ -24,14 +24,13 @@ pub fn OAuthSessionCard(session: OauthSessionData) -> Element {
     let device_type = session
         .user_agent
         .as_ref()
-        .map(|ua| ua.device_type.clone())
-        .unwrap_or(DeviceType::Unknown);
+        .map_or(DeviceType::Unknown, |ua| ua.device_type.clone());
     let name = session_display_name(&session);
     let client_name = session
         .client
         .as_ref()
         .and_then(|c| c.client_name.clone())
-        .unwrap_or_else(|| "Unknown client".to_string());
+        .unwrap_or_else(|| "Unknown client".to_owned());
     let logo_uri = session.client.as_ref().and_then(|c| c.logo_uri.clone());
 
     rsx! {
@@ -44,12 +43,12 @@ pub fn OAuthSessionCard(session: OauthSessionData) -> Element {
                 }
                 SessionCardMetadata {
                     if let Some(ref last_active) = session.last_active_at {
-                        SessionCardInfo { label: "Last active".to_string(),
+                        SessionCardInfo { label: "Last active".to_owned(),
                             crate::components::last_active::LastActive { datetime: last_active.clone() }
                         }
                     }
                     if let Some(ref ip) = session.last_active_ip {
-                        SessionCardInfo { label: "IP address".to_string(),
+                        SessionCardInfo { label: "IP address".to_owned(),
                             span { class: "text-sm", "{ip}" }
                         }
                     }

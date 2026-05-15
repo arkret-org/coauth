@@ -83,7 +83,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> Result<Json<SiteConfig
         password_change_allowed: cfg.password_change_allowed,
         account_recovery_allowed: cfg.account_recovery_allowed,
         account_deactivation_allowed: cfg.account_deactivation_allowed,
-        admin_portal_url: cfg.admin_portal_url.as_ref().map(|url| url.to_string()),
+        admin_portal_url: cfg.admin_portal_url.as_ref().map(std::string::ToString::to_string),
         captcha_enabled: cfg.captcha.is_some(),
         minimum_password_complexity: cfg.minimum_password_complexity,
     };

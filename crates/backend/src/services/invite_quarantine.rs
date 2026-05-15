@@ -193,7 +193,7 @@ impl PgInviteQuarantineService {
         let id = Uuid::now_v7();
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
-            r#"
+            r"
             INSERT INTO invite_quarantine_queue (
                 id,
                 peer_did,
@@ -217,7 +217,7 @@ impl PgInviteQuarantineService {
                 status,
                 resolved_at,
                 resolution_note
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(id)
         .bind::<Text, _>(input.peer_did)
@@ -239,7 +239,7 @@ impl PgInviteQuarantineService {
         let limit = limit.clamp(1, 1000);
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
-            r#"
+            r"
             SELECT
                 id,
                 created_at,
@@ -256,7 +256,7 @@ impl PgInviteQuarantineService {
             WHERE status = 'pending'
             ORDER BY created_at ASC, id ASC
             LIMIT $1
-            "#,
+            ",
         )
         .bind::<BigInt, _>(limit)
         .get_results::<InviteQuarantineRow>(&mut *conn)
@@ -271,7 +271,7 @@ impl PgInviteQuarantineService {
     async fn get_inner(&self, id: Uuid) -> anyhow::Result<Option<InviteQuarantineRecord>> {
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
-            r#"
+            r"
             SELECT
                 id,
                 created_at,
@@ -286,7 +286,7 @@ impl PgInviteQuarantineService {
                 resolution_note
             FROM invite_quarantine_queue
             WHERE id = $1
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(id)
         .get_results::<InviteQuarantineRow>(&mut *conn)
@@ -309,7 +309,7 @@ impl PgInviteQuarantineService {
         // Only transition `pending` rows. Already-resolved rows are
         // returned as `None` so the caller can render a 409.
         let rows = diesel::sql_query(
-            r#"
+            r"
             UPDATE invite_quarantine_queue
             SET
                 status = $2,
@@ -328,7 +328,7 @@ impl PgInviteQuarantineService {
                 status,
                 resolved_at,
                 resolution_note
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(id)
         .bind::<Text, _>(new_status.as_str().to_owned())

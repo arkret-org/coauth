@@ -87,6 +87,7 @@ bcrypt.workspace = true
 camino.workspace = true
 cookie.workspace = true
 der.workspace = true
+ed25519-dalek.workspace = true
 elliptic-curve.workspace = true
 form_urlencoded.workspace = true
 hex.workspace = true

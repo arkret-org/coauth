@@ -1,6 +1,6 @@
-//! DingTalk (钉钉) OAuth specific request implementations.
+//! `DingTalk` (钉钉) OAuth specific request implementations.
 //!
-//! DingTalk uses a mostly standard OAuth flow with JSON request/response
+//! `DingTalk` uses a mostly standard OAuth flow with JSON request/response
 //! bodies and a custom header for the access token in userinfo requests.
 
 use std::collections::HashMap;
@@ -12,7 +12,7 @@ use url::Url;
 use super::super::error::{TokenRequestError, UserInfoError};
 use crate::outbound_http::RequestBuilderExt;
 
-/// DingTalk token exchange request body.
+/// `DingTalk` token exchange request body.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DingTalkTokenRequest<'a> {
@@ -22,7 +22,7 @@ struct DingTalkTokenRequest<'a> {
     grant_type: &'a str,
 }
 
-/// DingTalk token endpoint response.
+/// `DingTalk` token endpoint response.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DingTalkTokenResponse {
@@ -35,7 +35,7 @@ pub struct DingTalkTokenResponse {
     pub refresh_token: Option<String>,
     /// The OpenID of the user.
     pub open_id: Option<String>,
-    /// The UnionID of the user.
+    /// The `UnionID` of the user.
     pub union_id: Option<String>,
 }
 
@@ -55,7 +55,7 @@ impl DingTalkTokenResponse {
     }
 }
 
-/// Exchange an authorization code for an access token with DingTalk.
+/// Exchange an authorization code for an access token with `DingTalk`.
 ///
 /// `POST https://api.dingtalk.com/v1.0/oauth/userAccessToken`
 #[tracing::instrument(skip_all, fields(%token_endpoint))]
@@ -80,19 +80,18 @@ pub async fn request_access_token(
         .json(&body)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
     Ok(response)
 }
 
-/// Fetch user info from DingTalk's contact API.
+/// Fetch user info from `DingTalk`'s contact API.
 ///
 /// `GET https://api.dingtalk.com/v1.0/contact/users/me`
 ///
-/// DingTalk uses the `x-acs-dingtalk-access-token` header instead of
+/// `DingTalk` uses the `x-acs-dingtalk-access-token` header instead of
 /// standard Bearer auth.
 #[tracing::instrument(skip_all, fields(%userinfo_endpoint))]
 pub async fn fetch_userinfo(
@@ -107,8 +106,7 @@ pub async fn fetch_userinfo(
         .header("x-acs-dingtalk-access-token", access_token)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 

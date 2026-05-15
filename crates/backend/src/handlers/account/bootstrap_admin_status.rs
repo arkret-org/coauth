@@ -28,7 +28,7 @@ async fn load_bootstrap_admin_status_from(
         .count(UserFilter::new().can_request_admin_only())
         .await?
         > 0;
-    let token_configured = bootstrap_token_configured(&config);
+    let token_configured = bootstrap_token_configured(config);
 
     Ok(BootstrapAdminStatusResponse {
         has_admin,
@@ -60,7 +60,7 @@ mod tests {
         let state = TestState::from_pool_with_site_config(
             pool,
             coauth_data::SiteConfig {
-                bootstrap_admin_token: Some("bootstrap-secret".to_string()),
+                bootstrap_admin_token: Some("bootstrap-secret".to_owned()),
                 ..test_site_config()
             },
         )
@@ -78,6 +78,10 @@ mod tests {
         assert!(payload.setup_required);
     }
 
+    // The lock is held briefly across the `repo.user().add(...).await` call
+    // because the rng is a sync `std::sync::Mutex` shared with the repository
+    // helper; this test is single-threaded so the await-while-locked is safe.
+    #[allow(clippy::await_holding_lock)]
     #[tokio::test]
     async fn setup_not_required_after_first_admin_exists() {
         setup();
@@ -87,7 +91,7 @@ mod tests {
         let state = TestState::from_pool_with_site_config(
             pool,
             coauth_data::SiteConfig {
-                bootstrap_admin_token: Some("bootstrap-secret".to_string()),
+                bootstrap_admin_token: Some("bootstrap-secret".to_owned()),
                 ..test_site_config()
             },
         )
@@ -98,7 +102,7 @@ mod tests {
         let mut rng = state.rng.lock().unwrap();
         let user = repo
             .user()
-            .add(&mut *rng, state.clock.as_ref(), "admin".to_string())
+            .add(&mut *rng, state.clock.as_ref(), "admin".to_owned())
             .await
             .unwrap();
         repo.user().set_can_request_admin(user, true).await.unwrap();

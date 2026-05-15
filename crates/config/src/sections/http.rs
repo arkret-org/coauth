@@ -287,7 +287,7 @@ pub struct ListenerConfig {
     /// Network addresses / sockets this listener binds to
     pub binds: Vec<BindConfig>,
 
-    /// Enable HAProxy PROXY protocol v1 on accepted connections
+    /// Enable `HAProxy` PROXY protocol v1 on accepted connections
     #[serde(default)]
     pub proxy_protocol: bool,
 

@@ -84,7 +84,7 @@ pub fn handle_valid(handle: &str) -> bool {
 /// `cx:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
 ///
 /// This is the Move/Anchor/Lattice typed-id surface (spec `wire-ids.md` —
-/// rebased onto UUIDv7 in 2026-05). coauth's internal admin tokens and
+/// rebased onto `UUIDv7` in 2026-05). coauth's internal admin tokens and
 /// personal session ids stay ULID; this helper is for the few admin /
 /// session-grant handler call-sites that consume Contrix wire ids
 /// (`cx:device:<uuid7>`, `cx:space:<uuid7>`, `cx:cell:<family>:<id>`,
@@ -607,7 +607,7 @@ pub async fn load_policy_factory_dynamic_data_continuously(
     load_policy_factory_dynamic_data(&policy_factory, &*repository_factory).await?;
 
     task_tracker.spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        let mut interval = tokio::time::interval(Duration::from_mins(1));
 
         loop {
             tokio::select! {
@@ -661,6 +661,7 @@ pub async fn load_policy_factory_dynamic_data(
 }
 
 /// Create the local principal account facade used by account/profile flows.
+#[must_use] 
 pub fn principal_server_connection_from_config(
     site_config: &SiteConfig,
 ) -> (Arc<dyn PrincipalServerAdmin>, ConnectorRegistry) {

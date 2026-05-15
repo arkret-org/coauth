@@ -105,7 +105,7 @@ impl AccessToken {
     }
 }
 
-/// coauth extension: RefreshTokenState extended with `Revoked` variant and
+/// coauth extension: `RefreshTokenState` extended with `Revoked` variant and
 /// `next_refresh_token_id` tracking (replacing the simple Apache 2.0
 /// `Consumed` state).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

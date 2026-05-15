@@ -109,19 +109,19 @@ pub async fn get_anonymous(
 /// into the SPA configuration.
 pub(crate) fn account_error_to_state(err: &AccountError) -> AppErrorState {
     match err {
-        AccountError::Deactivated { username } => AppErrorState {
+        AccountError::Deactivated { handle } => AppErrorState {
             kind: "account_deactivated".to_owned(),
-            username: Some(username.clone()),
+            handle: Some(handle.clone()),
             description: None,
         },
-        AccountError::Locked { username } => AppErrorState {
+        AccountError::Locked { handle } => AppErrorState {
             kind: "account_locked".to_owned(),
-            username: Some(username.clone()),
+            handle: Some(handle.clone()),
             description: None,
         },
         AccountError::SessionEnded => AppErrorState {
             kind: "session_ended".to_owned(),
-            username: None,
+            handle: None,
             description: None,
         },
     }

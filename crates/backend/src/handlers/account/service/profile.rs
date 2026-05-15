@@ -1,6 +1,6 @@
-use anyhow::{Context as _, Error as AnyhowError};
+use anyhow::Error as AnyhowError;
 use coauth_data::{
-    BoxRepository, Clock, RepositoryAccess, RepositoryError, SiteConfig, User,
+    BoxRepository, Clock, RepositoryAccess, RepositoryError, SiteConfig,
     queue::{DeactivateUserJob, QueueJobRepositoryExt as _},
     user::UserRepository,
 };

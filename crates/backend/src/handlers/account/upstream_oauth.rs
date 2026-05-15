@@ -131,7 +131,7 @@ pub async fn get_link(
         .headers()
         .get(http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
     let url_builder = depot.url_builder()?;
     let site_config = depot.site_config()?;
     let ip_address = extract_bound_activity_tracker(req, depot).ip();
@@ -192,7 +192,7 @@ pub async fn post_link(
         .headers()
         .get(http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
     let mut policy = depot
         .policy_factory()?
         .instantiate()
@@ -483,7 +483,7 @@ fn map_upstream_link_workflow_error(error: UpstreamLinkWorkflowError) -> RouteEr
         | UpstreamLinkWorkflowError::ConflictSetBlocked { .. }
         | UpstreamLinkWorkflowError::PolicyDeniedHandle { .. }
         | UpstreamLinkWorkflowError::HandleUnavailable { .. } => {
-            RouteError::BadRequest(error.to_string().into())
+            RouteError::BadRequest(error.to_string())
         }
         UpstreamLinkWorkflowError::RequiredAttributeEmpty { .. }
         | UpstreamLinkWorkflowError::RequiredAttributeRender { .. }

@@ -290,7 +290,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         limit: usize,
     ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error> {
         let res: SessionGrantCleanupResult = diesel::sql_query(
-            r#"
+            r"
                 WITH to_delete AS (
                     SELECT id, expires_at
                     FROM oauth_session_grants
@@ -306,7 +306,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     RETURNING oauth_session_grants.expires_at
                 )
                 SELECT COUNT(*) as count, MAX(expires_at) as last_ts FROM deleted
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, _>(since)
         .bind::<diesel::sql_types::Timestamptz, _>(until)

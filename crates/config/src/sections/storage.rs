@@ -34,7 +34,7 @@ pub enum StorageConfig {
         root: String,
     },
 
-    /// S3-compatible object storage (AWS S3, Cloudflare R2, MinIO, etc.).
+    /// S3-compatible object storage (AWS S3, Cloudflare R2, `MinIO`, etc.).
     S3 {
         /// S3 bucket name.
         bucket: String,
@@ -59,7 +59,7 @@ pub enum StorageConfig {
         #[serde(default = "default_s3_prefix")]
         prefix: String,
 
-        /// Enable path-style access (required for MinIO).
+        /// Enable path-style access (required for `MinIO`).
         #[serde(default)]
         path_style: bool,
 

@@ -15,7 +15,6 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use thiserror::Error;
 use ulid::Ulid;
-use url::Url;
 
 pub use coauth_admin_types::Resource;
 

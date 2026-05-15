@@ -25,8 +25,8 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            root: "/".to_string(),
-            api_endpoint: "/api/v1".to_string(),
+            root: "/".to_owned(),
+            api_endpoint: "/api/v1".to_owned(),
             error: None,
         }
     }
@@ -95,7 +95,7 @@ fn read_error_from_js(config: &web_sys::wasm_bindgen::JsValue) -> Option<AppErro
         .ok()
         .and_then(|v| v.as_string())?;
 
-    let username = js_sys::Reflect::get(&err, &"username".into())
+    let handle = js_sys::Reflect::get(&err, &"handle".into())
         .ok()
         .and_then(|v| v.as_string());
 
@@ -105,7 +105,7 @@ fn read_error_from_js(config: &web_sys::wasm_bindgen::JsValue) -> Option<AppErro
 
     Some(AppError {
         kind,
-        username,
+        handle,
         description,
     })
 }

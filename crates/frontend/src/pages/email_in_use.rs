@@ -11,9 +11,9 @@ pub fn EmailInUse(id: String) -> Element {
         Layout {
             div { class: "flex flex-col gap-10",
                 PageHeading {
-                    icon: "✉".to_string(),
-                    title: "Email already in use".to_string(),
-                    subtitle: "This email address is already associated with another account.".to_string(),
+                    icon: "✉".to_owned(),
+                    title: "Email already in use".to_owned(),
+                    subtitle: "This email address is already associated with another account.".to_owned(),
                 }
                 Link { class: "btn btn-primary", to: Route::AccountSettings {},
                     "Back to settings"

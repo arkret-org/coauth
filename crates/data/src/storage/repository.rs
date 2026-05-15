@@ -21,9 +21,10 @@ use crate::{
         UpstreamOAuthSessionRepository,
     },
     user::{
-        BrowserSessionRepository, UserEmailRepository, UserPasswordRepository, UserPhoneRepository,
-        UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
-        UserRepository, UserTermsRepository, UserTotpRepository,
+        BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
+        UserPasswordRepository, UserPhoneRepository, UserRecoveryRepository,
+        UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
+        UserTermsRepository, UserTotpRepository,
     },
     workflow::WorkflowRepository,
 };
@@ -166,6 +167,11 @@ pub trait RepositoryAccess: Send {
     /// Get an [`UserTotpRepository`]
     fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c>;
 
+    /// Get a [`PrincipalDidRepository`]
+    fn principal_did<'c>(
+        &'c mut self,
+    ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c>;
+
     /// Get a [`BrowserSessionRepository`]
     fn browser_session<'c>(
         &'c mut self,
@@ -273,9 +279,10 @@ mod impls {
             UpstreamOAuthSessionRepository,
         },
         user::{
-            BrowserSessionRepository, UserEmailRepository, UserPasswordRepository,
-            UserPhoneRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
-            UserRepository, UserTermsRepository, UserTotpRepository,
+            BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
+            UserPasswordRepository, UserPhoneRepository, UserRegistrationRepository,
+            UserRegistrationTokenRepository, UserRepository, UserTermsRepository,
+            UserTotpRepository,
         },
         workflow::WorkflowRepository,
     };
@@ -398,6 +405,12 @@ mod impls {
 
         fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.user_totp(), &mut self.mapper))
+        }
+
+        fn principal_did<'c>(
+            &'c mut self,
+        ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(self.inner.principal_did(), &mut self.mapper))
         }
 
         fn browser_session<'c>(
@@ -593,6 +606,12 @@ mod impls {
 
         fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c> {
             (**self).user_terms()
+        }
+
+        fn principal_did<'c>(
+            &'c mut self,
+        ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c> {
+            (**self).principal_did()
         }
 
         fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {

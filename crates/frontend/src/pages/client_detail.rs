@@ -12,7 +12,7 @@ pub fn ClientDetail(id: String) -> Element {
     let data = use_resource(move || {
         let id = id_clone.clone();
         async move {
-            crate::api::api_get::<OauthClientDetail>(&format!("/oauth-clients/{}", id)).await
+            crate::api::api_get::<OauthClientDetail>(&format!("/oauth-clients/{id}")).await
         }
     });
     let binding = data.read();
@@ -50,7 +50,7 @@ fn ClientDetailView(
 ) -> Element {
     let name = client_name
         .clone()
-        .unwrap_or_else(|| "Unknown client".to_string());
+        .unwrap_or_else(|| "Unknown client".to_owned());
 
     rsx! {
         div { class: "flex flex-col gap-6",

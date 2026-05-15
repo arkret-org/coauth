@@ -1,4 +1,8 @@
 //! SMS transport backends
+//
+// Outbound HTTP here uses raw `reqwest` rather than `outbound_http::send_traced`
+// because the messaging crate doesn't depend on `outbound_http`.
+#![allow(clippy::disallowed_methods)]
 
 use std::sync::{
     Arc,

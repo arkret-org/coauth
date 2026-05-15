@@ -4,7 +4,7 @@ use super::layout::Layout;
 
 #[component]
 pub fn GenericError(message: Option<String>) -> Element {
-    let msg = message.unwrap_or_else(|| "An unexpected error occurred.".to_string());
+    let msg = message.unwrap_or_else(|| "An unexpected error occurred.".to_owned());
 
     rsx! {
         Layout {

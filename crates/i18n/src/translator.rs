@@ -187,7 +187,7 @@ impl Translator {
     /// Example: `"coauth.emails.verify.body_text"` becomes
     /// `"coauth-emails-verify-body-text"`.
     fn key_to_ftl_id(key: &str) -> String {
-        key.replace('.', "-").replace('_', "-")
+        key.replace(['.', '_'], "-")
     }
 
     /// Format a message for the given locale, walking the ICU fallback chain.
@@ -216,7 +216,7 @@ impl Translator {
         loop {
             let candidate = chain.get();
 
-            let candidate_locale = candidate.clone().into_locale();
+            let candidate_locale = (*candidate).into_locale();
             if let Some(result) = self.format_in_bundle(&candidate_locale, &ftl_id, args) {
                 return Some(result);
             }
@@ -325,7 +325,7 @@ impl Translator {
                     break;
                 }
 
-                let current_locale = current.clone().into_locale();
+                let current_locale = (*current).into_locale();
                 if self.has_locale(&current_locale) {
                     return current_locale;
                 }

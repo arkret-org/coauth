@@ -30,7 +30,7 @@ use crate::{
 };
 
 /// Terminate an active OAuth session. If the session is associated with a
-/// user, a device-sync job is enqueued so that downstream PrincipalServers learn
+/// user, a device-sync job is enqueued so that downstream `PrincipalServers` learn
 /// about the revocation promptly.
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.oauth_sessions.finish", skip_all)]

@@ -28,8 +28,8 @@ pub fn preferred_language(req: &Request, depot: &Depot) -> Locale {
             // automatic locale chain (but `zh-TW` → `zh-Hant` does), so we
             // expand it manually here. A full alias table would be a nicer
             // solution but has not been needed beyond this one case.
-            if lang == locale!("zh-CN").into() {
-                vec![lang, locale!("zh-Hans").into()]
+            if lang == locale!("zh-CN") {
+                vec![lang, locale!("zh-Hans")]
             } else {
                 vec![lang]
             }

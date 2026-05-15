@@ -22,7 +22,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 pub use coauth_admin_types::{
-    PaginatedResponse, SelfLinks, SingleResourceMeta, SingleResourceMetaPage, SingleResponse,
+    PaginatedResponse, SingleResponse,
 };
 
 fn url_with_pagination(base: &str, pagination: Pagination) -> String {

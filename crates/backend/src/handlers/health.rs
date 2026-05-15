@@ -24,7 +24,7 @@ pub async fn get(depot: &Depot) -> Result<String, InternalError> {
         .instrument(info_span!("DB health"))
         .await?;
 
-    Ok("ok".to_string())
+    Ok("ok".to_owned())
 }
 
 #[cfg(test)]

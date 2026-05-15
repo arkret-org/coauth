@@ -57,7 +57,7 @@ pub struct AppErrorState {
     pub description: Option<String>,
 }
 
-/// Frontend application configuration serialized as snake_case JSON.
+/// Frontend application configuration serialized as `snake_case` JSON.
 #[derive(Serialize)]
 pub struct AppConfig {
     root: String,

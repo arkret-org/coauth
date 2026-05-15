@@ -133,7 +133,7 @@ impl AppState {
                 if let Err(e) = metadata_cache
                     .warm_up_and_run(
                         &http_client,
-                        std::time::Duration::from_secs(60 * 15),
+                        std::time::Duration::from_mins(15),
                         &mut repo,
                     )
                     .await
@@ -160,14 +160,11 @@ pub async fn inject_app_state(
     ctrl: &mut FlowCtrl,
 ) {
     // The AppState should already be in depot from the router setup
-    let state: AppState = match depot.get::<AppState>("app_state").ok().cloned() {
-        Some(state) => state,
-        None => {
-            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-            res.render(Text::Plain("AppState not found in depot"));
-            ctrl.skip_rest();
-            return;
-        }
+    let state: AppState = if let Some(state) = depot.get::<AppState>("app_state").ok().cloned() { state } else {
+        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+        res.render(Text::Plain("AppState not found in depot"));
+        ctrl.skip_rest();
+        return;
     };
 
     // Inject all components into depot with their type names as keys
@@ -387,13 +384,15 @@ impl DepotExt for Depot {
     }
 }
 
-/// Extract BoxClock from request
+/// Extract `BoxClock` from request
+#[must_use] 
 pub fn extract_clock() -> BoxClock {
     let clock = SystemClock::default();
     Box::new(clock)
 }
 
-/// Extract BoxRng from request
+/// Extract `BoxRng` from request
+#[must_use] 
 pub fn extract_rng() -> BoxRng {
     let rng = rand_chacha::ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed RNG");
     Box::new(rng)
@@ -409,7 +408,7 @@ pub async fn extract_policy(depot: &Depot) -> Result<Policy, coauth_policy::Inst
     policy_factory.instantiate().await
 }
 
-/// Extract BoxRepository from depot
+/// Extract `BoxRepository` from depot
 pub async fn extract_repository(
     depot: &Depot,
 ) -> Result<BoxRepository, coauth_data::RepositoryError> {

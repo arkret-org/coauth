@@ -36,7 +36,7 @@ use crate::{
 ///
 /// This is intentionally separate from the data-model flow types. The flow
 /// engine continues using domain enums from `coauth_data`, while the REST
-/// API exposes a stable schema DTO that can be documented via OpenAPI.
+/// API exposes a stable schema DTO that can be documented via `OpenAPI`.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum IdentificationField {
@@ -504,8 +504,7 @@ pub async fn respond_flow(
     let captcha_verify = http_client.map(|client| {
         let captcha_config = site_config.and_then(|sc| sc.captcha.as_ref());
         let site_hostname = url_builder
-            .map(coauth_data::UrlBuilder::public_hostname)
-            .unwrap_or("localhost");
+            .map_or("localhost", coauth_data::UrlBuilder::public_hostname);
         CaptchaVerifyContext {
             http_client: client,
             captcha_config,

@@ -25,6 +25,7 @@ pub struct NotificationDispatchResult {
 }
 
 /// A standardized outbound notification request.
+#[allow(clippy::large_enum_variant)]
 pub enum NotificationRequest {
     /// Send a verification email to a mailbox.
     EmailVerification {

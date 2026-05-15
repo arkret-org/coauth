@@ -97,7 +97,7 @@ fn SessionEnded() -> Element {
 
 #[component]
 fn GenericServerError(description: Option<String>) -> Element {
-    let msg = description.unwrap_or_else(|| "An unexpected error occurred.".to_string());
+    let msg = description.unwrap_or_else(|| "An unexpected error occurred.".to_owned());
 
     rsx! {
         Layout {
@@ -127,7 +127,6 @@ fn LogoutButton() -> Element {
             class: "btn btn-destructive btn-lg",
             disabled: signing_out(),
             onclick: move |_| {
-                let nav = nav.clone();
                 signing_out.set(true);
                 spawn(async move {
                     // DELETE the current browser session to log out.

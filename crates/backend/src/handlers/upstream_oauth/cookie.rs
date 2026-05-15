@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::salvo_utils::cookies::{CookieJar, TimedCookie, ulid_is_expired};
+use crate::salvo_utils::cookies::{TimedCookie, ulid_is_expired};
 
 /// Sessions expire after 10 minutes.
 fn upstream_session_max_age() -> Duration {

@@ -136,6 +136,7 @@ impl ConfigurationSection for AccountConfig {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::result_large_err)]
     use figment::{
         Figment,
         providers::{Env, Format, Yaml},

@@ -113,6 +113,7 @@ impl SecretsConfig {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::result_large_err)]
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable;
     use figment::{

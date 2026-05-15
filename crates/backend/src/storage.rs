@@ -1,4 +1,4 @@
-//! Storage abstraction layer using OpenDAL.
+//! Storage abstraction layer using `OpenDAL`.
 //!
 //! Provides a global storage operator that supports local filesystem
 //! and S3-compatible object storage backends.
@@ -81,6 +81,7 @@ pub async fn delete(key: &str) -> anyhow::Result<()> {
 }
 
 /// Build the storage key for an avatar file.
+#[must_use] 
 pub fn avatar_key(user_id: &str) -> String {
     format!("avatars/{user_id}")
 }

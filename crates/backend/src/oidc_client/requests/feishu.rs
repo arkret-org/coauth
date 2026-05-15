@@ -3,7 +3,7 @@
 //! Feishu uses a non-standard OAuth flow:
 //! - A separate step is needed to obtain an `app_access_token`
 //! - The token exchange uses `app_access_token` as Bearer auth (not
-//!   client_secret)
+//!   `client_secret`)
 //! - Request bodies are JSON (not form-encoded)
 //! - All responses are wrapped in a `{"code": 0, "msg": "...", "data": {...}}`
 //!   envelope
@@ -17,11 +17,11 @@ use url::Url;
 use super::super::error::{TokenRequestError, UserInfoError};
 use crate::outbound_http::RequestBuilderExt;
 
-/// Feishu (China) app_access_token endpoint.
+/// Feishu (China) `app_access_token` endpoint.
 pub const FEISHU_APP_TOKEN_ENDPOINT: &str =
     "https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal/";
 
-/// Lark (International) app_access_token endpoint.
+/// Lark (International) `app_access_token` endpoint.
 pub const LARK_APP_TOKEN_ENDPOINT: &str =
     "https://open.larksuite.com/open-apis/auth/v3/app_access_token/internal/";
 
@@ -34,7 +34,7 @@ struct Envelope<T> {
     data: Option<T>,
 }
 
-/// Feishu app_access_token response (flat, non-envelope format).
+/// Feishu `app_access_token` response (flat, non-envelope format).
 #[derive(Debug, Deserialize)]
 struct AppAccessTokenResponse {
     code: i32,
@@ -112,7 +112,7 @@ impl FeishuTokenData {
     }
 }
 
-/// Request body for getting app_access_token.
+/// Request body for getting `app_access_token`.
 #[derive(Serialize)]
 struct AppAccessTokenRequest<'a> {
     app_id: &'a str,
@@ -126,7 +126,7 @@ struct CodeExchangeRequest<'a> {
     code: &'a str,
 }
 
-/// Obtain a Feishu/Lark app_access_token using app credentials.
+/// Obtain a Feishu/Lark `app_access_token` using app credentials.
 ///
 /// Use [`FEISHU_APP_TOKEN_ENDPOINT`] for Feishu (China)
 /// or [`LARK_APP_TOKEN_ENDPOINT`] for Lark (International).
@@ -146,8 +146,7 @@ pub async fn get_app_access_token(
         .json(&body)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
@@ -185,8 +184,7 @@ pub async fn request_access_token(
         .json(&body)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
@@ -222,8 +220,7 @@ pub async fn fetch_userinfo(
         .bearer_auth(user_access_token)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 

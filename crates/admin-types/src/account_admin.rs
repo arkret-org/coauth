@@ -40,13 +40,16 @@ use crate::did_binding_admin::AccountDidBindingPreview;
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum AdminAccountStatus {
+    #[default]
     Active,
     Locked,
     Disabled,
 }
 
 impl AdminAccountStatus {
+    #[must_use] 
     pub fn label(&self) -> &'static str {
         match self {
             AdminAccountStatus::Active => "Active",
@@ -55,6 +58,7 @@ impl AdminAccountStatus {
         }
     }
 
+    #[must_use] 
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "active" => Some(AdminAccountStatus::Active),
@@ -64,27 +68,22 @@ impl AdminAccountStatus {
         }
     }
 
+    #[must_use] 
     pub fn is_locked(&self) -> bool {
         matches!(self, AdminAccountStatus::Locked)
     }
 
+    #[must_use] 
     pub fn is_disabled(&self) -> bool {
         matches!(self, AdminAccountStatus::Disabled)
     }
 
+    #[must_use] 
     pub fn is_active(&self) -> bool {
         matches!(self, AdminAccountStatus::Active)
     }
 }
 
-impl Default for AdminAccountStatus {
-    fn default() -> Self {
-        // Default to Active so a missing/garbage status string does not
-        // accidentally lock or disable the displayed badge — the backend
-        // always emits an explicit value.
-        AdminAccountStatus::Active
-    }
-}
 
 impl std::fmt::Display for AdminAccountStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -100,7 +99,7 @@ impl std::fmt::Display for AdminAccountStatus {
 ///
 /// Field order mirrors `AccountRecord` in
 /// `coauth/crates/backend/src/handlers/admin/v1/accounts.rs` so the
-/// generated OpenAPI document and the sodmin client decoder stay in
+/// generated `OpenAPI` document and the sodmin client decoder stay in
 /// lock-step. The `id` is intentionally NOT here — it lives on the
 /// JSON:API envelope (`SingleResource::id`).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -171,6 +170,7 @@ impl AdminAccountAttributes {
     /// explicit `primary_principal_did` and falls back to the first
     /// entry in `principal_dids` so callers do not have to repeat that
     /// fallback at every call site.
+    #[must_use] 
     pub fn effective_primary_did(&self) -> Option<&str> {
         self.primary_principal_did
             .as_deref()

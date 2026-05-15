@@ -201,7 +201,7 @@ impl InsertableJob for ProcessNotificationDeliveriesJob {
     const QUEUE_NAME: &'static str = "process-notification-deliveries";
 }
 
-/// A job to provision the user on the PrincipalServer.
+/// A job to provision the user on the `PrincipalServer`.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProvisionUserJob {
     user_id: Ulid,
@@ -213,7 +213,7 @@ pub struct ProvisionUserJob {
 }
 
 impl ProvisionUserJob {
-    /// Create a new job to provision the user on the PrincipalServer.
+    /// Create a new job to provision the user on the `PrincipalServer`.
     #[must_use]
     pub fn new(user: &User) -> Self {
         Self {
@@ -249,7 +249,7 @@ impl ProvisionUserJob {
         self
     }
 
-    /// Mark the user as an admin on the PrincipalServer.
+    /// Mark the user as an admin on the `PrincipalServer`.
     #[must_use]
     pub fn set_admin(mut self) -> Self {
         self.admin = true;
@@ -268,7 +268,7 @@ impl ProvisionUserJob {
         self.set_avatar_url.as_deref()
     }
 
-    /// Whether the user should be made admin on the PrincipalServer.
+    /// Whether the user should be made admin on the `PrincipalServer`.
     #[must_use]
     pub fn is_admin(&self) -> bool {
         self.admin
@@ -285,7 +285,7 @@ impl InsertableJob for ProvisionUserJob {
     const QUEUE_NAME: &'static str = "provision-user";
 }
 
-/// A job which syncs the list of devices of a user with the PrincipalServer
+/// A job which syncs the list of devices of a user with the `PrincipalServer`
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SyncDevicesJob {
     user_id: Ulid,
@@ -293,14 +293,14 @@ pub struct SyncDevicesJob {
 
 impl SyncDevicesJob {
     /// Create a new job to sync the list of devices of a user with the
-    /// PrincipalServer
+    /// `PrincipalServer`
     #[must_use]
     pub fn new(user: &User) -> Self {
         Self { user_id: user.id }
     }
 
     /// Create a new job to sync the list of devices of a user with the
-    /// PrincipalServer for the given user ID
+    /// `PrincipalServer` for the given user ID
     ///
     /// This is useful to use in cases where the [`User`] object isn't loaded
     #[must_use]
@@ -332,7 +332,7 @@ impl DeactivateUserJob {
     /// # Parameters
     ///
     /// * `user` - The user to deactivate
-    /// * `principal_erase` - Whether to erase the user from the PrincipalServer
+    /// * `principal_erase` - Whether to erase the user from the `PrincipalServer`
     #[must_use]
     pub fn new(user: &User, principal_erase: bool) -> Self {
         Self {
@@ -347,7 +347,7 @@ impl DeactivateUserJob {
         self.user_id
     }
 
-    /// Whether to erase the user from the PrincipalServer
+    /// Whether to erase the user from the `PrincipalServer`
     #[must_use]
     pub fn principal_erase(&self) -> bool {
         self.principal_erase

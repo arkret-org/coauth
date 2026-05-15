@@ -53,8 +53,8 @@ impl<T: AsyncRead + Unpin> AsyncRead for BufferedStream<T> {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        if let Some(mut prefix) = self.prefix.take() {
-            if !prefix.is_empty() {
+        if let Some(mut prefix) = self.prefix.take()
+            && !prefix.is_empty() {
                 let n = cmp::min(prefix.len(), buf.remaining());
                 buf.put_slice(&prefix[..n]);
                 prefix.advance(n);
@@ -63,7 +63,6 @@ impl<T: AsyncRead + Unpin> AsyncRead for BufferedStream<T> {
                 }
                 return Poll::Ready(Ok(()));
             }
-        }
         Pin::new(&mut self.inner).poll_read(cx, buf)
     }
 }

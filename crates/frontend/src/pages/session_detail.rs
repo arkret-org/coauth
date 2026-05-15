@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::{
     api::types::{DeviceType, Session},
     components::{
-        last_active::LastActive, layout::Layout, loading::LoadingScreen, session_card::*,
+        last_active::LastActive, layout::Layout, loading::LoadingScreen, session_card::{SessionCardHeader, SessionCardName, SessionCardMetadata, SessionCardInfo, SessionCardClient},
     },
     utils::format_date,
 };
@@ -13,7 +13,7 @@ pub fn SessionDetail(id: String) -> Element {
     let id_clone = id.clone();
     let data = use_resource(move || {
         let id = id_clone.clone();
-        async move { crate::api::api_get::<Session>(&format!("/sessions/{}", id)).await }
+        async move { crate::api::api_get::<Session>(&format!("/sessions/{id}")).await }
     });
     let binding = data.read();
 
@@ -39,13 +39,12 @@ fn SessionDetailView(node: Session) -> Element {
             let device_type = session
                 .user_agent
                 .as_ref()
-                .map(|ua| ua.device_type.clone())
-                .unwrap_or(DeviceType::Unknown);
+                .map_or(DeviceType::Unknown, |ua| ua.device_type.clone());
             let name = session
                 .display_name
                 .clone()
                 .or_else(|| session.user_agent.as_ref().and_then(|ua| ua.name.clone()))
-                .unwrap_or_else(|| "Unknown session".to_string());
+                .unwrap_or_else(|| "Unknown session".to_owned());
             let session_id = session.id.clone();
             let created_at = session.created_at.clone();
             let last_active_at = session.last_active_at.clone();
@@ -64,32 +63,32 @@ fn SessionDetailView(node: Session) -> Element {
                     }
                     SessionCardMetadata {
                         if let Some(ref created) = created_at {
-                            SessionCardInfo { label: "Created".to_string(),
+                            SessionCardInfo { label: "Created".to_owned(),
                                 span { "{format_date(created)}" }
                             }
                         }
                         if let Some(ref last_active) = last_active_at {
-                            SessionCardInfo { label: "Last active".to_string(),
+                            SessionCardInfo { label: "Last active".to_owned(),
                                 LastActive { datetime: last_active.clone() }
                             }
                         }
                         if let Some(ref ip) = last_active_ip {
-                            SessionCardInfo { label: "IP address".to_string(),
+                            SessionCardInfo { label: "IP address".to_owned(),
                                 span { "{ip}" }
                             }
                         }
                         if let Some(ref os_name) = os {
-                            SessionCardInfo { label: "OS".to_string(),
+                            SessionCardInfo { label: "OS".to_owned(),
                                 span { "{os_name}" }
                             }
                         }
                         if let Some(ref browser_name) = browser {
-                            SessionCardInfo { label: "Browser".to_string(),
+                            SessionCardInfo { label: "Browser".to_owned(),
                                 span { "{browser_name}" }
                             }
                         }
                         if let Some(ref auth_at) = last_auth {
-                            SessionCardInfo { label: "Last authenticated".to_string(),
+                            SessionCardInfo { label: "Last authenticated".to_owned(),
                                 span { "{format_date(auth_at)}" }
                             }
                         }
@@ -105,13 +104,12 @@ fn SessionDetailView(node: Session) -> Element {
             let device_type = session
                 .user_agent
                 .as_ref()
-                .map(|ua| ua.device_type.clone())
-                .unwrap_or(DeviceType::Unknown);
+                .map_or(DeviceType::Unknown, |ua| ua.device_type.clone());
             let name = session
                 .display_name
                 .clone()
                 .or_else(|| session.client.as_ref().and_then(|c| c.client_name.clone()))
-                .unwrap_or_else(|| "Unknown app".to_string());
+                .unwrap_or_else(|| "Unknown app".to_owned());
             let session_id = session.id.clone();
             let client_name = session.client.as_ref().and_then(|c| c.client_name.clone());
             let logo_uri = session.client.as_ref().and_then(|c| c.logo_uri.clone());
@@ -140,22 +138,22 @@ fn SessionDetailView(node: Session) -> Element {
                     }
                     SessionCardMetadata {
                         if let Some(ref s) = scope {
-                            SessionCardInfo { label: "Scope".to_string(),
+                            SessionCardInfo { label: "Scope".to_owned(),
                                 span { "{s}" }
                             }
                         }
                         if let Some(ref created) = created_at {
-                            SessionCardInfo { label: "Created".to_string(),
+                            SessionCardInfo { label: "Created".to_owned(),
                                 span { "{format_date(created)}" }
                             }
                         }
                         if let Some(ref last_active) = last_active_at {
-                            SessionCardInfo { label: "Last active".to_string(),
+                            SessionCardInfo { label: "Last active".to_owned(),
                                 LastActive { datetime: last_active.clone() }
                             }
                         }
                         if let Some(ref ip) = last_active_ip {
-                            SessionCardInfo { label: "IP address".to_string(),
+                            SessionCardInfo { label: "IP address".to_owned(),
                                 span { "{ip}" }
                             }
                         }
@@ -236,7 +234,7 @@ fn EditSessionName(
                                 error_msg.set(None);
                                 spawn(async move {
                                     let path = match st {
-                                        EditableSessionType::Oauth => format!("/oauth-sessions/{}/name", sid),
+                                        EditableSessionType::Oauth => format!("/oauth-sessions/{sid}/name"),
                                     };
                                     let result = crate::api::api_put::<serde_json::Value>(
                                         &path,
@@ -310,11 +308,10 @@ fn EndSessionButton(session_id: String, session_type: SessionType) -> Element {
                 let sid = sid.clone();
                 let st = st.clone();
                 ending.set(true);
-                let nav = nav.clone();
                 spawn(async move {
                     let path = match st {
-                        SessionType::Browser => format!("/browser-sessions/{}", sid),
-                        SessionType::Oauth => format!("/oauth-sessions/{}", sid),
+                        SessionType::Browser => format!("/browser-sessions/{sid}"),
+                        SessionType::Oauth => format!("/oauth-sessions/{sid}"),
                     };
                     let _ = crate::api::api_delete::<serde_json::Value>(
                         &path,

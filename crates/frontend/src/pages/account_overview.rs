@@ -66,9 +66,9 @@ pub fn AccountOverview() -> Element {
         None => "badge badge-neutral",
     };
     let workflow_badge_label = match pending_count {
-        Some(0) => "No pending workflows".to_string(),
+        Some(0) => "No pending workflows".to_owned(),
         Some(count) => format!("{count} workflow(s) pending"),
-        None => "Workflow status unavailable".to_string(),
+        None => "Workflow status unavailable".to_owned(),
     };
     let workflow_title = match pending_count {
         Some(0) => "No workflows waiting",
@@ -76,9 +76,9 @@ pub fn AccountOverview() -> Element {
         None => "Workflow visibility degraded",
     };
     let workflow_message = match pending_count {
-        Some(0) => "Everything looks clear right now. You can stay focused on profile and security hygiene.".to_string(),
+        Some(0) => "Everything looks clear right now. You can stay focused on profile and security hygiene.".to_owned(),
         Some(count) => format!("{count} workflow(s) still need attention. Review them before they expire or block follow-up actions."),
-        None => "The workflow inbox could not be loaded. You can still open it directly and retry from there.".to_string(),
+        None => "The workflow inbox could not be loaded. You can still open it directly and retry from there.".to_owned(),
     };
     rsx! {
         div { class: "overview-shell",
@@ -111,11 +111,11 @@ pub fn AccountOverview() -> Element {
             div { class: "overview-stat-grid",
                 OverviewStatCard {
                     title: "Password",
-                    value: password_label.to_string(),
+                    value: password_label.to_owned(),
                     note: if summary.has_password {
-                        "Password login is available for this account.".to_string()
+                        "Password login is available for this account.".to_owned()
                     } else {
-                        "Add a password to reduce recovery friction and speed up sign-in.".to_string()
+                        "Add a password to reduce recovery friction and speed up sign-in.".to_owned()
                     },
                     action_label: "Open security",
                     action_to: Route::SecurityCenter {},
@@ -124,7 +124,7 @@ pub fn AccountOverview() -> Element {
                 OverviewStatCard {
                     title: "Active sessions",
                     value: summary.active_sessions_count.to_string(),
-                    note: "Browser and app sessions currently recognized as active.".to_string(),
+                    note: "Browser and app sessions currently recognized as active.".to_owned(),
                     action_label: "Manage sessions",
                     action_to: Route::Sessions {},
                     tone_class: "tone-neutral",
@@ -132,7 +132,7 @@ pub fn AccountOverview() -> Element {
                 OverviewStatCard {
                     title: "Linked identities",
                     value: summary.linked_providers_count.to_string(),
-                    note: "Connected upstream identity providers available for sign-in.".to_string(),
+                    note: "Connected upstream identity providers available for sign-in.".to_owned(),
                     action_label: "Review identities",
                     action_to: Route::IdentityBindings {},
                     tone_class: "tone-neutral",

@@ -92,7 +92,7 @@ impl TryFrom<AppSessionLookup> for AppSession {
     }
 }
 
-/// Apply the [`AppSessionFilter`] to a boxed select query on oauth_sessions.
+/// Apply the [`AppSessionFilter`] to a boxed select query on `oauth_sessions`.
 macro_rules! apply_app_session_filter {
     ($query:expr, $filter:expr) => {{
         let mut query = $query;
@@ -235,8 +235,7 @@ impl AppSessionRepository for PgAppSessionRepository<'_> {
 mod tests {
     use chrono::Duration;
     use coauth_data::{
-        Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
-        RepositoryTransaction as _,
+        Pagination, RepositoryAccess as _, RepositoryFactory as _,
         app_session::{AppSession, AppSessionFilter},
         clock::MockClock,
         oauth::OAuthSessionRepository,

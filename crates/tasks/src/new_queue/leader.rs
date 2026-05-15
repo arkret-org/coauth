@@ -241,6 +241,8 @@ pub(super) async fn run_leader_duties(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)]
+
     use chrono::Utc;
     use coauth_data::queue::ScheduleStatus;
 
@@ -260,12 +262,12 @@ mod tests {
         let schedules = vec![schedule("alpha"), schedule("beta"), schedule("gamma")];
         let statuses = vec![
             ScheduleStatus {
-                schedule_name: "alpha".to_string(),
+                schedule_name: "alpha".to_owned(),
                 last_scheduled_at: Some(Utc::now()),
                 last_scheduled_job_completed: Some(true),
             },
             ScheduleStatus {
-                schedule_name: "gamma".to_string(),
+                schedule_name: "gamma".to_owned(),
                 last_scheduled_at: None,
                 last_scheduled_job_completed: None,
             },

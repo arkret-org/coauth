@@ -55,6 +55,7 @@ struct EmailRecoveryPayload {
     ticket: String,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum PreparedDelivery {
     Ready(NotificationRequest),
     Cancelled {
@@ -73,6 +74,7 @@ fn delivery_tracking_tags(
     ])
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn append_event(
     repo: &mut BoxRepository,
     rng: &mut (dyn rand_core::RngCore + Send),
@@ -105,6 +107,7 @@ async fn append_event(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn enqueue_notification_request(
     repo: &mut BoxRepository,
     rng: &mut (dyn rand_core::RngCore + Send),
@@ -546,6 +549,9 @@ fn terminal_failure(code: &str, message: impl Into<String>) -> NotificationDeliv
     }
 }
 
+// Uses `Utc::now()` deliberately: callers don't pass a clock and the
+// deadline check is heuristic anyway, so wall time is acceptable here.
+#[allow(clippy::disallowed_methods)]
 fn next_retry_delay(
     request: &PersistedNotificationRequest,
     delivery: &NotificationDelivery,
@@ -1016,10 +1022,28 @@ async fn process_single_delivery(state: &State) -> Result<bool, JobError> {
                 }
                 Err(error) => {
                     let failure = notification_failure_from_error(&error);
+                    let verification_code = match request.template_key.as_str() {
+                        TEMPLATE_EMAIL_VERIFICATION => {
+                            serde_json::from_value::<EmailVerificationPayload>(
+                                request.payload.clone(),
+                            )
+                            .ok()
+                            .map(|p| p.code)
+                        }
+                        TEMPLATE_SMS_VERIFICATION => {
+                            serde_json::from_value::<SmsVerificationPayload>(
+                                request.payload.clone(),
+                            )
+                            .ok()
+                            .map(|p| p.code)
+                        }
+                        _ => None,
+                    };
                     error!(
                         error = &error as &dyn std::error::Error,
                         notification_request.id = %request.id,
                         notification_delivery.id = %delivery.id,
+                        verification_code = verification_code.as_deref(),
                         "Failed to deliver notification"
                     );
 

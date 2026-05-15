@@ -174,14 +174,11 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
     let account_id =
         resolve_account_id_for_issue(&mut repo, depot, body.account_id, &subject).await?;
 
-    let issuer = match body.issuer {
-        Some(value) => require_non_empty(value, "issuer")?,
-        None => {
-            let url_builder = depot.url_builder()?;
-            let contrix_config = depot.contrix_config()?;
-            let did_resolver = depot.did_resolver_service()?;
-            did_resolver.issuer_did(&url_builder, &contrix_config)
-        }
+    let issuer = if let Some(value) = body.issuer { require_non_empty(value, "issuer")? } else {
+        let url_builder = depot.url_builder()?;
+        let contrix_config = depot.contrix_config()?;
+        let did_resolver = depot.did_resolver_service()?;
+        did_resolver.issuer_did(&url_builder, &contrix_config)
     };
 
     let claim_service = depot.account_claims_service()?;

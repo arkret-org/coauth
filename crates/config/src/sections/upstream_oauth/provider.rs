@@ -44,16 +44,16 @@ pub enum TokenAuthMethod {
     /// `none`: No client authentication
     None,
 
-    /// `client_secret_basic`: HTTP Basic auth with client_id and client_secret
+    /// `client_secret_basic`: HTTP Basic auth with `client_id` and `client_secret`
     ClientSecretBasic,
 
-    /// `client_secret_post`: client_id and client_secret in the POST body
+    /// `client_secret_post`: `client_id` and `client_secret` in the POST body
     ClientSecretPost,
 
-    /// `client_secret_jwt`: signed client_assertion using the client_secret
+    /// `client_secret_jwt`: signed `client_assertion` using the `client_secret`
     ClientSecretJwt,
 
-    /// `private_key_jwt`: signed client_assertion using an asymmetric key
+    /// `private_key_jwt`: signed `client_assertion` using an asymmetric key
     PrivateKeyJwt,
 
     /// `sign_in_with_apple`: Apple-specific authentication flow
@@ -68,13 +68,13 @@ pub enum TokenAuthMethod {
     /// `lark`: Lark (international Feishu) OAuth flow
     Lark,
 
-    /// `dingtalk`: DingTalk OAuth flow
+    /// `dingtalk`: `DingTalk` OAuth flow
     DingTalk,
 
-    /// `wechat`: WeChat Open Platform OAuth flow
+    /// `wechat`: `WeChat` Open Platform OAuth flow
     WeChat,
 
-    /// `wecom`: WeCom (Enterprise WeChat) OAuth flow
+    /// `wecom`: `WeCom` (Enterprise `WeChat`) OAuth flow
     WeCom,
 }
 

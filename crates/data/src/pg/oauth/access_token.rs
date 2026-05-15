@@ -234,7 +234,7 @@ impl coauth_data::oauth::OAuthAccessTokenRepository for PgOAuthAccessTokenReposi
         let limit_i64 = i64::try_from(limit).unwrap_or(i64::MAX);
 
         let res: CleanupResult = diesel::sql_query(
-            r#"
+            r"
                 WITH
                     to_delete AS (
                         SELECT id
@@ -258,7 +258,7 @@ impl coauth_data::oauth::OAuthAccessTokenRepository for PgOAuthAccessTokenReposi
                     COUNT(*) as count,
                     MAX(revoked_at) as last_ts
                 FROM deleted
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, _>(since)
         .bind::<diesel::sql_types::Timestamptz, _>(until)
@@ -288,7 +288,7 @@ impl coauth_data::oauth::OAuthAccessTokenRepository for PgOAuthAccessTokenReposi
         let limit_i64 = i64::try_from(limit).unwrap_or(i64::MAX);
 
         let res: CleanupResult = diesel::sql_query(
-            r#"
+            r"
                 WITH
                     to_delete AS (
                         SELECT id
@@ -312,7 +312,7 @@ impl coauth_data::oauth::OAuthAccessTokenRepository for PgOAuthAccessTokenReposi
                     COUNT(*) as count,
                     MAX(expires_at) as last_ts
                 FROM deleted
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, _>(since)
         .bind::<diesel::sql_types::Timestamptz, _>(until)

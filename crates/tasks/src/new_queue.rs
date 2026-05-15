@@ -254,10 +254,7 @@ impl QueueWorker {
         }
 
         self.am_i_leader = leader;
-        match leader {
-            true => tracing::info!("I'm the leader now"),
-            false => tracing::warn!("I am no longer the leader"),
-        }
+        if leader { tracing::info!("I'm the leader now") } else { tracing::warn!("I am no longer the leader") }
     }
 
     /// Leader-only duties: evaluate cron schedules, clean up dead workers,

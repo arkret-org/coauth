@@ -124,6 +124,7 @@ pub struct StartedPasswordRegistration {
     pub phone_verified: bool,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum BeginPasswordRegistrationResult {
     Started(StartedPasswordRegistration),
     Rejected {
@@ -404,6 +405,7 @@ pub enum LoadRegistrationProgressError {
 }
 
 #[derive(Debug, Error)]
+#[allow(clippy::large_enum_variant)]
 pub enum LoadRegistrationEmailStepError {
     #[error("registration not found")]
     NotFound,
@@ -425,6 +427,7 @@ pub enum LoadRegistrationEmailStepError {
 }
 
 #[derive(Debug, Error)]
+#[allow(clippy::large_enum_variant)]
 pub enum LoadRegistrationDisplayNameStepError {
     #[error("registration not found")]
     NotFound,
@@ -634,6 +637,7 @@ pub enum RegistrationDisplayNameWorkflowError {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum RegistrationFinishOutcome {
     Completed(CompletedRegistration),
     Rejected { error: &'static str },
@@ -1656,8 +1660,8 @@ pub async fn submit_registration_email_code(
         Ok(progress) => Ok(RegistrationVerificationOutcome::Advanced {
             next_step: progress.next_step(),
         }),
-        Err(VerifyRegistrationEmailCodeError::NotFound)
-        | Err(VerifyRegistrationEmailCodeError::EmailAuthenticationMissing) => {
+        Err(VerifyRegistrationEmailCodeError::NotFound |
+VerifyRegistrationEmailCodeError::EmailAuthenticationMissing) => {
             Err(RegistrationVerificationError::NotFound)
         }
         Err(VerifyRegistrationEmailCodeError::NoEmailAuthentication) => {
@@ -1692,8 +1696,8 @@ pub async fn submit_registration_phone_code(
         Ok(progress) => Ok(RegistrationVerificationOutcome::Advanced {
             next_step: progress.next_step(),
         }),
-        Err(VerifyRegistrationPhoneCodeError::NotFound)
-        | Err(VerifyRegistrationPhoneCodeError::PhoneAuthenticationMissing) => {
+        Err(VerifyRegistrationPhoneCodeError::NotFound |
+VerifyRegistrationPhoneCodeError::PhoneAuthenticationMissing) => {
             Err(RegistrationVerificationError::NotFound)
         }
         Err(VerifyRegistrationPhoneCodeError::NoPhoneAuthentication) => {

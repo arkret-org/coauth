@@ -43,6 +43,7 @@ pub struct Requester {
 }
 
 impl Requester {
+    #[must_use] 
     pub fn fingerprint(&self) -> RequesterFingerprint {
         if let Some(ip) = self.ip_address {
             RequesterFingerprint::new(ip)
@@ -73,6 +74,7 @@ pub enum RequestingEntity {
 }
 
 impl RequestingEntity {
+    #[must_use] 
     pub fn browser_session(&self) -> Option<&BrowserSession> {
         match self {
             Self::BrowserSession(session) => Some(session),
@@ -80,6 +82,7 @@ impl RequestingEntity {
         }
     }
 
+    #[must_use] 
     pub fn user(&self) -> Option<&User> {
         match self {
             Self::BrowserSession(session) => Some(&session.user),
@@ -88,6 +91,7 @@ impl RequestingEntity {
         }
     }
 
+    #[must_use] 
     pub fn oauth_session(&self) -> Option<&Session> {
         match self {
             Self::OAuthSession(tuple) => Some(&tuple.0),
@@ -95,6 +99,7 @@ impl RequestingEntity {
         }
     }
 
+    #[must_use] 
     pub fn is_owner_or_admin(&self, owner_id: Option<Ulid>) -> bool {
         if self.is_admin() {
             return true;
@@ -108,6 +113,7 @@ impl RequestingEntity {
         user.id == owner_id
     }
 
+    #[must_use] 
     pub fn is_admin(&self) -> bool {
         match self {
             Self::OAuthSession(tuple) => crate::handlers::admin::has_admin_scope(&tuple.0.scope),
@@ -115,6 +121,7 @@ impl RequestingEntity {
         }
     }
 
+    #[must_use] 
     pub fn is_unauthenticated(&self) -> bool {
         matches!(self, Self::Anonymous)
     }
@@ -192,7 +199,7 @@ impl salvo::oapi::EndpointOutRegister for RouteError {
         _components: &mut salvo::oapi::Components,
         _operation: &mut salvo::oapi::Operation,
     ) {
-        use salvo::oapi::*;
+        use salvo::oapi::{Object, BasicType, Response, Content};
 
         let error_schema = Object::new()
             .property("error", Object::new().schema_type(BasicType::String))
@@ -271,8 +278,7 @@ pub trait DepotExt {
 
 fn depot_get<T: Send + Sync + Clone + 'static>(depot: &Depot, key: &str) -> Result<T, RouteError> {
     depot.get::<T>(key).cloned().map_err(|_| {
-        RouteError::Internal(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        RouteError::Internal(Box::new(std::io::Error::other(
             format!("{key} not found in depot"),
         )))
     })
@@ -282,8 +288,7 @@ impl DepotExt for Depot {
     fn repo_factory(&self) -> Result<&BoxRepositoryFactory, RouteError> {
         self.get::<BoxRepositoryFactory>("box_repository_factory")
             .map_err(|_| {
-                RouteError::Internal(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                RouteError::Internal(Box::new(std::io::Error::other(
                     "box_repository_factory not found in depot",
                 )))
             })
@@ -416,10 +421,12 @@ impl DepotExt for Depot {
     }
 }
 
+#[must_use] 
 pub fn make_clock() -> BoxClock {
     Box::new(SystemClock::default())
 }
 
+#[must_use] 
 pub fn make_rng() -> BoxRng {
     let rng = ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng");
     Box::new(rng)
@@ -435,6 +442,7 @@ pub struct UserAgentInfo {
     pub device_type: &'static str,
 }
 
+#[must_use] 
 pub fn parse_user_agent(ua: &str) -> UserAgentInfo {
     let parsed = woothee::parser::Parser::new().parse(ua);
     let (name, os, category) = match parsed {
@@ -478,8 +486,7 @@ pub fn extract_bound_activity_tracker(req: &Request, depot: &Depot) -> BoundActi
 
     let trusted_proxies = depot
         .get::<Vec<ipnetwork::IpNetwork>>("trusted_proxies")
-        .map(|v| v.as_slice())
-        .unwrap_or(&[]);
+        .map_or(&[][..], std::vec::Vec::as_slice);
 
     let ip = infer_client_ip(req, trusted_proxies);
     activity_tracker.bind(ip)

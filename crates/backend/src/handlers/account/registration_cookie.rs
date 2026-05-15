@@ -41,6 +41,7 @@ impl UserRegistrationSessions {
     }
 
     /// Returns true if the cookie is empty
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -74,17 +75,21 @@ impl UserRegistrationSessions {
     }
 
     /// Add a new session, for a provider and a random state
+    #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn add(mut self, user_registration: &UserRegistration) -> Self {
         self.0.insert(user_registration.id);
         self
     }
 
     /// Check if the session is in the list
+    #[must_use] 
     pub fn contains(&self, user_registration: &UserRegistration) -> bool {
         self.0.contains(&user_registration.id)
     }
 
     /// Check if the session is in the list by registration ID
+    #[must_use] 
     pub fn contains_id(&self, user_registration_id: Ulid) -> bool {
         self.0.contains(&user_registration_id)
     }

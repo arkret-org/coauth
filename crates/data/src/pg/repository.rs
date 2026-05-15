@@ -19,9 +19,10 @@ use coauth_data::{
         UpstreamOAuthSessionRepository,
     },
     user::{
-        BrowserSessionRepository, UserEmailRepository, UserPasswordRepository, UserPhoneRepository,
-        UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
-        UserRepository, UserTermsRepository, UserTotpRepository,
+        BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
+        UserPasswordRepository, UserPhoneRepository, UserRecoveryRepository,
+        UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
+        UserTermsRepository, UserTotpRepository,
     },
     workflow::WorkflowRepository,
 };
@@ -55,10 +56,10 @@ use crate::{
         PgUpstreamOAuthSessionRepository,
     },
     user::{
-        PgBrowserSessionRepository, PgUserEmailRepository, PgUserPasswordRepository,
-        PgUserPhoneRepository, PgUserRecoveryRepository, PgUserRegistrationRepository,
-        PgUserRegistrationTokenRepository, PgUserRepository, PgUserTermsRepository,
-        PgUserTotpRepository,
+        PgBrowserSessionRepository, PgPrincipalDidRepository, PgUserEmailRepository,
+        PgUserPasswordRepository, PgUserPhoneRepository, PgUserRecoveryRepository,
+        PgUserRegistrationRepository, PgUserRegistrationTokenRepository, PgUserRepository,
+        PgUserTermsRepository, PgUserTotpRepository,
     },
     workflow::PgWorkflowRepository,
 };
@@ -186,169 +187,175 @@ impl RepositoryAccess for PgRepository {
     type Error = DatabaseError;
 
     fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAccountRepository::new(&mut *self.conn))
+        Box::new(PgAccountRepository::new(&mut self.conn))
     }
 
     fn upstream_oauth_link<'c>(
         &'c mut self,
     ) -> Box<dyn UpstreamOAuthLinkRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUpstreamOAuthLinkRepository::new(&mut *self.conn))
+        Box::new(PgUpstreamOAuthLinkRepository::new(&mut self.conn))
     }
 
     fn upstream_oauth_provider<'c>(
         &'c mut self,
     ) -> Box<dyn UpstreamOAuthProviderRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUpstreamOAuthProviderRepository::new(&mut *self.conn))
+        Box::new(PgUpstreamOAuthProviderRepository::new(&mut self.conn))
     }
 
     fn upstream_oauth_session<'c>(
         &'c mut self,
     ) -> Box<dyn UpstreamOAuthSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUpstreamOAuthSessionRepository::new(&mut *self.conn))
+        Box::new(PgUpstreamOAuthSessionRepository::new(&mut self.conn))
     }
 
     fn user<'c>(&'c mut self) -> Box<dyn UserRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserRepository::new(&mut *self.conn))
+        Box::new(PgUserRepository::new(&mut self.conn))
     }
 
     fn user_email<'c>(&'c mut self) -> Box<dyn UserEmailRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserEmailRepository::new(&mut *self.conn))
+        Box::new(PgUserEmailRepository::new(&mut self.conn))
     }
 
     fn user_phone<'c>(&'c mut self) -> Box<dyn UserPhoneRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserPhoneRepository::new(&mut *self.conn))
+        Box::new(PgUserPhoneRepository::new(&mut self.conn))
     }
 
     fn user_password<'c>(
         &'c mut self,
     ) -> Box<dyn UserPasswordRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserPasswordRepository::new(&mut *self.conn))
+        Box::new(PgUserPasswordRepository::new(&mut self.conn))
     }
 
     fn user_recovery<'c>(
         &'c mut self,
     ) -> Box<dyn UserRecoveryRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserRecoveryRepository::new(&mut *self.conn))
+        Box::new(PgUserRecoveryRepository::new(&mut self.conn))
     }
 
     fn user_terms<'c>(&'c mut self) -> Box<dyn UserTermsRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserTermsRepository::new(&mut *self.conn))
+        Box::new(PgUserTermsRepository::new(&mut self.conn))
     }
 
     fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserTotpRepository::new(&mut *self.conn))
+        Box::new(PgUserTotpRepository::new(&mut self.conn))
+    }
+
+    fn principal_did<'c>(
+        &'c mut self,
+    ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c> {
+        Box::new(PgPrincipalDidRepository::new(&mut self.conn))
     }
 
     fn user_registration<'c>(
         &'c mut self,
     ) -> Box<dyn UserRegistrationRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserRegistrationRepository::new(&mut *self.conn))
+        Box::new(PgUserRegistrationRepository::new(&mut self.conn))
     }
 
     fn user_registration_token<'c>(
         &'c mut self,
     ) -> Box<dyn UserRegistrationTokenRepository<Error = Self::Error> + 'c> {
-        Box::new(PgUserRegistrationTokenRepository::new(&mut *self.conn))
+        Box::new(PgUserRegistrationTokenRepository::new(&mut self.conn))
     }
 
     fn browser_session<'c>(
         &'c mut self,
     ) -> Box<dyn BrowserSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgBrowserSessionRepository::new(&mut *self.conn))
+        Box::new(PgBrowserSessionRepository::new(&mut self.conn))
     }
 
     fn app_session<'c>(&'c mut self) -> Box<dyn AppSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAppSessionRepository::new(&mut *self.conn))
+        Box::new(PgAppSessionRepository::new(&mut self.conn))
     }
 
     fn audit<'c>(&'c mut self) -> Box<dyn AuditRepository<Error = Self::Error> + 'c> {
-        Box::new(PgAuditRepository::new(&mut *self.conn))
+        Box::new(PgAuditRepository::new(&mut self.conn))
     }
 
     fn notification<'c>(&'c mut self) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c> {
-        Box::new(PgNotificationRepository::new(&mut *self.conn))
+        Box::new(PgNotificationRepository::new(&mut self.conn))
     }
 
     fn oauth_client<'c>(
         &'c mut self,
     ) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthClientRepository::new(&mut *self.conn))
+        Box::new(PgOAuthClientRepository::new(&mut self.conn))
     }
 
     fn oauth_authorization_grant<'c>(
         &'c mut self,
     ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthAuthorizationGrantRepository::new(&mut *self.conn))
+        Box::new(PgOAuthAuthorizationGrantRepository::new(&mut self.conn))
     }
 
     fn oauth_session<'c>(
         &'c mut self,
     ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthSessionRepository::new(&mut *self.conn))
+        Box::new(PgOAuthSessionRepository::new(&mut self.conn))
     }
 
     fn oauth_session_grant<'c>(
         &'c mut self,
     ) -> Box<dyn SessionGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthSessionGrantRepository::new(&mut *self.conn))
+        Box::new(PgOAuthSessionGrantRepository::new(&mut self.conn))
     }
 
     fn oauth_access_token<'c>(
         &'c mut self,
     ) -> Box<dyn OAuthAccessTokenRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthAccessTokenRepository::new(&mut *self.conn))
+        Box::new(PgOAuthAccessTokenRepository::new(&mut self.conn))
     }
 
     fn oauth_refresh_token<'c>(
         &'c mut self,
     ) -> Box<dyn OAuthRefreshTokenRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthRefreshTokenRepository::new(&mut *self.conn))
+        Box::new(PgOAuthRefreshTokenRepository::new(&mut self.conn))
     }
 
     fn oauth_device_code_grant<'c>(
         &'c mut self,
     ) -> Box<dyn OAuthDeviceCodeGrantRepository<Error = Self::Error> + 'c> {
-        Box::new(PgOAuthDeviceCodeGrantRepository::new(&mut *self.conn))
+        Box::new(PgOAuthDeviceCodeGrantRepository::new(&mut self.conn))
     }
 
     fn personal_access_token<'c>(
         &'c mut self,
     ) -> Box<dyn coauth_data::personal::PersonalAccessTokenRepository<Error = Self::Error> + 'c>
     {
-        Box::new(PgPersonalAccessTokenRepository::new(&mut *self.conn))
+        Box::new(PgPersonalAccessTokenRepository::new(&mut self.conn))
     }
 
     fn personal_session<'c>(
         &'c mut self,
     ) -> Box<dyn PersonalSessionRepository<Error = Self::Error> + 'c> {
-        Box::new(PgPersonalSessionRepository::new(&mut *self.conn))
+        Box::new(PgPersonalSessionRepository::new(&mut self.conn))
     }
 
     fn queue_worker<'c>(&'c mut self) -> Box<dyn QueueWorkerRepository<Error = Self::Error> + 'c> {
-        Box::new(PgQueueWorkerRepository::new(&mut *self.conn))
+        Box::new(PgQueueWorkerRepository::new(&mut self.conn))
     }
 
     fn queue_job<'c>(&'c mut self) -> Box<dyn QueueJobRepository<Error = Self::Error> + 'c> {
-        Box::new(PgQueueJobRepository::new(&mut *self.conn))
+        Box::new(PgQueueJobRepository::new(&mut self.conn))
     }
 
     fn queue_schedule<'c>(
         &'c mut self,
     ) -> Box<dyn QueueScheduleRepository<Error = Self::Error> + 'c> {
-        Box::new(PgQueueScheduleRepository::new(&mut *self.conn))
+        Box::new(PgQueueScheduleRepository::new(&mut self.conn))
     }
 
     fn policy_data<'c>(&'c mut self) -> Box<dyn PolicyDataRepository<Error = Self::Error> + 'c> {
-        Box::new(PgPolicyDataRepository::new(&mut *self.conn))
+        Box::new(PgPolicyDataRepository::new(&mut self.conn))
     }
 
     fn notification_template<'c>(
         &'c mut self,
     ) -> Box<dyn NotificationTemplateRepository<Error = Self::Error> + 'c> {
-        Box::new(PgNotificationTemplateRepository::new(&mut *self.conn))
+        Box::new(PgNotificationTemplateRepository::new(&mut self.conn))
     }
 
     fn workflow<'c>(&'c mut self) -> Box<dyn WorkflowRepository<Error = Self::Error> + 'c> {
-        Box::new(PgWorkflowRepository::new(&mut *self.conn))
+        Box::new(PgWorkflowRepository::new(&mut self.conn))
     }
 }

@@ -1,4 +1,4 @@
-//! OAuth form_post response mode context.
+//! OAuth `form_post` response mode context.
 
 use std::collections::BTreeMap;
 

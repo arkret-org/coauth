@@ -101,7 +101,7 @@ impl salvo::oapi::EndpointOutRegister for InternalError {
         _components: &mut salvo::oapi::Components,
         _operation: &mut salvo::oapi::Operation,
     ) {
-        use salvo::oapi::*;
+        use salvo::oapi::{Object, BasicType, Response, Content, RefOr};
         let error_schema = Object::new()
             .property("error", Object::new().schema_type(BasicType::String))
             .required("error");

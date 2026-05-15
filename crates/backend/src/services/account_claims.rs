@@ -214,7 +214,7 @@ impl PgAccountClaimsService {
         let account_id = input.account_id.map(Uuid::from);
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
-            r#"
+            r"
             INSERT INTO account_claims (
                 id,
                 account_id,
@@ -243,7 +243,7 @@ impl PgAccountClaimsService {
                 expires_at,
                 revoked_at,
                 revoked_reason
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(id)
         .bind::<Nullable<DieselUuid>, _>(account_id)
@@ -274,7 +274,7 @@ impl PgAccountClaimsService {
         let limit = filter.limit.unwrap_or(100).clamp(1, 1000);
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
-            r#"
+            r"
             SELECT
                 id,
                 account_id,
@@ -300,7 +300,7 @@ impl PgAccountClaimsService {
               )
             ORDER BY issued_at DESC, id DESC
             LIMIT $6
-            "#,
+            ",
         )
         .bind::<Nullable<DieselUuid>, _>(account_id)
         .bind::<Nullable<Text>, _>(filter.subject)
@@ -322,7 +322,7 @@ impl PgAccountClaimsService {
     ) -> anyhow::Result<Option<AccountClaimRecord>> {
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
-            r#"
+            r"
             UPDATE account_claims
             SET
                 revoked_at = COALESCE(revoked_at, $2),
@@ -342,7 +342,7 @@ impl PgAccountClaimsService {
                 expires_at,
                 revoked_at,
                 revoked_reason
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(Uuid::from(id))
         .bind::<Timestamptz, _>(revoked_at)
@@ -357,6 +357,7 @@ impl PgAccountClaimsService {
     }
 }
 
+#[must_use] 
 pub fn account_claims_service(pool: DieselPool<AsyncPgConnection>) -> AccountClaimsServiceHandle {
     Arc::new(PgAccountClaimsService::new(pool))
 }

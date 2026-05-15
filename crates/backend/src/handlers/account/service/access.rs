@@ -26,6 +26,7 @@ pub struct PasswordLoginRequest {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum PasswordLoginOutcome {
     Disabled,
     InvalidCredentials,
@@ -141,7 +142,7 @@ pub async fn login_with_password(
         Ok(PasswordVerificationResult::NotMatched) => {
             return Ok(PasswordLoginOutcome::InvalidCredentials);
         }
-        Err(error) => return Err(PasswordLoginError::Password(error.into())),
+        Err(error) => return Err(PasswordLoginError::Password(error)),
     };
 
     if user.deactivated_at.is_some() {

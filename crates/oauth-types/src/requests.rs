@@ -155,6 +155,9 @@ string_enum! {
     }
 }
 
+// The variant is declared inside the `string_enum!` macro, so we can't
+// easily attach `#[default]` to it; keep the manual impl.
+#[allow(clippy::derivable_impls)]
 impl Default for Display {
     fn default() -> Self {
         Self::Page

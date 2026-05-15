@@ -1,7 +1,7 @@
 use chrono::Duration;
 use coauth_data::{
-    Clock, Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
-    RepositoryTransaction as _, UserEmailPatch, UserPatch, UserProfilePatch,
+    Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _, UserEmailPatch, UserPatch,
+    UserProfilePatch,
     clock::MockClock,
     upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter},
     user::{

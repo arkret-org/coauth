@@ -1258,6 +1258,7 @@ dependencies = [
  "diesel",
  "diesel-async",
  "diesel_migrations",
+ "ed25519-dalek",
  "elliptic-curve",
  "form_urlencoded",
  "futures-util",

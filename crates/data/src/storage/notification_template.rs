@@ -12,7 +12,7 @@ pub trait NotificationTemplateRepository: Send + Sync {
     /// The error type returned by the repository
     type Error;
 
-    /// List all template versions, optionally filtered by template_key
+    /// List all template versions, optionally filtered by `template_key`
     async fn list(
         &mut self,
         template_key: Option<&str>,
@@ -26,6 +26,7 @@ pub trait NotificationTemplateRepository: Send + Sync {
     ) -> Result<Option<NotificationTemplateVersion>, Self::Error>;
 
     /// Publish a new template version
+    #[allow(clippy::too_many_arguments)]
     async fn publish(
         &mut self,
         rng: &mut (dyn RngCore + Send),

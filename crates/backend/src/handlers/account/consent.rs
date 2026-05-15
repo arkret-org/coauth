@@ -86,8 +86,8 @@ fn client_info(client: &coauth_data::Client) -> ClientInfo {
         id: client.id.to_string(),
         client_id: client.client_id.clone(),
         client_name: client.client_name.clone(),
-        client_uri: client.client_uri.as_ref().map(|u| u.to_string()),
-        logo_uri: client.logo_uri.as_ref().map(|u| u.to_string()),
+        client_uri: client.client_uri.as_ref().map(std::string::ToString::to_string),
+        logo_uri: client.logo_uri.as_ref().map(std::string::ToString::to_string),
     }
 }
 

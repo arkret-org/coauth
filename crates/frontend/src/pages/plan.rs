@@ -9,22 +9,19 @@ pub fn Plan() -> Element {
     let binding = data.read();
 
     match &*binding {
-        Some(Ok(result)) => match &result.plan_management_iframe_uri {
-            Some(uri) => {
-                let uri = uri.clone();
-                rsx! {
-                    iframe {
-                        class: "plan-iframe",
-                        title: "Plan management",
-                        src: "{uri}",
-                        scrolling: "no",
-                    }
+        Some(Ok(result)) => if let Some(uri) = &result.plan_management_iframe_uri {
+            let uri = uri.clone();
+            rsx! {
+                iframe {
+                    class: "plan-iframe",
+                    title: "Plan management",
+                    src: "{uri}",
+                    scrolling: "no",
                 }
             }
-            None => {
-                nav.push(Route::AccountOverview {});
-                rsx! {}
-            }
+        } else {
+            nav.push(Route::AccountOverview {});
+            rsx! {}
         },
         Some(Err(e)) => rsx! {
             div { class: "alert alert-critical", "{e}" }

@@ -94,13 +94,13 @@ impl From<coauth_data::RepositoryError> for ContrixRouteError {
 enum SessionGrantAuthz {
     /// The caller presented an admin scope. Allowed for read and write.
     Admin,
-    /// The caller presented the server_name `session.bind` scope.
+    /// The caller presented the `server_name` `session.bind` scope.
     /// Allowed for read-only paths (list / introspect).
     PrincipalServer,
 }
 
 /// Resolve the bearer token on the request and require either an admin
-/// scope or the server_name session-bind scope. Used by the
+/// scope or the `server_name` session-bind scope. Used by the
 /// session-grant admin surface to gate access without going through the
 /// heavier admin call-context extractor.
 async fn require_session_grant_caller(
@@ -767,8 +767,8 @@ pub(crate) enum SessionGrantTargetError {
 ///
 /// `requested_audience` is the audience the client proved during the login
 /// ceremony (e.g. carried in a request body field or audience-bound state).
-/// When supplied, only an exact match against a configured server_name
-/// is accepted — falling back to "first server_name wins" silently
+/// When supplied, only an exact match against a configured `server_name`
+/// is accepted — falling back to "first `server_name` wins" silently
 /// would let any caller mint a grant for an audience they never asked for.
 ///
 /// When `requested_audience` is `None` and exactly one principal server is
@@ -1001,7 +1001,7 @@ fn write_canonical_json(
         serde_json::Value::Object(map) => {
             out.push(b'{');
             let mut entries: Vec<_> = map.iter().collect();
-            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            entries.sort_by_key(|(left, _)| *left);
             for (idx, (key, item)) in entries.into_iter().enumerate() {
                 if idx > 0 {
                     out.push(b',');
@@ -1060,7 +1060,7 @@ fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) 
 }
 
 pub(crate) fn primary_device_id(scope: &Scope) -> Option<String> {
-    primary_device_id_from_tokens(scope.iter().map(|token| token.as_str()))
+    primary_device_id_from_tokens(scope.iter().map(oauth_types::scope::ScopeToken::as_str))
 }
 
 pub(crate) fn service_did_document(
@@ -1641,9 +1641,7 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospection
         subject: grant.subject.clone(),
         service_account_id: grant
             .subject
-            .rsplit_once(":users:")
-            .map(|(_, id)| id.to_owned())
-            .unwrap_or_else(|| grant.browser_session_id.to_string()),
+            .rsplit_once(":users:").map_or_else(|| grant.browser_session_id.to_string(), |(_, id)| id.to_owned()),
         device_id: grant.device_id.clone(),
         audience: grant.audience.clone(),
         scopes: grant

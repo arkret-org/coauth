@@ -12,7 +12,7 @@ use anyhow::Context;
 use clap::CommandFactory;
 use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config};
 use coauth_config::{
-    ConfigurationSection, ConfigurationSectionExt, DatabaseConfig, PasswordsConfig,
+    ConfigurationSectionExt, DatabaseConfig, PasswordsConfig,
 };
 use coauth_data::{
     Clock, DatabaseError, PgRepository, RepositoryAccess, SystemClock, UpstreamOAuthProvider, User,
@@ -327,7 +327,7 @@ impl std::fmt::Display for UserCreationCommand<'_> {
 }
 
 /// Handle the interactive register-user subcommand.
-#[expect(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(super) async fn handle_register_user(
     figment: &Figment,
     handle: Option<String>,
@@ -423,7 +423,7 @@ pub(super) async fn handle_register_user(
     };
 
     let mut req = UserCreationRequest {
-        handle: handle,
+        handle,
         hashed_password,
         emails,
         upstream_provider_mappings,

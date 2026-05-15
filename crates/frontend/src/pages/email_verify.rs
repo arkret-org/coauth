@@ -25,7 +25,7 @@ pub fn EmailVerify(id: String) -> Element {
     let auth_data = use_resource(move || {
         let qid = id_for_query.clone();
         async move {
-            crate::api::api_get::<UserEmailAuthentication>(&format!("/email-auth/{}", qid)).await
+            crate::api::api_get::<UserEmailAuthentication>(&format!("/email-auth/{qid}")).await
         }
     });
 
@@ -34,9 +34,9 @@ pub fn EmailVerify(id: String) -> Element {
             Layout {
                 div { class: "flex flex-col gap-10",
                     PageHeading {
-                        icon: "✓".to_string(),
-                        title: "Email verified".to_string(),
-                        subtitle: "Your email address has been verified successfully.".to_string(),
+                        icon: "✓".to_owned(),
+                        title: "Email verified".to_owned(),
+                        subtitle: "Your email address has been verified successfully.".to_owned(),
                     }
                     Link { class: "btn btn-primary", to: Route::AccountSettings {},
                         "Back to settings"
@@ -56,9 +56,9 @@ pub fn EmailVerify(id: String) -> Element {
                         Layout {
                             div { class: "flex flex-col gap-10",
                                 PageHeading {
-                                    icon: "✓".to_string(),
-                                    title: "Already verified".to_string(),
-                                    subtitle: "This email address has already been verified.".to_string(),
+                                    icon: "✓".to_owned(),
+                                    title: "Already verified".to_owned(),
+                                    subtitle: "This email address has already been verified.".to_owned(),
                                 }
                                 Link { class: "btn btn-primary", to: Route::AccountSettings {},
                                     "Back to settings"
@@ -75,8 +75,8 @@ pub fn EmailVerify(id: String) -> Element {
                     Layout {
                         div { class: "flex flex-col gap-10",
                             PageHeading {
-                                icon: "✉".to_string(),
-                                title: "Verify your email".to_string(),
+                                icon: "✉".to_owned(),
+                                title: "Verify your email".to_owned(),
                                 subtitle: subtitle,
                             }
 
@@ -95,7 +95,7 @@ pub fn EmailVerify(id: String) -> Element {
 
                                     spawn(async move {
                                         let result = crate::api::api_post::<crate::api::types::CompleteEmailAuthPayload>(
-                                            &format!("/email-auth/{}/complete", eid),
+                                            &format!("/email-auth/{eid}/complete"),
                                             serde_json::json!({
                                                 "code": code_val,
                                             }),
@@ -107,10 +107,10 @@ pub fn EmailVerify(id: String) -> Element {
                                                     success.set(true);
                                                 }
                                                 CompleteEmailAuthStatus::InvalidCode => {
-                                                    error.set(Some("Invalid verification code.".to_string()));
+                                                    error.set(Some("Invalid verification code.".to_owned()));
                                                 }
                                                 CompleteEmailAuthStatus::NotFound => {
-                                                    error.set(Some("Verification not found.".to_string()));
+                                                    error.set(Some("Verification not found.".to_owned()));
                                                 }
                                             },
                                             Err(err) => {
@@ -164,7 +164,7 @@ pub fn EmailVerify(id: String) -> Element {
                                             resend_message.set(None);
                                             spawn(async move {
                                                 let result = crate::api::api_post::<ResendEmailAuthCodePayload>(
-                                                    &format!("/email-auth/{}/resend", rid),
+                                                    &format!("/email-auth/{rid}/resend"),
                                                     serde_json::json!({
                                                         "language": "en",
                                                     }),
@@ -172,7 +172,7 @@ pub fn EmailVerify(id: String) -> Element {
                                                 resending.set(false);
                                                 match result {
                                                     Ok(_) => {
-                                                        resend_message.set(Some("Verification code resent.".to_string()));
+                                                        resend_message.set(Some("Verification code resent.".to_owned()));
                                                     }
                                                     Err(err) => {
                                                         error.set(Some(err));

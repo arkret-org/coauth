@@ -960,3 +960,36 @@ ALTER TABLE oauth_clients
 -- `StaridRegistry::create_principal_did` has succeeded.
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS starid_backend BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Consolidated from 20260515000001_add_principal_did_update_keys/up.sql
+-- Per-user ed25519 update-key material for `did:webvh` DIDs minted by a
+-- principal server's *embedded* webvh provider (e.g. soland's
+-- `POST /api/v1/identity/webvh/register`). Distinct from the starid
+-- adapter path — starid mints the DID and stores the update key on its
+-- side; the embedded path requires the *client* (coauth) to construct
+-- and sign the inception entry and to retain the update key for future
+-- rotations.
+--
+-- The actual `update_public_key_multibase` is what soland's
+-- `verify_webvh_log_proof` looks for in `parameters.updateKeys`; the
+-- encrypted `update_secret_b64` is the ed25519 seed coauth uses to sign
+-- subsequent key-rotation entries. `(user_id, audience)` is unique so a
+-- single user has at most one DID per principal-server target.
+CREATE TABLE IF NOT EXISTS principal_did_update_keys (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    audience TEXT NOT NULL,
+    did TEXT NOT NULL,
+    did_public_key_multibase TEXT NOT NULL,
+    update_public_key_multibase TEXT NOT NULL,
+    update_secret_b64 TEXT NOT NULL,
+    key_log_head TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+
+    CONSTRAINT principal_did_update_keys_user_audience_unique UNIQUE (user_id, audience),
+    CONSTRAINT principal_did_update_keys_did_unique UNIQUE (did)
+);
+
+CREATE INDEX IF NOT EXISTS idx_principal_did_update_keys_user_id
+    ON principal_did_update_keys(user_id);

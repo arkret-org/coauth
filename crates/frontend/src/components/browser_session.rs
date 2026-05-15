@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use super::session_card::*;
+use super::session_card::{SessionCardRoot, SessionCardLinkBody, SessionCardHeader, SessionCardName, SessionCardMetadata, SessionCardInfo};
 use crate::{
     api::types::{BrowserSession as BrowserSessionData, DeviceType},
     pages::Route,
@@ -22,7 +22,7 @@ fn session_display_name(session: &BrowserSessionData) -> String {
             return parts.join(" - ");
         }
     }
-    "Unknown session".to_string()
+    "Unknown session".to_owned()
 }
 
 #[component]
@@ -30,8 +30,7 @@ pub fn BrowserSessionCard(session: BrowserSessionData, is_current: Option<bool>)
     let device_type = session
         .user_agent
         .as_ref()
-        .map(|ua| ua.device_type.clone())
-        .unwrap_or(DeviceType::Unknown);
+        .map_or(DeviceType::Unknown, |ua| ua.device_type.clone());
     let name = session_display_name(&session);
     let os = session.user_agent.as_ref().and_then(|ua| ua.os.clone());
 
@@ -47,17 +46,17 @@ pub fn BrowserSessionCard(session: BrowserSessionData, is_current: Option<bool>)
                 }
                 SessionCardMetadata {
                     if is_current.unwrap_or(false) {
-                        SessionCardInfo { label: "Status".to_string(),
+                        SessionCardInfo { label: "Status".to_owned(),
                             span { class: "text-sm", "Current session" }
                         }
                     }
                     if let Some(ref last_active) = session.last_active_at {
-                        SessionCardInfo { label: "Last active".to_string(),
+                        SessionCardInfo { label: "Last active".to_owned(),
                             crate::components::last_active::LastActive { datetime: last_active.clone() }
                         }
                     }
                     if let Some(ref ip) = session.last_active_ip {
-                        SessionCardInfo { label: "IP address".to_string(),
+                        SessionCardInfo { label: "IP address".to_owned(),
                             span { class: "text-sm", "{ip}" }
                         }
                     }

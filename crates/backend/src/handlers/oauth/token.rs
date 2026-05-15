@@ -393,6 +393,7 @@ async fn handle_post(
         .get::<Arc<coauth_policy::PolicyFactory>>("policy_factory")
         .expect("PolicyFactory not found in depot");
 
+    #[allow(clippy::box_default)] // Box::default() doesn't apply to dyn Clock+Send
     let clock: BoxClock = Box::new(SystemClock::default());
     let mut rng: BoxRng =
         Box::new(ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng"));
@@ -438,7 +439,7 @@ async fn handle_post(
 
     let form = client_authorization.form.ok_or(RouteError::BadRequest)?;
 
-    let grant_type = form.grant_type().to_string();
+    let grant_type = form.grant_type().to_owned();
     tracing::info!(
         oauth_client.id = %client.id,
         grant_type = %grant_type,

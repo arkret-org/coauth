@@ -120,6 +120,7 @@ impl AdminAccountClaimRecord {
     /// True when the inventory record's `state` reads as a revoked
     /// variant. Helpers use this to gate the "Revoke" button in the
     /// UI so admins do not double-revoke.
+    #[must_use] 
     pub fn is_revoked(&self) -> bool {
         self.state == "revoked" || self.revoked_at.is_some()
     }
@@ -138,6 +139,8 @@ pub struct AdminAccountClaimsResponse {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)]
+
     use super::*;
 
     #[test]

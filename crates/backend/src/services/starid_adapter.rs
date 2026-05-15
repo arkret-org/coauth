@@ -153,7 +153,7 @@ pub trait StaridRegistry: Send + Sync {
     ///
     /// The recovery contract is captured separately in coauth's
     /// `_todos.md`; this method exists so onboarding and recovery share
-    /// the same StaridResolver entry point.
+    /// the same `StaridResolver` entry point.
     async fn recover_principal_did(
         &self,
         account_id: &str,
@@ -174,14 +174,14 @@ pub trait StaridRegistry: Send + Sync {
 
     /// Rotate the DID's `update_keys` slot to a new device-bound key.
     /// Posts to `POST /api/v1/webvh/dids/{did}/update` with the next
-    /// version_id (computed from the supplied `prev_version_id`) and a
+    /// `version_id` (computed from the supplied `prev_version_id`) and a
     /// document patch that replaces `verificationMethod.key-1` with
     /// `new_update_key`.
     ///
     /// Onboarding flow: when a new passkey is enrolled on an account
     /// that already has a starid-minted DID, coauth calls this to swap
     /// the device key. starid validates that the request is signed by
-    /// (or carries proof of) the *previous* update_key, so the rotation
+    /// (or carries proof of) the *previous* `update_key`, so the rotation
     /// is itself authenticated by the outgoing key.
     async fn rotate_update_key(
         &self,
@@ -236,7 +236,7 @@ impl StaridResolver {
     }
 
     /// Compose the path coauth wants starid to mint the DID at:
-    /// `<path_prefix>/<account_id>` with the account_id sanitised to
+    /// `<path_prefix>/<account_id>` with the `account_id` sanitised to
     /// the `[a-z0-9-]` alphabet starid allows in webvh paths.
     fn principal_path(&self, account_id: &str) -> String {
         let slug = account_id

@@ -43,15 +43,12 @@ pub fn AccountPage() -> Element {
 
     match &*binding {
         Some(Ok(result)) => {
-            let user = match result.viewer.as_user() {
-                Some(u) => u,
-                None => {
-                    let nav = navigator();
-                    nav.push(Route::Login {});
-                    return rsx! {
-                        Layout { p { "Redirecting to login..." } }
-                    };
-                }
+            let user = if let Some(u) = result.viewer.as_user() { u } else {
+                let nav = navigator();
+                nav.push(Route::Login {});
+                return rsx! {
+                    Layout { p { "Redirecting to login..." } }
+                };
             };
 
             let principal = match &user.principal {
@@ -93,7 +90,7 @@ pub fn AccountPage() -> Element {
                                     principal: current_principal.read().clone(),
                                     profile: current_profile.read().clone(),
                                     display_name_change_allowed: display_name_change_allowed,
-                                    on_edit: move |_| show_edit_dialog.set(true),
+                                    on_edit: move |()| show_edit_dialog.set(true),
                                 }
                             }
 

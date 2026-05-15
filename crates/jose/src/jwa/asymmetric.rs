@@ -136,7 +136,7 @@ impl AsymmetricSigningKey {
         Self::Es256K(ecdsa::SigningKey::from(key))
     }
 
-    /// Create a new signing key with the EdDSA algorithm from the given OKP
+    /// Create a new signing key with the `EdDSA` algorithm from the given OKP
     /// private key.
     #[must_use]
     pub fn eddsa(key: ed25519_dalek::SigningKey) -> Self {
@@ -419,7 +419,7 @@ impl AsymmetricVerifyingKey {
         Self::Es256K(ecdsa::VerifyingKey::from(key))
     }
 
-    /// Create a new verifying key with the EdDSA algorithm from the given OKP
+    /// Create a new verifying key with the `EdDSA` algorithm from the given OKP
     /// public key.
     #[must_use]
     pub fn eddsa(key: ed25519_dalek::VerifyingKey) -> Self {
@@ -642,7 +642,7 @@ mod tests {
             Err(AsymmetricKeyFromJwkError::KeyNotSuitable {
                 alg: JsonWebSignatureAlg::Es512,
             }) => {}
-            Err(_) => panic!("unexpected error variant"),
+            Err(other) => panic!("unexpected error variant: {other:?}"),
             Ok(_) => panic!("expected ES512 to reject a P-256 key"),
         }
     }
@@ -668,7 +668,7 @@ mod tests {
             Err(AsymmetricKeyFromJwkError::KeyNotSuitable {
                 alg: JsonWebSignatureAlg::EdDsa,
             }) => {}
-            Err(_) => panic!("unexpected error variant"),
+            Err(other) => panic!("unexpected error variant: {other:?}"),
             Ok(_) => panic!("expected EdDSA to reject an Ed448 key"),
         }
     }

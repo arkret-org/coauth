@@ -36,13 +36,12 @@ pub fn DeviceLink() -> Element {
                             e.stop_propagation();
                             let c = code.to_string();
                             if c.is_empty() {
-                                error.set(Some("Please enter the device code.".to_string()));
+                                error.set(Some("Please enter the device code.".to_owned()));
                                 return;
                             }
 
                             submitting.set(true);
                             error.set(None);
-                            let nav = nav.clone();
 
                             spawn(async move {
                                 let result = crate::api::api_get::<DeviceLinkResponse>(
@@ -56,7 +55,7 @@ pub fn DeviceLink() -> Element {
                                         }
                                     }
                                     Ok(_) => {
-                                        error.set(Some("Invalid or expired code. Please try again.".to_string()));
+                                        error.set(Some("Invalid or expired code. Please try again.".to_owned()));
                                     }
                                     Err(e) => error.set(Some(e)),
                                 }

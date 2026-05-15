@@ -68,7 +68,7 @@ pub fn IdentityBindings() -> Element {
                                         .unwrap_or_default();
                                     let provider_label = account.provider_name.clone()
                                         .or_else(|| account.provider_brand.clone())
-                                        .unwrap_or_else(|| "External provider".to_string());
+                                        .unwrap_or_else(|| "External provider".to_owned());
                                     let is_unlinking = unlinking_id.read().as_deref() == Some(&account_id);
                                     // Prevent unlinking the last linked account
                                     let can_unlink = account_count > 1;
@@ -82,7 +82,7 @@ pub fn IdentityBindings() -> Element {
                                             button {
                                                 class: "btn btn-destructive btn-sm",
                                                 disabled: !can_unlink || unlinking_id.read().is_some(),
-                                                title: if !can_unlink { "Cannot unlink last connected account" } else { "Unlink this account" },
+                                                title: if can_unlink { "Unlink this account" } else { "Cannot unlink last connected account" },
                                                 onclick: {
                                                     let aid = account_id.clone();
                                                     let label = provider_label.clone();
@@ -132,7 +132,9 @@ pub fn IdentityBindings() -> Element {
                                 .iter()
                                 .filter(|p| !linked_ids.contains(&p.id))
                                 .collect();
-                            if !unlinked.is_empty() {
+                            if unlinked.is_empty() {
+                                rsx! {}
+                            } else {
                                 rsx! {
                                     div { class: "flex flex-col gap-2",
                                         h4 { class: "text-md font-semibold", "Link a new provider" }
@@ -151,8 +153,6 @@ pub fn IdentityBindings() -> Element {
                                     }
                                     Separator {}
                                 }
-                            } else {
-                                rsx! {}
                             }
                         }
                     }

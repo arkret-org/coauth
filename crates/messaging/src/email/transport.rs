@@ -1,4 +1,8 @@
 //! Email transport backends
+//
+// Outbound HTTP here uses raw `reqwest` rather than `outbound_http::send_traced`
+// because the messaging crate doesn't depend on `outbound_http`.
+#![allow(clippy::disallowed_methods)]
 
 use std::{
     collections::BTreeMap,
@@ -198,7 +202,7 @@ impl Transport {
         })
     }
 
-    /// Construct a SendGrid email API transport.
+    /// Construct a `SendGrid` email API transport.
     #[must_use]
     pub fn sendgrid(client: Client, base_url: Url, api_key: String) -> Self {
         Self::new(SendgridLikeProvider {
@@ -209,7 +213,7 @@ impl Transport {
         })
     }
 
-    /// Construct a Twilio SendGrid email API transport.
+    /// Construct a Twilio `SendGrid` email API transport.
     #[must_use]
     pub fn twilio(client: Client, base_url: Url, api_key: String) -> Self {
         Self::new(SendgridLikeProvider {
@@ -462,9 +466,8 @@ impl EmailProvider for PaloudInternalProvider {
             _ => {
                 return Err(Error::ProviderError {
                     status: 400,
-                    code: Some("unsupported_recipient_count".to_string()),
-                    body: "Paloud internal email transport requires exactly one recipient"
-                        .to_string(),
+                    code: Some("unsupported_recipient_count".to_owned()),
+                    body: "Paloud internal email transport requires exactly one recipient".to_owned(),
                     retryable: false,
                 });
             }
@@ -1022,8 +1025,7 @@ impl AwsSesProvider {
             .get_email_identity(&sender_email)
             .await?
             .filter(|identity| identity.verified_for_sending_status)
-        {
-            if identity
+            && identity
                 .verification_status
                 .as_deref()
                 .unwrap_or("SUCCESS")
@@ -1031,7 +1033,6 @@ impl AwsSesProvider {
             {
                 return Ok(());
             }
-        }
 
         let sender_domain = sender_domain(from).ok_or_else(|| {
             provider_client_error(
@@ -1044,8 +1045,7 @@ impl AwsSesProvider {
             .get_email_identity(&sender_domain)
             .await?
             .filter(|identity| identity.verified_for_sending_status)
-        {
-            if identity
+            && identity
                 .verification_status
                 .as_deref()
                 .unwrap_or("SUCCESS")
@@ -1053,7 +1053,6 @@ impl AwsSesProvider {
             {
                 return Ok(());
             }
-        }
 
         Err(provider_client_error(
             "sender_identity_unverified",
@@ -1069,7 +1068,7 @@ impl AwsSesProvider {
     ) -> Result<Option<AwsSesIdentityResponse>, Error> {
         let mut url = self.endpoint.clone();
         {
-            let mut segments = url.path_segments_mut().map_err(|_| {
+            let mut segments = url.path_segments_mut().map_err(|()| {
                 provider_client_error("invalid_endpoint", "AWS SES endpoint path is invalid")
             })?;
             segments.clear();
@@ -1485,14 +1484,13 @@ struct ProviderResponseError {
 
 fn extract_provider_message_id(headers: &reqwest::header::HeaderMap, body: &str) -> Option<String> {
     for header_name in ["x-provider-message-id", "x-message-id", "x-request-id"] {
-        if let Some(value) = headers.get(header_name) {
-            if let Ok(value) = value.to_str() {
+        if let Some(value) = headers.get(header_name)
+            && let Ok(value) = value.to_str() {
                 let value = value.trim();
                 if !value.is_empty() {
                     return Some(value.to_owned());
                 }
             }
-        }
     }
 
     serde_json::from_str::<ProviderResponse>(body)
@@ -1637,8 +1635,8 @@ mod tests {
             html_body: Some("<p>HTML body</p>".to_owned()),
             headers: BTreeMap::new(),
             tags: BTreeMap::from([(
-                "coauth_notification_request_id".to_string(),
-                "req-123".to_string(),
+                "coauth_notification_request_id".to_owned(),
+                "req-123".to_owned(),
             )]),
         };
 

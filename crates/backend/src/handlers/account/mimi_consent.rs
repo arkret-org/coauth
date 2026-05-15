@@ -26,7 +26,7 @@
 //! `contrix-rust-sdk` 0.5.0 now exposes the public `MoveSigner` trait,
 //! `UnsignedMove` builder, ergonomic `Move::sign(&unsigned, signer)` entry
 //! point and `Ed25519MoveSigner` impl (behind the `signer` feature). This
-//! module wires the full MIMI → SignedMove → soland POST path:
+//! module wires the full MIMI → `SignedMove` → soland POST path:
 //!
 //! 1. Caller hands an `UpdateConsent` (with `space_id`, `anchor_ref`, `hlc`
 //!    threaded in from upstream — typically populated either from the MIMI
@@ -117,7 +117,7 @@ pub struct PendingMove {
     pub cell_id: String,
     /// Either `or_set_add` or `or_set_remove` per spec §6.1.
     pub op: PendingMoveOp,
-    /// The OrSet tag to add or remove.
+    /// The `OrSet` tag to add or remove.
     pub tag: String,
     /// Latest anchor leaf the issuer references (`cx:anchor:sha256:<hex>`).
     pub anchor_ref: String,
@@ -128,9 +128,9 @@ pub struct PendingMove {
 /// Pending Move operation kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PendingMoveOp {
-    /// Grant: append the `(peer, scope)` tag to the cell's OrSet.
+    /// Grant: append the `(peer, scope)` tag to the cell's `OrSet`.
     OrSetAdd,
-    /// Revoke: remove the `(peer, scope)` tag from the cell's OrSet.
+    /// Revoke: remove the `(peer, scope)` tag from the cell's `OrSet`.
     OrSetRemove,
 }
 
@@ -180,7 +180,7 @@ pub fn consent_cell_id(consent_id: &str) -> String {
     format!("cx:cell:cx.component.consent.grant.v1:{consent_id}")
 }
 
-/// Build the OrSet tag for a `(peer, scope)` consent grant. Pure helper.
+/// Build the `OrSet` tag for a `(peer, scope)` consent grant. Pure helper.
 ///
 /// Matches the spec §6.1 tag form `peer=<did>;scope=<scope>`.
 #[must_use]
@@ -321,38 +321,35 @@ impl AnchorerSigner {
         use base64ct::{Base64, Encoding as _};
         let issuer_did = issuer_did.into();
         let kid = verification_method_id.into();
-        match std::env::var("COAUTH_CONTRIX__ANCHORER_SIGNING_KEY") {
-            Ok(raw) => {
-                let trimmed = raw.trim();
-                let mut buf = [0u8; 48];
-                let decoded = Base64::decode(trimmed, &mut buf).map_err(|error| {
-                    MimiConsentError::InvalidAnchorerKey {
-                        reason: format!("base64 decode failed: {error:?}"),
-                    }
-                })?;
-                if decoded.len() != 32 {
-                    return Err(MimiConsentError::InvalidAnchorerKey {
-                        reason: format!(
-                            "expected 32-byte seed, got {} bytes after base64 decode",
-                            decoded.len()
-                        ),
-                    });
+        if let Ok(raw) = std::env::var("COAUTH_CONTRIX__ANCHORER_SIGNING_KEY") {
+            let trimmed = raw.trim();
+            let mut buf = [0u8; 48];
+            let decoded = Base64::decode(trimmed, &mut buf).map_err(|error| {
+                MimiConsentError::InvalidAnchorerKey {
+                    reason: format!("base64 decode failed: {error:?}"),
                 }
-                let mut seed = [0_u8; 32];
-                seed.copy_from_slice(decoded);
-                Self::from_seed(seed, issuer_did, kid, AnchorerSigningKeyOrigin::Configured)
+            })?;
+            if decoded.len() != 32 {
+                return Err(MimiConsentError::InvalidAnchorerKey {
+                    reason: format!(
+                        "expected 32-byte seed, got {} bytes after base64 decode",
+                        decoded.len()
+                    ),
+                });
             }
-            Err(_) => {
-                let mut seed = [0_u8; 32];
-                use rand::RngExt as _;
-                rand::rng().fill(&mut seed[..]);
-                tracing::warn!(
-                    "COAUTH_CONTRIX__ANCHORER_SIGNING_KEY not set; using ephemeral \
-                     anchorer key (anything signed will be unverifiable across \
-                     restarts — configure a real key for production anchoring)"
-                );
-                Self::from_seed(seed, issuer_did, kid, AnchorerSigningKeyOrigin::Ephemeral)
-            }
+            let mut seed = [0_u8; 32];
+            seed.copy_from_slice(decoded);
+            Self::from_seed(seed, issuer_did, kid, AnchorerSigningKeyOrigin::Configured)
+        } else {
+            let mut seed = [0_u8; 32];
+            use rand::RngExt as _;
+            rand::rng().fill(&mut seed[..]);
+            tracing::warn!(
+                "COAUTH_CONTRIX__ANCHORER_SIGNING_KEY not set; using ephemeral \
+                 anchorer key (anything signed will be unverifiable across \
+                 restarts — configure a real key for production anchoring)"
+            );
+            Self::from_seed(seed, issuer_did, kid, AnchorerSigningKeyOrigin::Ephemeral)
         }
     }
 
@@ -376,10 +373,10 @@ impl AnchorerSigner {
     }
 }
 
-/// Build, sign, and POST a `PendingMove` to the holder's server_name.
+/// Build, sign, and POST a `PendingMove` to the holder's `server_name`.
 ///
-/// On success the SignedMove envelope returned by `Move::sign` has been
-/// POSTed to soland's `/api/v1/moves` endpoint and accepted with 2xx.
+/// On success the `SignedMove` envelope returned by `Move::sign` has been
+/// `POSTed` to soland's `/api/v1/moves` endpoint and accepted with 2xx.
 ///
 /// ### Wire shape
 ///

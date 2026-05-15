@@ -62,7 +62,7 @@ pub enum VerifyPasswordIfNeededError {
 /// verified against the stored hash. Admins can set a new password without
 /// knowing the current one.
 ///
-/// The caller is responsible for verifying ownership (is_owner_or_admin)
+/// The caller is responsible for verifying ownership (`is_owner_or_admin`)
 /// before calling this function.
 pub async fn change_password(
     mut repo: BoxRepository,

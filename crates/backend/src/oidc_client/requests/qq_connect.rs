@@ -81,8 +81,7 @@ pub async fn request_access_token(
         .form(&body)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
@@ -125,8 +124,7 @@ pub async fn fetch_openid(
         .get(url)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .text()
         .await?;
 
@@ -138,7 +136,7 @@ pub async fn fetch_openid(
         code: -1,
         msg: format!("Failed to parse QQ /me response: {e}"),
     })?;
-    if let Some(code) = raw.get("error").and_then(|v| v.as_i64()) {
+    if let Some(code) = raw.get("error").and_then(serde_json::Value::as_i64) {
         let msg = raw
             .get("error_description")
             .and_then(|v| v.as_str())
@@ -163,7 +161,7 @@ pub async fn fetch_openid(
 ///
 /// `GET https://graph.qq.com/user/get_user_info?access_token=xxx&oauth_consumer_key=appid&openid=xxx`
 ///
-/// Returns a map of user claims (nickname, figureurl_qq_2, gender, etc.).
+/// Returns a map of user claims (nickname, `figureurl_qq_2`, gender, etc.).
 #[tracing::instrument(skip_all)]
 pub async fn fetch_userinfo(
     http_client: &reqwest::Client,
@@ -183,14 +181,13 @@ pub async fn fetch_userinfo(
         .get(url)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
     // QQ userinfo uses "ret" field for error code (0 = success)
-    if let Some(ret) = response.get("ret").and_then(|v| v.as_i64()) {
-        if ret != 0 {
+    if let Some(ret) = response.get("ret").and_then(serde_json::Value::as_i64)
+        && ret != 0 {
             let msg = response
                 .get("msg")
                 .and_then(|v| v.as_str())
@@ -201,7 +198,6 @@ pub async fn fetch_userinfo(
                 msg,
             });
         }
-    }
 
     Ok(response)
 }

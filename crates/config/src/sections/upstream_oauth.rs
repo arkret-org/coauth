@@ -84,7 +84,7 @@ impl ConfigurationSection for UpstreamOAuthConfig {
 
 // ── Validation Helpers ──
 
-/// Ensures client_secret is present when required and absent when forbidden
+/// Ensures `client_secret` is present when required and absent when forbidden
 /// by the chosen token endpoint auth method.
 fn check_client_secret_requirement(
     provider: &Provider,
@@ -118,7 +118,7 @@ fn check_client_secret_requirement(
     Ok(())
 }
 
-/// Ensures token_endpoint_auth_signing_alg is present when required and
+/// Ensures `token_endpoint_auth_signing_alg` is present when required and
 /// absent when not applicable.
 fn check_signing_alg_requirement(
     provider: &Provider,
@@ -154,7 +154,7 @@ fn check_signing_alg_requirement(
     Ok(())
 }
 
-/// Ensures sign_in_with_apple fields are only present when the auth method
+/// Ensures `sign_in_with_apple` fields are only present when the auth method
 /// is `SignInWithApple`.
 fn check_apple_specific_fields(
     provider: &Provider,
@@ -188,8 +188,8 @@ fn check_apple_specific_fields(
     Ok(())
 }
 
-/// Validates the claims_imports section for internal consistency, checking
-/// that skip_confirmation and on_conflict settings are compatible.
+/// Validates the `claims_imports` section for internal consistency, checking
+/// that `skip_confirmation` and `on_conflict` settings are compatible.
 fn check_claims_import_consistency(
     provider: &Provider,
     annotate: &dyn Fn(figment::Error) -> figment::Error,
@@ -247,6 +247,7 @@ fn check_claims_import_consistency(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::result_large_err)]
     use std::str::FromStr;
 
     use figment::{

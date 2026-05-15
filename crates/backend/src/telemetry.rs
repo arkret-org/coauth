@@ -12,7 +12,7 @@ use opentelemetry::{
     propagation::{TextMapCompositePropagator, TextMapPropagator},
     trace::TracerProvider as _,
 };
-use opentelemetry_otlp::{WithExportConfig, WithHttpConfig};
+use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_prometheus_text_exporter::PrometheusExporter;
 use opentelemetry_sdk::{
     Resource,

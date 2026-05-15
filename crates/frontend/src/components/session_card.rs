@@ -15,7 +15,7 @@ pub fn SessionCardBody(
     disabled: Option<bool>,
     children: Element,
 ) -> Element {
-    let mut class = "session-card".to_string();
+    let mut class = "session-card".to_owned();
     if compact.unwrap_or(false) {
         class.push_str(" compact");
     }
@@ -35,7 +35,7 @@ pub fn SessionCardLinkBody(
     disabled: Option<bool>,
     children: Element,
 ) -> Element {
-    let mut class = "session-card".to_string();
+    let mut class = "session-card".to_owned();
     if compact.unwrap_or(false) {
         class.push_str(" compact");
     }

@@ -9,6 +9,7 @@
 //! visibility intact, so the move is purely textual.
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use chrono::Duration;
     use coauth_data::{

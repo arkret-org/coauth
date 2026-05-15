@@ -149,7 +149,7 @@ mod tests {
     use crate::mock::PrincipalServerAdmin as MockPrincipalServerAdmin;
 
     impl ConnectorProvider for MockPrincipalServerAdmin {
-        fn provider_name(&self) -> &str {
+        fn provider_name(&self) -> &'static str {
             "mock-principal"
         }
 

@@ -11,9 +11,9 @@ pub fn PasswordChangeSuccess() -> Element {
         Layout {
             div { class: "flex flex-col gap-10",
                 PageHeading {
-                    icon: "✓".to_string(),
-                    title: "Password changed".to_string(),
-                    subtitle: "Your password has been changed successfully.".to_string(),
+                    icon: "✓".to_owned(),
+                    title: "Password changed".to_owned(),
+                    subtitle: "Your password has been changed successfully.".to_owned(),
                 }
                 Link { class: "btn btn-primary", to: Route::AccountSettings {},
                     "Back to settings"

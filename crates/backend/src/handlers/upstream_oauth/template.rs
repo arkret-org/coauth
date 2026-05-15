@@ -128,13 +128,9 @@ fn b64encode(bytes: &[u8]) -> String {
 fn tlvdecode(bytes: &[u8]) -> Result<HashMap<Value, Value>, Error> {
     let mut iter = bytes.iter().copied();
     let mut ret = HashMap::new();
-    loop {
-        // TODO: this assumes the tag and the length are both single bytes, which is not
-        // always the case with protobufs. We should properly decode varints
-        // here.
-        let Some(tag) = iter.next() else {
-            break;
-        };
+    // TODO: this assumes the tag and the length are both single bytes, which is not
+    // always the case with protobufs. We should properly decode varints here.
+    while let Some(tag) = iter.next() {
 
         let len = iter
             .next()

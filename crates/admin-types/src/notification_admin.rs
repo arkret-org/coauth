@@ -110,7 +110,7 @@ pub struct PublishTemplateRequest {
 }
 
 fn default_locale() -> String {
-    "en".to_string()
+    "en".to_owned()
 }
 
 impl PublishTemplateRequest {

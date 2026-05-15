@@ -223,7 +223,7 @@ impl AuditRepository for PgAuditRepository<'_> {
 
         Ok(AdminOperationLog {
             id,
-            admin_user_id: params.admin_user_id().into(),
+            admin_user_id: params.admin_user_id(),
             operation,
             resource_type: row.resource_type,
             resource_id: params.resource_id(),
@@ -358,7 +358,7 @@ impl AuditRepository for PgAuditRepository<'_> {
 
         Ok(AccountSecurityEvent {
             id,
-            user_id: params.user_id().into(),
+            user_id: params.user_id(),
             event_type,
             metadata: row.metadata,
             ip_address,

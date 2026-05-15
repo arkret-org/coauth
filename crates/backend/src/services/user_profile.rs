@@ -248,6 +248,7 @@ pub(crate) async fn sync_display_name_patch(
     }
 }
 
+#[must_use] 
 pub fn notification_channel_key(channel: NotificationChannel) -> &'static str {
     match channel {
         NotificationChannel::Email => "email",

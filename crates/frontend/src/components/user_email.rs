@@ -43,7 +43,7 @@ pub fn UserEmailItem(email: UserEmail, on_removed: Option<EventHandler<String>>)
                                 error.set(None);
                                 spawn(async move {
                                     let result = crate::api::api_delete::<crate::api::types::RemoveEmailPayload>(
-                                        &format!("/user-emails/{}", eid),
+                                        &format!("/user-emails/{eid}"),
                                     ).await;
                                     removing.set(false);
                                     match result {
@@ -54,7 +54,7 @@ pub fn UserEmailItem(email: UserEmail, on_removed: Option<EventHandler<String>>)
                                                 }
                                             }
                                             RemoveEmailStatus::NotFound => {
-                                                error.set(Some("Email not found.".to_string()));
+                                                error.set(Some("Email not found.".to_owned()));
                                             }
                                         },
                                         Err(e) => {

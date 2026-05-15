@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Cross-service helper that consults the holder's consent cell on the
-//! server_name (`soland`) before coauth admits or relays an invite.
+//! `server_name` (`soland`) before coauth admits or relays an invite.
 //!
 //! Per the Move/Anchor/Lattice spec (`contrix-spec` 2026-05-08,
 //! `consent-model.md` §3–§9), consent is no longer reducer state on the
-//! server_name. It is an OrSet cell:
+//! `server_name`. It is an `OrSet` cell:
 //!
 //! ```text
 //! cx:cell:cx.component.consent.grant.v1:<consent_id>
@@ -34,7 +34,7 @@ use url::Url;
 
 /// Result of consulting a holder's consent cell.
 ///
-/// `tags` are the OrSet tag identifiers currently joined into the cell.
+/// `tags` are the `OrSet` tag identifiers currently joined into the cell.
 /// Each tag is opaque to this layer; the invite handler is responsible for
 /// matching `(peer, scope)` patterns against them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +61,7 @@ pub struct ConsentState {
 /// Wire format expected from the (still-pending) soland cell-read endpoint.
 ///
 /// Kept private — callers consume `ConsentLookup`. The shape is conservative:
-/// soland returns the OrSet join value as a list of tag strings, plus the
+/// soland returns the `OrSet` join value as a list of tag strings, plus the
 /// cell id for echo. `granted` is derived from `!tags.is_empty()`.
 #[derive(Debug, Deserialize)]
 struct ConsentCellResponse {
@@ -71,7 +71,7 @@ struct ConsentCellResponse {
     tags: Vec<String>,
 }
 
-/// Look up the holder's consent-grant cell on their server_name.
+/// Look up the holder's consent-grant cell on their `server_name`.
 ///
 /// * `principal_server_url` — base URL of the holder's soland deployment.
 ///   `None` means soland is not wired into this coauth instance and the
@@ -200,6 +200,7 @@ pub enum InviteGateDecision {
 /// Pure function: turn a `(ConsentLookup, peer, scope, require_consent)`
 /// tuple into a gate decision. No I/O, easy to unit-test and reuse from
 /// other invite-style handlers.
+#[must_use] 
 pub fn evaluate_invite_gate(
     lookup: &ConsentLookup,
     peer_did: &str,
@@ -258,7 +259,7 @@ mod urlencoding {
                 out.push(b as char);
             } else {
                 use std::fmt::Write as _;
-                let _ = write!(out, "%{:02X}", b);
+                let _ = write!(out, "%{b:02X}");
             }
         }
         out

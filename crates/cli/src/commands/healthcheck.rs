@@ -4,6 +4,9 @@
 //! and exits 0 on `200 OK`. Designed for the Dockerfile `HEALTHCHECK`
 //! and orchestrator probes that cannot reach the network themselves
 //! (the distroless image ships no `curl`).
+//
+// Healthcheck binary doesn't pull in the outbound-http tracing layer.
+#![allow(clippy::disallowed_methods)]
 
 use std::{net::ToSocketAddrs, process::ExitCode, time::Duration};
 
@@ -28,16 +31,13 @@ pub(super) struct Options {
 
 impl Options {
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
-        let url = match self.url {
-            Some(url) => url,
-            None => {
-                let config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
-                derive_health_url(&config.http.listeners).ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "no listener exposes the `health` resource; pass --url explicitly"
-                    )
-                })?
-            }
+        let url = if let Some(url) = self.url { url } else {
+            let config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
+            derive_health_url(&config.http.listeners).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no listener exposes the `health` resource; pass --url explicitly"
+                )
+            })?
         };
 
         let client = reqwest::Client::builder()

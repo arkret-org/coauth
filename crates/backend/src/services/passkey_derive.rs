@@ -5,7 +5,7 @@
 //! per-credential, device-bound key that starid stores on the DID's
 //! `updateKeys` slot. The flow is:
 //!
-//! 1. Browser finishes a WebAuthn registration ceremony
+//! 1. Browser finishes a `WebAuthn` registration ceremony
 //!    (`PgWebauthnService::register_finish`) producing a [`Passkey`].
 //! 2. coauth runs [`derive_update_key_from_credential`] over the
 //!    passkey's COSE public key, yielding a multibase `z…` string of
@@ -127,7 +127,7 @@ fn base58btc_encode(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    //! Determinism + shape tests for the passkey-derived update_key.
+    //! Determinism + shape tests for the passkey-derived `update_key`.
     //!
     //! We don't unit-test against a live `Passkey` here — exercising
     //! `webauthn-rs`'s registration ceremony from inside a unit test
@@ -214,7 +214,7 @@ mod tests {
                 return None;
             }
             let mut carry = u32::from(v);
-            for byte in acc.iter_mut() {
+            for byte in &mut acc {
                 let total = u32::from(*byte) * 58 + carry;
                 *byte = u8::try_from(total & 0xff).ok()?;
                 carry = total >> 8;

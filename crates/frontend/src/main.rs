@@ -1,3 +1,9 @@
+// The workspace-wide clippy policy disallows `reqwest::Client::new`,
+// `RequestBuilder::send`, and `chrono::Utc::now`, but those alternatives
+// (e.g. `coauth_http::reqwest_client`, a server-side clock abstraction)
+// don't exist for the WASM frontend.
+#![allow(clippy::disallowed_methods)]
+
 mod api;
 mod components;
 mod config;

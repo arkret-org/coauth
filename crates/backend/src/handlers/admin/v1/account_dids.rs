@@ -278,8 +278,7 @@ async fn enforce_did_binding_rate_limit(
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
         .ip()
-        .map(crate::handlers::RequesterFingerprint::new)
-        .unwrap_or(crate::handlers::RequesterFingerprint::EMPTY);
+        .map_or(crate::handlers::RequesterFingerprint::EMPTY, crate::handlers::RequesterFingerprint::new);
 
     limiter
         .check_did_binding(requester, account_id)

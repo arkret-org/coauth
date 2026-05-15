@@ -110,7 +110,7 @@ fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
                                         submitting.set(false);
                                         match result {
                                             Ok(resp) if resp.status == "fulfilled" => {
-                                                done.set(Some("Device authorized successfully. You can now use the device.".to_string()));
+                                                done.set(Some("Device authorized successfully. You can now use the device.".to_owned()));
                                             }
                                             Ok(resp) => {
                                                 error.set(Some(format!("Unexpected status: {}", resp.status)));
@@ -141,10 +141,10 @@ fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
                                         submitting.set(false);
                                         match result {
                                             Ok(resp) if resp.status == "rejected" => {
-                                                done.set(Some("Device authorization was rejected.".to_string()));
+                                                done.set(Some("Device authorization was rejected.".to_owned()));
                                             }
                                             Ok(_) | Err(_) => {
-                                                done.set(Some("Device authorization was rejected.".to_string()));
+                                                done.set(Some("Device authorization was rejected.".to_owned()));
                                             }
                                         }
                                     });

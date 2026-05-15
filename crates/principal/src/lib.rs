@@ -36,17 +36,14 @@ pub struct PrincipalAccountProfile {
 /// provisioning. Each variant captures whether the caller wants to
 /// leave the field alone, assign a value, or clear it.
 #[derive(Debug)]
+#[derive(Default)]
 enum FieldUpdate<T> {
+    #[default]
     Unchanged,
     Assign(T),
     Clear,
 }
 
-impl<T> Default for FieldUpdate<T> {
-    fn default() -> Self {
-        Self::Unchanged
-    }
-}
 
 impl<T> FieldUpdate<T> {
     /// Invoke `handler` when the field should be mutated (assigned or cleared).
@@ -414,7 +411,7 @@ trait AsAdmin {
 impl<T: PrincipalServerAdmin + ?Sized> AsAdmin for &T {
     type Target = T;
     fn as_admin(&self) -> &T {
-        *self
+        self
     }
 }
 

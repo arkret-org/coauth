@@ -38,10 +38,10 @@ pub fn AddEmailForm(on_add: Option<EventHandler<String>>) -> Element {
                                     }
                                 }
                                 crate::api::types::AddEmailStatus::Exists => {
-                                    error.set(Some("This email address is already in use.".to_string()));
+                                    error.set(Some("This email address is already in use.".to_owned()));
                                 }
                                 crate::api::types::AddEmailStatus::Invalid => {
-                                    error.set(Some("Invalid email address.".to_string()));
+                                    error.set(Some("Invalid email address.".to_owned()));
                                 }
                                 crate::api::types::AddEmailStatus::Denied => {
                                     let violations = data.violations.unwrap_or_default().join(", ");

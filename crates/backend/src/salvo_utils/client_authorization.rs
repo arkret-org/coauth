@@ -288,7 +288,7 @@ impl Scribe for ClientAuthorizationError {
             ClientAuthorizationError::BadForm(err) => (
                 StatusCode::BAD_REQUEST,
                 ClientError::from(ClientErrorCode::InvalidRequest)
-                    .with_description(err.to_string()),
+                    .with_description(err.clone()),
             ),
 
             ClientAuthorizationError::ClientIdMismatch { .. } => (
@@ -528,7 +528,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     // Tests would need to be updated for Salvo's test utilities
     // For now, we'll skip the tests as they require significant Salvo-specific

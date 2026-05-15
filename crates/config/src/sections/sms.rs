@@ -134,6 +134,7 @@ impl SmsConfig {
 impl ConfigurationSection for SmsConfig {
     const PATH: &'static str = "sms";
 
+    #[allow(clippy::result_large_err)]
     fn validate(
         &self,
         figment: &figment::Figment,
@@ -208,6 +209,7 @@ impl ConfigurationSection for SmsConfig {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::result_large_err)]
     use figment::{
         Figment, Jail,
         providers::{Format, Yaml},
@@ -252,7 +254,7 @@ mod tests {
         Jail::expect_with(|jail| {
             jail.create_file(
                 "config.yaml",
-                r#"
+                r"
                     sms:
                       provider:
                         type: paloud_internal
@@ -260,7 +262,7 @@ mod tests {
                         key_id: coauth-control-dev
                         secret: super-secret
                         workspace: demo
-                "#,
+                ",
             )?;
 
             let figment = Figment::new().merge(Yaml::file("config.yaml"));
@@ -288,14 +290,14 @@ mod tests {
         Jail::expect_with(|jail| {
             jail.create_file(
                 "config.yaml",
-                r#"
+                r"
                     sms:
                       provider:
                         type: paloud_internal
                         url: '::not-a-url::'
                         key_id: coauth-control-dev
                         secret: super-secret
-                "#,
+                ",
             )?;
 
             let figment = Figment::new().merge(Yaml::file("config.yaml"));

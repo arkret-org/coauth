@@ -206,7 +206,7 @@ impl ConfigurationSection for TelemetryConfig {
             "sentry.traces_sample_rate",
         )?;
         check_sample_rate_bounds(
-            self.tracing.sample_rate.map(|v| v as f64),
+            self.tracing.sample_rate,
             "Tracing",
             "tracing.sample_rate",
         )?;

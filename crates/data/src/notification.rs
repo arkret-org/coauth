@@ -371,6 +371,8 @@ pub struct NotificationProviderBinding {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)]
+
     use super::{
         NotificationDelivery, NotificationDeliveryFailure, NotificationDeliveryStatus,
         NotificationRequestStatus,

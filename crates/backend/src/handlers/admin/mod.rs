@@ -10,8 +10,6 @@
 use salvo::prelude::*;
 use serde::Serialize;
 
-use crate::{handlers::account::DepotExt, salvo_utils::InternalError};
-
 mod call_context;
 mod model;
 mod params;
@@ -50,6 +48,7 @@ pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 pub const CONTRIX_ADMIN_SCOPE: &str = "urn:contrix:admin:*";
 
 /// Returns `true` if the given scope string contains an admin scope.
+#[must_use] 
 pub fn has_admin_scope(scope: &oauth_types::scope::Scope) -> bool {
     scope.contains(ADMIN_SCOPE)
         || scope.contains(CONTRIX_ADMIN_SCOPE)

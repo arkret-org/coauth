@@ -40,7 +40,7 @@ pub fn AccountSettings() -> Element {
                 .as_ref()
                 .map(|ec| ec.edges.iter().map(|e| e.node.clone()).collect())
                 .unwrap_or_default();
-            let email_count = user.emails.as_ref().map(|ec| ec.total_count).unwrap_or(0);
+            let email_count = user.emails.as_ref().map_or(0, |ec| ec.total_count);
             let has_password = user.has_password.unwrap_or(false);
             let linked_accounts: Vec<LinkedAccount> =
                 user.linked_accounts.clone().unwrap_or_default();
@@ -58,7 +58,7 @@ pub fn AccountSettings() -> Element {
                 div { class: "flex flex-col gap-6",
                     // Email section
                     if email_change_allowed || email_count > 0 {
-                        CollapsibleSection { title: "Contact info".to_string(), default_open: true,
+                        CollapsibleSection { title: "Contact info".to_owned(), default_open: true,
                             UserEmailList {
                                 emails: emails,
                                 email_change_allowed: email_change_allowed,
@@ -76,7 +76,7 @@ pub fn AccountSettings() -> Element {
 
                     // Password section
                     if password_login_enabled && has_password {
-                        CollapsibleSection { title: "Account password".to_string(), default_open: true,
+                        CollapsibleSection { title: "Account password".to_owned(), default_open: true,
                             AccountManagementPasswordPreview {}
                         }
                         Separator { kind: SeparatorKind::Section }
@@ -139,14 +139,12 @@ fn SignOutButton(session_id: String) -> Element {
                         disabled: signing_out(),
                         onclick: {
                             let sid = session_id_clone.clone();
-                            let nav = nav.clone();
                             move |_| {
                                 let sid = sid.clone();
-                                let nav = nav.clone();
                                 signing_out.set(true);
                                 spawn(async move {
                                     let _ = crate::api::api_delete::<crate::api::types::EndSessionPayload>(
-                                        &format!("/browser-sessions/{}", sid),
+                                        &format!("/browser-sessions/{sid}"),
                                     ).await;
                                     nav.push(Route::Login {});
                                 });
@@ -183,7 +181,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
     });
 
     rsx! {
-        CollapsibleSection { title: "Linked accounts".to_string(), default_open: true,
+        CollapsibleSection { title: "Linked accounts".to_owned(), default_open: true,
             p { class: "text-md text-secondary",
                 "Connect external accounts to enable additional sign-in methods."
             }
@@ -203,7 +201,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
                                 .unwrap_or_default();
                             let provider_label = account.provider_name.clone()
                                 .or_else(|| account.provider_brand.clone())
-                                .unwrap_or_else(|| "External provider".to_string());
+                                .unwrap_or_else(|| "External provider".to_owned());
                             rsx! {
                                 div {
                                     class: "flex items-center justify-between p-3 rounded-lg border",
@@ -222,7 +220,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
                                                 error.set(None);
                                                 spawn(async move {
                                                     let result = crate::api::api_delete::<crate::api::types::UnlinkResponse>(
-                                                        &format!("/linked-accounts/{}", aid),
+                                                        &format!("/linked-accounts/{aid}"),
                                                     ).await;
                                                     match result {
                                                         Ok(_) => {
@@ -262,7 +260,9 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
                     let unlinked: Vec<_> = providers.providers.iter()
                         .filter(|p| !linked_provider_ids.contains(&p.id))
                         .collect();
-                    if !unlinked.is_empty() {
+                    if unlinked.is_empty() {
+                        rsx! {}
+                    } else {
                         rsx! {
                             div { class: "flex flex-wrap gap-2 mt-3",
                                 for provider in unlinked.iter() {
@@ -274,8 +274,6 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
                                 }
                             }
                         }
-                    } else {
-                        rsx! {}
                     }
                 }
             }
@@ -408,7 +406,6 @@ fn AccountDeleteButton(
                         class: "btn btn-destructive-solid",
                         disabled: deactivating() || !confirm_enabled() || !form_valid,
                         onclick: {
-                            let nav = nav.clone();
                             move |_| {
                                 let principal_erase = erase_data();
                                 let pw = if use_password_mode {
@@ -416,7 +413,6 @@ fn AccountDeleteButton(
                                 } else {
                                     None
                                 };
-                                let nav = nav.clone();
                                 deactivating.set(true);
                                 error.set(None);
                                 spawn(async move {
@@ -425,7 +421,7 @@ fn AccountDeleteButton(
                                     });
                                     if let Some(ref pw_val) = pw {
                                         body.as_object_mut().unwrap().insert(
-                                            "password".to_string(),
+                                            "password".to_owned(),
                                             serde_json::Value::String(pw_val.clone()),
                                         );
                                     }
@@ -440,10 +436,10 @@ fn AccountDeleteButton(
                                                 nav.push(Route::Login {});
                                             }
                                             crate::api::types::DeactivateUserStatus::NotFound => {
-                                                error.set(Some("Account not found.".to_string()));
+                                                error.set(Some("Account not found.".to_owned()));
                                             }
                                             crate::api::types::DeactivateUserStatus::IncorrectPassword => {
-                                                error.set(Some("Incorrect password.".to_string()));
+                                                error.set(Some("Incorrect password.".to_owned()));
                                             }
                                         },
                                         Err(e) => {

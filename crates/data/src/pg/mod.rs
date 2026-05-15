@@ -124,7 +124,7 @@ pub async fn migrate(
             .run_pending_migrations(MIGRATIONS)
             .map_err(|e| anyhow::anyhow!("could not run migrations: {e}"))?;
         // Convert MigrationVersion (which borrows wrapper) to owned strings
-        let versions: Vec<String> = applied.iter().map(|v| v.to_string()).collect();
+        let versions: Vec<String> = applied.iter().map(std::string::ToString::to_string).collect();
         Ok::<_, anyhow::Error>(versions)
     })
     .await

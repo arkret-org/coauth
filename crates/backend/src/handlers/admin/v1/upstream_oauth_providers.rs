@@ -143,8 +143,8 @@ pub struct ProviderRequest {
     brand_name: Option<String>,
     /// Space-separated OAuth scope, e.g. "openid email profile"
     scope: String,
-    /// One of: none, client_secret_basic, client_secret_post,
-    /// client_secret_jwt, private_key_jwt, sign_in_with_apple, qq_connect,
+    /// One of: none, `client_secret_basic`, `client_secret_post`,
+    /// `client_secret_jwt`, `private_key_jwt`, `sign_in_with_apple`, `qq_connect`,
     /// feishu, lark, dingtalk, wechat, wecom
     token_endpoint_auth_method: String,
     token_endpoint_signing_alg: Option<String>,
@@ -171,7 +171,7 @@ pub struct ProviderRequest {
     /// One of: auto, s256, disabled
     #[serde(default = "default_pkce_mode")]
     pkce_mode: String,
-    /// One of: query, form_post
+    /// One of: query, `form_post`
     response_mode: Option<String>,
     #[serde(default)]
     additional_authorization_parameters: Vec<(String, String)>,
@@ -179,7 +179,7 @@ pub struct ProviderRequest {
     forward_login_hint: bool,
     #[serde(default)]
     ui_order: i32,
-    /// One of: do_nothing, logout_browser_only, logout_all
+    /// One of: `do_nothing`, `logout_browser_only`, `logout_all`
     #[serde(default = "default_on_backchannel_logout")]
     on_backchannel_logout: String,
 }

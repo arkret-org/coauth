@@ -6,8 +6,8 @@
 //!
 //! `POST /api/admin/v1/oauth/clients/register`
 //!
-//! Accepts the standard RFC 7591 request payload (client_name,
-//! redirect_uris, grant_types, token_endpoint_auth_method, scope) and
+//! Accepts the standard RFC 7591 request payload (`client_name`,
+//! `redirect_uris`, `grant_types`, `token_endpoint_auth_method`, scope) and
 //! persists a new entry to `oauth_clients`. Returns the standard
 //! response shape — `client_id`, `client_secret` (only for confidential
 //! clients), `client_id_issued_at`, `client_secret_expires_at`, and a
@@ -196,7 +196,7 @@ fn validate_redirect_uris(raw: &[String]) -> Result<Vec<Url>, AppError> {
 
 /// Pure-function counterpart of the redirect requirement logic in
 /// [`register`]. Returns `Err` if the supplied grant types include a
-/// flow that needs a redirect_uri but none were supplied.
+/// flow that needs a `redirect_uri` but none were supplied.
 fn ensure_redirect_for_grants(grants: &[GrantType], redirect_uris: &[Url]) -> Result<(), AppError> {
     let needs_redirect = grants
         .iter()

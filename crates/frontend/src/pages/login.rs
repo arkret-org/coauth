@@ -65,11 +65,11 @@ fn current_query_string() -> String {
         && let Ok(search) = window.location().search()
         && !search.is_empty()
     {
-        return search.trim_start_matches('?').to_string();
+        return search.trim_start_matches('?').to_owned();
     }
 
     preserved_login_query()
-        .map(|s| s.trim_start_matches('?').to_string())
+        .map(|s| s.trim_start_matches('?').to_owned())
         .unwrap_or_default()
 }
 
@@ -157,13 +157,12 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                             let pass = password.to_string();
 
                             if user.is_empty() || pass.is_empty() {
-                                error.set(Some("Please enter your username and password.".to_string()));
+                                error.set(Some("Please enter your username and password.".to_owned()));
                                 return;
                             }
 
                             submitting.set(true);
                             error.set(None);
-                            let nav = nav.clone();
 
                             spawn(async move {
                                 let result = crate::api::api_post::<LoginResponse>(
@@ -201,7 +200,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                                             Some(other) => other,
                                             None => "Login failed.",
                                         };
-                                        error.set(Some(msg.to_string()));
+                                        error.set(Some(msg.to_owned()));
                                     }
                                     Err(e) => {
                                         error.set(Some(e));
@@ -309,7 +308,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                                 // overview.
                                 let continuation =
                                     get_query_param("kind").zip(get_query_param("id"));
-                                if let Some((kind, id)) = continuation {
+                                if let Some((_kind, _id)) = continuation {
                                     #[cfg(target_arch = "wasm32")]
                                     if let Some(storage) = web_sys::window()
                                         .and_then(|w| w.session_storage().ok().flatten())

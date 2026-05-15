@@ -56,12 +56,9 @@ fn get_or_create_group<'a>(
     base: &str,
 ) -> &'a mut Vec<(Option<LanguageTag>, Value)> {
     let idx = groups.iter().position(|(name, _)| name == base);
-    match idx {
-        Some(i) => &mut groups[i].1,
-        None => {
-            groups.push((base.to_owned(), Vec::new()));
-            &mut groups.last_mut().expect("just pushed").1
-        }
+    if let Some(i) = idx { &mut groups[i].1 } else {
+        groups.push((base.to_owned(), Vec::new()));
+        &mut groups.last_mut().expect("just pushed").1
     }
 }
 

@@ -161,7 +161,7 @@ pub async fn post(
         }
         PasswordLoginOutcome::AccountDeactivated { user } => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            let err = AccountError::Deactivated { username: user.handle.clone() };
+            let err = AccountError::Deactivated { handle: user.handle.clone() };
             let err_state = crate::handlers::views::app::account_error_to_state(&err);
             let ctx = AppContext::new(&url_builder, &depot.frontend_script_src()?)
                 .with_error(err_state)
@@ -172,7 +172,7 @@ pub async fn post(
         }
         PasswordLoginOutcome::AccountLocked { user } => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            let err = AccountError::Locked { username: user.handle.clone() };
+            let err = AccountError::Locked { handle: user.handle.clone() };
             let err_state = crate::handlers::views::app::account_error_to_state(&err);
             let ctx = AppContext::new(&url_builder, &depot.frontend_script_src()?)
                 .with_error(err_state)

@@ -1,6 +1,6 @@
-//! WeChat Open Platform OAuth specific request implementations.
+//! `WeChat` Open Platform OAuth specific request implementations.
 //!
-//! WeChat uses a non-standard OAuth flow:
+//! `WeChat` uses a non-standard OAuth flow:
 //! - Uses `appid` instead of `client_id`, `secret` instead of `client_secret`
 //! - Token response includes `openid` and `unionid` directly
 //! - UserInfo requires `openid` as a query parameter
@@ -15,7 +15,7 @@ use url::Url;
 use super::super::error::{TokenRequestError, UserInfoError};
 use crate::outbound_http::RequestBuilderExt;
 
-/// WeChat token endpoint response.
+/// `WeChat` token endpoint response.
 #[derive(Debug, Deserialize)]
 pub struct WeChatTokenResponse {
     /// The access token.
@@ -27,7 +27,7 @@ pub struct WeChatTokenResponse {
     pub refresh_token: Option<String>,
     /// The user's OpenID (unique per app).
     pub openid: String,
-    /// The user's UnionID (unique across apps under the same open platform).
+    /// The user's `UnionID` (unique across apps under the same open platform).
     pub unionid: Option<String>,
     /// Granted scope.
     pub scope: Option<String>,
@@ -37,7 +37,7 @@ pub struct WeChatTokenResponse {
     pub errmsg: Option<String>,
 }
 
-/// Exchange an authorization code for an access token with WeChat.
+/// Exchange an authorization code for an access token with `WeChat`.
 ///
 /// `GET https://api.weixin.qq.com/sns/oauth/access_token?appid=APPID&secret=SECRET&code=CODE&grant_type=authorization_code`
 #[tracing::instrument(skip_all, fields(%token_endpoint))]
@@ -61,24 +61,22 @@ pub async fn request_access_token(
         .get(url)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
-    if let Some(errcode) = response.errcode {
-        if errcode != 0 {
+    if let Some(errcode) = response.errcode
+        && errcode != 0 {
             return Err(TokenRequestError::ProviderError {
                 code: errcode,
                 msg: response.errmsg.unwrap_or_default(),
             });
         }
-    }
 
     Ok(response)
 }
 
-/// Fetch user info from WeChat's SNS userinfo endpoint.
+/// Fetch user info from `WeChat`'s SNS userinfo endpoint.
 ///
 /// `GET https://api.weixin.qq.com/sns/userinfo?access_token=TOKEN&openid=OPENID&lang=zh_CN`
 ///
@@ -102,14 +100,13 @@ pub async fn fetch_userinfo(
         .get(url)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
     // Check for error
-    if let Some(errcode) = response.get("errcode").and_then(|v| v.as_i64()) {
-        if errcode != 0 {
+    if let Some(errcode) = response.get("errcode").and_then(serde_json::Value::as_i64)
+        && errcode != 0 {
             let msg = response
                 .get("errmsg")
                 .and_then(|v| v.as_str())
@@ -120,7 +117,6 @@ pub async fn fetch_userinfo(
                 msg,
             });
         }
-    }
 
     Ok(response)
 }

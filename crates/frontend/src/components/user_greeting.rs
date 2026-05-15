@@ -345,5 +345,5 @@ async fn upload_selected_avatar() -> Result<Option<String>, String> {
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn upload_selected_avatar() -> Result<Option<String>, String> {
-    Err("not supported on this platform".to_string())
+    Err("not supported on this platform".to_owned())
 }

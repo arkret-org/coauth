@@ -49,7 +49,7 @@ pub struct LoginRequest {
     /// Audience the client wants the issued session grant to be bound to.
     /// Must exactly match a configured principal-server audience. When
     /// omitted, the caller is implicitly accepting the deployment's only
-    /// configured server_name; deployments with zero or multiple
+    /// configured `server_name`; deployments with zero or multiple
     /// principal servers will reject the request.
     #[serde(default)]
     pub audience: Option<String>,
@@ -152,14 +152,13 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
         .ip()
-        .map(RequesterFingerprint::new)
-        .unwrap_or(RequesterFingerprint::EMPTY);
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
     let cookie_jar = depot.cookie_jar(req)?;
     let user_agent = req
         .headers()
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
 
     let input: LoginRequest = req
         .parse_json()

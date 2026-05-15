@@ -39,7 +39,7 @@ pub const MAX_TOKEN_CLOCK_SKEW: Duration = Duration::minutes(5);
 
 /// Mapping rule: which raw upstream claim feeds which canonical Contrix field.
 ///
-/// Each `Option<String>` is the *raw claim name in the upstream id_token*; if
+/// Each `Option<String>` is the *raw claim name in the upstream `id_token`*; if
 /// it is `None`, the field is not extracted and stays `None` on the mapped
 /// identity (or, for `role`, falls back to `default_role`).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -115,7 +115,7 @@ impl TrustedIssuerPolicySet {
     }
 }
 
-/// Typed Contrix-side identity projected from an upstream id_token.
+/// Typed Contrix-side identity projected from an upstream `id_token`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MappedUpstreamIdentity {
     pub sub: String,
@@ -168,7 +168,7 @@ pub fn peek_issuer(id_token: &str) -> Result<String, MappingError> {
         .ok_or(MappingError::MissingClaim("iss"))
 }
 
-/// Validate the upstream id_token against the matching `TrustedIssuerPolicy`
+/// Validate the upstream `id_token` against the matching `TrustedIssuerPolicy`
 /// from `policy_set` and project the claims into `MappedUpstreamIdentity`.
 ///
 /// # Errors

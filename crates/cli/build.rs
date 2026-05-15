@@ -1,3 +1,8 @@
+// Build scripts run before `camino` is necessarily a build-time dep, and
+// only ever see paths through `CARGO_MANIFEST_DIR`, so the workspace
+// policy of "use `camino::Utf8Path*`" doesn't apply here.
+#![allow(clippy::disallowed_types)]
+
 use std::{
     env,
     path::{Path, PathBuf},

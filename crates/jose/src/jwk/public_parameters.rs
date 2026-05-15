@@ -2,6 +2,10 @@
 //
 // Each key type has its own parameter struct that implements
 // `ParametersInfo` to report the key type and compatible algorithms.
+//
+// The crypto stack still pulls in generic-array 0.x via the digest crates;
+// silence the deprecation noise until the ecosystem moves.
+#![allow(deprecated)]
 
 use coauth_iana::jose::{
     JsonWebKeyEcEllipticCurve, JsonWebKeyOkpEllipticCurve, JsonWebKeyType, JsonWebSignatureAlg,

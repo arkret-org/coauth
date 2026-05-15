@@ -56,7 +56,7 @@ pub struct FlowDefinitionFile {
 /// A single stage within a declarative flow definition.
 ///
 /// Uses `#[serde(tag = "type")]` so the YAML/JSON `type` field selects the
-/// variant, matching the snake_case naming of [`StageKind`].
+/// variant, matching the `snake_case` naming of [`StageKind`].
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StageDefinition {
@@ -97,7 +97,7 @@ pub enum StageDefinition {
         order: i32,
         fields: Vec<PromptField>,
     },
-    /// Validate a second factor (TOTP, WebAuthn, etc.).
+    /// Validate a second factor (TOTP, `WebAuthn`, etc.).
     AuthenticatorValidate {
         order: i32,
         allowed_types: Vec<AuthenticatorType>,
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn parse_registration_flow_yaml() {
-        let yaml = r#"
+        let yaml = r"
 slug: default-registration
 title: Default Registration
 designation: registration
@@ -268,7 +268,7 @@ stages:
     template_key: verification
     code_expiry_seconds: 300
     max_attempts: 5
-"#;
+";
 
         let file = FlowDefinitionFile::parse(yaml).expect("valid YAML");
         assert_eq!(file.slug, "default-registration");
@@ -279,7 +279,7 @@ stages:
 
     #[test]
     fn into_flow_produces_correct_domain_types() {
-        let yaml = r#"
+        let yaml = r"
 slug: test-recovery
 title: Test Recovery
 designation: recovery
@@ -298,7 +298,7 @@ stages:
   - type: password_write
     order: 30
     require_current: false
-"#;
+";
 
         let file = FlowDefinitionFile::parse(yaml).expect("valid YAML");
         let mut rng = test_rng();
@@ -329,14 +329,14 @@ stages:
 
     #[test]
     fn parse_minimal_captcha_stage() {
-        let yaml = r#"
+        let yaml = r"
 slug: captcha-test
 title: Captcha Test
 designation: authentication
 stages:
   - type: captcha
     order: 5
-"#;
+";
 
         let file = FlowDefinitionFile::parse(yaml).expect("valid YAML");
         let mut rng = test_rng();
@@ -350,7 +350,7 @@ stages:
 
     #[test]
     fn all_generated_ids_are_unique() {
-        let yaml = r#"
+        let yaml = r"
 slug: id-test
 title: ID Test
 designation: registration
@@ -363,7 +363,7 @@ stages:
     template_key: verification
     code_expiry_seconds: 300
     max_attempts: 5
-"#;
+";
 
         let file = FlowDefinitionFile::parse(yaml).expect("valid YAML");
         let mut rng = test_rng();

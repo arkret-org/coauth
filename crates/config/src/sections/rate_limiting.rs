@@ -42,7 +42,7 @@ pub struct RateLimitingConfig {
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct MfaTotpRateLimitingConfig {
-    /// Max TOTP attempts per account_id over a sliding window.
+    /// Max TOTP attempts per `account_id` over a sliding window.
     /// Default: 5 attempts per 15 minutes — matches NIST SP 800-63B
     /// guidance for time-based OTP throttling.
     #[serde(default = "default_mfa_totp_per_account")]
@@ -302,6 +302,7 @@ impl RateLimiterConfiguration {
     ///
     /// The `limit` is the burst count, and `period` is the time window
     /// computed from `burst / per_second`.
+    #[must_use] 
     pub fn to_limit_and_period(&self) -> Option<(usize, std::time::Duration)> {
         let reciprocal = self.per_second.recip();
         if !reciprocal.is_finite() || reciprocal < 1.0e-9 {

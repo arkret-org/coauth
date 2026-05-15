@@ -14,7 +14,7 @@
 //!
 //! * [`rotate_principal_did_for_credential`] — called from the same
 //!   handler on **subsequent** passkey enrolments (account already has
-//!   a starid-minted DID). Derives the new device's update_key, looks
+//!   a starid-minted DID). Derives the new device's `update_key`, looks
 //!   up the prior `version_id` from the binding row, posts
 //!   `POST /api/v1/webvh/dids/{did}/update` to starid, and persists
 //!   the bumped version.
@@ -130,7 +130,7 @@ mod tests {
     //! a fake `StaridRegistry`) so the wire format stays under test.
     //!
     //! The mint test does *not* feed a real `Passkey` (constructing one
-    //! requires a full WebAuthn registration ceremony with a fake
+    //! requires a full `WebAuthn` registration ceremony with a fake
     //! authenticator that's out of scope here) — instead we exercise
     //! `StaridRegistry::create_principal_did` directly with the
     //! deterministic derived key string. The derivation contract itself
@@ -150,7 +150,7 @@ mod tests {
     use crate::services::{
         did_resolver::{DefaultDidResolverService, DidResolverService},
         passkey_derive::derive_update_key_from_cose_bytes,
-        starid_adapter::{StaridRegistry, StaridRegistryHandle, StaridResolver},
+        starid_adapter::{StaridRegistryHandle, StaridResolver},
     };
 
     /// rustls's process-wide default crypto provider; required for the
@@ -173,7 +173,7 @@ mod tests {
 
     /// `StaridRegistry::create_principal_did` produces a `did:webvh:…`
     /// when wiremock returns a healthy mint response, and the resolver
-    /// adapter parses out the canonical DID + version_id. The
+    /// adapter parses out the canonical DID + `version_id`. The
     /// `update_key` posted is the multibase-encoded passkey-derived
     /// string — not the pre-37.4 placeholder.
     #[tokio::test]
@@ -256,13 +256,15 @@ mod tests {
     async fn primary_did_for_user_routes_to_starid_form_when_flag_set() {
         install_crypto_provider();
         let resolver = DefaultDidResolverService;
-        let mut contrix_config = ContrixConfig::default();
-        contrix_config.starid = Some(StaridConfig {
-            base_url: Url::parse("https://starid.example").unwrap(),
-            did_host: Some("starid.local".to_owned()),
-            path_prefix: "accounts".to_owned(),
-            admin_token: None,
-        });
+        let contrix_config = ContrixConfig {
+            starid: Some(StaridConfig {
+                base_url: Url::parse("https://starid.example").unwrap(),
+                did_host: Some("starid.local".to_owned()),
+                path_prefix: "accounts".to_owned(),
+                admin_token: None,
+            }),
+            ..ContrixConfig::default()
+        };
 
         let user_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
         let mut user = sample_user(user_id);

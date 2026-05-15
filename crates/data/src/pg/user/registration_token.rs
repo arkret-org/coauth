@@ -506,8 +506,7 @@ struct TimesUsedRow {
 mod tests {
     use chrono::Duration;
     use coauth_data::{
-        Clock as _, Pagination, RepositoryAccess as _, RepositoryFactory as _,
-        RepositoryTransaction as _, clock::MockClock, user::UserRegistrationTokenFilter,
+        Clock as _, Pagination, RepositoryAccess as _, RepositoryFactory as _, clock::MockClock, user::UserRegistrationTokenFilter,
     };
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;

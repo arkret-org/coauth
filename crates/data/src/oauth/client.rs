@@ -46,6 +46,7 @@ impl LocalizableField {
     /// unknown identifiers (which the database constraint should already
     /// reject).
     #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "client_name" => Some(Self::ClientName),

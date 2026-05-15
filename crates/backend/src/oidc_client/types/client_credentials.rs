@@ -109,7 +109,7 @@ pub enum ClientCredentials {
     // -- coauth-specific credential types for social login providers --
     /// The client authenticates using Sign in with Apple.
     ///
-    /// Apple requires a specially constructed JWT as the client_secret.
+    /// Apple requires a specially constructed JWT as the `client_secret`.
     SignInWithApple {
         /// The unique ID for the client.
         client_id: String,
@@ -124,38 +124,38 @@ pub enum ClientCredentials {
         team_id: String,
     },
 
-    /// QQ Connect: client_id and client_secret sent in the request body.
+    /// QQ Connect: `client_id` and `client_secret` sent in the request body.
     /// The actual token exchange uses a QQ-specific flow handled separately.
     QQConnect {
-        /// The unique ID for the client (QQ AppID).
+        /// The unique ID for the client (QQ `AppID`).
         client_id: String,
 
-        /// The secret of the client (QQ AppKey).
+        /// The secret of the client (QQ `AppKey`).
         client_secret: String,
     },
 
-    /// Feishu (Lark): uses app_access_token as Bearer auth for token exchange.
+    /// Feishu (Lark): uses `app_access_token` as Bearer auth for token exchange.
     /// The actual token exchange uses a Feishu-specific flow handled
     /// separately.
     Feishu {
-        /// The unique ID for the client (Feishu app_id).
+        /// The unique ID for the client (Feishu `app_id`).
         client_id: String,
 
-        /// The secret of the client (Feishu app_secret).
+        /// The secret of the client (Feishu `app_secret`).
         client_secret: String,
     },
 
     /// Lark (international Feishu): same flow as Feishu with different
     /// endpoints.
     Lark {
-        /// The unique ID for the client (Lark app_id).
+        /// The unique ID for the client (Lark `app_id`).
         client_id: String,
 
-        /// The secret of the client (Lark app_secret).
+        /// The secret of the client (Lark `app_secret`).
         client_secret: String,
     },
 
-    /// DingTalk: uses JSON body with clientId/clientSecret for token exchange.
+    /// `DingTalk`: uses JSON body with clientId/clientSecret for token exchange.
     DingTalk {
         /// The unique ID for the client.
         client_id: String,
@@ -164,21 +164,21 @@ pub enum ClientCredentials {
         client_secret: String,
     },
 
-    /// WeChat Open Platform: uses appid/secret as query params.
+    /// `WeChat` Open Platform: uses appid/secret as query params.
     WeChat {
-        /// The unique ID for the client (WeChat AppID).
+        /// The unique ID for the client (`WeChat` `AppID`).
         client_id: String,
 
-        /// The secret of the client (WeChat AppSecret).
+        /// The secret of the client (`WeChat` `AppSecret`).
         client_secret: String,
     },
 
-    /// WeCom: uses corpid/corpsecret for corp access token.
+    /// `WeCom`: uses corpid/corpsecret for corp access token.
     WeCom {
-        /// The unique ID for the client (WeCom CorpID).
+        /// The unique ID for the client (`WeCom` `CorpID`).
         client_id: String,
 
-        /// The secret of the client (WeCom CorpSecret).
+        /// The secret of the client (`WeCom` `CorpSecret`).
         client_secret: String,
     },
 }

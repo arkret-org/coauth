@@ -13,7 +13,7 @@ use elliptic_curve::{pkcs8::EncodePrivateKey, sec1::ToEncodedPoint};
 use pem_rfc7468::PemLabel;
 use pkcs1::EncodeRsaPrivateKey;
 use pkcs8::{AssociatedOid, DecodePrivateKey, PrivateKeyInfo};
-use rand_core::{CryptoRng, OsRng, RngCore};
+use rand_core::{CryptoRng, RngCore};
 use rsa::BigUint;
 use thiserror::Error;
 

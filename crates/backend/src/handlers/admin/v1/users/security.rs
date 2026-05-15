@@ -29,8 +29,8 @@ use crate::{
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "RiskActionRequest")]
 pub struct RiskActionRequest {
-    /// The risk action to perform: "lock", "force_password_reset", or
-    /// "terminate_sessions"
+    /// The risk action to perform: "lock", "`force_password_reset`", or
+    /// "`terminate_sessions`"
     action: String,
 
     /// The reason for the risk action
@@ -49,7 +49,7 @@ pub struct RiskActionResponse {
     /// The user the action was performed on
     user: SingleResponse<User>,
 
-    /// Number of sessions terminated (only for terminate_sessions action)
+    /// Number of sessions terminated (only for `terminate_sessions` action)
     #[serde(skip_serializing_if = "Option::is_none")]
     sessions_terminated: Option<usize>,
 }
@@ -81,8 +81,8 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
 
         "force_password_reset" => {
             // Lock the user account so they must reset their password
-            let user = repo.user().lock(&clock, user).await?;
-            user
+            
+            repo.user().lock(&clock, user).await?
         }
 
         "terminate_sessions" => {

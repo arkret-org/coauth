@@ -451,7 +451,7 @@ impl UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_> {
         // Use raw SQL for the CTE-based cleanup query since diesel doesn't
         // natively support CTEs with DELETE ... USING ... RETURNING.
         let res: Vec<Uuid> = diesel::sql_query(
-            r#"
+            r"
                 WITH to_delete AS (
                     SELECT id
                     FROM upstream_oauth_authorization_sessions
@@ -465,7 +465,7 @@ impl UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_> {
                 USING to_delete
                 WHERE upstream_oauth_authorization_sessions.id = to_delete.id
                 RETURNING upstream_oauth_authorization_sessions.id
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(since.map(Uuid::from))
         .bind::<diesel::sql_types::Uuid, _>(Uuid::from(until))
@@ -483,7 +483,7 @@ impl UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_> {
     }
 }
 
-/// Helper struct for the cleanup_orphaned query result
+/// Helper struct for the `cleanup_orphaned` query result
 #[derive(QueryableByName)]
 struct CleanupResult {
     #[diesel(sql_type = diesel::sql_types::Uuid)]

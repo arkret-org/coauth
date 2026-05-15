@@ -99,7 +99,7 @@ fn RecoveryProgressContent(data: RecoveryStatusResponse, id: String) -> Element 
                                     ).await;
                                     resending.set(false);
                                     match result {
-                                        Ok(_) => resend_msg.set(Some("Recovery email resent.".to_string())),
+                                        Ok(_) => resend_msg.set(Some("Recovery email resent.".to_owned())),
                                         Err(e) => resend_msg.set(Some(e)),
                                     }
                                 });

@@ -13,7 +13,7 @@ use ulid::Ulid;
 
 use super::response::ErrorResponse;
 use crate::{
-    handlers::{BoundActivityTracker, account::DepotExt},
+    handlers::account::DepotExt,
     record_error,
 };
 
@@ -98,11 +98,10 @@ impl Scribe for Rejection {
         };
 
         res.status_code(status);
-        if let Some(event_id) = sentry_event_id {
-            if let Ok(value) = http::HeaderValue::from_str(&event_id.to_string()) {
+        if let Some(event_id) = sentry_event_id
+            && let Ok(value) = http::HeaderValue::from_str(&event_id.to_string()) {
                 res.headers_mut().insert("x-sentry-event-id", value);
             }
-        }
         res.render(Json(response));
     }
 }

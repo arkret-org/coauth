@@ -35,7 +35,7 @@ impl<'c> PgBrowserSessionRepository<'c> {
     }
 }
 
-/// Row type for loading user_sessions columns
+/// Row type for loading `user_sessions` columns
 #[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = user_sessions)]
 struct UserSessionRow {
@@ -67,7 +67,7 @@ macro_rules! select_user_columns {
     };
 }
 
-/// Combined result from joining user_sessions + users.
+/// Combined result from joining `user_sessions` + users.
 /// We construct this from the two row types after loading.
 #[derive(Debug, Clone)]
 struct SessionLookup {
@@ -591,7 +591,7 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
         let expected = ids.len();
 
         let rows_affected = diesel::sql_query(
-            r#"
+            r"
                 UPDATE user_sessions
                 SET last_active_at = GREATEST(t.last_active_at, user_sessions.last_active_at)
                   , last_active_ip = COALESCE(t.last_active_ip, user_sessions.last_active_ip)
@@ -601,7 +601,7 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
                         AS t(user_session_id, last_active_at, last_active_ip)
                 ) AS t
                 WHERE user_sessions.id = t.user_session_id
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&ids)
         .bind::<diesel::sql_types::Array<diesel::sql_types::Timestamptz>, _>(&last_activities)
@@ -633,7 +633,7 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
         limit: usize,
     ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error> {
         let res: CleanupResult = diesel::sql_query(
-            r#"
+            r"
                 WITH
                     to_delete AS (
                         SELECT us.id AS user_session_id, us.finished_at
@@ -660,7 +660,7 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
                         RETURNING user_sessions.finished_at
                     )
                 SELECT COUNT(*) AS count, MAX(finished_at) AS last_ts FROM deleted_sessions
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, _>(since)
         .bind::<diesel::sql_types::Timestamptz, _>(until)
@@ -688,7 +688,7 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
         limit: usize,
     ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error> {
         let res: CleanupResult = diesel::sql_query(
-            r#"
+            r"
                 WITH to_update AS (
                     SELECT id AS user_session_id, last_active_at
                     FROM user_sessions
@@ -708,7 +708,7 @@ impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
                     RETURNING user_sessions.last_active_at
                 )
                 SELECT COUNT(*) AS count, MAX(last_active_at) AS last_ts FROM updated
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, _>(since)
         .bind::<diesel::sql_types::Timestamptz, _>(threshold)

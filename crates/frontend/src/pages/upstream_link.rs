@@ -177,7 +177,7 @@ fn SuggestLinkView(
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let nav = navigator();
-    let provider = provider_name.unwrap_or_else(|| "the external provider".to_string());
+    let provider = provider_name.unwrap_or_else(|| "the external provider".to_owned());
 
     rsx! {
         div { class: "login-page",
@@ -281,7 +281,7 @@ fn RegisterView(
     let mut field_errors = use_signal(|| None::<serde_json::Value>);
     let nav = navigator();
 
-    let provider = provider_name.unwrap_or_else(|| "external provider".to_string());
+    let provider = provider_name.unwrap_or_else(|| "external provider".to_owned());
 
     rsx! {
         div { class: "login-page",

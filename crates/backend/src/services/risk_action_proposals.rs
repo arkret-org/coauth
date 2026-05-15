@@ -247,7 +247,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             .await
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         let row = diesel::sql_query(
-            r#"
+            r"
             INSERT INTO risk_action_proposals (
                 id, account_id, action, proposer_did, reason, ticket,
                 state, approval_proofs, required_approvals,
@@ -258,7 +258,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
                 id, account_id, action, proposer_did, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at, approved_at, executed_at, cancelled_at
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(id)
         .bind::<DieselUuid, _>(Uuid::from(input.account_id))
@@ -285,13 +285,13 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             .await
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         let row = diesel::sql_query(
-            r#"
+            r"
             SELECT id, account_id, action, proposer_did, reason, ticket,
                    state, approval_proofs, required_approvals,
                    created_at, updated_at, approved_at, executed_at, cancelled_at
             FROM risk_action_proposals
             WHERE id = $1
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(Uuid::from(id))
         .get_results::<ProposalRow>(&mut *conn)
@@ -310,7 +310,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             .await
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         let rows = diesel::sql_query(
-            r#"
+            r"
             SELECT id, account_id, action, proposer_did, reason, ticket,
                    state, approval_proofs, required_approvals,
                    created_at, updated_at, approved_at, executed_at, cancelled_at
@@ -318,7 +318,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             WHERE account_id = $1
             ORDER BY created_at DESC, id DESC
             LIMIT 200
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(Uuid::from(account_id))
         .get_results::<ProposalRow>(&mut *conn)
@@ -370,7 +370,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             .await
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         let row = diesel::sql_query(
-            r#"
+            r"
             UPDATE risk_action_proposals
             SET approval_proofs = $2,
                 state = $3,
@@ -381,7 +381,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
                 id, account_id, action, proposer_did, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at, approved_at, executed_at, cancelled_at
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(Uuid::from(id))
         .bind::<Jsonb, _>(proofs_json)
@@ -423,7 +423,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             .await
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         let row = diesel::sql_query(
-            r#"
+            r"
             UPDATE risk_action_proposals
             SET state = 'executed',
                 executed_at = $2,
@@ -433,7 +433,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
                 id, account_id, action, proposer_did, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at, approved_at, executed_at, cancelled_at
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(Uuid::from(id))
         .bind::<Timestamptz, _>(executed_at)
@@ -468,7 +468,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             .await
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         let row = diesel::sql_query(
-            r#"
+            r"
             UPDATE risk_action_proposals
             SET state = 'cancelled',
                 cancelled_at = $2,
@@ -478,7 +478,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
                 id, account_id, action, proposer_did, reason, ticket,
                 state, approval_proofs, required_approvals,
                 created_at, updated_at, approved_at, executed_at, cancelled_at
-            "#,
+            ",
         )
         .bind::<DieselUuid, _>(Uuid::from(id))
         .bind::<Timestamptz, _>(cancelled_at)

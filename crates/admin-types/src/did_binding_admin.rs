@@ -35,13 +35,16 @@ use serde::{Deserialize, Serialize};
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum DidBindingKind {
+    #[default]
     Primary,
     Recovery,
     Pairwise,
 }
 
 impl DidBindingKind {
+    #[must_use] 
     pub fn label(&self) -> &'static str {
         match self {
             DidBindingKind::Primary => "Primary",
@@ -50,6 +53,7 @@ impl DidBindingKind {
         }
     }
 
+    #[must_use] 
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "primary" => Some(DidBindingKind::Primary),
@@ -60,11 +64,6 @@ impl DidBindingKind {
     }
 }
 
-impl Default for DidBindingKind {
-    fn default() -> Self {
-        DidBindingKind::Primary
-    }
-}
 
 /// Lifecycle bucket for a DID binding. A binding starts in
 /// `PendingProof` until the resolver / control proof is verified, then
@@ -76,7 +75,9 @@ impl Default for DidBindingKind {
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum DidBindingState {
+    #[default]
     PendingProof,
     Active,
     Revoked,
@@ -84,6 +85,7 @@ pub enum DidBindingState {
 }
 
 impl DidBindingState {
+    #[must_use] 
     pub fn label(&self) -> &'static str {
         match self {
             DidBindingState::PendingProof => "Pending proof",
@@ -93,6 +95,7 @@ impl DidBindingState {
         }
     }
 
+    #[must_use] 
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "pending_proof" => Some(DidBindingState::PendingProof),
@@ -103,16 +106,12 @@ impl DidBindingState {
         }
     }
 
+    #[must_use] 
     pub fn is_active(&self) -> bool {
         matches!(self, DidBindingState::Active)
     }
 }
 
-impl Default for DidBindingState {
-    fn default() -> Self {
-        DidBindingState::PendingProof
-    }
-}
 
 /// Verification status for the resolver-side / control-proof check.
 ///
@@ -125,7 +124,9 @@ impl Default for DidBindingState {
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum DidBindingVerificationStatus {
+    #[default]
     Pending,
     Verified,
     Rejected,
@@ -133,6 +134,7 @@ pub enum DidBindingVerificationStatus {
 }
 
 impl DidBindingVerificationStatus {
+    #[must_use] 
     pub fn label(&self) -> &'static str {
         match self {
             DidBindingVerificationStatus::Pending => "Pending",
@@ -142,6 +144,7 @@ impl DidBindingVerificationStatus {
         }
     }
 
+    #[must_use] 
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "pending" => Some(DidBindingVerificationStatus::Pending),
@@ -153,11 +156,6 @@ impl DidBindingVerificationStatus {
     }
 }
 
-impl Default for DidBindingVerificationStatus {
-    fn default() -> Self {
-        DidBindingVerificationStatus::Pending
-    }
-}
 
 /// Whether the deployment resolves DIDs locally or delegates to a
 /// public DID resolver.
@@ -167,12 +165,15 @@ impl Default for DidBindingVerificationStatus {
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum DidBindingResolverMode {
+    #[default]
     LocalBindings,
     DelegatedResolver,
 }
 
 impl DidBindingResolverMode {
+    #[must_use] 
     pub fn label(&self) -> &'static str {
         match self {
             DidBindingResolverMode::LocalBindings => "Local bindings",
@@ -180,6 +181,7 @@ impl DidBindingResolverMode {
         }
     }
 
+    #[must_use] 
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "local_bindings" => Some(DidBindingResolverMode::LocalBindings),
@@ -189,11 +191,6 @@ impl DidBindingResolverMode {
     }
 }
 
-impl Default for DidBindingResolverMode {
-    fn default() -> Self {
-        DidBindingResolverMode::LocalBindings
-    }
-}
 
 /// Resolver/delegation metadata for one binding (or for the meta block
 /// at the top of the response).

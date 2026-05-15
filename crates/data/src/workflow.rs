@@ -321,6 +321,8 @@ pub enum WorkflowAuditAction {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)]
+
     use chrono::{Duration, Utc};
     use serde_json::Value;
 

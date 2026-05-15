@@ -285,6 +285,7 @@ impl ConfigurationSection for DatabaseConfig {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::result_large_err)]
     use figment::{
         Figment, Jail,
         providers::{Format, Yaml},

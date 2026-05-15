@@ -196,6 +196,7 @@ async fn handle_post(
         .cloned()
         .unwrap_or_default();
 
+    #[allow(clippy::box_default)] // Box::default() doesn't apply to dyn Clock+Send
     let clock: BoxClock = Box::new(SystemClock::default());
 
     let mut repo: BoxRepository = repo_factory.create().await?;

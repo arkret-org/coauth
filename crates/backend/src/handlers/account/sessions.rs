@@ -112,10 +112,10 @@ pub async fn get_session(
                 display_name: None,
                 client: detail.client.map(|c| OauthClientBrief {
                     id: NodeType::OAuthClient.serialize(c.id),
-                    client_id: c.client_id.to_string(),
+                    client_id: c.client_id.clone(),
                     client_name: c.client_name.clone(),
-                    client_uri: c.client_uri.as_ref().map(|u| u.to_string()),
-                    logo_uri: c.logo_uri.as_ref().map(|u| u.to_string()),
+                    client_uri: c.client_uri.as_ref().map(std::string::ToString::to_string),
+                    logo_uri: c.logo_uri.as_ref().map(std::string::ToString::to_string),
                 }),
                 user_agent: session.user_agent.as_deref().map(parse_user_agent),
                 last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),

@@ -327,6 +327,7 @@ fn attach_recurring_schedules(w: &mut QueueWorker) -> Result<(), QueueRunnerErro
 /// # Errors
 ///
 /// Returns an error when the initial database connection fails.
+#[allow(clippy::too_many_arguments)]
 pub async fn init(
     repository_factory: PgRepositoryFactory,
     database_url: String,

@@ -26,6 +26,7 @@ pub enum FederationPeerHealth {
 }
 
 impl FederationPeerHealth {
+    #[must_use] 
     pub fn label(&self) -> &'static str {
         match self {
             FederationPeerHealth::Healthy => "Healthy",
@@ -34,6 +35,7 @@ impl FederationPeerHealth {
         }
     }
 
+    #[must_use] 
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "healthy" | "ok" => Some(FederationPeerHealth::Healthy),
@@ -73,6 +75,7 @@ pub struct FederationStatusRow {
 }
 
 impl FederationStatusRow {
+    #[must_use] 
     pub fn health_typed(&self) -> FederationPeerHealth {
         FederationPeerHealth::from_wire(&self.health).unwrap_or(FederationPeerHealth::Healthy)
     }

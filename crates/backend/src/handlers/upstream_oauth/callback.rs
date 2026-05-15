@@ -66,6 +66,7 @@ pub struct Params {
 
 impl Params {
     /// Returns true if none of the fields are set
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.state.is_none()
             && self.code.is_none()
@@ -800,7 +801,7 @@ pub async fn handler(
     cookie_jar.finalize(
         res,
         salvo::writing::Redirect::other(
-            &url_builder.relative_url(&format!("/upstream/link/{}", link.id)),
+            url_builder.relative_url(&format!("/upstream/link/{}", link.id)),
         ),
     );
     Ok(())

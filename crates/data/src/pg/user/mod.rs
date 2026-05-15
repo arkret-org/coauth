@@ -19,6 +19,7 @@ use crate::{DatabaseError, schema::users};
 mod email;
 mod password;
 mod phone;
+mod principal_did;
 mod recovery;
 mod registration;
 mod registration_token;
@@ -31,7 +32,8 @@ mod tests;
 
 pub use self::{
     email::PgUserEmailRepository, password::PgUserPasswordRepository, phone::PgUserPhoneRepository,
-    recovery::PgUserRecoveryRepository, registration::PgUserRegistrationRepository,
+    principal_did::PgPrincipalDidRepository, recovery::PgUserRecoveryRepository,
+    registration::PgUserRegistrationRepository,
     registration_token::PgUserRegistrationTokenRepository, session::PgBrowserSessionRepository,
     terms::PgUserTermsRepository, totp::PgUserTotpRepository,
 };
@@ -334,7 +336,10 @@ impl UserRepository for PgUserRepository<'_> {
             return Ok(user);
         }
         user.locked_at = None;
-        user.updated_at = Utc::now();
+        #[allow(clippy::disallowed_methods)] // trait signature doesn't expose a Clock
+        {
+            user.updated_at = Utc::now();
+        }
 
         let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
             .set((
@@ -380,7 +385,10 @@ impl UserRepository for PgUserRepository<'_> {
             return Ok(user);
         }
         user.deactivated_at = None;
-        user.updated_at = Utc::now();
+        #[allow(clippy::disallowed_methods)] // trait signature doesn't expose a Clock
+        {
+            user.updated_at = Utc::now();
+        }
 
         let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
             .set((
@@ -406,7 +414,10 @@ impl UserRepository for PgUserRepository<'_> {
         can_request_admin: bool,
     ) -> Result<User, Self::Error> {
         user.can_request_admin = can_request_admin;
-        user.updated_at = Utc::now();
+        #[allow(clippy::disallowed_methods)] // trait signature doesn't expose a Clock
+        {
+            user.updated_at = Utc::now();
+        }
 
         let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
             .set((
@@ -432,7 +443,10 @@ impl UserRepository for PgUserRepository<'_> {
         starid_backend: bool,
     ) -> Result<User, Self::Error> {
         user.starid_backend = starid_backend;
-        user.updated_at = Utc::now();
+        #[allow(clippy::disallowed_methods)] // trait signature doesn't expose a Clock
+        {
+            user.updated_at = Utc::now();
+        }
 
         let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
             .set((

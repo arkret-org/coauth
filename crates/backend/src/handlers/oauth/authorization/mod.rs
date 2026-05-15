@@ -1,12 +1,11 @@
 use coauth_data::{
-    AuthorizationCode, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, Pkce, PostAuthAction,
-    RepositoryAccess, SystemClock, UrlBuilder,
+    AuthorizationCode, BoxClock, BoxRepository, BoxRng, Pkce, PostAuthAction,
+    RepositoryAccess, SystemClock,
     oauth::{
         OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthSessionFilter,
         OAuthSessionRepository,
     },
 };
-use coauth_templates::Templates;
 use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     pkce,
@@ -134,6 +133,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
     let mut repo: BoxRepository = depot.repo().await?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
 
+    #[allow(clippy::box_default)] // Box::default() doesn't apply to dyn Clock+Send
     let clock: BoxClock = Box::new(SystemClock::default());
     let mut rng: BoxRng =
         Box::new(ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng"));
@@ -311,7 +311,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                         } else {
                             format!("/register?{query_str}")
                         };
-                        salvo::writing::Redirect::other(&url_builder.relative_url(&path))
+                        salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     }
                 }
 
@@ -327,7 +327,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                         } else {
                             format!("/login?{query_str}")
                         };
-                        salvo::writing::Redirect::other(&url_builder.relative_url(&path))
+                        salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     }
                 }
 
@@ -344,7 +344,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                         } else {
                             format!("/register?{query_str}")
                         };
-                        salvo::writing::Redirect::other(&url_builder.relative_url(&path))
+                        salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     }
                 }
 
@@ -361,7 +361,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                         } else {
                             format!("/login?{query_str}")
                         };
-                        salvo::writing::Redirect::other(&url_builder.relative_url(&path))
+                        salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     }
                 }
 
@@ -387,13 +387,13 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                         } else {
                             format!("/login?{query_str}")
                         };
-                        salvo::writing::Redirect::other(&url_builder.relative_url(&path))
+                        salvo::writing::Redirect::other(url_builder.relative_url(&path))
                     } else {
                         activity_tracker
                             .record_browser_session(&clock, &user_session)
                             .await;
                         salvo::writing::Redirect::other(
-                            &url_builder.relative_url(&format!("/consent/{}", grant.id)),
+                            url_builder.relative_url(&format!("/consent/{}", grant.id)),
                         )
                     }
                 }

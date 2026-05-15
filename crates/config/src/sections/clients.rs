@@ -145,7 +145,7 @@ impl ClientConfig {
         Ok(())
     }
 
-    /// Ensures a client_secret is present, returning an error otherwise
+    /// Ensures a `client_secret` is present, returning an error otherwise
     fn require_secret_for_method(
         &self,
         method: impl std::fmt::Display,
@@ -158,7 +158,7 @@ impl ClientConfig {
         Ok(())
     }
 
-    /// Ensures client_secret is absent for the given method
+    /// Ensures `client_secret` is absent for the given method
     fn reject_secret_for_method(
         &self,
         method: impl std::fmt::Display,
@@ -171,7 +171,7 @@ impl ClientConfig {
         Ok(())
     }
 
-    /// Ensures jwks and jwks_uri are both absent for the given method
+    /// Ensures jwks and `jwks_uri` are both absent for the given method
     fn reject_jwks_for_method(
         &self,
         method: impl std::fmt::Display,
@@ -308,6 +308,7 @@ impl ConfigurationSection for ClientsConfig {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::result_large_err)]
     use std::str::FromStr;
 
     use figment::{

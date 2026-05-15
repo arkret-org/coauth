@@ -683,7 +683,7 @@ impl AwsSesWebhookRuntime {
             "Notification" => {
                 let message: SesSnsMessage = serde_json::from_str(&envelope.message)
                     .map_err(|error| Error::BadRequest(error.to_string()))?;
-                let Some(status) = ses_event_status(&message.event_type()) else {
+                let Some(status) = ses_event_status(message.event_type()) else {
                     return Ok(ParsedWebhook {
                         updates: Vec::new(),
                         subscription_confirmed: false,
@@ -986,7 +986,7 @@ fn ses_event_status(event_type: &str) -> Option<DeliveryTerminalStatus> {
 fn normalize_event_type(value: &str) -> String {
     value
         .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .flat_map(char::to_lowercase)
         .collect()
 }
@@ -1054,8 +1054,8 @@ fn lookup_from_string_tags(
     provider_message_id: Option<String>,
 ) -> Result<DeliveryLookup, Error> {
     for tag in tags {
-        if let Some((name, value)) = parse_key_value_tag(tag) {
-            if name == DELIVERY_ID_TAG {
+        if let Some((name, value)) = parse_key_value_tag(tag)
+            && name == DELIVERY_ID_TAG {
                 return value
                     .parse()
                     .map(DeliveryLookup::DeliveryId)
@@ -1063,7 +1063,6 @@ fn lookup_from_string_tags(
                         Error::BadRequest(format!("invalid delivery id in webhook tag: {error}"))
                     });
             }
-        }
     }
 
     provider_message_id
@@ -1368,7 +1367,11 @@ fn validate_sns_signing_cert_url(
         ));
     }
 
-    if !path.starts_with("/SimpleNotificationService-") || !path.ends_with(".pem") {
+    if !path.starts_with("/SimpleNotificationService-")
+        || !path
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("pem"))
+    {
         return Err(Error::Unauthorized(
             "SNS SigningCertURL path must reference a SimpleNotificationService PEM certificate"
                 .into(),

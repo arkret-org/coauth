@@ -83,21 +83,20 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
                             let pw2 = new_password_again.to_string();
 
                             if user.is_empty() {
-                                error.set(Some("Username is required.".to_string()));
+                                error.set(Some("Username is required.".to_owned()));
                                 return;
                             }
                             if pw.is_empty() {
-                                error.set(Some("Password is required.".to_string()));
+                                error.set(Some("Password is required.".to_owned()));
                                 return;
                             }
                             if pw != pw2 {
-                                error.set(Some("Passwords do not match.".to_string()));
+                                error.set(Some("Passwords do not match.".to_owned()));
                                 return;
                             }
 
                             submitting.set(true);
                             error.set(None);
-                            let nav = nav.clone();
 
                             spawn(async move {
                                 let result = crate::api::api_post::<RegisterResponse>(
@@ -131,7 +130,7 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
                                         }
                                     }
                                     Ok(resp) => {
-                                        let msg = resp.error.unwrap_or_else(|| "Registration failed.".to_string());
+                                        let msg = resp.error.unwrap_or_else(|| "Registration failed.".to_owned());
                                         error.set(Some(msg));
                                     }
                                     Err(e) => error.set(Some(e)),
@@ -251,9 +250,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
         _ => None,
     };
     let masked_email = pending_email
-        .as_deref()
-        .map(mask_email_address)
-        .unwrap_or_else(|| "your email address".to_string());
+        .as_deref().map_or_else(|| "your email address".to_owned(), mask_email_address);
     let change_email_seed = pending_email.clone().unwrap_or_default();
 
     rsx! {
@@ -290,7 +287,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                                 e.stop_propagation();
                                 let new_email = email.to_string();
                                 if new_email.trim().is_empty() {
-                                    error.set(Some("Please enter your email address.".to_string()));
+                                    error.set(Some("Please enter your email address.".to_owned()));
                                     return;
                                 }
 
@@ -309,15 +306,13 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                                         Ok(resp) if resp.status == "updated" => {
                                             code.set(String::new());
                                             editing_email.set(false);
-                                            resend_message.set(Some("Your email has been updated and a new code has been sent.".to_string()));
+                                            resend_message.set(Some("Your email has been updated and a new code has been sent.".to_owned()));
                                             status.restart();
                                         }
                                         Ok(resp) => {
                                             let message = resp
                                                 .error
-                                                .as_deref()
-                                                .map(registration_error_message)
-                                                .unwrap_or_else(|| "Could not update your email address.".to_string());
+                                                .as_deref().map_or_else(|| "Could not update your email address.".to_owned(), registration_error_message);
                                             error.set(Some(message));
                                         }
                                         Err(e) => error.set(Some(e)),
@@ -370,14 +365,13 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                             e.stop_propagation();
                             let c = code.to_string();
                             if c.is_empty() {
-                                error.set(Some("Please enter the verification code.".to_string()));
+                                error.set(Some("Please enter the verification code.".to_owned()));
                                 return;
                             }
 
                             submitting.set(true);
                             error.set(None);
                             resend_message.set(None);
-                            let nav = nav.clone();
                             let rid = reg_id.clone();
 
                             spawn(async move {
@@ -396,9 +390,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                                     Ok(resp) => {
                                         let message = resp
                                             .error
-                                            .as_deref()
-                                            .map(registration_error_message)
-                                            .unwrap_or_else(|| "Incorrect code. Please try again.".to_string());
+                                            .as_deref().map_or_else(|| "Incorrect code. Please try again.".to_owned(), registration_error_message);
                                         error.set(Some(message));
                                     }
                                     Err(e) => error.set(Some(e)),
@@ -446,13 +438,13 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                                     resending.set(false);
                                     match result {
                                         Ok(resp) if resp.status == "resent" => {
-                                            resend_message.set(Some("A new verification code has been sent.".to_string()));
+                                            resend_message.set(Some("A new verification code has been sent.".to_owned()));
                                         }
                                         Ok(resp) => {
                                             let message = match resp.status.as_str() {
-                                                "already_verified" => "This email has already been verified.".to_string(),
-                                                "rate_limited" => "Please wait before requesting another code.".to_string(),
-                                                _ => "Could not resend the verification code.".to_string(),
+                                                "already_verified" => "This email has already been verified.".to_owned(),
+                                                "rate_limited" => "Please wait before requesting another code.".to_owned(),
+                                                _ => "Could not resend the verification code.".to_owned(),
                                             };
                                             error.set(Some(message));
                                         }
@@ -477,11 +469,11 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
 fn mask_email_address(email: &str) -> String {
     let trimmed = email.trim();
     let Some((local, domain)) = trimmed.split_once('@') else {
-        return trimmed.to_string();
+        return trimmed.to_owned();
     };
 
     if local.is_empty() || domain.is_empty() {
-        return trimmed.to_string();
+        return trimmed.to_owned();
     }
 
     let visible = local.chars().take(2).collect::<String>();
@@ -490,18 +482,18 @@ fn mask_email_address(email: &str) -> String {
 
 fn registration_error_message(code: &str) -> String {
     match code {
-        "invalid_code" => "Incorrect code. Please try again.".to_string(),
-        "rate_limited" => "Please wait a moment and try again.".to_string(),
+        "invalid_code" => "Incorrect code. Please try again.".to_owned(),
+        "rate_limited" => "Please wait a moment and try again.".to_owned(),
         "registration_already_completed" => {
-            "This registration has already been completed.".to_string()
+            "This registration has already been completed.".to_owned()
         }
-        "email_already_verified" => "This email has already been verified.".to_string(),
-        "email_invalid" => "Please enter a valid email address.".to_string(),
-        "email_in_use" => "This email is already in use.".to_string(),
+        "email_already_verified" => "This email has already been verified.".to_owned(),
+        "email_invalid" => "Please enter a valid email address.".to_owned(),
+        "email_in_use" => "This email is already in use.".to_owned(),
         "bootstrap_admin_token_invalid" => {
-            "That admin bootstrap token is not valid. Clear the field to continue as a regular user, or enter the correct token to claim the first administrator account.".to_string()
+            "That admin bootstrap token is not valid. Clear the field to continue as a regular user, or enter the correct token to claim the first administrator account.".to_owned()
         }
-        other => other.to_string(),
+        other => other.to_owned(),
     }
 }
 
@@ -556,14 +548,13 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
                             e.stop_propagation();
                             let c = code.to_string();
                             if c.is_empty() {
-                                error.set(Some("Please enter the verification code.".to_string()));
+                                error.set(Some("Please enter the verification code.".to_owned()));
                                 return;
                             }
 
                             submitting.set(true);
                             error.set(None);
                             resend_message.set(None);
-                            let nav = nav.clone();
                             let rid = reg_id.clone();
 
                             spawn(async move {
@@ -581,7 +572,7 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
                                         }
                                     }
                                     Ok(resp) => {
-                                        error.set(Some(resp.error.unwrap_or_else(|| "Invalid code.".to_string())));
+                                        error.set(Some(resp.error.unwrap_or_else(|| "Invalid code.".to_owned())));
                                     }
                                     Err(e) => error.set(Some(e)),
                                 }
@@ -628,7 +619,7 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
                                     resending.set(false);
                                     match result {
                                         Ok(_) => {
-                                            resend_message.set(Some("Verification code resent.".to_string()));
+                                            resend_message.set(Some("Verification code resent.".to_owned()));
                                         }
                                         Err(err) => {
                                             error.set(Some(err));
@@ -679,7 +670,6 @@ pub fn RegisterDisplayName(id: String) -> Element {
                             let name = display_name.to_string();
                             submitting.set(true);
                             error.set(None);
-                            let nav = nav.clone();
                             let rid = reg_id.clone();
 
                             spawn(async move {
@@ -693,7 +683,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
                                         nav.push(Route::RegisterFinish { id: rid });
                                     }
                                     Ok(resp) => {
-                                        error.set(Some(resp.error.unwrap_or_else(|| "Failed.".to_string())));
+                                        error.set(Some(resp.error.unwrap_or_else(|| "Failed.".to_owned())));
                                     }
                                     Err(e) => error.set(Some(e)),
                                 }
@@ -728,7 +718,6 @@ pub fn RegisterDisplayName(id: String) -> Element {
                             onclick: move |_| {
                                 submitting.set(true);
                                 error.set(None);
-                                let nav = nav.clone();
                                 let rid = reg_id2.clone();
 
                                 spawn(async move {
@@ -846,7 +835,7 @@ pub fn RegisterFinish(id: String) -> Element {
                     div { class: "login-container",
                         h1 { class: "heading-md login-title", "Registration failed" }
                         div { class: "alert alert-critical",
-                            p { {resp.error.clone().unwrap_or_else(|| "Could not complete registration.".to_string())} }
+                            p { {resp.error.clone().unwrap_or_else(|| "Could not complete registration.".to_owned())} }
                         }
                         Link { class: "btn btn-primary", to: Route::Register {},
                             "Try again"

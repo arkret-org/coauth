@@ -167,20 +167,6 @@ pub(super) async fn tick_worker(
     Ok(leader)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::jobs_to_fetch_capacity;
-
-    #[test]
-    fn limits_fetch_to_remaining_capacity() {
-        assert_eq!(jobs_to_fetch_capacity(0), 5);
-        assert_eq!(jobs_to_fetch_capacity(4), 5);
-        assert_eq!(jobs_to_fetch_capacity(7), 3);
-        assert_eq!(jobs_to_fetch_capacity(10), 0);
-        assert_eq!(jobs_to_fetch_capacity(12), 0);
-    }
-}
-
 pub(super) async fn process_all_jobs_in_tests(
     state: &State,
     registration: &Worker,
@@ -208,4 +194,18 @@ pub(super) async fn process_all_jobs_in_tests(
         .process_jobs(&mut rng, clock, &mut repo, true)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::jobs_to_fetch_capacity;
+
+    #[test]
+    fn limits_fetch_to_remaining_capacity() {
+        assert_eq!(jobs_to_fetch_capacity(0), 5);
+        assert_eq!(jobs_to_fetch_capacity(4), 5);
+        assert_eq!(jobs_to_fetch_capacity(7), 3);
+        assert_eq!(jobs_to_fetch_capacity(10), 0);
+        assert_eq!(jobs_to_fetch_capacity(12), 0);
+    }
 }

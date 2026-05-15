@@ -230,7 +230,7 @@ pub trait OAuthClientRepository: Send + Sync {
     /// Returns [`Self::Error`] if the underlying repository fails.
     async fn load_i18n(&mut self, id: Ulid) -> Result<OAuthClientI18n, Self::Error>;
 
-    /// Upsert a single (locale, display_name, description) entry into the
+    /// Upsert a single (locale, `display_name`, description) entry into the
     /// client's `i18n` JSONB column. Other locales are left untouched.
     ///
     /// Pass `description = None` to clear the description for that

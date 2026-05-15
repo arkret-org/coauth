@@ -121,7 +121,7 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
                                     submitting.set(false);
                                     match result {
                                         Ok(resp) if resp.status == "success" => {
-                                            if let Some(url) = resp.redirect_url {
+                                            if let Some(_url) = resp.redirect_url {
                                                 // Navigate browser to the OAuth callback URL
                                                 #[cfg(target_arch = "wasm32")]
                                                 {
@@ -133,7 +133,7 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
                                                     }
                                                 }
                                             } else {
-                                                error.set(Some("No redirect URL in response.".to_string()));
+                                                error.set(Some("No redirect URL in response.".to_owned()));
                                             }
                                         }
                                         Ok(resp) if resp.error.as_deref() == Some("not_authenticated") => {
@@ -143,7 +143,7 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
                                             nav.push(Route::Login {});
                                         }
                                         Ok(resp) => {
-                                            error.set(Some(resp.error.unwrap_or_else(|| "Authorization failed.".to_string())));
+                                            error.set(Some(resp.error.unwrap_or_else(|| "Authorization failed.".to_owned())));
                                         }
                                         Err(e) => error.set(Some(e)),
                                     }
@@ -168,23 +168,23 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
 
 fn scope_description(scope: &str) -> String {
     match scope {
-        "openid" => "Verify your identity with coauth".to_string(),
-        "profile" => "View your basic account profile".to_string(),
-        "email" => "View your verified email address".to_string(),
-        "phone" => "View your phone number".to_string(),
-        "address" => "View your address".to_string(),
+        "openid" => "Verify your identity with coauth".to_owned(),
+        "profile" => "View your basic account profile".to_owned(),
+        "email" => "View your verified email address".to_owned(),
+        "phone" => "View your phone number".to_owned(),
+        "address" => "View your address".to_owned(),
         "urn:contrix:principal-server:session.bind" => {
-            "Receive a short-lived session grant bound to this login session".to_string()
+            "Receive a short-lived session grant bound to this login session".to_owned()
         }
         other if other.starts_with("urn:contrix:principal-server:") => {
-            "Act as a trusted Principal Server integration".to_string()
+            "Act as a trusted Principal Server integration".to_owned()
         }
         other if other.starts_with("urn:contrix:client:") => {
-            "Use Contrix client capabilities on your behalf".to_string()
+            "Use Contrix client capabilities on your behalf".to_owned()
         }
         other if other == "urn:coauth:admin" || other.starts_with("urn:contrix:admin:") => {
-            "Administrative access to coauth management APIs".to_string()
+            "Administrative access to coauth management APIs".to_owned()
         }
-        other => other.to_string(),
+        other => other.to_owned(),
     }
 }

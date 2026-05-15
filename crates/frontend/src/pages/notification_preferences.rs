@@ -54,8 +54,7 @@ fn NotificationPreferencesForm(
             prefs
                 .iter()
                 .find(|p| p.channel == channel)
-                .map(|p| p.enabled)
-                .unwrap_or(false)
+                .is_some_and(|p| p.enabled)
         };
 
     // Build channel display data.
@@ -178,7 +177,7 @@ fn NotificationPreferencesForm(
                             Ok(resp) => {
                                 preferences.set(resp.preferences);
                                 feedback.set(Some(Ok(
-                                    "Preferences saved successfully.".to_string(),
+                                    "Preferences saved successfully.".to_owned(),
                                 )));
                             }
                             Err(e) => {

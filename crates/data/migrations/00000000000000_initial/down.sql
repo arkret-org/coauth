@@ -1,3 +1,6 @@
+-- Consolidated from 20260515000001_add_principal_did_update_keys/down.sql
+DROP TABLE IF EXISTS principal_did_update_keys;
+
 -- Consolidated from 20260510000200_account_starid_backend_marker/down.sql
 ALTER TABLE users
     DROP COLUMN IF EXISTS starid_backend;

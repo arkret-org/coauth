@@ -57,7 +57,7 @@ pub mod revoke;
 pub mod token;
 /// UserInfo endpoint.
 pub mod userinfo;
-/// WebFinger discovery.
+/// `WebFinger` discovery.
 pub mod webfinger;
 
 #[derive(Debug, Error)]

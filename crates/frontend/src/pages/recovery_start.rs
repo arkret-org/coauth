@@ -36,13 +36,12 @@ pub fn RecoveryStart() -> Element {
                             e.stop_propagation();
                             let em = email.to_string();
                             if em.is_empty() {
-                                error.set(Some("Please enter your email address.".to_string()));
+                                error.set(Some("Please enter your email address.".to_owned()));
                                 return;
                             }
 
                             submitting.set(true);
                             error.set(None);
-                            let nav = nav.clone();
 
                             spawn(async move {
                                 let result = crate::api::api_post::<RecoveryStartResponse>(
@@ -57,7 +56,7 @@ pub fn RecoveryStart() -> Element {
                                         }
                                     }
                                     Ok(resp) => {
-                                        error.set(Some(resp.error.unwrap_or_else(|| "Recovery failed.".to_string())));
+                                        error.set(Some(resp.error.unwrap_or_else(|| "Recovery failed.".to_owned())));
                                     }
                                     Err(e) => error.set(Some(e)),
                                 }

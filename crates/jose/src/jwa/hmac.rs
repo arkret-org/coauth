@@ -1,3 +1,8 @@
+// Upgrading to generic-array 1.x is a coordinated change with the digest
+// ecosystem; until that lands, keep the legacy API and silence the
+// deprecation noise.
+#![allow(deprecated)]
+
 use std::marker::PhantomData;
 
 use digest::{

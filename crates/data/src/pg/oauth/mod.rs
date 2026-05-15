@@ -22,7 +22,6 @@ mod tests {
     use chrono::Duration;
     use coauth_data::{
         AuthorizationCode, Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _,
-        RepositoryTransaction as _,
         clock::MockClock,
         oauth::{OAuthDeviceCodeGrantParams, OAuthSessionFilter, OAuthSessionRepository},
     };

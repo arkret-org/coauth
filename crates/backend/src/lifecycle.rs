@@ -1,7 +1,7 @@
 use std::{process::ExitCode, time::Duration};
 
 use coauth_templates::Templates;
-use futures_util::future::{BoxFuture, Either};
+use futures_util::future::BoxFuture;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::handlers::ActivityTracker;
@@ -91,7 +91,7 @@ impl LifecycleManager {
     pub fn new() -> Result<Self, std::io::Error> {
         let hard_shutdown_token = CancellationToken::new();
         let soft_shutdown_token = hard_shutdown_token.child_token();
-        let timeout = Duration::from_secs(60);
+        let timeout = Duration::from_mins(1);
         let hard_timeout = Duration::from_secs(30);
         let reload_timeout = Duration::from_secs(30);
         let task_tracker = TaskTracker::new();
@@ -176,7 +176,7 @@ impl LifecycleManager {
     }
 
     /// Run until we finish completely shutting down.
-    pub async fn run(mut self) -> ExitCode {
+    pub async fn run(self) -> ExitCode {
         #[cfg(unix)]
         notify(&[sd_notify::NotifyState::Ready]);
 
@@ -190,7 +190,12 @@ impl LifecycleManager {
             }
         };
 
-        // Wait for a first shutdown signal and trigger the soft shutdown
+        // Wait for a first shutdown signal and trigger the soft shutdown.
+        // Each branch breaks, so this is structurally a loop with one
+        // execution; the `loop` shape lets us conditionally compile
+        // branches under `#[cfg(unix)]` while keeping a single value
+        // assignment.
+        #[allow(clippy::never_loop)]
         let likely_crashed = loop {
             #[cfg(unix)]
             {

@@ -1,13 +1,12 @@
 use coauth_config::ContrixConfig;
 use coauth_data::{
-    BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock, UrlBuilder,
+    BoxClock, BoxRepository, BoxRng, SystemClock,
     oauth::OAuthClientRepository,
 };
 use coauth_jose::{
     constraints::Constrainable,
     jwt::{JsonWebSignatureHeader, Jwt},
 };
-use coauth_keystore::Keystore;
 use oauth_types::scope::OPENID;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -147,6 +146,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
     let key_store = depot.key_store()?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
 
+    #[allow(clippy::box_default)] // Box::default() doesn't apply to dyn Clock+Send
     let clock: BoxClock = Box::new(SystemClock::default());
     let mut rng: BoxRng =
         Box::new(ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng"));

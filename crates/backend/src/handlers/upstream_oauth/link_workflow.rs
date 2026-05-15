@@ -125,6 +125,7 @@ pub struct UpstreamRegisterScreen {
     pub has_tos: bool,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum LoadUpstreamLinkOutcome {
     Authenticated {
         session: BrowserSession,
@@ -170,6 +171,7 @@ pub struct UpstreamLinkRegistrationAction {
     pub accept_terms: bool,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum SubmitUpstreamLinkOutcome {
     Linked {
         session: BrowserSession,
@@ -611,7 +613,7 @@ enum HandlePreCheckResult {
 /// Pre-check a suggested username from the upstream provider.
 ///
 /// This runs policy checks, user conflict resolution (using the provider's
-/// `on_conflict` setting), and PrincipalServer availability checks on the suggested
+/// `on_conflict` setting), and `PrincipalServer` availability checks on the suggested
 /// username.
 #[allow(clippy::too_many_arguments)]
 async fn pre_check_handle(
@@ -965,14 +967,15 @@ async fn validate_registration_action(
 
     if username.is_empty() {
         field_errors.insert("handle".into(), serde_json::json!("required"));
-    } else if repo.user().exists(username).await? {
-        field_errors.insert("handle".into(), serde_json::json!("exists"));
-    } else if !principal_server
-        .is_handle_available(username)
-        .await
-        .map_err(UpstreamLinkWorkflowError::principal_server)?
-    {
-        field_errors.insert("handle".into(), serde_json::json!("exists"));
+    } else {
+        let already_exists = repo.user().exists(username).await?
+            || !principal_server
+                .is_handle_available(username)
+                .await
+                .map_err(UpstreamLinkWorkflowError::principal_server)?;
+        if already_exists {
+            field_errors.insert("handle".into(), serde_json::json!("exists"));
+        }
     }
 
     if site_config.tos_uri.is_some() && !accept_terms {

@@ -10,6 +10,7 @@ use crate::{Page, Pagination, repository_impl};
 mod email;
 mod password;
 mod phone;
+mod principal_did;
 mod recovery;
 mod registration;
 mod registration_token;
@@ -21,6 +22,7 @@ pub use self::{
     email::{UserEmailFilter, UserEmailRepository},
     password::UserPasswordRepository,
     phone::UserPhoneRepository,
+    principal_did::PrincipalDidRepository,
     recovery::UserRecoveryRepository,
     registration::UserRegistrationRepository,
     registration_token::{UserRegistrationTokenFilter, UserRegistrationTokenRepository},

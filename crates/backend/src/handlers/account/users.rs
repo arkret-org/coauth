@@ -2,7 +2,7 @@ use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    DepotExt, NodeType, RouteError, extract_bound_activity_tracker, extract_session_info,
+    DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info,
     get_requester, make_clock, make_rng,
 };
 use crate::{

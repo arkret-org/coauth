@@ -24,7 +24,7 @@ use crate::{
     AppError, JsonResult,
     handlers::{
         admin::{
-            call_context::extract_call_context, model::Resource, params::extract_ulid_param,
+            call_context::extract_call_context, params::extract_ulid_param,
             response::SingleResponse,
         },
         common::DepotExt,
@@ -154,21 +154,21 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
 pub(super) fn admin_bridge_risk_action_examples() -> AdminBridgeRiskActionExamples {
     AdminBridgeRiskActionExamples {
         proposal_request: AdminBridgeRiskActionProposalExample {
-            action: "lock".to_string(),
-            reason: "suspicious session recovery detected".to_string(),
-            ticket: "INC-2026-0504".to_string(),
+            action: "lock".to_owned(),
+            reason: "suspicious session recovery detected".to_owned(),
+            ticket: "INC-2026-0504".to_owned(),
             approved_by: None,
         },
         approve_request: AdminBridgeRiskActionApprovalExample {
-            action: "lock".to_string(),
-            ticket: "INC-2026-0504".to_string(),
-            approved_by: "did:web:admin.example".to_string(),
-            approval_note: "approved for controlled execution".to_string(),
+            action: "lock".to_owned(),
+            ticket: "INC-2026-0504".to_owned(),
+            approved_by: "did:web:admin.example".to_owned(),
+            approval_note: "approved for controlled execution".to_owned(),
         },
         execute_request: AdminBridgeRiskActionExecuteExample {
-            action: "lock".to_string(),
-            ticket: "INC-2026-0504".to_string(),
-            execution_note: "execute via controlled mutation worker".to_string(),
+            action: "lock".to_owned(),
+            ticket: "INC-2026-0504".to_owned(),
+            execution_note: "execute via controlled mutation worker".to_owned(),
         },
     }
 }
@@ -225,7 +225,7 @@ pub async fn propose(
                 &clock,
                 NewAdminOperationLog::new(
                     admin_user.id,
-                    AdminOperation::Other(format!("account_{}_proposal", params.action).into()),
+                    AdminOperation::Other(format!("account_{}_proposal", params.action)),
                     "account",
                     serde_json::json!({
                         "state_record_id": state_record_id,
@@ -351,7 +351,7 @@ pub async fn approve(
                 NewAdminOperationLog::new(
                     admin_user.id,
                     AdminOperation::Other(
-                        format!("account_{}_proposal_approved", params.action).into(),
+                        format!("account_{}_proposal_approved", params.action),
                     ),
                     "account",
                     serde_json::json!({
@@ -472,7 +472,7 @@ pub async fn execute(
                 NewAdminOperationLog::new(
                     admin_user.id,
                     AdminOperation::Other(
-                        format!("account_{}_proposal_executed", params.action).into(),
+                        format!("account_{}_proposal_executed", params.action),
                     ),
                     "account",
                     serde_json::json!({
@@ -591,9 +591,7 @@ pub async fn get_current(
     repo.cancel().await?;
 
     let current = logs
-        .into_iter()
-        .filter(|log| is_account_risk_action_log(log, id))
-        .next()
+        .into_iter().find(|log| is_account_risk_action_log(log, id))
         .map(|log| AccountRiskActionCurrentResponse {
             account_id: id.to_string(),
             state_record_id: risk_action_detail_string(&log.details, "state_record_id"),

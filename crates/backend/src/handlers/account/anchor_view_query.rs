@@ -49,7 +49,7 @@ pub struct LatestAnchorView {
     pub leaf_anchor_id: String,
     /// HLC string suitable for `UnsignedMove.hlc`. coauth generates a
     /// fresh HLC locally because soland's snapshot does not surface a
-    /// "next-tick" hint; the leaf's anchor_id is the only durable input.
+    /// "next-tick" hint; the leaf's `anchor_id` is the only durable input.
     pub hlc: String,
 }
 
@@ -211,13 +211,14 @@ fn fresh_hlc() -> String {
 ///
 /// **Convention** (until soland exposes a canonical
 /// `account/{did}/principal-space` endpoint): map a DID to a deterministic
-/// `cx:space:` UUIDv7 by `sha256(did)` → take the first 16 bytes, then
+/// `cx:space:` `UUIDv7` by `sha256(did)` → take the first 16 bytes, then
 /// rewrite the version + variant nibbles so the result is a valid RFC 9562
-/// UUIDv7. This keeps the convention reproducible across coauth /
+/// `UUIDv7`. This keeps the convention reproducible across coauth /
 /// soland / sodmin without any cross-service round-trip.
 ///
 /// If/when soland publishes a real lookup endpoint, swap this for an
 /// HTTP call and keep the deterministic mapping as the offline fallback.
+#[must_use] 
 pub fn holder_principal_space_for_did(holder_did: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -258,7 +259,7 @@ mod urlencoding {
                 out.push(b as char);
             } else {
                 use std::fmt::Write as _;
-                let _ = write!(out, "%{:02X}", b);
+                let _ = write!(out, "%{b:02X}");
             }
         }
         out

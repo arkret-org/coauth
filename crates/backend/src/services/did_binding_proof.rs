@@ -19,7 +19,7 @@
 //!   2. Reject if the resolver returns no `verificationMethod` keys.
 //!   3. Reject if the JWS doesn't verify against any of those keys.
 //!   4. Reject if the embedded binding statement doesn't match the request
-//!      (account_did + cx_account_id + nonce all match exactly).
+//!      (`account_did` + `cx_account_id` + nonce all match exactly).
 
 use chrono::{DateTime, Utc};
 use coauth_config::ContrixConfig;

@@ -8,11 +8,10 @@ pub fn get_ninety_days_ago() -> String {
 /// Extract device ID from a Contrix OAuth scope string.
 pub fn device_id_from_scope(scope: &str) -> Option<String> {
     for part in scope.split_whitespace() {
-        if let Some(device_id) = part.strip_prefix("urn:contrix:client:device:") {
-            if !device_id.is_empty() {
-                return Some(device_id.to_string());
+        if let Some(device_id) = part.strip_prefix("urn:contrix:client:device:")
+            && !device_id.is_empty() {
+                return Some(device_id.to_owned());
             }
-        }
     }
     None
 }
@@ -29,7 +28,7 @@ pub fn simplify_url(url: &str) -> String {
     if let Some(pos) = simplified.find('#') {
         return simplified[..pos].to_string();
     }
-    simplified.to_string()
+    simplified.to_owned()
 }
 
 /// Format a relative time string from a datetime string.
@@ -39,7 +38,7 @@ pub fn format_last_active(datetime: &str) -> String {
         let duration = now.signed_duration_since(dt);
 
         if duration.num_minutes() < 3 {
-            return "Active now".to_string();
+            return "Active now".to_owned();
         }
         if duration.num_hours() < 1 {
             let mins = duration.num_minutes();
@@ -53,9 +52,9 @@ pub fn format_last_active(datetime: &str) -> String {
             let days = duration.num_days();
             return format!("{days} days ago");
         }
-        return "Inactive for 90+ days".to_string();
+        return "Inactive for 90+ days".to_owned();
     }
-    datetime.to_string()
+    datetime.to_owned()
 }
 
 /// Format a datetime string to a readable date.
@@ -63,5 +62,5 @@ pub fn format_date(datetime: &str) -> String {
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(datetime) {
         return dt.format("%b %d, %Y %H:%M").to_string();
     }
-    datetime.to_string()
+    datetime.to_owned()
 }

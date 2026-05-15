@@ -775,7 +775,7 @@ impl UserEmailRepository for PgUserEmailRepository<'_> {
         // we can efficiently delete old authentications without needing an index.
         // `MAX(uuid)` isn't a thing in Postgres, so we aggregate on the client side.
         let res: Vec<Uuid> = diesel::sql_query(
-            r#"
+            r"
                 WITH
                   to_delete AS (
                     SELECT id
@@ -795,7 +795,7 @@ impl UserEmailRepository for PgUserEmailRepository<'_> {
                 USING to_delete
                 WHERE user_email_authentications.id = to_delete.id
                 RETURNING user_email_authentications.id
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(since.map(Uuid::from))
         .bind::<diesel::sql_types::Uuid, _>(Uuid::from(until))

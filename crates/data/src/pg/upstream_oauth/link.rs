@@ -198,10 +198,14 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
         upstream_oauth_link: &UpstreamOAuthLink,
         user: &User,
     ) -> Result<(), Self::Error> {
+        // The repository trait doesn't pass a clock for this method;
+        // use the wall clock until the trait signature is reworked.
+        #[allow(clippy::disallowed_methods)]
+        let now = Utc::now();
         diesel::update(upstream_oauth_links::table.find(Uuid::from(upstream_oauth_link.id)))
             .set((
                 upstream_oauth_links::user_id.eq(Some(Uuid::from(user.id))),
-                upstream_oauth_links::updated_at.eq(Utc::now()),
+                upstream_oauth_links::updated_at.eq(now),
             ))
             .execute(self.conn)
             .await?;
@@ -227,12 +231,11 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
 
         let mut changed = false;
 
-        if let Some(user_id) = patch.user_id {
-            if upstream_oauth_link.user_id != user_id {
+        if let Some(user_id) = patch.user_id
+            && upstream_oauth_link.user_id != user_id {
                 upstream_oauth_link.user_id = user_id;
                 changed = true;
             }
-        }
 
         if let Some(subject) = patch.subject
             && upstream_oauth_link.subject != subject
@@ -444,7 +447,7 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
         // Use raw SQL for the CTE-based cleanup query since diesel doesn't
         // natively support CTEs with DELETE ... USING ... RETURNING.
         let res: Vec<Uuid> = diesel::sql_query(
-            r#"
+            r"
                 WITH
                   to_delete AS (
                     SELECT id
@@ -464,7 +467,7 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
                 USING to_delete
                 WHERE upstream_oauth_links.id = to_delete.id
                 RETURNING upstream_oauth_links.id
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(since.map(Uuid::from))
         .bind::<diesel::sql_types::Uuid, _>(Uuid::from(until))
@@ -482,7 +485,7 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
     }
 }
 
-/// Helper struct for the cleanup_orphaned query result
+/// Helper struct for the `cleanup_orphaned` query result
 #[derive(QueryableByName)]
 struct CleanupResult {
     #[diesel(sql_type = diesel::sql_types::Uuid)]

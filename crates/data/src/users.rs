@@ -554,3 +554,38 @@ pub struct UserTotpConfig {
     pub confirmed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
+
+/// Per-user `did:webvh` update-key material minted against an embedded
+/// principal-server provider (e.g. soland's
+/// `POST /api/v1/identity/webvh/register`).
+///
+/// `update_secret_b64` is the **encrypted** ed25519 seed for the update
+/// key — encryption is the caller's responsibility (use
+/// `coauth_keystore::Encrypter::encrypt_to_string`); this struct stores
+/// it as opaque base64 to keep the data layer agnostic to the key
+/// schedule.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PrincipalDidUpdateKey {
+    pub id: Ulid,
+    pub user_id: Ulid,
+    /// Audience string of the principal server this DID was minted for
+    /// (matches `PrincipalServerConfig::audience` / session-grant `aud`).
+    pub audience: String,
+    /// The minted DID, e.g.
+    /// `did:webvh:zQm…:local.host%3A8080:webvh:01krmccd…`.
+    pub did: String,
+    /// Multibase ed25519 public key recorded in the DID document's
+    /// `verificationMethod[0]` — kept for cheap reads (e.g. introspection).
+    pub did_public_key_multibase: String,
+    /// Multibase ed25519 public key recorded in
+    /// `parameters.updateKeys[0]` of the DID's webvh log.
+    pub update_public_key_multibase: String,
+    /// Encrypted ed25519 seed for the update key — base64 wrapper around
+    /// `Encrypter::encrypt_to_string` output. Never log or expose.
+    pub update_secret_b64: String,
+    /// `versionId` of the latest log entry coauth has authored. Set to
+    /// `Some(version_id)` after the inception entry is accepted.
+    pub key_log_head: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

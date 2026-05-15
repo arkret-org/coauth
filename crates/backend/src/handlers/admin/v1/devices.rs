@@ -1,7 +1,7 @@
 //! Contrix device administration endpoints.
 
 use chrono::{DateTime, Utc};
-use coauth_data::{RepositoryAccess, audit::AdminOperation};
+use coauth_data::audit::AdminOperation;
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

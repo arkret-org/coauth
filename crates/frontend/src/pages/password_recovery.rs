@@ -55,7 +55,7 @@ fn navigate_to_url(url: String) -> Result<(), String> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn navigate_to_url(_url: String) -> Result<(), String> {
-    Err("Navigation is only available in the browser.".to_string())
+    Err("Navigation is only available in the browser.".to_owned())
 }
 
 #[component]
@@ -79,7 +79,7 @@ pub fn PasswordRecovery() -> Element {
             async move {
                 if ticket_value.is_empty() {
                     recovery_state.set(RecoveryState::Error(
-                        "No recovery ticket found in the URL.".to_string(),
+                        "No recovery ticket found in the URL.".to_owned(),
                     ));
                     return;
                 }
@@ -96,10 +96,10 @@ pub fn PasswordRecovery() -> Element {
                             "expired" => recovery_state.set(RecoveryState::Expired),
                             "consumed" => recovery_state.set(RecoveryState::Consumed),
                             "disabled" => recovery_state.set(RecoveryState::Error(
-                                "Account recovery is not available.".to_string(),
+                                "Account recovery is not available.".to_owned(),
                             )),
                             "not_found" => recovery_state
-                                .set(RecoveryState::Error("Invalid recovery ticket.".to_string())),
+                                .set(RecoveryState::Error("Invalid recovery ticket.".to_owned())),
                             other => recovery_state.set(RecoveryState::Error(format!(
                                 "Unexpected recovery ticket status: {other}",
                             ))),
@@ -120,9 +120,9 @@ pub fn PasswordRecovery() -> Element {
                 Layout {
                     div { class: "flex flex-col gap-10",
                         PageHeading {
-                            icon: "✓".to_string(),
-                            title: "Password reset".to_string(),
-                            subtitle: "Your password has been reset successfully. You can now sign in with your new password.".to_string(),
+                            icon: "✓".to_owned(),
+                            title: "Password reset".to_owned(),
+                            subtitle: "Your password has been reset successfully. You can now sign in with your new password.".to_owned(),
                         }
 
                         div { class: "login-links",
@@ -139,9 +139,9 @@ pub fn PasswordRecovery() -> Element {
                 Layout {
                     div { class: "flex flex-col gap-10",
                         PageHeading {
-                            icon: "✗".to_string(),
-                            title: "Recovery link already used".to_string(),
-                            subtitle: "This password recovery link has already been used. Request a new recovery email if you still need to reset your password.".to_string(),
+                            icon: "✗".to_owned(),
+                            title: "Recovery link already used".to_owned(),
+                            subtitle: "This password recovery link has already been used. Request a new recovery email if you still need to reset your password.".to_owned(),
                         }
 
                         div { class: "login-links",
@@ -157,8 +157,7 @@ pub fn PasswordRecovery() -> Element {
             let ticket_value = ticket_value.clone();
             let subtitle = ticket_email.read().clone().map_or_else(
                 || {
-                    "This password recovery link has expired. You can request a new recovery email."
-                        .to_string()
+                    "This password recovery link has expired. You can request a new recovery email.".to_owned()
                 },
                 |email| {
                     format!(
@@ -171,8 +170,8 @@ pub fn PasswordRecovery() -> Element {
                 Layout {
                     div { class: "flex flex-col gap-10",
                         PageHeading {
-                            icon: "⏰".to_string(),
-                            title: "Recovery link expired".to_string(),
+                            icon: "⏰".to_owned(),
+                            title: "Recovery link expired".to_owned(),
                             subtitle: subtitle,
                         }
 
@@ -208,25 +207,23 @@ pub fn PasswordRecovery() -> Element {
                                                     }
                                                 } else {
                                                     error.set(Some(
-                                                        "Recovery email sent, but no progress page was returned."
-                                                            .to_string(),
+                                                        "Recovery email sent, but no progress page was returned.".to_owned(),
                                                     ));
                                                 }
                                             }
                                             "RATE_LIMITED" => error.set(Some(
-                                                "Too many recovery emails were requested. Please try again later."
-                                                    .to_string(),
+                                                "Too many recovery emails were requested. Please try again later.".to_owned(),
                                             )),
                                             "RECOVERY_TICKET_ALREADY_USED" => {
                                                 recovery_state.set(RecoveryState::Consumed);
                                             }
                                             "NO_SUCH_RECOVERY_TICKET" => recovery_state.set(
                                                 RecoveryState::Error(
-                                                    "Invalid recovery ticket.".to_string(),
+                                                    "Invalid recovery ticket.".to_owned(),
                                                 ),
                                             ),
                                             _ => error.set(Some(
-                                                "Could not resend the recovery email.".to_string(),
+                                                "Could not resend the recovery email.".to_owned(),
                                             )),
                                         },
                                         Err(err) => error.set(Some(err)),
@@ -253,8 +250,8 @@ pub fn PasswordRecovery() -> Element {
                 Layout {
                     div { class: "flex flex-col gap-10",
                         PageHeading {
-                            icon: "⚠".to_string(),
-                            title: "Password recovery".to_string(),
+                            icon: "⚠".to_owned(),
+                            title: "Password recovery".to_owned(),
                             subtitle: message,
                         }
 
@@ -276,9 +273,9 @@ pub fn PasswordRecovery() -> Element {
         Layout {
             div { class: "flex flex-col gap-10",
                 PageHeading {
-                    icon: "🔒".to_string(),
-                    title: "Reset your password".to_string(),
-                    subtitle: "Enter a new password for your account.".to_string(),
+                    icon: "🔒".to_owned(),
+                    title: "Reset your password".to_owned(),
+                    subtitle: "Enter a new password for your account.".to_owned(),
                 }
 
                 form {
@@ -291,7 +288,7 @@ pub fn PasswordRecovery() -> Element {
                         let new_password_again_value = new_password_again.to_string();
 
                         if new_password_value != new_password_again_value {
-                            error.set(Some("Passwords do not match.".to_string()));
+                            error.set(Some("Passwords do not match.".to_owned()));
                             return;
                         }
 
@@ -319,8 +316,7 @@ pub fn PasswordRecovery() -> Element {
                                     SetPasswordStatus::InvalidNewPassword => {
                                         invalid_new.set(true);
                                         error.set(Some(
-                                            "New password does not meet the requirements."
-                                                .to_string(),
+                                            "New password does not meet the requirements.".to_owned(),
                                         ));
                                     }
                                     SetPasswordStatus::ExpiredRecoveryTicket => {
@@ -328,7 +324,7 @@ pub fn PasswordRecovery() -> Element {
                                     }
                                     SetPasswordStatus::NoSuchRecoveryTicket => {
                                         recovery_state.set(RecoveryState::Error(
-                                            "Invalid recovery ticket.".to_string(),
+                                            "Invalid recovery ticket.".to_owned(),
                                         ));
                                     }
                                     SetPasswordStatus::RecoveryTicketAlreadyUsed => {
@@ -336,18 +332,16 @@ pub fn PasswordRecovery() -> Element {
                                     }
                                     SetPasswordStatus::AccountLocked => {
                                         error.set(Some(
-                                            "This account is locked and cannot be recovered."
-                                                .to_string(),
+                                            "This account is locked and cannot be recovered.".to_owned(),
                                         ));
                                     }
                                     SetPasswordStatus::PasswordChangesDisabled => {
                                         error.set(Some(
-                                            "Password recovery is not available.".to_string(),
+                                            "Password recovery is not available.".to_owned(),
                                         ));
                                     }
                                     _ => error.set(Some(
-                                        "An error occurred while resetting your password."
-                                            .to_string(),
+                                        "An error occurred while resetting your password.".to_owned(),
                                     )),
                                 },
                                 Err(err) => error.set(Some(err)),

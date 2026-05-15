@@ -10,7 +10,5 @@ use crate::handlers::preferred_language;
 pub fn notification_language(req: &Request, depot: &Depot, requested: Option<&str>) -> String {
     requested
         .map(str::trim)
-        .filter(|language| !language.is_empty())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| preferred_language(req, depot).to_string())
+        .filter(|language| !language.is_empty()).map_or_else(|| preferred_language(req, depot).to_string(), ToOwned::to_owned)
 }

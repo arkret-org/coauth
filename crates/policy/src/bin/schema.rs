@@ -21,17 +21,14 @@ use schemars::{JsonSchema, generate::SchemaSettings};
 /// Resolve the destination writer: either a file in the output directory
 /// or stdout when no directory is provided.
 fn destination_writer(output_dir: Option<&Path>, filename: &str) -> Box<dyn std::io::Write> {
-    match output_dir {
-        Some(dir) => {
-            let target_path = dir.join(filename);
-            eprintln!("Writing to {}", target_path.display());
-            let handle = std::fs::File::create(target_path).expect("Failed to create file");
-            Box::new(std::io::BufWriter::new(handle))
-        }
-        None => {
-            eprintln!("--- {filename} ---");
-            Box::new(std::io::stdout())
-        }
+    if let Some(dir) = output_dir {
+        let target_path = dir.join(filename);
+        eprintln!("Writing to {}", target_path.display());
+        let handle = std::fs::File::create(target_path).expect("Failed to create file");
+        Box::new(std::io::BufWriter::new(handle))
+    } else {
+        eprintln!("--- {filename} ---");
+        Box::new(std::io::stdout())
     }
 }
 

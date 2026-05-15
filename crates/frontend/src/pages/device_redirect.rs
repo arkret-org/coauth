@@ -30,9 +30,9 @@ pub fn DeviceRedirect(route: Vec<String>) -> Element {
                         Layout {
                             div { class: "flex flex-col gap-10",
                                 PageHeading {
-                                    icon: "🔒".to_string(),
-                                    title: "Not authenticated".to_string(),
-                                    subtitle: "Please sign in to view device information.".to_string(),
+                                    icon: "🔒".to_owned(),
+                                    title: "Not authenticated".to_owned(),
+                                    subtitle: "Please sign in to view device information.".to_owned(),
                                 }
                                 Link { class: "btn btn-primary", to: Route::Login {},
                                     "Sign in"
@@ -44,23 +44,22 @@ pub fn DeviceRedirect(route: Vec<String>) -> Element {
             };
 
             // Check if we found a session
-            if let Some(ref app_sessions) = user.app_sessions {
-                if let Some(edge) = app_sessions.edges.first() {
+            if let Some(ref app_sessions) = user.app_sessions
+                && let Some(edge) = app_sessions.edges.first() {
                     let session_id = match &edge.node {
                         AppSession::OauthSession(s) => s.id.clone(),
                     };
                     nav.push(Route::SessionDetail { id: session_id });
                     return rsx! { LoadingScreen {} };
                 }
-            }
 
             rsx! {
                 Layout {
                     div { class: "flex flex-col gap-10",
                         PageHeading {
-                            icon: "?".to_string(),
-                            title: "Device not found".to_string(),
-                            subtitle: "The device you are looking for could not be found.".to_string(),
+                            icon: "?".to_owned(),
+                            title: "Device not found".to_owned(),
+                            subtitle: "The device you are looking for could not be found.".to_owned(),
                         }
                         Link { class: "btn btn-primary", to: Route::Sessions {},
                             "Back to sessions"
@@ -73,8 +72,8 @@ pub fn DeviceRedirect(route: Vec<String>) -> Element {
             Layout {
                 div { class: "flex flex-col gap-10",
                     PageHeading {
-                        icon: "!".to_string(),
-                        title: "Error".to_string(),
+                        icon: "!".to_owned(),
+                        title: "Error".to_owned(),
                         subtitle: e.clone(),
                     }
                     Link { class: "btn btn-primary", to: Route::Sessions {},

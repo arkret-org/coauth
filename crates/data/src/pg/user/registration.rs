@@ -543,10 +543,12 @@ struct UuidRow {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)]
+
     use std::net::{IpAddr, Ipv4Addr};
 
     use coauth_data::{
-        Clock, RepositoryAccess as _, RepositoryFactory as _, RepositoryTransaction as _,
+        Clock, RepositoryAccess as _, RepositoryFactory as _,
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
         UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
         UpstreamOAuthProviderTokenAuthMethod, UserRegistration, UserRegistrationPassword,

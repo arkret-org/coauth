@@ -68,6 +68,7 @@ impl RiskActionStateService for AuditLogRiskActionStateService {
     }
 }
 
+#[must_use] 
 pub fn default_risk_action_state_service() -> RiskActionStateServiceHandle {
     Arc::new(AuditLogRiskActionStateService)
 }

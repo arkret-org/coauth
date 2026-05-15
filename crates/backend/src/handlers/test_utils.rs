@@ -16,7 +16,7 @@ use chrono::Duration;
 use coauth_config::ContrixConfig;
 use coauth_config::RateLimitingConfig;
 use coauth_data::{
-    AppVersion, BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, PgRepositoryFactory,
+    AppVersion, BoxRepository, PgRepositoryFactory,
     RepositoryAccess, RepositoryError, RepositoryFactory, SiteConfig, SystemClock, TokenType,
     UrlBuilder,
     clock::MockClock,
@@ -25,13 +25,12 @@ use coauth_data::{
     },
     user::UserRepository,
 };
-use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
 use coauth_messaging::{
     NotificationCenter,
     email::{Mailer, Transport as MailTransport},
 };
-use coauth_policy::{InstantiateError, Policy, PolicyFactory};
+use coauth_policy::PolicyFactory;
 use coauth_principal::{MockPrincipalServerAdmin, PrincipalServerAdmin};
 use coauth_tasks::QueueWorker;
 use coauth_templates::{SiteConfigExt, Templates};
@@ -59,7 +58,7 @@ use url::Url;
 
 use crate::{
     handlers::{
-        ActivityTracker, BoundActivityTracker, Limiter, RequesterFingerprint,
+        ActivityTracker, Limiter,
         passwords::{Hasher, PasswordManager},
         upstream_oauth::cache::MetadataCache,
     },
@@ -93,7 +92,7 @@ pub(crate) fn unique_test_nonce() -> u64 {
         .as_millis() as u64;
     let counter = UNIQUE_TEST_NONCE.fetch_add(1, Ordering::Relaxed) % 1_000_000;
     let time_component = epoch_millis % 1_000_000;
-    let pid_component = (process::id() as u64 % 1_000) * 1_000_000;
+    let pid_component = (u64::from(process::id()) % 1_000) * 1_000_000;
 
     pid_component + time_component + counter
 }
@@ -189,7 +188,7 @@ pub fn test_site_config() -> SiteConfig {
     }
 }
 
-/// Salvo handler that injects TestState components into the Depot.
+/// Salvo handler that injects `TestState` components into the Depot.
 #[derive(Clone)]
 struct InjectTestState(TestState);
 
@@ -315,7 +314,7 @@ impl TestState {
 
         let activity_tracker = ActivityTracker::new(
             PgRepositoryFactory::new(pool.clone()).boxed(),
-            std::time::Duration::from_secs(60),
+            std::time::Duration::from_mins(1),
             &task_tracker,
             shutdown_token.child_token(),
         );
@@ -769,7 +768,7 @@ impl TestState {
         let uri = parts.uri;
         let url = format!(
             "https://example.com{}",
-            uri.path_and_query().map(|p| p.as_str()).unwrap_or("/")
+            uri.path_and_query().map_or("/", http::uri::PathAndQuery::as_str)
         );
 
         let mut test_req = match parts.method {
@@ -1073,7 +1072,7 @@ impl CookieHelper {
         );
     }
 
-    /// Import cookies from a CookieJar into the store.
+    /// Import cookies from a `CookieJar` into the store.
     pub fn import(&self, cookie_jar: CookieJar) {
         let url = "https://example.com/".parse().unwrap();
         let mut store = self.store.write().unwrap();

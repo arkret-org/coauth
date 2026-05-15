@@ -8,6 +8,7 @@ pub mod onboarding_starid;
 pub mod passkey_derive;
 pub mod risk_action_proposals;
 pub mod risk_action_state;
+pub mod soland_webvh;
 pub mod starid_adapter;
 pub mod upstream_oidc;
 pub mod upstream_oidc_mapping;

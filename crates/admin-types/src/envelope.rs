@@ -81,6 +81,7 @@ pub struct PaginationMeta {
 }
 
 impl PaginationMeta {
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.count.is_none()
     }
@@ -109,6 +110,7 @@ pub struct SingleResourceMeta {
 }
 
 impl SingleResourceMeta {
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.page.is_none()
     }
@@ -119,7 +121,7 @@ impl SingleResourceMeta {
 /// Generic over the inner attributes type. The backend sets `type_` from
 /// `T::KIND` when constructing, sodmin trusts what the wire emits.
 ///
-/// Schema derives (JsonSchema / ToSchema) are intentionally NOT on the
+/// Schema derives (`JsonSchema` / `ToSchema`) are intentionally NOT on the
 /// generic envelope types — auto-deriving them imposes `T: 'static`,
 /// `T: Default`, and the equivalent schema bounds on every concrete `T`,
 /// which we don't want here. Backend installs minimal hand-written
@@ -227,6 +229,7 @@ pub struct PaginatedResponse<T> {
 
 impl<T> PaginatedResponse<T> {
     /// Build a count-only response (no `data` array).
+    #[must_use] 
     pub fn for_count_only(count: usize, self_link: String) -> Self {
         Self {
             meta: PaginationMeta { count: Some(count) },
@@ -241,6 +244,7 @@ impl<T> PaginatedResponse<T> {
     /// Build a paginated response from already-wrapped resources and
     /// pre-computed link strings. Backend's cursor-paginated `for_page`
     /// helper extracts the cursors and links and calls this.
+    #[must_use] 
     pub fn from_parts(
         items: Vec<SingleResource<T>>,
         count: Option<usize>,
@@ -337,7 +341,7 @@ mod schema_impls {
         fn to_schema(
             _components: &mut salvo::oapi::Components,
         ) -> salvo::oapi::RefOr<salvo::oapi::Schema> {
-            use salvo::oapi::*;
+            use salvo::oapi::{Object, BasicType};
             Object::new()
                 .property(
                     "meta",
@@ -368,7 +372,7 @@ mod schema_impls {
         fn to_schema(
             _components: &mut salvo::oapi::Components,
         ) -> salvo::oapi::RefOr<salvo::oapi::Schema> {
-            use salvo::oapi::*;
+            use salvo::oapi::{Object, BasicType};
             Object::new()
                 .property(
                     "data",

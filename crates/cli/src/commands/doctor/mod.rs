@@ -1,6 +1,10 @@
 //! Deployment health-check diagnostics
 //!
 //! Validates Contrix/OIDC discovery surfaces exposed by the coauth server.
+//
+// CLI diagnostic checks use raw `reqwest` so they don't pull in the
+// outbound-http tracing layer required by the server runtime.
+#![allow(clippy::disallowed_methods)]
 
 use std::process::ExitCode;
 
@@ -25,9 +29,7 @@ impl Options {
         let resolved_issuer = config
             .http
             .issuer
-            .as_ref()
-            .map(url::Url::as_str)
-            .unwrap_or_else(|| public_base.as_str());
+            .as_ref().map_or_else(|| public_base.as_str(), url::Url::as_str);
 
         if !resolved_issuer.starts_with("https://") {
             warn!(

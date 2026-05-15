@@ -1,7 +1,7 @@
-//! WeCom (企业微信) OAuth specific request implementations.
+//! `WeCom` (企业微信) OAuth specific request implementations.
 //!
-//! WeCom uses a non-standard OAuth flow:
-//! - First obtain a corp access_token using corpid + corpsecret
+//! `WeCom` uses a non-standard OAuth flow:
+//! - First obtain a corp `access_token` using corpid + corpsecret
 //! - Then use the authorization code to get user identity (userid)
 //! - Optionally fetch full user profile
 //! - Error responses use `errcode` and `errmsg` fields
@@ -19,7 +19,7 @@ const WECOM_TOKEN_ENDPOINT: &str = "https://qyapi.weixin.qq.com/cgi-bin/gettoken
 const WECOM_USERINFO_ENDPOINT: &str = "https://qyapi.weixin.qq.com/cgi-bin/auth/getuserinfo";
 const WECOM_USER_GET_ENDPOINT: &str = "https://qyapi.weixin.qq.com/cgi-bin/user/get";
 
-/// WeCom corp access_token response.
+/// `WeCom` corp `access_token` response.
 #[derive(Debug, Deserialize)]
 pub struct WeComTokenResponse {
     /// Error code (0 means success).
@@ -35,7 +35,7 @@ pub struct WeComTokenResponse {
     pub expires_in: u64,
 }
 
-/// WeCom user identity response from the getuserinfo endpoint.
+/// `WeCom` user identity response from the getuserinfo endpoint.
 #[derive(Debug, Deserialize)]
 pub struct WeComUserIdentity {
     /// Error code (0 means success).
@@ -53,7 +53,7 @@ pub struct WeComUserIdentity {
     pub external_userid: Option<String>,
 }
 
-/// Obtain a WeCom corp access_token.
+/// Obtain a `WeCom` corp `access_token`.
 ///
 /// `GET https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=CORPID&corpsecret=SECRET`
 #[tracing::instrument(skip_all)]
@@ -73,8 +73,7 @@ pub async fn get_corp_access_token(
         .get(url)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
@@ -110,8 +109,7 @@ pub async fn get_user_identity(
         .get(url)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
@@ -125,7 +123,7 @@ pub async fn get_user_identity(
     Ok(response)
 }
 
-/// Fetch full user profile from WeCom.
+/// Fetch full user profile from `WeCom`.
 ///
 /// `GET https://qyapi.weixin.qq.com/cgi-bin/user/get?access_token=TOKEN&userid=USERID`
 ///
@@ -148,14 +146,13 @@ pub async fn fetch_userinfo(
         .get(url)
         .send_traced()
         .await?
-        .error_for_status()
-        .map_err(reqwest::Error::from)?
+        .error_for_status()?
         .json()
         .await?;
 
     // Check for error
-    if let Some(errcode) = response.get("errcode").and_then(|v| v.as_i64()) {
-        if errcode != 0 {
+    if let Some(errcode) = response.get("errcode").and_then(serde_json::Value::as_i64)
+        && errcode != 0 {
             let msg = response
                 .get("errmsg")
                 .and_then(|v| v.as_str())
@@ -166,7 +163,6 @@ pub async fn fetch_userinfo(
                 msg,
             });
         }
-    }
 
     Ok(response)
 }

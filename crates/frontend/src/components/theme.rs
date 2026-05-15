@@ -33,8 +33,7 @@ fn system_prefers_dark() -> bool {
         .match_media("(prefers-color-scheme: dark)")
         .ok()
         .flatten()
-        .map(|query| query.matches())
-        .unwrap_or(false)
+        .is_some_and(|query| query.matches())
 }
 
 fn read_stored_theme() -> ThemeMode {

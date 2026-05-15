@@ -1,4 +1,4 @@
-//! Passkey / WebAuthn registration + authentication.
+//! Passkey / `WebAuthn` registration + authentication.
 //!
 //! Wires `webauthn-rs` into a coauth-shaped service that:
 //!

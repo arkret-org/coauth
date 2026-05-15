@@ -42,7 +42,7 @@
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
-/// Run a (happy_body, invalid_body) pair against `T`'s deserializer.
+/// Run a (`happy_body`, `invalid_body`) pair against `T`'s deserializer.
 ///
 /// The happy body MUST round-trip; the invalid body MUST be rejected.
 /// Panics with a contextual message on failure so test output points at

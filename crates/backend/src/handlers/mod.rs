@@ -35,7 +35,8 @@ macro_rules! impl_from_error_for_route {
 ///
 /// Accepts a list of `(status_code, description)` tuples.  The generated
 /// implementation adds each pair as an error response with a JSON error
-/// body to the OpenAPI operation.
+/// body to the `OpenAPI` operation.
+#[allow(unused_macros)]
 macro_rules! impl_endpoint_out_register {
     ($ty:ty, [ $(($status:expr, $desc:expr)),* $(,)? ]) => {
         impl salvo::oapi::EndpointOutRegister for $ty {

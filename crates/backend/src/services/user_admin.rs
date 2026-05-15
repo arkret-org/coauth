@@ -60,6 +60,7 @@ pub enum UserAdminServiceError {
     Repository(#[from] RepositoryError),
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn patch_user(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),

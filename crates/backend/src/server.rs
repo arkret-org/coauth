@@ -35,6 +35,7 @@ use crate::{
 
 /// Scan the Dioxus build output directory for the hashed frontend JS entry
 /// point. Returns a URL path like `/assets/coauth-frontend-dxh<hash>.js`.
+#[must_use] 
 pub fn discover_frontend_script(assets_root: &camino::Utf8Path) -> Option<String> {
     let assets_dir = assets_root.join("assets");
     let dir = std::fs::read_dir(&assets_dir).ok()?;
@@ -215,7 +216,7 @@ pub async fn sentry_middleware(
     res: &mut Response,
     ctrl: &mut FlowCtrl,
 ) {
-    let path = req.uri().path().to_string();
+    let path = req.uri().path().to_owned();
     let method = otel_http_method(req.method());
 
     sentry::configure_scope(|scope| {
@@ -240,12 +241,12 @@ pub async fn cache_control_middleware(
         // Cache 404s for 5 minutes
         CacheControl::new()
             .with_public()
-            .with_max_age(Duration::from_secs(5 * 60))
+            .with_max_age(Duration::from_mins(5))
     } else {
         // Cache assets for 1 year
         CacheControl::new()
             .with_public()
-            .with_max_age(Duration::from_secs(365 * 24 * 60 * 60))
+            .with_max_age(Duration::from_hours(8760))
             .with_immutable()
     };
     res.headers_mut().typed_insert(cache_control);
@@ -342,7 +343,7 @@ pub async fn security_headers_middleware(
     let (hsts_header, csp_html_header) = depot
         .get::<AppState>("app_state")
         .ok()
-        .map(|state| {
+        .map_or((None, None), |state| {
             (
                 state
                     .hsts_header
@@ -353,8 +354,7 @@ pub async fn security_headers_middleware(
                     .as_deref()
                     .and_then(|value| HeaderValue::from_str(value).ok()),
             )
-        })
-        .unwrap_or((None, None));
+        });
 
     ctrl.call_next(req, depot, res).await;
 
@@ -362,13 +362,12 @@ pub async fn security_headers_middleware(
         .headers()
         .get(http::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
-        .map(|value| {
+        .is_some_and(|value| {
             value
                 .trim_start()
                 .to_ascii_lowercase()
                 .starts_with("text/html")
-        })
-        .unwrap_or(false);
+        });
 
     let headers = res.headers_mut();
     headers
@@ -386,11 +385,10 @@ pub async fn security_headers_middleware(
     if let Some(value) = hsts_header {
         headers.entry("strict-transport-security").or_insert(value);
     }
-    if response_is_html {
-        if let Some(value) = csp_html_header {
+    if response_is_html
+        && let Some(value) = csp_html_header {
             headers.entry("content-security-policy").or_insert(value);
         }
-    }
 }
 
 /// A Salvo handler that injects [`AppState`] into the depot for every request.
@@ -465,6 +463,7 @@ async fn favicon_handler(res: &mut Response) {
     res.render(Text::Plain(INLINE_FAVICON_SVG));
 }
 
+#[must_use] 
 pub fn build_router(
     state: AppState,
     resources: &[HttpResource],
@@ -672,7 +671,7 @@ fn build_oauth_router(router: Router) -> Router {
 }
 
 fn build_account_api_router(router: Router) -> Router {
-    use crate::handlers::{account::*, contrix};
+    use crate::handlers::{account::{viewer, password, users, avatar, notification_prefs, bootstrap_admin_status, site_config, sessions, oauth_clients, emails, auth, register, recovery, consent, invite_relay, linked_accounts, upstream_oauth, flow, openapi}, contrix};
 
     let api_router = Router::with_path("/api/v1")
         // Contrix service surface
@@ -857,7 +856,7 @@ fn build_account_api_router(router: Router) -> Router {
 }
 
 fn build_admin_router(router: Router) -> Router {
-    use crate::handlers::admin::v1::*;
+    use crate::handlers::admin::v1::{version, site_config, connector_health, notification_channels, notification_templates, audit_feed, invite_quarantine, accounts, account_dids, passkeys, users, user_emails, user_sessions, oauth_sessions, oauth_clients, oauth_clients_register, oauth_clients_i18n, personal_sessions, devices, user_registration_tokens, upstream_oauth_providers, upstream_oauth_links, policy_data, claims, policy_checks};
 
     let admin_router = Router::with_path("/api/admin/v1")
         // Version
@@ -1145,7 +1144,7 @@ async fn connection_info_handler(req: &Request) -> String {
     if let Some(conn_info) = req.extensions().get::<ConnectionInfo>() {
         format!("{conn_info:?}")
     } else {
-        "No connection info available".to_string()
+        "No connection info available".to_owned()
     }
 }
 

@@ -1,4 +1,4 @@
-//! Admin passkey / WebAuthn endpoints.
+//! Admin passkey / `WebAuthn` endpoints.
 //!
 //! These endpoints drive the four ceremonies the
 //! [`crate::services::webauthn`] service exposes:
@@ -74,7 +74,7 @@ pub struct PasskeyRegisterFinishRequest {
     #[serde(default)]
     pub label: Option<String>,
 
-    /// The raw attestation. We accept the raw JSON as serde_json::Value
+    /// The raw attestation. We accept the raw JSON as `serde_json::Value`
     /// because `RegisterPublicKeyCredential` uses non-self-describing
     /// formats internally; we re-deserialise once we have it.
     pub attestation: serde_json::Value,

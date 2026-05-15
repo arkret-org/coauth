@@ -138,6 +138,7 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
         .expect("BoxRepositoryFactory not found in depot");
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
 
+    #[allow(clippy::box_default)] // Box::default() doesn't apply to dyn Clock+Send
     let clock: BoxClock = Box::new(SystemClock::default());
     let mut rng: BoxRng =
         Box::new(ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng"));

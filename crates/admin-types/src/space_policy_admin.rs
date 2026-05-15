@@ -87,7 +87,7 @@ impl SpacePolicy {
     }
 }
 
-/// Body POSTed to `/api/admin/v1/spaces/{id}/policy`.
+/// Body `POSTed` to `/api/admin/v1/spaces/{id}/policy`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "schema",

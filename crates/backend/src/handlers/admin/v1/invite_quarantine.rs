@@ -24,7 +24,7 @@
 //!
 //! The original `batch_invite` only minted registration tokens; the
 //! consent decision context (peer DID, target holder DID) lives in the
-//! queue row but the *registration policy* (count, usage_limit, expiry)
+//! queue row but the *registration policy* (count, `usage_limit`, expiry)
 //! is in the `payload` JSON. Re-issuing requires the admin to confirm
 //! those parameters via a fresh batch-invite call. The "approve"
 //! transition therefore unblocks future calls (the holder's consent has
@@ -138,7 +138,7 @@ pub struct ResolveRequest {
 }
 
 /// Response from `resolve_invite_quarantine`. On `approve`, the queue
-/// row is marked resolved *and* the original batch_invite is re-run
+/// row is marked resolved *and* the original `batch_invite` is re-run
 /// (round 21) — the freshly minted registration tokens are returned in
 /// `minted_tokens`. On `reject`, only the entry is updated and
 /// `minted_tokens` is empty.
@@ -202,7 +202,7 @@ pub async fn list_invite_quarantine(
 /// `POST /api/admin/v1/invite-quarantine/{id}/resolve`
 ///
 /// Round-21 update: `approve` now actually re-runs the original
-/// batch_invite using the parameters captured in `payload` at enqueue
+/// `batch_invite` using the parameters captured in `payload` at enqueue
 /// time. The minted tokens are returned in `ResolveResponse.minted_tokens`
 /// so the caller (sodmin / yougen) doesn't need a follow-up call. The
 /// consent gate is not re-evaluated — the operator approving the queue
@@ -345,9 +345,9 @@ fn mint_params_from_payload(payload: &serde_json::Value) -> Option<MintRegistrat
     }
     let usage_limit = payload
         .get("usage_limit")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .map(|n| n as u32);
-    let expires_in_hours = payload.get("expires_in_hours").and_then(|v| v.as_u64());
+    let expires_in_hours = payload.get("expires_in_hours").and_then(serde_json::Value::as_u64);
     Some(MintRegistrationTokensParams {
         count: count as u32,
         usage_limit,
@@ -361,7 +361,7 @@ fn mint_params_from_payload(payload: &serde_json::Value) -> Option<MintRegistrat
 mod tests {
     //! Pure-helper tests for wire-type mapping. End-to-end coverage of
     //! the list/resolve handlers requires the test-db harness; the
-    //! batch_invite wiring tests in `users::tests` already exercise the
+    //! `batch_invite` wiring tests in `users::tests` already exercise the
     //! enqueue path on the same harness.
 
     use super::*;

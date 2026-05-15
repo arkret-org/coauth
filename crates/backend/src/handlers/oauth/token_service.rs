@@ -278,20 +278,16 @@ pub async fn exchange_authorization_code(
         ));
     }
 
-    let authz_grant = match repo
+    let authz_grant = if let Some(authz_grant) = repo
         .oauth_authorization_grant()
         .find_by_code(&grant.code)
-        .await?
-    {
-        Some(authz_grant) => authz_grant,
-        None => {
-            warn!(
-                oauth_client.id = %client.id,
-                has_code_verifier = grant.code_verifier.is_some(),
-                "Authorization code not found during token exchange"
-            );
-            return Err(AuthorizationCodeExchangeError::GrantNotFound);
-        }
+        .await? { authz_grant } else {
+        warn!(
+            oauth_client.id = %client.id,
+            has_code_verifier = grant.code_verifier.is_some(),
+            "Authorization code not found during token exchange"
+        );
+        return Err(AuthorizationCodeExchangeError::GrantNotFound);
     };
     let authorization_grant_id = authz_grant.id;
 
@@ -361,19 +357,16 @@ pub async fn exchange_authorization_code(
         }
     };
 
-    let mut session = match repo.oauth_session().lookup(session_id).await? {
-        Some(session) => session,
-        None => {
-            error!(
-                oauth_client.id = %client.id,
-                authorization_grant.id = %authz_grant.id,
-                oauth_session.id = %session_id,
-                "OAuth session missing during authorization_code exchange"
-            );
-            return Err(AuthorizationCodeExchangeError::NoSuchOAuthSession(
-                session_id,
-            ));
-        }
+    let mut session = if let Some(session) = repo.oauth_session().lookup(session_id).await? { session } else {
+        error!(
+            oauth_client.id = %client.id,
+            authorization_grant.id = %authz_grant.id,
+            oauth_session.id = %session_id,
+            "OAuth session missing during authorization_code exchange"
+        );
+        return Err(AuthorizationCodeExchangeError::NoSuchOAuthSession(
+            session_id,
+        ));
     };
 
     let requested_scopes = scope_tokens(&session.scope);
@@ -401,17 +394,14 @@ pub async fn exchange_authorization_code(
     }
 
     // This should never happen, since we looked up in the database using the code
-    let code = match authz_grant.code.as_ref() {
-        Some(code) => code,
-        None => {
-            error!(
-                oauth_client.id = %client.id,
-                authorization_grant.id = %authz_grant.id,
-                oauth_session.id = %session.id,
-                "Authorization grant is missing embedded code payload during token exchange"
-            );
-            return Err(AuthorizationCodeExchangeError::InvalidGrant(authz_grant.id));
-        }
+    let code = if let Some(code) = authz_grant.code.as_ref() { code } else {
+        error!(
+            oauth_client.id = %client.id,
+            authorization_grant.id = %authz_grant.id,
+            oauth_session.id = %session.id,
+            "Authorization grant is missing embedded code payload during token exchange"
+        );
+        return Err(AuthorizationCodeExchangeError::InvalidGrant(authz_grant.id));
     };
 
     if client.id != session.client_id {
@@ -458,20 +448,17 @@ pub async fn exchange_authorization_code(
         return Err(AuthorizationCodeExchangeError::InvalidGrant(authz_grant.id));
     };
 
-    let browser_session = match repo.browser_session().lookup(user_session_id).await? {
-        Some(browser_session) => browser_session,
-        None => {
-            error!(
-                oauth_client.id = %client.id,
-                authorization_grant.id = %authz_grant.id,
-                oauth_session.id = %session.id,
-                browser_session.id = %user_session_id,
-                "Browser session missing during authorization_code exchange"
-            );
-            return Err(AuthorizationCodeExchangeError::NoSuchBrowserSession(
-                user_session_id,
-            ));
-        }
+    let browser_session = if let Some(browser_session) = repo.browser_session().lookup(user_session_id).await? { browser_session } else {
+        error!(
+            oauth_client.id = %client.id,
+            authorization_grant.id = %authz_grant.id,
+            oauth_session.id = %session.id,
+            browser_session.id = %user_session_id,
+            "Browser session missing during authorization_code exchange"
+        );
+        return Err(AuthorizationCodeExchangeError::NoSuchBrowserSession(
+            user_session_id,
+        ));
     };
 
     let last_authentication = repo
@@ -867,19 +854,15 @@ pub async fn exchange_device_code(
         return Err(DeviceCodeExchangeError::UnauthorizedClient(client.id));
     }
 
-    let grant = match repo
+    let grant = if let Some(grant) = repo
         .oauth_device_code_grant()
         .find_by_device_code(&grant.device_code)
-        .await?
-    {
-        Some(grant) => grant,
-        None => {
-            warn!(
-                oauth_client.id = %client.id,
-                "Device code grant not found during token exchange"
-            );
-            return Err(DeviceCodeExchangeError::GrantNotFound);
-        }
+        .await? { grant } else {
+        warn!(
+            oauth_client.id = %client.id,
+            "Device code grant not found during token exchange"
+        );
+        return Err(DeviceCodeExchangeError::GrantNotFound);
     };
     let device_code_grant_id = grant.id;
 
@@ -937,19 +920,16 @@ pub async fn exchange_device_code(
         } => *browser_session_id,
     };
 
-    let browser_session = match repo.browser_session().lookup(browser_session_id).await? {
-        Some(browser_session) => browser_session,
-        None => {
-            error!(
-                oauth_client.id = %client.id,
-                device_code_grant.id = %grant.id,
-                browser_session.id = %browser_session_id,
-                "Browser session missing during device_code exchange"
-            );
-            return Err(DeviceCodeExchangeError::NoSuchBrowserSession(
-                browser_session_id,
-            ));
-        }
+    let browser_session = if let Some(browser_session) = repo.browser_session().lookup(browser_session_id).await? { browser_session } else {
+        error!(
+            oauth_client.id = %client.id,
+            device_code_grant.id = %grant.id,
+            browser_session.id = %browser_session_id,
+            "Browser session missing during device_code exchange"
+        );
+        return Err(DeviceCodeExchangeError::NoSuchBrowserSession(
+            browser_session_id,
+        ));
     };
 
     // Start the session

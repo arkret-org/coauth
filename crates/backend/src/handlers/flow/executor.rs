@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use coauth_data::{CaptchaConfig, CaptchaService, flow::*};
+use coauth_data::{CaptchaConfig, CaptchaService, flow::{FlowDefinition, FlowStageBinding, FlowSession, StageChallenge, StageResponse, StageOutcome, StageKind, StageValidationError}};
 use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
@@ -38,6 +38,7 @@ pub struct FlowExecutor;
 impl FlowExecutor {
     /// Plan a flow: determine which stages should run based on context.
     /// For now, all stages in the flow are included (no policy evaluation).
+    #[must_use] 
     pub fn plan(flow: FlowDefinition, bindings: Vec<FlowStageBinding>) -> FlowPlan {
         let mut stages = bindings;
         stages.sort_by_key(|b| b.order);
@@ -98,6 +99,7 @@ impl FlowExecutor {
     }
 
     /// Check if the flow has more stages after the current one.
+    #[must_use] 
     pub fn has_next_stage(plan: &FlowPlan, session: &FlowSession) -> bool {
         session.current_stage_index + 1 < plan.stages.len()
     }
@@ -131,7 +133,7 @@ fn challenge_for_stage(stage: &StageKind, context: &Value) -> StageChallenge {
             let suggested = context
                 .get("handle")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_owned());
+                .map(std::borrow::ToOwned::to_owned);
             StageChallenge::UserWrite {
                 suggested_handle: suggested,
             }
@@ -152,7 +154,7 @@ fn challenge_for_stage(stage: &StageKind, context: &Value) -> StageChallenge {
             client_name: context
                 .get("client_name")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_owned()),
+                .map(std::borrow::ToOwned::to_owned),
         },
         StageKind::Prompt { fields } => StageChallenge::Prompt {
             fields: fields.clone(),
@@ -297,8 +299,8 @@ async fn validate_response(
             }
 
             // Server-side verification against the CAPTCHA provider API
-            if let Some(ctx) = captcha_ctx {
-                if let Some(config) = ctx.captcha_config {
+            if let Some(ctx) = captcha_ctx
+                && let Some(config) = ctx.captcha_config {
                     let verify_url = match config.service {
                         CaptchaService::RecaptchaV2 => RECAPTCHA_VERIFY_URL,
                         CaptchaService::HCaptcha => HCAPTCHA_VERIFY_URL,
@@ -321,15 +323,14 @@ async fn validate_response(
                         Ok(resp) => match resp.json::<CaptchaApiResponse>().await {
                             Ok(body) if body.success => {
                                 // Optionally verify hostname
-                                if let Some(hostname) = &body.hostname {
-                                    if hostname != ctx.site_hostname {
+                                if let Some(hostname) = &body.hostname
+                                    && hostname != ctx.site_hostname {
                                         warn!(
                                             expected = ctx.site_hostname,
                                             got = hostname.as_str(),
                                             "CAPTCHA hostname mismatch"
                                         );
                                     }
-                                }
                                 // Verification passed — fall through to
                                 // Continue
                             }
@@ -365,7 +366,6 @@ async fn validate_response(
                         }
                     }
                 }
-            }
 
             StageOutcome::Continue
         }

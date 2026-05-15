@@ -243,7 +243,7 @@ impl Scribe for UserAuthorizationError {
                     error_description: None,
                 });
                 res.status_code(StatusCode::BAD_REQUEST);
-                for (name, value) in headers.iter() {
+                for (name, value) in &headers {
                     res.headers_mut().insert(name.clone(), value.clone());
                 }
             }
@@ -269,7 +269,7 @@ where
                     error_description: None,
                 });
                 res.status_code(StatusCode::BAD_REQUEST);
-                for (name, value) in headers.iter() {
+                for (name, value) in &headers {
                     res.headers_mut().insert(name.clone(), value.clone());
                 }
             }
@@ -281,7 +281,7 @@ where
                     error_description: None,
                 });
                 res.status_code(StatusCode::BAD_REQUEST);
-                for (name, value) in headers.iter() {
+                for (name, value) in &headers {
                     res.headers_mut().insert(name.clone(), value.clone());
                 }
             }

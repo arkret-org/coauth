@@ -46,6 +46,7 @@ pub struct UpstreamOidcSessionGrantTarget {
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum UpstreamOidcExchangeMode {
     LocalCoauth,
     Federated { provider: UpstreamOAuthProvider },
@@ -95,6 +96,7 @@ pub trait UpstreamOidcService: Send + Sync {
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
+    #[allow(clippy::too_many_arguments, clippy::ptr_arg)]
     async fn fetch_local_oidc_userinfo(
         &self,
         http_client: &reqwest::Client,
@@ -195,11 +197,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                     || userinfo_endpoint != &expected_userinfo_endpoint
                 {
                     return Err(format!(
-                        "OIDC exchange metadata does not match this coauth issuer/token/userinfo surface: expected token_endpoint={} userinfo_endpoint={} but received token_endpoint={} userinfo_endpoint={}",
-                        expected_token_endpoint,
-                        expected_userinfo_endpoint,
-                        token_endpoint,
-                        userinfo_endpoint
+                        "OIDC exchange metadata does not match this coauth issuer/token/userinfo surface: expected token_endpoint={expected_token_endpoint} userinfo_endpoint={expected_userinfo_endpoint} but received token_endpoint={token_endpoint} userinfo_endpoint={userinfo_endpoint}"
                     ));
                 }
             }
@@ -525,6 +523,7 @@ async fn fetch_oidc_userinfo(
     Ok((claims, false))
 }
 
+#[must_use] 
 pub fn default_upstream_oidc_service() -> UpstreamOidcServiceHandle {
     Arc::new(DefaultUpstreamOidcService)
 }

@@ -42,7 +42,7 @@ pub struct AddRequest {
     /// The handle of the user to add.
     handle: String,
 
-    /// Skip checking with the PrincipalServer whether the username is available.
+    /// Skip checking with the `PrincipalServer` whether the username is available.
     ///
     /// Use this with caution. It bypasses downstream username reservation and
     /// should only be used when the caller already knows the Principal Server
@@ -144,7 +144,7 @@ pub struct BatchInviteRequest {
 
     /// Optional Contrix consent-gate metadata (Move/Anchor/Lattice spec
     /// `consent-model.md` §6.1). When `peer_did` is supplied **and** a
-    /// server_name URL is configured, coauth queries the holder's
+    /// `server_name` URL is configured, coauth queries the holder's
     /// consent-grant cell on `soland` before minting registration tokens
     /// and rejects / quarantines the batch when the holder has not granted
     /// the requesting peer.
@@ -173,13 +173,13 @@ pub struct BatchInviteConsentGate {
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
 
-    /// Tag scope to match against the holder's OrSet tags. Defaults to
+    /// Tag scope to match against the holder's `OrSet` tags. Defaults to
     /// `invite` (matches `peer=...;scope=invite` and `peer=...;scope=any`).
     #[serde(default = "default_invite_scope")]
     pub scope: String,
 
     /// Override `ContrixConfig::principal_server_url` per request. Useful
-    /// when a deployment fans out across multiple server_names and
+    /// when a deployment fans out across multiple `server_names` and
     /// the global config points at a different one.
     #[serde(default)]
     pub target_principal_url: Option<Url>,
@@ -491,7 +491,7 @@ pub async fn batch_invite(
 #[cfg(test)]
 mod consent_gate_tests {
     //! Unit tests for the `batch_invite` consent gate (Allow /
-    //! ConsentRequired / Quarantine). Exercises
+    //! `ConsentRequired` / Quarantine). Exercises
     //! `evaluate_batch_invite_gate` end-to-end with a wiremock-backed
     //! soland stub, mirroring the per-recipient relay tests.
     //!
@@ -556,7 +556,7 @@ mod consent_gate_tests {
         assert_eq!(outcome, BatchInviteGateOutcome::Allow);
     }
 
-    /// Cell missing (404) + require_consent=true → ConsentRequired.
+    /// Cell missing (404) + `require_consent=true` → `ConsentRequired`.
     #[tokio::test]
     async fn batch_invite_gate_returns_consent_required_when_missing() {
         setup();
@@ -579,7 +579,7 @@ mod consent_gate_tests {
         assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
     }
 
-    /// soland 500 (Unknown) + require_consent=false → Quarantined.
+    /// soland 500 (Unknown) + `require_consent=false` → Quarantined.
     #[tokio::test]
     async fn batch_invite_gate_quarantines_when_unknown_and_not_required() {
         setup();
@@ -601,7 +601,7 @@ mod consent_gate_tests {
         assert_eq!(outcome, BatchInviteGateOutcome::Quarantined);
     }
 
-    /// Tag present but peer DID mismatch → ConsentRequired (require=true).
+    /// Tag present but peer DID mismatch → `ConsentRequired` (require=true).
     #[tokio::test]
     async fn batch_invite_gate_rejects_when_peer_mismatch() {
         setup();
@@ -626,7 +626,7 @@ mod consent_gate_tests {
     }
 
     /// Gate metadata supplied but no principal URL anywhere +
-    /// require_consent=true → ConsentRequired (fail closed). No HTTP.
+    /// `require_consent=true` → `ConsentRequired` (fail closed). No HTTP.
     #[tokio::test]
     async fn batch_invite_gate_fails_closed_when_no_principal_url() {
         setup();

@@ -53,8 +53,7 @@ pub async fn post_recovery_start(
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
         .ip()
-        .map(RequesterFingerprint::new)
-        .unwrap_or(RequesterFingerprint::EMPTY);
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
     let user_agent = req
         .headers()
         .get("user-agent")
@@ -232,8 +231,7 @@ pub async fn post_recovery_resend(
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
         .ip()
-        .map(RequesterFingerprint::new)
-        .unwrap_or(RequesterFingerprint::EMPTY);
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
 
     if !site_config.account_recovery_allowed {
         return Ok(Json(ResendRecoveryResponse {

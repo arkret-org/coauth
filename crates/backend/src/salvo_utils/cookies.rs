@@ -259,12 +259,13 @@ impl CookieJar {
     }
 
     /// Get the pending cookies for manual response handling
+    #[must_use] 
     pub fn pending_cookies(&self) -> &[Cookie<'static>] {
         &self.pending_cookies
     }
 }
 
-/// Extract CookieJar from request using Depot
+/// Extract `CookieJar` from request using Depot
 impl CookieJar {
     /// Extract from request and depot
     pub fn extract_from_request(req: &Request, depot: &Depot) -> Result<Self, StatusError> {

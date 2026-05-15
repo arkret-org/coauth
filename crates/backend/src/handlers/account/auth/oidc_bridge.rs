@@ -25,6 +25,7 @@ use crate::{
     handlers::contrix,
     oidc_client::requests::discovery,
     oidc_client::types::client_credentials::ClientCredentials,
+    services::soland_webvh,
     services::upstream_oidc::UpstreamOidcExchangeMode,
     services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token},
 };
@@ -215,6 +216,56 @@ fn soland_account_handle_for_did(did: &str) -> String {
     }
 }
 
+/// Resolve the `principal_did` for `user` against the targeted principal
+/// server. When the audience corresponds to a `PrincipalServerConfig` with
+/// an embedded webvh provider, this mints (or re-uses) a
+/// `did:webvh:<scid>:<principal_host>:webvh:<user_ulid>` against soland's
+/// `POST /api/v1/identity/webvh/register` so the DID's authority matches
+/// the host that actually serves its document. When no principal-server
+/// config is found (e.g. legacy/local audiences that pre-date the embedded
+/// path) we fall back to coauth's old `user_did_for` derivation so existing
+/// callers keep working — that fallback is the documented gap rather than
+/// a silent regression.
+async fn ensure_principal_did_for_user(
+    repo: &mut coauth_data::BoxRepository,
+    rng: &mut coauth_data::BoxRng,
+    clock: &coauth_data::BoxClock,
+    encrypter: &coauth_keystore::Encrypter,
+    http_client: &reqwest::Client,
+    url_builder: &coauth_data::UrlBuilder,
+    contrix_config: &coauth_config::ContrixConfig,
+    user: &User,
+    audience: &str,
+) -> Result<String, String> {
+    let Some(principal_server) = contrix_config
+        .principal_servers
+        .iter()
+        .find(|server| server.audience == audience)
+    else {
+        return Ok(contrix::user_did_for(url_builder, contrix_config, user));
+    };
+    let registration_bearer = principal_server
+        .embedded_webvh_registration_bearer
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let also_known_as = vec![contrix::user_handle(url_builder, user)];
+    soland_webvh::ensure_principal_did_minted(
+        repo,
+        &mut **rng,
+        &**clock,
+        encrypter,
+        http_client,
+        user,
+        &principal_server.audience,
+        &principal_server.endpoint,
+        registration_bearer,
+        &also_known_as,
+    )
+    .await
+    .map_err(|error| format!("principal DID minting failed: {error}"))
+}
+
 async fn ensure_soland_account_registered(
     http_client: &reqwest::Client,
     principal_endpoint: Option<&str>,
@@ -347,57 +398,45 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
 
-    let redirect_uri = match url::Url::parse(input.redirect_uri.trim()) {
-        Ok(uri) => uri,
-        Err(_) => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_redirect_uri"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec!["redirect_uri must be a valid absolute URI".to_owned()],
-            }));
-            return Ok(());
-        }
+    let redirect_uri = if let Ok(uri) = url::Url::parse(input.redirect_uri.trim()) { uri } else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_redirect_uri"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec!["redirect_uri must be a valid absolute URI".to_owned()],
+        }));
+        return Ok(());
     };
-    let issuer = match url::Url::parse(input.issuer.trim()) {
-        Ok(uri) => uri,
-        Err(_) => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_issuer"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec!["issuer must be a valid absolute URI".to_owned()],
-            }));
-            return Ok(());
-        }
+    let issuer = if let Ok(uri) = url::Url::parse(input.issuer.trim()) { uri } else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_issuer"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec!["issuer must be a valid absolute URI".to_owned()],
+        }));
+        return Ok(());
     };
-    let token_endpoint = match url::Url::parse(input.token_endpoint.trim()) {
-        Ok(uri) => uri,
-        Err(_) => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_token_endpoint"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec!["token_endpoint must be a valid absolute URI".to_owned()],
-            }));
-            return Ok(());
-        }
+    let token_endpoint = if let Ok(uri) = url::Url::parse(input.token_endpoint.trim()) { uri } else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_token_endpoint"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec!["token_endpoint must be a valid absolute URI".to_owned()],
+        }));
+        return Ok(());
     };
-    let userinfo_endpoint = match url::Url::parse(input.userinfo_endpoint.trim()) {
-        Ok(uri) => uri,
-        Err(_) => {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_userinfo_endpoint"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec!["userinfo_endpoint must be a valid absolute URI".to_owned()],
-            }));
-            return Ok(());
-        }
+    let userinfo_endpoint = if let Ok(uri) = url::Url::parse(input.userinfo_endpoint.trim()) { uri } else {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_userinfo_endpoint"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec!["userinfo_endpoint must be a valid absolute URI".to_owned()],
+        }));
+        return Ok(());
     };
     let expected_issuer = url_builder.oidc_issuer();
 
@@ -589,8 +628,8 @@ pub async fn oidc_code_exchange(
         if let (Ok(trusted_issuers), Some(id_token)) = (
             depot.get::<TrustedIssuerPolicySet>("upstream_oidc_trusted_issuers"),
             federated_exchange.token_response.id_token.as_deref(),
-        ) {
-            if !trusted_issuers.is_empty() {
+        )
+            && !trusted_issuers.is_empty() {
                 match map_upstream_id_token(issuer.as_str(), id_token, trusted_issuers, clock.now())
                 {
                     Ok(mapped) => {
@@ -612,7 +651,6 @@ pub async fn oidc_code_exchange(
                     }
                 }
             }
-        }
 
         let upstream_subject = federated_exchange.userinfo.sub.clone();
         let Some(upstream_link) = repo
@@ -718,7 +756,31 @@ pub async fn oidc_code_exchange(
                 return Ok(());
             }
         };
-        let principal_did = contrix::user_did_for(&url_builder, &contrix_config, &user);
+        let principal_did = match ensure_principal_did_for_user(
+            &mut repo,
+            &mut rng,
+            &clock,
+            &encrypter,
+            &http_client,
+            &url_builder,
+            &contrix_config,
+            &user,
+            &grant_target.audience,
+        )
+        .await
+        {
+            Ok(did) => did,
+            Err(message) => {
+                res.render(Json(LoginResponse {
+                    status: "error",
+                    error: Some("principal_did_minting_failed"),
+                    viewer: None,
+                    session_grant: None,
+                    warnings: vec![message],
+                }));
+                return Ok(());
+            }
+        };
         if let Err(message) = ensure_soland_account_registered(
             &http_client,
             grant_target.principal_server_endpoint.as_deref(),
@@ -806,9 +868,7 @@ pub async fn oidc_code_exchange(
                     federated_exchange
                         .token_response
                         .scope
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .unwrap_or_else(|| "missing".to_owned())
+                        .as_ref().map_or_else(|| "missing".to_owned(), ToString::to_string)
                 ),
                 "authorization_code_exchanged_via_federated_token_endpoint=true".to_owned(),
                 "oauth_access_token_validated_via_federated_userinfo=true".to_owned(),
@@ -987,9 +1047,7 @@ pub async fn oidc_code_exchange(
                 oauth_client.client_id,
                 oauth_client
                     .token_endpoint_auth_method
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| "missing".to_owned())
+                    .as_ref().map_or_else(|| "missing".to_owned(), ToString::to_string)
             )],
         }));
         return Ok(());
@@ -1333,7 +1391,31 @@ pub async fn oidc_code_exchange(
         }
     };
     let user = &browser_session.user;
-    let principal_did = contrix::user_did_for(&url_builder, &contrix_config, user);
+    let principal_did = match ensure_principal_did_for_user(
+        &mut repo,
+        &mut rng,
+        &clock,
+        &encrypter,
+        &http_client,
+        &url_builder,
+        &contrix_config,
+        user,
+        &grant_target.audience,
+    )
+    .await
+    {
+        Ok(did) => did,
+        Err(message) => {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("principal_did_minting_failed"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![message],
+            }));
+            return Ok(());
+        }
+    };
     if let Err(message) = ensure_soland_account_registered(
         &http_client,
         grant_target.principal_server_endpoint.as_deref(),
@@ -1419,9 +1501,7 @@ pub async fn oidc_code_exchange(
                 "oauth_scope={}",
                 oauth_token_reply
                     .scope
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| "missing".to_owned())
+                    .as_ref().map_or_else(|| "missing".to_owned(), ToString::to_string)
             ),
             "authorization_code_exchanged_via_local_http_token_endpoint=true".to_owned(),
             "oauth_access_token_issued=true".to_owned(),
@@ -1649,84 +1729,84 @@ pub async fn auth_bridge_describe(
 #[endpoint]
 pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteError> {
     Ok(Json(IntegrationManifest {
-        contract: "contrix.rest.integration_manifest.v1".to_string(),
-        version: "2026-05-04-scaffold".to_string(),
-        service: "coauth".to_string(),
-        service_kind: "account_authority".to_string(),
-        api_base_path: "/api/v1".to_string(),
-        describe_path: "/api/v1/integration/describe".to_string(),
+        contract: "contrix.rest.integration_manifest.v1".to_owned(),
+        version: "2026-05-04-scaffold".to_owned(),
+        service: "coauth".to_owned(),
+        service_kind: "account_authority".to_owned(),
+        api_base_path: "/api/v1".to_owned(),
+        describe_path: "/api/v1/integration/describe".to_owned(),
         dependencies: vec![
             IntegrationManifestDependency {
-                service: "soland".to_string(),
-                purpose: "principal_server_session_exchange".to_string(),
-                required_contract: "contrix.rest.principal_bridge.v1".to_string(),
-                discovery_path: "/api/v1/auth/bridge/describe".to_string(),
-                mode: "remote_service_contract".to_string(),
+                service: "soland".to_owned(),
+                purpose: "principal_server_session_exchange".to_owned(),
+                required_contract: "contrix.rest.principal_bridge.v1".to_owned(),
+                discovery_path: "/api/v1/auth/bridge/describe".to_owned(),
+                mode: "remote_service_contract".to_owned(),
             },
             IntegrationManifestDependency {
-                service: "public_did_resolver".to_string(),
-                purpose: "principal_did_resolution".to_string(),
-                required_contract: "did_method_resolution".to_string(),
-                discovery_path: "TODO: external resolver metadata".to_string(),
-                mode: "remote_public_resolver".to_string(),
+                service: "public_did_resolver".to_owned(),
+                purpose: "principal_did_resolution".to_owned(),
+                required_contract: "did_method_resolution".to_owned(),
+                discovery_path: "TODO: external resolver metadata".to_owned(),
+                mode: "remote_public_resolver".to_owned(),
             },
         ],
         surfaces: vec![
             IntegrationManifestSurface {
-                name: "auth_bridge".to_string(),
-                method: "GET".to_string(),
-                path: "/api/v1/auth/bridge/describe".to_string(),
-                contract: "contrix.rest.auth_bridge.v1".to_string(),
-                stability: "scaffold".to_string(),
-                todo: "TODO: keep browser bridge, exchange contract, and downstream grant metadata aligned with real OIDC/passkey flows.".to_string(),
+                name: "auth_bridge".to_owned(),
+                method: "GET".to_owned(),
+                path: "/api/v1/auth/bridge/describe".to_owned(),
+                contract: "contrix.rest.auth_bridge.v1".to_owned(),
+                stability: "scaffold".to_owned(),
+                todo: "TODO: keep browser bridge, exchange contract, and downstream grant metadata aligned with real OIDC/passkey flows.".to_owned(),
             },
             IntegrationManifestSurface {
-                name: "oidc_browser_bridge_session".to_string(),
-                method: "POST".to_string(),
-                path: "/api/v1/auth/oidc/browser-bridge/session".to_string(),
-                contract: "contrix.rest.oidc_browser_bridge_session.v1".to_string(),
-                stability: "scaffold".to_string(),
-                todo: "TODO: persist browser-bound PKCE/session state.".to_string(),
+                name: "oidc_browser_bridge_session".to_owned(),
+                method: "POST".to_owned(),
+                path: "/api/v1/auth/oidc/browser-bridge/session".to_owned(),
+                contract: "contrix.rest.oidc_browser_bridge_session.v1".to_owned(),
+                stability: "scaffold".to_owned(),
+                todo: "TODO: persist browser-bound PKCE/session state.".to_owned(),
             },
             IntegrationManifestSurface {
-                name: "oidc_exchange_describe".to_string(),
-                method: "GET".to_string(),
-                path: "/api/v1/auth/oidc/exchange/describe".to_string(),
-                contract: "contrix.rest.oidc_exchange.v1".to_string(),
-                stability: "scaffold".to_string(),
-                todo: "TODO: publish upstream-boundary verification modes and failure taxonomy as final contract states.".to_string(),
+                name: "oidc_exchange_describe".to_owned(),
+                method: "GET".to_owned(),
+                path: "/api/v1/auth/oidc/exchange/describe".to_owned(),
+                contract: "contrix.rest.oidc_exchange.v1".to_owned(),
+                stability: "scaffold".to_owned(),
+                todo: "TODO: publish upstream-boundary verification modes and failure taxonomy as final contract states.".to_owned(),
             },
             IntegrationManifestSurface {
-                name: "oidc_exchange".to_string(),
-                method: "POST".to_string(),
-                path: "/api/v1/auth/oidc/exchange".to_string(),
-                contract: "contrix.rest.oidc_exchange.v1".to_string(),
-                stability: "scaffold".to_string(),
-                todo: "TODO: publish final failure taxonomy and examples for local_coauth and federated modes.".to_string(),
+                name: "oidc_exchange".to_owned(),
+                method: "POST".to_owned(),
+                path: "/api/v1/auth/oidc/exchange".to_owned(),
+                contract: "contrix.rest.oidc_exchange.v1".to_owned(),
+                stability: "scaffold".to_owned(),
+                todo: "TODO: publish final failure taxonomy and examples for local_coauth and federated modes.".to_owned(),
             },
             IntegrationManifestSurface {
-                name: "admin_bridge".to_string(),
-                method: "GET".to_string(),
-                path: "/api/admin/v1/bridge/describe".to_string(),
-                contract: "contrix.rest.coauth_admin_bridge.v1".to_string(),
-                stability: "scaffold".to_string(),
-                todo: "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records.".to_string(),
+                name: "admin_bridge".to_owned(),
+                method: "GET".to_owned(),
+                path: "/api/admin/v1/bridge/describe".to_owned(),
+                contract: "contrix.rest.coauth_admin_bridge.v1".to_owned(),
+                stability: "scaffold".to_owned(),
+                todo: "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records.".to_owned(),
             },
             IntegrationManifestSurface {
-                name: "account_claims".to_string(),
-                method: "GET".to_string(),
-                path: "/api/admin/v1/accounts/{account_id}/claims".to_string(),
-                contract: "contrix.rest.coauth_account_claims.v1".to_string(),
-                stability: "scaffold".to_string(),
-                todo: "TODO: replace scaffold claim inventory with real issuer-backed claim sources and verification state.".to_string(),
+                name: "account_claims".to_owned(),
+                method: "GET".to_owned(),
+                path: "/api/admin/v1/accounts/{account_id}/claims".to_owned(),
+                contract: "contrix.rest.coauth_account_claims.v1".to_owned(),
+                stability: "scaffold".to_owned(),
+                todo: "TODO: replace scaffold claim inventory with real issuer-backed claim sources and verification state.".to_owned(),
             },
             IntegrationManifestSurface {
-                name: "account_session_grants".to_string(),
-                method: "GET".to_string(),
-                path: "/api/admin/v1/accounts/{account_id}/session-grants".to_string(),
-                contract: "contrix.rest.coauth_account_session_grants.v1".to_string(),
-                stability: "scaffold".to_string(),
-                todo: "TODO: expose durable grant inventory, revocation state, and audience binding beyond preview records.".to_string(),
+                name: "account_session_grants".to_owned(),
+                method: "GET".to_owned(),
+                path: "/api/admin/v1/accounts/{account_id}/session-grants".to_owned(),
+                contract: "contrix.rest.coauth_account_session_grants.v1".to_owned(),
+                stability: "scaffold".to_owned(),
+                todo: "TODO: expose durable grant inventory, revocation state, and audience binding beyond preview records.".to_owned(),
             },
         ],
         examples: serde_json::json!({
@@ -1754,8 +1834,8 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             }
         }),
         todos: vec![
-            "TODO: persist browser bridge session state, PKCE material, and approval/risk-action lifecycle records.".to_string(),
-            "TODO: publish OpenAPI examples that match the integration manifest surfaces exactly.".to_string(),
+            "TODO: persist browser bridge session state, PKCE material, and approval/risk-action lifecycle records.".to_owned(),
+            "TODO: publish OpenAPI examples that match the integration manifest surfaces exactly.".to_owned(),
         ],
     }))
 }

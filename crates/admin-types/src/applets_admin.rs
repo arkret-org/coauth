@@ -40,6 +40,7 @@ pub enum ApprovalStatus {
 }
 
 impl ApprovalStatus {
+    #[must_use] 
     pub fn label(&self) -> &'static str {
         match self {
             ApprovalStatus::Pending => "Pending",
@@ -49,6 +50,7 @@ impl ApprovalStatus {
         }
     }
 
+    #[must_use] 
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "pending" => Some(ApprovalStatus::Pending),
@@ -61,6 +63,7 @@ impl ApprovalStatus {
 
     /// Approve transition is valid from any non-Approved state — Pending,
     /// Suspended (resume), or Revoked (re-instate).
+    #[must_use] 
     pub fn is_approvable(&self) -> bool {
         matches!(
             self,
@@ -70,11 +73,13 @@ impl ApprovalStatus {
 
     /// Suspend is only valid for Approved entries — Pending hasn't been
     /// approved yet, Suspended is a no-op, Revoked is terminal.
+    #[must_use] 
     pub fn is_suspendable(&self) -> bool {
         matches!(self, ApprovalStatus::Approved)
     }
 
     /// Revoke is valid from any non-Revoked state.
+    #[must_use] 
     pub fn is_revocable(&self) -> bool {
         matches!(
             self,
@@ -103,6 +108,7 @@ pub struct AppletAdminRow {
 }
 
 impl AppletAdminRow {
+    #[must_use] 
     pub fn status_typed(&self) -> ApprovalStatus {
         ApprovalStatus::from_wire(&self.status).unwrap_or(ApprovalStatus::Pending)
     }
@@ -128,6 +134,7 @@ pub struct AgentAdminRow {
 }
 
 impl AgentAdminRow {
+    #[must_use] 
     pub fn status_typed(&self) -> ApprovalStatus {
         ApprovalStatus::from_wire(&self.status).unwrap_or(ApprovalStatus::Pending)
     }
@@ -156,6 +163,7 @@ pub struct DirectoryAdminRow {
 }
 
 impl DirectoryAdminRow {
+    #[must_use] 
     pub fn status_typed(&self) -> ApprovalStatus {
         ApprovalStatus::from_wire(&self.status).unwrap_or(ApprovalStatus::Pending)
     }

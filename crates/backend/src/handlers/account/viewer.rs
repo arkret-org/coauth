@@ -26,6 +26,7 @@ struct ViewerResponse {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "__typename")]
+#[allow(clippy::large_enum_variant)]
 enum ViewerData {
     User(ViewerUser),
     Anonymous(AnonymousData),
@@ -52,6 +53,7 @@ struct AnonymousData {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "__typename")]
+#[allow(clippy::large_enum_variant)]
 enum ViewerSessionData {
     BrowserSession(BrowserSessionData),
     Anonymous(AnonymousData),
@@ -321,7 +323,7 @@ pub async fn get_workflow_inbox(
     match &requester.entity {
         super::RequestingEntity::BrowserSession(_) => {}
         _ => return Err(RouteError::Unauthorized),
-    };
+    }
 
     repo.cancel().await?;
 

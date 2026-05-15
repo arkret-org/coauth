@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "__typename")]
+#[allow(clippy::large_enum_variant)]
 pub enum Viewer {
     User(User),
     Anonymous(Anonymous),
@@ -90,6 +91,7 @@ pub struct UnlinkResponse {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "__typename")]
+#[allow(clippy::large_enum_variant)]
 pub enum ViewerSession {
     BrowserSession(BrowserSession),
     Anonymous(Anonymous),
@@ -181,6 +183,7 @@ pub struct OauthClient {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "__typename")]
+#[allow(clippy::large_enum_variant)]
 pub enum Session {
     BrowserSession(BrowserSession),
     OauthSession(OauthSession),

@@ -56,7 +56,7 @@ pub struct RelayRequest {
     /// token guards the route.
     pub inviter_did: String,
 
-    /// Base URL of the target's server_name (`soland`).
+    /// Base URL of the target's `server_name` (`soland`).
     ///
     /// Optional in the body; when omitted, falls back to
     /// `ContrixConfig::principal_server_url`. If neither is present the
@@ -72,7 +72,7 @@ pub struct RelayRequest {
     /// Consent-cell identifier per spec §6.
     pub consent_id: String,
 
-    /// Tag scope to match against the consent cell's OrSet tags
+    /// Tag scope to match against the consent cell's `OrSet` tags
     /// (`peer=...;scope=<scope>` or `peer=...;scope=any`).
     pub scope: String,
 
@@ -126,6 +126,7 @@ pub enum RelayOutcome {
 
 /// Convert a `RelayOutcome` into HTTP `(status, body)`. Pulled out so
 /// both the real handler and the unit tests can share it.
+#[must_use] 
 pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, RelayResponse) {
     match outcome {
         RelayOutcome::Forwarded { forwarded_ok } => (
@@ -368,7 +369,7 @@ mod tests {
         assert_eq!(body.forwarded_ok, Some(true));
     }
 
-    /// ConsentRequired path: cell missing (404) + require_consent=true
+    /// `ConsentRequired` path: cell missing (404) + `require_consent=true`
     /// → no forward attempt, decision is `ConsentRequired`.
     #[tokio::test]
     async fn relay_returns_consent_required_when_no_consent() {

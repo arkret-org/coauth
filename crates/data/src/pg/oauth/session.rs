@@ -416,7 +416,7 @@ impl OAuthSessionRepository for PgOAuthSessionRepository<'_> {
         let expected = ids.len();
 
         let rows_affected = diesel::sql_query(
-            r#"
+            r"
                 UPDATE oauth_sessions
                 SET last_active_at = GREATEST(t.last_active_at, oauth_sessions.last_active_at)
                   , last_active_ip = COALESCE(t.last_active_ip, oauth_sessions.last_active_ip)
@@ -426,7 +426,7 @@ impl OAuthSessionRepository for PgOAuthSessionRepository<'_> {
                         AS t(id, last_active_at, last_active_ip)
                 ) AS t
                 WHERE oauth_sessions.id = t.id
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&ids)
         .bind::<diesel::sql_types::Array<diesel::sql_types::Timestamptz>, _>(&last_activities)
@@ -512,7 +512,7 @@ impl OAuthSessionRepository for PgOAuthSessionRepository<'_> {
         limit: usize,
     ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error> {
         let res: CleanupResult = diesel::sql_query(
-            r#"
+            r"
                 WITH
                     to_delete AS (
                         SELECT id, finished_at
@@ -538,7 +538,7 @@ impl OAuthSessionRepository for PgOAuthSessionRepository<'_> {
                         RETURNING oauth_sessions.finished_at
                     )
                 SELECT COUNT(*) as count, MAX(finished_at) as last_ts FROM deleted_sessions
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, _>(since)
         .bind::<diesel::sql_types::Timestamptz, _>(until)
@@ -566,7 +566,7 @@ impl OAuthSessionRepository for PgOAuthSessionRepository<'_> {
         limit: usize,
     ) -> Result<(usize, Option<DateTime<Utc>>), Self::Error> {
         let res: CleanupResult = diesel::sql_query(
-            r#"
+            r"
                 WITH to_update AS (
                     SELECT id, last_active_at
                     FROM oauth_sessions
@@ -586,7 +586,7 @@ impl OAuthSessionRepository for PgOAuthSessionRepository<'_> {
                     RETURNING oauth_sessions.last_active_at
                 )
                 SELECT COUNT(*) AS count, MAX(last_active_at) AS last_ts FROM updated
-            "#,
+            ",
         )
         .bind::<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, _>(since)
         .bind::<diesel::sql_types::Timestamptz, _>(threshold)

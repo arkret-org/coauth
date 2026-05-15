@@ -11,8 +11,7 @@ pub use session::PgPersonalSessionRepository;
 mod tests {
     use chrono::Duration;
     use coauth_data::{
-        Clock, Pagination, RepositoryAccess, RepositoryAccess as _, RepositoryFactory as _,
-        RepositoryTransaction as _,
+        Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _,
         clock::MockClock,
         personal::{
             PersonalAccessTokenRepository, PersonalSessionFilter, PersonalSessionRepository,

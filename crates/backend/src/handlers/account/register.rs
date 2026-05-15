@@ -104,13 +104,12 @@ pub async fn post_register(
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
         .ip()
-        .map(RequesterFingerprint::new)
-        .unwrap_or(RequesterFingerprint::EMPTY);
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
     let user_agent = req
         .headers()
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
     let ip_address = activity_tracker.ip();
 
     if site_config.captcha.is_some() {
@@ -312,7 +311,7 @@ pub async fn post_webvh_start(
         .headers()
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
     let ip_address = activity_tracker.ip();
     let mut repo = repo_factory.create().await?;
 
@@ -431,8 +430,7 @@ pub async fn post_webvh_email(
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
         .ip()
-        .map(RequesterFingerprint::new)
-        .unwrap_or(RequesterFingerprint::EMPTY);
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
     let mut repo = repo_factory.create().await?;
 
     let Some(registration) = repo.user_registration().lookup(id).await? else {
@@ -683,7 +681,7 @@ pub async fn post_webvh_finish(
         .headers()
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
 
     let mut repo = repo_factory.create().await?;
     let Some(registration) = repo.user_registration().lookup(id).await? else {
@@ -871,8 +869,7 @@ fn resolve_webvh_target(
         .find(|server| {
             requested
                 .as_ref()
-                .map(|requested| urls_match(requested, &server.endpoint))
-                .unwrap_or(true)
+                .is_none_or(|requested| urls_match(requested, &server.endpoint))
         });
     let Some(server) = candidate else {
         return Err("embedded_webvh_provider_not_configured".to_owned());
@@ -1126,8 +1123,7 @@ pub async fn post_resend_verification(
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
         .ip()
-        .map(RequesterFingerprint::new)
-        .unwrap_or(RequesterFingerprint::EMPTY);
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
 
     let repo = repo_factory.create().await?;
 
@@ -1198,8 +1194,7 @@ pub async fn post_change_email(
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
         .ip()
-        .map(RequesterFingerprint::new)
-        .unwrap_or(RequesterFingerprint::EMPTY);
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
 
     let repo = repo_factory.create().await?;
 
@@ -1441,7 +1436,7 @@ pub async fn post_finish(
         .headers()
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
     let cookie_jar = depot.cookie_jar(req)?;
 
     let repo = repo_factory.create().await?;

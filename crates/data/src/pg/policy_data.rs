@@ -126,7 +126,7 @@ impl PolicyDataRepository for PgPolicyDataRepository<'_> {
 #[cfg(test)]
 mod tests {
     use coauth_data::{
-        RepositoryAccess as _, RepositoryFactory as _, RepositoryTransaction as _,
+        RepositoryAccess as _, RepositoryFactory as _,
         clock::MockClock, policy_data::PolicyDataRepository,
     };
     use diesel_async::RunQueryDsl;
