@@ -1149,9 +1149,16 @@ pub(crate) fn issue_session_grant(
         browser_session,
         required_audience_for(url_builder, contrix_config),
         scopes,
+        None,
     )
 }
 
+// `subject_override` lets callers bind the grant to a non-default DID — e.g.
+// an OIDC bridge that just minted a `did:webvh:…` for the user on the target
+// principal server, where falling back to `user_did_for` would diverge from
+// the `viewer.did` returned in the same response and the principal server
+// would reject the exchange with `session grant subject does not match
+// principal_did`.
 pub(crate) fn issue_session_grant_for_audience(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
@@ -1161,8 +1168,11 @@ pub(crate) fn issue_session_grant_for_audience(
     browser_session: &BrowserSession,
     audience: String,
     scopes: Vec<String>,
+    subject_override: Option<&str>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
-    let subject = user_did_for(url_builder, contrix_config, &browser_session.user);
+    let subject = subject_override
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| user_did_for(url_builder, contrix_config, &browser_session.user));
     let session_key = PrivateKey::generate_ed25519(rng);
     let session_public_key = JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
         .with_use(JsonWebKeyUse::Sig)

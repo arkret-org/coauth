@@ -808,6 +808,7 @@ pub async fn oidc_code_exchange(
             &browser_session,
             grant_target.audience.clone(),
             principal_session_grant_scopes(&device_id),
+            Some(&principal_did),
         )
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
@@ -1443,6 +1444,7 @@ pub async fn oidc_code_exchange(
         &browser_session,
         grant_target.audience.clone(),
         principal_session_grant_scopes(&device_id),
+        Some(&principal_did),
     )
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
 

@@ -328,6 +328,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 &user_session,
                 grant_target.audience.clone(),
                 vec![contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+                None,
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
