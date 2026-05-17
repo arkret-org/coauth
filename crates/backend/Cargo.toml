@@ -68,6 +68,12 @@ coauth-config.workspace = true
 # trait + UnsignedMove + identifier types.
 contrix-core.workspace = true
 contrix-signatures = { workspace = true, features = ["signer"] }
+# Umbrella `contrix` SDK — currently consumed only for
+# `contrix::identity::binding::*` (multicodec helpers used by
+# `services::passkey_derive`). Opted in via workspace declaration with
+# default features off + `full-surface` on, so the heavier client /
+# openmls / sync surface stays out of the backend build.
+contrix.workspace = true
 coauth-data.workspace = true
 coauth-messaging.workspace = true
 coauth-i18n.workspace = true

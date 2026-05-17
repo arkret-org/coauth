@@ -30,18 +30,17 @@
 //! that round-trips through the same multibase decoder is acceptable
 //! for the v1 wire-up; a real Ed25519 update-key rotation lands once
 //! the device-side key-export contract stabilises (tracked separately).
+//!
+//! SDK-10 migration (2026-05-18): the multibase / multicodec envelope
+//! is now produced by `contrix::identity::binding::multicodec_ed25519_from_bytes`
+//! so coauth, yougen, and any other consumer reach the same bytes for
+//! the same 32-byte input. The COSE→32-byte digest step stays here
+//! because it's coupled to webauthn-rs's `Passkey` / `COSEKey` types
+//! (which are coauth-specific deps).
 
+use contrix::identity::binding::multicodec_ed25519_from_bytes;
 use sha2::{Digest, Sha256};
 use webauthn_rs::prelude::Passkey;
-
-/// Multicodec tag for an Ed25519 public key — two bytes prepended to
-/// the 32-byte raw key before multibase-encoding.
-const MULTICODEC_ED25519_PUB: [u8; 2] = [0xed, 0x01];
-
-/// Base58btc alphabet (Bitcoin) used by `did:key` / multibase `z…`
-/// prefix. Inlined to avoid pulling the `multibase` crate just for one
-/// 58-character table.
-const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 /// Derive a deterministic, multibase-encoded `update_key` from
 /// `passkey`. Returns a string of the form `z6Mk…` that starid accepts
@@ -69,60 +68,9 @@ pub fn derive_update_key_from_credential(passkey: &Passkey) -> String {
 #[must_use]
 pub fn derive_update_key_from_cose_bytes(cose_bytes: &[u8]) -> String {
     let digest = Sha256::digest(cose_bytes);
-
-    let mut envelope = Vec::with_capacity(2 + digest.len());
-    envelope.extend_from_slice(&MULTICODEC_ED25519_PUB);
-    envelope.extend_from_slice(&digest);
-
-    let mut out = String::with_capacity(1 + envelope.len() * 2);
-    out.push('z');
-    out.push_str(&base58btc_encode(&envelope));
-    out
-}
-
-/// Minimal base58btc encoder. Accepts an arbitrary byte slice and
-/// returns the base58btc-encoded string (no leading multibase tag —
-/// that's the caller's job).
-fn base58btc_encode(bytes: &[u8]) -> String {
-    if bytes.is_empty() {
-        return String::new();
-    }
-
-    // Count leading zero bytes — these become leading '1's in the
-    // output, since base58 has no zero digit at index 0 (the alphabet
-    // starts at '1').
-    let leading_zeros = bytes.iter().take_while(|&&b| b == 0).count();
-
-    // Convert big-endian bytes to base58 by repeated long division.
-    // Allocation: log_58(256) ≈ 1.366, so ceil(len * 1.4) is safe.
-    let mut input: Vec<u8> = bytes.to_vec();
-    let mut output: Vec<u8> = Vec::with_capacity(bytes.len() * 138 / 100 + 1);
-
-    let mut start = leading_zeros;
-    while start < input.len() {
-        let mut remainder: u32 = 0;
-        for byte in input.iter_mut().skip(start) {
-            let acc = (remainder << 8) | u32::from(*byte);
-            *byte = u8::try_from(acc / 58).expect("acc/58 fits in u8 because acc < 58 * 256");
-            remainder = acc % 58;
-        }
-        output.push(BASE58_ALPHABET[remainder as usize]);
-        // Skip any new leading zeros that the division introduced.
-        while start < input.len() && input[start] == 0 {
-            start += 1;
-        }
-    }
-
-    let mut s = String::with_capacity(leading_zeros + output.len());
-    for _ in 0..leading_zeros {
-        s.push('1');
-    }
-    // We accumulated least-significant-digit first; reverse for the
-    // canonical big-endian base58 string.
-    for &b in output.iter().rev() {
-        s.push(b as char);
-    }
-    s
+    let mut bytes = [0u8; 32];
+    bytes.copy_from_slice(&digest);
+    multicodec_ed25519_from_bytes(&bytes)
 }
 
 #[cfg(test)]
@@ -137,6 +85,7 @@ mod tests {
     //! `passkeys::register_finish` handler tests. Here we lock down the
     //! pure derivation contract on raw COSE-key bytes.
     use super::*;
+    use contrix::identity::binding::decode_multicodec_ed25519;
 
     /// Same input bytes → same multibase string; different inputs →
     /// different strings. This is the load-bearing property the starid
@@ -166,66 +115,19 @@ mod tests {
         );
     }
 
-    /// Output decodes back to a 34-byte payload (2-byte multicodec +
-    /// 32-byte sha256). Catches accidental truncation / padding bugs
-    /// in the base58 encoder.
+    /// Output decodes back via the SDK helper to the 32-byte digest
+    /// payload (the SDK strips the 2-byte multicodec tag). Catches
+    /// accidental truncation / padding bugs in the encoder path.
     #[test]
-    fn derive_output_round_trips_to_34_bytes() {
+    fn derive_output_round_trips_to_32_bytes() {
         let key = derive_update_key_from_cose_bytes(b"hello world");
-        assert!(key.starts_with('z'));
-        let body = &key[1..];
-        let decoded = base58btc_decode(body).expect("output is valid base58btc");
-        assert_eq!(
-            decoded.len(),
-            34,
-            "envelope must be 2-byte tag + 32-byte digest"
-        );
-        assert_eq!(&decoded[..2], &MULTICODEC_ED25519_PUB);
-    }
-
-    /// Sanity check on the encoder against a known vector: the all-
-    /// zero 32-byte digest with the Ed25519 envelope must round-trip.
-    #[test]
-    fn base58_encoder_round_trips_known_vector() {
-        let mut envelope = Vec::with_capacity(34);
-        envelope.extend_from_slice(&MULTICODEC_ED25519_PUB);
-        envelope.extend_from_slice(&[0u8; 32]);
-        let encoded = base58btc_encode(&envelope);
-        let decoded = base58btc_decode(&encoded).unwrap();
-        assert_eq!(decoded, envelope);
-    }
-
-    /// Inverse of `base58btc_encode`. Test-only — production code only
-    /// ever encodes (starid handles the decode side).
-    fn base58btc_decode(s: &str) -> Option<Vec<u8>> {
-        if s.is_empty() {
-            return Some(Vec::new());
-        }
-        let mut lookup = [255u8; 128];
-        for (i, &c) in BASE58_ALPHABET.iter().enumerate() {
-            lookup[c as usize] = u8::try_from(i).ok()?;
-        }
-
-        let leading_ones = s.bytes().take_while(|&b| b == b'1').count();
-        let mut acc: Vec<u8> = Vec::with_capacity(s.len());
-        for c in s.bytes() {
-            let v = lookup.get(c as usize).copied()?;
-            if v == 255 {
-                return None;
-            }
-            let mut carry = u32::from(v);
-            for byte in &mut acc {
-                let total = u32::from(*byte) * 58 + carry;
-                *byte = u8::try_from(total & 0xff).ok()?;
-                carry = total >> 8;
-            }
-            while carry > 0 {
-                acc.push(u8::try_from(carry & 0xff).ok()?);
-                carry >>= 8;
-            }
-        }
-        let mut out: Vec<u8> = vec![0; leading_ones];
-        out.extend(acc.iter().rev());
-        Some(out)
+        let decoded =
+            decode_multicodec_ed25519(&key).expect("output is valid multicodec-ed25519");
+        assert_eq!(decoded.len(), 32, "payload after tag strip must be 32 bytes");
+        // The 32 bytes are the SHA-256 of the input; recompute and
+        // compare to lock in that the digest survives the round trip
+        // intact.
+        let expected: [u8; 32] = Sha256::digest(b"hello world").into();
+        assert_eq!(decoded, expected);
     }
 }

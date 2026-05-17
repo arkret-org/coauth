@@ -129,6 +129,12 @@ console = "0.16.3"
 # Ed25519 backend used by `anchor_pending_move`.
 contrix-core = { version = "0.7.0", path = "../contrix-rust-sdk/crates/core", default-features = false }
 contrix-signatures = { version = "0.7.0", path = "../contrix-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
+# Umbrella `contrix` SDK pulled in for the pure-protocol modules that
+# don't have a smaller-crate home: today just `contrix::identity::binding`
+# (consumed by `services::passkey_derive`). Default features pull in the
+# heavy client / openmls / sync surface, so opt into only `full-surface`
+# (gates the identity tree).
+contrix = { version = "0.7.0", path = "../contrix-rust-sdk/crates/sdk", default-features = false, features = ["full-surface"] }
 cookie_store = { version = "0.22.1", default-features = false, features = [
     "serde_json",
 ] }
