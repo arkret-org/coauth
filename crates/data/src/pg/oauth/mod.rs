@@ -217,11 +217,7 @@ mod tests {
         assert!(grant.is_exchanged());
 
         // Lookup a non-existing token
-        let token = repo
-            .oauth_access_token()
-            .lookup(Ulid::nil())
-            .await
-            .unwrap();
+        let token = repo.oauth_access_token().lookup(Ulid::nil()).await.unwrap();
         assert_eq!(token, None);
 
         // Find a non-existing token
@@ -511,11 +507,7 @@ mod tests {
 
         // First, list all the sessions
         let filter = OAuthSessionFilter::new().for_any_user();
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 4);
         assert_eq!(list.edges[0].node, session11);
@@ -527,11 +519,7 @@ mod tests {
 
         // Now filter for only one user
         let filter = OAuthSessionFilter::new().for_user(&user1);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 2);
         assert_eq!(list.edges[0].node, session11);
@@ -541,11 +529,7 @@ mod tests {
 
         // Filter for only one client
         let filter = OAuthSessionFilter::new().for_client(&client1);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 2);
         assert_eq!(list.edges[0].node, session11);
@@ -557,11 +541,7 @@ mod tests {
         let filter = OAuthSessionFilter::new()
             .for_user(&user2)
             .for_client(&client2);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session22);
@@ -570,11 +550,7 @@ mod tests {
 
         // Filter for active sessions
         let filter = OAuthSessionFilter::new().active_only();
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 2);
         assert_eq!(list.edges[0].node, session12);
@@ -584,11 +560,7 @@ mod tests {
 
         // Filter for finished sessions
         let filter = OAuthSessionFilter::new().finished_only();
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 2);
         assert_eq!(list.edges[0].node, session11);
@@ -598,11 +570,7 @@ mod tests {
 
         // Combine the finished filter with the user filter
         let filter = OAuthSessionFilter::new().finished_only().for_user(&user2);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session22);
@@ -613,11 +581,7 @@ mod tests {
         let filter = OAuthSessionFilter::new()
             .finished_only()
             .for_client(&client2);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session22);
@@ -626,11 +590,7 @@ mod tests {
 
         // Combine the active filter with the user filter
         let filter = OAuthSessionFilter::new().active_only().for_user(&user2);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session12);
@@ -638,14 +598,8 @@ mod tests {
         assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 1);
 
         // Combine the active filter with the client filter
-        let filter = OAuthSessionFilter::new()
-            .active_only()
-            .for_client(&client2);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let filter = OAuthSessionFilter::new().active_only().for_client(&client2);
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session21);
@@ -655,11 +609,7 @@ mod tests {
         // Try the scope filter. We should get all sessions with the "openid" scope
         let scope = Scope::from_iter([OPENID]);
         let filter = OAuthSessionFilter::new().with_scope(&scope);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 4);
         assert_eq!(list.edges[0].node, session11);
@@ -671,11 +621,7 @@ mod tests {
         // We should get all sessions with the "openid" and "email" scope
         let scope = Scope::from_iter([OPENID, EMAIL]);
         let filter = OAuthSessionFilter::new().with_scope(&scope);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert!(!list.has_next_page);
         assert_eq!(list.edges.len(), 2);
         assert_eq!(list.edges[0].node, session11);
@@ -686,11 +632,7 @@ mod tests {
         let filter = OAuthSessionFilter::new()
             .with_scope(&scope)
             .for_user(&user1);
-        let list = repo
-            .oauth_session()
-            .list(filter, pagination)
-            .await
-            .unwrap();
+        let list = repo.oauth_session().list(filter, pagination).await.unwrap();
         assert_eq!(list.edges.len(), 1);
         assert_eq!(list.edges[0].node, session11);
         assert_eq!(repo.oauth_session().count(filter).await.unwrap(), 1);
@@ -700,9 +642,7 @@ mod tests {
             .oauth_session()
             .finish_bulk(
                 &clock,
-                OAuthSessionFilter::new()
-                    .for_client(&client1)
-                    .active_only(),
+                OAuthSessionFilter::new().for_client(&client1).active_only(),
             )
             .await
             .unwrap();

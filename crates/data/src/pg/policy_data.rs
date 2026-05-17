@@ -126,8 +126,8 @@ impl PolicyDataRepository for PgPolicyDataRepository<'_> {
 #[cfg(test)]
 mod tests {
     use coauth_data::{
-        RepositoryAccess as _, RepositoryFactory as _,
-        clock::MockClock, policy_data::PolicyDataRepository,
+        RepositoryAccess as _, RepositoryFactory as _, clock::MockClock,
+        policy_data::PolicyDataRepository,
     };
     use diesel_async::RunQueryDsl;
     use rand_chacha::ChaChaRng;

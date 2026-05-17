@@ -29,7 +29,8 @@ impl Options {
         let resolved_issuer = config
             .http
             .issuer
-            .as_ref().map_or_else(|| public_base.as_str(), url::Url::as_str);
+            .as_ref()
+            .map_or_else(|| public_base.as_str(), url::Url::as_str);
 
         if !resolved_issuer.starts_with("https://") {
             warn!(

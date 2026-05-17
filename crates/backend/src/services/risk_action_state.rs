@@ -18,7 +18,7 @@ pub struct AuditLogRiskActionStateService;
 
 impl RiskActionStateService for AuditLogRiskActionStateService {
     fn state_store_kind(&self) -> &'static str {
-        "admin_audit_persisted_state_machine_scaffold"
+        "pg_risk_action_proposals_with_admin_audit_trail"
     }
 
     fn record_id(&self, account_id: Ulid, proposal_id: &str) -> String {
@@ -68,7 +68,7 @@ impl RiskActionStateService for AuditLogRiskActionStateService {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn default_risk_action_state_service() -> RiskActionStateServiceHandle {
     Arc::new(AuditLogRiskActionStateService)
 }

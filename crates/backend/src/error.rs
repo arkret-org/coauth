@@ -64,7 +64,7 @@ impl AppError {
         )
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn internal_box(error: BoxError) -> Self {
         let message = error.to_string();
         Self::with_source(StatusCode::INTERNAL_SERVER_ERROR, message, error, true)
@@ -106,12 +106,12 @@ impl AppError {
         Self::new(StatusCode::TOO_MANY_REQUESTS, message)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn status(&self) -> StatusCode {
         self.status
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn message(&self) -> &str {
         &self.message
     }

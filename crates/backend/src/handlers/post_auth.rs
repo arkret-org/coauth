@@ -20,7 +20,7 @@ impl From<Option<PostAuthAction>> for OptionalPostAuthAction {
 }
 
 impl OptionalPostAuthAction {
-    #[must_use] 
+    #[must_use]
     pub fn next_relative_url(&self, url_builder: &UrlBuilder) -> String {
         self.post_auth_action.as_ref().map_or_else(
             || url_builder.relative_url("/"),
@@ -54,7 +54,7 @@ impl OptionalPostAuthAction {
         )
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn go_next_or_default(
         &self,
         url_builder: &UrlBuilder,
@@ -67,7 +67,7 @@ impl OptionalPostAuthAction {
         salvo::writing::Redirect::other(&url)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn go_next(&self, url_builder: &UrlBuilder) -> salvo::writing::Redirect {
         self.go_next_or_default(url_builder, "/")
     }
@@ -131,7 +131,7 @@ impl OptionalPostAuthAction {
 }
 
 /// Compute the relative URL for a `PostAuthAction`.
-#[must_use] 
+#[must_use]
 pub fn post_auth_action_relative_url(action: &PostAuthAction, url_builder: &UrlBuilder) -> String {
     match action {
         PostAuthAction::ContinueAuthorizationGrant { id } => {
@@ -161,7 +161,7 @@ pub fn post_auth_action_relative_url(action: &PostAuthAction, url_builder: &UrlB
 }
 
 /// Produce a redirect response for a `PostAuthAction`.
-#[must_use] 
+#[must_use]
 pub fn post_auth_action_redirect(
     action: &PostAuthAction,
     url_builder: &UrlBuilder,

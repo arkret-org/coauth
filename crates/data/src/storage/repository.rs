@@ -168,9 +168,8 @@ pub trait RepositoryAccess: Send {
     fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c>;
 
     /// Get a [`PrincipalDidRepository`]
-    fn principal_did<'c>(
-        &'c mut self,
-    ) -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c>;
+    fn principal_did<'c>(&'c mut self)
+    -> Box<dyn PrincipalDidRepository<Error = Self::Error> + 'c>;
 
     /// Get a [`BrowserSessionRepository`]
     fn browser_session<'c>(
@@ -187,8 +186,7 @@ pub trait RepositoryAccess: Send {
     fn notification<'c>(&'c mut self) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c>;
 
     /// Get an [`OAuthClientRepository`]
-    fn oauth_client<'c>(&'c mut self)
-    -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c>;
+    fn oauth_client<'c>(&'c mut self) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c>;
 
     /// Get an [`OAuthAuthorizationGrantRepository`]
     fn oauth_authorization_grant<'c>(
@@ -196,9 +194,8 @@ pub trait RepositoryAccess: Send {
     ) -> Box<dyn OAuthAuthorizationGrantRepository<Error = Self::Error> + 'c>;
 
     /// Get an [`OAuthSessionRepository`]
-    fn oauth_session<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c>;
+    fn oauth_session<'c>(&'c mut self)
+    -> Box<dyn OAuthSessionRepository<Error = Self::Error> + 'c>;
 
     /// Get a [`SessionGrantRepository`]
     fn oauth_session_grant<'c>(
@@ -266,9 +263,9 @@ mod impls {
         audit::AuditRepository,
         notification::NotificationRepository,
         oauth::{
-            OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository,
-            OAuthClientRepository, OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository,
-            OAuthSessionRepository, SessionGrantRepository,
+            OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
+            OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
+            SessionGrantRepository,
         },
         personal::{PersonalAccessTokenRepository, PersonalSessionRepository},
         policy_data::PolicyDataRepository,

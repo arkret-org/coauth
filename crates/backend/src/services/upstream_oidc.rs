@@ -523,7 +523,7 @@ async fn fetch_oidc_userinfo(
     Ok((claims, false))
 }
 
-#[must_use] 
+#[must_use]
 pub fn default_upstream_oidc_service() -> UpstreamOidcServiceHandle {
     Arc::new(DefaultUpstreamOidcService)
 }

@@ -347,7 +347,9 @@ fn mint_params_from_payload(payload: &serde_json::Value) -> Option<MintRegistrat
         .get("usage_limit")
         .and_then(serde_json::Value::as_u64)
         .map(|n| n as u32);
-    let expires_in_hours = payload.get("expires_in_hours").and_then(serde_json::Value::as_u64);
+    let expires_in_hours = payload
+        .get("expires_in_hours")
+        .and_then(serde_json::Value::as_u64);
     Some(MintRegistrationTokensParams {
         count: count as u32,
         usage_limit,

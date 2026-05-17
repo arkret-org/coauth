@@ -131,11 +131,7 @@ impl AppState {
                 };
 
                 if let Err(e) = metadata_cache
-                    .warm_up_and_run(
-                        &http_client,
-                        std::time::Duration::from_mins(15),
-                        &mut repo,
-                    )
+                    .warm_up_and_run(&http_client, std::time::Duration::from_mins(15), &mut repo)
                     .await
                 {
                     tracing::error!(
@@ -160,7 +156,9 @@ pub async fn inject_app_state(
     ctrl: &mut FlowCtrl,
 ) {
     // The AppState should already be in depot from the router setup
-    let state: AppState = if let Some(state) = depot.get::<AppState>("app_state").ok().cloned() { state } else {
+    let state: AppState = if let Some(state) = depot.get::<AppState>("app_state").ok().cloned() {
+        state
+    } else {
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
         res.render(Text::Plain("AppState not found in depot"));
         ctrl.skip_rest();
@@ -385,14 +383,14 @@ impl DepotExt for Depot {
 }
 
 /// Extract `BoxClock` from request
-#[must_use] 
+#[must_use]
 pub fn extract_clock() -> BoxClock {
     let clock = SystemClock::default();
     Box::new(clock)
 }
 
 /// Extract `BoxRng` from request
-#[must_use] 
+#[must_use]
 pub fn extract_rng() -> BoxRng {
     let rng = rand_chacha::ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed RNG");
     Box::new(rng)

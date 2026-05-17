@@ -428,15 +428,14 @@ impl ConfigurationSection for EmailConfig {
                 ensure_non_empty(&provider.api_key, "provider.api_key")?;
                 ensure_valid_url(&provider.base_url, "provider.base_url")?;
                 if let Some(webhook) = &provider.webhook
-                    && webhook.headers.is_empty() {
-                        return Err(error_on_field(
-                            figment::error::Error::custom(
-                                "provider.webhook.headers must not be empty",
-                            ),
-                            "provider.webhook.headers",
-                        )
-                        .into());
-                    }
+                    && webhook.headers.is_empty()
+                {
+                    return Err(error_on_field(
+                        figment::error::Error::custom("provider.webhook.headers must not be empty"),
+                        "provider.webhook.headers",
+                    )
+                    .into());
+                }
             }
 
             EmailProviderConfig::AwsSes(provider) => {

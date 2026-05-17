@@ -29,7 +29,14 @@ use crate::{
         },
         common::DepotExt,
     },
-    services::risk_action_state::RiskActionStateService,
+    services::{
+        did_resolver::DidResolverService,
+        risk_action_proposals::{
+            ApprovalProof, CreateProposal, ProposalState, RiskActionProposalRecord,
+            RiskActionProposalsError, required_approvals_for,
+        },
+        risk_action_state::RiskActionStateService,
+    },
 };
 
 #[derive(Serialize, JsonSchema, ToSchema)]
@@ -173,6 +180,90 @@ pub(super) fn admin_bridge_risk_action_examples() -> AdminBridgeRiskActionExampl
     }
 }
 
+fn parse_proposal_id(value: &str) -> Result<Ulid, AppError> {
+    value
+        .parse::<Ulid>()
+        .map_err(|_| AppError::bad_request("invalid proposal_id"))
+}
+
+fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError {
+    match error {
+        RiskActionProposalsError::Storage(error) => {
+            AppError::internal(std::io::Error::other(error.to_string()))
+        }
+        RiskActionProposalsError::NotFound => AppError::not_found("risk action proposal not found"),
+        RiskActionProposalsError::NotDraft => {
+            AppError::bad_request("risk action proposal is not in draft state")
+        }
+        RiskActionProposalsError::DuplicateApproval(admin_did) => AppError::conflict(format!(
+            "risk action proposal already has an approval from {admin_did}"
+        )),
+        RiskActionProposalsError::NotApproved { got, need } => AppError::bad_request(format!(
+            "risk action proposal must be approved before execution (got {got}, need {need})"
+        )),
+        RiskActionProposalsError::AlreadyExecuted => {
+            AppError::conflict("risk action proposal has already been executed")
+        }
+        RiskActionProposalsError::AlreadyCancelled => {
+            AppError::conflict("risk action proposal has already been cancelled")
+        }
+    }
+}
+
+async fn admin_actor_did(
+    admin_user: Option<&coauth_data::User>,
+    contrix_config: &coauth_config::ContrixConfig,
+    did_resolver: &dyn DidResolverService,
+) -> Result<String, AppError> {
+    let admin_user = admin_user.ok_or_else(|| {
+        AppError::forbidden("risk action workflow requires a user-bound admin token")
+    })?;
+    Ok(did_resolver
+        .primary_did_for_user(contrix_config, admin_user)
+        .await)
+}
+
+fn ensure_proposal_targets(
+    proposal: &RiskActionProposalRecord,
+    account_id: Ulid,
+    action: &str,
+    ticket: Option<&str>,
+) -> Result<(), AppError> {
+    if proposal.account_id != account_id {
+        return Err(AppError::not_found("risk action proposal not found"));
+    }
+    if proposal.action != action {
+        return Err(AppError::bad_request(format!(
+            "risk action proposal action mismatch: expected {}, got {action}",
+            proposal.action
+        )));
+    }
+    if let Some(ticket) = ticket
+        && proposal.ticket.as_deref() != Some(ticket)
+    {
+        return Err(AppError::bad_request(
+            "risk action proposal ticket does not match request",
+        ));
+    }
+    Ok(())
+}
+
+fn state_revision_for(proposal: &RiskActionProposalRecord) -> u64 {
+    1 + proposal.approval_proofs.len() as u64
+        + u64::from(proposal.executed_at.is_some())
+        + u64::from(proposal.cancelled_at.is_some())
+}
+
+fn transition_for_state(state: ProposalState) -> &'static str {
+    match state {
+        ProposalState::Draft => "proposal_approval_recorded",
+        ProposalState::Approved => "proposal_approved",
+        ProposalState::Executed => "proposal_executed",
+        ProposalState::Cancelled => "proposal_cancelled",
+        ProposalState::Rejected => "proposal_rejected",
+    }
+}
+
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.accounts.risk_action", skip_all)]
 pub async fn propose(
@@ -194,7 +285,11 @@ pub async fn propose(
         ));
     }
 
+    let _mutation = account_risk_action_mutation(&params.action)?;
     let risk_action_state = depot.risk_action_state_service()?;
+    let risk_action_proposals = depot.risk_action_proposals_service()?;
+    let contrix_config = depot.contrix_config()?;
+    let did_resolver = depot.did_resolver_service()?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -210,12 +305,29 @@ pub async fn propose(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let proposal_id = Ulid::new().to_string();
+    let proposer_did =
+        admin_actor_did(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
+    let proposal = risk_action_proposals
+        .create(CreateProposal {
+            account_id: account.id,
+            action: params.action.clone(),
+            proposer_did,
+            reason: params.reason.clone().unwrap_or_default(),
+            ticket: params.ticket.clone(),
+            required_approvals: required_approvals_for(
+                &params.action,
+                contrix_config.high_risk_threshold,
+            ),
+            now: requested_at,
+        })
+        .await
+        .map_err(map_risk_action_proposals_error)?;
+    let proposal_id = proposal.id.to_string();
     let state_record_id = risk_action_state.record_id(account.id, &proposal_id);
     let execution_endpoint = risk_action_state.execution_endpoint(&params.action, account.id)?;
     let allowed_next_transitions = risk_action_state.allowed_next_transitions("draft");
     let state_store_kind = risk_action_state.state_store_kind();
-    let todo = "TODO(contrix): persist proposal records in a dedicated state store, capture requester/approver context, require explicit approval, then route approved proposals into the dedicated /lock, /disable, /erase, or /reset-recovery mutation endpoints.".to_owned();
+    let todo = "Durable proposal record persisted; execute requires explicit persisted approval and consumes this proposal before mutation.".to_owned();
 
     if let Some(admin_user) = &admin_user {
         let mut rng = crate::handlers::account::make_rng();
@@ -269,7 +381,7 @@ pub async fn propose(
         proposal_state: "draft".to_owned(),
         state_revision: 1,
         transition_kind: "proposal_requested".to_owned(),
-        approval_mode: "proposal_scaffold_required".to_owned(),
+        approval_mode: "durable_proposal_required".to_owned(),
         allowed_next_transitions,
         execution_endpoint,
         state_store_kind: state_store_kind.to_owned(),
@@ -299,6 +411,9 @@ pub async fn approve(
     }
 
     let risk_action_state = depot.risk_action_state_service()?;
+    let risk_action_proposals = depot.risk_action_proposals_service()?;
+    let contrix_config = depot.contrix_config()?;
+    let did_resolver = depot.did_resolver_service()?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -310,37 +425,54 @@ pub async fn approve(
     let proposal_id = req
         .param::<String>("proposal_id")
         .ok_or_else(|| AppError::bad_request("missing proposal_id"))?;
+    let proposal_ulid = parse_proposal_id(&proposal_id)?;
     let account = repo
         .user()
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let logs = repo
-        .audit()
-        .list_admin_operations(
-            coauth_data::audit::AdminOperationFilter::new()
-                .for_resource_type("account")
-                .with_limit(100),
+    let existing = risk_action_proposals
+        .get(proposal_ulid)
+        .await
+        .map_err(map_risk_action_proposals_error)?
+        .ok_or_else(|| AppError::not_found("risk action proposal not found"))?;
+    ensure_proposal_targets(
+        &existing,
+        account.id,
+        &params.action,
+        params.ticket.as_deref(),
+    )?;
+    let fallback_admin_did =
+        admin_actor_did(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
+    let approved_by = params
+        .approved_by
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(fallback_admin_did);
+    let approved = risk_action_proposals
+        .approve(
+            proposal_ulid,
+            ApprovalProof {
+                admin_did: approved_by.clone(),
+                signature: format!("coauth-admin-risk-action-approval:{proposal_id}:{approved_by}"),
+                note: params.approval_note.clone(),
+                recorded_at: approved_at,
+            },
         )
-        .await?;
-    let approved = logs.iter().any(|log| {
-        is_account_risk_action_log(log, account.id)
-            && risk_action_detail_string(&log.details, "proposal_id").as_deref()
-                == Some(proposal_id.as_str())
-            && risk_action_detail_string(&log.details, "action").as_deref()
-                == Some(params.action.as_str())
-            && risk_action_detail_string(&log.details, "next_state").as_deref() == Some("approved")
-    });
-    if !approved {
-        return Err(AppError::bad_request(
-            "risk action proposal must be approved before execution",
-        ));
-    }
+        .await
+        .map_err(map_risk_action_proposals_error)?;
     let state_record_id = risk_action_state.record_id(account.id, &proposal_id);
     let execution_endpoint = risk_action_state.execution_endpoint(&params.action, account.id)?;
-    let allowed_next_transitions = risk_action_state.allowed_next_transitions("approved");
+    let allowed_next_transitions =
+        risk_action_state.allowed_next_transitions(approved.state.as_str());
     let state_store_kind = risk_action_state.state_store_kind();
-    let todo = "TODO(contrix): replace approval scaffold with a persisted proposal state store, authorization checks, and a controlled execute step that consumes approved proposals.".to_owned();
+    let todo = format!(
+        "Durable approval recorded ({}/{}); execute is allowed only after state reaches approved.",
+        approved.approval_proofs.len(),
+        approved.required_approvals
+    );
+    let state_revision = state_revision_for(&approved);
+    let transition_kind = transition_for_state(approved.state).to_owned();
 
     if let Some(admin_user) = &admin_user {
         let mut rng = crate::handlers::account::make_rng();
@@ -350,21 +482,19 @@ pub async fn approve(
                 &clock,
                 NewAdminOperationLog::new(
                     admin_user.id,
-                    AdminOperation::Other(
-                        format!("account_{}_proposal_approved", params.action),
-                    ),
+                    AdminOperation::Other(format!("account_{}_proposal_approved", params.action)),
                     "account",
                     serde_json::json!({
                         "state_record_id": state_record_id,
                         "state_store_kind": state_store_kind,
-                        "state_revision": 2_u64,
+                        "state_revision": state_revision,
                         "proposal_id": proposal_id,
                         "action": params.action,
-                        "transition_kind": "proposal_approved",
-                        "previous_state": "draft",
-                        "next_state": "approved",
+                        "transition_kind": transition_kind,
+                        "previous_state": existing.state.as_str(),
+                        "next_state": approved.state.as_str(),
                         "ticket": params.ticket,
-                        "approved_by": params.approved_by,
+                        "approved_by": approved_by,
                         "approved_by_handle": admin_user.handle,
                         "approval_note": params.approval_note,
                         "execution_endpoint": execution_endpoint,
@@ -386,14 +516,12 @@ pub async fn approve(
         account_id: account.id.to_string(),
         action: params.action,
         ticket: params.ticket,
-        previous_state: "draft".to_owned(),
-        approval_state: "approved_scaffold".to_owned(),
-        state_revision: 2,
-        transition_kind: "proposal_approved".to_owned(),
-        approved_at: Some(approved_at),
-        approved_by: params
-            .approved_by
-            .or_else(|| admin_user.as_ref().map(|user| user.id.to_string())),
+        previous_state: existing.state.as_str().to_owned(),
+        approval_state: approved.state.as_str().to_owned(),
+        state_revision,
+        transition_kind,
+        approved_at: approved.approved_at.or(Some(approved_at)),
+        approved_by: Some(approved_by),
         approved_by_handle: admin_user.as_ref().map(|user| user.handle.clone()),
         approval_note: params.approval_note,
         execution_endpoint,
@@ -426,6 +554,7 @@ pub async fn execute(
 
     let mutation = account_risk_action_mutation(&params.action)?;
     let risk_action_state = depot.risk_action_state_service()?;
+    let risk_action_proposals = depot.risk_action_proposals_service()?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -440,16 +569,33 @@ pub async fn execute(
     let proposal_id = req
         .param::<String>("proposal_id")
         .ok_or_else(|| AppError::bad_request("missing proposal_id"))?;
+    let proposal_ulid = parse_proposal_id(&proposal_id)?;
     let account = repo
         .user()
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
+    let existing = risk_action_proposals
+        .get(proposal_ulid)
+        .await
+        .map_err(map_risk_action_proposals_error)?
+        .ok_or_else(|| AppError::not_found("risk action proposal not found"))?;
+    ensure_proposal_targets(
+        &existing,
+        account.id,
+        &params.action,
+        params.ticket.as_deref(),
+    )?;
+    let executed_proposal = risk_action_proposals
+        .mark_executed(proposal_ulid, executed_at)
+        .await
+        .map_err(map_risk_action_proposals_error)?;
     let state_record_id = risk_action_state.record_id(account.id, &proposal_id);
     let mutation_endpoint = risk_action_state.execution_endpoint(&params.action, account.id)?;
     let allowed_next_transitions = risk_action_state.allowed_next_transitions("mutation_recorded");
     let state_store_kind = risk_action_state.state_store_kind();
-    let todo = "TODO(contrix): replace audit-derived approval validation with durable proposal records and enforce proposal_id consumption before mutation.".to_owned();
+    let state_revision = state_revision_for(&executed_proposal);
+    let todo = "Durable proposal consumed before controlled account mutation.".to_owned();
     let mut rng = crate::handlers::account::make_rng();
     let updated_account = crate::services::user_admin::patch_user(
         &mut repo,
@@ -471,18 +617,16 @@ pub async fn execute(
                 &clock,
                 NewAdminOperationLog::new(
                     admin_user.id,
-                    AdminOperation::Other(
-                        format!("account_{}_proposal_executed", params.action),
-                    ),
+                    AdminOperation::Other(format!("account_{}_proposal_executed", params.action)),
                     "account",
                     serde_json::json!({
                         "state_record_id": state_record_id,
                         "state_store_kind": state_store_kind,
-                        "state_revision": 3_u64,
+                        "state_revision": state_revision,
                         "proposal_id": proposal_id,
                         "action": params.action,
                         "transition_kind": "proposal_executed",
-                        "previous_state": "approved",
+                        "previous_state": existing.state.as_str(),
                         "next_state": "mutation_recorded",
                         "mutation_kind": mutation.mutation_kind,
                         "mutation_description": mutation.mutation_description,
@@ -513,10 +657,10 @@ pub async fn execute(
         account_id: account.id.to_string(),
         action: params.action,
         ticket: params.ticket,
-        previous_state: "approved".to_owned(),
+        previous_state: existing.state.as_str().to_owned(),
         execution_state: "mutation_recorded".to_owned(),
         mutation_kind: mutation.mutation_kind.to_owned(),
-        state_revision: 3,
+        state_revision,
         transition_kind: "proposal_executed".to_owned(),
         executed_at,
         execution_mode: "services.user_admin.patch_user".to_owned(),
@@ -591,7 +735,8 @@ pub async fn get_current(
     repo.cancel().await?;
 
     let current = logs
-        .into_iter().find(|log| is_account_risk_action_log(log, id))
+        .into_iter()
+        .find(|log| is_account_risk_action_log(log, id))
         .map(|log| AccountRiskActionCurrentResponse {
             account_id: id.to_string(),
             state_record_id: risk_action_detail_string(&log.details, "state_record_id"),

@@ -661,7 +661,7 @@ pub async fn load_policy_factory_dynamic_data(
 }
 
 /// Create the local principal account facade used by account/profile flows.
-#[must_use] 
+#[must_use]
 pub fn principal_server_connection_from_config(
     site_config: &SiteConfig,
 ) -> (Arc<dyn PrincipalServerAdmin>, ConnectorRegistry) {

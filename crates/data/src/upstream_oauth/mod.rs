@@ -7,6 +7,7 @@ pub use self::{
     provider::{
         ClaimsImports as UpstreamOAuthProviderClaimsImports,
         DiscoveryMode as UpstreamOAuthProviderDiscoveryMode,
+        HandlePreference as UpstreamOAuthProviderHandlePreference,
         ImportAction as UpstreamOAuthProviderImportAction,
         ImportPreference as UpstreamOAuthProviderImportPreference,
         OnBackchannelLogout as UpstreamOAuthProviderOnBackchannelLogout,
@@ -15,7 +16,6 @@ pub use self::{
         ResponseMode as UpstreamOAuthProviderResponseMode,
         SubjectPreference as UpstreamOAuthProviderSubjectPreference,
         TokenAuthMethod as UpstreamOAuthProviderTokenAuthMethod, UpstreamOAuthProvider,
-        HandlePreference as UpstreamOAuthProviderHandlePreference,
     },
     session::{UpstreamOAuthAuthorizationSession, UpstreamOAuthAuthorizationSessionState},
 };

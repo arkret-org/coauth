@@ -171,7 +171,7 @@ impl TryFrom<ResponseType> for OAuthAuthorizationEndpointResponseType {
 
     fn try_from(rt: ResponseType) -> Result<Self, Self::Error> {
         use OAuthAuthorizationEndpointResponseType as O;
-        use ResponseTypeToken::{Unknown, Code, IdToken, Token};
+        use ResponseTypeToken::{Code, IdToken, Token, Unknown};
 
         // Reject if any unknown tokens are present
         if rt.iter().any(|t| matches!(t, Unknown(_))) {

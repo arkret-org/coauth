@@ -11,9 +11,7 @@ use std::{collections::BTreeMap, process::ExitCode};
 use anyhow::Context;
 use clap::CommandFactory;
 use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config};
-use coauth_config::{
-    ConfigurationSectionExt, DatabaseConfig, PasswordsConfig,
-};
+use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
 use coauth_data::{
     Clock, DatabaseError, PgRepository, RepositoryAccess, SystemClock, UpstreamOAuthProvider, User,
     queue::{ProvisionUserJob, QueueJobRepositoryExt as _},

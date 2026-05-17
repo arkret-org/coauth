@@ -467,7 +467,8 @@ impl EmailProvider for PaloudInternalProvider {
                 return Err(Error::ProviderError {
                     status: 400,
                     code: Some("unsupported_recipient_count".to_owned()),
-                    body: "Paloud internal email transport requires exactly one recipient".to_owned(),
+                    body: "Paloud internal email transport requires exactly one recipient"
+                        .to_owned(),
                     retryable: false,
                 });
             }
@@ -1030,9 +1031,9 @@ impl AwsSesProvider {
                 .as_deref()
                 .unwrap_or("SUCCESS")
                 .eq_ignore_ascii_case("SUCCESS")
-            {
-                return Ok(());
-            }
+        {
+            return Ok(());
+        }
 
         let sender_domain = sender_domain(from).ok_or_else(|| {
             provider_client_error(
@@ -1050,9 +1051,9 @@ impl AwsSesProvider {
                 .as_deref()
                 .unwrap_or("SUCCESS")
                 .eq_ignore_ascii_case("SUCCESS")
-            {
-                return Ok(());
-            }
+        {
+            return Ok(());
+        }
 
         Err(provider_client_error(
             "sender_identity_unverified",
@@ -1485,12 +1486,13 @@ struct ProviderResponseError {
 fn extract_provider_message_id(headers: &reqwest::header::HeaderMap, body: &str) -> Option<String> {
     for header_name in ["x-provider-message-id", "x-message-id", "x-request-id"] {
         if let Some(value) = headers.get(header_name)
-            && let Ok(value) = value.to_str() {
-                let value = value.trim();
-                if !value.is_empty() {
-                    return Some(value.to_owned());
-                }
+            && let Ok(value) = value.to_str()
+        {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(value.to_owned());
             }
+        }
     }
 
     serde_json::from_str::<ProviderResponse>(body)

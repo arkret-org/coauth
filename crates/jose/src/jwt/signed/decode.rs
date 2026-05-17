@@ -78,9 +78,7 @@ impl JwtDecodeError {
 // ---------------------------------------------------------------------------
 
 /// Take an already-split `RawJwt` and decode every segment into typed parts.
-fn parse_compact_parts<T: DeserializeOwned>(
-    raw: RawJwt<'_>,
-) -> Result<Jwt<'_, T>, JwtDecodeError> {
+fn parse_compact_parts<T: DeserializeOwned>(raw: RawJwt<'_>) -> Result<Jwt<'_, T>, JwtDecodeError> {
     // 1. header
     let header_decoder = base64ct::Decoder::<'_, Base64UrlUnpadded>::new(raw.header().as_bytes())
         .map_err(JwtDecodeError::header_base64)?;

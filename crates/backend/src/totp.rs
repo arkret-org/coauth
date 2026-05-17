@@ -48,7 +48,7 @@ fn generate_code(secret: &[u8], time_step: u64, digits: u32) -> u32 {
 /// * `code` - The 6-digit code string submitted by the user.
 /// * `period` - Time step in seconds (typically 30).
 /// * `digits` - Number of digits in the code (typically 6).
-#[must_use] 
+#[must_use]
 pub fn verify(secret_base32: &str, code: &str, period: u64, digits: u32) -> bool {
     let Ok(expected_code) = code.parse::<u32>() else {
         return false;
@@ -95,7 +95,7 @@ pub fn generate_secret(rng: &mut (impl rand_core::RngCore + ?Sized)) -> String {
 ///
 /// The returned URI can be rendered as a QR code for authenticator app
 /// scanning.
-#[must_use] 
+#[must_use]
 pub fn build_otpauth_uri(secret_base32: &str, issuer: &str, account_name: &str) -> String {
     // Manual percent-encoding for the label portion
     let label = format!("{issuer}:{account_name}");

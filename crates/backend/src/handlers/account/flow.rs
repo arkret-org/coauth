@@ -503,8 +503,8 @@ pub async fn respond_flow(
     let activity_tracker = super::extract_bound_activity_tracker(req, depot);
     let captcha_verify = http_client.map(|client| {
         let captcha_config = site_config.and_then(|sc| sc.captcha.as_ref());
-        let site_hostname = url_builder
-            .map_or("localhost", coauth_data::UrlBuilder::public_hostname);
+        let site_hostname =
+            url_builder.map_or("localhost", coauth_data::UrlBuilder::public_hostname);
         CaptchaVerifyContext {
             http_client: client,
             captcha_config,

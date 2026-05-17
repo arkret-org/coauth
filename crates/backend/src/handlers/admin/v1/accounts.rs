@@ -267,7 +267,7 @@ pub async fn admin_bridge_describe(depot: &Depot) -> JsonResult<AdminBridgeDescr
 
     Ok(Json(AdminBridgeDescribe {
         contract: "cx.contract.coauth_admin_bridge.v1".to_owned(),
-        version: "0.1.0-scaffold".to_owned(),
+        version: "0.2.0-durable-proposals".to_owned(),
         api_base_path: "/api/admin/v1".to_owned(),
         accounts_path: "/api/admin/v1/accounts".to_owned(),
         account_detail_path_template: "/api/admin/v1/accounts/{account_id}".to_owned(),
@@ -280,11 +280,9 @@ pub async fn admin_bridge_describe(depot: &Depot) -> JsonResult<AdminBridgeDescr
         risk_action_approve_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve".to_owned(),
         risk_action_execute_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute".to_owned(),
         risk_action_state_store_kind: risk_action_state.state_store_kind().to_owned(),
-        risk_action_approval_mode: "state_machine_scaffold_required".to_owned(),
+        risk_action_approval_mode: "durable_proposal_required".to_owned(),
         risk_action_examples: admin_bridge_risk_action_examples(),
         todos: vec![
-            "TODO: replace audit-backed scaffold transitions with dedicated persisted proposal records".to_owned(),
-            "TODO: enforce persisted approval-state consumption before executing risk-action mutations".to_owned(),
             "TODO: publish formal OpenAPI examples for admin bridge discovery and risk-action workflows".to_owned(),
         ],
     }))
@@ -568,10 +566,16 @@ fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGra
 
 #[cfg(test)]
 mod tests {
+    use coauth_data::{Clock, RepositoryAccess};
+    use coauth_iana::jose::JsonWebSignatureAlg;
+    use coauth_jose::constraints::Constrainable;
+    use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
     use hyper::{Request, StatusCode};
+    use serde_json::Value;
+    use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
-    use coauth_data::RepositoryAccess;
+    use crate::services::did_binding_proof::BindingStatementClaims;
 
     #[tokio::test]
     async fn test_list_and_get_accounts() {
@@ -709,6 +713,15 @@ mod tests {
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         let proposal_id = body["proposal_id"].as_str().unwrap().to_owned();
+        assert_eq!(body["approval_mode"], "durable_proposal_required");
+
+        let proposals =
+            crate::services::risk_action_proposals::risk_action_proposals_service(pool.clone());
+        let proposal_ulid = proposal_id.parse::<ulid::Ulid>().unwrap();
+        let persisted = proposals.get(proposal_ulid).await.unwrap().unwrap();
+        assert_eq!(persisted.account_id, user.id);
+        assert_eq!(persisted.action, "lock");
+        assert_eq!(persisted.state.as_str(), "draft");
 
         let response = state
             .request(
@@ -742,6 +755,16 @@ mod tests {
             )
             .await;
         response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["approval_state"], "approved");
+        assert_eq!(
+            body["state_store_kind"],
+            "pg_risk_action_proposals_with_admin_audit_trail"
+        );
+
+        let persisted = proposals.get(proposal_ulid).await.unwrap().unwrap();
+        assert_eq!(persisted.state.as_str(), "approved");
+        assert_eq!(persisted.approval_proofs.len(), 1);
 
         let response = state
             .request(
@@ -763,6 +786,26 @@ mod tests {
         assert_eq!(body["mutation_kind"], "account_locked");
         assert_eq!(body["account"]["data"]["attributes"]["status"], "locked");
         assert!(body["account"]["data"]["attributes"]["locked_at"].is_string());
+
+        let persisted = proposals.get(proposal_ulid).await.unwrap().unwrap();
+        assert_eq!(persisted.state.as_str(), "executed");
+        assert!(persisted.executed_at.is_some());
+
+        let response = state
+            .request(
+                Request::post(format!(
+                    "/api/admin/v1/accounts/{}/risk-action/{}/execute",
+                    user.id, proposal_id
+                ))
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "action": "lock",
+                    "ticket": "INC-2.1",
+                    "execution_note": "replay approved lock",
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::CONFLICT);
 
         let response = state
             .request(
@@ -788,7 +831,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_account_dids_contract_is_stubbed_with_not_implemented() {
+    async fn test_account_dids_add_list_and_revoke_use_audit_trail() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -812,11 +855,154 @@ mod tests {
                     .empty(),
             )
             .await;
-        response.assert_status(StatusCode::NOT_IMPLEMENTED);
+        response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_eq!(
-            body["errors"][0]["title"],
-            "account DID binding list is not implemented yet"
-        );
+        let did = body["data"][0]["did"].as_str().unwrap().to_owned();
+        assert_eq!(body["data"][0]["state"], "active");
+        assert_eq!(body["data"][0]["active"], true);
+        assert_eq!(body["meta"]["supports_write_operations"], true);
+
+        let recovery_did =
+            crate::handlers::contrix::service_did_for(&state.url_builder, &state.contrix_config);
+        let nonce = "did-binding-add-nonce";
+        let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
+        let response = state
+            .request(
+                Request::post(format!("/api/admin/v1/accounts/{}/dids", user.id))
+                    .bearer(&token)
+                    .json(serde_json::json!({
+                        "did": recovery_did,
+                        "kind": "recovery",
+                        "control_proof": {
+                            "jws": control_proof,
+                            "nonce": nonce
+                        },
+                        "verification_method": "did_controller_key",
+                        "operator_note": "bind recovery DID"
+                    })),
+            )
+            .await;
+        response.assert_status(StatusCode::CREATED);
+        let body: serde_json::Value = response.json();
+        let added = binding_for_did(&body, &recovery_did);
+        assert_eq!(added["kind"], "recovery");
+        assert_eq!(added["state"], "active");
+        assert_eq!(added["active"], true);
+        assert_eq!(added["verification_status"], "verified");
+        assert!(added["last_resolver_receipt_id"].is_string());
+
+        let duplicate_proof =
+            sign_did_binding_control_proof(&state, &recovery_did, user.id, "duplicate-nonce");
+        let response = state
+            .request(
+                Request::post(format!("/api/admin/v1/accounts/{}/dids", user.id))
+                    .bearer(&token)
+                    .json(serde_json::json!({
+                        "did": recovery_did,
+                        "kind": "recovery",
+                        "control_proof": {
+                            "jws": duplicate_proof,
+                            "nonce": "duplicate-nonce"
+                        }
+                    })),
+            )
+            .await;
+        response.assert_status(StatusCode::CONFLICT);
+
+        let response = state
+            .request(
+                Request::delete(format!(
+                    "/api/admin/v1/accounts/{}/dids/{}",
+                    user.id, recovery_did
+                ))
+                .bearer(&token)
+                .json(serde_json::json!({
+                "reason": "operator requested DID rotation",
+                    "revoke_related_sessions": true
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        let revoked = binding_for_did(&body, &recovery_did);
+        assert_eq!(revoked["state"], "revoked");
+        assert_eq!(revoked["active"], false);
+        assert!(revoked["revoked_at"].is_string());
+
+        let response = state
+            .request(
+                Request::delete(format!(
+                    "/api/admin/v1/accounts/{}/dids/{}",
+                    user.id, recovery_did
+                ))
+                .bearer(&token)
+                .json(serde_json::json!({
+                "reason": "duplicate revoke"
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::CONFLICT);
+
+        let response = state
+            .request(
+                Request::get(format!("/api/admin/v1/accounts/{}/dids", user.id))
+                    .bearer(&token)
+                    .empty(),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        let primary = binding_for_did(&body, &did);
+        assert_eq!(primary["state"], "active");
+        assert_eq!(primary["active"], true);
+        let revoked = binding_for_did(&body, &recovery_did);
+        assert_eq!(revoked["state"], "revoked");
+        assert_eq!(revoked["active"], false);
+    }
+
+    fn binding_for_did<'a>(body: &'a Value, did: &str) -> &'a Value {
+        body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|binding| binding["did"] == did)
+            .expect("binding should be present")
+    }
+
+    fn sign_did_binding_control_proof(
+        state: &TestState,
+        did: &str,
+        account_id: Ulid,
+        nonce: &str,
+    ) -> String {
+        let alg = [
+            JsonWebSignatureAlg::EdDsa,
+            JsonWebSignatureAlg::Es512,
+            JsonWebSignatureAlg::Es384,
+            JsonWebSignatureAlg::Es256,
+            JsonWebSignatureAlg::Rs512,
+            JsonWebSignatureAlg::Rs384,
+            JsonWebSignatureAlg::Rs256,
+            JsonWebSignatureAlg::Ps512,
+            JsonWebSignatureAlg::Ps384,
+            JsonWebSignatureAlg::Ps256,
+        ]
+        .into_iter()
+        .find(|alg| state.key_store.signing_key_for_algorithm(alg).is_some())
+        .expect("test keystore should expose a signing key");
+        let key = state.key_store.signing_key_for_algorithm(&alg).unwrap();
+        let signer = key.params().signing_key_for_alg(&alg).unwrap();
+        let header = JsonWebSignatureHeader::new(alg).with_kid(key.kid().unwrap());
+        let claims = BindingStatementClaims {
+            kind: "cx.did_binding.control_proof.v1".to_owned(),
+            account_did: did.to_owned(),
+            cx_account_id: account_id.to_string(),
+            nonce: nonce.to_owned(),
+            iat: state.clock.now(),
+        };
+        let mut rng = state.rng();
+        Jwt::sign_with_rng(&mut rng, header, claims, &signer)
+            .unwrap()
+            .into_string()
     }
 }

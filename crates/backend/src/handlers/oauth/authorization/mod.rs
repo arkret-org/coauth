@@ -1,6 +1,6 @@
 use coauth_data::{
-    AuthorizationCode, BoxClock, BoxRepository, BoxRng, Pkce, PostAuthAction,
-    RepositoryAccess, SystemClock,
+    AuthorizationCode, BoxClock, BoxRepository, BoxRng, Pkce, PostAuthAction, RepositoryAccess,
+    SystemClock,
     oauth::{
         OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthSessionFilter,
         OAuthSessionRepository,
@@ -246,6 +246,30 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                         &locale,
                         ClientError::from(ClientErrorCode::UnauthorizedClient),
                     )?);
+                }
+                let pkce_required = super::token_service::authorization_code_pkce_required(&client);
+                match params.pkce.as_ref() {
+                    None if pkce_required => {
+                        return Ok(callback_destination.go(
+                            &templates,
+                            &locale,
+                            ClientError::from(ClientErrorCode::InvalidRequest),
+                        )?);
+                    }
+                    Some(pkce)
+                        if pkce.code_challenge.trim().is_empty()
+                            || (pkce_required
+                                && !super::token_service::required_pkce_method_is_allowed(
+                                    &pkce.code_challenge_method,
+                                )) =>
+                    {
+                        return Ok(callback_destination.go(
+                            &templates,
+                            &locale,
+                            ClientError::from(ClientErrorCode::InvalidRequest),
+                        )?);
+                    }
+                    _ => {}
                 }
 
                 // 32 random alphanumeric characters, about 190bit of entropy

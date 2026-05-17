@@ -23,7 +23,7 @@ pub struct SiteConfigResponse {
 }
 
 /// Build a [`SiteConfigResponse`] from the domain [`SiteConfig`].
-#[must_use] 
+#[must_use]
 pub fn from_site_config(config: &SiteConfig) -> SiteConfigResponse {
     SiteConfigResponse {
         id: Some("site_config".to_owned()),
@@ -37,9 +37,18 @@ pub fn from_site_config(config: &SiteConfig) -> SiteConfigResponse {
         bootstrap_admin_token_enabled: config.bootstrap_admin_token.is_some(),
         minimum_password_complexity: config.minimum_password_complexity,
         imprint: config.imprint.clone(),
-        tos_uri: config.tos_uri.as_ref().map(std::string::ToString::to_string),
-        policy_uri: config.policy_uri.as_ref().map(std::string::ToString::to_string),
-        admin_portal_url: config.admin_portal_url.as_ref().map(std::string::ToString::to_string),
+        tos_uri: config
+            .tos_uri
+            .as_ref()
+            .map(std::string::ToString::to_string),
+        policy_uri: config
+            .policy_uri
+            .as_ref()
+            .map(std::string::ToString::to_string),
+        admin_portal_url: config
+            .admin_portal_url
+            .as_ref()
+            .map(std::string::ToString::to_string),
         plan_management_iframe_uri: config.plan_management_iframe_uri.clone(),
     }
 }

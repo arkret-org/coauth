@@ -126,7 +126,7 @@ pub enum RelayOutcome {
 
 /// Convert a `RelayOutcome` into HTTP `(status, body)`. Pulled out so
 /// both the real handler and the unit tests can share it.
-#[must_use] 
+#[must_use]
 pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, RelayResponse) {
     match outcome {
         RelayOutcome::Forwarded { forwarded_ok } => (

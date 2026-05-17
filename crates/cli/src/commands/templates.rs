@@ -12,8 +12,8 @@ use chrono::DateTime;
 use clap::Parser;
 use coauth_backend::util::{site_config_from_config, templates_from_config};
 use coauth_config::{
-    AccountConfig, BrandingConfig, CaptchaConfig, ConfigurationSectionExt,
-    ExperimentalConfig, HttpConfig, PasswordsConfig, SmsConfig, TemplatesConfig,
+    AccountConfig, BrandingConfig, CaptchaConfig, ConfigurationSectionExt, ExperimentalConfig,
+    HttpConfig, PasswordsConfig, SmsConfig, TemplatesConfig,
 };
 use coauth_data::{Clock, SystemClock};
 use figment::Figment;

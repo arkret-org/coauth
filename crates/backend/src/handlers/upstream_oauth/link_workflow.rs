@@ -1148,3 +1148,140 @@ async fn prepare_user_registration(
         .await
         .map_err(UpstreamLinkWorkflowError::from)
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use coauth_data::{
+        UpstreamOAuthAuthorizationSessionState, UpstreamOAuthProviderClaimsImports,
+        UpstreamOAuthProviderHandlePreference, UpstreamOAuthProviderImportAction,
+        UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderTokenAuthMethod,
+    };
+    use coauth_iana::jose::JsonWebSignatureAlg;
+    use oauth_types::scope::{OPENID, Scope};
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn required_claim_import_fails_when_template_renders_empty() {
+        let provider = provider_with_claims_imports(UpstreamOAuthProviderClaimsImports {
+            handle: UpstreamOAuthProviderHandlePreference {
+                action: UpstreamOAuthProviderImportAction::Require,
+                template: None,
+                on_conflict: UpstreamOAuthProviderOnConflict::default(),
+            },
+            ..UpstreamOAuthProviderClaimsImports::default()
+        });
+        let session = completed_upstream_session(json!({
+            "email": "john@example.com",
+            "email_verified": true
+        }));
+
+        let error = match resolve_registration_suggestions(&provider, &session) {
+            Ok(_) => panic!("required missing handle claim should fail"),
+            Err(error) => error,
+        };
+
+        match error {
+            UpstreamLinkWorkflowError::RequiredAttributeEmpty { template }
+            | UpstreamLinkWorkflowError::RequiredAttributeRender { template, .. } => {
+                assert_eq!(template, DEFAULT_HANDLE_TEMPLATE);
+            }
+            other => panic!("unexpected required-claim failure: {other}"),
+        }
+    }
+
+    #[test]
+    fn forced_claim_imports_override_user_registration_toggles() {
+        let provider = provider_with_claims_imports(UpstreamOAuthProviderClaimsImports {
+            handle: UpstreamOAuthProviderHandlePreference {
+                action: UpstreamOAuthProviderImportAction::Force,
+                template: None,
+                on_conflict: UpstreamOAuthProviderOnConflict::default(),
+            },
+            displayname: UpstreamOAuthProviderImportPreference {
+                action: UpstreamOAuthProviderImportAction::Force,
+                template: None,
+            },
+            email: UpstreamOAuthProviderImportPreference {
+                action: UpstreamOAuthProviderImportAction::Force,
+                template: None,
+            },
+            ..UpstreamOAuthProviderClaimsImports::default()
+        });
+        let session = completed_upstream_session(json!({
+            "preferred_username": "john",
+            "name": "John Appleseed",
+            "email": "john@example.com",
+            "email_verified": true
+        }));
+        let action = UpstreamLinkRegistrationAction {
+            handle: Some("manual-handle".to_owned()),
+            import_email: false,
+            import_display_name: false,
+            accept_terms: true,
+        };
+
+        let attributes = resolve_registration_attributes(&provider, &session, &action).unwrap();
+
+        assert_eq!(attributes.handle, "john");
+        assert_eq!(attributes.display_name.as_deref(), Some("John Appleseed"));
+        assert_eq!(attributes.email.as_deref(), Some("john@example.com"));
+    }
+
+    fn provider_with_claims_imports(
+        claims_imports: UpstreamOAuthProviderClaimsImports,
+    ) -> UpstreamOAuthProvider {
+        UpstreamOAuthProvider {
+            id: Ulid::new(),
+            issuer: Some("https://example.com/".to_owned()),
+            human_name: Some("Example Ltd.".to_owned()),
+            brand_name: None,
+            discovery_mode: coauth_data::UpstreamOAuthProviderDiscoveryMode::Oidc,
+            pkce_mode: coauth_data::UpstreamOAuthProviderPkceMode::Auto,
+            jwks_uri_override: None,
+            authorization_endpoint_override: None,
+            scope: Scope::from_iter([OPENID]),
+            token_endpoint_override: None,
+            userinfo_endpoint_override: None,
+            fetch_userinfo: false,
+            userinfo_signed_response_alg: None,
+            client_id: "client".to_owned(),
+            encrypted_client_secret: None,
+            token_endpoint_signing_alg: None,
+            token_endpoint_auth_method: UpstreamOAuthProviderTokenAuthMethod::None,
+            id_token_signed_response_alg: JsonWebSignatureAlg::Rs256,
+            response_mode: None,
+            created_at: Utc::now(),
+            disabled_at: None,
+            claims_imports,
+            additional_authorization_parameters: Vec::new(),
+            forward_login_hint: false,
+            on_backchannel_logout: coauth_data::UpstreamOAuthProviderOnBackchannelLogout::DoNothing,
+            source: coauth_data::UpstreamOAuthProviderSource::Config,
+        }
+    }
+
+    fn completed_upstream_session(
+        id_token_claims: serde_json::Value,
+    ) -> UpstreamOAuthAuthorizationSession {
+        let now = Utc::now();
+        UpstreamOAuthAuthorizationSession {
+            id: Ulid::new(),
+            state: UpstreamOAuthAuthorizationSessionState::Completed {
+                completed_at: now,
+                link_id: Ulid::new(),
+                id_token: None,
+                id_token_claims: None,
+                extra_callback_parameters: None,
+                userinfo: Some(id_token_claims),
+            },
+            provider_id: Ulid::new(),
+            state_str: "state".to_owned(),
+            code_challenge_verifier: None,
+            nonce: Some("nonce".to_owned()),
+            created_at: now,
+        }
+    }
+}

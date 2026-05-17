@@ -43,7 +43,9 @@ pub fn AccountPage() -> Element {
 
     match &*binding {
         Some(Ok(result)) => {
-            let user = if let Some(u) = result.viewer.as_user() { u } else {
+            let user = if let Some(u) = result.viewer.as_user() {
+                u
+            } else {
                 let nav = navigator();
                 nav.push(Route::Login {});
                 return rsx! {

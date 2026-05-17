@@ -32,7 +32,7 @@ pub enum ConnectorHealthStatus {
 }
 
 impl ConnectorHealthStatus {
-    #[must_use] 
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             ConnectorHealthStatus::Healthy => "Healthy",
@@ -40,7 +40,7 @@ impl ConnectorHealthStatus {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "healthy" | "ok" => Some(ConnectorHealthStatus::Healthy),
@@ -50,7 +50,7 @@ impl ConnectorHealthStatus {
     }
 
     /// True when the provider passed its last probe.
-    #[must_use] 
+    #[must_use]
     pub fn is_healthy(&self) -> bool {
         matches!(self, ConnectorHealthStatus::Healthy)
     }
@@ -82,14 +82,14 @@ pub struct ConnectorHealthRow {
 }
 
 impl ConnectorHealthRow {
-    #[must_use] 
+    #[must_use]
     pub fn status_typed(&self) -> ConnectorHealthStatus {
         // Default to Unhealthy on unknown so an unrecognized status code
         // does not look green to the operator.
         ConnectorHealthStatus::from_wire(&self.status).unwrap_or(ConnectorHealthStatus::Unhealthy)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_healthy(&self) -> bool {
         self.status_typed().is_healthy()
     }

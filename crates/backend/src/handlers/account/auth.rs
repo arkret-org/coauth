@@ -350,9 +350,9 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     error: None,
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
-                handle: user.handle.clone(),
-                did: contrix::user_did_for(&url_builder, &contrix_config, &user),
-                federated_handle: contrix::user_handle(&url_builder, &user),
+                        handle: user.handle.clone(),
+                        did: contrix::user_did_for(&url_builder, &contrix_config, &user),
+                        federated_handle: contrix::user_handle(&url_builder, &user),
                         principal_id: principal_server.principal_id(&user.handle),
                         display_name,
                     }),

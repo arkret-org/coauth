@@ -397,7 +397,7 @@ impl DidResolverService for DefaultDidResolverService {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn default_did_resolver_service() -> DidResolverServiceHandle {
     Arc::new(DefaultDidResolverService)
 }

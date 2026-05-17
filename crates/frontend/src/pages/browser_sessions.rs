@@ -59,9 +59,7 @@ pub fn BrowserSessions() -> Element {
                 .as_ref()
                 .map(|bs| bs.page_info.clone());
 
-            let has_previous = page_info
-                .as_ref()
-                .is_some_and(|p| p.has_previous_page);
+            let has_previous = page_info.as_ref().is_some_and(|p| p.has_previous_page);
             let has_next = page_info.as_ref().is_some_and(|p| p.has_next_page);
             let start_cursor = page_info.as_ref().and_then(|p| p.start_cursor.clone());
             let end_cursor = page_info.as_ref().and_then(|p| p.end_cursor.clone());

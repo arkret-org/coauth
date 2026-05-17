@@ -19,9 +19,9 @@ pub use self::{
 };
 pub use crate::{
     pg::oauth::{
-        PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository,
-        PgOAuthClientRepository, PgOAuthDeviceCodeGrantRepository,
-        PgOAuthRefreshTokenRepository, PgOAuthSessionGrantRepository, PgOAuthSessionRepository,
+        PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
+        PgOAuthDeviceCodeGrantRepository, PgOAuthRefreshTokenRepository,
+        PgOAuthSessionGrantRepository, PgOAuthSessionRepository,
     },
     storage::oauth::*,
 };

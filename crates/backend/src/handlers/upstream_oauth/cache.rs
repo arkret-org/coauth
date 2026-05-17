@@ -21,7 +21,7 @@ pub struct LazyProviderInfos<'a> {
 }
 
 impl<'a> LazyProviderInfos<'a> {
-    #[must_use] 
+    #[must_use]
     pub fn new(
         cache: &'a MetadataCache,
         provider: &'a UpstreamOAuthProvider,

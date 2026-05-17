@@ -19,6 +19,7 @@ use coauth_data::{
     user::BrowserSessionRepository,
 };
 use coauth_i18n::Locale;
+use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
 use coauth_keystore::Keystore;
 use coauth_policy::Policy;
 use coauth_principal::PrincipalServerAdmin;
@@ -42,6 +43,22 @@ use crate::{
     },
     oidc_client::types::scope::ScopeToken,
 };
+
+/// Public authorization-code clients must use PKCE. Confidential clients can
+/// still use PKCE, but do not require it for legacy OIDC Core compatibility.
+#[must_use]
+pub(crate) fn authorization_code_pkce_required(client: &Client) -> bool {
+    client.grant_types.contains(&GrantType::AuthorizationCode)
+        && matches!(
+            client.token_endpoint_auth_method.as_ref(),
+            Some(OAuthClientAuthenticationMethod::None)
+        )
+}
+
+#[must_use]
+pub(crate) fn required_pkce_method_is_allowed(method: &PkceCodeChallengeMethod) -> bool {
+    *method == PkceCodeChallengeMethod::S256
+}
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -281,7 +298,10 @@ pub async fn exchange_authorization_code(
     let authz_grant = if let Some(authz_grant) = repo
         .oauth_authorization_grant()
         .find_by_code(&grant.code)
-        .await? { authz_grant } else {
+        .await?
+    {
+        authz_grant
+    } else {
         warn!(
             oauth_client.id = %client.id,
             has_code_verifier = grant.code_verifier.is_some(),
@@ -357,7 +377,9 @@ pub async fn exchange_authorization_code(
         }
     };
 
-    let mut session = if let Some(session) = repo.oauth_session().lookup(session_id).await? { session } else {
+    let mut session = if let Some(session) = repo.oauth_session().lookup(session_id).await? {
+        session
+    } else {
         error!(
             oauth_client.id = %client.id,
             authorization_grant.id = %authz_grant.id,
@@ -394,7 +416,9 @@ pub async fn exchange_authorization_code(
     }
 
     // This should never happen, since we looked up in the database using the code
-    let code = if let Some(code) = authz_grant.code.as_ref() { code } else {
+    let code = if let Some(code) = authz_grant.code.as_ref() {
+        code
+    } else {
         error!(
             oauth_client.id = %client.id,
             authorization_grant.id = %authz_grant.id,
@@ -418,8 +442,18 @@ pub async fn exchange_authorization_code(
         });
     }
 
+    let pkce_required = authorization_code_pkce_required(client);
     match (code.pkce.as_ref(), grant.code_verifier.as_ref()) {
-        (None, None) => {}
+        (None, None) if !pkce_required => {}
+        (None, None) => {
+            warn!(
+                oauth_client.id = %client.id,
+                authorization_grant.id = %authz_grant.id,
+                oauth_session.id = %session.id,
+                "Public authorization_code client attempted token exchange without PKCE"
+            );
+            return Err(AuthorizationCodeExchangeError::BadRequest);
+        }
         // We have a challenge but no verifier (or vice-versa)? Bad request.
         (Some(_), None) | (None, Some(_)) => {
             warn!(
@@ -434,6 +468,16 @@ pub async fn exchange_authorization_code(
         }
         // If we have both, we need to check the code validity
         (Some(pkce), Some(verifier)) => {
+            if pkce_required && !required_pkce_method_is_allowed(&pkce.challenge_method) {
+                warn!(
+                    oauth_client.id = %client.id,
+                    authorization_grant.id = %authz_grant.id,
+                    oauth_session.id = %session.id,
+                    method = %pkce.challenge_method,
+                    "Public authorization_code client used a disallowed PKCE challenge method"
+                );
+                return Err(AuthorizationCodeExchangeError::BadRequest);
+            }
             pkce.verify(verifier)?;
         }
     }
@@ -448,18 +492,21 @@ pub async fn exchange_authorization_code(
         return Err(AuthorizationCodeExchangeError::InvalidGrant(authz_grant.id));
     };
 
-    let browser_session = if let Some(browser_session) = repo.browser_session().lookup(user_session_id).await? { browser_session } else {
-        error!(
-            oauth_client.id = %client.id,
-            authorization_grant.id = %authz_grant.id,
-            oauth_session.id = %session.id,
-            browser_session.id = %user_session_id,
-            "Browser session missing during authorization_code exchange"
-        );
-        return Err(AuthorizationCodeExchangeError::NoSuchBrowserSession(
-            user_session_id,
-        ));
-    };
+    let browser_session =
+        if let Some(browser_session) = repo.browser_session().lookup(user_session_id).await? {
+            browser_session
+        } else {
+            error!(
+                oauth_client.id = %client.id,
+                authorization_grant.id = %authz_grant.id,
+                oauth_session.id = %session.id,
+                browser_session.id = %user_session_id,
+                "Browser session missing during authorization_code exchange"
+            );
+            return Err(AuthorizationCodeExchangeError::NoSuchBrowserSession(
+                user_session_id,
+            ));
+        };
 
     let last_authentication = repo
         .browser_session()
@@ -571,6 +618,56 @@ pub async fn exchange_authorization_code(
     );
 
     Ok((params, repo))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use coauth_data::oauth::LocalizedClientMetadata;
+    use url::Url;
+
+    fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> Client {
+        Client {
+            id: Ulid::new(),
+            client_id: "client".to_owned(),
+            metadata_digest: None,
+            encrypted_client_secret: None,
+            application_type: None,
+            redirect_uris: vec![Url::parse("https://client.example/callback").unwrap()],
+            grant_types: vec![GrantType::AuthorizationCode],
+            client_name: None,
+            logo_uri: None,
+            client_uri: None,
+            policy_uri: None,
+            tos_uri: None,
+            localized_metadata: LocalizedClientMetadata::default(),
+            jwks: None,
+            id_token_signed_response_alg: None,
+            userinfo_signed_response_alg: None,
+            token_endpoint_auth_method: method,
+            token_endpoint_auth_signing_alg: None,
+            initiate_login_uri: None,
+        }
+    }
+
+    #[test]
+    fn public_authorization_code_clients_require_s256_pkce() {
+        let client = client_with_auth_method(Some(OAuthClientAuthenticationMethod::None));
+        assert!(authorization_code_pkce_required(&client));
+        assert!(required_pkce_method_is_allowed(
+            &PkceCodeChallengeMethod::S256
+        ));
+        assert!(!required_pkce_method_is_allowed(
+            &PkceCodeChallengeMethod::Plain
+        ));
+    }
+
+    #[test]
+    fn confidential_authorization_code_clients_do_not_require_pkce() {
+        let client =
+            client_with_auth_method(Some(OAuthClientAuthenticationMethod::ClientSecretBasic));
+        assert!(!authorization_code_pkce_required(&client));
+    }
 }
 
 /// Exchange a refresh token for a new access/refresh token pair.
@@ -857,7 +954,10 @@ pub async fn exchange_device_code(
     let grant = if let Some(grant) = repo
         .oauth_device_code_grant()
         .find_by_device_code(&grant.device_code)
-        .await? { grant } else {
+        .await?
+    {
+        grant
+    } else {
         warn!(
             oauth_client.id = %client.id,
             "Device code grant not found during token exchange"
@@ -920,17 +1020,20 @@ pub async fn exchange_device_code(
         } => *browser_session_id,
     };
 
-    let browser_session = if let Some(browser_session) = repo.browser_session().lookup(browser_session_id).await? { browser_session } else {
-        error!(
-            oauth_client.id = %client.id,
-            device_code_grant.id = %grant.id,
-            browser_session.id = %browser_session_id,
-            "Browser session missing during device_code exchange"
-        );
-        return Err(DeviceCodeExchangeError::NoSuchBrowserSession(
-            browser_session_id,
-        ));
-    };
+    let browser_session =
+        if let Some(browser_session) = repo.browser_session().lookup(browser_session_id).await? {
+            browser_session
+        } else {
+            error!(
+                oauth_client.id = %client.id,
+                device_code_grant.id = %grant.id,
+                browser_session.id = %browser_session_id,
+                "Browser session missing during device_code exchange"
+            );
+            return Err(DeviceCodeExchangeError::NoSuchBrowserSession(
+                browser_session_id,
+            ));
+        };
 
     // Start the session
     let mut session = repo

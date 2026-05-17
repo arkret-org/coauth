@@ -16,8 +16,7 @@
 use std::collections::BTreeMap;
 
 use coauth_data::{
-    LocalizableField, LocalizedClientMetadata, audit::AdminOperation,
-    oauth::OAuthClientRepository,
+    LocalizableField, LocalizedClientMetadata, audit::AdminOperation, oauth::OAuthClientRepository,
 };
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;

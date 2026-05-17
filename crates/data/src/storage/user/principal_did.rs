@@ -36,10 +36,8 @@ pub trait PrincipalDidRepository: Send + Sync {
     ///
     /// # Errors
     /// Returns [`Self::Error`] if the underlying repository fails.
-    async fn get_by_did(
-        &mut self,
-        did: &str,
-    ) -> Result<Option<PrincipalDidUpdateKey>, Self::Error>;
+    async fn get_by_did(&mut self, did: &str)
+    -> Result<Option<PrincipalDidUpdateKey>, Self::Error>;
 
     /// Insert a freshly-minted DID. The `(user_id, audience)` unique
     /// constraint and the `(did)` unique constraint surface conflicts as

@@ -11,9 +11,7 @@ pub fn ClientDetail(id: String) -> Element {
     let id_clone = id.clone();
     let data = use_resource(move || {
         let id = id_clone.clone();
-        async move {
-            crate::api::api_get::<OauthClientDetail>(&format!("/oauth-clients/{id}")).await
-        }
+        async move { crate::api::api_get::<OauthClientDetail>(&format!("/oauth-clients/{id}")).await }
     });
     let binding = data.read();
 

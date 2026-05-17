@@ -250,7 +250,8 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
         _ => None,
     };
     let masked_email = pending_email
-        .as_deref().map_or_else(|| "your email address".to_owned(), mask_email_address);
+        .as_deref()
+        .map_or_else(|| "your email address".to_owned(), mask_email_address);
     let change_email_seed = pending_email.clone().unwrap_or_default();
 
     rsx! {

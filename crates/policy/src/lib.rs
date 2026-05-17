@@ -158,7 +158,7 @@ impl PolicyFactory {
     /// implementation.
     ///
     /// This allows users to plug in custom policy backends.
-    #[must_use] 
+    #[must_use]
     pub fn from_provider(provider: Box<dyn PolicyProviderFactory>) -> Self {
         Self { inner: provider }
     }

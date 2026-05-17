@@ -232,10 +232,11 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
         let mut changed = false;
 
         if let Some(user_id) = patch.user_id
-            && upstream_oauth_link.user_id != user_id {
-                upstream_oauth_link.user_id = user_id;
-                changed = true;
-            }
+            && upstream_oauth_link.user_id != user_id
+        {
+            upstream_oauth_link.user_id = user_id;
+            changed = true;
+        }
 
         if let Some(subject) = patch.subject
             && upstream_oauth_link.subject != subject

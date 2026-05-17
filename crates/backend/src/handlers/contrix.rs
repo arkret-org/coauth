@@ -1649,9 +1649,10 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospection
         id: grant.id.to_string(),
         issuer: grant.issuer.clone(),
         subject: grant.subject.clone(),
-        service_account_id: grant
-            .subject
-            .rsplit_once(":users:").map_or_else(|| grant.browser_session_id.to_string(), |(_, id)| id.to_owned()),
+        service_account_id: grant.subject.rsplit_once(":users:").map_or_else(
+            || grant.browser_session_id.to_string(),
+            |(_, id)| id.to_owned(),
+        ),
         device_id: grant.device_id.clone(),
         audience: grant.audience.clone(),
         scopes: grant

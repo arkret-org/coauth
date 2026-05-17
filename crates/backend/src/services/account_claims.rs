@@ -357,7 +357,7 @@ impl PgAccountClaimsService {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn account_claims_service(pool: DieselPool<AsyncPgConnection>) -> AccountClaimsServiceHandle {
     Arc::new(PgAccountClaimsService::new(pool))
 }

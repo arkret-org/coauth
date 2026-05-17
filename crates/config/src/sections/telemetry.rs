@@ -205,11 +205,7 @@ impl ConfigurationSection for TelemetryConfig {
             "Sentry",
             "sentry.traces_sample_rate",
         )?;
-        check_sample_rate_bounds(
-            self.tracing.sample_rate,
-            "Tracing",
-            "tracing.sample_rate",
-        )?;
+        check_sample_rate_bounds(self.tracing.sample_rate, "Tracing", "tracing.sample_rate")?;
         Ok(())
     }
 }

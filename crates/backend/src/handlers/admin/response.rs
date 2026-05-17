@@ -21,9 +21,7 @@ use salvo::oapi::ToSchema;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-pub use coauth_admin_types::{
-    PaginatedResponse, SingleResponse,
-};
+pub use coauth_admin_types::{PaginatedResponse, SingleResponse};
 
 fn url_with_pagination(base: &str, pagination: Pagination) -> String {
     let (path, query) = base.split_once('?').unwrap_or((base, ""));

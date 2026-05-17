@@ -40,9 +40,9 @@ use crate::{
     audit::PgAuditRepository,
     notification::{PgNotificationRepository, PgNotificationTemplateRepository},
     oauth::{
-        PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository,
-        PgOAuthClientRepository, PgOAuthDeviceCodeGrantRepository,
-        PgOAuthRefreshTokenRepository, PgOAuthSessionGrantRepository, PgOAuthSessionRepository,
+        PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
+        PgOAuthDeviceCodeGrantRepository, PgOAuthRefreshTokenRepository,
+        PgOAuthSessionGrantRepository, PgOAuthSessionRepository,
     },
     personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository},
     pg::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM,
@@ -276,9 +276,7 @@ impl RepositoryAccess for PgRepository {
         Box::new(PgNotificationRepository::new(&mut self.conn))
     }
 
-    fn oauth_client<'c>(
-        &'c mut self,
-    ) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
+    fn oauth_client<'c>(&'c mut self) -> Box<dyn OAuthClientRepository<Error = Self::Error> + 'c> {
         Box::new(PgOAuthClientRepository::new(&mut self.conn))
     }
 

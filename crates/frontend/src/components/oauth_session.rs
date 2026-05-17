@@ -1,6 +1,9 @@
 use dioxus::prelude::*;
 
-use super::session_card::{SessionCardRoot, SessionCardLinkBody, SessionCardHeader, SessionCardName, SessionCardClient, SessionCardMetadata, SessionCardInfo};
+use super::session_card::{
+    SessionCardClient, SessionCardHeader, SessionCardInfo, SessionCardLinkBody,
+    SessionCardMetadata, SessionCardName, SessionCardRoot,
+};
 use crate::{
     api::types::{DeviceType, OauthSession as OauthSessionData},
     pages::Route,

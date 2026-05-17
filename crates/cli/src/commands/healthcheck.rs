@@ -31,12 +31,12 @@ pub(super) struct Options {
 
 impl Options {
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
-        let url = if let Some(url) = self.url { url } else {
+        let url = if let Some(url) = self.url {
+            url
+        } else {
             let config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
             derive_health_url(&config.http.listeners).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "no listener exposes the `health` resource; pass --url explicitly"
-                )
+                anyhow::anyhow!("no listener exposes the `health` resource; pass --url explicitly")
             })?
         };
 

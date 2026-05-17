@@ -235,6 +235,27 @@ impl AuditRepository for PgAuditRepository<'_> {
     }
 
     #[tracing::instrument(
+        name = "db.audit.lookup_admin_operation",
+        skip_all,
+        fields(admin_operation_log.id = %id),
+        err,
+    )]
+    async fn lookup_admin_operation(
+        &mut self,
+        id: Ulid,
+    ) -> Result<Option<AdminOperationLog>, Self::Error> {
+        admin_operation_logs::table
+            .find(Uuid::from(id))
+            .select(AdminOperationLogRow::as_select())
+            .first::<AdminOperationLogRow>(self.conn)
+            .await
+            .optional()?
+            .map(TryInto::try_into)
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(
         name = "db.audit.list_admin_operations",
         skip_all,
         fields(

@@ -1055,14 +1055,15 @@ fn lookup_from_string_tags(
 ) -> Result<DeliveryLookup, Error> {
     for tag in tags {
         if let Some((name, value)) = parse_key_value_tag(tag)
-            && name == DELIVERY_ID_TAG {
-                return value
-                    .parse()
-                    .map(DeliveryLookup::DeliveryId)
-                    .map_err(|error| {
-                        Error::BadRequest(format!("invalid delivery id in webhook tag: {error}"))
-                    });
-            }
+            && name == DELIVERY_ID_TAG
+        {
+            return value
+                .parse()
+                .map(DeliveryLookup::DeliveryId)
+                .map_err(|error| {
+                    Error::BadRequest(format!("invalid delivery id in webhook tag: {error}"))
+                });
+        }
     }
 
     provider_message_id

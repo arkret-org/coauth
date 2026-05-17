@@ -90,11 +90,9 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
                 AuthorizationGrantStage::Cancelled { cancelled_at }
             }
             _ => {
-                return Err(
-                    DatabaseInconsistencyError::on("oauth_authorization_grants")
-                        .column("stage")
-                        .row(id),
-                );
+                return Err(DatabaseInconsistencyError::on("oauth_authorization_grants")
+                    .column("stage")
+                    .row(id));
             }
         };
 
@@ -111,11 +109,9 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
             }),
             (None, None) => None,
             _ => {
-                return Err(
-                    DatabaseInconsistencyError::on("oauth_authorization_grants")
-                        .column("code_challenge_method")
-                        .row(id),
-                );
+                return Err(DatabaseInconsistencyError::on("oauth_authorization_grants")
+                    .column("code_challenge_method")
+                    .row(id));
             }
         };
 
@@ -124,11 +120,9 @@ impl TryFrom<GrantLookup> for AuthorizationGrant {
                 (false, None, None) => None,
                 (true, Some(code), pkce) => Some(AuthorizationCode { code, pkce }),
                 _ => {
-                    return Err(
-                        DatabaseInconsistencyError::on("oauth_authorization_grants")
-                            .column("authorization_code")
-                            .row(id),
-                    );
+                    return Err(DatabaseInconsistencyError::on("oauth_authorization_grants")
+                        .column("authorization_code")
+                        .row(id));
                 }
             };
 

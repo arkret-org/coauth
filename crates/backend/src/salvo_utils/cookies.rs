@@ -259,7 +259,7 @@ impl CookieJar {
     }
 
     /// Get the pending cookies for manual response handling
-    #[must_use] 
+    #[must_use]
     pub fn pending_cookies(&self) -> &[Cookie<'static>] {
         &self.pending_cookies
     }

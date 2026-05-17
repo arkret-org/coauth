@@ -45,13 +45,14 @@ pub fn DeviceRedirect(route: Vec<String>) -> Element {
 
             // Check if we found a session
             if let Some(ref app_sessions) = user.app_sessions
-                && let Some(edge) = app_sessions.edges.first() {
-                    let session_id = match &edge.node {
-                        AppSession::OauthSession(s) => s.id.clone(),
-                    };
-                    nav.push(Route::SessionDetail { id: session_id });
-                    return rsx! { LoadingScreen {} };
-                }
+                && let Some(edge) = app_sessions.edges.first()
+            {
+                let session_id = match &edge.node {
+                    AppSession::OauthSession(s) => s.id.clone(),
+                };
+                nav.push(Route::SessionDetail { id: session_id });
+                return rsx! { LoadingScreen {} };
+            }
 
             rsx! {
                 Layout {

@@ -16,9 +16,8 @@ use chrono::Duration;
 use coauth_config::ContrixConfig;
 use coauth_config::RateLimitingConfig;
 use coauth_data::{
-    AppVersion, BoxRepository, PgRepositoryFactory,
-    RepositoryAccess, RepositoryError, RepositoryFactory, SiteConfig, SystemClock, TokenType,
-    UrlBuilder,
+    AppVersion, BoxRepository, PgRepositoryFactory, RepositoryAccess, RepositoryError,
+    RepositoryFactory, SiteConfig, SystemClock, TokenType, UrlBuilder,
     clock::MockClock,
     personal::{
         PersonalAccessTokenRepository, PersonalSessionRepository, session::PersonalSessionOwner,
@@ -463,6 +462,26 @@ impl TestState {
                     .post(crate::handlers::oauth::device::authorize::post),
             )
             // REST API
+            .push(
+                Router::with_path("/api/v1/integration/describe")
+                    .get(crate::handlers::account::auth::integration_describe),
+            )
+            .push(
+                Router::with_path("/api/v1/auth/bridge/describe")
+                    .get(crate::handlers::account::auth::auth_bridge_describe),
+            )
+            .push(
+                Router::with_path("/api/v1/auth/oidc/browser-bridge/session")
+                    .post(crate::handlers::account::auth::oidc_browser_bridge_session),
+            )
+            .push(
+                Router::with_path("/api/v1/auth/oidc/exchange/describe")
+                    .get(crate::handlers::account::auth::oidc_exchange_describe),
+            )
+            .push(
+                Router::with_path("/api/v1/auth/oidc/exchange")
+                    .post(crate::handlers::account::auth::oidc_code_exchange),
+            )
             .push(Router::with_path("/api/v1/server/describe").get(crate::handlers::contrix::server_describe))
             .push(Router::with_path("/api/v1/identity/describe").get(crate::handlers::contrix::identity_describe))
             .push(Router::with_path("/api/v1/identity/resolve").post(crate::handlers::contrix::identity_resolve))
@@ -768,7 +787,8 @@ impl TestState {
         let uri = parts.uri;
         let url = format!(
             "https://example.com{}",
-            uri.path_and_query().map_or("/", http::uri::PathAndQuery::as_str)
+            uri.path_and_query()
+                .map_or("/", http::uri::PathAndQuery::as_str)
         );
 
         let mut test_req = match parts.method {

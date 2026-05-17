@@ -117,9 +117,10 @@ fn visit_call_spanned<'a>(
 
     // Detect whether this call invokes the translation function.
     if let Expr::Var(v) = &call.expr
-        && v.id == ctx.func() {
-            record_translation_key(ctx, &call.args, source_span)?;
-        }
+        && v.id == ctx.func()
+    {
+        record_translation_key(ctx, &call.args, source_span)?;
+    }
 
     visit_expr(ctx, &call.expr)?;
     visit_call_arg_list(ctx, &call.args)

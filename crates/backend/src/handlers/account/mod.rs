@@ -53,8 +53,6 @@ pub async fn get_requester(
     mut repo: BoxRepository,
     session_info: &SessionInfo,
 ) -> Result<(Requester, BoxRepository), RouteError> {
-    
-
     let maybe_session = session_info.load_active_session(&mut repo).await?;
 
     if let Some(session) = maybe_session.as_ref() {
@@ -113,7 +111,7 @@ pub enum NodeType {
 }
 
 impl NodeType {
-    #[must_use] 
+    #[must_use]
     pub fn prefix(self) -> &'static str {
         match self {
             Self::Authentication => "authentication",
@@ -129,7 +127,7 @@ impl NodeType {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn from_prefix(prefix: &str) -> Option<Self> {
         match prefix {
             "authentication" => Some(Self::Authentication),
@@ -146,7 +144,7 @@ impl NodeType {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn serialize(self, id: Ulid) -> String {
         format!("{}:{}", self.prefix(), id)
     }

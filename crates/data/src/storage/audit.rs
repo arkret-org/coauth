@@ -246,6 +246,12 @@ pub trait AuditRepository: Send + Sync {
         params: NewAdminOperationLog,
     ) -> Result<AdminOperationLog, Self::Error>;
 
+    /// Look up an admin operation log entry by id.
+    async fn lookup_admin_operation(
+        &mut self,
+        id: Ulid,
+    ) -> Result<Option<AdminOperationLog>, Self::Error>;
+
     /// List admin operation log entries, optionally filtered by admin user.
     async fn list_admin_operations(
         &mut self,
@@ -280,6 +286,10 @@ repository_impl!(AuditRepository:
         clock: &dyn Clock,
         params: NewAdminOperationLog,
     ) -> Result<AdminOperationLog, Self::Error>;
+    async fn lookup_admin_operation(
+        &mut self,
+        id: Ulid,
+    ) -> Result<Option<AdminOperationLog>, Self::Error>;
     async fn list_admin_operations(
         &mut self,
         filter: AdminOperationFilter,

@@ -131,7 +131,6 @@ fn tlvdecode(bytes: &[u8]) -> Result<HashMap<Value, Value>, Error> {
     // TODO: this assumes the tag and the length are both single bytes, which is not
     // always the case with protobufs. We should properly decode varints here.
     while let Some(tag) = iter.next() {
-
         let len = iter
             .next()
             .ok_or_else(|| Error::new(ErrorKind::InvalidOperation, "Invalid ILV encoding"))?;

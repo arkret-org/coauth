@@ -125,9 +125,10 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedRe
     let mut filter = AdminOperationFilter::new().with_limit(query.limit.unwrap_or(50));
 
     if let Some(ref admin_id_str) = query.admin_user_id
-        && let Ok(admin_id) = admin_id_str.parse::<Ulid>() {
-            filter = filter.for_admin_user(admin_id);
-        }
+        && let Ok(admin_id) = admin_id_str.parse::<Ulid>()
+    {
+        filter = filter.for_admin_user(admin_id);
+    }
 
     if let Some(ref resource_type) = query.resource_type {
         filter = filter.for_resource_type(resource_type);

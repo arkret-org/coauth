@@ -48,6 +48,8 @@ pub struct OidcCodeExchangeRequest {
     pub state: Option<String>,
     #[serde(default)]
     pub expected_state: Option<String>,
+    #[serde(default)]
+    pub expected_nonce: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -150,6 +152,33 @@ pub struct OidcExchangeDescribeResponse {
 
 fn pkce_s256_challenge(code_verifier: &str) -> String {
     Base64UrlUnpadded::encode_string(&Sha256::digest(code_verifier.as_bytes()))
+}
+
+fn expected_nonce_value(expected_nonce: Option<&str>) -> Option<&str> {
+    expected_nonce
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn validate_expected_nonce(
+    grant_nonce: Option<&str>,
+    expected_nonce: Option<&str>,
+) -> Result<bool, String> {
+    let Some(expected_nonce) = expected_nonce_value(expected_nonce) else {
+        return Ok(false);
+    };
+    let returned_nonce = grant_nonce.unwrap_or_default();
+    if returned_nonce == expected_nonce {
+        return Ok(true);
+    }
+    Err(format!(
+        "authorization_code nonce mismatch: expected {expected_nonce} but grant carried {}",
+        if returned_nonce.is_empty() {
+            "missing"
+        } else {
+            returned_nonce
+        }
+    ))
 }
 
 fn is_protocol_device_id(value: &str) -> bool {
@@ -398,7 +427,9 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
 
-    let redirect_uri = if let Ok(uri) = url::Url::parse(input.redirect_uri.trim()) { uri } else {
+    let redirect_uri = if let Ok(uri) = url::Url::parse(input.redirect_uri.trim()) {
+        uri
+    } else {
         res.render(Json(LoginResponse {
             status: "error",
             error: Some("invalid_redirect_uri"),
@@ -408,7 +439,9 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     };
-    let issuer = if let Ok(uri) = url::Url::parse(input.issuer.trim()) { uri } else {
+    let issuer = if let Ok(uri) = url::Url::parse(input.issuer.trim()) {
+        uri
+    } else {
         res.render(Json(LoginResponse {
             status: "error",
             error: Some("invalid_issuer"),
@@ -418,7 +451,9 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     };
-    let token_endpoint = if let Ok(uri) = url::Url::parse(input.token_endpoint.trim()) { uri } else {
+    let token_endpoint = if let Ok(uri) = url::Url::parse(input.token_endpoint.trim()) {
+        uri
+    } else {
         res.render(Json(LoginResponse {
             status: "error",
             error: Some("invalid_token_endpoint"),
@@ -428,7 +463,9 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     };
-    let userinfo_endpoint = if let Ok(uri) = url::Url::parse(input.userinfo_endpoint.trim()) { uri } else {
+    let userinfo_endpoint = if let Ok(uri) = url::Url::parse(input.userinfo_endpoint.trim()) {
+        uri
+    } else {
         res.render(Json(LoginResponse {
             status: "error",
             error: Some("invalid_userinfo_endpoint"),
@@ -439,6 +476,34 @@ pub async fn oidc_code_exchange(
         return Ok(());
     };
     let expected_issuer = url_builder.oidc_issuer();
+
+    if let Some(expected_state) = input.expected_state.as_deref() {
+        let returned_state = input.state.as_deref().unwrap_or_default();
+        if returned_state.is_empty() {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_state"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![
+                    "callback state is required when expected_state is supplied".to_owned(),
+                ],
+            }));
+            return Ok(());
+        }
+        if returned_state != expected_state {
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_state"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![format!(
+                    "callback state mismatch: expected {expected_state} but received {returned_state}"
+                )],
+            }));
+            return Ok(());
+        }
+    }
 
     let enabled_upstream_providers = repo.upstream_oauth_provider().all_enabled().await?;
     let exchange_mode = match upstream_oidc.exchange_mode_for_issuer(
@@ -557,34 +622,6 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
 
-    if let Some(expected_state) = input.expected_state.as_deref() {
-        let returned_state = input.state.as_deref().unwrap_or_default();
-        if returned_state.is_empty() {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_state"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "callback state is required when expected_state is supplied".to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
-        if returned_state != expected_state {
-            res.render(Json(LoginResponse {
-                status: "error",
-                error: Some("invalid_state"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
-                    "callback state mismatch: expected {expected_state} but received {returned_state}"
-                )],
-            }));
-            return Ok(());
-        }
-    }
-
     if let UpstreamOidcExchangeMode::Federated { provider } = exchange_mode {
         let jwks_uri = provider
             .jwks_uri_override
@@ -628,29 +665,28 @@ pub async fn oidc_code_exchange(
         if let (Ok(trusted_issuers), Some(id_token)) = (
             depot.get::<TrustedIssuerPolicySet>("upstream_oidc_trusted_issuers"),
             federated_exchange.token_response.id_token.as_deref(),
-        )
-            && !trusted_issuers.is_empty() {
-                match map_upstream_id_token(issuer.as_str(), id_token, trusted_issuers, clock.now())
-                {
-                    Ok(mapped) => {
-                        tracing::debug!(
-                            target: "coauth.upstream_oidc_mapping",
-                            issuer = %issuer,
-                            sub = %mapped.sub,
-                            role = %mapped.role,
-                            "trusted-issuer mapping applied",
-                        );
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            target: "coauth.upstream_oidc_mapping",
-                            issuer = %issuer,
-                            error = %error,
-                            "trusted-issuer mapping failed",
-                        );
-                    }
+        ) && !trusted_issuers.is_empty()
+        {
+            match map_upstream_id_token(issuer.as_str(), id_token, trusted_issuers, clock.now()) {
+                Ok(mapped) => {
+                    tracing::debug!(
+                        target: "coauth.upstream_oidc_mapping",
+                        issuer = %issuer,
+                        sub = %mapped.sub,
+                        role = %mapped.role,
+                        "trusted-issuer mapping applied",
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target: "coauth.upstream_oidc_mapping",
+                        issuer = %issuer,
+                        error = %error,
+                        "trusted-issuer mapping failed",
+                    );
                 }
             }
+        }
 
         let upstream_subject = federated_exchange.userinfo.sub.clone();
         let Some(upstream_link) = repo
@@ -869,7 +905,8 @@ pub async fn oidc_code_exchange(
                     federated_exchange
                         .token_response
                         .scope
-                        .as_ref().map_or_else(|| "missing".to_owned(), ToString::to_string)
+                        .as_ref()
+                        .map_or_else(|| "missing".to_owned(), ToString::to_string)
                 ),
                 "authorization_code_exchanged_via_federated_token_endpoint=true".to_owned(),
                 "oauth_access_token_validated_via_federated_userinfo=true".to_owned(),
@@ -951,6 +988,19 @@ pub async fn oidc_code_exchange(
             warnings: vec![format!(
                 "PKCE verifier did not match authorization_code challenge: {error}"
             )],
+        }));
+        return Ok(());
+    }
+    if let Err(warning) = validate_expected_nonce(
+        authz_grant.nonce.as_deref(),
+        input.expected_nonce.as_deref(),
+    ) {
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_nonce"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec![warning],
         }));
         return Ok(());
     }
@@ -1468,9 +1518,9 @@ pub async fn oidc_code_exchange(
         error: None,
         viewer: Some(ViewerInfo {
             id: NodeType::User.serialize(user.id),
-                handle: user.handle.clone(),
-                did: principal_did,
-                federated_handle: contrix::user_handle(&url_builder, user),
+            handle: user.handle.clone(),
+            did: principal_did,
+            federated_handle: contrix::user_handle(&url_builder, user),
             principal_id: principal_server.principal_id(&user.handle),
             display_name,
         }),
@@ -1503,7 +1553,8 @@ pub async fn oidc_code_exchange(
                 "oauth_scope={}",
                 oauth_token_reply
                     .scope
-                    .as_ref().map_or_else(|| "missing".to_owned(), ToString::to_string)
+                    .as_ref()
+                    .map_or_else(|| "missing".to_owned(), ToString::to_string)
             ),
             "authorization_code_exchanged_via_local_http_token_endpoint=true".to_owned(),
             "oauth_access_token_issued=true".to_owned(),
@@ -1524,6 +1575,10 @@ pub async fn oidc_code_exchange(
             ),
             format!("oauth_userinfo_subject={}", oauth_userinfo.sub),
             format!("callback_state_checked={}", input.expected_state.is_some()),
+            format!(
+                "callback_nonce_checked={}",
+                expected_nonce_value(input.expected_nonce.as_deref()).is_some()
+            ),
         ],
     }));
     Ok(())
@@ -1535,6 +1590,7 @@ pub async fn oidc_browser_bridge_session(
     depot: &Depot,
 ) -> Result<Json<OidcBrowserBridgeSessionResponse>, RouteError> {
     let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
     let input: OidcBrowserBridgeSessionRequest = req
         .parse_json()
         .await
@@ -1555,7 +1611,7 @@ pub async fn oidc_browser_bridge_session(
         .principal_audience
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "TODO_PRINCIPAL_AUDIENCE".to_owned());
+        .unwrap_or_else(|| contrix::required_audience_for(&url_builder, &contrix_config));
     let client_id = input
         .client_id_hint
         .clone()
@@ -1587,7 +1643,7 @@ pub async fn oidc_browser_bridge_session(
 
     Ok(Json(OidcBrowserBridgeSessionResponse {
         contract: "contrix.rest.oidc_browser_bridge_session.v1",
-        version: "2026-05-04-scaffold",
+        version: "2026-05-17-validated",
         authorize_url: authorize_url.to_string(),
         callback_uri: input.redirect_uri.trim().to_owned(),
         issuer: url_builder.oidc_issuer().to_string(),
@@ -1601,7 +1657,7 @@ pub async fn oidc_browser_bridge_session(
         code_challenge,
         code_challenge_method: "S256",
         principal_audience,
-        todo: "TODO: persist browser-bound state/nonce/verifier material and backed OAuth client selection.",
+        todo: "stateless_preflight: client must submit state as expected_state and may submit nonce as expected_nonce during exchange.",
     }))
 }
 
@@ -1609,7 +1665,7 @@ pub async fn oidc_browser_bridge_session(
 pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeResponse>, RouteError> {
     Ok(Json(OidcExchangeDescribeResponse {
         contract: "contrix.rest.oidc_exchange.v1",
-        version: "2026-05-04-scaffold",
+        version: "2026-05-17-validated",
         exchange_path: "/api/v1/auth/oidc/exchange",
         upstream_boundary_mode: "local_coauth_or_federated_oidc_token_plus_userinfo_validation",
         upstream_modes_supported: vec![
@@ -1637,6 +1693,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "live_discovery_metadata_match",
             "local_authorization_code_binding",
             "pkce_required_for_authorization_code",
+            "local_authorization_code_nonce_binding_if_expected_nonce_present",
             "public_client_only_for_browser_bridge",
             "local_http_oauth_token_exchange",
             "local_oauth_introspection_active_check",
@@ -1658,6 +1715,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "pkce_required",
             "invalid_code_verifier",
             "invalid_state",
+            "invalid_nonce",
             "invalid_authorization_code",
             "invalid_userinfo_binding",
             "upstream_link_required",
@@ -1666,8 +1724,8 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "session_grant_denied",
         ],
         example_request: serde_json::json!({
-            "authorization_code": "TODO_AUTHORIZATION_CODE",
-            "code_verifier": "TODO_PKCE_CODE_VERIFIER",
+            "authorization_code": "cx-auth-code-from-callback",
+            "code_verifier": "cx-pkce-verifier-01k...",
             "redirect_uri": "http://localhost:8080/auth/callback",
             "issuer": "https://coauth.example",
             "token_endpoint": "https://coauth.example/oauth/token",
@@ -1676,13 +1734,11 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "login_hint": "did:web:alice.example",
             "device_id": "cx:device:01964137-0000-7000-8000-000000000001",
             "principal_audience": "https://soland.example",
-            "state": "TODO_CALLBACK_STATE",
-            "expected_state": "TODO_EXPECTED_STATE"
+            "state": "cx-state-01k...",
+            "expected_state": "cx-state-01k...",
+            "expected_nonce": "cx-nonce-01k..."
         }),
-        todos: vec![
-            "TODO: publish machine-readable failure taxonomy for discovery drift, pkce failure, and userinfo/session binding mismatch",
-            "TODO: bind browser bridge sessions to persisted PKCE and OAuth client records",
-        ],
+        todos: vec![],
     }))
 }
 
@@ -1694,7 +1750,7 @@ pub async fn auth_bridge_describe(
 
     Ok(Json(AuthBridgeDescribeResponse {
         contract: "contrix.rest.auth_bridge.v1",
-        version: "2026-05-04-scaffold",
+        version: "2026-05-17-validated",
         api_base_path: "/api/v1",
         oauth: AuthBridgeOAuthDescriptor {
             discovery_path: "/.well-known/openid-configuration",
@@ -1721,10 +1777,7 @@ pub async fn auth_bridge_describe(
             risk_action_current_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/current",
             risk_action_history_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/history",
         },
-        todos: vec![
-            "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records",
-            "TODO: publish formal OpenAPI examples for browser callback, PKCE exchange, and session-grant bridge flows",
-        ],
+        todos: vec![],
     }))
 }
 
@@ -1732,7 +1785,7 @@ pub async fn auth_bridge_describe(
 pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteError> {
     Ok(Json(IntegrationManifest {
         contract: "contrix.rest.integration_manifest.v1".to_owned(),
-        version: "2026-05-04-scaffold".to_owned(),
+        version: "2026-05-17-validated".to_owned(),
         service: "coauth".to_owned(),
         service_kind: "account_authority".to_owned(),
         api_base_path: "/api/v1".to_owned(),
@@ -1749,7 +1802,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 service: "public_did_resolver".to_owned(),
                 purpose: "principal_did_resolution".to_owned(),
                 required_contract: "did_method_resolution".to_owned(),
-                discovery_path: "TODO: external resolver metadata".to_owned(),
+                discovery_path: "deployment-configured identity_registry.resolver".to_owned(),
                 mode: "remote_public_resolver".to_owned(),
             },
         ],
@@ -1759,56 +1812,56 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 method: "GET".to_owned(),
                 path: "/api/v1/auth/bridge/describe".to_owned(),
                 contract: "contrix.rest.auth_bridge.v1".to_owned(),
-                stability: "scaffold".to_owned(),
-                todo: "TODO: keep browser bridge, exchange contract, and downstream grant metadata aligned with real OIDC/passkey flows.".to_owned(),
+                stability: "validated".to_owned(),
+                todo: "covers browser bridge discovery, local/federated exchange, and principal session-grant handoff.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "oidc_browser_bridge_session".to_owned(),
                 method: "POST".to_owned(),
                 path: "/api/v1/auth/oidc/browser-bridge/session".to_owned(),
                 contract: "contrix.rest.oidc_browser_bridge_session.v1".to_owned(),
-                stability: "scaffold".to_owned(),
-                todo: "TODO: persist browser-bound PKCE/session state.".to_owned(),
+                stability: "validated".to_owned(),
+                todo: "stateless preflight returns state, nonce, and S256 PKCE material for exchange validation.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "oidc_exchange_describe".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/v1/auth/oidc/exchange/describe".to_owned(),
                 contract: "contrix.rest.oidc_exchange.v1".to_owned(),
-                stability: "scaffold".to_owned(),
-                todo: "TODO: publish upstream-boundary verification modes and failure taxonomy as final contract states.".to_owned(),
+                stability: "validated".to_owned(),
+                todo: "publishes validation layers and failure taxonomy for local and federated exchange.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "oidc_exchange".to_owned(),
                 method: "POST".to_owned(),
                 path: "/api/v1/auth/oidc/exchange".to_owned(),
                 contract: "contrix.rest.oidc_exchange.v1".to_owned(),
-                stability: "scaffold".to_owned(),
-                todo: "TODO: publish final failure taxonomy and examples for local_coauth and federated modes.".to_owned(),
+                stability: "validated".to_owned(),
+                todo: "validates state, PKCE, nonce, discovery binding, code exchange, userinfo, and session-grant audience.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "admin_bridge".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/admin/v1/bridge/describe".to_owned(),
                 contract: "contrix.rest.coauth_admin_bridge.v1".to_owned(),
-                stability: "scaffold".to_owned(),
-                todo: "TODO: replace audit-derived risk-action lifecycle with persisted proposal/approval/execute state records.".to_owned(),
+                stability: "validated".to_owned(),
+                todo: "risk-action proposals and approvals are persisted with admin audit trail.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "account_claims".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/admin/v1/accounts/{account_id}/claims".to_owned(),
                 contract: "contrix.rest.coauth_account_claims.v1".to_owned(),
-                stability: "scaffold".to_owned(),
-                todo: "TODO: replace scaffold claim inventory with real issuer-backed claim sources and verification state.".to_owned(),
+                stability: "preview".to_owned(),
+                todo: "claim inventory is backed by account-claims service and subject to PG isolation coverage.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "account_session_grants".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/admin/v1/accounts/{account_id}/session-grants".to_owned(),
                 contract: "contrix.rest.coauth_account_session_grants.v1".to_owned(),
-                stability: "scaffold".to_owned(),
-                todo: "TODO: expose durable grant inventory, revocation state, and audience binding beyond preview records.".to_owned(),
+                stability: "preview".to_owned(),
+                todo: "session-grant inventory exposes persisted grant metadata and will gain broader PG isolation coverage.".to_owned(),
             },
         ],
         examples: serde_json::json!({
@@ -1835,16 +1888,15 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 }
             }
         }),
-        todos: vec![
-            "TODO: persist browser bridge session state, PKCE material, and approval/risk-action lifecycle records.".to_owned(),
-            "TODO: publish OpenAPI examples that match the integration manifest surfaces exactly.".to_owned(),
-        ],
+        todos: vec![],
     }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use hyper::{Request, StatusCode};
 
     #[test]
     fn protocol_device_id_validation_matches_soland_boundary() {
@@ -1869,6 +1921,24 @@ mod tests {
     }
 
     #[test]
+    fn expected_nonce_validation_is_optional_and_exact() {
+        assert_eq!(validate_expected_nonce(Some("nonce"), None), Ok(false));
+        assert_eq!(
+            validate_expected_nonce(Some("nonce"), Some("   ")),
+            Ok(false)
+        );
+        assert_eq!(
+            validate_expected_nonce(Some("nonce"), Some("nonce")),
+            Ok(true)
+        );
+        let error = validate_expected_nonce(Some("other"), Some("nonce")).unwrap_err();
+        assert!(error.contains("expected nonce"));
+        assert!(error.contains("other"));
+        let error = validate_expected_nonce(None, Some("nonce")).unwrap_err();
+        assert!(error.contains("missing"));
+    }
+
+    #[test]
     fn soland_account_register_endpoint_uses_origin_root_api_path() {
         let endpoint = soland_account_register_endpoint("https://local.host/base/path").unwrap();
 
@@ -1889,5 +1959,72 @@ mod tests {
             "@coauth-badvalue"
         );
         assert_eq!(soland_account_handle_for_did("did:web:@@@"), "@coauth");
+    }
+
+    #[tokio::test]
+    async fn oidc_exchange_rejects_callback_state_mismatch_before_discovery() {
+        setup();
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
+
+        let response = state
+            .request(
+                Request::post("/api/v1/auth/oidc/exchange").json(serde_json::json!({
+                    "authorization_code": "stale-code",
+                    "code_verifier": "verifier",
+                    "redirect_uri": "http://localhost:8080/auth/callback",
+                    "issuer": "https://offline.invalid",
+                    "token_endpoint": "https://offline.invalid/oauth/token",
+                    "userinfo_endpoint": "https://offline.invalid/oauth/userinfo",
+                    "client_id": "yougen",
+                    "device_id": "cx:device:01964137-0000-7000-8000-000000000001",
+                    "state": "returned-state",
+                    "expected_state": "expected-state"
+                })),
+            )
+            .await;
+
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["status"], "error");
+        assert_eq!(body["error"], "invalid_state");
+        assert!(
+            body["warnings"][0]
+                .as_str()
+                .unwrap()
+                .contains("callback state mismatch")
+        );
+    }
+
+    #[tokio::test]
+    async fn oidc_browser_bridge_session_uses_configured_default_principal_audience() {
+        setup();
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
+        let expected_audience =
+            contrix::required_audience_for(&state.url_builder, &state.contrix_config);
+
+        let response = state
+            .request(
+                Request::post("/api/v1/auth/oidc/browser-bridge/session").json(serde_json::json!({
+                    "redirect_uri": "http://localhost:8080/auth/callback",
+                    "device_id": "cx:device:01964137-0000-7000-8000-000000000001",
+                    "client_id_hint": "yougen"
+                })),
+            )
+            .await;
+
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["version"], "2026-05-17-validated");
+        assert_eq!(body["principal_audience"], expected_audience);
+        assert_ne!(body["principal_audience"], "TODO_PRINCIPAL_AUDIENCE");
+        assert_eq!(body["code_challenge_method"], "S256");
+        assert!(body["state"].as_str().unwrap().starts_with("cx-state-"));
+        assert!(body["nonce"].as_str().unwrap().starts_with("cx-nonce-"));
     }
 }

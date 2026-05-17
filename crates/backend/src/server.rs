@@ -35,7 +35,7 @@ use crate::{
 
 /// Scan the Dioxus build output directory for the hashed frontend JS entry
 /// point. Returns a URL path like `/assets/coauth-frontend-dxh<hash>.js`.
-#[must_use] 
+#[must_use]
 pub fn discover_frontend_script(assets_root: &camino::Utf8Path) -> Option<String> {
     let assets_dir = assets_root.join("assets");
     let dir = std::fs::read_dir(&assets_dir).ok()?;
@@ -340,21 +340,22 @@ pub async fn security_headers_middleware(
     res: &mut Response,
     ctrl: &mut FlowCtrl,
 ) {
-    let (hsts_header, csp_html_header) = depot
-        .get::<AppState>("app_state")
-        .ok()
-        .map_or((None, None), |state| {
-            (
-                state
-                    .hsts_header
-                    .as_deref()
-                    .and_then(|value| HeaderValue::from_str(value).ok()),
-                state
-                    .csp_html_header
-                    .as_deref()
-                    .and_then(|value| HeaderValue::from_str(value).ok()),
-            )
-        });
+    let (hsts_header, csp_html_header) =
+        depot
+            .get::<AppState>("app_state")
+            .ok()
+            .map_or((None, None), |state| {
+                (
+                    state
+                        .hsts_header
+                        .as_deref()
+                        .and_then(|value| HeaderValue::from_str(value).ok()),
+                    state
+                        .csp_html_header
+                        .as_deref()
+                        .and_then(|value| HeaderValue::from_str(value).ok()),
+                )
+            });
 
     ctrl.call_next(req, depot, res).await;
 
@@ -385,10 +386,9 @@ pub async fn security_headers_middleware(
     if let Some(value) = hsts_header {
         headers.entry("strict-transport-security").or_insert(value);
     }
-    if response_is_html
-        && let Some(value) = csp_html_header {
-            headers.entry("content-security-policy").or_insert(value);
-        }
+    if response_is_html && let Some(value) = csp_html_header {
+        headers.entry("content-security-policy").or_insert(value);
+    }
 }
 
 /// A Salvo handler that injects [`AppState`] into the depot for every request.
@@ -463,7 +463,7 @@ async fn favicon_handler(res: &mut Response) {
     res.render(Text::Plain(INLINE_FAVICON_SVG));
 }
 
-#[must_use] 
+#[must_use]
 pub fn build_router(
     state: AppState,
     resources: &[HttpResource],
@@ -671,7 +671,14 @@ fn build_oauth_router(router: Router) -> Router {
 }
 
 fn build_account_api_router(router: Router) -> Router {
-    use crate::handlers::{account::{viewer, password, users, avatar, notification_prefs, bootstrap_admin_status, site_config, sessions, oauth_clients, emails, auth, register, recovery, consent, invite_relay, linked_accounts, upstream_oauth, flow, openapi}, contrix};
+    use crate::handlers::{
+        account::{
+            auth, avatar, bootstrap_admin_status, consent, emails, flow, invite_relay,
+            linked_accounts, notification_prefs, oauth_clients, openapi, password, recovery,
+            register, sessions, site_config, upstream_oauth, users, viewer,
+        },
+        contrix,
+    };
 
     let api_router = Router::with_path("/api/v1")
         // Contrix service surface
@@ -856,7 +863,13 @@ fn build_account_api_router(router: Router) -> Router {
 }
 
 fn build_admin_router(router: Router) -> Router {
-    use crate::handlers::admin::v1::{version, site_config, connector_health, notification_channels, notification_templates, audit_feed, invite_quarantine, accounts, account_dids, passkeys, users, user_emails, user_sessions, oauth_sessions, oauth_clients, oauth_clients_register, oauth_clients_i18n, personal_sessions, devices, user_registration_tokens, upstream_oauth_providers, upstream_oauth_links, policy_data, claims, policy_checks};
+    use crate::handlers::admin::v1::{
+        account_dids, accounts, audit_feed, claims, connector_health, devices, invite_quarantine,
+        notification_channels, notification_templates, oauth_clients, oauth_clients_i18n,
+        oauth_clients_register, oauth_sessions, passkeys, personal_sessions, policy_checks,
+        policy_data, site_config, upstream_oauth_links, upstream_oauth_providers, user_emails,
+        user_registration_tokens, user_sessions, users, version,
+    };
 
     let admin_router = Router::with_path("/api/admin/v1")
         // Version

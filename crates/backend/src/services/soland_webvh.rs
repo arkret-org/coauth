@@ -27,9 +27,9 @@
 use chrono::{DateTime, Utc};
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, User};
 use coauth_keystore::Encrypter;
-use ed25519_dalek::{Signer, SigningKey, SECRET_KEY_LENGTH};
+use ed25519_dalek::{SECRET_KEY_LENGTH, Signer, SigningKey};
 use rand_core::RngCore;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
@@ -136,7 +136,8 @@ pub fn prepare_inception<R: RngCore + ?Sized>(
     let update_key_seed = random_seed(rng);
     let did_signing = SigningKey::from_bytes(&did_key_seed);
     let update_signing = SigningKey::from_bytes(&update_key_seed);
-    let did_public_key_multibase = encode_ed25519_pubkey_multibase(&did_signing.verifying_key().to_bytes());
+    let did_public_key_multibase =
+        encode_ed25519_pubkey_multibase(&did_signing.verifying_key().to_bytes());
     let update_public_key_multibase =
         encode_ed25519_pubkey_multibase(&update_signing.verifying_key().to_bytes());
 
@@ -166,9 +167,7 @@ pub fn prepare_inception<R: RngCore + ?Sized>(
         "state": document_skeleton,
     });
 
-    let scid = sha256_multihash_multibase(
-        &canonical_bytes(&entry_skeleton)?,
-    );
+    let scid = sha256_multihash_multibase(&canonical_bytes(&entry_skeleton)?);
     let mut log_entry = substitute_scid(&entry_skeleton, &scid);
     let version_hash = sha256_multihash_multibase(&canonical_bytes(&strip_for_hash(&log_entry))?);
     let version_id = format!("1-{version_hash}");
@@ -297,8 +296,13 @@ pub async fn ensure_principal_did_minted(
     };
     let prepared = prepare_inception(rng, &input)?;
 
-    register_against_principal(http_client, principal_endpoint, registration_bearer, &prepared)
-        .await?;
+    register_against_principal(
+        http_client,
+        principal_endpoint,
+        registration_bearer,
+        &prepared,
+    )
+    .await?;
 
     let update_secret_b64 = encrypter
         .encrypt_to_string(&prepared.update_key_seed)
@@ -390,7 +394,8 @@ fn substitute_scid(value: &Value, scid: &str) -> Value {
     let Ok(text) = serde_json::to_string(value) else {
         return value.clone();
     };
-    serde_json::from_str(&text.replace(WEBVH_SCID_PLACEHOLDER, scid)).unwrap_or_else(|_| value.clone())
+    serde_json::from_str(&text.replace(WEBVH_SCID_PLACEHOLDER, scid))
+        .unwrap_or_else(|_| value.clone())
 }
 
 fn sha256_multihash_multibase(bytes: &[u8]) -> String {
@@ -492,7 +497,11 @@ fn base58btc_decode(value: &str) -> Option<Vec<u8>> {
     let leading_ones = value.chars().take_while(|&c| c == '1').count();
     let mut acc: Vec<u8> = Vec::new();
     for c in value.chars().skip(leading_ones) {
-        let idx = if c.is_ascii() { indices[c as usize] } else { 255 };
+        let idx = if c.is_ascii() {
+            indices[c as usize]
+        } else {
+            255
+        };
         if idx == 255 {
             return None;
         }
@@ -515,8 +524,8 @@ fn base58btc_decode(value: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
-    use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
+    use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH, Signature, Verifier, VerifyingKey};
+    use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 
     /// In-crate copy of soland's `verify_webvh_log_proof`. If soland tightens
     /// its verification rules, this copy must be updated — and the test below
@@ -558,8 +567,8 @@ mod tests {
         if let Value::Object(map) = &mut canonical {
             map.remove("proof");
         }
-        let payload = contrix_core::canonical::canonical_json_bytes(&canonical)
-            .map_err(|e| e.to_string())?;
+        let payload =
+            contrix_core::canonical::canonical_json_bytes(&canonical).map_err(|e| e.to_string())?;
         public_key
             .verify(&payload, &signature)
             .map_err(|_| "signature invalid".to_owned())
@@ -609,9 +618,7 @@ mod tests {
     fn did_format_matches_soland_authority() {
         let prepared = run_prepare(1);
         assert!(
-            prepared
-                .did
-                .starts_with("did:webvh:")
+            prepared.did.starts_with("did:webvh:")
                 && prepared.did.contains(":local.host%3A8080:webvh:")
                 && prepared.did.ends_with(":01krmccd3cehqbtvzg383m3maf"),
             "unexpected DID: {}",
@@ -637,7 +644,10 @@ mod tests {
         // confirming the proof no longer verifies.
         let mut prepared = run_prepare(7);
         if let Value::Object(map) = &mut prepared.log_entry {
-            map.insert("versionId".to_owned(), Value::String("1-zTAMPERED".to_owned()));
+            map.insert(
+                "versionId".to_owned(),
+                Value::String("1-zTAMPERED".to_owned()),
+            );
         }
         let err = verify_proof_like_soland(&prepared.log_entry).expect_err("must fail");
         assert!(err.contains("signature"), "got: {err}");
@@ -662,9 +672,15 @@ mod tests {
         );
         assert_eq!(body["did_key_id"].as_str(), Some("did-key-1"));
         assert_eq!(body["update_key_id"].as_str(), Some("update-key-1"));
-        assert_eq!(body["version_time"].as_str(), Some(prepared.version_time.as_str()));
+        assert_eq!(
+            body["version_time"].as_str(),
+            Some(prepared.version_time.as_str())
+        );
         assert!(body["proof"].is_object());
-        assert_eq!(body["proof"]["cryptosuite"].as_str(), Some("eddsa-jcs-2022"));
+        assert_eq!(
+            body["proof"]["cryptosuite"].as_str(),
+            Some("eddsa-jcs-2022")
+        );
     }
 
     #[test]
@@ -724,13 +740,7 @@ mod tests {
 
     #[test]
     fn base58_round_trip() {
-        let cases: &[&[u8]] = &[
-            &[],
-            &[0],
-            &[0, 0, 1],
-            &[1, 2, 3, 4, 5],
-            &[0xff; 32],
-        ];
+        let cases: &[&[u8]] = &[&[], &[0], &[0, 0, 1], &[1, 2, 3, 4, 5], &[0xff; 32]];
         for case in cases {
             let encoded = base58btc_encode(case);
             let decoded = base58btc_decode(&encoded).unwrap();

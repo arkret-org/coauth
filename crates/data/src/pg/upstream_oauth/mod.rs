@@ -14,8 +14,9 @@ pub use self::{
 mod tests {
     use chrono::Duration;
     use coauth_data::{
-        Pagination, RepositoryAccess as _, RepositoryFactory as _, UpstreamOAuthLinkPatch, UpstreamOAuthProviderClaimsImports,
-        UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderTokenAuthMethod,
+        Pagination, RepositoryAccess as _, RepositoryFactory as _, UpstreamOAuthLinkPatch,
+        UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderOnBackchannelLogout,
+        UpstreamOAuthProviderTokenAuthMethod,
         clock::MockClock,
         upstream_oauth::{
             UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderFilter,
@@ -712,8 +713,7 @@ mod tests {
                     client_id: "client".to_owned(),
                     encrypted_client_secret: None,
                     claims_imports: UpstreamOAuthProviderClaimsImports::default(),
-                    discovery_mode:
-                        coauth_data::UpstreamOAuthProviderDiscoveryMode::default(),
+                    discovery_mode: coauth_data::UpstreamOAuthProviderDiscoveryMode::default(),
                     pkce_mode: coauth_data::UpstreamOAuthProviderPkceMode::default(),
                     response_mode: None,
                     authorization_endpoint_override: None,

@@ -5,8 +5,8 @@ use coauth_data::{
     AuthorizationGrant, AuthorizationGrantStage, BoxClock, BoxRepository, BoxRng, BrowserSession,
     Client, Clock, PrincipalUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
     oauth::{
-        OAuthAuthorizationGrantRepository, OAuthClientRepository,
-        OAuthDeviceCodeGrantRepository, OAuthSessionRepository,
+        OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthDeviceCodeGrantRepository,
+        OAuthSessionRepository,
     },
     user::BrowserSessionRepository,
 };

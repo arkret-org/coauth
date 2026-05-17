@@ -215,11 +215,7 @@ impl crate::PrincipalServerAdmin for PrincipalServerAdmin {
         Ok(())
     }
 
-    async fn set_displayname(
-        &self,
-        handle: &str,
-        displayname: &str,
-    ) -> Result<(), anyhow::Error> {
+    async fn set_displayname(&self, handle: &str, displayname: &str) -> Result<(), anyhow::Error> {
         let full_id = self.principal_id(handle);
         let mut guard = self.state.write().await;
         let record = guard.account_mut(&full_id)?;

@@ -9,9 +9,10 @@ pub fn get_ninety_days_ago() -> String {
 pub fn device_id_from_scope(scope: &str) -> Option<String> {
     for part in scope.split_whitespace() {
         if let Some(device_id) = part.strip_prefix("urn:contrix:client:device:")
-            && !device_id.is_empty() {
-                return Some(device_id.to_owned());
-            }
+            && !device_id.is_empty()
+        {
+            return Some(device_id.to_owned());
+        }
     }
     None
 }

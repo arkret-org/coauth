@@ -3,7 +3,13 @@ use dioxus::prelude::*;
 use crate::{
     api::types::{DeviceType, Session},
     components::{
-        last_active::LastActive, layout::Layout, loading::LoadingScreen, session_card::{SessionCardHeader, SessionCardName, SessionCardMetadata, SessionCardInfo, SessionCardClient},
+        last_active::LastActive,
+        layout::Layout,
+        loading::LoadingScreen,
+        session_card::{
+            SessionCardClient, SessionCardHeader, SessionCardInfo, SessionCardMetadata,
+            SessionCardName,
+        },
     },
     utils::format_date,
 };

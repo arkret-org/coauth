@@ -52,9 +52,10 @@ The Contrix-native admin surface now includes `GET /api/admin/v1/accounts`,
 `GET /api/admin/v1/accounts/{id}`, `POST /api/admin/v1/accounts/{id}/lock`,
 and `POST /api/admin/v1/accounts/{id}/disable`. DID bindings, device
 administration, claim issuance/revocation, policy dry-run, and signed policy
-decision audit routes are present in OpenAPI as guarded contract endpoints and
-return `501 Not Implemented` until the storage, proof verification, and audit
-models land.
+decision audit routes are present in OpenAPI as guarded endpoints. Device
+inventory is derived from persisted session grants and device revoke audit
+records; policy dry-runs persist a signed decision audit record that can be
+looked up through the decision-audit route.
 
 ## Authentication
 

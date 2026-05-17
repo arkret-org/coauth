@@ -19,7 +19,9 @@ Contrix-native 管理面现在包含 `GET /api/admin/v1/accounts`、
 `GET /api/admin/v1/accounts/{id}`、`POST /api/admin/v1/accounts/{id}/lock` 和
 `POST /api/admin/v1/accounts/{id}/disable`。DID binding、设备管理、claim
 签发/吊销、policy dry-run 和 signed policy decision audit 路由已经进入 OpenAPI，
-但在对应存储、proof verification 和审计模型落地前会返回 `501 Not Implemented`。
+并作为受保护端点提供。设备清单从已持久化的 session grant 和设备吊销审计记录派生；
+policy dry-run 会持久化 signed decision audit record，随后可通过 decision-audit
+路由查询。
 
 ## 认证方式
 

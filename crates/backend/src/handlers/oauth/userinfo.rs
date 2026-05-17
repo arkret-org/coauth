@@ -1,8 +1,5 @@
 use coauth_config::ContrixConfig;
-use coauth_data::{
-    BoxClock, BoxRepository, BoxRng, SystemClock,
-    oauth::OAuthClientRepository,
-};
+use coauth_data::{BoxClock, BoxRepository, BoxRng, SystemClock, oauth::OAuthClientRepository};
 use coauth_jose::{
     constraints::Constrainable,
     jwt::{JsonWebSignatureHeader, Jwt},

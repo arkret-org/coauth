@@ -81,7 +81,7 @@ pub async fn delete(key: &str) -> anyhow::Result<()> {
 }
 
 /// Build the storage key for an avatar file.
-#[must_use] 
+#[must_use]
 pub fn avatar_key(user_id: &str) -> String {
     format!("avatars/{user_id}")
 }

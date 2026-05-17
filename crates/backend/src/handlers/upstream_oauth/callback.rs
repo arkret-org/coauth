@@ -66,7 +66,7 @@ pub struct Params {
 
 impl Params {
     /// Returns true if none of the fields are set
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.state.is_none()
             && self.code.is_none()

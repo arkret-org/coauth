@@ -225,11 +225,23 @@ pub(crate) async fn send_email_authentication_code(
         .await
         .map_err(JobError::retry)?;
 
-    info!(
-        email = %user_email_authentication.email,
-        authentication_code.id = %code.id,
-        "Email verification code generated"
-    );
+    if state
+        .site_config()
+        .registration_email_delivery_bypass_allowed
+    {
+        info!(
+            email = %user_email_authentication.email,
+            authentication_code.id = %code.id,
+            code = %code.code,
+            "Email verification code generated (dev: code shown because registration_email_delivery_bypass_allowed=true)"
+        );
+    } else {
+        info!(
+            email = %user_email_authentication.email,
+            authentication_code.id = %code.id,
+            "Email verification code generated"
+        );
+    }
 
     enqueue_notification_request(
         &mut repo,

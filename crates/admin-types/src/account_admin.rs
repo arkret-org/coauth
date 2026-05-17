@@ -49,7 +49,7 @@ pub enum AdminAccountStatus {
 }
 
 impl AdminAccountStatus {
-    #[must_use] 
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             AdminAccountStatus::Active => "Active",
@@ -58,7 +58,7 @@ impl AdminAccountStatus {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "active" => Some(AdminAccountStatus::Active),
@@ -68,22 +68,21 @@ impl AdminAccountStatus {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_locked(&self) -> bool {
         matches!(self, AdminAccountStatus::Locked)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_disabled(&self) -> bool {
         matches!(self, AdminAccountStatus::Disabled)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_active(&self) -> bool {
         matches!(self, AdminAccountStatus::Active)
     }
 }
-
 
 impl std::fmt::Display for AdminAccountStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -170,7 +169,7 @@ impl AdminAccountAttributes {
     /// explicit `primary_principal_did` and falls back to the first
     /// entry in `principal_dids` so callers do not have to repeat that
     /// fallback at every call site.
-    #[must_use] 
+    #[must_use]
     pub fn effective_primary_did(&self) -> Option<&str> {
         self.primary_principal_did
             .as_deref()

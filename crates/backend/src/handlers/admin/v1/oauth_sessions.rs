@@ -442,10 +442,7 @@ mod tests {
         let body: serde_json::Value = response.json();
         assert_eq!(
             body["errors"][0]["title"],
-            format!(
-                "OAuth session with ID {} is already finished",
-                session.id
-            )
+            format!("OAuth session with ID {} is already finished", session.id)
         );
     }
 

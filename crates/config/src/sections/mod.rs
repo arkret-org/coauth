@@ -250,9 +250,11 @@ impl ConfigurationSection for RootConfig {
         figment: &figment::Figment,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // Validate each sub-section in a deterministic order
-        type SectionValidator<'a> = &'a dyn Fn(
-            &figment::Figment,
-        ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>>;
+        type SectionValidator<'a> =
+            &'a dyn Fn(
+                &figment::Figment,
+            )
+                -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>>;
         let sections: &[SectionValidator<'_>] = &[
             &|f| self.clients.validate(f),
             &|f| self.http.validate(f),

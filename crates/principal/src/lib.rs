@@ -35,15 +35,13 @@ pub struct PrincipalAccountProfile {
 /// Represents an optional mutation for a user profile field during
 /// provisioning. Each variant captures whether the caller wants to
 /// leave the field alone, assign a value, or clear it.
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 enum FieldUpdate<T> {
     #[default]
     Unchanged,
     Assign(T),
     Clear,
 }
-
 
 impl<T> FieldUpdate<T> {
     /// Invoke `handler` when the field should be mutated (assigned or cleared).
@@ -385,8 +383,7 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// Returns an error if the downstream system is unreachable or the displayname
     /// could not be set.
-    async fn set_displayname(&self, handle: &str, displayname: &str)
-    -> Result<(), anyhow::Error>;
+    async fn set_displayname(&self, handle: &str, displayname: &str) -> Result<(), anyhow::Error>;
 
     /// Unset the displayname of a user in the downstream principal system.
     ///
@@ -495,11 +492,7 @@ where
         self.as_admin().reactivate_user(handle).await
     }
 
-    async fn set_displayname(
-        &self,
-        handle: &str,
-        displayname: &str,
-    ) -> Result<(), anyhow::Error> {
+    async fn set_displayname(&self, handle: &str, displayname: &str) -> Result<(), anyhow::Error> {
         self.as_admin().set_displayname(handle, displayname).await
     }
 

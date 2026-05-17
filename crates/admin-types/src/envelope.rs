@@ -81,7 +81,7 @@ pub struct PaginationMeta {
 }
 
 impl PaginationMeta {
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.count.is_none()
     }
@@ -110,7 +110,7 @@ pub struct SingleResourceMeta {
 }
 
 impl SingleResourceMeta {
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.page.is_none()
     }
@@ -229,7 +229,7 @@ pub struct PaginatedResponse<T> {
 
 impl<T> PaginatedResponse<T> {
     /// Build a count-only response (no `data` array).
-    #[must_use] 
+    #[must_use]
     pub fn for_count_only(count: usize, self_link: String) -> Self {
         Self {
             meta: PaginationMeta { count: Some(count) },
@@ -244,7 +244,7 @@ impl<T> PaginatedResponse<T> {
     /// Build a paginated response from already-wrapped resources and
     /// pre-computed link strings. Backend's cursor-paginated `for_page`
     /// helper extracts the cursors and links and calls this.
-    #[must_use] 
+    #[must_use]
     pub fn from_parts(
         items: Vec<SingleResource<T>>,
         count: Option<usize>,
@@ -341,7 +341,7 @@ mod schema_impls {
         fn to_schema(
             _components: &mut salvo::oapi::Components,
         ) -> salvo::oapi::RefOr<salvo::oapi::Schema> {
-            use salvo::oapi::{Object, BasicType};
+            use salvo::oapi::{BasicType, Object};
             Object::new()
                 .property(
                     "meta",
@@ -372,7 +372,7 @@ mod schema_impls {
         fn to_schema(
             _components: &mut salvo::oapi::Components,
         ) -> salvo::oapi::RefOr<salvo::oapi::Schema> {
-            use salvo::oapi::{Object, BasicType};
+            use salvo::oapi::{BasicType, Object};
             Object::new()
                 .property(
                     "data",

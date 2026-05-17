@@ -302,7 +302,7 @@ impl RateLimiterConfiguration {
     ///
     /// The `limit` is the burst count, and `period` is the time window
     /// computed from `burst / per_second`.
-    #[must_use] 
+    #[must_use]
     pub fn to_limit_and_period(&self) -> Option<(usize, std::time::Duration)> {
         let reciprocal = self.per_second.recip();
         if !reciprocal.is_finite() || reciprocal < 1.0e-9 {

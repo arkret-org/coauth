@@ -218,7 +218,7 @@ fn fresh_hlc() -> String {
 ///
 /// If/when soland publishes a real lookup endpoint, swap this for an
 /// HTTP call and keep the deterministic mapping as the offline fallback.
-#[must_use] 
+#[must_use]
 pub fn holder_principal_space_for_did(holder_did: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();

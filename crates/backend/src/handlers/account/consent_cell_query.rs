@@ -200,7 +200,7 @@ pub enum InviteGateDecision {
 /// Pure function: turn a `(ConsentLookup, peer, scope, require_consent)`
 /// tuple into a gate decision. No I/O, easy to unit-test and reuse from
 /// other invite-style handlers.
-#[must_use] 
+#[must_use]
 pub fn evaluate_invite_gate(
     lookup: &ConsentLookup,
     peer_did: &str,

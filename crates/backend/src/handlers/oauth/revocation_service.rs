@@ -94,13 +94,12 @@ pub async fn revoke_token(
     // created it.  When client_id is None (admin-secret auth), skip this
     // check so that the PrincipalServer can revoke tokens on behalf of any client.
     if let Some(client_id) = client_id
-        && client_id != session.client_id {
-            return Err(RevocationError::UnauthorizedClient);
-        }
+        && client_id != session.client_id
+    {
+        return Err(RevocationError::UnauthorizedClient);
+    }
 
-    activity_tracker
-        .record_oauth_session(clock, &session)
-        .await;
+    activity_tracker.record_oauth_session(clock, &session).await;
 
     // If the session is associated with a user, make sure we schedule a device
     // deletion job for all the devices associated with the session.

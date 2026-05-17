@@ -152,17 +152,18 @@ pub async fn fetch_userinfo(
 
     // Check for error
     if let Some(errcode) = response.get("errcode").and_then(serde_json::Value::as_i64)
-        && errcode != 0 {
-            let msg = response
-                .get("errmsg")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown error")
-                .to_owned();
-            return Err(UserInfoError::ProviderError {
-                code: errcode as i32,
-                msg,
-            });
-        }
+        && errcode != 0
+    {
+        let msg = response
+            .get("errmsg")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown error")
+            .to_owned();
+        return Err(UserInfoError::ProviderError {
+            code: errcode as i32,
+            msg,
+        });
+    }
 
     Ok(response)
 }

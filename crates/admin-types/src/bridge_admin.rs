@@ -194,7 +194,7 @@ mod tests {
         // Mirrors what `accounts::admin_bridge_describe` actually emits.
         let wire = r#"{
             "contract": "cx.contract.coauth_admin_bridge.v1",
-            "version": "0.1.0-scaffold",
+            "version": "0.2.0-durable-proposals",
             "api_base_path": "/api/admin/v1",
             "accounts_path": "/api/admin/v1/accounts",
             "account_detail_path_template": "/api/admin/v1/accounts/{account_id}",
@@ -206,8 +206,8 @@ mod tests {
             "risk_action_history_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/history",
             "risk_action_approve_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve",
             "risk_action_execute_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute",
-            "risk_action_state_store_kind": "audit_backed",
-            "risk_action_approval_mode": "state_machine_scaffold_required",
+            "risk_action_state_store_kind": "pg_risk_action_proposals_with_admin_audit_trail",
+            "risk_action_approval_mode": "durable_proposal_required",
             "risk_action_examples": {
                 "proposal_request": {
                     "action": "lock",
@@ -227,12 +227,15 @@ mod tests {
                     "execution_note": "execute via controlled mutation worker"
                 }
             },
-            "todos": ["TODO: replace audit-backed scaffold transitions"]
+            "todos": ["TODO: publish formal OpenAPI examples for admin bridge discovery and risk-action workflows"]
         }"#;
         let d: AdminBridgeDescribe = serde_json::from_str(wire).unwrap();
         assert_eq!(d.contract, "cx.contract.coauth_admin_bridge.v1");
-        assert_eq!(d.version, "0.1.0-scaffold");
-        assert_eq!(d.risk_action_state_store_kind, "audit_backed");
+        assert_eq!(d.version, "0.2.0-durable-proposals");
+        assert_eq!(
+            d.risk_action_state_store_kind,
+            "pg_risk_action_proposals_with_admin_audit_trail"
+        );
         assert_eq!(d.risk_action_examples.proposal_request.action, "lock");
         assert_eq!(d.risk_action_examples.proposal_request.approved_by, None);
         assert_eq!(

@@ -1128,10 +1128,7 @@ pub async fn begin_password_registration(
     } else if repo.user().exists(&request.handle).await? {
         issues.push(BeginPasswordRegistrationIssue::HandleExists);
     } else {
-        match principal_server
-            .is_handle_available(&request.handle)
-            .await
-        {
+        match principal_server.is_handle_available(&request.handle).await {
             Ok(false) => issues.push(BeginPasswordRegistrationIssue::HandleExists),
             Ok(true) => {}
             Err(error) => {
@@ -1660,10 +1657,10 @@ pub async fn submit_registration_email_code(
         Ok(progress) => Ok(RegistrationVerificationOutcome::Advanced {
             next_step: progress.next_step(),
         }),
-        Err(VerifyRegistrationEmailCodeError::NotFound |
-VerifyRegistrationEmailCodeError::EmailAuthenticationMissing) => {
-            Err(RegistrationVerificationError::NotFound)
-        }
+        Err(
+            VerifyRegistrationEmailCodeError::NotFound
+            | VerifyRegistrationEmailCodeError::EmailAuthenticationMissing,
+        ) => Err(RegistrationVerificationError::NotFound),
         Err(VerifyRegistrationEmailCodeError::NoEmailAuthentication) => {
             Err(RegistrationVerificationError::NotAvailable)
         }
@@ -1696,10 +1693,10 @@ pub async fn submit_registration_phone_code(
         Ok(progress) => Ok(RegistrationVerificationOutcome::Advanced {
             next_step: progress.next_step(),
         }),
-        Err(VerifyRegistrationPhoneCodeError::NotFound |
-VerifyRegistrationPhoneCodeError::PhoneAuthenticationMissing) => {
-            Err(RegistrationVerificationError::NotFound)
-        }
+        Err(
+            VerifyRegistrationPhoneCodeError::NotFound
+            | VerifyRegistrationPhoneCodeError::PhoneAuthenticationMissing,
+        ) => Err(RegistrationVerificationError::NotFound),
         Err(VerifyRegistrationPhoneCodeError::NoPhoneAuthentication) => {
             Err(RegistrationVerificationError::NotAvailable)
         }

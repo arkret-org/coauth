@@ -31,8 +31,7 @@ fn is_default_engine(value: &PolicyEngine) -> bool {
 ///
 /// Supports multiple backends: Cedar (default) and Remote HTTP.
 #[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct PolicyConfig {
     /// The policy engine to use.
     ///
@@ -63,7 +62,6 @@ pub struct PolicyConfig {
     #[serde(default)]
     pub audit_logging: bool,
 }
-
 
 impl PolicyConfig {
     /// Returns true if the configuration is the default one

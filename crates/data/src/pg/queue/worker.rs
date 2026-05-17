@@ -99,7 +99,8 @@ impl PgQueueWorkerRepository<'_> {
         match self.load_worker_state(worker).await {
             Ok(Some(state)) => {
                 let shutdown_at = state
-                    .shutdown_at.map_or_else(|| "null".to_owned(), |ts| ts.to_rfc3339());
+                    .shutdown_at
+                    .map_or_else(|| "null".to_owned(), |ts| ts.to_rfc3339());
                 tracing::error!(
                     worker.id = %worker.id,
                     stored_worker.id = %state.id,
