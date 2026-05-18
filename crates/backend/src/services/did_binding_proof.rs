@@ -20,6 +20,13 @@
 //!   3. Reject if the JWS doesn't verify against any of those keys.
 //!   4. Reject if the embedded binding statement doesn't match the request
 //!      (`account_did` + `cx_account_id` + nonce all match exactly).
+//!
+//! SDK note: `contrix::identity::binding::verify_binding_proof` is the
+//! available pure SDK verifier today, but it accepts a raw Ed25519 proof
+//! tuple, not coauth's compact JWS + DID-document JWKS envelope. Until
+//! the SDK grows a JWS/JWKS binding-proof adapter, this module keeps the
+//! envelope verification in `coauth_jose` and pins the statement checks
+//! below with targeted unit tests.
 
 use chrono::{DateTime, Utc};
 use coauth_config::ContrixConfig;
@@ -144,8 +151,18 @@ pub async fn validate_control_proof(
     }
 
     let claims = jwt.payload();
+    validate_binding_statement_claims(claims, account_did, cx_account_id, nonce, now)?;
 
-    // Statement equality
+    Ok(claims.clone())
+}
+
+fn validate_binding_statement_claims(
+    claims: &BindingStatementClaims,
+    account_did: &str,
+    cx_account_id: Ulid,
+    nonce: &str,
+    now: DateTime<Utc>,
+) -> Result<(), DidBindingProofError> {
     if claims.kind != "cx.did_binding.control_proof.v1" {
         return Err(DidBindingProofError::StatementKindMismatch);
     }
@@ -163,7 +180,7 @@ pub async fn validate_control_proof(
         return Err(DidBindingProofError::IatOutOfRange);
     }
 
-    Ok(claims.clone())
+    Ok(())
 }
 
 #[cfg(test)]
@@ -199,5 +216,52 @@ mod tests {
             statement_claims_default().kind,
             "cx.did_binding.control_proof.v1"
         );
+    }
+
+    #[test]
+    fn binding_statement_validation_accepts_exact_request_context() {
+        let claims = statement_claims_default();
+
+        validate_binding_statement_claims(
+            &claims,
+            "did:web:alice.example",
+            Ulid::nil(),
+            "nonce-123",
+            claims.iat,
+        )
+        .expect("matching statement should validate");
+    }
+
+    #[test]
+    fn binding_statement_validation_rejects_nonce_replay() {
+        let claims = statement_claims_default();
+
+        let err = validate_binding_statement_claims(
+            &claims,
+            "did:web:alice.example",
+            Ulid::nil(),
+            "different-nonce",
+            claims.iat,
+        )
+        .expect_err("nonce replay must reject");
+
+        assert!(matches!(err, DidBindingProofError::NonceMismatch));
+    }
+
+    #[test]
+    fn binding_statement_validation_rejects_expired_iat() {
+        let claims = statement_claims_default();
+        let now = claims.iat + chrono::Duration::seconds(MAX_IAT_SKEW_SECS + 1);
+
+        let err = validate_binding_statement_claims(
+            &claims,
+            "did:web:alice.example",
+            Ulid::nil(),
+            "nonce-123",
+            now,
+        )
+        .expect_err("expired statement must reject");
+
+        assert!(matches!(err, DidBindingProofError::IatOutOfRange));
     }
 }
