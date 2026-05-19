@@ -569,10 +569,6 @@ pub struct RegisterResponse {
     pub next_step: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
-    /// Set when the flow engine is enabled; the frontend can use this to
-    /// switch to the flow session API.
-    #[serde(default)]
-    pub flow_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

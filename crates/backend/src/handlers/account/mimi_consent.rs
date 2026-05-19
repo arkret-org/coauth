@@ -381,9 +381,9 @@ impl AnchorerSigner {
 /// ### Wire shape
 ///
 /// The body is `serde_json::to_value(&signed_move)` directly — i.e.
-/// the canonical `Move` envelope from `contrix-core::move_event::Move`,
-/// not the legacy `{cell_id, op, tag}` placeholder. `X-Contrix-Holder-Did`
-/// echoes the holder DID for soland's per-Space routing.
+/// the canonical `Move` envelope from `contrix-core::move_event::Move`.
+/// `X-Contrix-Holder-Did` echoes the holder DID for soland's per-Space
+/// routing.
 pub async fn anchor_pending_move(
     pending: &PendingMove,
     principal_server_url: Option<&url::Url>,
@@ -789,10 +789,6 @@ mod tests {
             .and(path("/api/v1/moves"))
             .and(header("x-contrix-holder-did", "did:web:holder.example"))
             .respond_with(move |req: &Request| {
-                // Body must be a serialized SDK Move envelope, not the
-                // legacy `{cell_id, op, tag}` placeholder. Round-trip
-                // through serde to assert the wire shape — if any field
-                // changes in the SDK, this fails loudly.
                 let body: serde_json::Value =
                     serde_json::from_slice(&req.body).expect("valid JSON body");
                 let m: contrix_core::Move =
@@ -803,13 +799,6 @@ mod tests {
                     m.effects[0].cell.as_str(),
                     "cx:cell:cx.component.consent.grant.v1:c-1"
                 );
-                // No legacy keys allowed at the top level.
-                assert!(
-                    body.get("cell_id").is_none(),
-                    "legacy cell_id must be absent"
-                );
-                assert!(body.get("op").is_none(), "legacy op must be absent");
-                assert!(body.get("tag").is_none(), "legacy tag must be absent");
                 ResponseTemplate::new(202)
             })
             .expect(1)

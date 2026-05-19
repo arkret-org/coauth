@@ -7,11 +7,9 @@
 
 use std::{str::FromStr, time::Duration as StdDuration};
 
-use chrono::{Duration, Utc};
+use chrono::Duration;
 use coauth_data::{
     RepositoryAccess as _,
-    flow::{FlowSession, FlowSessionStatus},
-    new_id,
     user::{UserEmailRepository as _, UserRegistrationRepository as _, UserRepository as _},
 };
 use lettre::Address;
@@ -39,7 +37,6 @@ use crate::{
             submit_registration_display_name, submit_registration_email_code,
             submit_registration_phone_code,
         },
-        flow::{FlowExecutor, defaults::default_registration_flow, flow_session_store_write},
         notification_dispatch::{NotificationIntent, schedule_notification},
     },
     salvo_utils::SessionInfoExt,
@@ -72,11 +69,6 @@ pub struct RegisterResponse {
     pub next_step: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    /// When the flow engine is enabled, the frontend should use this ID
-    /// with the flow session API (`/api/v1/flow/session/:id`) instead of
-    /// the legacy registration step endpoints.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub flow_session_id: Option<String>,
 }
 
 #[endpoint]
@@ -129,7 +121,6 @@ pub async fn post_register(
                 id: None,
                 next_step: None,
                 error: Some("captcha_failed".into()),
-                flow_session_id: None,
             }));
         }
     }
@@ -190,7 +181,6 @@ pub async fn post_register(
                         .collect::<Vec<_>>()
                         .join(", "),
                 ),
-                flow_session_id: None,
             }));
         }
     };
@@ -201,45 +191,11 @@ pub async fn post_register(
 
     let step = next_registration_step(&registration, email_verified, phone_verified);
 
-    // If the flow engine is enabled, start a flow session alongside the
-    // legacy registration so the frontend can choose the flow-based path.
-    let flow_session_id = if site_config.flow_engine_enabled {
-        let mut rng = make_rng();
-        let (flow_def, bindings) = default_registration_flow(&mut *rng);
-        let plan = FlowExecutor::plan(flow_def, bindings);
-
-        let now = Utc::now();
-        let session_id = new_id(now, &mut *rng);
-
-        let session = FlowSession {
-            id: session_id,
-            flow_id: plan.flow.id,
-            current_stage_index: 0,
-            status: FlowSessionStatus::InProgress,
-            context: Value::Object(serde_json::Map::new()),
-            ip_address: None,
-            user_agent: None,
-            created_at: now,
-            updated_at: now,
-            expires_at: now + chrono::Duration::hours(1),
-            completed_at: None,
-        };
-
-        flow_session_store_write()
-            .await
-            .insert(session_id, (plan, session));
-
-        Some(session_id.to_string())
-    } else {
-        None
-    };
-
     Ok(Json(RegisterResponse {
         status: "success",
         id: Some(registration.id.to_string()),
         next_step: Some(step),
         error: None,
-        flow_session_id,
     }))
 }
 

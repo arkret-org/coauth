@@ -1407,13 +1407,6 @@
             "null"
           ]
         },
-        "session_grant_introspection_bearer": {
-          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's legacy Contrix session-grant introspection endpoint.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "embedded_webvh_registration_bearer": {
           "description": "Optional static bearer token coauth should send when writing embedded\n`did:webvh` registration records into this Principal Server.",
           "type": [

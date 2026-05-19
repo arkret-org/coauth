@@ -18,11 +18,6 @@ pub struct StartRecoveryResponse {
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    /// When the flow engine is enabled, the frontend should use this ID
-    /// with the flow session API (`/api/v1/flow/session/:id`) instead of
-    /// the legacy recovery step endpoints.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub flow_session_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]

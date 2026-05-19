@@ -280,7 +280,7 @@ mod tests {
         let local = resolver.primary_did_for_user(&contrix_config, &user).await;
         assert_eq!(
             local, "did:web:coauth.invalid:accounts:01arz3ndektsv4rrffq69g5fav",
-            "starid_backend=false must keep the legacy local derivation",
+            "starid_backend=false uses the local derivation",
         );
     }
 

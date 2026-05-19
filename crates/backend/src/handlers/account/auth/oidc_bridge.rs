@@ -246,15 +246,11 @@ fn soland_account_handle_for_did(did: &str) -> String {
 }
 
 /// Resolve the `principal_did` for `user` against the targeted principal
-/// server. When the audience corresponds to a `PrincipalServerConfig` with
-/// an embedded webvh provider, this mints (or re-uses) a
+/// server. The audience must correspond to a `PrincipalServerConfig` with
+/// an embedded webvh provider; this mints (or re-uses) a
 /// `did:webvh:<scid>:<principal_host>:webvh:<user_ulid>` against soland's
 /// `POST /api/v1/identity/webvh/register` so the DID's authority matches
-/// the host that actually serves its document. When no principal-server
-/// config is found (e.g. legacy/local audiences that pre-date the embedded
-/// path) we fall back to coauth's old `user_did_for` derivation so existing
-/// callers keep working — that fallback is the documented gap rather than
-/// a silent regression.
+/// the host that actually serves its document.
 async fn ensure_principal_did_for_user(
     repo: &mut coauth_data::BoxRepository,
     rng: &mut coauth_data::BoxRng,
@@ -271,7 +267,9 @@ async fn ensure_principal_did_for_user(
         .iter()
         .find(|server| server.audience == audience)
     else {
-        return Ok(contrix::user_did_for(url_builder, contrix_config, user));
+        return Err(format!(
+            "no principal-server config matches audience {audience}"
+        ));
     };
     let registration_bearer = principal_server
         .embedded_webvh_registration_bearer

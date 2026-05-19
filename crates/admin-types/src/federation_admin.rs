@@ -38,9 +38,9 @@ impl FederationPeerHealth {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "healthy" | "ok" => Some(FederationPeerHealth::Healthy),
-            "degraded" | "lagging" => Some(FederationPeerHealth::Degraded),
-            "unreachable" | "down" => Some(FederationPeerHealth::Unreachable),
+            "healthy" => Some(FederationPeerHealth::Healthy),
+            "degraded" => Some(FederationPeerHealth::Degraded),
+            "unreachable" => Some(FederationPeerHealth::Unreachable),
             _ => None,
         }
     }
@@ -96,18 +96,9 @@ mod tests {
             assert_eq!(h.label(), label);
         }
         assert!(FederationPeerHealth::from_wire("nope").is_none());
-        assert_eq!(
-            FederationPeerHealth::from_wire("ok"),
-            Some(FederationPeerHealth::Healthy)
-        );
-        assert_eq!(
-            FederationPeerHealth::from_wire("lagging"),
-            Some(FederationPeerHealth::Degraded)
-        );
-        assert_eq!(
-            FederationPeerHealth::from_wire("down"),
-            Some(FederationPeerHealth::Unreachable)
-        );
+        assert!(FederationPeerHealth::from_wire("ok").is_none());
+        assert!(FederationPeerHealth::from_wire("lagging").is_none());
+        assert!(FederationPeerHealth::from_wire("down").is_none());
     }
 
     #[test]

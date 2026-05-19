@@ -125,11 +125,6 @@ async fn require_session_grant_caller(
             ContrixRouteError::Unauthorized("invalid authorization header".to_owned())
         })?;
 
-    let contrix_config = depot.contrix_config()?;
-    if principal_server_static_session_grant_bearer_matches(&contrix_config, token) {
-        return Ok(SessionGrantAuthz::PrincipalServer);
-    }
-
     let token_type = TokenType::check(token)
         .map_err(|_| ContrixRouteError::Unauthorized("invalid bearer token".to_owned()))?;
 
@@ -194,18 +189,6 @@ async fn require_session_grant_caller(
             "missing admin or principal-server scope".to_owned(),
         ))
     }
-}
-
-fn principal_server_static_session_grant_bearer_matches(
-    contrix_config: &ContrixConfig,
-    token: &str,
-) -> bool {
-    !token.trim().is_empty()
-        && contrix_config
-            .principal_servers
-            .iter()
-            .filter_map(|server| server.session_grant_introspection_bearer.as_deref())
-            .any(|configured| configured == token)
 }
 
 impl Scribe for ContrixRouteError {
@@ -1940,7 +1923,6 @@ mod tests {
                 endpoint: "https://soland.example.com/contrix".parse().unwrap(),
                 did: Some("did:web:soland.example.com".to_owned()),
                 oauth_introspection_bearer: None,
-                session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }],
             identity_registry: Some(IdentityRegistryConfig {

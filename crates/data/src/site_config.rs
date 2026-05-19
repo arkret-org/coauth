@@ -119,10 +119,6 @@ pub struct SiteConfig {
     /// user can have
     pub session_limit: Option<SessionLimitConfig>,
 
-    /// coauth extension: when true, registration/recovery/password-change use
-    /// the flow engine instead of the legacy service modules.
-    pub flow_engine_enabled: bool,
-
     /// Whether phone number verification is available (i.e. a real SMS
     /// transport is configured).  When `false`, phone fields submitted during
     /// registration are silently ignored so that the flow does not get stuck

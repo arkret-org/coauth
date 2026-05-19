@@ -182,7 +182,6 @@ pub fn test_site_config() -> SiteConfig {
         admin_portal_url: None,
         plan_management_iframe_uri: None,
         session_limit: None,
-        flow_engine_enabled: false,
         phone_verification_enabled: true,
     }
 }

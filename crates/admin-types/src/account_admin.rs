@@ -63,7 +63,7 @@ impl AdminAccountStatus {
         match s {
             "active" => Some(AdminAccountStatus::Active),
             "locked" => Some(AdminAccountStatus::Locked),
-            "disabled" | "deactivated" => Some(AdminAccountStatus::Disabled),
+            "disabled" => Some(AdminAccountStatus::Disabled),
             _ => None,
         }
     }
@@ -195,13 +195,8 @@ mod tests {
             let back: AdminAccountStatus = serde_json::from_str(&json).unwrap();
             assert_eq!(s, back);
         }
-        // Server-side legacy alias `deactivated` collapses into Disabled
-        // so older audit/event payloads still decode cleanly.
-        assert_eq!(
-            AdminAccountStatus::from_wire("deactivated"),
-            Some(AdminAccountStatus::Disabled)
-        );
         assert!(AdminAccountStatus::from_wire("nope").is_none());
+        assert!(AdminAccountStatus::from_wire("deactivated").is_none());
     }
 
     #[test]

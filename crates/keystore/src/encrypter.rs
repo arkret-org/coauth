@@ -1,8 +1,3 @@
-// `generic_array::GenericArray` is deprecated in favour of v1.x of the
-// crate, but the crypto stack we depend on still pulls in the legacy API;
-// silence the deprecation noise until the ecosystem moves.
-#![allow(deprecated)]
-
 use std::sync::Arc;
 
 use aead::Aead;

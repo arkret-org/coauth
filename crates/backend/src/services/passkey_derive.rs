@@ -1,9 +1,7 @@
 //! Derive a deterministic starid `update_key` from a webauthn-rs `Passkey`.
 //!
-//! Replaces the round-37.4 placeholder
-//! (`onboarding_starid::PLACEHOLDER_UPDATE_KEY` — removed) with a
-//! per-credential, device-bound key that starid stores on the DID's
-//! `updateKeys` slot. The flow is:
+//! Produces a per-credential, device-bound key that starid stores on the
+//! DID's `updateKeys` slot. The flow is:
 //!
 //! 1. Browser finishes a `WebAuthn` registration ceremony
 //!    (`PgWebauthnService::register_finish`) producing a [`Passkey`].

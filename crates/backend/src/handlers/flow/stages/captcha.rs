@@ -27,12 +27,6 @@ pub async fn execute(
         });
     }
 
-    // NOTE: the legacy flow engine (`site_config.flow_engine_enabled`) is
-    // currently disabled in all shipped configurations; real CAPTCHA
-    // verification is performed by `handlers::flow::executor::validate_response`
-    // for the mainline path. If/when the flow-engine stage pipeline is
-    // reactivated, wire this stage up to the same `CaptchaVerifyContext`.
-
     if let Some(ctx) = context.as_object_mut() {
         ctx.insert("captcha_verified".into(), serde_json::json!(true));
     }
