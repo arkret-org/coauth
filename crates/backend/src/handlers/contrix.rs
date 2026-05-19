@@ -694,10 +694,36 @@ pub(crate) fn user_did_for(
     )
 }
 
+/// Legacy display form `local@host` used by some logging / display
+/// paths. NOT the canonical handle URI form — use [`user_handle_uri`]
+/// (spec 0a5ab85) for `alsoKnownAs` / DID Document / claim emission.
 pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
         "{}@{}",
         user.handle,
+        url_builder.public_hostname().to_lowercase()
+    )
+}
+
+/// Canonical Contrix handle URI for a user per spec 0a5ab85:
+/// `contrix://<lowercase-host>/users/<lowercase-localpart>`. This is the
+/// form that MUST appear in `alsoKnownAs` and on any handle claim
+/// `handle_uri`. `acct:<local>@<host>` is interop-only and lives in
+/// `handle_aliases[]` on the handle claim.
+pub(crate) fn user_handle_uri(url_builder: &UrlBuilder, user: &User) -> String {
+    format!(
+        "contrix://{}/users/{}",
+        url_builder.public_hostname().to_lowercase(),
+        user.handle.to_lowercase()
+    )
+}
+
+/// `acct:` interop alias for [`user_handle_uri`]. Use this for
+/// `handle_aliases[]` on a `handle-claim.schema.json` payload.
+pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> String {
+    format!(
+        "acct:{}@{}",
+        user.handle.to_lowercase(),
         url_builder.public_hostname().to_lowercase()
     )
 }
@@ -1100,7 +1126,9 @@ pub(crate) fn user_did_document(
 
     DidDocument {
         id: did.clone(),
-        also_known_as: vec![format!("contrix://{}", user_handle(url_builder, user))],
+        // Spec 0a5ab85: canonical handle URI form is
+        // `contrix://<host>/users/<localpart>`; `acct:` is interop-only.
+        also_known_as: vec![user_handle_uri(url_builder, user)],
         verification_method: Vec::new(),
         authentication: Vec::new(),
         assertion_method: Vec::new(),
