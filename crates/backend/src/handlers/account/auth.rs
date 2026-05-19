@@ -43,7 +43,7 @@ const RESULT: Key = Key::from_static_str("result");
 // ── Request / Response types ───────────────────────────────────
 
 #[derive(Deserialize, ToSchema)]
-pub struct LoginRequest {
+pub struct LoginReqBody {
     pub handle: String,
     pub password: String,
     /// Audience the client wants the issued session grant to be bound to.
@@ -160,7 +160,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         .and_then(|h| h.to_str().ok())
         .map(std::borrow::ToOwned::to_owned);
 
-    let input: LoginRequest = req
+    let input: LoginReqBody = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;

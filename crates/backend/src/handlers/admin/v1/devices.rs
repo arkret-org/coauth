@@ -63,7 +63,7 @@ pub struct DeviceRecord {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct DeviceListResponse {
+pub struct DeviceListResBody {
     data: Vec<DeviceRecord>,
 }
 
@@ -125,7 +125,7 @@ impl DeviceDraft {
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.devices.list", skip_all)]
-pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<DeviceListResponse> {
+pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<DeviceListResBody> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let mut devices = BTreeMap::<String, DeviceDraft>::new();
@@ -177,7 +177,7 @@ pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<Device
 
     apply_device_revocation_audit(&mut repo, &mut devices).await?;
 
-    Ok(Json(DeviceListResponse {
+    Ok(Json(DeviceListResBody {
         data: devices
             .into_values()
             .map(DeviceDraft::into_record)

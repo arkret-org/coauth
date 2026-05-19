@@ -486,7 +486,7 @@ pub struct ResendEmailAuthCodePayload {
 // ── Auth API types ────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LoginRequest {
+pub struct LoginReqBody {
     pub handle: String,
     pub password: String,
 }

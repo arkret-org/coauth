@@ -491,7 +491,7 @@ struct ServiceDescribeResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct IdentityDescribeResponse {
+struct IdentityDescribeResBody {
     service_did: String,
     registry_mode: &'static str,
     supported_receipts: Vec<String>,
@@ -502,7 +502,7 @@ struct IdentityDescribeResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct IdentityResolveResponse {
+struct IdentityResolveResBody {
     did_document: DidDocument,
     key_log_head: Option<String>,
     seq: Option<u64>,
@@ -511,7 +511,7 @@ struct IdentityResolveResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct IdentityDocumentResponse {
+struct IdentityDocumentResBody {
     did_document: DidDocument,
     head_event_hash: Option<String>,
     seq: Option<u64>,
@@ -519,7 +519,7 @@ struct IdentityDocumentResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct DirectoryDescribeResponse {
+struct DirectoryDescribeResBody {
     service_did: String,
     resource_types: Vec<&'static str>,
     discovery_profiles: Vec<&'static str>,
@@ -1397,12 +1397,12 @@ pub async fn server_describe(
 #[handler]
 pub async fn identity_describe(
     depot: &Depot,
-) -> Result<Json<IdentityDescribeResponse>, ContrixRouteError> {
+) -> Result<Json<IdentityDescribeResBody>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let identity_registry = delegated_identity_registry_descriptor(&contrix_config);
 
-    Ok(Json(IdentityDescribeResponse {
+    Ok(Json(IdentityDescribeResBody {
         service_did: service_did_for(&url_builder, &contrix_config),
         registry_mode: if identity_registry.is_some() {
             "delegated_resolver"
@@ -1420,7 +1420,7 @@ pub async fn identity_describe(
 pub async fn identity_resolve(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityResolveResponse>, ContrixRouteError> {
+) -> Result<Json<IdentityResolveResBody>, ContrixRouteError> {
     let body: ResolveIdentityRequest = req
         .parse_json()
         .await
@@ -1446,7 +1446,7 @@ pub async fn identity_resolve(
         .await
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(IdentityResolveResponse {
+    Ok(Json(IdentityResolveResBody {
         did_document: resolution.document,
         key_log_head: None,
         seq: None,
@@ -1459,7 +1459,7 @@ pub async fn identity_resolve(
 pub async fn identity_document(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityDocumentResponse>, ContrixRouteError> {
+) -> Result<Json<IdentityDocumentResBody>, ContrixRouteError> {
     let did = req
         .query::<String>("did")
         .ok_or_else(|| ContrixRouteError::BadRequest("missing did query parameter".into()))?;
@@ -1484,7 +1484,7 @@ pub async fn identity_document(
         .await
         .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(IdentityDocumentResponse {
+    Ok(Json(IdentityDocumentResBody {
         did_document: resolution.document,
         head_event_hash: None,
         seq: None,
@@ -1495,11 +1495,11 @@ pub async fn identity_document(
 #[handler]
 pub async fn directory_describe(
     depot: &Depot,
-) -> Result<Json<DirectoryDescribeResponse>, ContrixRouteError> {
+) -> Result<Json<DirectoryDescribeResBody>, ContrixRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
 
-    Ok(Json(DirectoryDescribeResponse {
+    Ok(Json(DirectoryDescribeResBody {
         service_did: service_did_for(&url_builder, &contrix_config),
         resource_types: vec!["actor", "handle"],
         discovery_profiles: Vec::new(),
