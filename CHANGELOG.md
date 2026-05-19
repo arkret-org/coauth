@@ -12,6 +12,13 @@ for the full release process.
 
 ## [Unreleased]
 
+### Changed
+
+- Realm/Space terminology inversion (wire-breaking): old `Space` (security
+  boundary) → **Realm**, old `Place` (container) → **Space**. Session
+  grants, capabilities, and admin scopes now key on `realm_id`; legacy
+  `space_id` remains accepted as a serde alias for back-compat clients.
+
 ### Security
 
 - Anti-enumeration timing equivalence on the password-login path. When

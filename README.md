@@ -9,6 +9,15 @@ account, device, and session, then publishes that state to Principal Servers
 and admin tooling. DID documents, key logs, and registry receipts belong to
 delegated/public DID resolver services.
 
+## Realm vs Space
+
+Sessions, capabilities, and admin scopes attach to a **Realm** (the security
+boundary). Navigation containers — **Space** in the new vocabulary — sit
+inside a Realm and inherit its auth context.
+
+- **Realm:** membership, capability, E2EE, federation are governed here.
+- **Space:** board, list, section, or calendar bucket inside a Realm.
+
 ## Integration model
 
 - `yougen` acts as a public/native Contrix client and consumes OIDC tokens.

@@ -181,8 +181,8 @@ fn build_cell_id(consent_id: &str) -> String {
 /// Decide whether an invite should pass the consent gate, given a cell
 /// lookup result and the requested `(peer_did, scope)` pair.
 ///
-/// `require_consent` mirrors the principal control Space's
-/// `cx.space.policy_components.preauth.require_consent` toggle. When `true`
+/// `require_consent` mirrors the principal control Realm's
+/// `cx.realm.policy_components.preauth.require_consent` toggle. When `true`
 /// and the lookup result is `Unknown` or revoked/absent, the invite is
 /// rejected with `ConsentRequired`. When `false` the same condition routes
 /// to a holder-side quarantine (caller decides how to enact that).

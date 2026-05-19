@@ -185,7 +185,7 @@ pub struct BatchInviteConsentGate {
     pub target_principal_url: Option<Url>,
 
     /// Mirror of the holder's
-    /// `cx.space.policy_components.preauth.require_consent` policy bit.
+    /// `cx.realm.policy_components.preauth.require_consent` policy bit.
     /// Defaults to `true` (fail closed: missing / revoked consent → 422).
     #[serde(default = "default_require_consent")]
     pub require_consent: bool,
