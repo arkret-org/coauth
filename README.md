@@ -126,6 +126,23 @@ just build-all
 - Chinese configuration reference: [docs/zh/reference/configuration.md](docs/zh/reference/configuration.md)
 - Chinese scope reference: [docs/zh/reference/scopes.md](docs/zh/reference/scopes.md)
 
+## Production Deployment Checklist
+
+Before exposing coauth to the public internet, walk every item below.
+The same list will be computed at runtime and surfaced on
+`/health.hardening` so sodmin's `/hardening` dashboard can flag failing
+checks across the whole fleet (see T8.3 for the cross-service shape).
+
+- [ ] `COAUTH_DEVELOPMENT_MODE=false` (or unset in production builds)
+- [ ] TLS enabled at the reverse proxy (`COAUTH_TLS_CERT_PATH` / `COAUTH_TLS_KEY_PATH` when terminated in-process)
+- [ ] CSP header configured at the reverse proxy
+- [ ] CORS limited to the allowed origins for sodmin / public clients
+- [ ] Secrets in a secret manager (session-grant signing seed, OAuth client secrets, upstream provider creds)
+- [ ] Log redaction enabled (default outside dev mode)
+- [ ] Admin auth in production mode (admin capabilities + scopes, no dev-login)
+- [ ] Rate limit enabled
+- [ ] Provider credential rotation scheduled for upstream OAuth providers
+
 ## License
 
 `coauth` is distributed under `AGPL-3.0-only`. See [LICENSE](LICENSE).

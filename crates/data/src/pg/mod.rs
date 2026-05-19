@@ -16,6 +16,8 @@ pub mod account;
 pub mod app_session;
 /// PostgreSQL audit log repositories.
 pub mod audit;
+/// PostgreSQL append-only handle audit log repository (T3.2).
+pub mod handle_audit;
 /// PostgreSQL notification persistence repositories.
 pub mod notification;
 /// PostgreSQL OAuth repositories.

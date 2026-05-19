@@ -17,6 +17,25 @@ diesel::table! {
         avatar_url -> Nullable<Text>,
         preferred_locale -> Nullable<Text>,
         starid_backend -> Bool,
+        handle_aliases -> Array<Text>,
+    }
+}
+
+diesel::table! {
+    handle_audit_log (id) {
+        id -> Uuid,
+        user_id -> Nullable<Uuid>,
+        event_type -> Text,
+        canonical_handle_uri -> Nullable<Text>,
+        handle_aliases -> Array<Text>,
+        old_did -> Nullable<Text>,
+        new_did -> Nullable<Text>,
+        issuer_service_did -> Nullable<Text>,
+        audience -> Nullable<Text>,
+        claim_digest -> Nullable<Text>,
+        details -> Jsonb,
+        actor_id -> Nullable<Uuid>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -850,4 +869,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     workflow_events,
     workflow_deadlines,
     workflow_audit_logs,
+    handle_audit_log,
 );

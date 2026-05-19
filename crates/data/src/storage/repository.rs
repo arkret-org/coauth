@@ -182,6 +182,11 @@ pub trait RepositoryAccess: Send {
     /// Get an [`AuditRepository`]
     fn audit<'c>(&'c mut self) -> Box<dyn AuditRepository<Error = Self::Error> + 'c>;
 
+    /// Get an append-only handle audit log repository (T3.2).
+    fn handle_audit<'c>(
+        &'c mut self,
+    ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c>;
+
     /// Get a [`NotificationRepository`]
     fn notification<'c>(&'c mut self) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c>;
 
@@ -426,6 +431,13 @@ mod impls {
             Box::new(MapErr::new(self.inner.audit(), &mut self.mapper))
         }
 
+        fn handle_audit<'c>(
+            &'c mut self,
+        ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c>
+        {
+            Box::new(MapErr::new(self.inner.handle_audit(), &mut self.mapper))
+        }
+
         fn notification<'c>(
             &'c mut self,
         ) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c> {
@@ -629,6 +641,13 @@ mod impls {
 
         fn audit<'c>(&'c mut self) -> Box<dyn AuditRepository<Error = Self::Error> + 'c> {
             (**self).audit()
+        }
+
+        fn handle_audit<'c>(
+            &'c mut self,
+        ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c>
+        {
+            (**self).handle_audit()
         }
 
         fn notification<'c>(

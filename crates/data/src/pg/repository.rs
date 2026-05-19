@@ -4,7 +4,7 @@ use coauth_data::{
     RepositoryFactory, RepositoryTransaction,
     account::AccountRepository,
     app_session::AppSessionRepository,
-    audit::AuditRepository,
+    audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository},
     notification::{NotificationRepository, NotificationTemplateRepository},
     oauth::{
         OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -270,6 +270,12 @@ impl RepositoryAccess for PgRepository {
 
     fn audit<'c>(&'c mut self) -> Box<dyn AuditRepository<Error = Self::Error> + 'c> {
         Box::new(PgAuditRepository::new(&mut self.conn))
+    }
+
+    fn handle_audit<'c>(
+        &'c mut self,
+    ) -> Box<dyn HandleAuditRepository<Error = Self::Error> + 'c> {
+        Box::new(PgHandleAuditRepository::new(&mut self.conn))
     }
 
     fn notification<'c>(&'c mut self) -> Box<dyn NotificationRepository<Error = Self::Error> + 'c> {

@@ -454,6 +454,16 @@ struct AuthMetadata {
 struct ServiceDescribeResponse {
     service_did: String,
     service_type: &'static str,
+    /// T6.3 — explicit Contrix v1 role declaration. A coauth instance can
+    /// simultaneously act as `auth_server` (OIDC token issuer),
+    /// `identity_resolver` (DID / handle resolution proxy), and
+    /// `account_registry` (internal service-account management). The
+    /// entries here are independent capability claims; each maps to a
+    /// distinct subset of `supported_operations`. Consumers MUST NOT
+    /// infer canonical identity-registry ownership from
+    /// `identity_resolver` alone (that role is held by an upstream
+    /// resolver such as starid / public DID network).
+    service_roles: Vec<&'static str>,
     protocol_version: &'static str,
     supported_profiles: Vec<&'static str>,
     supported_features: Vec<&'static str>,
@@ -461,6 +471,26 @@ struct ServiceDescribeResponse {
     supported_schema_profiles: Vec<&'static str>,
     supported_bindings: Vec<SupportedBinding>,
     supported_operations: Vec<&'static str>,
+    /// T6.1 — feature ids the service has implementation code for but
+    /// does NOT claim conformance for. Schema:
+    /// `cx.schema.service_describe.v1` (see service-surface.md §3.0).
+    implemented_features: Vec<&'static str>,
+    /// T6.1 — self-claimed profiles. `claim_kind` MUST be `self_claimed`.
+    claimed_profiles: Vec<ClaimedProfileDescriptor>,
+    /// T6.1 — cotest-verified profiles. MUST be empty when
+    /// `development_mode=true` (§3.0).
+    verified_profiles: Vec<VerifiedProfileDescriptor>,
+    /// T6.1 — features the service exposes but does NOT promise stable
+    /// interop for.
+    experimental_features: Vec<&'static str>,
+    /// T6.1 — legacy / external-interop surfaces exposed for compatibility,
+    /// not as part of Contrix v1 conformance.
+    compat_surfaces: Vec<CompatSurfaceDescriptor>,
+    /// Mirror of the service's development-mode flag. coauth has no
+    /// dedicated dev toggle today, so this is always `false`; if a toggle
+    /// is added later the `verified_profiles=[]` invariant MUST be
+    /// re-enforced.
+    development_mode: bool,
     admin_audience: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     principal_servers: Vec<PrincipalServerDescriptor>,
@@ -471,6 +501,39 @@ struct ServiceDescribeResponse {
     auth_metadata: AuthMetadata,
     limits: ServiceLimitsDescriptor,
     standard_error_envelope: StandardErrorEnvelopeDescriptor,
+}
+
+/// T6.1 — self-claimed profile entry. `claim_kind = "self_claimed"`;
+/// cotest-verified entries belong in `verified_profiles`.
+#[derive(Debug, Serialize)]
+struct ClaimedProfileDescriptor {
+    profile_id: &'static str,
+    claim_kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    notes: Option<&'static str>,
+}
+
+/// T6.1 — cotest-verified profile entry. Required `cotest_run_id`,
+/// `artifact_hash`, `timestamp`. Dev-mode posture MUST NOT advertise any
+/// such entry (§3.0).
+#[derive(Debug, Serialize)]
+struct VerifiedProfileDescriptor {
+    profile_id: String,
+    claim_kind: &'static str,
+    cotest_run_id: String,
+    artifact_hash: String,
+    timestamp: String,
+}
+
+/// T6.1 — compat / external-interop surface entry. `kind` ∈
+/// {`matrix_passthrough`, `mimi_passthrough`, `legacy_alias`,
+/// `external_interop`, `deprecated_alias`}.
+#[derive(Debug, Serialize)]
+struct CompatSurfaceDescriptor {
+    name: &'static str,
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    notes: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -728,6 +791,224 @@ pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> S
     )
 }
 
+/// Stable wire-level error code returned when a caller passes an `acct:`
+/// alias (or any other non-canonical string) as a `handle_uri` input.
+///
+/// Mirrored by [`coauth_data::users::HANDLE_URI_NOT_CANONICAL_CODE`] —
+/// kept in sync so the audit / HTTP layers can refer to the same constant
+/// without an extra dependency.
+pub const HANDLE_URI_NOT_CANONICAL_CODE: &str = "handle_uri_not_canonical";
+
+/// Reject any inbound `handle_uri` that is not in the canonical
+/// `contrix://<host>/users/<localpart>` shape. Returns a
+/// [`ContrixRouteError::BadRequest`] wrapping the standard error envelope
+/// `code = "handle_uri_not_canonical"`.
+pub(crate) fn require_canonical_handle_uri(input: &str) -> Result<&str, ContrixRouteError> {
+    coauth_data::user::validate_canonical_handle_uri(input).map_err(|(_code, message)| {
+        // The error envelope sets `code` from the variant; we embed the
+        // reason text so callers see why their input was rejected.
+        ContrixRouteError::BadRequest(format!("{HANDLE_URI_NOT_CANONICAL_CODE}: {message}"))
+    })
+}
+
+/// Delivery-binding hint embedded in a `handle_claim`. Shape mirrors
+/// `member-delivery-binding-candidate.schema.json#delivery_binding_hint`
+/// (commit 0a5ab85). `binding_source` MUST be one of the five values
+/// enumerated below — `did_document_default` is forbidden because handle-
+/// resolved candidates and DID Document fallback are independent
+/// materialisation paths.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HandleClaimDeliveryBindingHint {
+    pub recipient_service_did: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recipient_service_type: Option<String>,
+    pub binding_source: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delivery_modes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_acceptance_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_ref: Option<String>,
+}
+
+/// Detached-JWS proof attached to a `handle_claim`. Lightweight mirror of
+/// `event-schema.json#/$defs/proof`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HandleClaimProof {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub alg: String,
+    pub verification_method: String,
+    pub canonicalization: String,
+    pub payload_hash_alg: String,
+    pub payload_hash: String,
+    pub created_at: DateTime<Utc>,
+    pub audience: String,
+    pub jws: String,
+}
+
+/// Canonical `handle_claim` payload signed by coauth's audience-bound
+/// session-grant signing key. Shape aligned with
+/// `member-delivery-binding-candidate.schema.json` so a downstream
+/// directory can pack this directly into a candidate without rewriting
+/// fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HandleClaimPayload {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub subject_did: String,
+    pub handle_uri: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub handle_aliases: Vec<String>,
+    pub issuer_service_did: String,
+    pub audience: String,
+    pub delivery_binding_hint: HandleClaimDeliveryBindingHint,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub proofs: Vec<HandleClaimProof>,
+    /// `sha256:<hex>` digest of the canonical-JSON encoding of the claim
+    /// minus the `proofs[]` field (proofs are produced *over* this hash).
+    pub claim_digest: String,
+}
+
+/// Output of [`issue_handle_claim`]. Carries the signed JWT, the raw
+/// payload (so the caller can persist or echo it), and the wire-level
+/// claim digest used as the audit-chain anchor.
+#[derive(Debug, Clone)]
+pub struct HandleClaimMaterial {
+    pub claim_jwt: String,
+    pub payload: HandleClaimPayload,
+    pub claim_digest: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// TTL applied to handle claim JWTs. Short by design — claims are meant
+/// to round-trip through a directory / candidate builder in seconds, not
+/// be stored as long-lived bearer credentials.
+pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
+
+/// Mint a handle-claim JWT bound to `audience`. The claim's
+/// `delivery_binding_hint` MUST come from upstream policy (handed to this
+/// function by the caller); we never default to `did_document_default`.
+///
+/// Signs with the same preferred ed25519 key used for session grants, so
+/// downstream verifiers can use coauth's published DID Document
+/// `verificationMethod` to validate both artefacts.
+pub(crate) fn issue_handle_claim(
+    clock: &dyn Clock,
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    key_store: &Keystore,
+    user: &User,
+    audience: String,
+    delivery_binding_hint: HandleClaimDeliveryBindingHint,
+) -> Result<HandleClaimMaterial, SessionGrantError> {
+    let issuer_service_did = service_did_for(url_builder, contrix_config);
+    let subject_did = user_did_for(url_builder, contrix_config, user);
+    let handle_uri = user_handle_uri(url_builder, user);
+    let mut aliases = vec![user_handle_acct_alias(url_builder, user)];
+    aliases.extend(user.handle_aliases.iter().cloned());
+    // De-duplicate while preserving first-seen order.
+    let mut seen = std::collections::HashSet::new();
+    aliases.retain(|s| seen.insert(s.clone()));
+
+    let now = clock.now();
+    let expires_at = now + Duration::try_minutes(HANDLE_CLAIM_TTL_MINUTES).unwrap();
+
+    // Build the payload sans proofs so we can hash it deterministically.
+    // The proof block then carries that hash; the JWT signs the complete
+    // payload.
+    let mut payload_no_proofs = HandleClaimPayload {
+        kind: "cx.handle.claim".to_owned(),
+        subject_did: subject_did.clone(),
+        handle_uri,
+        handle_aliases: aliases.clone(),
+        issuer_service_did: issuer_service_did.clone(),
+        audience: audience.clone(),
+        delivery_binding_hint: delivery_binding_hint.clone(),
+        issued_at: now,
+        expires_at,
+        proofs: Vec::new(),
+        claim_digest: String::new(),
+    };
+    let claim_digest = canonical_json_sha256(&HandleClaimDigestInput {
+        kind: &payload_no_proofs.kind,
+        subject_did: &payload_no_proofs.subject_did,
+        handle_uri: &payload_no_proofs.handle_uri,
+        handle_aliases: &payload_no_proofs.handle_aliases,
+        issuer_service_did: &payload_no_proofs.issuer_service_did,
+        audience: &payload_no_proofs.audience,
+        delivery_binding_hint: &payload_no_proofs.delivery_binding_hint,
+        issued_at: payload_no_proofs.issued_at,
+        expires_at: payload_no_proofs.expires_at,
+    })?;
+    payload_no_proofs.claim_digest = claim_digest.clone();
+
+    let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
+    let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
+    let verification_method = format!("{issuer_service_did}#{key_id}");
+    let proof_payload_hash = claim_digest.clone();
+
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
+    let signer = key.params().signing_key_for_alg(&alg)?;
+    let unsigned_payload = HandleClaimPayload {
+        proofs: vec![HandleClaimProof {
+            kind: "cx.handle.claim.proof.v1".to_owned(),
+            alg: alg.to_string(),
+            verification_method: verification_method.clone(),
+            canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
+            payload_hash_alg: "sha-256".to_owned(),
+            payload_hash: proof_payload_hash.clone(),
+            created_at: now,
+            audience: audience.clone(),
+            // Placeholder — overwritten with the detached JWS below.
+            jws: String::new(),
+        }],
+        ..payload_no_proofs.clone()
+    };
+    let claim_jwt = Jwt::sign(header, unsigned_payload.clone(), &signer)?.into_string();
+
+    let final_payload = HandleClaimPayload {
+        proofs: vec![HandleClaimProof {
+            kind: "cx.handle.claim.proof.v1".to_owned(),
+            alg: alg.to_string(),
+            verification_method,
+            canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
+            payload_hash_alg: "sha-256".to_owned(),
+            payload_hash: proof_payload_hash,
+            created_at: now,
+            audience: audience.clone(),
+            jws: claim_jwt.clone(),
+        }],
+        ..payload_no_proofs
+    };
+
+    Ok(HandleClaimMaterial {
+        claim_jwt,
+        payload: final_payload,
+        claim_digest,
+        expires_at,
+    })
+}
+
+/// Helper struct used to canonicalise the *digest input* — i.e. the
+/// payload minus the `proofs[]` and `claim_digest` fields. Sorting and
+/// shape must match the wire shape of `HandleClaimPayload` for
+/// downstream digesters to reproduce the hash.
+#[derive(Debug, Serialize)]
+struct HandleClaimDigestInput<'a> {
+    #[serde(rename = "type")]
+    kind: &'a str,
+    subject_did: &'a str,
+    handle_uri: &'a str,
+    handle_aliases: &'a Vec<String>,
+    issuer_service_did: &'a str,
+    audience: &'a str,
+    delivery_binding_hint: &'a HandleClaimDeliveryBindingHint,
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+}
+
 pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
     url_builder.absolute_url("/api/v1").to_string()
 }
@@ -914,7 +1195,30 @@ fn service_describe_response(
 
     ServiceDescribeResponse {
         service_did: service_did_for(url_builder, contrix_config),
+        // service_type is the SDK-side `ServiceType` discriminant. coauth's
+        // primary role is OIDC issuance, so this is kept as "auth_server".
+        // The richer multi-role posture is expressed via `service_roles`
+        // (T6.3) — consumers that need the full picture MUST read that
+        // array; legacy clients that only key off service_type still get
+        // an answer compatible with the SDK's
+        // `ProfileValidator::for_auth_server`.
         service_type: "auth_server",
+        // T6.3 — declare all roles this coauth instance carries. Each
+        // role is independent: any subset may be deployed off elsewhere
+        // (e.g. dedicated starid for identity_resolver, dedicated
+        // account-registry service) without affecting the others.
+        //   - "auth_server"        : OIDC / token issuance, the
+        //                            canonical role.
+        //   - "identity_resolver"  : DID / handle resolution proxy.
+        //                            NOT canonical identity registry;
+        //                            backed by `cx.identity.*` proxy
+        //                            operations that ultimately route
+        //                            to an upstream registry (configured
+        //                            via `identity_registry_resolver`).
+        //   - "account_registry"   : internal service-account /
+        //                            recovery / claim-attestation
+        //                            management.
+        service_roles: vec!["auth_server", "identity_resolver", "account_registry"],
         protocol_version: CONTRIX_PROTOCOL_VERSION,
         supported_profiles: Vec::new(),
         supported_features: vec![
@@ -929,7 +1233,14 @@ fn service_describe_response(
             "policy_hook",
         ],
         supported_reducer_profiles: vec!["cx.reducer.v1"],
-        supported_schema_profiles: vec!["cx.schema.v1"],
+        // T6.3 — replace the historical `cx.schema.v1` placeholder with
+        // the actual spec-declared schemas this surface emits. The
+        // `cx.schema.service_describe.v1` schema covers the very
+        // payload being served here; `cx.schema.core.v1` matches the
+        // soland / SDK convention for the core-event-store schema
+        // profile and is the umbrella the OIDC + account artefacts hash
+        // under. Older `cx.schema.v1` is no longer published.
+        supported_schema_profiles: vec!["cx.schema.core.v1", "cx.schema.service_describe.v1"],
         supported_bindings: vec![SupportedBinding {
             binding: CONTRIX_HTTP_BINDING,
             base_url: url_builder.http_base().to_string(),
@@ -942,6 +1253,93 @@ fn service_describe_response(
             "cx.directory.describe",
             "cx.directory.resolve_handle",
         ],
+        // T6.1 — claim-level partition. See service-surface.md §3.0.
+        //
+        // implemented_features mirrors supported_features: coauth has
+        // code for each of these but does not claim conformance for any
+        // of them today. Any future cotest run that produces a passing
+        // artifact for a coauth profile MUST land in `verified_profiles`,
+        // never here.
+        implemented_features: vec![
+            "oidc",
+            "account_first_onboarding",
+            "session_grant",
+            "did_binding",
+            "did_resolution",
+            "handle_resolution",
+            "account_recovery",
+            "claim_attestation",
+            "policy_hook",
+        ],
+        // T6.3 — claimed_profiles intentionally empty.
+        //
+        // coauth wears three roles (see `service_roles` above) but each
+        // canonical Contrix v1 profile that *could* apply has a role
+        // mismatch with at least one of them:
+        //
+        //   * `cx.profile.identity_registry.v1`   — role=directory.
+        //     coauth's `cx.identity.*` ops are a DELEGATED proxy onto
+        //     an upstream resolver, not a canonical registry. Claiming
+        //     this profile would lie about authority over DID
+        //     documents.
+        //   * `cx.profile.directory_service.v1`   — role=directory.
+        //     coauth exposes `cx.directory.resolve_handle` only for
+        //     local handles it issued; it does NOT publish a
+        //     network-wide actor directory.
+        //   * `cx.profile.public_network_identity.v1` — role=directory.
+        //     Same reason — coauth is a service-local issuer, not the
+        //     network identity authority.
+        //
+        // Until a coauth-shaped profile exists in the spec
+        // (`cx.profile.auth_server.v1` is the natural slot), this
+        // array stays empty. The boundary is instead surfaced via
+        // `service_roles` + `compat_surfaces` (for the delegated
+        // identity ops) so cotest's ProfileValidator does not flag a
+        // role mismatch.
+        claimed_profiles: Vec::new(),
+        // verified_profiles MUST be empty when `development_mode=true`.
+        // coauth has no runtime dev toggle, so this is unconditionally
+        // empty until a cotest verifier writes a real entry.
+        verified_profiles: Vec::new(),
+        // experimental_features: surfaces still maturing inside coauth.
+        // Listed here explicitly so callers don't treat them as stable
+        // interop.
+        experimental_features: vec![
+            "session_grant_exchange",
+            "did_webvh_embedded_registration",
+            "principal_server_delegation_targets",
+        ],
+        // T6.3 — compat_surfaces declares non-canonical surfaces. The
+        // `cx.identity.*` operations are exposed for client
+        // convenience but are a DELEGATED resolver shim onto an
+        // upstream registry (starid, public DID network, etc.); coauth
+        // is NOT the canonical identity authority for any DID it
+        // returns. The `delegated_resolver` kind disambiguates from
+        // `external_interop` / `matrix_passthrough`.
+        compat_surfaces: vec![
+            CompatSurfaceDescriptor {
+                name: "cx.identity.describe_registry",
+                kind: "delegated_resolver",
+                notes: Some(
+                    "Reports the upstream registry coauth proxies to; does not assert canonical ownership.",
+                ),
+            },
+            CompatSurfaceDescriptor {
+                name: "cx.identity.resolve",
+                kind: "delegated_resolver",
+                notes: Some(
+                    "DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
+                ),
+            },
+            CompatSurfaceDescriptor {
+                name: "cx.identity.get_document",
+                kind: "delegated_resolver",
+                notes: Some(
+                    "Returns the cached/resolved DID document; coauth holds no authoritative key log for external DIDs.",
+                ),
+            },
+        ],
+        development_mode: false,
         admin_audience: admin_audience.clone(),
         principal_servers: principal_servers.clone(),
         principal_server_delegation_targets: principal_servers,
@@ -987,52 +1385,34 @@ fn service_describe_response(
     }
 }
 
-fn write_canonical_json(
-    value: &serde_json::Value,
-    out: &mut Vec<u8>,
-) -> Result<(), serde_json::Error> {
-    match value {
-        serde_json::Value::Null
-        | serde_json::Value::Bool(_)
-        | serde_json::Value::Number(_)
-        | serde_json::Value::String(_) => serde_json::to_writer(out, value),
-        serde_json::Value::Array(items) => {
-            out.push(b'[');
-            for (idx, item) in items.iter().enumerate() {
-                if idx > 0 {
-                    out.push(b',');
-                }
-                write_canonical_json(item, out)?;
-            }
-            out.push(b']');
-            Ok(())
-        }
-        serde_json::Value::Object(map) => {
-            out.push(b'{');
-            let mut entries: Vec<_> = map.iter().collect();
-            entries.sort_by_key(|(left, _)| *left);
-            for (idx, (key, item)) in entries.into_iter().enumerate() {
-                if idx > 0 {
-                    out.push(b',');
-                }
-                serde_json::to_writer(&mut *out, key)?;
-                out.push(b':');
-                write_canonical_json(item, out)?;
-            }
-            out.push(b'}');
-            Ok(())
+// T5.3 (Round 22, 2026-05-20) — handle_claim digest convergence.
+//
+// The previous in-file `write_canonical_json` walker and
+// `canonical_json_sha256` helper were a hand-rolled (but spec-equivalent)
+// canonical-JSON implementation. They are now a thin shim over
+// `contrix_core::canonical::canonical_sha256`, which is the single canonical
+// JSON pipeline shared by soland / starid / yougen / floria. This keeps
+// the handle-claim payload hash byte-identical to every other Contrix
+// service computing `sha256(canonical_json(payload))`.
+//
+// The SDK encoder is *stricter* than the original (it rejects float
+// numbers per `encoding.md` §3.2). Coauth's `HandleClaimDigestInput` is
+// composed of strings, DateTime<Utc> (rendered as RFC 3339 strings), and
+// an inner struct of strings, so no shape that previously hashed cleanly
+// will now reject.
+fn canonical_json_sha256(value: &impl Serialize) -> Result<String, serde_json::Error> {
+    match contrix_core::canonical::canonical_sha256(value) {
+        Ok(digest) => Ok(digest),
+        Err(contrix_core::Error::CanonicalJson(err)) => Err(err),
+        Err(other) => {
+            // The SDK canonical encoder fails with `NonCanonicalNumber`
+            // for any float, but handle_claim never carries floats and
+            // upstream call-sites currently expect a serde_json::Error.
+            // Mirror that via the `serde::ser::Error::custom` constructor
+            // so failure is still surfaced rather than swallowed.
+            Err(<serde_json::Error as serde::ser::Error>::custom(other.to_string()))
         }
     }
-}
-
-fn canonical_json_sha256(value: &impl Serialize) -> Result<String, serde_json::Error> {
-    let value = serde_json::to_value(value)?;
-    let mut canonical = Vec::new();
-    write_canonical_json(&value, &mut canonical)?;
-    Ok(format!(
-        "sha256:{}",
-        hex::encode(sha2::Sha256::digest(&canonical))
-    ))
 }
 
 fn session_grant_claims_hash(
@@ -2012,13 +2392,145 @@ mod tests {
         assert!(supported_profiles.is_empty());
         let supported_reducer_profiles = body["supported_reducer_profiles"].as_array().unwrap();
         assert!(supported_reducer_profiles.contains(&serde_json::json!("cx.reducer.v1")));
+        // T6.3 — `cx.schema.v1` was a coauth-only placeholder. The actual
+        // schemas this surface emits are `cx.schema.core.v1` (umbrella
+        // core schemas, soland / SDK convention) and
+        // `cx.schema.service_describe.v1` (this very payload).
         let supported_schema_profiles = body["supported_schema_profiles"].as_array().unwrap();
-        assert!(supported_schema_profiles.contains(&serde_json::json!("cx.schema.v1")));
+        assert!(supported_schema_profiles.contains(&serde_json::json!("cx.schema.core.v1")));
+        assert!(
+            supported_schema_profiles
+                .contains(&serde_json::json!("cx.schema.service_describe.v1"))
+        );
+        assert!(
+            !supported_schema_profiles.contains(&serde_json::json!("cx.schema.v1")),
+            "the legacy `cx.schema.v1` placeholder MUST NOT be advertised"
+        );
         let not_authoritative_for = body["service_boundary"]["not_authoritative_for"]
             .as_array()
             .unwrap();
         assert!(not_authoritative_for.contains(&serde_json::json!("did_key_log")));
         assert!(not_authoritative_for.contains(&serde_json::json!("identity_registry_receipt")));
+
+        // T6.3 — service_roles must list every role coauth carries.
+        // Boundary check: account_registry + auth_server + identity_resolver.
+        let service_roles = body["service_roles"]
+            .as_array()
+            .expect("service_roles array present");
+        assert!(service_roles.contains(&serde_json::json!("auth_server")));
+        assert!(service_roles.contains(&serde_json::json!("identity_resolver")));
+        assert!(service_roles.contains(&serde_json::json!("account_registry")));
+
+        // T6.3 — cx.identity.* operations MUST be declared delegated,
+        // not as canonical identity registry surface.
+        let compat: Vec<&str> = body["compat_surfaces"]
+            .as_array()
+            .expect("compat_surfaces array present")
+            .iter()
+            .filter(|entry| entry["kind"].as_str() == Some("delegated_resolver"))
+            .filter_map(|entry| entry["name"].as_str())
+            .collect();
+        assert!(compat.contains(&"cx.identity.resolve"));
+        assert!(compat.contains(&"cx.identity.get_document"));
+        assert!(compat.contains(&"cx.identity.describe_registry"));
+        // verified_profiles MUST NOT include cx.profile.identity_registry.v1
+        // because coauth is a delegated resolver, not a registry.
+        let verified = body["verified_profiles"]
+            .as_array()
+            .expect("verified_profiles array present");
+        for entry in verified {
+            assert_ne!(
+                entry["profile_id"], "cx.profile.identity_registry.v1",
+                "coauth MUST NOT advertise canonical identity registry conformance"
+            );
+        }
+    }
+
+    #[test]
+    fn describe_separates_claim_levels() {
+        // T6.1 — describe response MUST partition into
+        // supported_operations (wire-callable) and the new claim-level
+        // arrays. coauth has no dev toggle, but the spec invariant
+        // (development_mode=true => verified_profiles=[]) is still
+        // exercised: when development_mode is reported as `false`, the
+        // assertion below ensures we never lazily populate verified
+        // entries from self-claimed input.
+        let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
+        let body = serde_json::to_value(service_describe_response(
+            &url_builder,
+            &ContrixConfig::default(),
+        ))
+        .unwrap();
+
+        // verified_profiles MUST be present and (with no cotest run wired
+        // in) empty.
+        let verified = body["verified_profiles"]
+            .as_array()
+            .expect("verified_profiles array present");
+        assert!(
+            verified.is_empty(),
+            "coauth must not advertise cotest_verified profiles without a verifier"
+        );
+
+        // claimed_profiles entries MUST carry claim_kind=self_claimed.
+        for entry in body["claimed_profiles"]
+            .as_array()
+            .expect("claimed_profiles array present")
+        {
+            assert_eq!(
+                entry["claim_kind"], "self_claimed",
+                "claimed_profiles entries MUST be self_claimed"
+            );
+        }
+
+        // implemented_features must be a non-empty subset of "code
+        // exists" features.
+        let implemented = body["implemented_features"]
+            .as_array()
+            .expect("implemented_features array present");
+        assert!(!implemented.is_empty());
+
+        // experimental_features and verified_profiles MUST NOT
+        // intersect.
+        let experimental: std::collections::HashSet<&str> = body["experimental_features"]
+            .as_array()
+            .expect("experimental_features array present")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        let verified_ids: std::collections::HashSet<&str> = verified
+            .iter()
+            .filter_map(|v| v["profile_id"].as_str())
+            .collect();
+        assert!(experimental.is_disjoint(&verified_ids));
+
+        // compat_surfaces entries must declare a known kind.
+        // T6.3 — `delegated_resolver` was added for coauth's
+        // `cx.identity.*` proxy operations (it is NOT a canonical
+        // identity registry; the ops are forwarded to an upstream
+        // resolver such as starid).
+        for surface in body["compat_surfaces"]
+            .as_array()
+            .expect("compat_surfaces array present")
+        {
+            let kind = surface["kind"].as_str().expect("compat surface kind");
+            assert!(
+                matches!(
+                    kind,
+                    "matrix_passthrough"
+                        | "mimi_passthrough"
+                        | "legacy_alias"
+                        | "external_interop"
+                        | "deprecated_alias"
+                        | "delegated_resolver"
+                ),
+                "unknown compat_surface kind {kind}"
+            );
+        }
+
+        // development_mode field must be present so downstream tools
+        // (sodmin / cotest) can render the dev banner.
+        assert!(body["development_mode"].is_boolean());
     }
 
     #[test]
@@ -2441,9 +2953,21 @@ mod tests {
             document.id,
             user_did_for(&url_builder, &contrix_config, &user)
         );
+        // Spec 0a5ab85: `alsoKnownAs` carries the canonical
+        // `contrix://<host>/users/<localpart>` form; `acct:` aliases live
+        // on `handle_claim.handle_aliases[]`, not on the DID document.
         assert_eq!(
             document.also_known_as,
-            vec![format!("contrix://{}", user_handle(&url_builder, &user))]
+            vec![user_handle_uri(&url_builder, &user)]
+        );
+        assert!(
+            document.also_known_as[0].contains("/users/"),
+            "alsoKnownAs MUST use the canonical handle URI form, got {}",
+            document.also_known_as[0]
+        );
+        assert!(
+            !document.also_known_as[0].starts_with("acct:"),
+            "alsoKnownAs MUST NOT carry an acct: alias as the canonical form"
         );
         assert_eq!(document.service[0].kind, "ContrixAuthServer");
         assert_eq!(
@@ -2452,5 +2976,95 @@ mod tests {
                 .absolute_url("/api/v1/server/describe")
                 .to_string()
         );
+    }
+
+    #[test]
+    fn require_canonical_handle_uri_rejects_acct_aliases() {
+        let err = require_canonical_handle_uri("acct:alice@example.com").unwrap_err();
+        match err {
+            ContrixRouteError::BadRequest(message) => {
+                assert!(
+                    message.starts_with(HANDLE_URI_NOT_CANONICAL_CODE),
+                    "expected code prefix, got {message}"
+                );
+                assert!(message.contains("acct:"), "expected acct: in reason, got {message}");
+            }
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn require_canonical_handle_uri_rejects_bare_handle() {
+        require_canonical_handle_uri("alice@example.com")
+            .expect_err("bare host strings MUST be rejected as canonical handle URIs");
+        require_canonical_handle_uri("contrix://example.com/users/")
+            .expect_err("empty localpart MUST be rejected");
+        require_canonical_handle_uri("contrix://Example.com/users/alice")
+            .expect_err("uppercase host MUST be rejected");
+        require_canonical_handle_uri("")
+            .expect_err("empty input MUST be rejected");
+    }
+
+    #[test]
+    fn require_canonical_handle_uri_accepts_canonical_form() {
+        let result =
+            require_canonical_handle_uri("contrix://example.com/users/alice").unwrap();
+        assert_eq!(result, "contrix://example.com/users/alice");
+    }
+
+    #[test]
+    fn issue_handle_claim_emits_canonical_uri_and_aliases() {
+        use coauth_data::clock::MockClock;
+        let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
+        let contrix_config = ContrixConfig::default();
+        let mut rng = ChaChaRng::seed_from_u64(0xc15a);
+        let clock = MockClock::default();
+        let now = clock.now();
+        let user = User::samples(now, &mut rng).into_iter().next().unwrap();
+        let key_store = test_keystore();
+
+        let hint = HandleClaimDeliveryBindingHint {
+            recipient_service_did: "did:web:soland.example".to_owned(),
+            recipient_service_type: Some("principal_server".to_owned()),
+            binding_source: "organization_policy".to_owned(),
+            delivery_modes: vec!["events".to_owned()],
+            service_acceptance_ref: None,
+            policy_ref: None,
+        };
+
+        let material = issue_handle_claim(
+            &clock,
+            &url_builder,
+            &contrix_config,
+            &key_store,
+            &user,
+            "did:web:space.example".to_owned(),
+            hint.clone(),
+        )
+        .expect("handle claim must mint with the test keystore");
+
+        let canonical = user_handle_uri(&url_builder, &user);
+        let acct = user_handle_acct_alias(&url_builder, &user);
+        assert_eq!(material.payload.handle_uri, canonical);
+        assert!(
+            material.payload.handle_uri.starts_with("contrix://"),
+            "handle_uri MUST be canonical contrix:// form"
+        );
+        assert!(
+            !material.payload.handle_uri.starts_with("acct:"),
+            "handle_uri MUST NOT be an acct: alias"
+        );
+        assert!(
+            material.payload.handle_aliases.contains(&acct),
+            "handle_aliases MUST carry the acct: interop form"
+        );
+        assert_eq!(material.payload.audience, "did:web:space.example");
+        assert_eq!(material.payload.delivery_binding_hint.binding_source, hint.binding_source);
+        assert!(material.payload.claim_digest.starts_with("sha256:"));
+        assert_eq!(material.claim_digest, material.payload.claim_digest);
+        assert!(material.expires_at > now);
+        assert_eq!(material.payload.proofs.len(), 1);
+        assert_eq!(material.payload.proofs[0].audience, "did:web:space.example");
+        assert_eq!(material.payload.proofs[0].jws, material.claim_jwt);
     }
 }

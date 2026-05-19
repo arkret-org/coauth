@@ -299,6 +299,7 @@ mod tests {
             avatar_url: None,
             preferred_locale: None,
             starid_backend: false,
+            handle_aliases: Vec::new(),
         }
     }
 }

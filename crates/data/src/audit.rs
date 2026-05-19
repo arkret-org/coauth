@@ -4,6 +4,12 @@ use serde_json::Value;
 
 use crate::Ulid;
 pub use crate::{pg::audit::PgAuditRepository, storage::audit::*};
+pub use crate::{
+    pg::handle_audit::PgHandleAuditRepository,
+    storage::handle_audit::{
+        HandleAuditEventType, HandleAuditRepository, NewHandleAuditEvent,
+    },
+};
 
 /// An admin operation log entry, recording actions taken by administrators.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +97,44 @@ pub struct AccountSecurityEvent {
     pub ip_address: Option<std::net::IpAddr>,
     /// User-agent string associated with the event.
     pub user_agent: Option<String>,
+    /// When the event occurred.
+    pub created_at: DateTime<Utc>,
+}
+
+/// A single immutable handle-history event. Companion type to
+/// [`HandleAuditEventType`] (re-exported via [`HandleAuditRepository`]).
+///
+/// Rows persisted in `handle_audit_log` and surfaced unchanged through
+/// [`HandleAuditRepository::list_for_user`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandleAuditEvent {
+    /// Stable unique identifier for the audit entry.
+    pub id: Ulid,
+    /// Optional binding to a user record (NULL when the event covers a
+    /// freshly revoked handle whose user row has been hard-deleted).
+    pub user_id: Option<Ulid>,
+    /// The kind of event recorded.
+    pub event_type: HandleAuditEventType,
+    /// Canonical `contrix://<host>/users/<localpart>` URI affected by the
+    /// event.
+    pub canonical_handle_uri: Option<String>,
+    /// Interop aliases (e.g. `acct:<local>@<host>`) recorded with the event.
+    pub handle_aliases: Vec<String>,
+    /// Previous DID this handle resolved to (reassignment / divergence).
+    pub old_did: Option<String>,
+    /// New DID the handle resolves to as of this event.
+    pub new_did: Option<String>,
+    /// Issuer service DID that signed the affected claim, if any.
+    pub issuer_service_did: Option<String>,
+    /// Audience the affected claim was bound to.
+    pub audience: Option<String>,
+    /// `sha256:<hex>` digest of the canonical-JSON form of the emitted
+    /// claim (audit chain anchor / cache key per §3.7.1).
+    pub claim_digest: Option<String>,
+    /// Free-form structured payload (reason text, ticket id, etc.).
+    pub details: Value,
+    /// Actor (admin / system component) that triggered the event, if any.
+    pub actor_id: Option<Ulid>,
     /// When the event occurred.
     pub created_at: DateTime<Utc>,
 }

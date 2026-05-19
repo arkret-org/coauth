@@ -67,6 +67,7 @@ macro_rules! select_user_columns {
             users::avatar_url,
             users::preferred_locale,
             users::starid_backend,
+            users::handle_aliases,
         )
     };
 }
@@ -179,6 +180,7 @@ impl UserRepository for PgUserRepository<'_> {
             // immediately after `StaridRegistry::create_principal_did`
             // succeeds via [`UserRepository::set_starid_backend`].
             starid_backend: false,
+            handle_aliases: Vec::new(),
         })
     }
 

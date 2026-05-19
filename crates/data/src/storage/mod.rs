@@ -109,6 +109,9 @@ pub mod account;
 pub mod app_session;
 /// Audit log repositories.
 pub mod audit;
+/// Append-only handle audit log repository (T3.2: handle reassignment,
+/// revocation, TTL expiry, DID Document `alsoKnownAs` divergence).
+pub mod handle_audit;
 /// Notification persistence repositories.
 pub mod notification;
 /// Notification template version repositories.

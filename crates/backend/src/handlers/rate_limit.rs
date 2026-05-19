@@ -541,6 +541,7 @@ mod tests {
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
             starid_backend: false,
+            handle_aliases: Vec::new(),
         };
 
         let bob = User {
@@ -557,6 +558,7 @@ mod tests {
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
             starid_backend: false,
+            handle_aliases: Vec::new(),
         };
 
         // Three times the same IP should be allowed (burst=3 for per_ip)

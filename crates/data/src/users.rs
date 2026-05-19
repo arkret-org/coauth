@@ -21,6 +21,7 @@ type UserSqlType = (
     sql_types::Nullable<sql_types::Text>,
     sql_types::Nullable<sql_types::Text>,
     sql_types::Bool,
+    sql_types::Array<sql_types::Text>,
 );
 
 type UserSqlRow = (
@@ -36,6 +37,7 @@ type UserSqlRow = (
     Option<String>,
     Option<String>,
     bool,
+    Vec<String>,
 );
 
 /// A downstream principal account projection used by consent and viewer APIs.
@@ -71,6 +73,15 @@ pub struct User {
     /// adds this column with `DEFAULT FALSE`, so every historical row
     /// stays on the local derivation.
     pub starid_backend: bool,
+    /// Interop alias handles for this user (e.g. `acct:<local>@<host>`).
+    ///
+    /// Spec 0a5ab85 §3.7 — the canonical handle URI form
+    /// (`contrix://<host>/users/<localpart>`) is derived at read time from
+    /// `handle` + the public host name. Aliases are *additional* identifiers
+    /// kept for RFC 7565 / WebFinger interop and `handle_claim.handle_aliases`
+    /// emission. Migration `20260520000100_handle_claims_and_audit` adds the
+    /// underlying column with `DEFAULT ARRAY[]::TEXT[]`.
+    pub handle_aliases: Vec<String>,
 }
 
 impl Queryable<UserSqlType, Pg> for User {
@@ -90,6 +101,7 @@ impl Queryable<UserSqlType, Pg> for User {
             avatar_url,
             preferred_locale,
             starid_backend,
+            handle_aliases,
         ) = row;
         let id = Ulid::from(id);
 
@@ -107,6 +119,7 @@ impl Queryable<UserSqlType, Pg> for User {
             avatar_url,
             preferred_locale,
             starid_backend,
+            handle_aliases,
         })
     }
 }
@@ -114,6 +127,109 @@ impl Queryable<UserSqlType, Pg> for User {
 impl Node<Ulid> for User {
     fn cursor(&self) -> Ulid {
         self.id
+    }
+}
+
+/// Error code surfaced to API callers when they supply a handle URI that
+/// is not in the canonical `contrix://<host>/users/<localpart>` form.
+///
+/// Stable wire constant — the OIDC bridge / register / handle-claim issuer
+/// surfaces this verbatim in their error envelopes per spec 0a5ab85 §3.7.
+pub const HANDLE_URI_NOT_CANONICAL_CODE: &str = "handle_uri_not_canonical";
+
+/// Validate that an input string is a canonical contrix handle URI of the
+/// form `contrix://<lowercase-host>/users/<lowercase-localpart>`.
+///
+/// Rejects:
+///   * `acct:` interop aliases (those belong in `handle_aliases[]`)
+///   * bare host strings, `did:` strings, display strings
+///   * uppercase characters in host or localpart
+///   * an empty localpart
+///
+/// Returns the canonical form on success (lowercased exactly as supplied —
+/// the validator does *not* fold uppercase into lowercase on the user's
+/// behalf; callers must canonicalise before submitting).
+///
+/// # Errors
+///
+/// Returns `HANDLE_URI_NOT_CANONICAL_CODE` paired with a short reason.
+pub fn validate_canonical_handle_uri(value: &str) -> Result<&str, (&'static str, String)> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err((HANDLE_URI_NOT_CANONICAL_CODE, "empty handle uri".to_owned()));
+    }
+    if trimmed.starts_with("acct:") {
+        return Err((
+            HANDLE_URI_NOT_CANONICAL_CODE,
+            "acct: alias is interop-only; supply a contrix:// URI as canonical".to_owned(),
+        ));
+    }
+    let Some(rest) = trimmed.strip_prefix("contrix://") else {
+        return Err((
+            HANDLE_URI_NOT_CANONICAL_CODE,
+            "handle uri must begin with contrix://".to_owned(),
+        ));
+    };
+    let Some((host, path)) = rest.split_once('/') else {
+        return Err((
+            HANDLE_URI_NOT_CANONICAL_CODE,
+            "handle uri missing /users/<localpart>".to_owned(),
+        ));
+    };
+    let Some(localpart) = path.strip_prefix("users/") else {
+        return Err((
+            HANDLE_URI_NOT_CANONICAL_CODE,
+            "handle uri path must begin with /users/".to_owned(),
+        ));
+    };
+    if localpart.is_empty() || localpart.contains('/') {
+        return Err((
+            HANDLE_URI_NOT_CANONICAL_CODE,
+            "handle uri localpart must be a single non-empty segment".to_owned(),
+        ));
+    }
+    if host.is_empty() {
+        return Err((
+            HANDLE_URI_NOT_CANONICAL_CODE,
+            "handle uri host must not be empty".to_owned(),
+        ));
+    }
+    // Reject any uppercase letters — the canonical form is lowercased.
+    if value.chars().any(|c| c.is_ascii_uppercase()) {
+        return Err((
+            HANDLE_URI_NOT_CANONICAL_CODE,
+            "handle uri must be lowercase".to_owned(),
+        ));
+    }
+    Ok(trimmed)
+}
+
+impl User {
+    /// Canonical Contrix handle URI per spec 0a5ab85:
+    /// `contrix://<lowercase-host>/users/<lowercase-localpart>`.
+    ///
+    /// The host is supplied by the caller (typically the URL builder's
+    /// public hostname); the data crate has no opinion on which host is
+    /// "the" service host since the same `User` row may be addressed by
+    /// multiple alias hosts.
+    #[must_use]
+    pub fn canonical_handle_uri(&self, host: &str) -> String {
+        format!(
+            "contrix://{}/users/{}",
+            host.to_lowercase(),
+            self.handle.to_lowercase()
+        )
+    }
+
+    /// Interop `acct:` alias for this user against the supplied host. Used
+    /// to populate `handle_claim.handle_aliases[]`. Never used as canonical.
+    #[must_use]
+    pub fn acct_alias(&self, host: &str) -> String {
+        format!(
+            "acct:{}@{}",
+            self.handle.to_lowercase(),
+            host.to_lowercase()
+        )
     }
 }
 
@@ -167,6 +283,7 @@ impl User {
             avatar_url: None,
             preferred_locale: Some("en".to_owned()),
             starid_backend: false,
+            handle_aliases: Vec::new(),
         }]
     }
 }
