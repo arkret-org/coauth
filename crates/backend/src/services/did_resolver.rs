@@ -461,6 +461,12 @@ fn delegated_resolver_url(resolver: &str, did: &str) -> Result<Url, DidResolveEr
 }
 
 fn did_method(did: &str) -> Option<String> {
+    // Round 4 (spec a77b995) — delegate DID acceptance to the SDK's
+    // tightened regex `^did:[a-z0-9]+:[^\s]+$`. The method-name segment
+    // MUST be lowercase ASCII alpha + digits only (no `.`/`-`/`_`/`:`);
+    // any value the SDK validator rejects is wire-broken and MUST NOT
+    // be routed by this resolver.
+    contrix_core::Did::new(did.to_owned()).ok()?;
     let rest = did.strip_prefix("did:")?;
     let (method, _method_id) = rest.split_once(':')?;
     (!method.is_empty()).then(|| method.to_ascii_lowercase())

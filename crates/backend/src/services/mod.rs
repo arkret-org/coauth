@@ -1,8 +1,10 @@
 pub mod account_claims;
+pub mod cross_signing_publish;
 pub mod device_revoke;
 pub mod did_binding_proof;
 pub mod did_resolver;
 pub mod email_webhook;
+pub mod identity_link;
 pub mod invite_quarantine;
 pub mod oob_code;
 pub mod oob_invite_state;
@@ -12,6 +14,7 @@ pub mod risk_action_proposals;
 pub mod risk_action_state;
 pub mod soland_webvh;
 pub mod starid_adapter;
+pub mod third_party_invite;
 pub mod upstream_oidc;
 pub mod upstream_oidc_mapping;
 pub mod user_admin;

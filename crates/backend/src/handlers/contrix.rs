@@ -478,6 +478,13 @@ struct AuthMetadata {
 struct ServiceDescribeResponse {
     service_did: String,
     service_type: &'static str,
+    /// Round 4 (spec a77b995) — deployment-scope trust domain. Mirror
+    /// of `ContrixConfig::trust_domain` (wire form
+    /// `cx:trust_domain:<scope>`). Receivers MUST treat a missing
+    /// `trust_domain` as the deployment failing closed — federation
+    /// partners cannot bind their canonical transcript without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    trust_domain: Option<String>,
     /// T6.3 — explicit Contrix v1 role declaration. A coauth instance can
     /// simultaneously act as `auth_server` (OIDC token issuer),
     /// `identity_resolver` (DID / handle resolution proxy), and
@@ -1219,6 +1226,10 @@ fn service_describe_response(
 
     ServiceDescribeResponse {
         service_did: service_did_for(url_builder, contrix_config),
+        // Round 4 — surface the deployment trust domain so federation
+        // peers can verify cross-deployment replay protection (see
+        // `contrix-spec` round-4 §f9bd7eb).
+        trust_domain: contrix_config.trust_domain.clone(),
         // service_type is the SDK-side `ServiceType` discriminant. coauth's
         // primary role is OIDC issuance, so this is kept as "auth_server".
         // The richer multi-role posture is expressed via `service_roles`
@@ -2606,6 +2617,44 @@ mod tests {
         // development_mode field must be present so downstream tools
         // (sodmin / cotest) can render the dev banner.
         assert!(body["development_mode"].is_boolean());
+    }
+
+    #[test]
+    fn service_describe_emits_trust_domain_when_configured() {
+        // Round 4 (spec a77b995) — trust_domain MUST surface on the
+        // wire when the deployment sets it. Mirrors the SDK's
+        // `Realm.trust_domain` / `ServiceDescribe.trust_domain`
+        // requirement so federation peers can bind their canonical
+        // transcript.
+        let url_builder = UrlBuilder::new(
+            "https://auth.example.com/coauth/".parse().unwrap(),
+            None,
+            None,
+        );
+        let mut config = ContrixConfig::default();
+        config.trust_domain = Some("cx:trust_domain:example.net".to_owned());
+
+        let body =
+            serde_json::to_value(service_describe_response(&url_builder, &config)).unwrap();
+        assert_eq!(body["trust_domain"], "cx:trust_domain:example.net");
+    }
+
+    #[test]
+    fn service_describe_omits_trust_domain_when_unset() {
+        let url_builder = UrlBuilder::new(
+            "https://auth.example.com/coauth/".parse().unwrap(),
+            None,
+            None,
+        );
+        let body = serde_json::to_value(service_describe_response(
+            &url_builder,
+            &ContrixConfig::default(),
+        ))
+        .unwrap();
+        assert!(
+            body.get("trust_domain").is_none(),
+            "trust_domain field MUST be omitted from the wire when unset (deployment fails closed)"
+        );
     }
 
     #[test]

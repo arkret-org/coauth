@@ -12,6 +12,40 @@ for the full release process.
 
 ## [Unreleased]
 
+### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
+
+Closes 8 protocol-review commits on the auth / identity / policy surfaces.
+See [`../_todos.md`](../_todos.md) for the workstream context.
+
+- **BREAKING** 3PID OOB invite split into two wire modes (`offline_token`
+  vs `lookup`), with all plaintext 3PID values removed from the wire. The
+  `offline_token` form carries `token_commitment` (sha256) + `token_salt_id`
+  + `token_entropy_bits ≥ 128`; the `lookup` form carries
+  `lookup_table_ref` + `pepper_id` with 3-strike invalidation. Token salt
+  and lookup pepper are zeroized within 24h of any of 5 terminal states
+  (`claimed` / `send_failed` / `revoked_by_capability_loss` /
+  `revoked_by_inviter_left` / `invalidated_by_rate_limit`).
+- **Added** invite-claim flow now produces `binding_proof{verification_service_did,
+  verification_method, subject_did, realm_id, audience, claim_nonce,
+  expires_at, signature}` and `subject_proof`. Full verifier chain is a
+  `TODO(round4)`; wire-shape lands now.
+- **BREAKING** `cx.cross_signing.publish` CAS: publisher must read the
+  current generation and submit `expected_previous_generation`; post-reset
+  generation steps are strictly `+1`.
+- **BREAKING** `/policy/check` v2 — request switches to `PolicyCheckRequest`
+  (`signed_transport`, `source_ip_hash`, `source.{service_did,
+  service_type}`). Response is `PolicyCheckResponse` carrying
+  `bound_to{realm_id, actor, action, request_canonical_hash,
+  policy_server_id}` + `auth_state_hash` + `policy_frontier_hash` +
+  `membership_frontier_hash` + signature (`kid: did:.+#.+`). Full signing
+  transcript is a `TODO(round4)`; binding fields land now.
+- **BREAKING** identity_link encrypted payload is now Realm-scoped: bound
+  to `realm_id` + `trust_domain`.
+- **Added** `trust_domain` injected into the `ServiceDescribe` /
+  Realm-policy publish path via soland's config API.
+- **Added** DID method-name regex sweep tightened to
+  `^did:[a-z0-9]+:[^\s]+$` across coauth's DID parsers and fixtures.
+
 ### Added — Round R2/R3 (2026-05-20, spec 8b7978d)
 
 - **3PID OOB code generation** (`backend::services::oob_code`,

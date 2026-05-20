@@ -677,7 +677,7 @@ fn build_account_api_router(router: Router) -> Router {
             linked_accounts, notification_prefs, oauth_clients, openapi, password, recovery,
             register, sessions, site_config, upstream_oauth, users, viewer,
         },
-        contrix,
+        contrix, policy_check,
     };
 
     let api_router = Router::with_path("/api/v1")
@@ -688,6 +688,9 @@ fn build_account_api_router(router: Router) -> Router {
         .push(Router::with_path("identity/document").get(contrix::identity_document))
         .push(Router::with_path("directory/describe").get(contrix::directory_describe))
         .push(Router::with_path("directory/resolve-handle").post(contrix::directory_resolve_handle))
+        // Round 4 (spec a77b995) — `/policy/check` v2 returns a signed
+        // PolicyCheckResponse with full `bound_to` binding.
+        .push(Router::with_path("policy/check").post(policy_check::post_policy_check))
         .push(
             Router::with_path("session-grants")
                 .get(contrix::list_session_grants)

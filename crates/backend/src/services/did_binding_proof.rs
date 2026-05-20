@@ -119,6 +119,17 @@ pub async fn validate_control_proof(
         return Err(DidBindingProofError::EmptyProof);
     }
 
+    // Round 4 (spec a77b995) — DID regex tightened to
+    // `^did:[a-z0-9]+:[^\s]+$`. Reject any value the SDK validator
+    // refuses BEFORE invoking the resolver chain, so wire-broken DIDs
+    // never trigger network I/O. Delegating to the SDK's validator
+    // keeps coauth in lockstep with the canonical regex.
+    if contrix_core::Did::new(account_did.to_owned()).is_err() {
+        return Err(DidBindingProofError::InvalidJws(format!(
+            "account_did {account_did:?} fails round-4 DID regex"
+        )));
+    }
+
     // Parse JWS
     let jwt: Jwt<'_, BindingStatementClaims> =
         Jwt::try_from(proof_jws).map_err(|e| DidBindingProofError::InvalidJws(e.to_string()))?;

@@ -62,6 +62,33 @@ padding) so external observers cannot distinguish "expired" from
 and [`../contrix-spec/CHANGELOG.md`](../contrix-spec/CHANGELOG.md)
 Round R2/R3 entries for the normative source.
 
+## Round R4 (protocol review closures)
+
+Spec round 4 (`contrix-spec` range `2a4d39b..a77b995`, 8 commits) layers
+on top of the R2/R3 trust-domain and OOB-invite work. See
+[`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
+[`../_todos.md`](../_todos.md) for the canonical wire-breaking list.
+
+- **3PID OOB invite has two wire modes.** Either `offline_token`
+  (`token_commitment` + `token_salt_id` + `token_entropy_bits ≥ 128`,
+  default) or `lookup` (`lookup_table_ref` + `pepper_id`, 3-strike
+  invalidation). Plaintext 3PIDs are no longer carried on the wire. Both
+  modes share the 5-terminal-state machine (`claimed` / `send_failed` /
+  `revoked_by_capability_loss` / `revoked_by_inviter_left` /
+  `invalidated_by_rate_limit`); salt / pepper are zeroized within 24h.
+- **`cx.cross_signing.publish` CAS** — publisher reads the current
+  generation and submits `expected_previous_generation`; new generation
+  is strictly `current + 1`.
+- **`/policy/check` v2** — request switches to `PolicyCheckRequest`
+  (`signed_transport` + `source_ip_hash` + `source.{service_did,
+  service_type}`); response is `PolicyCheckResponse` carrying the
+  `bound_to{realm_id, actor, action, request_canonical_hash,
+  policy_server_id}` envelope plus `auth_state_hash` /
+  `policy_frontier_hash` / `membership_frontier_hash` and a signed
+  `kid: did:.+#.+`.
+- **identity_link is Realm-scoped** — encrypted payload now binds
+  `realm_id` + `trust_domain`.
+
 ## Cross-project task tracking
 
 Per-project task lists are consolidated upstream — see
