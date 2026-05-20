@@ -695,7 +695,17 @@ fn build_account_api_router(router: Router) -> Router {
             Router::with_path("session-grants")
                 .get(contrix::list_session_grants)
                 .push(Router::with_path("introspect").post(contrix::introspect_session_grant))
+                .push(Router::with_path("refresh").post(contrix::refresh_session_grant))
                 .push(Router::with_path("{id}/revoke").post(contrix::revoke_session_grant)),
+        )
+        // G3.C1: debug-only DPoP-bound grant seeding for the cotest
+        // harness. The handler itself short-circuits to 404 when the
+        // `debug_assertions` cfg + `COAUTH_ENABLE_TEST_ENDPOINTS` env
+        // gate are both off, so this route is safe to mount
+        // unconditionally.
+        .push(
+            Router::with_path("test/debug/issue-dpop-grant")
+                .post(contrix::debug_issue_dpop_grant),
         )
         // Viewer
         .push(

@@ -374,6 +374,25 @@ pub async fn oidc_code_exchange(
         })?;
     let mut repo = depot.repo().await?;
 
+    // Extract DPoP proof (RFC 9449) if the client presented one. The
+    // proof binds the upcoming session grant to the device's
+    // proof-of-possession key. Failures here are fatal — a malformed
+    // proof must not silently fall back to an unbound grant.
+    let dpop_jkt = match super::extract_dpop_jkt_for_kickoff(req, &url_builder).await {
+        Ok(jkt) => jkt,
+        Err(error) => {
+            res.status_code(StatusCode::BAD_REQUEST);
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_dpop_proof"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![error.to_string()],
+            }));
+            return Ok(());
+        }
+    };
+
     let input: OidcCodeExchangeRequest = req
         .parse_json()
         .await
@@ -843,6 +862,7 @@ pub async fn oidc_code_exchange(
             grant_target.audience.clone(),
             principal_session_grant_scopes(&device_id),
             Some(&principal_did),
+            dpop_jkt.clone(),
         )
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
@@ -1493,6 +1513,7 @@ pub async fn oidc_code_exchange(
         grant_target.audience.clone(),
         principal_session_grant_scopes(&device_id),
         Some(&principal_did),
+        dpop_jkt.clone(),
     )
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
 

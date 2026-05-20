@@ -12,6 +12,7 @@ pub use oidc_bridge::{
 
 use std::sync::LazyLock;
 
+use coauth_data::UrlBuilder;
 use opentelemetry::{Key, KeyValue, metrics::Counter};
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -27,7 +28,39 @@ use crate::{
         contrix,
     },
     salvo_utils::session::SessionInfoExt,
+    services::dpop::{
+        DpopError, DpopVerifier, dpop_header_from_request, dpop_htu,
+    },
 };
+
+/// Extract a DPoP proof from the "kickoff" request — i.e. the initial
+/// auth-side request that mints a session grant (login or
+/// `oidc/exchange`). When no `DPoP` header is present we return
+/// `Ok(None)` so the grant is issued unbound (legacy clients keep
+/// working); when the header is present but malformed we surface the
+/// failure so the caller can emit `invalid_dpop_proof` rather than
+/// silently degrade.
+///
+/// On these kickoff endpoints we do NOT require an `ath` claim — there
+/// is no access token to bind to yet; the proof's `jkt` becomes the
+/// `cnf.jkt` of the newly issued grant.
+pub(crate) async fn extract_dpop_jkt_for_kickoff(
+    req: &salvo::Request,
+    url_builder: &UrlBuilder,
+) -> Result<Option<String>, DpopError> {
+    let Some(header) = dpop_header_from_request(req) else {
+        return Ok(None);
+    };
+    let verifier = DpopVerifier::shared();
+    let now = chrono::Utc::now();
+    let htm = req.method().as_str().to_ascii_uppercase();
+    let public_base = url_builder.http_base();
+    let htu = dpop_htu(Some(&public_base), req);
+    let result = verifier
+        .verify(&header, &htm, &htu, now, None)
+        .await?;
+    Ok(Some(result.jkt))
+}
 
 // ── Metrics ────────────────────────────────────────────────────
 
@@ -159,6 +192,24 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
         .map(std::borrow::ToOwned::to_owned);
+
+    // Same DPoP extraction as `oidc_code_exchange`: a present-but-broken
+    // proof must reject the login outright; absence is allowed for the
+    // legacy password-bootstrap path.
+    let dpop_jkt = match extract_dpop_jkt_for_kickoff(req, &url_builder).await {
+        Ok(jkt) => jkt,
+        Err(error) => {
+            res.status_code(StatusCode::BAD_REQUEST);
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_dpop_proof"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec![error.to_string()],
+            }));
+            return Ok(());
+        }
+    };
 
     let input: LoginReqBody = req
         .parse_json()
@@ -329,6 +380,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 grant_target.audience.clone(),
                 vec![contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
                 None,
+                dpop_jkt.clone(),
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
 

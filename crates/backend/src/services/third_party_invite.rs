@@ -48,18 +48,37 @@
 //! stored salt (offline_token mode) or pepper (lookup mode) so the
 //! invite can never be replayed — see [`schedule_terminal_zeroize`].
 //!
-//! ## TODO(round4-binding-proof-verifier)
+//! ## Invite verifier
 //!
-//! The full `binding_proof` / `subject_proof` chain verifier (the
-//! `verification_service_did` -> DID document -> signature chain) is
-//! not yet implemented end-to-end. The wire shape is correct; internal
-//! verification is a stub that accepts well-formed proofs. See
-//! [`crate::services::invite_claim_binding`] for the proof issuance
-//! side.
+//! [`verify_invite`] performs the two-step proof chain that gates an
+//! incoming `cx.invite.claim`:
+//!
+//! 1. **Verification-service proof** — a signed JWT issued by the trusted
+//!    3PID verification service. Claims `iss` / `aud` / `sub` / `exp` /
+//!    `nbf` / `nonce` are checked against [`VerifierCtx`]; signature is
+//!    verified against the resolved DID's JWKS via
+//!    [`did_binding_proof::verify_verification_service_proof`].
+//! 2. **Subject proof** — a signed JWS by the inviter actor key over the
+//!    canonical tuple `(verification_proof_jti, 3pid_hash,
+//!    invitee_promise_did, expires_at)`. The signing key is resolved via
+//!    the configured [`DidResolverService`]. The signed payload's
+//!    `inviter_did` MUST equal `ctx.expected_presenter_did` to reject
+//!    cross-presenter attacks.
+//!
+//! Replay defence: every accepted `jti` is recorded in
+//! [`NonceStore`] (an in-memory `Mutex<HashMap>`) and kept until the
+//! proof's `exp` passes. A duplicate `jti` within that window is
+//! rejected with [`InviteVerificationError::VerificationProofInvalid`].
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use coauth_config::ContrixConfig;
+use coauth_data::{BoxRepository, UrlBuilder};
+use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
+use coauth_keystore::Keystore;
 use contrix_core::{
     Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
 };
@@ -67,6 +86,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use zeroize::Zeroize;
+
+use crate::services::did_binding_proof::{
+    VerificationServiceProofClaims, verify_verification_service_proof,
+};
+use crate::services::did_resolver::DidResolverService;
 
 /// Minimum entropy (in bits) required for offline_token mode invites.
 /// Mirrors `cx.schema.invite.v1` `third_party_invite.token_entropy_bits`
@@ -287,10 +311,426 @@ pub struct InviteClaimBindingProof {
     pub claim_nonce: String,
     /// Wall-clock expiry. Receivers MUST reject after this point.
     pub expires_at: DateTime<Utc>,
-    /// Detached signature over the canonical proof transcript. Round 4
-    /// internal verifier chain is TODO — see module docs above.
+    /// Detached signature over the canonical proof transcript.
     pub signature: String,
 }
+
+// ───────────────────────────── Invite verifier ─────────────────────────────
+
+/// Subject-proof JWT claims. Issued by the inviter (NOT the verification
+/// service) to bind their DID to a specific 3PID + verification proof.
+///
+/// The canonical signed message is `(verification_proof_jti, 3pid_hash,
+/// invitee_promise_did, expires_at)`, packed into a JWT payload and
+/// signed with the inviter's actor key via the resolver-returned
+/// verification method.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubjectProofClaims {
+    /// Discriminator. MUST equal `cx.invite.subject_proof.v1`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Inviter actor DID — the entity claiming to present this invite.
+    /// Verified against [`VerifierCtx::expected_presenter_did`].
+    pub inviter_did: String,
+    /// `jti` of the verification-service proof this subject proof
+    /// references. Ties the two halves of the chain together.
+    pub verification_proof_jti: String,
+    /// SHA-256 (hex) of the normalized 3PID, identical to the
+    /// `sub` claim in the verification-service proof.
+    #[serde(rename = "3pid_hash")]
+    pub three_pid_hash: String,
+    /// DID the invitee promises to claim under. The wire `subject_did`
+    /// of the invite-claim event MUST match this value.
+    pub invitee_promise_did: String,
+    /// Unix-epoch (seconds) expiry. Past this point the proof MUST be
+    /// rejected with `proof_expired`.
+    pub expires_at: i64,
+}
+
+/// Constant for the subject-proof type discriminator. Kept as a
+/// `const` so callers can re-use it without typos.
+pub const SUBJECT_PROOF_KIND: &str = "cx.invite.subject_proof.v1";
+
+/// Inputs to [`verify_invite`].
+///
+/// Two JWS strings:
+/// - `binding_proof_jws`: the verification-service proof (signed by the
+///   3PID verification service).
+/// - `subject_proof_jws`: the inviter's binding signature (signed by
+///   the inviter actor key).
+#[derive(Debug, Clone)]
+pub struct InviteRequest {
+    /// Verification-service proof JWS (compact serialization).
+    pub binding_proof_jws: String,
+    /// Subject proof JWS (compact serialization) from the inviter.
+    pub subject_proof_jws: String,
+    /// The DID currently presenting this invite (typically extracted
+    /// from the request bearer / DPoP signer). MUST match the inviter
+    /// DID embedded in the subject proof; mismatch is
+    /// `subject_did_mismatch`.
+    pub presenter_did: String,
+}
+
+/// Context passed to [`verify_invite`]. Carries the dependencies the
+/// pure verifier needs to perform key resolution + signature checks +
+/// nonce-store updates.
+pub struct VerifierCtx<'a> {
+    /// Expected `iss` of the verification-service proof. Reject any
+    /// other issuer.
+    pub expected_verification_service_did: &'a str,
+    /// Expected `aud` of the verification-service proof — the local
+    /// coauth service DID.
+    pub expected_audience: &'a str,
+    /// Wall-clock "now" used for `exp` / `nbf` evaluation. Injected so
+    /// tests can pin a deterministic value.
+    pub now: DateTime<Utc>,
+    /// Replay store. Records every accepted `jti` until its `exp`
+    /// passes; duplicate `jti` within that window is rejected.
+    pub nonce_store: &'a NonceStore,
+    /// DID resolver used to look up the inviter's actor key.
+    pub did_resolver: &'a dyn DidResolverService,
+    /// Shared services the resolver needs.
+    pub http_client: &'a reqwest::Client,
+    pub url_builder: &'a UrlBuilder,
+    pub contrix_config: &'a ContrixConfig,
+    pub key_store: &'a Keystore,
+    pub repo: &'a mut BoxRepository,
+}
+
+/// Successful verification output. Returned to the caller (typically an
+/// invite-acceptance handler) so it can map onto the downstream
+/// `cx.invite.create` / accept Move.
+#[derive(Debug, Clone)]
+pub struct VerifiedInvite {
+    /// SHA-256 hex of the normalized 3PID, as carried in both proofs.
+    pub three_pid_hash: String,
+    /// Inviter DID asserted by the subject proof — already verified
+    /// to match `ctx.expected_presenter_did`.
+    pub inviter_did: String,
+    /// DID the invitee promised to claim under.
+    pub invitee_promise_did: String,
+    /// `jti` of the verification-service proof. The caller MAY persist
+    /// this for downstream audit linkage.
+    pub verification_proof_jti: String,
+    /// Earliest of the two proofs' `exp` claims — used by the caller
+    /// to schedule downstream timeouts.
+    pub effective_expires_at: DateTime<Utc>,
+}
+
+/// Discrete error variants returned by [`verify_invite`]. Each variant
+/// maps onto a specific HTTP status code at the handler layer (see
+/// [`InviteVerificationError::http_status`]).
+#[derive(Debug, Error)]
+pub enum InviteVerificationError {
+    /// Verification-service proof failed validation: malformed JWT,
+    /// signature mismatch, wrong `iss` / `aud` / `sub`, missing
+    /// claims, or replayed `jti`. Maps to HTTP `401 Unauthorized`.
+    #[error("verification_proof_invalid: {0}")]
+    VerificationProofInvalid(String),
+
+    /// Subject proof failed validation: malformed JWS, signature
+    /// mismatch against the resolved inviter key, wrong kind, or
+    /// canonical-message mismatch with the verification-service
+    /// proof. Maps to HTTP `401 Unauthorized`.
+    #[error("subject_proof_invalid: {0}")]
+    SubjectProofInvalid(String),
+
+    /// Either proof's `exp` is in the past. Maps to HTTP `410 Gone`.
+    #[error("proof_expired: {0}")]
+    ProofExpired(String),
+
+    /// `inviter_did` in the subject proof doesn't match the actor
+    /// presenting the invite (e.g. token theft + replay by a third
+    /// party). Maps to HTTP `403 Forbidden`.
+    #[error("subject_did_mismatch: presenter={presenter} subject={subject}")]
+    SubjectDidMismatch { presenter: String, subject: String },
+}
+
+impl InviteVerificationError {
+    /// Variant → wire error code (stable, machine-readable). Handlers
+    /// use this as the `error` field in the JSON 4xx body.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::VerificationProofInvalid(_) => "verification_proof_invalid",
+            Self::SubjectProofInvalid(_) => "subject_proof_invalid",
+            Self::ProofExpired(_) => "proof_expired",
+            Self::SubjectDidMismatch { .. } => "subject_did_mismatch",
+        }
+    }
+
+    /// Variant → recommended HTTP status code for the rejection.
+    #[must_use]
+    pub fn http_status(&self) -> u16 {
+        match self {
+            Self::VerificationProofInvalid(_) | Self::SubjectProofInvalid(_) => 401,
+            Self::ProofExpired(_) => 410,
+            Self::SubjectDidMismatch { .. } => 403,
+        }
+    }
+}
+
+/// In-memory nonce / jti replay store.
+///
+/// Stores `jti -> exp` until the wall-clock time passes `exp`, at
+/// which point the entry is pruned (on the next insert). Replay
+/// rejection is for the lifetime of the entry: if a `jti` has already
+/// been accepted and its `exp` is still in the future, a second
+/// `verify_invite` call with the same `jti` fails with
+/// [`InviteVerificationError::VerificationProofInvalid`].
+///
+/// **Single-replica acceptable for now.** A multi-replica coauth
+/// deployment would need to back this with the shared DB (a small
+/// `invite_proof_seen_jti` table with `(jti, expires_at)` and a
+/// partial unique index on `jti`). The current setup is intentional —
+/// the cross-replica coordination cost outweighs the marginal benefit
+/// while the deployment topology is still single-process.
+#[derive(Debug, Default, Clone)]
+pub struct NonceStore {
+    inner: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+}
+
+impl NonceStore {
+    /// Build an empty store.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record `jti` with its `exp`, returning `Err` if `jti` is already
+    /// recorded and its `exp` has not yet passed.
+    fn check_and_record(&self, jti: &str, exp: DateTime<Utc>, now: DateTime<Utc>) -> Result<(), ()> {
+        let mut guard = self.inner.lock().expect("nonce store mutex poisoned");
+        // Prune expired entries opportunistically.
+        guard.retain(|_, e| *e > now);
+        if let Some(existing_exp) = guard.get(jti) {
+            if *existing_exp > now {
+                return Err(());
+            }
+        }
+        guard.insert(jti.to_owned(), exp);
+        Ok(())
+    }
+
+    /// Test helper: number of live (non-pruned) entries.
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.inner.lock().unwrap().len()
+    }
+}
+
+/// Verify a 3PID invite-claim request.
+///
+/// Performs (in order):
+///
+/// 1. **Verification-service proof** — parse JWT, verify signature via
+///    resolved JWKS, check `iss` / `aud` / `sub` / `exp` / `nbf`,
+///    reject replayed `jti`.
+/// 2. **Subject proof** — parse JWT, verify signature via the inviter's
+///    DID-document JWKS, check kind / `inviter_did` / cross-link to
+///    the verification proof.
+/// 3. **Cross-checks** — `inviter_did` MUST equal
+///    `req.presenter_did`; both proofs MUST share the same
+///    `three_pid_hash`; expiries MUST be in the future.
+///
+/// On success returns a [`VerifiedInvite`] and persists the
+/// verification proof's `jti` to the replay store.
+pub async fn verify_invite(
+    req: &InviteRequest,
+    ctx: &mut VerifierCtx<'_>,
+) -> Result<VerifiedInvite, InviteVerificationError> {
+    // Step 1: verification-service proof.
+    let verification = verify_verification_service_proof(
+        ctx.http_client,
+        ctx.url_builder,
+        ctx.contrix_config,
+        ctx.key_store,
+        ctx.repo,
+        ctx.did_resolver,
+        &req.binding_proof_jws,
+        ctx.expected_verification_service_did,
+        ctx.expected_audience,
+        ctx.now,
+    )
+    .await
+    .map_err(map_verification_service_error)?;
+
+    let verification_exp = DateTime::<Utc>::from_timestamp(verification.exp, 0)
+        .ok_or_else(|| {
+            InviteVerificationError::VerificationProofInvalid("exp claim out of range".into())
+        })?;
+    if verification_exp <= ctx.now {
+        return Err(InviteVerificationError::ProofExpired(format!(
+            "verification proof exp {} <= now {}",
+            verification_exp, ctx.now
+        )));
+    }
+
+    // Replay check + record. Must happen *after* we know the proof is
+    // otherwise valid; recording an unverified jti would let an
+    // attacker poison the store with garbage entries.
+    ctx.nonce_store
+        .check_and_record(&verification.jti, verification_exp, ctx.now)
+        .map_err(|()| {
+            InviteVerificationError::VerificationProofInvalid(format!(
+                "jti {} already used",
+                verification.jti
+            ))
+        })?;
+
+    // Step 2: subject proof.
+    let subject_claims = verify_subject_proof(
+        ctx.http_client,
+        ctx.url_builder,
+        ctx.contrix_config,
+        ctx.key_store,
+        ctx.repo,
+        ctx.did_resolver,
+        &req.subject_proof_jws,
+    )
+    .await?;
+
+    // Step 3: cross-checks.
+    if subject_claims.inviter_did != req.presenter_did {
+        return Err(InviteVerificationError::SubjectDidMismatch {
+            presenter: req.presenter_did.clone(),
+            subject: subject_claims.inviter_did.clone(),
+        });
+    }
+    if subject_claims.verification_proof_jti != verification.jti {
+        return Err(InviteVerificationError::SubjectProofInvalid(
+            "verification_proof_jti mismatch with binding proof jti".into(),
+        ));
+    }
+    if subject_claims.three_pid_hash != verification.sub {
+        return Err(InviteVerificationError::SubjectProofInvalid(
+            "3pid_hash in subject proof does not match verification proof sub".into(),
+        ));
+    }
+    let subject_exp = DateTime::<Utc>::from_timestamp(subject_claims.expires_at, 0).ok_or_else(
+        || InviteVerificationError::SubjectProofInvalid("expires_at out of range".into()),
+    )?;
+    if subject_exp <= ctx.now {
+        return Err(InviteVerificationError::ProofExpired(format!(
+            "subject proof expires_at {} <= now {}",
+            subject_exp, ctx.now
+        )));
+    }
+
+    let effective_expires_at = std::cmp::min(verification_exp, subject_exp);
+
+    Ok(VerifiedInvite {
+        three_pid_hash: verification.sub,
+        inviter_did: subject_claims.inviter_did,
+        invitee_promise_did: subject_claims.invitee_promise_did,
+        verification_proof_jti: verification.jti,
+        effective_expires_at,
+    })
+}
+
+/// Parse + signature-verify the subject proof against the inviter's
+/// resolved DID document.
+async fn verify_subject_proof(
+    http_client: &reqwest::Client,
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    key_store: &Keystore,
+    repo: &mut BoxRepository,
+    did_resolver: &dyn DidResolverService,
+    subject_proof_jws: &str,
+) -> Result<SubjectProofClaims, InviteVerificationError> {
+    if subject_proof_jws.trim().is_empty() {
+        return Err(InviteVerificationError::SubjectProofInvalid(
+            "empty JWS".into(),
+        ));
+    }
+    let jwt: Jwt<'_, SubjectProofClaims> = Jwt::try_from(subject_proof_jws).map_err(|e| {
+        InviteVerificationError::SubjectProofInvalid(format!("could not parse JWS: {e}"))
+    })?;
+    let claims = jwt.payload();
+    if claims.kind != SUBJECT_PROOF_KIND {
+        return Err(InviteVerificationError::SubjectProofInvalid(format!(
+            "kind discriminator mismatch: expected {SUBJECT_PROOF_KIND}, got {}",
+            claims.kind
+        )));
+    }
+    // Reject DIDs that don't pass the SDK's round-4 regex before any
+    // network I/O — matches did_binding_proof.rs.
+    if Did::new(claims.inviter_did.clone()).is_err() {
+        return Err(InviteVerificationError::SubjectProofInvalid(format!(
+            "inviter_did {:?} fails round-4 DID regex",
+            claims.inviter_did
+        )));
+    }
+
+    let resolution = did_resolver
+        .resolve_did_document(
+            http_client,
+            url_builder,
+            contrix_config,
+            key_store,
+            repo,
+            &claims.inviter_did,
+        )
+        .await
+        .map_err(|e| {
+            InviteVerificationError::SubjectProofInvalid(format!(
+                "could not resolve inviter DID: {e}"
+            ))
+        })?;
+
+    let keys: Vec<_> = resolution
+        .document
+        .verification_method
+        .iter()
+        .map(|vm| vm.public_key_jwk.clone())
+        .collect();
+    if keys.is_empty() {
+        return Err(InviteVerificationError::SubjectProofInvalid(
+            "inviter DID document has no verificationMethod entries".into(),
+        ));
+    }
+    let jwks = PublicJsonWebKeySet::new(keys);
+    if jwt.verify_with_jwks(&jwks).is_err() {
+        return Err(InviteVerificationError::SubjectProofInvalid(
+            "JWS signature did not verify against any inviter DID key".into(),
+        ));
+    }
+
+    Ok(claims.clone())
+}
+
+/// Map a verification-service-proof error onto the public
+/// [`InviteVerificationError`] enum. `proof_expired` is split out so
+/// the handler can return `410 Gone` instead of `401`.
+fn map_verification_service_error(
+    err: crate::services::did_binding_proof::VerificationProofError,
+) -> InviteVerificationError {
+    use crate::services::did_binding_proof::VerificationProofError as E;
+    match err {
+        E::Expired(msg) => InviteVerificationError::ProofExpired(msg),
+        other => InviteVerificationError::VerificationProofInvalid(other.to_string()),
+    }
+}
+
+/// Compute the SHA-256 hex hash of a normalized 3PID value. The
+/// normalization step is conservative (lowercase + trim) — callers
+/// that need a stricter normalization should pre-process before
+/// hashing.
+#[must_use]
+pub fn three_pid_hash(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase();
+    let mut h = Sha256::new();
+    h.update(normalized.as_bytes());
+    hex::encode(h.finalize())
+}
+
+// Re-export the verification-service proof claims for callers
+// (invite-acceptance handlers may want to inspect the `nonce` claim
+// before persisting audit metadata).
+pub use crate::services::did_binding_proof::VerificationServiceProofClaims as VerificationProofClaims;
+#[doc(hidden)]
+pub use crate::services::did_binding_proof::VerificationProofError;
 
 #[cfg(test)]
 mod tests {
@@ -462,8 +902,85 @@ mod tests {
             assert_eq!(rec.terminal_state, Some(state));
         }
     }
+
+    // ─────────── verifier tests (pure parts) ───────────
+
+    #[test]
+    fn three_pid_hash_normalizes_input() {
+        let a = three_pid_hash("Bob@Example.COM ");
+        let b = three_pid_hash("bob@example.com");
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 64); // SHA-256 hex
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn nonce_store_rejects_duplicate_jti_before_expiry() {
+        let store = NonceStore::new();
+        let now = Utc::now();
+        let exp = now + chrono::Duration::minutes(10);
+        store.check_and_record("jti-1", exp, now).unwrap();
+        assert_eq!(store.len(), 1);
+        let again = store.check_and_record("jti-1", exp, now);
+        assert!(again.is_err(), "duplicate jti must reject");
+    }
+
+    #[test]
+    fn nonce_store_allows_jti_reuse_after_expiry() {
+        let store = NonceStore::new();
+        let now = Utc::now();
+        let exp = now + chrono::Duration::seconds(1);
+        store.check_and_record("jti-1", exp, now).unwrap();
+        // Simulate time passing past exp.
+        let later = exp + chrono::Duration::seconds(1);
+        let new_exp = later + chrono::Duration::minutes(10);
+        store
+            .check_and_record("jti-1", new_exp, later)
+            .expect("post-expiry re-use must succeed (entry is pruned)");
+    }
+
+    #[test]
+    fn invite_verification_error_code_and_status_map_correctly() {
+        let cases = [
+            (
+                InviteVerificationError::VerificationProofInvalid("x".into()),
+                "verification_proof_invalid",
+                401u16,
+            ),
+            (
+                InviteVerificationError::SubjectProofInvalid("x".into()),
+                "subject_proof_invalid",
+                401,
+            ),
+            (
+                InviteVerificationError::ProofExpired("x".into()),
+                "proof_expired",
+                410,
+            ),
+            (
+                InviteVerificationError::SubjectDidMismatch {
+                    presenter: "did:web:a".into(),
+                    subject: "did:web:b".into(),
+                },
+                "subject_did_mismatch",
+                403,
+            ),
+        ];
+        for (err, code, status) in cases {
+            assert_eq!(err.code(), code);
+            assert_eq!(err.http_status(), status);
+        }
+    }
+
+    #[test]
+    fn subject_proof_kind_constant_is_stable() {
+        // Tripwire: any rename of the kind discriminator is a wire break.
+        assert_eq!(SUBJECT_PROOF_KIND, "cx.invite.subject_proof.v1");
+    }
 }
 
 // Inline reference: spec doc anchors for reviewers.
 //   `contrix-spec/spec/v1/artifacts/schemas/invite.schema.json` $defs.third_party_invite
 //   `contrix-spec/spec/v1/zh/identity/3pid-invite-engine.md` (round-4 SP3.4)
+//   `contrix-spec/spec/v1/zh/sync/third-party-invites.md` §3-§4 (binding /
+//     subject proof chain — invite verifier)

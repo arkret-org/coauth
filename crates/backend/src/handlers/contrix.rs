@@ -276,6 +276,11 @@ pub struct SessionGrantMaterial {
     pub device_id: Option<String>,
     pub audience: String,
     pub scopes: Vec<String>,
+    /// RFC 7638 JWK SHA-256 thumbprint (base64url) of the DPoP proof the
+    /// grant is bound to, when issuance happened on a request that
+    /// carried a `DPoP` header. `None` for legacy paths (e.g. internal
+    /// admin minting, debug seeds without a `dpop_jwk`).
+    pub dpop_jkt: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -349,7 +354,22 @@ pub struct SessionGrantPayload {
     pub device_id: Option<String>,
     pub session_id: String,
     pub browser_session_id: String,
+    /// RFC 9449 §6 confirmation — when the grant was issued bound to a
+    /// DPoP proof, `cnf.jkt` carries the RFC 7638 SHA-256 thumbprint
+    /// (base64url) of the proof's public key. The refresh path requires
+    /// any follow-up proof to recompute the same thumbprint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cnf: Option<SessionGrantConfirmation>,
     pub proof: SessionGrantProof,
+}
+
+/// RFC 9449 / RFC 7800 confirmation claim, carrying the JWK thumbprint
+/// that binds an access token (here a session grant) to the holder's
+/// proof-of-possession key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionGrantConfirmation {
+    /// `jkt` — base64url SHA-256 JWK thumbprint per RFC 7638.
+    pub jkt: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -380,6 +400,8 @@ struct SessionGrantPayloadClaims {
     device_id: Option<String>,
     session_id: String,
     browser_session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cnf: Option<SessionGrantConfirmation>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1306,11 +1328,14 @@ fn service_describe_response(
             "claim_attestation",
             "policy_hook",
         ],
-        // T6.3 — claimed_profiles intentionally empty.
+        // T6.3 / G3.C3 — claimed_profiles carries the auth-server slot.
         //
-        // coauth wears three roles (see `service_roles` above) but each
-        // canonical Contrix v1 profile that *could* apply has a role
-        // mismatch with at least one of them:
+        // coauth wears three roles (see `service_roles` above). The only
+        // canonical v1 profile whose role + required surface coauth
+        // actually serves is `cx.profile.auth_server.v1` (added under
+        // G3.C3 to `contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json`).
+        // The other directory-role profiles that would superficially
+        // apply are NOT claimed and the reason is documented inline:
         //
         //   * `cx.profile.identity_registry.v1`   — role=directory.
         //     coauth's `cx.identity.*` ops are a DELEGATED proxy onto
@@ -1324,14 +1349,23 @@ fn service_describe_response(
         //   * `cx.profile.public_network_identity.v1` — role=directory.
         //     Same reason — coauth is a service-local issuer, not the
         //     network identity authority.
+        //   * `cx.profile.principal_server.v1`    — role=server.
+        //     coauth is not Realm-authoritative; principal-server
+        //     event acceptance is soland's role.
         //
-        // Until a coauth-shaped profile exists in the spec
-        // (`cx.profile.auth_server.v1` is the natural slot), this
-        // array stays empty. The boundary is instead surfaced via
-        // `service_roles` + `compat_surfaces` (for the delegated
-        // identity ops) so cotest's ProfileValidator does not flag a
-        // role mismatch.
-        claimed_profiles: Vec::new(),
+        // The boundary against those non-claimed profiles is still
+        // surfaced via `service_roles` + `compat_surfaces` (the
+        // delegated identity ops) so cotest's ProfileValidator does
+        // not flag a role mismatch.
+        claimed_profiles: vec![ClaimedProfileDescriptor {
+            profile_id: "cx.profile.auth_server.v1",
+            claim_kind: "self_claimed",
+            notes: Some(
+                "Auth-server-shaped profile: issues short-lived audience-bound cx.session.grant, exposes cx.server.describe, MAY expose cx.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",
+            ),
+        }],
+        // G4.T3 hook: verified_profiles populated by cotest verified-profile suite artifact loader.
+        //
         // verified_profiles MUST be empty when `development_mode=true`.
         // coauth has no runtime dev toggle, so this is unconditionally
         // empty until a cotest verifier writes a real entry.
@@ -1472,6 +1506,7 @@ fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGr
         device_id: payload.device_id.clone(),
         session_id: payload.session_id.clone(),
         browser_session_id: payload.browser_session_id.clone(),
+        cnf: payload.cnf.clone(),
     }
 }
 
@@ -1576,6 +1611,7 @@ pub(crate) fn issue_session_grant(
         required_audience_for(url_builder, contrix_config),
         scopes,
         None,
+        None,
     )
 }
 
@@ -1595,6 +1631,7 @@ pub(crate) fn issue_session_grant_for_audience(
     audience: String,
     scopes: Vec<String>,
     subject_override: Option<&str>,
+    dpop_jkt: Option<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let subject = subject_override
         .map(ToOwned::to_owned)
@@ -1615,6 +1652,9 @@ pub(crate) fn issue_session_grant_for_audience(
     let expires_at = now + Duration::try_minutes(SESSION_GRANT_TTL_MINUTES).unwrap();
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
     let issuer = issuer_did_for(url_builder, contrix_config);
+    let cnf = dpop_jkt
+        .as_ref()
+        .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
     let claims = SessionGrantPayloadClaims {
         kind: "cx.session.grant".to_owned(),
         issuer: issuer.clone(),
@@ -1629,6 +1669,7 @@ pub(crate) fn issue_session_grant_for_audience(
         device_id: device_id.clone(),
         session_id: browser_session.id.to_string(),
         browser_session_id: browser_session.id.to_string(),
+        cnf: cnf.clone(),
     };
     let payload_hash = session_grant_claims_hash(&claims)?;
 
@@ -1648,6 +1689,7 @@ pub(crate) fn issue_session_grant_for_audience(
         device_id: claims.device_id,
         session_id: claims.session_id,
         browser_session_id: claims.browser_session_id,
+        cnf: claims.cnf,
         proof: SessionGrantProof {
             kind: "cx.session.grant.proof.v1".to_owned(),
             alg: alg.to_string(),
@@ -1672,6 +1714,7 @@ pub(crate) fn issue_session_grant_for_audience(
         device_id,
         audience,
         scopes,
+        dpop_jkt,
     })
 }
 
@@ -2307,6 +2350,353 @@ pub async fn user_did_json(
         &contrix_config,
         &user,
     )))
+}
+
+// ── DPoP-bound session-grant refresh + debug seed ──────────────
+//
+// These two handlers were added in G3.C1 to complete the device-bound
+// session-grant story: `refresh_session_grant` rotates an existing
+// DPoP-bound grant onto a new access token (keeping `cnf.jkt` constant),
+// and `debug_issue_dpop_grant` is the cotest harness seam that mints a
+// fully signed grant without going through OIDC.
+
+#[derive(Debug, Deserialize)]
+pub struct RefreshSessionGrantRequest {
+    /// The session grant currently associated with the device. Single-use
+    /// — after a successful refresh the old grant is revoked.
+    pub grant_jwt: String,
+    /// Optional audience override; defaults to the grant's audience.
+    #[serde(default)]
+    pub audience: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RefreshSessionGrantResponse {
+    pub grant_id: String,
+    pub grant_jwt: String,
+    pub session_public_key: String,
+    pub session_private_key_pem: String,
+    pub expires_at: String,
+    pub audience: String,
+    pub scopes: Vec<String>,
+    pub dpop_jkt: String,
+    pub previous_grant_id: String,
+}
+
+/// `POST /api/v1/session-grants/refresh` — exchange a near-expiry
+/// DPoP-bound session grant for a fresh one. The caller MUST present:
+///
+/// * A `DPoP` header that proves possession of the same key the existing
+///   grant is bound to (`cnf.jkt` on the old grant must match the new
+///   proof's `jkt`).
+/// * A request body carrying the prior grant JWT.
+///
+/// On success the old grant is revoked (single-use semantics — its
+/// `revoked_at` is persisted) and a new grant is issued with the same
+/// `cnf.jkt`, a rotated id, and a fresh expiry.
+#[handler]
+pub async fn refresh_session_grant(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<RefreshSessionGrantResponse>, ContrixRouteError> {
+    use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
+
+    let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
+    let key_store = depot.key_store()?;
+    let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
+
+    // 1. DPoP proof must be present — the refresh endpoint is the
+    //    canonical proof-of-possession check.
+    let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
+        ContrixRouteError::BadRequest("device_proof_required".to_owned())
+    })?;
+
+    let body: RefreshSessionGrantRequest = req
+        .parse_json()
+        .await
+        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".to_owned()))?;
+
+    if body.grant_jwt.trim().is_empty() {
+        return Err(ContrixRouteError::BadRequest("missing grant_jwt".to_owned()));
+    }
+
+    // 2. Parse + load the existing grant. We never verify the JWT
+    //    signature here — the persisted row IS the source of truth — but
+    //    we DO read the `cnf.jkt` claim out of the JWT payload to bind
+    //    the proof.
+    let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(body.grant_jwt.as_str())
+        .map_err(|_| ContrixRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
+    let prior_payload = jwt.payload().clone();
+    let expected_jkt = prior_payload
+        .cnf
+        .as_ref()
+        .map(|cnf| cnf.jkt.clone())
+        .ok_or_else(|| {
+            ContrixRouteError::BadRequest(
+                "grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned(),
+            )
+        })?;
+
+    let mut repo = depot.repo().await?;
+    let prior_grant = repo
+        .oauth_session_grant()
+        .lookup_by_grant_jwt(&body.grant_jwt)
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| ContrixRouteError::NotFound)?;
+
+    // Single-use enforcement: a previously consumed grant can never be
+    // refreshed again.
+    if prior_grant.revoked_at.is_some() {
+        repo.cancel()
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        return Err(ContrixRouteError::BadRequest(
+            "refresh_token_already_consumed".to_owned(),
+        ));
+    }
+
+    // 3. Verify the DPoP proof against this exact endpoint, with the
+    //    prior grant_jwt as the bound access token (so `ath` MUST match).
+    let verifier = DpopVerifier::shared();
+    let now = clock.now();
+    let htm = req.method().as_str().to_ascii_uppercase();
+    let public_base = url_builder.http_base();
+    let htu = dpop_htu(Some(&public_base), req);
+    let verification = verifier
+        .verify(&dpop_header, &htm, &htu, now, Some(&body.grant_jwt))
+        .await
+        .map_err(|error| ContrixRouteError::BadRequest(error.to_string()))?;
+
+    DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt)
+        .map_err(|error| ContrixRouteError::BadRequest(error.to_string()))?;
+
+    // 4. Resolve the underlying browser session so the new grant lives
+    //    under the same authentication context.
+    let browser_session = repo
+        .browser_session()
+        .lookup(prior_grant.browser_session_id)
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| {
+            ContrixRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                "session grant references missing browser session",
+            ))
+        })?;
+
+    // 5. Mint a new grant with the same subject + scope + audience.
+    let audience = body.audience.clone().unwrap_or_else(|| prior_grant.audience.clone());
+    let scopes: Vec<String> = prior_grant
+        .scope
+        .iter()
+        .map(|scope| scope.as_str().to_owned())
+        .collect();
+    let new_material = issue_session_grant_for_audience(
+        &mut rng,
+        &*clock,
+        &url_builder,
+        &contrix_config,
+        &key_store,
+        &browser_session,
+        audience,
+        scopes,
+        Some(&prior_grant.subject),
+        Some(verification.jkt.clone()),
+    )
+    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    let persisted = persist_session_grant(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        &browser_session,
+        &new_material,
+    )
+    .await
+    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    // 6. Single-use semantics: revoke the prior grant only AFTER the new
+    //    one is persisted.
+    let revoked_prior = repo
+        .oauth_session_grant()
+        .revoke(&*clock, prior_grant.clone())
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    repo.save()
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    Ok(Json(RefreshSessionGrantResponse {
+        grant_id: persisted.id.to_string(),
+        grant_jwt: new_material.grant_jwt,
+        session_public_key: new_material.session_public_key,
+        session_private_key_pem: new_material.session_private_key_pem,
+        expires_at: new_material.expires_at,
+        audience: new_material.audience,
+        scopes: new_material.scopes,
+        dpop_jkt: verification.jkt,
+        previous_grant_id: revoked_prior.id.to_string(),
+    }))
+}
+
+// ── Test-only DPoP-bound grant seeding ──────────────────────────
+
+/// Body for the cotest debug helper. `dpop_jwk` is the device's public
+/// JWK (RFC 7517 shape) — we recompute its thumbprint and bake it in as
+/// `cnf.jkt` on the issued grant. `actor_did` is the subject DID the
+/// caller wants the grant bound to; we trust it because this endpoint
+/// is gated behind `debug_assertions` / a `COAUTH_ENABLE_TEST_ENDPOINTS`
+/// env var.
+#[derive(Debug, Deserialize)]
+pub struct DebugIssueDpopGrantRequest {
+    pub actor_did: String,
+    pub device_id: String,
+    pub dpop_jwk: serde_json::Value,
+    #[serde(default)]
+    pub audience: Option<String>,
+    #[serde(default)]
+    pub scopes: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DebugIssueDpopGrantResponse {
+    pub grant_id: String,
+    pub grant_jwt: String,
+    pub dpop_jkt: String,
+    pub audience: String,
+    pub scopes: Vec<String>,
+    pub expires_at: String,
+}
+
+/// Returns true when test-only endpoints are allowed at runtime. We are
+/// permissive when either `cfg!(debug_assertions)` is true (i.e. dev /
+/// debug builds) OR the operator sets `COAUTH_ENABLE_TEST_ENDPOINTS=1`.
+#[must_use]
+pub fn test_endpoints_enabled() -> bool {
+    if cfg!(debug_assertions) {
+        return true;
+    }
+    matches!(
+        std::env::var("COAUTH_ENABLE_TEST_ENDPOINTS").ok().as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    )
+}
+
+/// `POST /api/v1/test/debug/issue-dpop-grant` — deterministic DPoP-bound
+/// session-grant seed used by the cotest e2e harness. Returns a fully
+/// signed grant whose `cnf.jkt` matches the thumbprint of the supplied
+/// `dpop_jwk`. Gated by [`test_endpoints_enabled`].
+#[handler]
+pub async fn debug_issue_dpop_grant(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<DebugIssueDpopGrantResponse>, ContrixRouteError> {
+    use coauth_jose::jwk::{PublicJsonWebKey, Thumbprint};
+
+    if !test_endpoints_enabled() {
+        return Err(ContrixRouteError::NotFound);
+    }
+
+    let body: DebugIssueDpopGrantRequest = req
+        .parse_json()
+        .await
+        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".to_owned()))?;
+
+    if body.actor_did.trim().is_empty() {
+        return Err(ContrixRouteError::BadRequest("missing actor_did".to_owned()));
+    }
+    if body.device_id.trim().is_empty() {
+        return Err(ContrixRouteError::BadRequest("missing device_id".to_owned()));
+    }
+
+    let public_jwk: PublicJsonWebKey = serde_json::from_value(body.dpop_jwk.clone())
+        .map_err(|error| {
+            ContrixRouteError::BadRequest(format!("invalid dpop_jwk: {error}"))
+        })?;
+    let jkt = public_jwk.params().thumbprint_sha256_base64();
+
+    let url_builder = depot.url_builder()?;
+    let contrix_config = depot.contrix_config()?;
+    let key_store = depot.key_store()?;
+    let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
+
+    let mut repo = depot.repo().await?;
+
+    // We need a browser session for the underlying grant row. Pick the
+    // most recent one for the user identified by `actor_did`, or fail
+    // closed when none exists. The cotest harness registers the user
+    // first, so a session always exists in practice.
+    let user_id = parse_local_user_did_for(&url_builder, &contrix_config, &body.actor_did)
+        .ok_or_else(|| {
+            ContrixRouteError::BadRequest(
+                "actor_did is not a local Contrix user DID".to_owned(),
+            )
+        })?;
+    let user = repo
+        .user()
+        .lookup(user_id)
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| ContrixRouteError::NotFound)?;
+
+    let user_agent = Some(format!("coauth-test-harness/device:{}", body.device_id));
+    let browser_session = repo
+        .browser_session()
+        .add(&mut rng, &*clock, &user, user_agent)
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    let audience = body
+        .audience
+        .clone()
+        .unwrap_or_else(|| required_audience_for(&url_builder, &contrix_config));
+    let scopes = body.scopes.clone().unwrap_or_else(|| {
+        vec![
+            format!("urn:contrix:client:device:{}", body.device_id),
+            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+        ]
+    });
+
+    let material = issue_session_grant_for_audience(
+        &mut rng,
+        &*clock,
+        &url_builder,
+        &contrix_config,
+        &key_store,
+        &browser_session,
+        audience,
+        scopes,
+        Some(&body.actor_did),
+        Some(jkt.clone()),
+    )
+    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    let persisted = persist_session_grant(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        &browser_session,
+        &material,
+    )
+    .await
+    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    repo.save()
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    Ok(Json(DebugIssueDpopGrantResponse {
+        grant_id: persisted.id.to_string(),
+        grant_jwt: material.grant_jwt,
+        dpop_jkt: jkt,
+        audience: material.audience,
+        scopes: material.scopes,
+        expires_at: material.expires_at,
+    }))
 }
 
 #[cfg(test)]
