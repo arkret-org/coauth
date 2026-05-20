@@ -87,9 +87,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use zeroize::Zeroize;
 
-use crate::services::did_binding_proof::{
-    VerificationServiceProofClaims, verify_verification_service_proof,
-};
+use crate::services::did_binding_proof::verify_verification_service_proof;
 use crate::services::did_resolver::DidResolverService;
 
 /// Minimum entropy (in bits) required for offline_token mode invites.
