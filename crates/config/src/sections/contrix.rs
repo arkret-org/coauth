@@ -4,6 +4,16 @@ use url::Url;
 
 use super::ConfigurationSection;
 
+/// Round R2/R3 (2026-05-20) — deployment-scope trust-domain prefix.
+///
+/// A `trust_domain` value MUST match `cx:trust_domain:<scope>` where
+/// `<scope>` is `[a-z0-9._:-]{1,128}`. This mirrors the SDK validator
+/// `contrix_core::TypedTrustDomainId` so coauth and the Realm policy
+/// engine agree on the exact byte-form. Validate via
+/// [`validate_trust_domain`].
+const TRUST_DOMAIN_PREFIX: &str = "cx:trust_domain:";
+const TRUST_DOMAIN_MAX_SCOPE_LEN: usize = 128;
+
 /// Contrix-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -60,6 +70,36 @@ pub struct ContrixConfig {
     /// own approval.
     #[serde(default = "default_high_risk_threshold")]
     pub high_risk_threshold: u32,
+
+    /// Round R2/R3 (2026-05-20) — deployment trust-domain identifier
+    /// injected into Realm policy and the server-describe document.
+    ///
+    /// Wire form: `cx:trust_domain:<scope>` where `<scope>` matches
+    /// `[a-z0-9._:-]{1,128}`. This value enters the canonical transcript
+    /// of every `cx.cross_signing.reset` proof; **changing
+    /// `trust_domain` invalidates existing cross-signing reset proofs**
+    /// — see the README "Trust domain rotation" note.
+    ///
+    /// When omitted, callers expected to honour cross-deployment replay
+    /// protection (`Realm` policy, principal-server describe) MUST be
+    /// told the trust domain is unset and fail closed.
+    ///
+    /// Typically injected into `soland` via its config API on first
+    /// boot; see `services::onboarding_starid` for the call site.
+    // TODO(round23-T08): once soland exposes a `PATCH /admin/v1/policy/
+    //  trust_domain` mutation, propagate changes from coauth's runtime
+    //  reload through that channel rather than requiring a soland
+    //  restart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust_domain: Option<String>,
+
+    /// Round R2/R3 (2026-05-20) — selects the OOB code mint form for
+    /// 3PID invites. Default `OfflineVerifiable` mints a ≥128-bit
+    /// opaque token; `Lookup` mints a short human-typeable code with
+    /// server-side pepper + 3-strike invalidation. See
+    /// `backend::services::oob_code` for the implementation.
+    #[serde(default)]
+    pub oob_code_kind: OobCodeKindConfig,
 }
 
 fn default_high_risk_threshold() -> u32 {
@@ -77,6 +117,8 @@ impl Default for ContrixConfig {
             admin_audience: None,
             principal_server_url: None,
             high_risk_threshold: default_high_risk_threshold(),
+            trust_domain: None,
+            oob_code_kind: OobCodeKindConfig::default(),
         }
     }
 }
@@ -93,7 +135,63 @@ impl ContrixConfig {
             && self.admin_audience.is_none()
             && self.principal_server_url.is_none()
             && self.high_risk_threshold == default_high_risk_threshold()
+            && self.trust_domain.is_none()
+            && matches!(self.oob_code_kind, OobCodeKindConfig::OfflineVerifiable)
     }
+
+    /// Validate the configured `trust_domain` (if any) against the SDK
+    /// `cx:trust_domain:<scope>` wire format. Returns the borrowed
+    /// scope half on success so call-sites can build the
+    /// `TypedTrustDomainId` directly. Mirrors
+    /// `contrix_core::TypedTrustDomainId::new`'s acceptance rules so
+    /// the two never drift.
+    ///
+    /// # Errors
+    ///
+    /// Returns a static string when:
+    /// - the value lacks the `cx:trust_domain:` prefix
+    /// - the scope is empty or > 128 bytes
+    /// - the first character is not `[a-z0-9]`
+    /// - any byte is outside `[a-z0-9._:-]`
+    pub fn validate_trust_domain<'a>(value: &'a str) -> Result<&'a str, &'static str> {
+        let scope = value
+            .strip_prefix(TRUST_DOMAIN_PREFIX)
+            .ok_or("trust_domain MUST start with `cx:trust_domain:`")?;
+        if scope.is_empty() {
+            return Err("trust_domain scope MUST NOT be empty");
+        }
+        if scope.len() > TRUST_DOMAIN_MAX_SCOPE_LEN {
+            return Err("trust_domain scope MUST be ≤128 bytes");
+        }
+        let bytes = scope.as_bytes();
+        if !matches!(bytes[0], b'a'..=b'z' | b'0'..=b'9') {
+            return Err("trust_domain scope MUST start with [a-z0-9]");
+        }
+        let ok = scope.bytes().all(|b| {
+            matches!(
+                b,
+                b'a'..=b'z' | b'0'..=b'9' | b'.' | b'_' | b'-' | b':'
+            )
+        });
+        if !ok {
+            return Err("trust_domain scope contains characters outside [a-z0-9._:-]");
+        }
+        Ok(scope)
+    }
+}
+
+/// Round R2/R3 — wire-config mirror of
+/// `backend::services::oob_code::OobCodeKind`. Lives in `config` so
+/// schema export can reach it without pulling the backend crate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OobCodeKindConfig {
+    /// Form 1 — offline-verifiable, ≥128-bit token.
+    #[default]
+    OfflineVerifiable,
+    /// Form 2 — short lookup-style code; requires a server-side pepper
+    /// and 3-strike invalidation.
+    Lookup,
 }
 
 impl ConfigurationSection for ContrixConfig {
@@ -194,4 +292,41 @@ pub struct StaridConfig {
 
 fn default_path_prefix() -> String {
     "accounts".to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trust_domain_accepts_well_formed_scope() {
+        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:example.net").is_ok());
+        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:soland-prod.eu").is_ok());
+        assert!(
+            ContrixConfig::validate_trust_domain("cx:trust_domain:tenant_a.shard_1").is_ok()
+        );
+    }
+
+    #[test]
+    fn trust_domain_rejects_uppercase_and_empty() {
+        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:Example").is_err());
+        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:").is_err());
+        assert!(ContrixConfig::validate_trust_domain("example.net").is_err());
+    }
+
+    #[test]
+    fn trust_domain_rejects_overlong_scope() {
+        let too_long = format!("cx:trust_domain:{}", "a".repeat(129));
+        assert!(ContrixConfig::validate_trust_domain(&too_long).is_err());
+        let just_right = format!("cx:trust_domain:{}", "a".repeat(128));
+        assert!(ContrixConfig::validate_trust_domain(&just_right).is_ok());
+    }
+
+    #[test]
+    fn trust_domain_rejects_disallowed_chars() {
+        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:bad space").is_err());
+        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:bad/slash").is_err());
+        // Scope MUST start with [a-z0-9], not a separator.
+        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:.dotleader").is_err());
+    }
 }

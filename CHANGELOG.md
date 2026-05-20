@@ -12,6 +12,45 @@ for the full release process.
 
 ## [Unreleased]
 
+### Added — Round R2/R3 (2026-05-20, spec 8b7978d)
+
+- **3PID OOB code generation** (`backend::services::oob_code`,
+  T15). Two configurable code forms:
+  - `OobCodeKind::OfflineVerifiable` (default) — 27-char restricted
+    base32 (excludes `I`, `L`, `0`, `1`, `O`), ≥128-bit entropy,
+    offline-verifiable.
+  - `OobCodeKind::Lookup` — 6-char human-typeable code paired with a
+    server-side HMAC-SHA256 pepper, `oob_code_kind="lookup"` advertised
+    on the wire, and 3-strike invalidation (see `LookupStrikes`).
+  - Helper `generate_oob_code(kind)` mints either form.
+- **7-trigger non-enumerable failure state machine for OOB invites**
+  (`backend::services::oob_invite_state`, T15). All seven triggers
+  (`expired`, `send_failed`, `capability_loss`, `inviter_left`,
+  `revoked`, `claim_success`, `rate_limit_invalidated`) surface as
+  the byte-identical wire body `{"error":"not_found"}` with constant-
+  time padding to ≤50 ms. The `Expired` trigger's internal reason code
+  joins the SDK error catalog as `expired_invite_token` (re-exported
+  from `contrix_core::error::ERROR_CODE_EXPIRED_INVITE_TOKEN`).
+- **Deployment `trust_domain` config** (`ContrixConfig::trust_domain`,
+  T08). Optional `cx:trust_domain:<scope>` value validated against the
+  SDK `TypedTrustDomainId` rules (scope `[a-z0-9._:-]{1,128}`,
+  lowercase-leading). The value is propagated into Realm policy and
+  server-describe via soland's config API. **Changing `trust_domain`
+  invalidates every existing `cx.cross_signing.reset` proof** because
+  the trust domain enters the proof's canonical transcript; operators
+  MUST rotate device-quorum / recovery-unlock proofs in tandem with
+  the rotation. See the README "Trust domain rotation" note for the
+  full migration procedure.
+- **Cross-account consent revoke `scope=any` cascade**
+  (`handlers::account::mimi_consent::cascade_any_revoke`, T17). When a
+  holder revokes consent with `scope=any`, coauth now emits the
+  primary `(peer, scope=any)` revoke plus one `or_set_remove` per
+  pre-existing subscope tag, each marked
+  `superseded_by_any_revoke`. A stubbed broadcast helper
+  (`broadcast_cache_invalidation_for_any_revoke`) is wired in for the
+  teabay / floria cache-invalidation channel; the channel itself is
+  not yet implemented (tracked under `TODO(round23-T17)`).
+
 ### Changed
 
 - Realm/Space terminology inversion (wire-breaking): old `Space` (security

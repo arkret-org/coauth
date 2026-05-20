@@ -188,6 +188,121 @@ pub fn build_consent_tag(peer_did: &str, scope: &str) -> String {
     format!("peer={peer_did};scope={scope}")
 }
 
+/// Round R2/R3 T17 — sentinel scope value that, when present on a
+/// revoke, cascades to every subscope on the same `(holder, consent_id)`
+/// cell. Wire string per consent-model §6.4.
+pub const ANY_SCOPE_SENTINEL: &str = "any";
+
+/// Round R2/R3 T17 — outcome of [`cascade_any_revoke`]: the primary
+/// `(peer, scope=any)` revoke Move plus one supplementary
+/// `or_set_remove` Move per pre-existing subscope grant on the cell.
+/// Each supplementary Move carries the `superseded_by_any_revoke`
+/// marker in `extra` so reducers can attribute it to the cascade.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnyRevokeCascade {
+    /// The primary `(peer, scope=any)` revoke Move.
+    pub primary: PendingMove,
+    /// One Move per pre-existing subscope grant. The reducer applies
+    /// them after the primary so the final OrSet state is
+    /// `subscope-tags removed AND scope=any removed`.
+    pub superseded: Vec<SupersededRevoke>,
+}
+
+/// A subscope revoke spawned by an `scope=any` cascade. Carries the
+/// `superseded_by_any_revoke` audit marker so downstream auditors and
+/// the broadcast invalidation channel can correlate the cascade.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SupersededRevoke {
+    pub mv: PendingMove,
+    /// Always `"superseded_by_any_revoke"` — kept as a field so the
+    /// reducer / audit log can persist it without re-deriving.
+    pub marker: &'static str,
+}
+
+/// Round R2/R3 T17 — build the cascade for a revoke that targets the
+/// sentinel scope `any`. Given the set of subscope tags currently on
+/// the cell (as observed from a `consent_cell_query`), this returns a
+/// primary revoke + one supplementary `or_set_remove` per pre-existing
+/// subscope tag, each marked `superseded_by_any_revoke`.
+///
+/// `current_subscope_tags` is the `OrSet` snapshot at the time of the
+/// revoke, filtered to tags with `peer=<actor>;scope=<...>` where
+/// `<...> != "any"`. Tag form follows [`build_consent_tag`].
+///
+/// Returns `MimiConsentError::MissingField { field: "scope" }` when
+/// invoked on a non-revoke or a non-`any` scope (use
+/// [`update_consent_to_pending_move`] for those).
+///
+/// TODO(round23-T17): pair this with a soland-side `cells/cascade`
+/// endpoint so the Moves can land in a single anchor batch rather
+/// than as N+1 sequential calls. The current shape is correct
+/// (reducers idempotent on or_set_remove) but bandwidth-inefficient
+/// for large grant lists.
+pub fn cascade_any_revoke(
+    update: &UpdateConsent,
+    current_subscope_tags: &[String],
+) -> Result<AnyRevokeCascade, MimiConsentError> {
+    if update.granted {
+        return Err(MimiConsentError::MissingField { field: "granted=false" });
+    }
+    if update.scope != ANY_SCOPE_SENTINEL {
+        return Err(MimiConsentError::MissingField { field: "scope=any" });
+    }
+
+    let primary = update_consent_to_pending_move(update)?;
+
+    let mut superseded = Vec::with_capacity(current_subscope_tags.len());
+    for tag in current_subscope_tags {
+        // Defensive: skip a "scope=any" tag that snuck through — it's
+        // already covered by the primary, and replaying it would just
+        // be a no-op or-set-remove.
+        if tag.ends_with(";scope=any") {
+            continue;
+        }
+        superseded.push(SupersededRevoke {
+            mv: PendingMove {
+                space_id: update.space_id.clone(),
+                cell_id: consent_cell_id(&update.consent_id),
+                op: PendingMoveOp::OrSetRemove,
+                tag: tag.clone(),
+                anchor_ref: update.anchor_ref.clone(),
+                hlc: update.hlc.clone(),
+            },
+            marker: "superseded_by_any_revoke",
+        });
+    }
+
+    Ok(AnyRevokeCascade { primary, superseded })
+}
+
+/// Round R2/R3 T17 — broadcast a cache-invalidation event to
+/// downstream services (teabay = consent/cache shadow, floria =
+/// federated invite gate) when a `scope=any` revoke lands.
+///
+/// The broadcast channel doesn't exist yet (T17 leaves it as a stub).
+/// For now this records the intent and returns; once
+/// `services::cross_account_bus` is wired the body will publish to
+/// the bus. The signature is in place so call-sites can adopt it
+/// without further wire changes.
+///
+/// TODO(round23-T17): when `cross_account_bus` lands, replace the
+/// `tracing::info!` below with a real publish. Until then the broadcast
+/// is best-effort and idempotency is on the receiver.
+pub fn broadcast_cache_invalidation_for_any_revoke(
+    holder_did: &str,
+    consent_id: &str,
+    superseded_count: usize,
+) {
+    tracing::info!(
+        target: "coauth::consent::cascade",
+        holder_did,
+        consent_id,
+        superseded_count,
+        marker = "superseded_by_any_revoke",
+        "scope=any revoke cascade — broadcast stub (TODO round23-T17)"
+    );
+}
+
 /// Translate an `update_consent` envelope into a `PendingMove`. Pure
 /// function — no I/O, no signing.
 pub fn update_consent_to_pending_move(
@@ -579,6 +694,59 @@ mod tests {
     fn update_consent_revoke_maps_to_or_set_remove() {
         let pending = update_consent_to_pending_move(&sample_update(false)).unwrap();
         assert_eq!(pending.op, PendingMoveOp::OrSetRemove);
+    }
+
+    // Round R2/R3 T17 — scope=any cascade.
+
+    #[test]
+    fn cascade_any_revoke_emits_primary_plus_one_remove_per_subscope() {
+        let mut update = sample_update(false);
+        update.scope = ANY_SCOPE_SENTINEL.into();
+        let subscopes = [
+            "peer=did:web:peer;scope=invite".to_owned(),
+            "peer=did:web:peer;scope=presence".to_owned(),
+        ];
+        let cascade = cascade_any_revoke(&update, &subscopes).unwrap();
+        assert_eq!(cascade.primary.op, PendingMoveOp::OrSetRemove);
+        assert_eq!(cascade.primary.tag, "peer=did:web:peer;scope=any");
+        assert_eq!(cascade.superseded.len(), 2);
+        for sup in &cascade.superseded {
+            assert_eq!(sup.marker, "superseded_by_any_revoke");
+            assert_eq!(sup.mv.op, PendingMoveOp::OrSetRemove);
+            // Same cell + space + anchor + hlc as the primary.
+            assert_eq!(sup.mv.cell_id, cascade.primary.cell_id);
+            assert_eq!(sup.mv.space_id, cascade.primary.space_id);
+        }
+    }
+
+    #[test]
+    fn cascade_any_revoke_drops_redundant_scope_any_tag() {
+        let mut update = sample_update(false);
+        update.scope = ANY_SCOPE_SENTINEL.into();
+        let subscopes = [
+            "peer=did:web:peer;scope=invite".to_owned(),
+            // This one must be skipped — it would duplicate the primary.
+            "peer=did:web:peer;scope=any".to_owned(),
+        ];
+        let cascade = cascade_any_revoke(&update, &subscopes).unwrap();
+        assert_eq!(cascade.superseded.len(), 1);
+        assert_eq!(
+            cascade.superseded[0].mv.tag,
+            "peer=did:web:peer;scope=invite"
+        );
+    }
+
+    #[test]
+    fn cascade_any_revoke_rejects_non_any_scope() {
+        let update = sample_update(false); // scope = "invite", not "any"
+        assert!(cascade_any_revoke(&update, &[]).is_err());
+    }
+
+    #[test]
+    fn cascade_any_revoke_rejects_grant() {
+        let mut update = sample_update(true);
+        update.scope = ANY_SCOPE_SENTINEL.into();
+        assert!(cascade_any_revoke(&update, &[]).is_err());
     }
 
     #[test]

@@ -2341,6 +2341,8 @@ mod tests {
             starid: None,
             principal_server_url: None,
             high_risk_threshold: 2,
+            trust_domain: None,
+            oob_code_kind: Default::default(),
         };
 
         let body =

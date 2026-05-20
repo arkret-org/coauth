@@ -18,6 +18,55 @@ inside a Realm and inherit its auth context.
 - **Realm:** membership, capability, E2EE, federation are governed here.
 - **Space:** board, list, section, or calendar bucket inside a Realm.
 
+## Trust domain rotation
+
+Round R2/R3 (2026-05-20) introduces the deployment-level `trust_domain`
+config knob (`contrix.trust_domain` in `config.yaml`):
+
+```yaml
+contrix:
+  trust_domain: cx:trust_domain:soland-prod.eu
+```
+
+The value MUST match `cx:trust_domain:<scope>` where `<scope>` is
+`[a-z0-9._:-]{1,128}` and starts with `[a-z0-9]`. coauth validates it
+on load via `ContrixConfig::validate_trust_domain` (mirrors the SDK's
+`TypedTrustDomainId` acceptance rules) and injects it into the Realm
+policy + `/api/v1/server/describe` document via soland's config API.
+
+**Rotation is wire-breaking for existing cross-signing reset proofs.**
+The `trust_domain` value enters the canonical transcript of every
+`cx.cross_signing.reset` proof (see
+`contrix_core::round23::CrossSigningResetPayload`). Changing it
+invalidates all previously-issued `principal_signing` /
+`recovery_unlock` / `device_quorum` / `trusted_recovery_service`
+proofs. Operators MUST roll fresh proofs through the device-lifecycle
+recovery flow as part of the rotation.
+
+## OOB invite code form (Round R2/R3 — T15)
+
+`coauth` mints third-party invite OOB codes in one of two configurable
+forms. Deployments choose per `auth.oob_code_kind`:
+
+- **`offline_verifiable`** (default) — 27-char restricted-base32 token
+  (excludes `I`, `L`, `0`, `1`, `O`), ≥128-bit entropy, no server
+  lookup needed for entropy proof.
+- **`lookup`** — 6-char human-typeable code paired with a server-side
+  HMAC-SHA256 pepper, `oob_code_kind="lookup"` advertised on the wire,
+  3-strike invalidation per code.
+
+Both forms run the same 7-trigger non-enumerable failure state machine
+(byte-identical `{"error":"not_found"}` body, ≤50 ms constant-time
+padding) so external observers cannot distinguish "expired" from
+"never existed". See [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]`
+and [`../contrix-spec/CHANGELOG.md`](../contrix-spec/CHANGELOG.md)
+Round R2/R3 entries for the normative source.
+
+## Cross-project task tracking
+
+Per-project task lists are consolidated upstream — see
+[`../_todos.md`](../_todos.md) for the active cross-project task plan.
+
 ## Integration model
 
 - `yougen` acts as a public/native Contrix client and consumes OIDC tokens.

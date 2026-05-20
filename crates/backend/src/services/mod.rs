@@ -4,6 +4,8 @@ pub mod did_binding_proof;
 pub mod did_resolver;
 pub mod email_webhook;
 pub mod invite_quarantine;
+pub mod oob_code;
+pub mod oob_invite_state;
 pub mod onboarding_starid;
 pub mod passkey_derive;
 pub mod risk_action_proposals;
