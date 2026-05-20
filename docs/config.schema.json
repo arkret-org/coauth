@@ -1407,6 +1407,13 @@
             "null"
           ]
         },
+        "session_grant_introspection_bearer": {
+          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint\n(`/api/v1/contrix/session-grants/introspect`). Mirrors\n`oauth_introspection_bearer` for the session-grant exchange path:\navoids requiring a DB-backed PAT/OAuth-session for the\nserver-to-server hop, which is awkward in dev when the coauth DB\nis reset frequently.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "embedded_webvh_registration_bearer": {
           "description": "Optional static bearer token coauth should send when writing embedded\n`did:webvh` registration records into this Principal Server.",
           "type": [

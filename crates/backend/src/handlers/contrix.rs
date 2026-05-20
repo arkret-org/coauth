@@ -125,6 +125,18 @@ async fn require_session_grant_caller(
             ContrixRouteError::Unauthorized("invalid authorization header".to_owned())
         })?;
 
+    // Static bearer fallback: a Principal Server may authenticate with a
+    // token configured in `contrix.principal_servers[].
+    // session_grant_introspection_bearer`. Mirrors the
+    // `oauth_introspection_bearer` fallback on the OAuth introspection
+    // endpoint and lets a server-to-server caller skip the DB-backed
+    // PAT/OAuth-session lookup. Grants `PrincipalServer` authz only —
+    // never `Admin` — so it cannot revoke session grants.
+    let contrix_config = depot.contrix_config()?;
+    if principal_server_static_session_grant_bearer_matches(&contrix_config, token) {
+        return Ok(SessionGrantAuthz::PrincipalServer);
+    }
+
     let token_type = TokenType::check(token)
         .map_err(|_| ContrixRouteError::Unauthorized("invalid bearer token".to_owned()))?;
 
@@ -189,6 +201,18 @@ async fn require_session_grant_caller(
             "missing admin or principal-server scope".to_owned(),
         ))
     }
+}
+
+fn principal_server_static_session_grant_bearer_matches(
+    contrix_config: &ContrixConfig,
+    token: &str,
+) -> bool {
+    !token.trim().is_empty()
+        && contrix_config
+            .principal_servers
+            .iter()
+            .filter_map(|server| server.session_grant_introspection_bearer.as_deref())
+            .any(|configured| configured == token)
 }
 
 impl Scribe for ContrixRouteError {
@@ -2331,6 +2355,7 @@ mod tests {
                 endpoint: "https://soland.example.com/contrix".parse().unwrap(),
                 did: Some("did:web:soland.example.com".to_owned()),
                 oauth_introspection_bearer: None,
+                session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }],
             identity_registry: Some(IdentityRegistryConfig {
@@ -2446,6 +2471,54 @@ mod tests {
                 "coauth MUST NOT advertise canonical identity registry conformance"
             );
         }
+    }
+
+    fn config_with_static_session_grant_bearer(bearer: &str) -> ContrixConfig {
+        ContrixConfig {
+            principal_servers: vec![PrincipalServerConfig {
+                name: "soland-dev".to_owned(),
+                audience: "did:web:local.host".to_owned(),
+                endpoint: "https://local.host/".parse().unwrap(),
+                did: Some("did:web:local.host".to_owned()),
+                oauth_introspection_bearer: None,
+                session_grant_introspection_bearer: Some(bearer.to_owned()),
+                embedded_webvh_registration_bearer: None,
+            }],
+            ..ContrixConfig::default()
+        }
+    }
+
+    #[test]
+    fn principal_server_static_session_grant_bearer_matches_exact_token() {
+        let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
+        assert!(principal_server_static_session_grant_bearer_matches(
+            &config,
+            "local-coauth-session-grant"
+        ));
+    }
+
+    #[test]
+    fn principal_server_static_session_grant_bearer_rejects_other_tokens() {
+        let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
+        assert!(!principal_server_static_session_grant_bearer_matches(
+            &config, "other-token"
+        ));
+        assert!(!principal_server_static_session_grant_bearer_matches(
+            &config, ""
+        ));
+        assert!(!principal_server_static_session_grant_bearer_matches(
+            &config, "   "
+        ));
+    }
+
+    #[test]
+    fn principal_server_static_session_grant_bearer_ignores_unset_field() {
+        let mut config = config_with_static_session_grant_bearer("placeholder");
+        config.principal_servers[0].session_grant_introspection_bearer = None;
+        assert!(!principal_server_static_session_grant_bearer_matches(
+            &config,
+            "placeholder"
+        ));
     }
 
     #[test]

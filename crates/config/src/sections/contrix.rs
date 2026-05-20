@@ -222,6 +222,16 @@ pub struct PrincipalServerConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth_introspection_bearer: Option<String>,
 
+    /// Optional static bearer token accepted when this Principal Server calls
+    /// coauth's session-grant introspection endpoint
+    /// (`/api/v1/contrix/session-grants/introspect`). Mirrors
+    /// `oauth_introspection_bearer` for the session-grant exchange path:
+    /// avoids requiring a DB-backed PAT/OAuth-session for the
+    /// server-to-server hop, which is awkward in dev when the coauth DB
+    /// is reset frequently.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_grant_introspection_bearer: Option<String>,
+
     /// Optional static bearer token coauth should send when writing embedded
     /// `did:webvh` registration records into this Principal Server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
