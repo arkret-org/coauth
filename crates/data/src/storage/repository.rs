@@ -433,8 +433,7 @@ mod impls {
 
         fn handle_audit<'c>(
             &'c mut self,
-        ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c>
-        {
+        ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.handle_audit(), &mut self.mapper))
         }
 
@@ -645,8 +644,7 @@ mod impls {
 
         fn handle_audit<'c>(
             &'c mut self,
-        ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c>
-        {
+        ) -> Box<dyn coauth_data::audit::HandleAuditRepository<Error = Self::Error> + 'c> {
             (**self).handle_audit()
         }
 

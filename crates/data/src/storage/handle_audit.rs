@@ -249,10 +249,7 @@ pub trait HandleAuditRepository: Send + Sync {
     ) -> Result<Vec<HandleAuditEvent>, Self::Error>;
 
     /// Look up a single audit event by id.
-    async fn lookup(
-        &mut self,
-        id: Ulid,
-    ) -> Result<Option<HandleAuditEvent>, Self::Error>;
+    async fn lookup(&mut self, id: Ulid) -> Result<Option<HandleAuditEvent>, Self::Error>;
 
     /// Count events for a given user (audit-summary endpoints).
     async fn count_for_user(&mut self, user_id: Ulid) -> Result<usize, Self::Error>;
@@ -281,4 +278,3 @@ repository_impl!(HandleAuditRepository:
     ) -> Result<Option<HandleAuditEvent>, Self::Error>;
     async fn count_for_user(&mut self, user_id: Ulid) -> Result<usize, Self::Error>;
 );
-

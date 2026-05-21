@@ -272,9 +272,7 @@ impl RepositoryAccess for PgRepository {
         Box::new(PgAuditRepository::new(&mut self.conn))
     }
 
-    fn handle_audit<'c>(
-        &'c mut self,
-    ) -> Box<dyn HandleAuditRepository<Error = Self::Error> + 'c> {
+    fn handle_audit<'c>(&'c mut self) -> Box<dyn HandleAuditRepository<Error = Self::Error> + 'c> {
         Box::new(PgHandleAuditRepository::new(&mut self.conn))
     }
 

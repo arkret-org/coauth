@@ -4,9 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::{
     Clock,
-    audit::{
-        HandleAuditEvent, HandleAuditEventType, HandleAuditRepository, NewHandleAuditEvent,
-    },
+    audit::{HandleAuditEvent, HandleAuditEventType, HandleAuditRepository, NewHandleAuditEvent},
     new_id,
 };
 use diesel::prelude::*;
@@ -199,11 +197,7 @@ impl HandleAuditRepository for PgHandleAuditRepository<'_> {
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(
-        name = "db.handle_audit.list_by_event_type",
-        skip_all,
-        err,
-    )]
+    #[tracing::instrument(name = "db.handle_audit.list_by_event_type", skip_all, err)]
     async fn list_by_event_type(
         &mut self,
         event_type: HandleAuditEventType,

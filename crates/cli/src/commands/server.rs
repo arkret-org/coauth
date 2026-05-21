@@ -279,8 +279,7 @@ impl Options {
                 // G4.T3 — load verified-profile descriptors at startup from
                 // COAUTH_VERIFIED_PROFILES_ARTIFACT (env var IS the feature
                 // flag). Empty Arc when unset.
-                verified_profiles:
-                    coauth_backend::services::verified_profiles::load_from_env(),
+                verified_profiles: coauth_backend::services::verified_profiles::load_from_env(),
             };
             s.init_metrics();
             s.init_metadata_cache();

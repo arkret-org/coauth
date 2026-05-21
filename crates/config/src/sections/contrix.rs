@@ -324,9 +324,7 @@ mod tests {
     fn trust_domain_accepts_well_formed_scope() {
         assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:example.net").is_ok());
         assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:soland-prod.eu").is_ok());
-        assert!(
-            ContrixConfig::validate_trust_domain("cx:trust_domain:tenant_a.shard_1").is_ok()
-        );
+        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:tenant_a.shard_1").is_ok());
     }
 
     #[test]

@@ -32,7 +32,7 @@ pub enum Error {
     CaptchaResponseMismatch,
 
     #[error("The CAPTCHA response provided is invalid: {0:?}")]
-    InvalidCaptcha(Vec<ErrorCode>),
+    InvalidCaptcha(Vec<CaptchaProviderErrorCode>),
 
     #[error("The CAPTCHA provider returned an invalid response")]
     InvalidResponse,
@@ -66,7 +66,7 @@ struct VerificationRequest<'a> {
 struct VerificationResponse {
     success: bool,
     #[serde(rename = "error-codes")]
-    error_codes: Option<Vec<ErrorCode>>,
+    error_codes: Option<Vec<CaptchaProviderErrorCode>>,
 
     challenge_ts: Option<String>,
     hostname: Option<String>,
@@ -74,7 +74,7 @@ struct VerificationResponse {
 
 #[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "kebab-case")]
-pub enum ErrorCode {
+pub enum CaptchaProviderErrorCode {
     /// The secret parameter is missing.
     ///
     /// Used by Cloudflare Turnstile, hCaptcha, reCAPTCHA

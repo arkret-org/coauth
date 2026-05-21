@@ -2,8 +2,8 @@ use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::{ContrixConfig, IdentityRegistryKind};
 use coauth_data::{
-    oauth::{NewSessionGrant, SessionGrantFilter},
     BrowserSession, Clock, Pagination, RepositoryAccess, SessionGrant, UrlBuilder, User,
+    oauth::{NewSessionGrant, SessionGrantFilter},
 };
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::{
@@ -2494,7 +2494,7 @@ pub async fn refresh_session_grant(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<RefreshSessionGrantResponse>, ContrixRouteError> {
-    use crate::services::dpop::{dpop_header_from_request, dpop_htu, DpopVerifier};
+    use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
@@ -2806,7 +2806,7 @@ mod tests {
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
-    use crate::handlers::test_utils::{setup, RequestBuilderExt, ResponseExt, TestState};
+    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
     use super::*;
 
