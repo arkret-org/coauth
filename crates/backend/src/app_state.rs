@@ -80,6 +80,21 @@ pub struct AppState {
     /// `Content-Security-Policy` value emitted on HTML responses.
     /// `None` (or an empty configured string) suppresses the header.
     pub csp_html_header: Option<String>,
+
+    /// G4.T3 — verified-profile descriptors loaded from the cotest
+    /// artifact path in `COAUTH_VERIFIED_PROFILES_ARTIFACT` at server
+    /// startup. Filtered to entries whose `service_role == "auth_server"`
+    /// and additionally cross-checked against coauth's hard-coded
+    /// `claimed_profiles[]` set inside
+    /// `handlers::contrix::build_verified_profile_descriptors`. Empty
+    /// when the env var is unset / file missing / file malformed — the
+    /// dev-mode invariant in service-surface.md §3.0.
+    ///
+    /// Constructed once at process boot in
+    /// `coauth_cli::commands::server` (via
+    /// `crate::services::verified_profiles::load_from_env`) and surfaced
+    /// into the per-request depot as the `verified_profiles` key.
+    pub verified_profiles: Arc<Vec<crate::services::verified_profiles::VerifiedProfileDescriptor>>,
 }
 
 impl AppState {
@@ -193,6 +208,11 @@ pub async fn inject_app_state(
     depot.insert("activity_tracker", state.activity_tracker.clone());
     depot.insert("trusted_proxies", state.trusted_proxies.clone());
     depot.insert("frontend_script_src", state.frontend_script_src.clone());
+    // G4.T3 — loaded at process boot from
+    // `COAUTH_VERIFIED_PROFILES_ARTIFACT`. Consumed by
+    // `handlers::contrix::server_describe` to populate the wire
+    // `verified_profiles[]`. Empty Arc when the env var is unset.
+    depot.insert("verified_profiles", state.verified_profiles.clone());
     depot.insert(
         "risk_action_state_service",
         default_risk_action_state_service(),

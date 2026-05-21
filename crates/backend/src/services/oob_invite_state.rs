@@ -84,7 +84,9 @@ pub struct NonEnumerableAudit {
 /// caller logs (and persists) `audit`, sleeps via
 /// [`pad_to_non_enumerable`], then writes `response`.
 #[must_use]
-pub fn finalise_oob_failure(trigger: OobInviteFailure) -> (NonEnumerableAudit, NonEnumerableResponse) {
+pub fn finalise_oob_failure(
+    trigger: OobInviteFailure,
+) -> (NonEnumerableAudit, NonEnumerableResponse) {
     (
         NonEnumerableAudit {
             trigger,

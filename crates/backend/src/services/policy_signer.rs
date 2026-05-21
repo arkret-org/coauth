@@ -33,8 +33,7 @@ use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
 use contrix_core::{
-    AuthzDecision, Hash, PolicyCheckBoundTo, PolicyCheckSignature,
-    canonical::canonical_json_bytes,
+    AuthzDecision, Hash, PolicyCheckBoundTo, PolicyCheckSignature, canonical::canonical_json_bytes,
 };
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
@@ -98,8 +97,8 @@ impl<'a> PolicySigner<'a> {
         // Ed25519 key first; ECDSA / RSA fall-back paths are accepted so
         // a deployment that has not yet rotated to Ed25519 still gets a
         // real signature (not a stub).
-        let (alg, key) = preferred_service_signing_key(self.key_store)
-            .ok_or(PolicySignerError::NoSigningKey)?;
+        let (alg, key) =
+            preferred_service_signing_key(self.key_store).ok_or(PolicySignerError::NoSigningKey)?;
         let key_id = key.kid().ok_or(PolicySignerError::NoSigningKey)?;
         let signer = key
             .params()
@@ -109,8 +108,7 @@ impl<'a> PolicySigner<'a> {
         // RandomizedSigner: ECDSA needs an RNG; Ed25519 ignores it. Seed
         // a fresh ChaCha from OsRng to match the rest of coauth's signing
         // paths (`handlers::common::make_rng`).
-        let mut rng = ChaChaRng::from_rng(rand_core::OsRng)
-            .map_err(|_| PolicySignerError::Sign)?;
+        let mut rng = ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| PolicySignerError::Sign)?;
         let raw = signer
             .try_sign_with_rng(&mut rng, &canonical)
             .map_err(|_| PolicySignerError::Sign)?;

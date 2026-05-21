@@ -673,9 +673,9 @@ fn build_oauth_router(router: Router) -> Router {
 fn build_account_api_router(router: Router) -> Router {
     use crate::handlers::{
         account::{
-            auth, avatar, bootstrap_admin_status, consent, emails, flow, invite_relay,
-            linked_accounts, notification_prefs, oauth_clients, openapi, password, recovery,
-            register, sessions, site_config, upstream_oauth, users, viewer,
+            auth, avatar, bootstrap_admin_status, consent, emails, flow, invite_accept,
+            invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
+            recovery, register, sessions, site_config, upstream_oauth, users, viewer,
         },
         contrix, policy_check,
     };
@@ -704,8 +704,7 @@ fn build_account_api_router(router: Router) -> Router {
         // gate are both off, so this route is safe to mount
         // unconditionally.
         .push(
-            Router::with_path("test/debug/issue-dpop-grant")
-                .post(contrix::debug_issue_dpop_grant),
+            Router::with_path("test/debug/issue-dpop-grant").post(contrix::debug_issue_dpop_grant),
         )
         // Viewer
         .push(
@@ -770,6 +769,18 @@ fn build_account_api_router(router: Router) -> Router {
                 )
                 .push(Router::with_path("oidc/exchange/describe").get(auth::oidc_exchange_describe))
                 .push(Router::with_path("oidc/exchange").post(auth::oidc_code_exchange))
+                .push(
+                    Router::with_path("passkey")
+                        .push(
+                            Router::with_path("register/start").post(auth::passkey_register_start),
+                        )
+                        .push(
+                            Router::with_path("register/finish")
+                                .post(auth::passkey_register_finish),
+                        )
+                        .push(Router::with_path("auth/start").post(auth::passkey_auth_start))
+                        .push(Router::with_path("auth/finish").post(auth::passkey_auth_finish)),
+                )
                 .push(Router::with_path("logout").post(auth::logout))
                 .push(Router::with_path("providers").get(auth::providers))
                 // Registration
@@ -841,6 +852,13 @@ fn build_account_api_router(router: Router) -> Router {
         )
         // Invite relay (consent-gated forward to target principal)
         .push(Router::with_path("account/invites/relay").post(invite_relay::post_invite_relay))
+        // G3.C3: 3PID invite verifier — runs the binding-proof +
+        // subject-proof chain in `services::third_party_invite` and
+        // returns the verified summary. The actual invite-claim
+        // reducer lives on soland; this endpoint is the trusted
+        // pre-flight check the claimant runs before submitting
+        // `cx.invite.claim`.
+        .push(Router::with_path("invites/3pid/verify").post(invite_accept::post_verify_invite))
         // Device code link & consent
         .push(Router::with_path("device-link").get(consent::device_link_get))
         .push(

@@ -497,7 +497,12 @@ impl NonceStore {
 
     /// Record `jti` with its `exp`, returning `Err` if `jti` is already
     /// recorded and its `exp` has not yet passed.
-    fn check_and_record(&self, jti: &str, exp: DateTime<Utc>, now: DateTime<Utc>) -> Result<(), ()> {
+    fn check_and_record(
+        &self,
+        jti: &str,
+        exp: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> Result<(), ()> {
         let mut guard = self.inner.lock().expect("nonce store mutex poisoned");
         // Prune expired entries opportunistically.
         guard.retain(|_, e| *e > now);
@@ -553,8 +558,8 @@ pub async fn verify_invite(
     .await
     .map_err(map_verification_service_error)?;
 
-    let verification_exp = DateTime::<Utc>::from_timestamp(verification.exp, 0)
-        .ok_or_else(|| {
+    let verification_exp =
+        DateTime::<Utc>::from_timestamp(verification.exp, 0).ok_or_else(|| {
             InviteVerificationError::VerificationProofInvalid("exp claim out of range".into())
         })?;
     if verification_exp <= ctx.now {
@@ -605,9 +610,10 @@ pub async fn verify_invite(
             "3pid_hash in subject proof does not match verification proof sub".into(),
         ));
     }
-    let subject_exp = DateTime::<Utc>::from_timestamp(subject_claims.expires_at, 0).ok_or_else(
-        || InviteVerificationError::SubjectProofInvalid("expires_at out of range".into()),
-    )?;
+    let subject_exp =
+        DateTime::<Utc>::from_timestamp(subject_claims.expires_at, 0).ok_or_else(|| {
+            InviteVerificationError::SubjectProofInvalid("expires_at out of range".into())
+        })?;
     if subject_exp <= ctx.now {
         return Err(InviteVerificationError::ProofExpired(format!(
             "subject proof expires_at {} <= now {}",
@@ -726,9 +732,9 @@ pub fn three_pid_hash(value: &str) -> String {
 // Re-export the verification-service proof claims for callers
 // (invite-acceptance handlers may want to inspect the `nonce` claim
 // before persisting audit metadata).
-pub use crate::services::did_binding_proof::VerificationServiceProofClaims as VerificationProofClaims;
 #[doc(hidden)]
 pub use crate::services::did_binding_proof::VerificationProofError;
+pub use crate::services::did_binding_proof::VerificationServiceProofClaims as VerificationProofClaims;
 
 #[cfg(test)]
 mod tests {
@@ -766,9 +772,11 @@ mod tests {
     #[test]
     fn from_wire_accepts_well_formed_offline_invite() {
         let wire = build_wire_offline();
-        let rec =
-            ThirdPartyInviteRecord::from_wire(wire, Some(b"salt".to_vec()), None).unwrap();
-        assert_eq!(rec.wire.oob_code_kind, ThirdPartyInviteOobKind::OfflineToken);
+        let rec = ThirdPartyInviteRecord::from_wire(wire, Some(b"salt".to_vec()), None).unwrap();
+        assert_eq!(
+            rec.wire.oob_code_kind,
+            ThirdPartyInviteOobKind::OfflineToken
+        );
         assert!(rec.server_private_salt.is_some());
         assert!(rec.server_private_pepper.is_none());
         assert!(!rec.is_terminal());
@@ -812,7 +820,10 @@ mod tests {
         // Same state again — no error.
         rec.transition_terminal(ThirdPartyInviteTerminalState::Claimed, now)
             .unwrap();
-        assert_eq!(rec.terminal_state, Some(ThirdPartyInviteTerminalState::Claimed));
+        assert_eq!(
+            rec.terminal_state,
+            Some(ThirdPartyInviteTerminalState::Claimed)
+        );
     }
 
     #[test]
@@ -850,9 +861,12 @@ mod tests {
 
     #[test]
     fn zeroize_secrets_scrubs_salt_and_pepper() {
-        let mut rec =
-            ThirdPartyInviteRecord::from_wire(build_wire_offline(), Some(b"hot_salt".to_vec()), None)
-                .unwrap();
+        let mut rec = ThirdPartyInviteRecord::from_wire(
+            build_wire_offline(),
+            Some(b"hot_salt".to_vec()),
+            None,
+        )
+        .unwrap();
         assert!(rec.server_private_salt.is_some());
         rec.zeroize_secrets();
         assert!(rec.server_private_salt.is_none());

@@ -119,9 +119,12 @@ mod tests {
     #[test]
     fn derive_output_round_trips_to_32_bytes() {
         let key = derive_update_key_from_cose_bytes(b"hello world");
-        let decoded =
-            decode_multicodec_ed25519(&key).expect("output is valid multicodec-ed25519");
-        assert_eq!(decoded.len(), 32, "payload after tag strip must be 32 bytes");
+        let decoded = decode_multicodec_ed25519(&key).expect("output is valid multicodec-ed25519");
+        assert_eq!(
+            decoded.len(),
+            32,
+            "payload after tag strip must be 32 bytes"
+        );
         // The 32 bytes are the SHA-256 of the input; recompute and
         // compare to lock in that the digest survives the round trip
         // intact.

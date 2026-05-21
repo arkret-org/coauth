@@ -28,11 +28,11 @@
 //! [`CrossSigningPublishError::GenerationUnknown`] rather than guess.
 
 use chrono::{DateTime, Utc};
-use contrix_core::{Did, TypedTrustDomainId};
 use contrix::crypto_protocol::{
     CrossSigningKeyRecord, CrossSigningPublishContent, SignedCrossSigningKey,
     cross_signing_publish_cell_subject,
 };
+use contrix_core::{Did, TypedTrustDomainId};
 use thiserror::Error;
 
 /// Errors raised by the cross-signing publish issuer.

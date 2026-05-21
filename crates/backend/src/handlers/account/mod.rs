@@ -30,6 +30,7 @@ pub mod consent;
 pub mod consent_cell_query;
 pub mod emails;
 pub mod flow;
+pub mod invite_accept;
 pub mod invite_relay;
 pub mod linked_accounts;
 pub mod mimi_consent;

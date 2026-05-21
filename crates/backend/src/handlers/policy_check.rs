@@ -233,8 +233,11 @@ pub(crate) async fn build_policy_check_response(
     let decided_at_str = format_canonical_rfc3339(decided_at);
     let expires_at_str = format_canonical_rfc3339(expires_at);
 
-    let obligations_wire: Vec<Value> =
-        decision.obligations.iter().map(PolicyObligation::to_wire).collect();
+    let obligations_wire: Vec<Value> = decision
+        .obligations
+        .iter()
+        .map(PolicyObligation::to_wire)
+        .collect();
     let reason_code = if decision.reason_code.is_empty() {
         None
     } else {
@@ -265,9 +268,9 @@ pub(crate) async fn build_policy_check_response(
             // Signing failure is a true server-side fault — we can't
             // emit an unsigned response per spec §5 (the caller would
             // reject it). Surface as 500.
-            return Err(ContrixRouteError::Internal(Box::new(std::io::Error::other(
-                format!("policy decision signing failed: {e}"),
-            ))));
+            return Err(ContrixRouteError::Internal(Box::new(
+                std::io::Error::other(format!("policy decision signing failed: {e}")),
+            )));
         }
     };
 

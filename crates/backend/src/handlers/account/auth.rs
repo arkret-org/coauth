@@ -4,10 +4,15 @@
 //! responses. Session cookies are set/cleared as side effects.
 
 pub mod oidc_bridge;
+pub mod passkey;
 
 pub use oidc_bridge::{
     auth_bridge_describe, integration_describe, oidc_browser_bridge_session, oidc_code_exchange,
     oidc_exchange_describe,
+};
+pub use passkey::{
+    auth_finish as passkey_auth_finish, auth_start as passkey_auth_start,
+    register_finish as passkey_register_finish, register_start as passkey_register_start,
 };
 
 use std::sync::LazyLock;
@@ -28,9 +33,7 @@ use crate::{
         contrix,
     },
     salvo_utils::session::SessionInfoExt,
-    services::dpop::{
-        DpopError, DpopVerifier, dpop_header_from_request, dpop_htu,
-    },
+    services::dpop::{DpopError, DpopVerifier, dpop_header_from_request, dpop_htu},
 };
 
 /// Extract a DPoP proof from the "kickoff" request — i.e. the initial
@@ -56,9 +59,7 @@ pub(crate) async fn extract_dpop_jkt_for_kickoff(
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();
     let htu = dpop_htu(Some(&public_base), req);
-    let result = verifier
-        .verify(&header, &htm, &htu, now, None)
-        .await?;
+    let result = verifier.verify(&header, &htm, &htu, now, None).await?;
     Ok(Some(result.jkt))
 }
 

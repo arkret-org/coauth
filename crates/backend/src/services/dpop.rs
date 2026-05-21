@@ -173,8 +173,8 @@ impl NonceCache {
         if self.seen.contains_key(jti) {
             return Err(DpopError::JtiReplayed(jti.to_owned()));
         }
-        let expiry = now
-            + Duration::from_std(NONCE_TTL).expect("NONCE_TTL fits in chrono::Duration");
+        let expiry =
+            now + Duration::from_std(NONCE_TTL).expect("NONCE_TTL fits in chrono::Duration");
         self.seen.insert(jti.to_owned(), expiry);
         Ok(())
     }
@@ -233,8 +233,8 @@ impl DpopVerifier {
             return Err(DpopError::Missing);
         }
 
-        let jwt: Jwt<'_, DpopClaims> = Jwt::try_from(trimmed)
-            .map_err(|error| DpopError::NotJwt(error.to_string()))?;
+        let jwt: Jwt<'_, DpopClaims> =
+            Jwt::try_from(trimmed).map_err(|error| DpopError::NotJwt(error.to_string()))?;
         let header = jwt.header();
 
         // `typ` MUST be `dpop+jwt` (RFC 9449 §4.2).
@@ -253,9 +253,8 @@ impl DpopVerifier {
         // Embedded JWK is the verification key (RFC 9449 §4.2: jwk MUST
         // be present).
         let jwk = header.jwk().ok_or(DpopError::MissingJwk)?.clone();
-        let verifying_key =
-            AsymmetricVerifyingKey::from_jwk_and_alg(jwk.params(), alg)
-                .map_err(|error| DpopError::JwkAlgMismatch(error.to_string()))?;
+        let verifying_key = AsymmetricVerifyingKey::from_jwk_and_alg(jwk.params(), alg)
+            .map_err(|error| DpopError::JwkAlgMismatch(error.to_string()))?;
         jwt.verify(&verifying_key)
             .map_err(|_| DpopError::BadSignature)?;
 
@@ -397,7 +396,9 @@ pub fn dpop_htu(public_base: Option<&url::Url>, req: &salvo::Request) -> String 
 /// Trim query string and fragment from `htu`, lowercase scheme + host.
 fn canonicalize_htu(input: &str) -> String {
     let trimmed = input.trim();
-    let without_fragment = trimmed.split_once('#').map_or(trimmed, |(prefix, _)| prefix);
+    let without_fragment = trimmed
+        .split_once('#')
+        .map_or(trimmed, |(prefix, _)| prefix);
     let without_query = without_fragment
         .split_once('?')
         .map_or(without_fragment, |(prefix, _)| prefix);
@@ -408,9 +409,18 @@ fn canonicalize_htu(input: &str) -> String {
         let rest = &rest[3..];
         if let Some(path_start) = rest.find('/') {
             let (authority, path) = rest.split_at(path_start);
-            format!("{}://{}{}", scheme.to_ascii_lowercase(), authority.to_ascii_lowercase(), path)
+            format!(
+                "{}://{}{}",
+                scheme.to_ascii_lowercase(),
+                authority.to_ascii_lowercase(),
+                path
+            )
         } else {
-            format!("{}://{}", scheme.to_ascii_lowercase(), rest.to_ascii_lowercase())
+            format!(
+                "{}://{}",
+                scheme.to_ascii_lowercase(),
+                rest.to_ascii_lowercase()
+            )
         }
     } else {
         without_query.to_owned()
@@ -422,9 +432,7 @@ mod tests {
     use super::*;
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::{
-        jwa::AsymmetricSigningKey,
-        jwk::JsonWebKeyPublicParameters,
-        jwt::JsonWebSignatureHeader,
+        jwa::AsymmetricSigningKey, jwk::JsonWebKeyPublicParameters, jwt::JsonWebSignatureHeader,
     };
     use ed25519_dalek::SigningKey;
     use rand_core::OsRng;

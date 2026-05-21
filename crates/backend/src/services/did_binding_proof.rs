@@ -296,8 +296,8 @@ pub async fn verify_verification_service_proof(
         return Err(VerificationProofError::InvalidJws("empty JWS".into()));
     }
 
-    let jwt: Jwt<'_, VerificationServiceProofClaims> = Jwt::try_from(proof_jws)
-        .map_err(|e| VerificationProofError::InvalidJws(e.to_string()))?;
+    let jwt: Jwt<'_, VerificationServiceProofClaims> =
+        Jwt::try_from(proof_jws).map_err(|e| VerificationProofError::InvalidJws(e.to_string()))?;
 
     let claims = jwt.payload();
     if claims.sub.trim().is_empty() {

@@ -62,7 +62,10 @@ pub enum IdentityLinkError {
     #[error("identity_link trust_domain mismatch: expected {expected}, got {actual}")]
     TrustDomainMismatch { expected: String, actual: String },
     #[error("identity_link has expired (now={now:?}, expires_at={expires_at:?})")]
-    Expired { now: DateTime<Utc>, expires_at: DateTime<Utc> },
+    Expired {
+        now: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
+    },
     #[error("identity_link encrypted_payload is empty")]
     EmptyPayload,
 }

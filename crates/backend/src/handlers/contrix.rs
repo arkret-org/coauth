@@ -1230,9 +1230,47 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
     }
 }
 
+/// G4.T3 — convert the loader's `VerifiedProfileDescriptor` into the wire
+/// shape expected by `ServiceDescribeResponse.verified_profiles[]`. Also
+/// enforces the local cross-check: any entry whose `profile_id` is not in
+/// coauth's hard-coded claimed-profile set is dropped with a `warn!` line.
+///
+/// The claimed-profile set here MUST stay in lockstep with the
+/// `claimed_profiles: vec![...]` literal inside `service_describe_response`.
+/// If a future task widens coauth's claimed profiles (e.g. adds an
+/// `identity_resolver` profile claim), this set MUST grow accordingly —
+/// otherwise the cross-check will silently drop legitimate verified
+/// entries.
+fn build_verified_profile_descriptors(
+    loaded: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
+) -> Vec<VerifiedProfileDescriptor> {
+    const CLAIMED_PROFILE_IDS: &[&str] = &["cx.profile.auth_server.v1"];
+    loaded
+        .iter()
+        .filter_map(|entry| {
+            if !CLAIMED_PROFILE_IDS.contains(&entry.profile_id.as_str()) {
+                tracing::warn!(
+                    target: "verified_profiles",
+                    profile_id = %entry.profile_id,
+                    "dropping verified-profile entry: profile_id absent from coauth claimed_profiles"
+                );
+                return None;
+            }
+            Some(VerifiedProfileDescriptor {
+                profile_id: entry.profile_id.clone(),
+                claim_kind: "cotest_verified",
+                cotest_run_id: entry.cotest_run_id.clone(),
+                artifact_hash: entry.artifact_hash.clone(),
+                timestamp: entry.timestamp.to_rfc3339(),
+            })
+        })
+        .collect()
+}
+
 fn service_describe_response(
     url_builder: &UrlBuilder,
     contrix_config: &ContrixConfig,
+    loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
 ) -> ServiceDescribeResponse {
     let principal_servers: Vec<PrincipalServerDescriptor> = contrix_config
         .principal_servers
@@ -1364,12 +1402,19 @@ fn service_describe_response(
                 "Auth-server-shaped profile: issues short-lived audience-bound cx.session.grant, exposes cx.server.describe, MAY expose cx.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",
             ),
         }],
-        // G4.T3 hook: verified_profiles populated by cotest verified-profile suite artifact loader.
+        // G4.T3 — verified_profiles populated by the cotest artifact loader
+        // (`crate::services::verified_profiles::load_from_env`). Every loaded
+        // entry's profile_id is cross-checked against the local
+        // `claimed_profiles[]` set; entries that fail the cross-check are
+        // dropped here (warn-logged) so coauth never advertises a verified
+        // profile it does not also self-claim.
         //
-        // verified_profiles MUST be empty when `development_mode=true`.
-        // coauth has no runtime dev toggle, so this is unconditionally
-        // empty until a cotest verifier writes a real entry.
-        verified_profiles: Vec::new(),
+        // dev-mode invariant (service-surface.md §3.0): coauth has no
+        // runtime dev toggle today, so the only way this surface contains
+        // an entry is for COAUTH_VERIFIED_PROFILES_ARTIFACT to point at a
+        // valid cotest-produced artifact. Env var unset → empty Vec → the
+        // dev-mode posture is preserved without any extra branching here.
+        verified_profiles: build_verified_profile_descriptors(loaded_verified_profiles),
         // experimental_features: surfaces still maturing inside coauth.
         // Listed here explicitly so callers don't treat them as stable
         // interop.
@@ -1479,7 +1524,9 @@ fn canonical_json_sha256(value: &impl Serialize) -> Result<String, serde_json::E
             // upstream call-sites currently expect a serde_json::Error.
             // Mirror that via the `serde::ser::Error::custom` constructor
             // so failure is still surfaced rather than swallowed.
-            Err(<serde_json::Error as serde::ser::Error>::custom(other.to_string()))
+            Err(<serde_json::Error as serde::ser::Error>::custom(
+                other.to_string(),
+            ))
         }
     }
 }
@@ -1858,7 +1905,21 @@ pub async fn server_describe(
         .collect::<Vec<_>>();
     repo.cancel().await?;
 
-    let mut response = service_describe_response(&url_builder, &contrix_config);
+    // G4.T3 — pull the loaded verified-profile descriptors out of the
+    // depot. Empty Arc when COAUTH_VERIFIED_PROFILES_ARTIFACT is unset.
+    let verified_profiles_loaded: std::sync::Arc<
+        Vec<crate::services::verified_profiles::VerifiedProfileDescriptor>,
+    > = depot
+        .get::<std::sync::Arc<Vec<crate::services::verified_profiles::VerifiedProfileDescriptor>>>(
+            "verified_profiles",
+        )
+        .cloned()
+        .unwrap_or_else(|_| std::sync::Arc::new(Vec::new()));
+    let mut response = service_describe_response(
+        &url_builder,
+        &contrix_config,
+        verified_profiles_loaded.as_ref(),
+    );
     response.auth_metadata.oidc_clients = oidc_clients;
     Ok(Json(response))
 }
@@ -2409,9 +2470,8 @@ pub async fn refresh_session_grant(
 
     // 1. DPoP proof must be present — the refresh endpoint is the
     //    canonical proof-of-possession check.
-    let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
-        ContrixRouteError::BadRequest("device_proof_required".to_owned())
-    })?;
+    let dpop_header = dpop_header_from_request(req)
+        .ok_or_else(|| ContrixRouteError::BadRequest("device_proof_required".to_owned()))?;
 
     let body: RefreshSessionGrantRequest = req
         .parse_json()
@@ -2419,7 +2479,9 @@ pub async fn refresh_session_grant(
         .map_err(|_| ContrixRouteError::BadRequest("invalid json body".to_owned()))?;
 
     if body.grant_jwt.trim().is_empty() {
-        return Err(ContrixRouteError::BadRequest("missing grant_jwt".to_owned()));
+        return Err(ContrixRouteError::BadRequest(
+            "missing grant_jwt".to_owned(),
+        ));
     }
 
     // 2. Parse + load the existing grant. We never verify the JWT
@@ -2487,7 +2549,10 @@ pub async fn refresh_session_grant(
         })?;
 
     // 5. Mint a new grant with the same subject + scope + audience.
-    let audience = body.audience.clone().unwrap_or_else(|| prior_grant.audience.clone());
+    let audience = body
+        .audience
+        .clone()
+        .unwrap_or_else(|| prior_grant.audience.clone());
     let scopes: Vec<String> = prior_grant
         .scope
         .iter()
@@ -2580,7 +2645,9 @@ pub fn test_endpoints_enabled() -> bool {
         return true;
     }
     matches!(
-        std::env::var("COAUTH_ENABLE_TEST_ENDPOINTS").ok().as_deref(),
+        std::env::var("COAUTH_ENABLE_TEST_ENDPOINTS")
+            .ok()
+            .as_deref(),
         Some("1") | Some("true") | Some("yes")
     )
 }
@@ -2606,16 +2673,18 @@ pub async fn debug_issue_dpop_grant(
         .map_err(|_| ContrixRouteError::BadRequest("invalid json body".to_owned()))?;
 
     if body.actor_did.trim().is_empty() {
-        return Err(ContrixRouteError::BadRequest("missing actor_did".to_owned()));
+        return Err(ContrixRouteError::BadRequest(
+            "missing actor_did".to_owned(),
+        ));
     }
     if body.device_id.trim().is_empty() {
-        return Err(ContrixRouteError::BadRequest("missing device_id".to_owned()));
+        return Err(ContrixRouteError::BadRequest(
+            "missing device_id".to_owned(),
+        ));
     }
 
     let public_jwk: PublicJsonWebKey = serde_json::from_value(body.dpop_jwk.clone())
-        .map_err(|error| {
-            ContrixRouteError::BadRequest(format!("invalid dpop_jwk: {error}"))
-        })?;
+        .map_err(|error| ContrixRouteError::BadRequest(format!("invalid dpop_jwk: {error}")))?;
     let jkt = public_jwk.params().thumbprint_sha256_base64();
 
     let url_builder = depot.url_builder()?;
@@ -2632,9 +2701,7 @@ pub async fn debug_issue_dpop_grant(
     // first, so a session always exists in practice.
     let user_id = parse_local_user_did_for(&url_builder, &contrix_config, &body.actor_did)
         .ok_or_else(|| {
-            ContrixRouteError::BadRequest(
-                "actor_did is not a local Contrix user DID".to_owned(),
-            )
+            ContrixRouteError::BadRequest("actor_did is not a local Contrix user DID".to_owned())
         })?;
     let user = repo
         .user()
@@ -2675,15 +2742,10 @@ pub async fn debug_issue_dpop_grant(
     )
     .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
 
-    let persisted = persist_session_grant(
-        &mut repo,
-        &mut rng,
-        &*clock,
-        &browser_session,
-        &material,
-    )
-    .await
-    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    let persisted =
+        persist_session_grant(&mut repo, &mut rng, &*clock, &browser_session, &material)
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
 
     repo.save()
         .await
@@ -2769,10 +2831,15 @@ mod tests {
             high_risk_threshold: 2,
             trust_domain: None,
             oob_code_kind: Default::default(),
+            verification_service_did: None,
         };
 
-        let body =
-            serde_json::to_value(service_describe_response(&url_builder, &contrix_config)).unwrap();
+        let body = serde_json::to_value(service_describe_response(
+            &url_builder,
+            &contrix_config,
+            &[],
+        ))
+        .unwrap();
 
         assert_eq!(body["service_did"], "did:web:auth.example.com");
         assert_eq!(body["service_type"], "auth_server");
@@ -2827,8 +2894,7 @@ mod tests {
         let supported_schema_profiles = body["supported_schema_profiles"].as_array().unwrap();
         assert!(supported_schema_profiles.contains(&serde_json::json!("cx.schema.core.v1")));
         assert!(
-            supported_schema_profiles
-                .contains(&serde_json::json!("cx.schema.service_describe.v1"))
+            supported_schema_profiles.contains(&serde_json::json!("cx.schema.service_describe.v1"))
         );
         assert!(
             !supported_schema_profiles.contains(&serde_json::json!("cx.schema.v1")),
@@ -2902,7 +2968,8 @@ mod tests {
     fn principal_server_static_session_grant_bearer_rejects_other_tokens() {
         let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
         assert!(!principal_server_static_session_grant_bearer_matches(
-            &config, "other-token"
+            &config,
+            "other-token"
         ));
         assert!(!principal_server_static_session_grant_bearer_matches(
             &config, ""
@@ -2935,6 +3002,7 @@ mod tests {
         let body = serde_json::to_value(service_describe_response(
             &url_builder,
             &ContrixConfig::default(),
+            &[],
         ))
         .unwrap();
 
@@ -3025,7 +3093,7 @@ mod tests {
         config.trust_domain = Some("cx:trust_domain:example.net".to_owned());
 
         let body =
-            serde_json::to_value(service_describe_response(&url_builder, &config)).unwrap();
+            serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
         assert_eq!(body["trust_domain"], "cx:trust_domain:example.net");
     }
 
@@ -3039,6 +3107,7 @@ mod tests {
         let body = serde_json::to_value(service_describe_response(
             &url_builder,
             &ContrixConfig::default(),
+            &[],
         ))
         .unwrap();
         assert!(
@@ -3058,6 +3127,7 @@ mod tests {
         let body = serde_json::to_value(service_describe_response(
             &url_builder,
             &ContrixConfig::default(),
+            &[],
         ))
         .unwrap();
 
@@ -3501,7 +3571,10 @@ mod tests {
                     message.starts_with(HANDLE_URI_NOT_CANONICAL_CODE),
                     "expected code prefix, got {message}"
                 );
-                assert!(message.contains("acct:"), "expected acct: in reason, got {message}");
+                assert!(
+                    message.contains("acct:"),
+                    "expected acct: in reason, got {message}"
+                );
             }
             other => panic!("expected BadRequest, got {other:?}"),
         }
@@ -3515,14 +3588,12 @@ mod tests {
             .expect_err("empty localpart MUST be rejected");
         require_canonical_handle_uri("contrix://Example.com/users/alice")
             .expect_err("uppercase host MUST be rejected");
-        require_canonical_handle_uri("")
-            .expect_err("empty input MUST be rejected");
+        require_canonical_handle_uri("").expect_err("empty input MUST be rejected");
     }
 
     #[test]
     fn require_canonical_handle_uri_accepts_canonical_form() {
-        let result =
-            require_canonical_handle_uri("contrix://example.com/users/alice").unwrap();
+        let result = require_canonical_handle_uri("contrix://example.com/users/alice").unwrap();
         assert_eq!(result, "contrix://example.com/users/alice");
     }
 
@@ -3573,7 +3644,10 @@ mod tests {
             "handle_aliases MUST carry the acct: interop form"
         );
         assert_eq!(material.payload.audience, "did:web:space.example");
-        assert_eq!(material.payload.delivery_binding_hint.binding_source, hint.binding_source);
+        assert_eq!(
+            material.payload.delivery_binding_hint.binding_source,
+            hint.binding_source
+        );
         assert!(material.payload.claim_digest.starts_with("sha256:"));
         assert_eq!(material.claim_digest, material.payload.claim_digest);
         assert!(material.expires_at > now);

@@ -243,7 +243,9 @@ pub fn cascade_any_revoke(
     current_subscope_tags: &[String],
 ) -> Result<AnyRevokeCascade, MimiConsentError> {
     if update.granted {
-        return Err(MimiConsentError::MissingField { field: "granted=false" });
+        return Err(MimiConsentError::MissingField {
+            field: "granted=false",
+        });
     }
     if update.scope != ANY_SCOPE_SENTINEL {
         return Err(MimiConsentError::MissingField { field: "scope=any" });
@@ -272,7 +274,10 @@ pub fn cascade_any_revoke(
         });
     }
 
-    Ok(AnyRevokeCascade { primary, superseded })
+    Ok(AnyRevokeCascade {
+        primary,
+        superseded,
+    })
 }
 
 /// Round R2/R3 T17 — broadcast a cache-invalidation event to

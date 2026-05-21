@@ -278,10 +278,7 @@ mod tests {
         for _ in 0..16 {
             let code = generate_oob_code(OobCodeKind::OfflineVerifiable);
             assert_eq!(code.len(), OFFLINE_CODE_LEN, "len: {code}");
-            assert!(
-                is_valid_offline_code(&code),
-                "alphabet violation: {code}"
-            );
+            assert!(is_valid_offline_code(&code), "alphabet violation: {code}");
             // Excluded characters MUST NOT appear.
             for forbidden in ['I', 'L', '0', '1', 'O'] {
                 assert!(

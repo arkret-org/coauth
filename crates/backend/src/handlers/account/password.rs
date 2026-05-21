@@ -77,9 +77,9 @@ pub async fn set_password(
         Err(ChangePasswordError::PasswordTooWeak) => Ok(Json(SetPasswordResponse {
             status: "INVALID_NEW_PASSWORD",
         })),
-        Err(ChangePasswordError::UserNotFound) => {
-            Ok(Json(SetPasswordResponse { status: "NOT_FOUND" }))
-        }
+        Err(ChangePasswordError::UserNotFound) => Ok(Json(SetPasswordResponse {
+            status: "NOT_FOUND",
+        })),
         Err(ChangePasswordError::PasswordChangesDisabled) => Ok(Json(SetPasswordResponse {
             status: "PASSWORD_CHANGES_DISABLED",
         })),

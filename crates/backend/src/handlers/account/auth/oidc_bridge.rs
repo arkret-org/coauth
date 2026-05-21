@@ -70,6 +70,7 @@ pub struct AuthBridgeDescribeResponse {
     pub version: &'static str,
     pub api_base_path: &'static str,
     pub oauth: AuthBridgeOAuthDescriptor,
+    pub passkey: AuthBridgePasskeyDescriptor,
     pub contrix: AuthBridgeContrixDescriptor,
     pub admin: AuthBridgeAdminDescriptor,
     pub todos: Vec<&'static str>,
@@ -84,6 +85,16 @@ pub struct AuthBridgeOAuthDescriptor {
     pub supported_flows: Vec<&'static str>,
     pub redirect_uri_modes: Vec<&'static str>,
     pub client_selection_mode: &'static str,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct AuthBridgePasskeyDescriptor {
+    pub register_start_path: &'static str,
+    pub register_finish_path: &'static str,
+    pub auth_start_path: &'static str,
+    pub auth_finish_path: &'static str,
+    pub account_hint_fields: Vec<&'static str>,
+    pub finish_response: &'static str,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -1780,6 +1791,14 @@ pub async fn auth_bridge_describe(
             redirect_uri_modes: vec!["browser_origin_callback", "native_urn_callback"],
             client_selection_mode: "public_authorization_code_client_with_exact_redirect_match",
         },
+        passkey: AuthBridgePasskeyDescriptor {
+            register_start_path: "/api/v1/auth/passkey/register/start",
+            register_finish_path: "/api/v1/auth/passkey/register/finish",
+            auth_start_path: "/api/v1/auth/passkey/auth/start",
+            auth_finish_path: "/api/v1/auth/passkey/auth/finish",
+            account_hint_fields: vec!["account_id", "handle", "login_hint", "display_name"],
+            finish_response: "credential_id_only_session_grant_followup",
+        },
         contrix: AuthBridgeContrixDescriptor {
             login_path: "/api/v1/auth/login",
             logout_path: "/api/v1/auth/logout",
@@ -1857,6 +1876,14 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 contract: "contrix.rest.oidc_exchange.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "validates state, PKCE, nonce, discovery binding, code exchange, userinfo, and session-grant audience.".to_owned(),
+            },
+            IntegrationManifestSurface {
+                name: "passkey_auth".to_owned(),
+                method: "POST".to_owned(),
+                path: "/api/v1/auth/passkey/{register,auth}/{start,finish}".to_owned(),
+                contract: "contrix.rest.passkey_auth.v1".to_owned(),
+                stability: "preview".to_owned(),
+                todo: "WebAuthn challenge and finish use the production passkey service; finish currently returns credential identity and still relies on the session-grant follow-up path.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "admin_bridge".to_owned(),

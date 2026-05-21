@@ -100,6 +100,16 @@ pub struct ContrixConfig {
     /// `backend::services::oob_code` for the implementation.
     #[serde(default)]
     pub oob_code_kind: OobCodeKindConfig,
+
+    /// Round 4 — DID of the trusted 3PID verification service whose
+    /// `binding_proof` JWTs this coauth deployment will accept on
+    /// `POST /api/v1/invites/3pid/verify`. When omitted, the invite
+    /// verifier endpoint returns `503 verifier_not_configured` because
+    /// it has no trusted `iss` to compare against.
+    ///
+    /// Override at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_service_did: Option<String>,
 }
 
 fn default_high_risk_threshold() -> u32 {
@@ -119,6 +129,7 @@ impl Default for ContrixConfig {
             high_risk_threshold: default_high_risk_threshold(),
             trust_domain: None,
             oob_code_kind: OobCodeKindConfig::default(),
+            verification_service_did: None,
         }
     }
 }
@@ -137,6 +148,7 @@ impl ContrixConfig {
             && self.high_risk_threshold == default_high_risk_threshold()
             && self.trust_domain.is_none()
             && matches!(self.oob_code_kind, OobCodeKindConfig::OfflineVerifiable)
+            && self.verification_service_did.is_none()
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
