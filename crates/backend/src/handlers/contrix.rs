@@ -2,8 +2,8 @@ use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::{ContrixConfig, IdentityRegistryKind};
 use coauth_data::{
-    BrowserSession, Clock, Pagination, RepositoryAccess, SessionGrant, UrlBuilder, User,
     oauth::{NewSessionGrant, SessionGrantFilter},
+    BrowserSession, Clock, Pagination, RepositoryAccess, SessionGrant, UrlBuilder, User,
 };
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::{
@@ -500,13 +500,11 @@ struct AuthMetadata {
 struct ServiceDescribeResponse {
     service_did: String,
     service_type: &'static str,
-    /// Round 4 (spec a77b995) — deployment-scope trust domain. Mirror
-    /// of `ContrixConfig::trust_domain` (wire form
-    /// `cx:trust_domain:<scope>`). Receivers MUST treat a missing
-    /// `trust_domain` as the deployment failing closed — federation
-    /// partners cannot bind their canonical transcript without one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    trust_domain: Option<String>,
+    /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
+    /// form `cx:trust_domain:<scope>`). Explicit configuration wins;
+    /// otherwise coauth derives a stable deployment-local value from the
+    /// public host so the service-describe schema can require it.
+    trust_domain: String,
     /// T6.3 — explicit Contrix v1 role declaration. A coauth instance can
     /// simultaneously act as `auth_server` (OIDC token issuer),
     /// `identity_resolver` (DID / handle resolution proxy), and
@@ -1066,6 +1064,41 @@ pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
     url_builder.absolute_url("/api/v1").to_string()
 }
 
+fn trust_domain_for(url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String {
+    contrix_config.trust_domain.clone().unwrap_or_else(|| {
+        let scope = derived_trust_domain_scope(url_builder.public_hostname());
+        let trust_domain = format!("cx:trust_domain:{scope}");
+        debug_assert!(ContrixConfig::validate_trust_domain(&trust_domain).is_ok());
+        trust_domain
+    })
+}
+
+fn derived_trust_domain_scope(host: &str) -> String {
+    let host = host
+        .strip_prefix('[')
+        .and_then(|inner| inner.strip_suffix(']'))
+        .unwrap_or(host);
+    let mut scope: String = host
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | '0'..='9' | '.' | '_' | '-' | ':' => ch,
+            _ => '-',
+        })
+        .collect();
+    if scope.is_empty() {
+        scope.push_str("host");
+    }
+    let first = scope.as_bytes()[0];
+    if !matches!(first, b'a'..=b'z' | b'0'..=b'9') {
+        scope.insert_str(0, "host-");
+    }
+    if scope.len() > 128 {
+        scope.truncate(128);
+    }
+    scope
+}
+
 pub(crate) fn required_audience_for(
     url_builder: &UrlBuilder,
     contrix_config: &ContrixConfig,
@@ -1289,7 +1322,7 @@ fn service_describe_response(
         // Round 4 — surface the deployment trust domain so federation
         // peers can verify cross-deployment replay protection (see
         // `contrix-spec` round-4 §f9bd7eb).
-        trust_domain: contrix_config.trust_domain.clone(),
+        trust_domain: trust_domain_for(url_builder, contrix_config),
         // service_type is the SDK-side `ServiceType` discriminant. coauth's
         // primary role is OIDC issuance, so this is kept as "auth_server".
         // The richer multi-role posture is expressed via `service_roles`
@@ -1347,6 +1380,7 @@ fn service_describe_response(
             "cx.identity.get_document",
             "cx.directory.describe",
             "cx.directory.resolve_handle",
+            "cx.policy.check",
         ],
         // T6.1 — claim-level partition. See service-surface.md §3.0.
         //
@@ -1428,28 +1462,28 @@ fn service_describe_response(
         // convenience but are a DELEGATED resolver shim onto an
         // upstream registry (starid, public DID network, etc.); coauth
         // is NOT the canonical identity authority for any DID it
-        // returns. The `delegated_resolver` kind disambiguates from
-        // `external_interop` / `matrix_passthrough`.
+        // returns. Schema only allows the broad `external_interop` kind;
+        // each note preserves the delegated-resolver boundary explicitly.
         compat_surfaces: vec![
             CompatSurfaceDescriptor {
                 name: "cx.identity.describe_registry",
-                kind: "delegated_resolver",
+                kind: "external_interop",
                 notes: Some(
-                    "Reports the upstream registry coauth proxies to; does not assert canonical ownership.",
+                    "delegated-resolver interop: reports the upstream registry coauth proxies to; does not assert canonical ownership.",
                 ),
             },
             CompatSurfaceDescriptor {
                 name: "cx.identity.resolve",
-                kind: "delegated_resolver",
+                kind: "external_interop",
                 notes: Some(
-                    "DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
+                    "delegated-resolver interop: DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
                 ),
             },
             CompatSurfaceDescriptor {
                 name: "cx.identity.get_document",
-                kind: "delegated_resolver",
+                kind: "external_interop",
                 notes: Some(
-                    "Returns the cached/resolved DID document; coauth holds no authoritative key log for external DIDs.",
+                    "delegated-resolver interop: returns the cached/resolved DID document; coauth holds no authoritative key log for external DIDs.",
                 ),
             },
         ],
@@ -2460,7 +2494,7 @@ pub async fn refresh_session_grant(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<RefreshSessionGrantResponse>, ContrixRouteError> {
-    use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
+    use crate::services::dpop::{dpop_header_from_request, dpop_htu, DpopVerifier};
 
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
@@ -2772,7 +2806,7 @@ mod tests {
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use crate::handlers::test_utils::{setup, RequestBuilderExt, ResponseExt, TestState};
 
     use super::*;
 
@@ -2842,6 +2876,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(body["service_did"], "did:web:auth.example.com");
+        assert_eq!(body["trust_domain"], "cx:trust_domain:auth.example.com");
         assert_eq!(body["service_type"], "auth_server");
         assert_eq!(body["admin_audience"], "https://auth.example.com/api/admin");
         assert_eq!(
@@ -2900,6 +2935,11 @@ mod tests {
             !supported_schema_profiles.contains(&serde_json::json!("cx.schema.v1")),
             "the legacy `cx.schema.v1` placeholder MUST NOT be advertised"
         );
+        let supported_operations = body["supported_operations"].as_array().unwrap();
+        assert!(
+            supported_operations.contains(&serde_json::json!("cx.policy.check")),
+            "implemented POST /api/v1/policy/check MUST be advertised as cx.policy.check"
+        );
         let not_authoritative_for = body["service_boundary"]["not_authoritative_for"]
             .as_array()
             .unwrap();
@@ -2915,18 +2955,26 @@ mod tests {
         assert!(service_roles.contains(&serde_json::json!("identity_resolver")));
         assert!(service_roles.contains(&serde_json::json!("account_registry")));
 
-        // T6.3 — cx.identity.* operations MUST be declared delegated,
-        // not as canonical identity registry surface.
-        let compat: Vec<&str> = body["compat_surfaces"]
+        // T6.3 — cx.identity.* operations MUST be declared as
+        // schema-valid external interop while preserving their delegated-
+        // resolver boundary in notes, not as canonical identity registry
+        // surface.
+        let compat: Vec<(&str, &str)> = body["compat_surfaces"]
             .as_array()
             .expect("compat_surfaces array present")
             .iter()
-            .filter(|entry| entry["kind"].as_str() == Some("delegated_resolver"))
-            .filter_map(|entry| entry["name"].as_str())
+            .filter(|entry| entry["kind"].as_str() == Some("external_interop"))
+            .filter_map(|entry| Some((entry["name"].as_str()?, entry["notes"].as_str()?)))
             .collect();
-        assert!(compat.contains(&"cx.identity.resolve"));
-        assert!(compat.contains(&"cx.identity.get_document"));
-        assert!(compat.contains(&"cx.identity.describe_registry"));
+        assert!(compat.iter().any(|(name, notes)| {
+            *name == "cx.identity.resolve" && notes.contains("delegated-resolver")
+        }));
+        assert!(compat.iter().any(|(name, notes)| {
+            *name == "cx.identity.get_document" && notes.contains("delegated-resolver")
+        }));
+        assert!(compat.iter().any(|(name, notes)| {
+            *name == "cx.identity.describe_registry" && notes.contains("delegated-resolver")
+        }));
         // verified_profiles MUST NOT include cx.profile.identity_registry.v1
         // because coauth is a delegated resolver, not a registry.
         let verified = body["verified_profiles"]
@@ -3048,11 +3096,10 @@ mod tests {
             .collect();
         assert!(experimental.is_disjoint(&verified_ids));
 
-        // compat_surfaces entries must declare a known kind.
-        // T6.3 — `delegated_resolver` was added for coauth's
-        // `cx.identity.*` proxy operations (it is NOT a canonical
-        // identity registry; the ops are forwarded to an upstream
-        // resolver such as starid).
+        // compat_surfaces entries must declare a schema-known kind.
+        // T6.3 — coauth's `cx.identity.*` proxy operations are NOT a
+        // canonical identity registry; the delegated-resolver semantics
+        // are carried in notes while kind stays schema-valid.
         for surface in body["compat_surfaces"]
             .as_array()
             .expect("compat_surfaces array present")
@@ -3066,15 +3113,28 @@ mod tests {
                         | "legacy_alias"
                         | "external_interop"
                         | "deprecated_alias"
-                        | "delegated_resolver"
                 ),
                 "unknown compat_surface kind {kind}"
+            );
+            assert_ne!(
+                kind, "delegated_resolver",
+                "service-describe schema does not allow delegated_resolver as compat_surface kind"
+            );
+            assert!(
+                surface["notes"]
+                    .as_str()
+                    .is_some_and(|notes| notes.contains("delegated-resolver")),
+                "delegated-resolver semantics must remain in compat_surface notes"
             );
         }
 
         // development_mode field must be present so downstream tools
         // (sodmin / cotest) can render the dev banner.
         assert!(body["development_mode"].is_boolean());
+        let supported_operations = body["supported_operations"]
+            .as_array()
+            .expect("supported_operations array present");
+        assert!(supported_operations.contains(&serde_json::json!("cx.policy.check")));
     }
 
     #[test]
@@ -3098,7 +3158,7 @@ mod tests {
     }
 
     #[test]
-    fn service_describe_omits_trust_domain_when_unset() {
+    fn service_describe_derives_trust_domain_from_public_host_when_unset() {
         let url_builder = UrlBuilder::new(
             "https://auth.example.com/coauth/".parse().unwrap(),
             None,
@@ -3110,10 +3170,20 @@ mod tests {
             &[],
         ))
         .unwrap();
-        assert!(
-            body.get("trust_domain").is_none(),
-            "trust_domain field MUST be omitted from the wire when unset (deployment fails closed)"
-        );
+        assert_eq!(body["trust_domain"], "cx:trust_domain:auth.example.com");
+    }
+
+    #[test]
+    fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
+        let url_builder = UrlBuilder::new("https://[::1]/coauth/".parse().unwrap(), None, None);
+        let body = serde_json::to_value(service_describe_response(
+            &url_builder,
+            &ContrixConfig::default(),
+            &[],
+        ))
+        .unwrap();
+        assert_eq!(body["trust_domain"], "cx:trust_domain:host-::1");
+        ContrixConfig::validate_trust_domain(body["trust_domain"].as_str().unwrap()).unwrap();
     }
 
     #[test]
