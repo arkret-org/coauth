@@ -82,6 +82,17 @@ fn clear_preserved_login_query() {
     }
 }
 
+fn store_post_auth_continuation(kind: &str, id: &str) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(storage) = web_sys::window().and_then(|w| w.session_storage().ok().flatten()) {
+        let _ = storage.set_item("post_auth_kind", kind);
+        let _ = storage.set_item("post_auth_id", id);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = (kind, id);
+}
+
 #[component]
 pub fn Login() -> Element {
     let providers_data = use_resource(|| async {
@@ -308,14 +319,8 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                                 // overview.
                                 let continuation =
                                     get_query_param("kind").zip(get_query_param("id"));
-                                if let Some((_kind, _id)) = continuation {
-                                    #[cfg(target_arch = "wasm32")]
-                                    if let Some(storage) = web_sys::window()
-                                        .and_then(|w| w.session_storage().ok().flatten())
-                                    {
-                                        let _ = storage.set_item("post_auth_kind", &kind);
-                                        let _ = storage.set_item("post_auth_id", &id);
-                                    }
+                                if let Some((kind, id)) = continuation {
+                                    store_post_auth_continuation(&kind, &id);
                                 }
                             },
                             "Create account"

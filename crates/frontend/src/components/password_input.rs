@@ -91,6 +91,8 @@ pub fn PasswordCreationDoubleInput(
     new_password_again: Signal<String>,
     force_invalid: Option<bool>,
 ) -> Element {
+    let show_new_password = use_signal(|| false);
+    let show_confirm_password = use_signal(|| false);
     let passwords_match =
         new_password.read().eq(&*new_password_again.read()) || new_password_again.read().is_empty();
     let show_mismatch = !passwords_match && !new_password_again.read().is_empty();
@@ -102,13 +104,16 @@ pub fn PasswordCreationDoubleInput(
     rsx! {
         div { class: "form-field",
             label { class: "form-label", "New password" }
-            input {
-                class: if force_invalid { "form-input invalid" } else { "form-input" },
-                r#type: "password",
-                autocomplete: "new-password",
-                required: true,
-                value: "{new_password}",
-                oninput: move |e| new_password.set(e.value()),
+            div { class: "password-input-wrapper",
+                input {
+                    class: if force_invalid { "form-input invalid" } else { "form-input" },
+                    r#type: if show_new_password() { "text" } else { "password" },
+                    autocomplete: "new-password",
+                    required: true,
+                    value: "{new_password}",
+                    oninput: move |e| new_password.set(e.value()),
+                }
+                PasswordVisibilityToggle { visible: show_new_password }
             }
             if force_invalid {
                 span { class: "form-error", "Password does not meet the requirements." }
@@ -136,16 +141,59 @@ pub fn PasswordCreationDoubleInput(
         }
         div { class: "form-field",
             label { class: "form-label", "Confirm new password" }
-            input {
-                class: if show_mismatch { "form-input invalid" } else { "form-input" },
-                r#type: "password",
-                autocomplete: "new-password",
-                required: true,
-                value: "{new_password_again}",
-                oninput: move |e| new_password_again.set(e.value()),
+            div { class: "password-input-wrapper",
+                input {
+                    class: if show_mismatch { "form-input invalid" } else { "form-input" },
+                    r#type: if show_confirm_password() { "text" } else { "password" },
+                    autocomplete: "new-password",
+                    required: true,
+                    value: "{new_password_again}",
+                    oninput: move |e| new_password_again.set(e.value()),
+                }
+                PasswordVisibilityToggle { visible: show_confirm_password }
             }
             if show_mismatch {
                 span { class: "form-error", "Passwords do not match." }
+            }
+        }
+    }
+}
+
+#[component]
+fn PasswordVisibilityToggle(visible: Signal<bool>) -> Element {
+    let label = if visible() {
+        "Hide password"
+    } else {
+        "Show password"
+    };
+
+    rsx! {
+        button {
+            class: "password-toggle",
+            r#type: "button",
+            title: "{label}",
+            "aria-label": "{label}",
+            onclick: move |_| visible.set(!visible()),
+            svg {
+                class: "password-toggle-icon",
+                xmlns: "http://www.w3.org/2000/svg",
+                width: "20",
+                height: "20",
+                view_box: "0 0 24 24",
+                fill: "none",
+                stroke: "currentColor",
+                stroke_width: "2",
+                stroke_linecap: "round",
+                stroke_linejoin: "round",
+                if visible() {
+                    path { d: "M17.94 17.94A10.07 10.07 0 0 1 12 20C7 20 2.73 16.89 1 12A18.45 18.45 0 0 1 5.06 5.06" }
+                    path { d: "M9.9 4.24A9.12 9.12 0 0 1 12 4C17 4 21.27 7.11 23 12A18.5 18.5 0 0 1 19.42 16.42" }
+                    path { d: "M14.12 14.12A3 3 0 0 1 9.88 9.88" }
+                    path { d: "M1 1L23 23" }
+                } else {
+                    path { d: "M1 12S5 4 12 4S23 12 23 12S19 20 12 20S1 12 1 12Z" }
+                    circle { cx: "12", cy: "12", r: "3" }
+                }
             }
         }
     }

@@ -6,6 +6,16 @@ use crate::{
     pages::Route,
 };
 
+#[cfg(target_arch = "wasm32")]
+fn navigate_to_redirect_url(url: &str) {
+    if let Some(win) = web_sys::window() {
+        let _ = win.location().assign(url);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn navigate_to_redirect_url(_url: &str) {}
+
 /// OAuth consent page — shows what permissions a client is requesting.
 #[component]
 pub fn Consent(grant_id: String) -> Element {
@@ -121,17 +131,10 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
                                     submitting.set(false);
                                     match result {
                                         Ok(resp) if resp.status == "success" => {
-                                            if let Some(_url) = resp.redirect_url {
+                                            if let Some(url) = resp.redirect_url {
                                                 // Navigate browser to the OAuth callback URL
-                                                #[cfg(target_arch = "wasm32")]
-                                                {
-                                                    if let Some(win) = web_sys::window() {
-                                                        // Use assign() for a full navigation
-                                                        // (more reliable than set_href in some
-                                                        // WASM scenarios).
-                                                        let _ = win.location().assign(&url);
-                                                    }
-                                                }
+                                                // with assign() for a full navigation.
+                                                navigate_to_redirect_url(&url);
                                             } else {
                                                 error.set(Some("No redirect URL in response.".to_owned()));
                                             }

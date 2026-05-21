@@ -812,6 +812,49 @@ html[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
 }
 
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper .form-input {
+    padding-right: 48px;
+}
+
+.password-toggle {
+    position: absolute;
+    right: var(--space-2x);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.password-toggle:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-secondary);
+}
+
+.password-toggle:focus-visible {
+    outline: none;
+    color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-glow);
+}
+
+.password-toggle-icon {
+    width: 20px;
+    height: 20px;
+    pointer-events: none;
+}
+
 .form-error {
     font-size: var(--font-size-sm);
     color: var(--color-destructive);
