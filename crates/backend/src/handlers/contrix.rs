@@ -561,15 +561,20 @@ struct ClaimedProfileDescriptor {
 }
 
 /// T6.1 — cotest-verified profile entry. Required `cotest_run_id`,
-/// `artifact_hash`, `timestamp`. Dev-mode posture MUST NOT advertise any
-/// such entry (§3.0).
+/// `artifact_hash`, `artifact_ref`, `cotest_issuer_did`, `signature`,
+/// `timestamp`. Dev-mode posture MUST NOT advertise any such entry (§3.0).
 #[derive(Debug, Serialize)]
 struct VerifiedProfileDescriptor {
     profile_id: String,
     claim_kind: &'static str,
     cotest_run_id: String,
     artifact_hash: String,
+    artifact_ref: String,
+    cotest_issuer_did: String,
+    signature: String,
     timestamp: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    valid_until: Option<String>,
 }
 
 /// T6.1 — compat / external-interop surface entry. `kind` ∈
@@ -1291,7 +1296,11 @@ fn build_verified_profile_descriptors(
                 claim_kind: "cotest_verified",
                 cotest_run_id: entry.cotest_run_id.clone(),
                 artifact_hash: entry.artifact_hash.clone(),
+                artifact_ref: entry.artifact_ref.clone(),
+                cotest_issuer_did: entry.cotest_issuer_did.clone(),
+                signature: entry.signature.clone(),
                 timestamp: entry.timestamp.to_rfc3339(),
+                valid_until: entry.valid_until.map(|ts| ts.to_rfc3339()),
             })
         })
         .collect()
