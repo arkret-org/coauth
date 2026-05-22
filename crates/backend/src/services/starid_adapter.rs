@@ -23,6 +23,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use coauth_config::StaridConfig;
+use contrix_core::ErrorEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -44,14 +45,14 @@ pub enum StaridError {
     #[error("starid base URL invalid: {0}")]
     Url(#[from] url::ParseError),
 
-    /// 4xx with the `errcode` from the response envelope and the human
-    /// `error` string. `errcode == "not_found"` means the DID isn't
+    /// 4xx with the `error.code` from the response envelope and the human
+    /// `message` string. `code == "not_found"` means the DID isn't
     /// hosted by this starid; everything else is a programmer or
     /// signature failure.
-    #[error("starid request failed ({status}, errcode={errcode}): {message}")]
+    #[error("starid request failed ({status}, code={code}): {message}")]
     Api {
         status: u16,
-        errcode: String,
+        code: String,
         message: String,
     },
 
@@ -415,7 +416,7 @@ impl StaridRegistry for StaridResolver {
         if !status.is_success() {
             // 401 → invalid signature. Caller may want to surface that
             // distinctly; today we collapse it into the `Api` variant
-            // and let the caller match on `errcode`.
+            // and let the caller match on `error.code`.
             return Err(parse_api_fault(status.as_u16(), &bytes));
         }
         let parsed: WebvhVerifyResponse = serde_json::from_slice(&bytes)?;
@@ -430,24 +431,15 @@ impl StaridRegistry for StaridResolver {
 }
 
 fn parse_api_fault(status: u16, bytes: &[u8]) -> StaridError {
-    #[derive(Deserialize)]
-    struct Envelope {
-        error: ErrorBody,
-    }
-    #[derive(Deserialize)]
-    struct ErrorBody {
-        errcode: String,
-        error: String,
-    }
-    match serde_json::from_slice::<Envelope>(bytes) {
+    match serde_json::from_slice::<ErrorEnvelope>(bytes) {
         Ok(env) => StaridError::Api {
             status,
-            errcode: env.error.errcode,
-            message: env.error.error,
+            code: env.error.code,
+            message: env.error.message,
         },
         Err(_) => StaridError::Api {
             status,
-            errcode: "unparseable".to_owned(),
+            code: "unparseable".to_owned(),
             message: String::from_utf8_lossy(bytes).into_owned(),
         },
     }
@@ -578,10 +570,10 @@ mod tests {
             .respond_with(ResponseTemplate::new(409).set_body_json(json!({
                 "ok": false,
                 "error": {
-                    "errcode": "cas_conflict",
-                    "error": "stale write",
-                    "request_id": "req-abc",
-                }
+                    "code": "cas_conflict",
+                    "message": "stale write"
+                },
+                "request_id": "cx:req:01964137-0000-7000-8000-000000000001"
             })))
             .mount(&server)
             .await;
@@ -592,11 +584,9 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            StaridError::Api {
-                status, errcode, ..
-            } => {
+            StaridError::Api { status, code, .. } => {
                 assert_eq!(status, 409);
-                assert_eq!(errcode, "cas_conflict");
+                assert_eq!(code, "cas_conflict");
             }
             other => panic!("expected Api fault, got {other:?}"),
         }
@@ -679,10 +669,10 @@ mod tests {
             .respond_with(ResponseTemplate::new(409).set_body_json(json!({
                 "ok": false,
                 "error": {
-                    "errcode": "stale_prev_version",
-                    "error": "prev_version_id no longer matches head",
-                    "request_id": "req-rot",
-                }
+                    "code": "stale_prev_version",
+                    "message": "prev_version_id no longer matches head"
+                },
+                "request_id": "cx:req:01964137-0000-7000-8000-000000000002"
             })))
             .mount(&server)
             .await;
@@ -697,11 +687,9 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            StaridError::Api {
-                status, errcode, ..
-            } => {
+            StaridError::Api { status, code, .. } => {
                 assert_eq!(status, 409);
-                assert_eq!(errcode, "stale_prev_version");
+                assert_eq!(code, "stale_prev_version");
             }
             other => panic!("expected Api fault, got {other:?}"),
         }
@@ -753,10 +741,10 @@ mod tests {
             .respond_with(ResponseTemplate::new(401).set_body_json(json!({
                 "ok": false,
                 "error": {
-                    "errcode": "invalid_signature",
-                    "error": "ed25519 signature is invalid",
-                    "request_id": "req-x",
-                }
+                    "code": "invalid_signature",
+                    "message": "ed25519 signature is invalid"
+                },
+                "request_id": "cx:req:01964137-0000-7000-8000-000000000003"
             })))
             .mount(&server)
             .await;
@@ -770,11 +758,9 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            StaridError::Api {
-                status, errcode, ..
-            } => {
+            StaridError::Api { status, code, .. } => {
                 assert_eq!(status, 401);
-                assert_eq!(errcode, "invalid_signature");
+                assert_eq!(code, "invalid_signature");
             }
             other => panic!("expected Api fault, got {other:?}"),
         }

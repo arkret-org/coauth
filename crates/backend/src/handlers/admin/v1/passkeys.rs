@@ -113,10 +113,10 @@ fn map_starid_error(err: OnboardingStaridError) -> AppError {
     match err {
         OnboardingStaridError::Starid(StaridError::Api {
             status,
-            errcode,
+            code,
             message,
         }) => AppError::bad_request(format!(
-            "starid_mint_failed: status={status} errcode={errcode} message={message}"
+            "starid_mint_failed: status={status} code={code} message={message}"
         )),
         OnboardingStaridError::Starid(other) => {
             AppError::internal(std::io::Error::other(other.to_string()))

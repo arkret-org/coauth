@@ -12,6 +12,7 @@ use coauth_jose::{
     jwt::{JsonWebSignatureHeader, Jwt, JwtSignatureError},
 };
 use coauth_keystore::{Keystore, PrivateKey, WrongAlgorithmError};
+use contrix_core::ErrorEnvelope;
 use der::pem::LineEnding;
 use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::{CryptoRngCore, RngCore};
@@ -239,13 +240,7 @@ impl Scribe for ContrixRouteError {
         }
 
         res.status_code(status);
-        res.render(Json(serde_json::json!({
-            "ok": false,
-            "error": {
-                "code": code,
-                "message": message,
-            }
-        })));
+        res.render(Json(ErrorEnvelope::new(code, message)));
     }
 }
 
@@ -453,6 +448,7 @@ struct StandardErrorEnvelopeDescriptor {
 struct StandardErrorEnvelopeExample {
     ok: bool,
     error: StandardErrorExampleBody,
+    request_id: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -1258,6 +1254,7 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
                 code: "machine_readable_code",
                 message: "human-readable message",
             },
+            request_id: "cx:req:01964137-0000-7000-8000-000000000000",
         },
         codes: vec!["bad_json", "not_found", "internal_error"],
     }
@@ -2914,7 +2911,8 @@ mod tests {
                 "error": {
                     "code": "machine_readable_code",
                     "message": "human-readable message"
-                }
+                },
+                "request_id": "cx:req:01964137-0000-7000-8000-000000000000"
             })
         );
 

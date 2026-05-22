@@ -103,7 +103,7 @@ mod tests {
     /// match against. Locking this in here means a regression in the
     /// envelope (e.g. wrong multicodec tag) breaks this test rather
     /// than silently producing a key starid rejects with
-    /// `errcode=invalid_update_key`.
+    /// `error.code=invalid_update_key`.
     #[test]
     fn derive_output_uses_multibase_z6mk_prefix() {
         let key = derive_update_key_from_cose_bytes(b"any-input");
