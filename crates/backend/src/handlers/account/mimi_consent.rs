@@ -637,7 +637,7 @@ mod tests {
             anchor_ref:
                 "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
                     .to_owned(),
-            hlc: "0189c4d2af00-00000000-aabbccdd".to_owned(),
+            hlc: "0189c4d2af00-0000-aabbccdd".to_owned(),
         }
     }
 
@@ -678,7 +678,7 @@ mod tests {
             anchor_ref:
                 "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
                     .into(),
-            hlc: "0189c4d2af00-00000000-aabbccdd".into(),
+            hlc: "0189c4d2af00-0000-aabbccdd".into(),
         }
     }
 
@@ -692,7 +692,7 @@ mod tests {
             pending.space_id,
             "cx:space:0196419b-0000-7000-8000-00000000014a"
         );
-        assert_eq!(pending.hlc, "0189c4d2af00-00000000-aabbccdd");
+        assert_eq!(pending.hlc, "0189c4d2af00-0000-aabbccdd");
     }
 
     #[test]
