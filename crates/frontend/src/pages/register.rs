@@ -11,6 +11,14 @@ use crate::{
     pages::Route,
 };
 
+const REGISTER_EMAIL_CHANGE_ID: &str = "register-email-change";
+const REGISTER_EMAIL_VERIFY_CODE_ID: &str = "register-email-verify-code";
+const REGISTER_EMAIL_VERIFY_ERROR_ID: &str = "register-email-verify-error";
+const REGISTER_EMAIL_VERIFY_STATUS_ID: &str = "register-email-verify-status";
+const REGISTER_PHONE_VERIFY_CODE_ID: &str = "register-phone-verify-code";
+const REGISTER_PHONE_VERIFY_ERROR_ID: &str = "register-phone-verify-error";
+const REGISTER_PHONE_VERIFY_STATUS_ID: &str = "register-phone-verify-status";
+
 /// Registration entry page — shows password registration form and/or upstream
 /// provider buttons.
 #[component]
@@ -253,6 +261,11 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
         .as_deref()
         .map_or_else(|| "your email address".to_owned(), mask_email_address);
     let change_email_seed = pending_email.clone().unwrap_or_default();
+    let is_editing_email = editing_email();
+    let error_text = error.read().clone();
+    let resend_text = resend_message.read().clone();
+    let has_email_change_error = error_text.is_some() && is_editing_email;
+    let has_code_error = error_text.is_some() && !is_editing_email;
 
     rsx! {
         Layout {
@@ -280,9 +293,10 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                         }
                     }
 
-                    if editing_email() {
+                    if is_editing_email {
                         form {
                             class: "form-root",
+                            "aria-describedby": if has_email_change_error { REGISTER_EMAIL_VERIFY_ERROR_ID } else { "" },
                             onsubmit: move |e| {
                                 e.prevent_default();
                                 e.stop_propagation();
@@ -322,12 +336,15 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                             },
 
                             div { class: "form-field",
-                                label { class: "form-label", "Email address" }
+                                label { class: "form-label", r#for: REGISTER_EMAIL_CHANGE_ID, "Email address" }
                                 input {
+                                    id: REGISTER_EMAIL_CHANGE_ID,
                                     class: "form-input",
                                     r#type: "email",
                                     autocomplete: "email",
                                     required: true,
+                                    "aria-invalid": if has_email_change_error { "true" } else { "false" },
+                                    "aria-describedby": if has_email_change_error { REGISTER_EMAIL_VERIFY_ERROR_ID } else { "" },
                                     placeholder: "your@email.com",
                                     value: "{email}",
                                     oninput: move |e| email.set(e.value()),
@@ -347,20 +364,29 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                         }
                     }
 
-                    if let Some(ref err) = *error.read() {
-                        div { class: "alert alert-critical",
+                    if let Some(err) = error_text.as_ref() {
+                        div {
+                            class: "alert alert-critical",
+                            id: REGISTER_EMAIL_VERIFY_ERROR_ID,
+                            role: "alert",
+                            "aria-live": "assertive",
                             p { "{err}" }
                         }
                     }
 
-                    if let Some(ref msg) = *resend_message.read() {
-                        div { class: "alert alert-info",
+                    if let Some(msg) = resend_text.as_ref() {
+                        div {
+                            class: "alert alert-info",
+                            id: REGISTER_EMAIL_VERIFY_STATUS_ID,
+                            role: "status",
+                            "aria-live": "polite",
                             p { "{msg}" }
                         }
                     }
 
                     form {
                         class: "form-root",
+                        "aria-describedby": if has_code_error { REGISTER_EMAIL_VERIFY_ERROR_ID } else { "" },
                         onsubmit: move |e| {
                             e.prevent_default();
                             e.stop_propagation();
@@ -400,12 +426,15 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                         },
 
                         div { class: "form-field",
-                            label { class: "form-label", "Verification code" }
+                            label { class: "form-label", r#for: REGISTER_EMAIL_VERIFY_CODE_ID, "Verification code" }
                             input {
+                                id: REGISTER_EMAIL_VERIFY_CODE_ID,
                                 class: "form-input",
                                 r#type: "text",
                                 autocomplete: "one-time-code",
                                 required: true,
+                                "aria-invalid": if has_code_error { "true" } else { "false" },
+                                "aria-describedby": if has_code_error { REGISTER_EMAIL_VERIFY_ERROR_ID } else { "" },
                                 placeholder: "6-digit code",
                                 value: "{code}",
                                 oninput: move |e| code.set(e.value()),
@@ -522,6 +551,9 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
     let nav = navigator();
     let reg_id = id.clone();
     let resend_id = id.clone();
+    let error_text = error.read().clone();
+    let has_error = error_text.is_some();
+    let resend_text = resend_message.read().clone();
 
     rsx! {
         Layout {
@@ -530,20 +562,29 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
                     h1 { class: "heading-md login-title", "Verify your phone" }
                     p { class: "text-secondary", "We sent a verification code to your phone number. Please enter it below." }
 
-                    if let Some(ref err) = *error.read() {
-                        div { class: "alert alert-critical",
+                    if let Some(err) = error_text.as_ref() {
+                        div {
+                            class: "alert alert-critical",
+                            id: REGISTER_PHONE_VERIFY_ERROR_ID,
+                            role: "alert",
+                            "aria-live": "assertive",
                             p { "{err}" }
                         }
                     }
 
-                    if let Some(ref msg) = *resend_message.read() {
-                        div { class: "alert alert-info",
+                    if let Some(msg) = resend_text.as_ref() {
+                        div {
+                            class: "alert alert-info",
+                            id: REGISTER_PHONE_VERIFY_STATUS_ID,
+                            role: "status",
+                            "aria-live": "polite",
                             p { "{msg}" }
                         }
                     }
 
                     form {
                         class: "form-root",
+                        "aria-describedby": if has_error { REGISTER_PHONE_VERIFY_ERROR_ID } else { "" },
                         onsubmit: move |e| {
                             e.prevent_default();
                             e.stop_propagation();
@@ -581,12 +622,15 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
                         },
 
                         div { class: "form-field",
-                            label { class: "form-label", "Verification code" }
+                            label { class: "form-label", r#for: REGISTER_PHONE_VERIFY_CODE_ID, "Verification code" }
                             input {
+                                id: REGISTER_PHONE_VERIFY_CODE_ID,
                                 class: "form-input",
                                 r#type: "text",
                                 autocomplete: "one-time-code",
                                 required: true,
+                                "aria-invalid": if has_error { "true" } else { "false" },
+                                "aria-describedby": if has_error { REGISTER_PHONE_VERIFY_ERROR_ID } else { "" },
                                 placeholder: "6-digit code",
                                 value: "{code}",
                                 oninput: move |e| code.set(e.value()),

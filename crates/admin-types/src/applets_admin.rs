@@ -5,9 +5,8 @@
 //! `Pending → Approved → Suspended (soft-revoke) → Revoked (terminal)`,
 //! with re-approval allowed from any non-Approved state.
 //!
-//! Round-27 migrated these out of `sodmin/src/types/applets_admin.rs`
-//! (where they were flagged `TODO(a0-shared-crate)`). sodmin's next
-//! round will switch its imports.
+//! The coauth-side shared-crate extraction is complete here; sodmin import
+//! cleanup is tracked as the cross-repo pairing item.
 
 use serde::{Deserialize, Serialize};
 

@@ -5,9 +5,8 @@
 //! 404-tolerant on the client side; soland may not have the route wired
 //! yet for every deployment.
 //!
-//! Round-27 migrated these out of `sodmin/src/types/federation_status.rs`
-//! (where they were flagged `TODO(a0-shared-crate)`). The sodmin inline
-//! copies stay in place this round; sodmin's next round will switch.
+//! The coauth-side shared-crate extraction is complete here; sodmin import
+//! cleanup is tracked as the cross-repo pairing item.
 
 use serde::{Deserialize, Serialize};
 

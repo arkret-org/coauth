@@ -8,6 +8,7 @@ mod api;
 mod components;
 mod config;
 mod pages;
+mod translations;
 mod utils;
 
 use dioxus::prelude::*;
@@ -28,9 +29,15 @@ fn main() {
 
 fn app() -> Element {
     let cfg = get_config();
+    let bundled_fluent_json = crate::translations::bundled_fluent_json();
 
     rsx! {
         document::Link { rel: "stylesheet", href: MAIN_CSS }
+        document::Script {
+            id: "coauth-fluent-bundles",
+            r#type: "application/json",
+            "{bundled_fluent_json}"
+        }
         ThemeToggle {}
 
         if let Some(error) = cfg.error {

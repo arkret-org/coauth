@@ -28,13 +28,13 @@
 - [x] §6 Add the three plans (`plan-basic-op.json`, `plan-fapi2-baseline.json`, `plan-mtls-baseline.json`) into the nightly run.
 
 ### Admin types extraction
-- [ ] §7 Land the `TODO(a0-shared-crate)` items: extract applets_admin, bridge_admin, federation_admin, space_policy_admin into `coauth-admin-types`. sodmin currently has these inline (a known duplicate).
-- [ ] §8 Publish OpenAPI examples for the admin bridge surface (currently noted as TODO).
+- [x] §7 Land the `TODO(a0-shared-crate)` items: extract applets_admin, bridge_admin, federation_admin, space_policy_admin into `coauth-admin-types`. sodmin currently has these inline (a known duplicate).
+- [x] §8 Publish OpenAPI examples for the admin bridge surface (currently noted as TODO).
 
 ### Frontend (Dioxus SPA) polish
-- [ ] §9 Cross-check `crates/frontend/src/pages/login.rs` against sodmin's login flow — confirm they hit the same endpoints. (Today they share `coauth-admin-types` but with different request flows.)
-- [ ] §10 Add WCAG 2.1 AA check to the frontend (focus rings, aria-live for OTP errors, contrast). Capture in `frontend/A11Y.md`.
-- [ ] §11 Confirm `dx build` output bundles the latest Fluent translations (en+zh) — currently the WASM SPA embeds them.
+- [x] §9 Cross-check `crates/frontend/src/pages/login.rs` against sodmin's login flow — confirm they hit the same endpoints. (Today they share `coauth-admin-types` but with different request flows.)
+- [x] §10 Add WCAG 2.1 AA check to the frontend (focus rings, aria-live for OTP errors, contrast). Capture in `frontend/A11Y.md`.
+- [x] §11 Confirm `dx build` output bundles the latest Fluent translations (en+zh) — currently the WASM SPA embeds them.
 
 ### Engineering hygiene (master plan §5)
 - [x] §12 Add Trivy scan to release.yaml's container build step.

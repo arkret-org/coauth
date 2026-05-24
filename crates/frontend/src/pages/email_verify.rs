@@ -10,6 +10,10 @@ use crate::{
     pages::Route,
 };
 
+const EMAIL_VERIFY_ERROR_ID: &str = "email-verify-error";
+const EMAIL_VERIFY_CODE_ID: &str = "email-verify-code";
+const EMAIL_VERIFY_STATUS_ID: &str = "email-verify-status";
+
 #[component]
 pub fn EmailVerify(id: String) -> Element {
     let mut code = use_signal(String::new);
@@ -19,6 +23,8 @@ pub fn EmailVerify(id: String) -> Element {
     let mut resending = use_signal(|| false);
     let mut resend_message = use_signal(|| None::<String>);
     let email_id = id.clone();
+    let error_text = error.read().clone();
+    let has_error = error_text.is_some();
 
     // Preliminary query to check email authentication status
     let id_for_query = id.clone();
@@ -82,6 +88,7 @@ pub fn EmailVerify(id: String) -> Element {
 
                             form {
                                 class: "form-root",
+                                "aria-describedby": if has_error { EMAIL_VERIFY_ERROR_ID } else { "" },
                                 onsubmit: move |evt| {
                                     evt.prevent_default();
                                     evt.stop_propagation();
@@ -120,21 +127,36 @@ pub fn EmailVerify(id: String) -> Element {
                                     });
                                 },
 
-                                if let Some(ref err) = *error.read() {
-                                    div { class: "alert alert-critical", "{err}" }
+                                if let Some(err) = error_text.as_ref() {
+                                    div {
+                                        class: "alert alert-critical",
+                                        id: EMAIL_VERIFY_ERROR_ID,
+                                        role: "alert",
+                                        "aria-live": "assertive",
+                                        "{err}"
+                                    }
                                 }
 
                                 if let Some(ref msg) = *resend_message.read() {
-                                    div { class: "alert alert-info", "{msg}" }
+                                    div {
+                                        class: "alert alert-info",
+                                        id: EMAIL_VERIFY_STATUS_ID,
+                                        role: "status",
+                                        "aria-live": "polite",
+                                        "{msg}"
+                                    }
                                 }
 
                                 div { class: "form-field",
-                                    label { class: "form-label", "Verification code" }
+                                    label { class: "form-label", r#for: EMAIL_VERIFY_CODE_ID, "Verification code" }
                                     input {
+                                        id: EMAIL_VERIFY_CODE_ID,
                                         class: "form-input",
                                         r#type: "text",
                                         autocomplete: "one-time-code",
                                         required: true,
+                                        "aria-invalid": if has_error { "true" } else { "false" },
+                                        "aria-describedby": if has_error { EMAIL_VERIFY_ERROR_ID } else { "" },
                                         placeholder: "Enter code",
                                         value: "{code}",
                                         oninput: move |evt| code.set(evt.value()),
@@ -198,7 +220,12 @@ pub fn EmailVerify(id: String) -> Element {
         }
         Some(Err(err)) => rsx! {
             Layout {
-                div { class: "alert alert-critical", "{err}" }
+                div {
+                    class: "alert alert-critical",
+                    role: "alert",
+                    "aria-live": "assertive",
+                    "{err}"
+                }
             }
         },
         None => rsx! { LoadingScreen {} },

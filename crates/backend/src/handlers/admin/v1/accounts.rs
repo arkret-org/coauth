@@ -17,7 +17,6 @@ use ulid::Ulid;
 use crate::{
     AppError, JsonResult,
     handlers::admin::v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
-    handlers::admin::v1::accounts::risk_action::admin_bridge_risk_action_examples,
     handlers::{
         admin::{
             call_context::extract_call_context,
@@ -265,27 +264,9 @@ pub async fn list_accounts(
 pub async fn admin_bridge_describe(depot: &Depot) -> JsonResult<AdminBridgeDescribe> {
     let risk_action_state = depot.risk_action_state_service()?;
 
-    Ok(Json(AdminBridgeDescribe {
-        contract: "cx.contract.coauth_admin_bridge.v1".to_owned(),
-        version: "0.2.0-durable-proposals".to_owned(),
-        api_base_path: "/api/admin/v1".to_owned(),
-        accounts_path: "/api/admin/v1/accounts".to_owned(),
-        account_detail_path_template: "/api/admin/v1/accounts/{account_id}".to_owned(),
-        account_dids_path_template: "/api/admin/v1/accounts/{account_id}/dids".to_owned(),
-        account_claims_path_template: "/api/admin/v1/accounts/{account_id}/claims".to_owned(),
-        account_session_grants_path_template: "/api/admin/v1/accounts/{account_id}/session-grants".to_owned(),
-        risk_action_path_template: "/api/admin/v1/accounts/{account_id}/risk-action".to_owned(),
-        risk_action_current_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/current".to_owned(),
-        risk_action_history_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/history".to_owned(),
-        risk_action_approve_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve".to_owned(),
-        risk_action_execute_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute".to_owned(),
-        risk_action_state_store_kind: risk_action_state.state_store_kind().to_owned(),
-        risk_action_approval_mode: "durable_proposal_required".to_owned(),
-        risk_action_examples: admin_bridge_risk_action_examples(),
-        todos: vec![
-            "TODO: publish formal OpenAPI examples for admin bridge discovery and risk-action workflows".to_owned(),
-        ],
-    }))
+    Ok(Json(coauth_admin_types::admin_bridge_describe(
+        risk_action_state.state_store_kind(),
+    )))
 }
 
 #[endpoint]

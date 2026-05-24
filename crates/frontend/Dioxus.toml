@@ -13,7 +13,7 @@ style = ["assets/main.css"]
 
 [web.watcher]
 reload_html = true
-watch_path = ["src", "assets"]
+watch_path = ["src", "assets", "../../translations"]
 
 [server]
 port = 8182

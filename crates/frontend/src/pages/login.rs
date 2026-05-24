@@ -9,6 +9,9 @@ use crate::{
 };
 
 const PRESERVED_LOGIN_QUERY_PROPERTY: &str = "__coauth_login_query";
+const LOGIN_ERROR_ID: &str = "login-error";
+const LOGIN_HANDLE_ID: &str = "login-handle";
+const LOGIN_PASSWORD_ID: &str = "login-password";
 
 fn preserved_login_query() -> Option<String> {
     let window = web_sys::window()?;
@@ -146,14 +149,20 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
     let password_enabled = providers.password_login_enabled;
     let registration_enabled = providers.password_registration_enabled;
     let recovery_enabled = providers.account_recovery_allowed;
+    let error_text = error.read().clone();
+    let has_error = error_text.is_some();
 
     rsx! {
         div { class: "login-page",
             div { class: "login-container",
                 h1 { class: "heading-md login-title", "Sign in" }
 
-                if let Some(ref err) = *error.read() {
-                    div { class: "alert alert-critical",
+                if let Some(err) = error_text.as_ref() {
+                    div {
+                        class: "alert alert-critical",
+                        id: LOGIN_ERROR_ID,
+                        role: "alert",
+                        "aria-live": "assertive",
                         p { "{err}" }
                     }
                 }
@@ -161,6 +170,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                 if password_enabled {
                     form {
                         class: "form-root",
+                        "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
                         onsubmit: move |e| {
                             e.prevent_default();
                             e.stop_propagation();
@@ -221,12 +231,15 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                         },
 
                         div { class: "form-field",
-                            label { class: "form-label", "Username" }
+                            label { class: "form-label", r#for: LOGIN_HANDLE_ID, "Username" }
                             input {
+                                id: LOGIN_HANDLE_ID,
                                 class: "form-input",
                                 r#type: "text",
                                 autocomplete: "username",
                                 required: true,
+                                "aria-invalid": if has_error { "true" } else { "false" },
+                                "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
                                 placeholder: "Username or email",
                                 value: "{handle}",
                                 oninput: move |e| handle.set(e.value()),
@@ -234,12 +247,15 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                         }
 
                         div { class: "form-field",
-                            label { class: "form-label", "Password" }
+                            label { class: "form-label", r#for: LOGIN_PASSWORD_ID, "Password" }
                             input {
+                                id: LOGIN_PASSWORD_ID,
                                 class: "form-input",
                                 r#type: "password",
                                 autocomplete: "current-password",
                                 required: true,
+                                "aria-invalid": if has_error { "true" } else { "false" },
+                                "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
                                 placeholder: "Password",
                                 value: "{password}",
                                 oninput: move |e| password.set(e.value()),
@@ -250,6 +266,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                             class: "btn btn-primary btn-block",
                             r#type: "submit",
                             disabled: submitting(),
+                            "aria-busy": if submitting() { "true" } else { "false" },
                             if submitting() {
                                 LoadingSpinner { inline: true }
                             }
@@ -288,11 +305,16 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                                 } else {
                                     format!("{}?{}", provider.authorize_url, query)
                                 };
+                                let label = provider
+                                    .human_name
+                                    .clone()
+                                    .unwrap_or_else(|| format!("Sign in with {}", provider.id));
                                 rsx! {
                                     a {
                                         class: "btn btn-secondary btn-block",
                                         href: "{href}",
-                                        {provider.human_name.clone().unwrap_or_else(|| format!("Sign in with {}", provider.id))}
+                                        "aria-label": "{label}",
+                                        "{label}"
                                     }
                                 }
                             }

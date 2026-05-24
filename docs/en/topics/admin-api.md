@@ -48,6 +48,74 @@ specification at these runtime paths:
 - `GET /api-doc/admin/openapi.json` for legacy Swagger tooling.
 - `GET /admin-swagger-ui/` for the hosted Swagger UI.
 
+## Admin bridge discovery examples
+
+`GET /api/admin/v1/bridge/describe` publishes the typed admin bridge contract
+used by `sodmin` and by local automation. The response shape and request body
+examples are generated from `coauth-admin-types::bridge_admin`, so the OpenAPI
+schema, backend response, and Rust consumers share one source of truth.
+
+```json
+{
+  "contract": "cx.contract.coauth_admin_bridge.v1",
+  "version": "0.2.0-durable-proposals",
+  "api_base_path": "/api/admin/v1",
+  "accounts_path": "/api/admin/v1/accounts",
+  "account_detail_path_template": "/api/admin/v1/accounts/{account_id}",
+  "account_dids_path_template": "/api/admin/v1/accounts/{account_id}/dids",
+  "account_claims_path_template": "/api/admin/v1/accounts/{account_id}/claims",
+  "account_session_grants_path_template": "/api/admin/v1/accounts/{account_id}/session-grants",
+  "risk_action_path_template": "/api/admin/v1/accounts/{account_id}/risk-action",
+  "risk_action_current_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/current",
+  "risk_action_history_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/history",
+  "risk_action_approve_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve",
+  "risk_action_execute_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute",
+  "risk_action_state_store_kind": "pg_risk_action_proposals_with_admin_audit_trail",
+  "risk_action_approval_mode": "durable_proposal_required",
+  "risk_action_examples": {
+    "proposal_request": {
+      "action": "lock",
+      "reason": "suspicious session recovery detected",
+      "ticket": "INC-2026-0504"
+    },
+    "approve_request": {
+      "action": "lock",
+      "ticket": "INC-2026-0504",
+      "approved_by": "did:web:admin.example",
+      "approval_note": "approved for controlled execution"
+    },
+    "execute_request": {
+      "action": "lock",
+      "ticket": "INC-2026-0504",
+      "execution_note": "execute via controlled mutation worker"
+    }
+  },
+  "todos": []
+}
+```
+
+The same example request bodies apply to the risk-action workflow:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"lock","reason":"suspicious session recovery detected","ticket":"INC-2026-0504"}' \
+  "https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/risk-action"
+
+curl -X POST \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"lock","ticket":"INC-2026-0504","approved_by":"did:web:admin.example","approval_note":"approved for controlled execution"}' \
+  "https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/approve"
+
+curl -X POST \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"lock","ticket":"INC-2026-0504","execution_note":"execute via controlled mutation worker"}' \
+  "https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/execute"
+```
+
 The Contrix-native admin surface now includes `GET /api/admin/v1/accounts`,
 `GET /api/admin/v1/accounts/{id}`, `POST /api/admin/v1/accounts/{id}/lock`,
 and `POST /api/admin/v1/accounts/{id}/disable`. DID bindings, device
