@@ -166,13 +166,19 @@ jobs:
           set -euo pipefail
 
           release_tags=()
+          primary_tag=""
 
           while IFS= read -r suffix; do
             [ -n "$suffix" ] || continue
-            release_tags+=("${IMAGE}:${suffix}-${{ matrix.arch }}")
+            tag="${IMAGE}:${suffix}-${{ matrix.arch }}"
+            release_tags+=("$tag")
+            if [ -z "$primary_tag" ]; then
+              primary_tag="$tag"
+            fi
           done <<< "$FINAL_SUFFIXES"
 
           {
+            echo "primary=$primary_tag"
             echo "release<<EOF"
             printf "%s\n" "${release_tags[@]}"
             echo "EOF"
@@ -209,6 +215,17 @@ jobs:
 
           docker pull "$image"
           docker run --rm "$image" --version
+
+      - name: Scan release image with Trivy for ${{ matrix.arch }}
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.arch-tags.outputs.primary }}
+          scan-type: image
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
 
   build-image:
     name: Publish container image manifests

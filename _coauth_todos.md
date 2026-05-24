@@ -37,10 +37,10 @@
 - [ ] §11 Confirm `dx build` output bundles the latest Fluent translations (en+zh) — currently the WASM SPA embeds them.
 
 ### Engineering hygiene (master plan §5)
-- [ ] §12 Add Trivy scan to release.yaml's container build step.
-- [ ] §13 Add local cosign/SLSA provenance command documentation; do not push images or tags.
-- [ ] §14 SBOM generation via `syft` as a local artifact.
-- [ ] §15 Set up Dependabot for cargo + actions.
+- [x] §12 Add Trivy scan to release.yaml's container build step.
+- [x] §13 Add local cosign/SLSA provenance command documentation; do not push images or tags.
+- [x] §14 SBOM generation via `syft` as a local artifact.
+- [x] §15 Set up Dependabot for cargo + actions.
 
 ### Observability
 - [ ] §16 Confirm OpenTelemetry exporter works against a real OTEL collector (jaeger/tempo) — currently jaeger/otlp/stdout exporters are present; add an example in `docs/en/observability.md`.

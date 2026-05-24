@@ -98,6 +98,111 @@ cosign verify \
 
 If you need to verify a per-PR build, fall back to `docker pull` + the recorded digest from the workflow run.
 
+## Local SBOM and provenance artifacts
+
+The local artifact path is for release dry-runs and audits only. It must
+not push images, create git tags, publish a GitHub release, or upload
+attestations to Rekor. Keep all outputs under `target/release-artifacts/`
+so they remain local build artifacts.
+
+Prerequisites: Docker Buildx, `jq`, `syft`, and `cosign`.
+
+```sh
+ARTIFACT_DIR=target/release-artifacts
+SHORT_SHA="$(git rev-parse --short=12 HEAD)"
+PLATFORM="${PLATFORM:-linux/amd64}"
+IMAGE_TAR="${ARTIFACT_DIR}/coauth-${SHORT_SHA}.oci.tar"
+PROVENANCE="${ARTIFACT_DIR}/coauth-${SHORT_SHA}.slsa-provenance.json"
+
+mkdir -p "${ARTIFACT_DIR}"
+
+docker buildx build \
+  --platform "${PLATFORM}" \
+  --output "type=oci,dest=${IMAGE_TAR}" \
+  --build-arg "VERGEN_GIT_DESCRIBE=$(git describe --tags --match 'v*.*.*' --always)" \
+  .
+```
+
+Generate local SBOM artifacts with Syft:
+
+```sh
+syft "oci-archive:${IMAGE_TAR}" -o spdx-json \
+  > "${ARTIFACT_DIR}/coauth-${SHORT_SHA}.spdx.json"
+
+syft "oci-archive:${IMAGE_TAR}" -o cyclonedx-json \
+  > "${ARTIFACT_DIR}/coauth-${SHORT_SHA}.cdx.json"
+```
+
+Generate a local SLSA provenance statement for the OCI archive:
+
+```sh
+IMAGE_SHA="$(sha256sum "${IMAGE_TAR}" | awk '{print $1}')"
+SOURCE_URI="$(git config --get remote.origin.url || true)"
+GIT_SHA="$(git rev-parse HEAD)"
+BUILD_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+jq -n \
+  --arg image "coauth-${SHORT_SHA}.oci.tar" \
+  --arg image_sha "${IMAGE_SHA}" \
+  --arg git_sha "${GIT_SHA}" \
+  --arg source_uri "${SOURCE_URI}" \
+  --arg platform "${PLATFORM}" \
+  --arg started "${BUILD_STARTED}" \
+  '{
+    "_type": "https://in-toto.io/Statement/v1",
+    "subject": [
+      {
+        "name": $image,
+        "digest": { "sha256": $image_sha }
+      }
+    ],
+    "predicateType": "https://slsa.dev/provenance/v1",
+    "predicate": {
+      "buildDefinition": {
+        "buildType": "https://github.com/contrix-dev/coauth/local-container-build/v1",
+        "externalParameters": {
+          "gitCommit": $git_sha,
+          "gitRemote": $source_uri,
+          "platform": $platform
+        },
+        "internalParameters": {}
+      },
+      "runDetails": {
+        "builder": { "id": "local:docker-buildx" },
+        "metadata": {
+          "invocationId": $git_sha,
+          "startedOn": $started
+        }
+      }
+    }
+  }' > "${PROVENANCE}"
+```
+
+Sign and verify that provenance file locally with Cosign. The
+`--tlog-upload=false` flag keeps this dry-run offline; published image
+signing remains the job of the release workflow.
+
+```sh
+KEY_DIR="${ARTIFACT_DIR}/cosign-local"
+mkdir -p "${KEY_DIR}"
+
+if [ ! -f "${KEY_DIR}/cosign.key" ]; then
+  (cd "${KEY_DIR}" && cosign generate-key-pair)
+fi
+
+cosign sign-blob \
+  --key "${KEY_DIR}/cosign.key" \
+  --tlog-upload=false \
+  --bundle "${ARTIFACT_DIR}/coauth-${SHORT_SHA}.slsa.bundle" \
+  "${PROVENANCE}"
+
+cosign verify-blob \
+  --key "${KEY_DIR}/cosign.pub" \
+  --insecure-ignore-tlog \
+  --bundle "${ARTIFACT_DIR}/coauth-${SHORT_SHA}.slsa.bundle" \
+  "${PROVENANCE}"
+```
+
 ## Undrafting releases
 
 Releases are manually undrafted when the release is ready to be published.
