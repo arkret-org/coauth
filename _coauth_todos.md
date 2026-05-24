@@ -53,12 +53,12 @@
 
 ## Phase 3 tasks
 
-- [ ] §21 Pair with sodmin to land `admin-types` shared-crate extraction (§7) once the bridge/risk-action surfaces stabilize.
+- [x] §21 Pair with sodmin to land `admin-types` shared-crate extraction (§7) once the bridge/risk-action surfaces stabilize.
 
 ## Phase 5 tasks (final 1.0)
 
-- [ ] §22 External security review — same vendor as soland.
-- [ ] §23 Bump to `v1.0.0` and build image + book sites (en + zh) locally.
+- [x] §22 External security review — same vendor as soland.
+- [x] §23 Bump to `v1.0.0` and build image + book sites (en + zh) locally.
 
 ## Exit gate (phase 2)
 
