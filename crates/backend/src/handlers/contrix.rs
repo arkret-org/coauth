@@ -863,8 +863,8 @@ pub(crate) fn require_canonical_handle_uri(input: &str) -> Result<&str, ContrixR
     })
 }
 
-/// Delivery-binding hint embedded in a `handle_claim`. Shape mirrors
-/// `member-delivery-binding-candidate.schema.json#delivery_binding_hint`
+/// Member delivery binding embedded in a `handle_claim`. Shape mirrors
+/// `member-delivery-binding-candidate.schema.json#member_delivery_binding`
 /// (commit 0a5ab85). `binding_source` MUST be one of the five values
 /// enumerated below — `did_document_default` is forbidden because handle-
 /// resolved candidates and DID Document fallback are independent
@@ -908,13 +908,13 @@ pub struct HandleClaimProof {
 pub struct HandleClaimPayload {
     #[serde(rename = "type")]
     pub kind: String,
-    pub subject_did: String,
+    pub subject_id: String,
     pub handle_uri: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub handle_aliases: Vec<String>,
     pub issuer_service_did: String,
     pub audience: String,
-    pub delivery_binding_hint: HandleClaimDeliveryBindingHint,
+    pub member_delivery_binding: HandleClaimDeliveryBindingHint,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub proofs: Vec<HandleClaimProof>,
@@ -940,7 +940,7 @@ pub struct HandleClaimMaterial {
 pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 
 /// Mint a handle-claim JWT bound to `audience`. The claim's
-/// `delivery_binding_hint` MUST come from upstream policy (handed to this
+/// `member_delivery_binding` MUST come from upstream policy (handed to this
 /// function by the caller); we never default to `did_document_default`.
 ///
 /// Signs with the same preferred ed25519 key used for session grants, so
@@ -953,10 +953,10 @@ pub(crate) fn issue_handle_claim(
     key_store: &Keystore,
     user: &User,
     audience: String,
-    delivery_binding_hint: HandleClaimDeliveryBindingHint,
+    member_delivery_binding: HandleClaimDeliveryBindingHint,
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
     let issuer_service_did = service_did_for(url_builder, contrix_config);
-    let subject_did = user_did_for(url_builder, contrix_config, user);
+    let subject_id = user_did_for(url_builder, contrix_config, user);
     let handle_uri = user_handle_uri(url_builder, user);
     let mut aliases = vec![user_handle_acct_alias(url_builder, user)];
     aliases.extend(user.handle_aliases.iter().cloned());
@@ -972,12 +972,12 @@ pub(crate) fn issue_handle_claim(
     // payload.
     let mut payload_no_proofs = HandleClaimPayload {
         kind: "cx.handle.claim".to_owned(),
-        subject_did: subject_did.clone(),
+        subject_id: subject_id.clone(),
         handle_uri,
         handle_aliases: aliases.clone(),
         issuer_service_did: issuer_service_did.clone(),
         audience: audience.clone(),
-        delivery_binding_hint: delivery_binding_hint.clone(),
+        member_delivery_binding: member_delivery_binding.clone(),
         issued_at: now,
         expires_at,
         proofs: Vec::new(),
@@ -985,12 +985,12 @@ pub(crate) fn issue_handle_claim(
     };
     let claim_digest = canonical_json_sha256(&HandleClaimDigestInput {
         kind: &payload_no_proofs.kind,
-        subject_did: &payload_no_proofs.subject_did,
+        subject_id: &payload_no_proofs.subject_id,
         handle_uri: &payload_no_proofs.handle_uri,
         handle_aliases: &payload_no_proofs.handle_aliases,
         issuer_service_did: &payload_no_proofs.issuer_service_did,
         audience: &payload_no_proofs.audience,
-        delivery_binding_hint: &payload_no_proofs.delivery_binding_hint,
+        member_delivery_binding: &payload_no_proofs.member_delivery_binding,
         issued_at: payload_no_proofs.issued_at,
         expires_at: payload_no_proofs.expires_at,
     })?;
@@ -1051,12 +1051,12 @@ pub(crate) fn issue_handle_claim(
 struct HandleClaimDigestInput<'a> {
     #[serde(rename = "type")]
     kind: &'a str,
-    subject_did: &'a str,
+    subject_id: &'a str,
     handle_uri: &'a str,
     handle_aliases: &'a Vec<String>,
     issuer_service_did: &'a str,
     audience: &'a str,
-    delivery_binding_hint: &'a HandleClaimDeliveryBindingHint,
+    member_delivery_binding: &'a HandleClaimDeliveryBindingHint,
     issued_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 }
@@ -1259,7 +1259,7 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
                 code: "machine_readable_code",
                 message: "human-readable message",
             },
-            request_id: "cx:req:01964137-0000-7000-8000-000000000000",
+            request_id: "cx:request:01964137-0000-7000-8000-000000000000",
         },
         codes: vec!["bad_json", "not_found", "internal_error"],
     }
@@ -2921,7 +2921,7 @@ mod tests {
                     "code": "machine_readable_code",
                     "message": "human-readable message"
                 },
-                "request_id": "cx:req:01964137-0000-7000-8000-000000000000"
+                "request_id": "cx:request:01964137-0000-7000-8000-000000000000"
             })
         );
 
@@ -3722,7 +3722,7 @@ mod tests {
         );
         assert_eq!(material.payload.audience, "did:web:space.example");
         assert_eq!(
-            material.payload.delivery_binding_hint.binding_source,
+            material.payload.member_delivery_binding.binding_source,
             hint.binding_source
         );
         assert!(material.payload.claim_digest.starts_with("sha256:"));

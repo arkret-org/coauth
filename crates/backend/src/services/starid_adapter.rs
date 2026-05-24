@@ -573,7 +573,7 @@ mod tests {
                     "code": "cas_conflict",
                     "message": "stale write"
                 },
-                "request_id": "cx:req:01964137-0000-7000-8000-000000000001"
+                "request_id": "cx:request:01964137-0000-7000-8000-000000000001"
             })))
             .mount(&server)
             .await;
@@ -672,7 +672,7 @@ mod tests {
                     "code": "stale_prev_version",
                     "message": "prev_version_id no longer matches head"
                 },
-                "request_id": "cx:req:01964137-0000-7000-8000-000000000002"
+                "request_id": "cx:request:01964137-0000-7000-8000-000000000002"
             })))
             .mount(&server)
             .await;
@@ -744,7 +744,7 @@ mod tests {
                     "code": "invalid_signature",
                     "message": "ed25519 signature is invalid"
                 },
-                "request_id": "cx:req:01964137-0000-7000-8000-000000000003"
+                "request_id": "cx:request:01964137-0000-7000-8000-000000000003"
             })))
             .mount(&server)
             .await;
