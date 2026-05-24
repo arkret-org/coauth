@@ -23,7 +23,7 @@
 - [ ] §3 Add a fixture-driven test against `contrix-spec/spec/v1/artifacts/fixtures/` binding proof vectors.
 
 ### Conformance polish
-- [ ] §4 Ship `conformance/conformance-keys.sh` to generate mTLS test fixtures (currently TODO in `conformance/README.md`).
+- [x] §4 Ship `conformance/conformance-keys.sh` to generate mTLS test fixtures (currently TODO in `conformance/README.md`).
 - [x] §5 Promote full OIDC conformance from manual `COAUTH_RUN_FULL_CONFORMANCE=1` to a **nightly** GHA job. PR jobs stay smoke-only. (Q4 in master plan.)
 - [x] §6 Add the three plans (`plan-basic-op.json`, `plan-fapi2-baseline.json`, `plan-mtls-baseline.json`) into the nightly run.
 
@@ -48,8 +48,8 @@
 - [x] §18 Expose Prometheus on a separate port via `COAUTH_METRICS_BIND`.
 
 ### Doc updates
-- [ ] §19 Document the Round R4 wire-breaking changes in `docs/en/upgrade-to-r4.md` (cross-signing reset proofs must be reissued after trust_domain rotation).
-- [ ] §20 Confirm the 5-state invite-claim flow is in `docs/en/account-lifecycle.md`.
+- [x] §19 Document the Round R4 wire-breaking changes in `docs/en/upgrade-to-r4.md` (cross-signing reset proofs must be reissued after trust_domain rotation).
+- [x] §20 Confirm the 5-state invite-claim flow is in `docs/en/account-lifecycle.md`.
 
 ## Phase 3 tasks
 

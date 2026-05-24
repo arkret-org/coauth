@@ -20,6 +20,7 @@
 
 - [Policy engine](./topics/policy.md)
 - [Authorization and sessions](./topics/authorization.md)
+- [Account lifecycle](./account-lifecycle.md)
 - [Use the Admin API](./topics/admin-api.md)
 - [Get an access token](./topics/access-token.md)
 
@@ -28,6 +29,7 @@
 - [Observability](./observability.md)
 - [Backup and restore](./operations/backup-restore.md)
 - [Upgrades](./operations/upgrades.md)
+- [Upgrade to Round R4](./upgrade-to-r4.md)
 
 # Reference
 

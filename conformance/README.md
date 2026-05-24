@@ -36,7 +36,11 @@ against the three shipped plan files.
 # 1. Build coauth.
 cargo build --release -p coauth-cli
 
-# 2. Run the smoke harness: boots coauth, fetches
+# 2. Generate local conformance keys for plans that need client key
+#    material. This writes only under target/conformance-keys/.
+./conformance/conformance-keys.sh
+
+# 3. Run the smoke harness: boots coauth, fetches
 #    /.well-known/openid-configuration, and prints plan inventory.
 ./scripts/oidc-conformance.sh
 ```
@@ -59,6 +63,18 @@ and runs:
 - `plan-basic-op.json`
 - `plan-fapi2-baseline.json`
 - `plan-mtls-baseline.json`
+
+Before running `plan-mtls-baseline.json`, generate the mTLS client
+fixtures:
+
+```bash
+./conformance/conformance-keys.sh
+```
+
+The script writes `target/conformance-keys/mtls-client.{crt,key}`,
+`target/conformance-keys/mtls-client-2.{crt,key}`, and a local README
+with the `x5t#S256` thumbprints. Pass `--force` to replace existing
+fixtures. These files are local test material and must not be committed.
 
 The workflow has no `pull_request` trigger; PR jobs remain smoke-only.
 It also exposes a `workflow_dispatch` input for targeted reruns of a
@@ -111,9 +127,5 @@ conformance suite.
 - `TODO(oidc-conformance-fapi2-cert)`: cross-check the FAPI 2.0 plan
   against the `OpenID Connect for Identity Assurance` certification
   requirements once coauth ships eIDAS-grade evidence linking.
-- `TODO(oidc-conformance-mtls-fixtures)`: lay down a per-plan key
-  generator (`scripts/conformance-keys.sh`) that materialises
-  `target/conformance-keys/mtls-client.{crt,key}` so the mTLS plan can
-  run end-to-end without a manual setup step.
 
 [openid-cs]: https://www.certification.openid.net/
