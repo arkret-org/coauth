@@ -374,8 +374,8 @@ pub struct SessionGrantProof {
     pub alg: String,
     pub key_id: String,
     pub canonicalization: String,
-    pub payload_hash_alg: String,
-    pub payload_hash: String,
+    pub payload_digest_alg: String,
+    pub payload_digest: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -561,14 +561,14 @@ struct ClaimedProfileDescriptor {
 }
 
 /// T6.1 — cotest-verified profile entry. Required `cotest_run_id`,
-/// `artifact_hash`, `artifact_ref`, `cotest_issuer_did`, `signature`,
+/// `artifact_digest`, `artifact_ref`, `cotest_issuer_did`, `signature`,
 /// `timestamp`. Dev-mode posture MUST NOT advertise any such entry (§3.0).
 #[derive(Debug, Serialize)]
 struct VerifiedProfileDescriptor {
     profile_id: String,
     claim_kind: &'static str,
     cotest_run_id: String,
-    artifact_hash: String,
+    artifact_digest: String,
     artifact_ref: String,
     cotest_issuer_did: String,
     signature: String,
@@ -611,7 +611,7 @@ struct IdentityResolveResBody {
 #[derive(Debug, Serialize)]
 struct IdentityDocumentResBody {
     did_document: DidDocument,
-    head_event_hash: Option<String>,
+    head_event_digest: Option<String>,
     seq: Option<u64>,
     receipts: Option<Vec<serde_json::Value>>,
 }
@@ -892,8 +892,8 @@ pub struct HandleClaimProof {
     pub alg: String,
     pub verification_method: String,
     pub canonicalization: String,
-    pub payload_hash_alg: String,
-    pub payload_hash: String,
+    pub payload_digest_alg: String,
+    pub payload_digest: String,
     pub created_at: DateTime<Utc>,
     pub audience: String,
     pub jws: String,
@@ -999,7 +999,7 @@ pub(crate) fn issue_handle_claim(
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
     let verification_method = format!("{issuer_service_did}#{key_id}");
-    let proof_payload_hash = claim_digest.clone();
+    let proof_payload_digest = claim_digest.clone();
 
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
     let signer = key.params().signing_key_for_alg(&alg)?;
@@ -1009,8 +1009,8 @@ pub(crate) fn issue_handle_claim(
             alg: alg.to_string(),
             verification_method: verification_method.clone(),
             canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
-            payload_hash_alg: "sha-256".to_owned(),
-            payload_hash: proof_payload_hash.clone(),
+            payload_digest_alg: "sha-256".to_owned(),
+            payload_digest: proof_payload_digest.clone(),
             created_at: now,
             audience: audience.clone(),
             // Placeholder — overwritten with the detached JWS below.
@@ -1026,8 +1026,8 @@ pub(crate) fn issue_handle_claim(
             alg: alg.to_string(),
             verification_method,
             canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
-            payload_hash_alg: "sha-256".to_owned(),
-            payload_hash: proof_payload_hash,
+            payload_digest_alg: "sha-256".to_owned(),
+            payload_digest: proof_payload_digest,
             created_at: now,
             audience: audience.clone(),
             jws: claim_jwt.clone(),
@@ -1295,7 +1295,7 @@ fn build_verified_profile_descriptors(
                 profile_id: entry.profile_id.clone(),
                 claim_kind: "cotest_verified",
                 cotest_run_id: entry.cotest_run_id.clone(),
-                artifact_hash: entry.artifact_hash.clone(),
+                artifact_digest: entry.artifact_digest.clone(),
                 artifact_ref: entry.artifact_ref.clone(),
                 cotest_issuer_did: entry.cotest_issuer_did.clone(),
                 signature: entry.signature.clone(),
@@ -1758,7 +1758,7 @@ pub(crate) fn issue_session_grant_for_audience(
         browser_session_id: browser_session.id.to_string(),
         cnf: cnf.clone(),
     };
-    let payload_hash = session_grant_claims_hash(&claims)?;
+    let payload_digest = session_grant_claims_hash(&claims)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
@@ -1782,8 +1782,8 @@ pub(crate) fn issue_session_grant_for_audience(
             alg: alg.to_string(),
             key_id: key_id.clone(),
             canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
-            payload_hash_alg: "sha-256".to_owned(),
-            payload_hash,
+            payload_digest_alg: "sha-256".to_owned(),
+            payload_digest,
         },
     };
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
@@ -2056,7 +2056,7 @@ pub async fn identity_document(
 
     Ok(Json(IdentityDocumentResBody {
         did_document: resolution.document,
-        head_event_hash: None,
+        head_event_digest: None,
         seq: None,
         receipts: None,
     }))
@@ -3269,9 +3269,9 @@ mod tests {
         assert_eq!(payload.proof.kind, "cx.session.grant.proof.v1");
         assert_eq!(payload.proof.alg, "EdDSA");
         assert_eq!(payload.proof.key_id, "test-eddsa");
-        assert_eq!(payload.proof.payload_hash_alg, "sha-256");
+        assert_eq!(payload.proof.payload_digest_alg, "sha-256");
         assert_eq!(
-            payload.proof.payload_hash,
+            payload.proof.payload_digest,
             session_grant_claims_hash(&session_grant_claims_from_payload(payload)).unwrap()
         );
         assert!(grant.session_private_key_pem.contains("PRIVATE KEY"));

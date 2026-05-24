@@ -33,11 +33,11 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
   current generation and submit `expected_previous_generation`; post-reset
   generation steps are strictly `+1`.
 - **BREAKING** `/policy/check` v2 — request switches to `PolicyCheckRequest`
-  (`signed_transport`, `source_ip_hash`, `source.{service_did,
+  (`signed_transport`, `source_ip_digest`, `source.{service_did,
   service_type}`). Response is `PolicyCheckResponse` carrying
-  `bound_to{realm_id, actor, action, request_canonical_hash,
-  policy_server_id}` + `auth_state_hash` + `policy_frontier_hash` +
-  `membership_frontier_hash` + signature (`kid: did:.+#.+`). Full signing
+  `bound_to{realm_id, actor, action, request_canonical_digest,
+  policy_server_id}` + `auth_state_digest` + `policy_frontier_digest` +
+  `membership_frontier_digest` + signature (`kid: did:.+#.+`). Full signing
   transcript is a `TODO(round4)`; binding fields land now.
 - **BREAKING** identity_link encrypted payload is now Realm-scoped: bound
   to `realm_id` + `trust_domain`.

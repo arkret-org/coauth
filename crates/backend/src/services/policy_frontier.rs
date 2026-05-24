@@ -7,10 +7,10 @@
 //! The spec ([`policy-server.md` §4]) requires every signed decision to
 //! carry three frontier digests:
 //!
-//! - `auth_state_hash` — accepted authorization-state root used during
+//! - `auth_state_digest` — accepted authorization-state root used during
 //!   evaluation;
-//! - `policy_frontier_hash` — policy-source frontier digest;
-//! - `membership_frontier_hash` — membership / role frontier digest.
+//! - `policy_frontier_digest` — policy-source frontier digest;
+//! - `membership_frontier_digest` — membership / role frontier digest.
 //!
 //! These come from soland's `/api/v1/events/frontier?peer_role=
 //! federation_peer` response, which returns
@@ -61,9 +61,9 @@ pub enum FrontierError {
 /// signature, but the decision is `deny`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frontier {
-    pub auth_state_hash: Hash,
-    pub policy_frontier_hash: Hash,
-    pub membership_frontier_hash: Hash,
+    pub auth_state_digest: Hash,
+    pub policy_frontier_digest: Hash,
+    pub membership_frontier_digest: Hash,
     /// Optional `policy_version` echo. When absent the evaluator
     /// substitutes `"v1"`.
     pub policy_version: Option<String>,
@@ -82,9 +82,9 @@ impl Frontier {
         )
         .expect("sentinel hash is structurally valid");
         Self {
-            auth_state_hash: empty.clone(),
-            policy_frontier_hash: empty.clone(),
-            membership_frontier_hash: empty,
+            auth_state_digest: empty.clone(),
+            policy_frontier_digest: empty.clone(),
+            membership_frontier_digest: empty,
             policy_version: None,
         }
     }
@@ -111,7 +111,7 @@ impl fmt::Debug for dyn FrontierSource {
 }
 
 /// Production frontier source — calls soland's federation-peer frontier
-/// endpoint and lifts `frontier_root` into [`Frontier::policy_frontier_hash`].
+/// endpoint and lifts `frontier_root` into [`Frontier::policy_frontier_digest`].
 ///
 /// Today soland only exposes a single `frontier_root` covering all
 /// federation-visible events; the spec splits the digest into three
@@ -220,9 +220,9 @@ impl FrontierSource for SolandFrontierSource {
 
             let h = Hash::new(frontier_root.to_owned()).map_err(|_| FrontierError::InvalidShape)?;
             Ok(Frontier {
-                auth_state_hash: h.clone(),
-                policy_frontier_hash: h.clone(),
-                membership_frontier_hash: h,
+                auth_state_digest: h.clone(),
+                policy_frontier_digest: h.clone(),
+                membership_frontier_digest: h,
                 policy_version: Some("v1".to_owned()),
             })
         })
@@ -284,10 +284,10 @@ mod tests {
     fn empty_sentinel_hashes_are_canonical_sha256_empty() {
         let empty = Frontier::empty();
         assert_eq!(
-            empty.auth_state_hash.as_str(),
+            empty.auth_state_digest.as_str(),
             "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
-        assert_eq!(empty.auth_state_hash, empty.policy_frontier_hash);
-        assert_eq!(empty.policy_frontier_hash, empty.membership_frontier_hash);
+        assert_eq!(empty.auth_state_digest, empty.policy_frontier_digest);
+        assert_eq!(empty.policy_frontier_digest, empty.membership_frontier_digest);
     }
 }

@@ -217,7 +217,7 @@ pub(crate) async fn build_policy_check_response(
         realm_id: request.realm_id.clone(),
         actor: request.actor.clone(),
         action: request.action.clone(),
-        request_canonical_hash: request.request_canonical_hash.clone(),
+        request_canonical_digest: request.request_canonical_digest.clone(),
         policy_server_id: policy_server_id.clone(),
     };
 
@@ -226,7 +226,7 @@ pub(crate) async fn build_policy_check_response(
     // Spec §4: `expires_at` is required. On allow paths we honour a
     // 30 s default TTL; on deny / quarantine / review we still set
     // `expires_at` so caches expire — same TTL is fine since the
-    // request_canonical_hash → decision mapping is bound to the
+    // request_canonical_digest → decision mapping is bound to the
     // five-tuple, not to the TTL alone.
     let expires_at = decided_at + chrono::Duration::seconds(DEFAULT_ALLOW_TTL_SECONDS);
 
@@ -252,9 +252,9 @@ pub(crate) async fn build_policy_check_response(
         request_id: request.request_id.as_str(),
         decision: &decision.decision,
         bound_to: &bound_to,
-        auth_state_hash: &frontier.auth_state_hash,
-        policy_frontier_hash: &frontier.policy_frontier_hash,
-        membership_frontier_hash: &frontier.membership_frontier_hash,
+        auth_state_digest: &frontier.auth_state_digest,
+        policy_frontier_digest: &frontier.policy_frontier_digest,
+        membership_frontier_digest: &frontier.membership_frontier_digest,
         policy_version: &decision.policy_version,
         decided_at: &decided_at_str,
         reason_code: reason_code.as_deref(),
@@ -284,9 +284,9 @@ pub(crate) async fn build_policy_check_response(
     Ok(PolicyCheckResponse {
         decision: decision.decision,
         bound_to,
-        auth_state_hash: frontier.auth_state_hash,
-        policy_frontier_hash: frontier.policy_frontier_hash,
-        membership_frontier_hash: frontier.membership_frontier_hash,
+        auth_state_digest: frontier.auth_state_digest,
+        policy_frontier_digest: frontier.policy_frontier_digest,
+        membership_frontier_digest: frontier.membership_frontier_digest,
         signature,
         reason_code,
         expires_at: Some(expires_at),
@@ -355,7 +355,7 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
         realm_id = transcript.bound_to.realm_id.as_str(),
         actor = transcript.bound_to.actor.as_str(),
         action = %transcript.bound_to.action,
-        request_canonical_hash = transcript.bound_to.request_canonical_hash.as_str(),
+        request_canonical_digest = transcript.bound_to.request_canonical_digest.as_str(),
         policy_server_id = transcript.bound_to.policy_server_id.as_str(),
         policy_version = transcript.policy_version,
         decided_at = transcript.decided_at,
@@ -385,12 +385,12 @@ mod tests {
             realm_id: realm(),
             actor: Did::new("did:web:alice.example").unwrap(),
             action: "cx.message.create".into(),
-            request_canonical_hash: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
+            request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
                 service_did: Did::new("did:web:soland.example").unwrap(),
                 service_type: "principal_server".into(),
             },
-            source_ip_hash: Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
+            source_ip_digest: Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
             signed_transport: serde_json::json!({"signature": "stub"}),
             event_preview: serde_json::Value::Null,
             auth_context: serde_json::Value::Null,
@@ -458,7 +458,7 @@ mod tests {
         // Smoke: ensure the Frontier::empty sentinel is structurally a
         // valid Hash so the transcript can embed it.
         let f = Frontier::empty();
-        assert!(f.auth_state_hash.as_str().starts_with("sha256:"));
+        assert!(f.auth_state_digest.as_str().starts_with("sha256:"));
     }
 
     /// Smoke: a request whose `action` is whitespace is rejected at

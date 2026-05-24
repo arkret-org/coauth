@@ -949,14 +949,14 @@ impl AwsSesProvider {
             .host_str()
             .expect("AWS SES endpoint must contain a hostname");
         let body = body.unwrap_or_default();
-        let payload_hash = hex_sha256(body.as_bytes());
+        let payload_digest = hex_sha256(body.as_bytes());
         let now = Utc::now();
         let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
         let date_stamp = now.format("%Y%m%d").to_string();
 
         let mut canonical_headers = BTreeMap::from([
             ("host".to_owned(), host.to_owned()),
-            ("x-amz-content-sha256".to_owned(), payload_hash.clone()),
+            ("x-amz-content-sha256".to_owned(), payload_digest.clone()),
             ("x-amz-date".to_owned(), amz_date.clone()),
         ]);
 
@@ -978,7 +978,7 @@ impl AwsSesProvider {
             .collect::<Vec<_>>()
             .join(";");
         let canonical_request = format!(
-            "{}\n{}\n{}\n{}{signed_headers}\n{payload_hash}",
+            "{}\n{}\n{}\n{}{signed_headers}\n{payload_digest}",
             method.as_str(),
             canonical_uri(url.path()),
             canonical_query(url.query()),
@@ -1001,7 +1001,7 @@ impl AwsSesProvider {
             .client
             .request(method, url)
             .header("Authorization", authorization)
-            .header("x-amz-content-sha256", payload_hash)
+            .header("x-amz-content-sha256", payload_digest)
             .header("x-amz-date", amz_date);
 
         if let Some(content_type) = content_type {

@@ -145,9 +145,9 @@ pub struct DecisionTranscript<'a> {
     pub request_id: &'a str,
     pub decision: &'a AuthzDecision,
     pub bound_to: &'a PolicyCheckBoundTo,
-    pub auth_state_hash: &'a Hash,
-    pub policy_frontier_hash: &'a Hash,
-    pub membership_frontier_hash: &'a Hash,
+    pub auth_state_digest: &'a Hash,
+    pub policy_frontier_digest: &'a Hash,
+    pub membership_frontier_digest: &'a Hash,
     pub policy_version: &'a str,
     /// RFC 3339 UTC instant when the decision was computed. Distinct
     /// from `expires_at` so a consumer can detect stale clocks.
@@ -213,7 +213,7 @@ mod tests {
             realm_id: RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001").unwrap(),
             actor: Did::new("did:web:alice.example").unwrap(),
             action: "cx.message.create".into(),
-            request_canonical_hash: empty_sha256(),
+            request_canonical_digest: empty_sha256(),
             policy_server_id: Did::new("did:web:coauth.example").unwrap(),
         }
     }
@@ -230,9 +230,9 @@ mod tests {
             request_id: "req-1",
             decision: &AuthzDecision::Allow,
             bound_to: &bound,
-            auth_state_hash: &auth,
-            policy_frontier_hash: &pol,
-            membership_frontier_hash: &mem,
+            auth_state_digest: &auth,
+            policy_frontier_digest: &pol,
+            membership_frontier_digest: &mem,
             policy_version: "v1",
             decided_at: "2026-05-21T00:00:00Z",
             reason_code: Some("ok"),
@@ -247,10 +247,10 @@ mod tests {
         assert!(a.starts_with(b"{"));
         let s = std::str::from_utf8(&a).unwrap();
         assert!(s.contains("cx.policy.check.transcript.v1"));
-        // Lexicographic key order: `auth_state_hash` precedes `bound_to`
+        // Lexicographic key order: `auth_state_digest` precedes `bound_to`
         // precedes `decided_at` precedes `decision` …; the serializer
         // sorts keys so we can spot-check the prefix.
-        assert!(s.starts_with("{\"auth_state_hash\""));
+        assert!(s.starts_with("{\"auth_state_digest\""));
     }
 
     #[test]
@@ -263,9 +263,9 @@ mod tests {
             request_id: "req-1",
             decision: &AuthzDecision::Allow,
             bound_to: &bound,
-            auth_state_hash: &h,
-            policy_frontier_hash: &h,
-            membership_frontier_hash: &h,
+            auth_state_digest: &h,
+            policy_frontier_digest: &h,
+            membership_frontier_digest: &h,
             policy_version: "v1",
             decided_at: "2026-05-21T00:00:00Z",
             reason_code: Some("ok"),
