@@ -81,11 +81,13 @@ impl<'a> PolicySigner<'a> {
     /// Sign the canonical transcript of a policy decision.
     ///
     /// The transcript captures every field §5 of `policy-server.md`
-    /// requires to be bound to the signature: `bound_to` (request id +
-    /// realm + actor + action + canonical request hash + policy server
-    /// id), the decision, reason code, expiry, and the three frontier
-    /// hashes. Optional fields are included only when present so the
-    /// canonical bytes are stable across requests that omit them.
+    /// requires to be bound to the signature and keeps the set
+    /// reconstructable from the wire request + response: `request_id`,
+    /// `bound_to` (realm + actor + action + canonical request hash +
+    /// policy server id), the decision, reason code, expiry, obligations,
+    /// and the three frontier hashes. Optional fields are included only
+    /// when present so the canonical bytes are stable across requests
+    /// that omit them.
     pub fn sign_decision(
         &self,
         transcript: &DecisionTranscript<'_>,
@@ -133,9 +135,9 @@ impl<'a> PolicySigner<'a> {
 /// decision. Field order is fixed by the struct, but the canonical
 /// serializer in `contrix_core::canonical` sorts object keys
 /// lexicographically before emitting bytes — so reordering fields here
-/// does not change the wire bytes. Reordering is still a behaviour
-/// change: tests assert byte equality between the signed bytes and the
-/// re-encoded transcript on the consumer side.
+/// does not change the wire bytes. Every field is either present on the
+/// request or the response so verifiers can rebuild the same transcript
+/// without consulting coauth internals or audit logs.
 #[derive(Debug, Serialize)]
 pub struct DecisionTranscript<'a> {
     /// `cx.policy.check.transcript.v1` — version tag to make the
@@ -148,10 +150,6 @@ pub struct DecisionTranscript<'a> {
     pub auth_state_digest: &'a Hash,
     pub policy_frontier_digest: &'a Hash,
     pub membership_frontier_digest: &'a Hash,
-    pub policy_version: &'a str,
-    /// RFC 3339 UTC instant when the decision was computed. Distinct
-    /// from `expires_at` so a consumer can detect stale clocks.
-    pub decided_at: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -233,8 +231,6 @@ mod tests {
             auth_state_digest: &auth,
             policy_frontier_digest: &pol,
             membership_frontier_digest: &mem,
-            policy_version: "v1",
-            decided_at: "2026-05-21T00:00:00Z",
             reason_code: Some("ok"),
             expires_at: Some("2026-05-21T00:01:00Z"),
             obligations: &obligations,
@@ -248,7 +244,7 @@ mod tests {
         let s = std::str::from_utf8(&a).unwrap();
         assert!(s.contains("cx.policy.check.transcript.v1"));
         // Lexicographic key order: `auth_state_digest` precedes `bound_to`
-        // precedes `decided_at` precedes `decision` …; the serializer
+        // precedes `decision`; the serializer
         // sorts keys so we can spot-check the prefix.
         assert!(s.starts_with("{\"auth_state_digest\""));
     }
@@ -266,8 +262,6 @@ mod tests {
             auth_state_digest: &h,
             policy_frontier_digest: &h,
             membership_frontier_digest: &h,
-            policy_version: "v1",
-            decided_at: "2026-05-21T00:00:00Z",
             reason_code: Some("ok"),
             expires_at: None,
             obligations: &obligations,

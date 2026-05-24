@@ -222,15 +222,15 @@ pub(crate) async fn build_policy_check_response(
     };
 
     let now = Utc::now();
-    let decided_at = now;
+    let now = chrono::DateTime::<Utc>::from_timestamp(now.timestamp(), 0)
+        .expect("current timestamp should be representable without fractional seconds");
     // Spec §4: `expires_at` is required. On allow paths we honour a
     // 30 s default TTL; on deny / quarantine / review we still set
     // `expires_at` so caches expire — same TTL is fine since the
     // request_canonical_digest → decision mapping is bound to the
     // five-tuple, not to the TTL alone.
-    let expires_at = decided_at + chrono::Duration::seconds(DEFAULT_ALLOW_TTL_SECONDS);
+    let expires_at = now + chrono::Duration::seconds(DEFAULT_ALLOW_TTL_SECONDS);
 
-    let decided_at_str = format_canonical_rfc3339(decided_at);
     let expires_at_str = format_canonical_rfc3339(expires_at);
 
     let obligations_wire: Vec<Value> = decision
@@ -244,9 +244,9 @@ pub(crate) async fn build_policy_check_response(
         Some(decision.reason_code.clone())
     };
 
-    // Step 4 — canonical transcript + detached signature. The
-    // transcript captures *every* field §5 of the spec requires to be
-    // bound to the signature.
+    // Step 4 — canonical transcript + detached signature. The transcript
+    // captures the request id plus every signed response field, so a
+    // verifier can rebuild these bytes from the wire request + response.
     let transcript = DecisionTranscript {
         kind: "cx.policy.check.transcript.v1",
         request_id: request.request_id.as_str(),
@@ -255,8 +255,6 @@ pub(crate) async fn build_policy_check_response(
         auth_state_digest: &frontier.auth_state_digest,
         policy_frontier_digest: &frontier.policy_frontier_digest,
         membership_frontier_digest: &frontier.membership_frontier_digest,
-        policy_version: &decision.policy_version,
-        decided_at: &decided_at_str,
         reason_code: reason_code.as_deref(),
         expires_at: Some(&expires_at_str),
         obligations: &obligations_wire,
@@ -357,8 +355,6 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
         action = %transcript.bound_to.action,
         request_canonical_digest = transcript.bound_to.request_canonical_digest.as_str(),
         policy_server_id = transcript.bound_to.policy_server_id.as_str(),
-        policy_version = transcript.policy_version,
-        decided_at = transcript.decided_at,
         reason_code = transcript.reason_code.unwrap_or(""),
         canonical_transcript = %canonical_str,
         signature_kid = %signature.kid,
@@ -371,7 +367,13 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
 mod tests {
     use super::*;
     use crate::services::policy_frontier::StaticFrontierSource;
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
+    use coauth_iana::jose::JsonWebSignatureAlg;
+    use coauth_jose::constraints::Constrainable as _;
+    use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
     use contrix_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
+    use rand_core::SeedableRng as _;
+    use signature::Verifier as _;
     use std::future::Future;
     use std::pin::Pin;
 
@@ -459,6 +461,91 @@ mod tests {
         // valid Hash so the transcript can embed it.
         let f = Frontier::empty();
         assert!(f.auth_state_digest.as_str().starts_with("sha256:"));
+    }
+
+    #[tokio::test]
+    async fn policy_response_signature_verifies_from_wire_transcript() {
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(42);
+        let key_store = Keystore::new(JsonWebKeySet::new(vec![
+            JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+                .with_kid("policy-test-key")
+                .with_alg(JsonWebSignatureAlg::EdDsa),
+        ]));
+        let request = req();
+        let url_builder = UrlBuilder::new(
+            url::Url::parse("https://coauth.example/").unwrap(),
+            None,
+            None,
+        );
+        let contrix_config = ContrixConfig::default();
+        let frontier_source = StaticFrontierSource::new(Frontier::empty());
+        let evaluator = FixedEvaluator(PolicyDecision::allow("policy-v1".into()));
+
+        let response = build_policy_check_response(
+            &request,
+            &url_builder,
+            &contrix_config,
+            &key_store,
+            &frontier_source,
+            &evaluator,
+        )
+        .await
+        .expect("policy response should build and sign");
+
+        assert!(matches!(response.decision, AuthzDecision::Allow));
+        assert_eq!(response.bound_to.realm_id, request.realm_id);
+        assert_eq!(response.bound_to.actor, request.actor);
+        assert_eq!(response.bound_to.action, request.action);
+        assert_eq!(
+            response.bound_to.request_canonical_digest,
+            request.request_canonical_digest
+        );
+
+        let expires_at = response
+            .expires_at
+            .as_ref()
+            .cloned()
+            .expect("signed response should carry expires_at");
+        let expires_at_str = format_canonical_rfc3339(expires_at);
+        assert_eq!(
+            serde_json::to_value(expires_at).unwrap(),
+            serde_json::Value::String(expires_at_str.clone())
+        );
+        let transcript = DecisionTranscript {
+            kind: "cx.policy.check.transcript.v1",
+            request_id: request.request_id.as_str(),
+            decision: &response.decision,
+            bound_to: &response.bound_to,
+            auth_state_digest: &response.auth_state_digest,
+            policy_frontier_digest: &response.policy_frontier_digest,
+            membership_frontier_digest: &response.membership_frontier_digest,
+            reason_code: response.reason_code.as_deref(),
+            expires_at: Some(&expires_at_str),
+            obligations: &response.obligations,
+        };
+        let canonical = PolicySigner::canonical_transcript_bytes(&transcript)
+            .expect("wire transcript should canonicalize");
+
+        let (_did, key_id) = response
+            .signature
+            .kid
+            .rsplit_once('#')
+            .expect("signature kid should be a DID URL");
+        let public_jwks = key_store.public_jwks();
+        let public_key = public_jwks
+            .iter()
+            .find(|key| key.kid() == Some(key_id))
+            .expect("signature kid should identify the signing key");
+        let verifying_key = coauth_jose::jwa::AsymmetricVerifyingKey::from_jwk_and_alg(
+            public_key.params(),
+            &JsonWebSignatureAlg::EdDsa,
+        )
+        .expect("public key should verify EdDSA signatures");
+        let signature = Base64UrlUnpadded::decode_vec(&response.signature.sig)
+            .expect("signature should be base64url");
+        verifying_key
+            .verify(&canonical, &coauth_jose::jwa::Signature::new(signature))
+            .expect("wire-reconstructed transcript should verify");
     }
 
     /// Smoke: a request whose `action` is whitespace is rejected at

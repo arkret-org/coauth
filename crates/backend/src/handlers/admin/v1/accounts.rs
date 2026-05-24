@@ -566,12 +566,14 @@ fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGra
 
 #[cfg(test)]
 mod tests {
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
     use coauth_data::{Clock, RepositoryAccess};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable;
-    use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
+    use coauth_jose::jwt::JsonWebSignatureHeader;
     use hyper::{Request, StatusCode};
     use serde_json::Value;
+    use signature::RandomizedSigner as _;
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
@@ -992,17 +994,28 @@ mod tests {
         .expect("test keystore should expose a signing key");
         let key = state.key_store.signing_key_for_algorithm(&alg).unwrap();
         let signer = key.params().signing_key_for_alg(&alg).unwrap();
-        let header = JsonWebSignatureHeader::new(alg).with_kid(key.kid().unwrap());
+        let verification_method = format!("{did}#key-1");
+        let header = JsonWebSignatureHeader::new(alg).with_kid(verification_method.clone());
         let claims = BindingStatementClaims {
             kind: "cx.did_binding.control_proof.v1".to_owned(),
             account_did: did.to_owned(),
             cx_account_id: account_id.to_string(),
+            verification_method,
             nonce: nonce.to_owned(),
             iat: state.clock.now(),
         };
+        let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
+        let payload = contrix_core::canonical::canonical_json_bytes(&claims).unwrap();
+        let payload_b64 = Base64UrlUnpadded::encode_string(&payload);
+        let signing_input = format!("{header_b64}.{payload_b64}");
         let mut rng = state.rng();
-        Jwt::sign_with_rng(&mut rng, header, claims, &signer)
-            .unwrap()
-            .into_string()
+        let raw_sig: coauth_jose::jwa::Signature = signer
+            .try_sign_with_rng(&mut rng, signing_input.as_bytes())
+            .unwrap();
+        let raw_sig: Box<[u8]> = raw_sig.into();
+        format!(
+            "{signing_input}.{}",
+            Base64UrlUnpadded::encode_string(raw_sig.as_ref())
+        )
     }
 }

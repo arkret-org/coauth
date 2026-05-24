@@ -41,8 +41,8 @@ pub struct AddAccountDidBindingRequest {
     pub kind: DidBindingKind,
 
     /// Proof that the account holder controls the DID. The proof MUST be a
-    /// detached JWS signed by one of the DID's verification-method keys
-    /// over the canonical binding statement (see
+    /// compact JWS signed by one of the DID's verification-method keys
+    /// with the canonical binding statement as its attached payload (see
     /// [`crate::services::did_binding_proof`]).
     pub control_proof: ControlProofPayload,
 
@@ -76,7 +76,7 @@ pub struct AddAccountDidBindingRequest {
 /// "..."}` and a bare string (legacy admin clients) for ergonomics.
 #[derive(Deserialize, JsonSchema, ToSchema)]
 pub struct ControlProofPayload {
-    /// The detached JWS in compact serialisation.
+    /// Compact JWS whose attached payload is the canonical binding statement.
     pub jws: String,
 
     /// Nonce that was included in the canonical binding statement signed
@@ -265,7 +265,12 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
         DidBindingProofError::EmptyProof
         | DidBindingProofError::InvalidJws(_)
         | DidBindingProofError::NoVerificationKey
+        | DidBindingProofError::MissingVerificationMethod
+        | DidBindingProofError::VerificationMethodMismatch
+        | DidBindingProofError::VerificationMethodNotFound
         | DidBindingProofError::SignatureMismatch
+        | DidBindingProofError::CanonicalStatement(_)
+        | DidBindingProofError::CanonicalStatementMismatch
         | DidBindingProofError::StatementKindMismatch
         | DidBindingProofError::AccountDidMismatch
         | DidBindingProofError::CxAccountIdMismatch

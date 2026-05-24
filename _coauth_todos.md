@@ -18,9 +18,9 @@
 ## Phase 2 tasks (critical-path)
 
 ### Round 4 binding-proof closure
-- [ ] §1 Finish `services/did_binding_proof.rs` verifier chain — chain (a) JWS signature, (b) DID document resolve, (c) verificationMethod match, (d) canonical statement match. Currently the structure exists but full transcript validation is TODO per CHANGELOG.
-- [ ] §2 Wire policy-response signing transcript (R4 closure) end-to-end. Reference: CHANGELOG entry 2026-05-20.
-- [ ] §3 Add a fixture-driven test against `contrix-spec/spec/v1/artifacts/fixtures/` binding proof vectors.
+- [x] §1 Finish `services/did_binding_proof.rs` verifier chain — chain (a) JWS signature, (b) DID document resolve, (c) verificationMethod match, (d) canonical statement match. Currently the structure exists but full transcript validation is TODO per CHANGELOG.
+- [x] §2 Wire policy-response signing transcript (R4 closure) end-to-end. Reference: CHANGELOG entry 2026-05-20.
+- [x] §3 Add a fixture-driven test against `contrix-spec/spec/v1/artifacts/fixtures/` binding proof vectors.
 
 ### Conformance polish
 - [x] §4 Ship `conformance/conformance-keys.sh` to generate mTLS test fixtures (currently TODO in `conformance/README.md`).

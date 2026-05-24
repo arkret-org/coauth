@@ -1,14 +1,15 @@
 //! Validate DID-binding `control_proof` payloads against the resolved DID
 //! document.
 //!
-//! Shape: a detached JWS signed by one of the DID's verification-method
-//! keys, over a canonical "binding statement" of the form:
+//! Shape: a compact JWS signed by one of the DID's verification-method
+//! keys, with an attached canonical "binding statement" payload of the form:
 //!
 //! ```json
 //! {
 //!   "type": "cx.did_binding.control_proof.v1",
 //!   "account_did": "<account DID>",
 //!   "cx_account_id": "<local account ULID>",
+//!   "verification_method": "<DID URL from verificationMethod.id>",
 //!   "nonce": "<opaque nonce>",
 //!   "iat": "<RFC3339 timestamp>"
 //! }
@@ -17,8 +18,12 @@
 //! Verification flow:
 //!   1. Resolve the DID via the configured resolver chain (`DidResolverService`).
 //!   2. Reject if the resolver returns no `verificationMethod` keys.
-//!   3. Reject if the JWS doesn't verify against any of those keys.
-//!   4. Reject if the embedded binding statement doesn't match the request
+//!   3. Require the JWS `kid`, statement `verification_method`, and resolved
+//!      DID document `verificationMethod.id` to match exactly.
+//!   4. Reject if the JWS doesn't verify against that exact method key.
+//!   5. Reject if the attached payload bytes are not the canonical JSON
+//!      encoding of the decoded binding statement.
+//!   6. Reject if the embedded binding statement doesn't match the request
 //!      (`account_did` + `cx_account_id` + nonce all match exactly).
 //!
 //! SDK note: `contrix::identity::binding::verify_binding_proof` is the
@@ -41,11 +46,13 @@
 //! `nonce`. The signature is verified against the verification
 //! service's resolved DID document JWKS.
 
+use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::ContrixConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
 use coauth_keystore::Keystore;
+use contrix_core::canonical::canonical_json_bytes;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ulid::Ulid;
@@ -62,6 +69,8 @@ pub struct BindingStatementClaims {
     pub account_did: String,
     /// The local coauth account ULID (string-encoded).
     pub cx_account_id: String,
+    /// DID URL of the resolved verification method that signs the proof.
+    pub verification_method: String,
     /// Nonce supplied in the binding request.
     pub nonce: String,
     /// Issuance time.
@@ -84,8 +93,23 @@ pub enum DidBindingProofError {
     #[error("DID document has no verificationMethod entries")]
     NoVerificationKey,
 
-    #[error("control_proof JWS signature did not verify against any DID key")]
+    #[error("control_proof JWS header is missing a verificationMethod kid")]
+    MissingVerificationMethod,
+
+    #[error("control_proof verificationMethod does not match the binding statement")]
+    VerificationMethodMismatch,
+
+    #[error("control_proof verificationMethod is not present in the resolved DID document")]
+    VerificationMethodNotFound,
+
+    #[error("control_proof JWS signature did not verify against the resolved verificationMethod")]
     SignatureMismatch,
+
+    #[error("binding statement canonical JSON could not be encoded: {0}")]
+    CanonicalStatement(String),
+
+    #[error("binding statement payload is not the canonical JSON encoding of the decoded claims")]
+    CanonicalStatementMismatch,
 
     #[error("binding statement type discriminator mismatch")]
     StatementKindMismatch,
@@ -146,6 +170,18 @@ pub async fn validate_control_proof(
     // Parse JWS
     let jwt: Jwt<'_, BindingStatementClaims> =
         Jwt::try_from(proof_jws).map_err(|e| DidBindingProofError::InvalidJws(e.to_string()))?;
+    let payload_bytes = decode_attached_jws_payload(proof_jws)?;
+    let verification_method = jwt
+        .header()
+        .kid()
+        .ok_or(DidBindingProofError::MissingVerificationMethod)?
+        .to_owned();
+
+    let claims = jwt.payload();
+    if claims.verification_method != verification_method {
+        return Err(DidBindingProofError::VerificationMethodMismatch);
+    }
+    validate_canonical_statement_payload(&payload_bytes, claims)?;
 
     // Resolve DID document
     let resolution = did_resolver
@@ -159,25 +195,72 @@ pub async fn validate_control_proof(
         )
         .await?;
 
-    let keys: Vec<_> = resolution
-        .document
-        .verification_method
-        .iter()
-        .map(|vm| vm.public_key_jwk.clone())
-        .collect();
-    if keys.is_empty() {
+    let verification_methods = &resolution.document.verification_method;
+    if verification_methods.is_empty() {
         return Err(DidBindingProofError::NoVerificationKey);
     }
 
-    let jwks = PublicJsonWebKeySet::new(keys);
+    let jwks = jwks_for_verification_method(verification_methods, &verification_method)
+        .ok_or(DidBindingProofError::VerificationMethodNotFound)?;
     if jwt.verify_with_jwks(&jwks).is_err() {
         return Err(DidBindingProofError::SignatureMismatch);
     }
 
-    let claims = jwt.payload();
     validate_binding_statement_claims(claims, account_did, cx_account_id, nonce, now)?;
 
     Ok(claims.clone())
+}
+
+fn decode_attached_jws_payload(proof_jws: &str) -> Result<Vec<u8>, DidBindingProofError> {
+    let mut parts = proof_jws.split('.');
+    let _header = parts.next().ok_or_else(|| {
+        DidBindingProofError::InvalidJws("compact JWS is missing protected header".to_owned())
+    })?;
+    let payload = parts.next().ok_or_else(|| {
+        DidBindingProofError::InvalidJws("compact JWS is missing payload".to_owned())
+    })?;
+    let _signature = parts.next().ok_or_else(|| {
+        DidBindingProofError::InvalidJws("compact JWS is missing signature".to_owned())
+    })?;
+    if parts.next().is_some() {
+        return Err(DidBindingProofError::InvalidJws(
+            "compact JWS has too many segments".to_owned(),
+        ));
+    }
+    if payload.is_empty() {
+        return Err(DidBindingProofError::InvalidJws(
+            "control_proof must attach the canonical binding statement payload".to_owned(),
+        ));
+    }
+
+    Base64UrlUnpadded::decode_vec(payload).map_err(|e| {
+        DidBindingProofError::InvalidJws(format!("payload base64url decode failed: {e}"))
+    })
+}
+
+fn validate_canonical_statement_payload(
+    payload_bytes: &[u8],
+    claims: &BindingStatementClaims,
+) -> Result<(), DidBindingProofError> {
+    let canonical = canonical_json_bytes(claims)
+        .map_err(|e| DidBindingProofError::CanonicalStatement(e.to_string()))?;
+    if payload_bytes != canonical.as_slice() {
+        return Err(DidBindingProofError::CanonicalStatementMismatch);
+    }
+
+    Ok(())
+}
+
+fn jwks_for_verification_method(
+    verification_methods: &[crate::handlers::contrix::VerificationMethod],
+    verification_method: &str,
+) -> Option<PublicJsonWebKeySet> {
+    let method = verification_methods
+        .iter()
+        .find(|method| method.id == verification_method)?;
+    Some(PublicJsonWebKeySet::new(vec![
+        method.public_key_jwk.clone().with_kid(method.id.clone()),
+    ]))
 }
 
 fn validate_binding_statement_claims(
@@ -251,6 +334,10 @@ pub enum VerificationProofError {
     Resolve(#[from] DidResolveError),
     #[error("DID document has no verificationMethod entries")]
     NoVerificationKey,
+    #[error("JWS header is missing a verificationMethod kid")]
+    MissingVerificationMethod,
+    #[error("JWS verificationMethod is not present in the resolved DID document")]
+    VerificationMethodNotFound,
     #[error("JWS signature did not verify against any verification-service key")]
     SignatureMismatch,
     #[error("iss claim {actual:?} does not match expected {expected:?}")]
@@ -329,7 +416,14 @@ pub async fn verify_verification_service_proof(
         )));
     }
 
-    // Resolve the issuer DID and check the signature against its keys.
+    let verification_method = jwt
+        .header()
+        .kid()
+        .ok_or(VerificationProofError::MissingVerificationMethod)?
+        .to_owned();
+
+    // Resolve the issuer DID and check the signature against the exact
+    // verificationMethod selected by the protected header.
     let resolution = did_resolver
         .resolve_did_document(
             http_client,
@@ -341,16 +435,12 @@ pub async fn verify_verification_service_proof(
         )
         .await?;
 
-    let keys: Vec<_> = resolution
-        .document
-        .verification_method
-        .iter()
-        .map(|vm| vm.public_key_jwk.clone())
-        .collect();
-    if keys.is_empty() {
+    let verification_methods = &resolution.document.verification_method;
+    if verification_methods.is_empty() {
         return Err(VerificationProofError::NoVerificationKey);
     }
-    let jwks = PublicJsonWebKeySet::new(keys);
+    let jwks = jwks_for_verification_method(verification_methods, &verification_method)
+        .ok_or(VerificationProofError::VerificationMethodNotFound)?;
     if jwt.verify_with_jwks(&jwks).is_err() {
         return Err(VerificationProofError::SignatureMismatch);
     }
@@ -367,6 +457,7 @@ mod tests {
             kind: "cx.did_binding.control_proof.v1".to_owned(),
             account_did: "did:web:alice.example".to_owned(),
             cx_account_id: Ulid::nil().to_string(),
+            verification_method: "did:web:alice.example#key-1".to_owned(),
             nonce: "nonce-123".to_owned(),
             iat: chrono::DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap(),
         }
@@ -380,6 +471,7 @@ mod tests {
         assert_eq!(decoded.kind, original.kind);
         assert_eq!(decoded.account_did, original.account_did);
         assert_eq!(decoded.cx_account_id, original.cx_account_id);
+        assert_eq!(decoded.verification_method, original.verification_method);
         assert_eq!(decoded.nonce, original.nonce);
         assert_eq!(decoded.iat, original.iat);
     }
@@ -438,5 +530,154 @@ mod tests {
         .expect_err("expired statement must reject");
 
         assert!(matches!(err, DidBindingProofError::IatOutOfRange));
+    }
+
+    #[test]
+    fn binding_statement_payload_must_be_canonical() {
+        let claims = statement_claims_default();
+        let canonical = canonical_json_bytes(&claims).unwrap();
+        validate_canonical_statement_payload(&canonical, &claims).unwrap();
+
+        let noncanonical = serde_json::to_vec(&claims).unwrap();
+        assert_ne!(noncanonical, canonical);
+        let err = validate_canonical_statement_payload(&noncanonical, &claims)
+            .expect_err("non-canonical payload bytes must reject");
+        assert!(matches!(
+            err,
+            DidBindingProofError::CanonicalStatementMismatch
+        ));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CryptoSignatureFixture {
+        vectors: Vec<CryptoSignatureVector>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CryptoSignatureVector {
+        name: String,
+        did_document_fragment: FixtureDidDocumentFragment,
+        binding_object: serde_json::Value,
+        canonical_binding_payload: String,
+        detached_payload_b64u: String,
+        proof: FixtureProof,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct FixtureDidDocumentFragment {
+        id: String,
+        #[serde(rename = "type")]
+        kind: String,
+        controller: String,
+        #[serde(rename = "publicKeyJwk")]
+        public_key_jwk: coauth_jose::jwk::PublicJsonWebKey,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct FixtureProof {
+        verification_method: String,
+        jws: String,
+    }
+
+    #[test]
+    fn contrix_spec_binding_proof_fixture_verifies() {
+        let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("contrix-spec")
+            .join("spec")
+            .join("v1")
+            .join("artifacts")
+            .join("fixtures")
+            .join("crypto-signature-fixture.json");
+        let raw = match std::fs::read_to_string(&fixture_path) {
+            Ok(raw) => raw,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!(
+                    "skipping contrix-spec fixture test; missing {}",
+                    fixture_path.display()
+                );
+                return;
+            }
+            Err(error) => panic!(
+                "failed reading contrix-spec fixture {}: {error}",
+                fixture_path.display()
+            ),
+        };
+
+        let fixture: CryptoSignatureFixture = serde_json::from_str(&raw).unwrap();
+        let vector = fixture
+            .vectors
+            .iter()
+            .find(|vector| vector.name == "cx.vector.encoding.crypto.ed25519_detached_jws.v1")
+            .expect("expected Ed25519 detached JWS binding vector");
+
+        let canonical = canonical_json_bytes(&vector.binding_object).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&canonical).unwrap(),
+            vector.canonical_binding_payload
+        );
+        assert_eq!(
+            Base64UrlUnpadded::encode_string(&canonical),
+            vector.detached_payload_b64u
+        );
+
+        let compact = attach_detached_jws(&vector.proof.jws, &vector.detached_payload_b64u);
+        let jwt: Jwt<'_, serde_json::Value> = Jwt::try_from(compact.as_str()).unwrap();
+        let kid = jwt.header().kid().expect("fixture JWS must carry kid");
+        assert_eq!(kid, vector.proof.verification_method);
+        assert_eq!(kid, vector.did_document_fragment.id);
+        assert_eq!(
+            vector
+                .binding_object
+                .get("verification_method")
+                .and_then(serde_json::Value::as_str),
+            Some(kid)
+        );
+
+        let method = crate::handlers::contrix::VerificationMethod {
+            id: vector.did_document_fragment.id.clone(),
+            kind: vector.did_document_fragment.kind.clone(),
+            controller: vector.did_document_fragment.controller.clone(),
+            public_key_jwk: vector.did_document_fragment.public_key_jwk.clone(),
+        };
+        let jwks = jwks_for_verification_method(std::slice::from_ref(&method), kid)
+            .expect("fixture verification method should resolve");
+        assert!(
+            jwks_for_verification_method(
+                std::slice::from_ref(&method),
+                "did:web:alice.example#unknown"
+            )
+            .is_none()
+        );
+        jwt.verify_with_jwks(&jwks)
+            .expect("fixture JWS should verify against DID method key");
+
+        let mut tampered_binding = vector.binding_object.clone();
+        tampered_binding["event_digest"] =
+            serde_json::Value::String(format!("sha256:{}", "0".repeat(64)));
+        let tampered_payload = canonical_json_bytes(&tampered_binding).unwrap();
+        assert_ne!(tampered_payload, canonical);
+        let tampered_compact = attach_detached_jws(
+            &vector.proof.jws,
+            &Base64UrlUnpadded::encode_string(&tampered_payload),
+        );
+        let tampered: Jwt<'_, serde_json::Value> =
+            Jwt::try_from(tampered_compact.as_str()).unwrap();
+        assert!(
+            tampered.verify_with_jwks(&jwks).is_err(),
+            "altered canonical binding payload must break the fixture signature"
+        );
+    }
+
+    fn attach_detached_jws(detached_jws: &str, payload_b64u: &str) -> String {
+        let mut parts = detached_jws.split('.');
+        let protected = parts.next().expect("detached JWS header segment");
+        let payload = parts.next().expect("detached JWS payload segment");
+        let signature = parts.next().expect("detached JWS signature segment");
+        assert!(parts.next().is_none());
+        assert_eq!(payload, "");
+        format!("{protected}.{payload_b64u}.{signature}")
     }
 }
