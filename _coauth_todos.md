@@ -24,8 +24,8 @@
 
 ### Conformance polish
 - [ ] §4 Ship `conformance/conformance-keys.sh` to generate mTLS test fixtures (currently TODO in `conformance/README.md`).
-- [ ] §5 Promote full OIDC conformance from manual `COAUTH_RUN_FULL_CONFORMANCE=1` to a **nightly** GHA job. PR jobs stay smoke-only. (Q4 in master plan.)
-- [ ] §6 Add the three plans (`plan-basic-op.json`, `plan-fapi2-baseline.json`, `plan-mtls-baseline.json`) into the nightly run.
+- [x] §5 Promote full OIDC conformance from manual `COAUTH_RUN_FULL_CONFORMANCE=1` to a **nightly** GHA job. PR jobs stay smoke-only. (Q4 in master plan.)
+- [x] §6 Add the three plans (`plan-basic-op.json`, `plan-fapi2-baseline.json`, `plan-mtls-baseline.json`) into the nightly run.
 
 ### Admin types extraction
 - [ ] §7 Land the `TODO(a0-shared-crate)` items: extract applets_admin, bridge_admin, federation_admin, space_policy_admin into `coauth-admin-types`. sodmin currently has these inline (a known duplicate).

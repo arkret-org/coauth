@@ -6,15 +6,15 @@ coauth instance brought up by `scripts/oidc-conformance.sh`. Each
 `*.json` file in this directory is a *test plan configuration* — the
 shape the conformance harness's `--config` flag accepts.
 
-## Why a config-only landing
+## CI split
 
 The full conformance harness runs as a Java + MongoDB stack
 (`openid/conformance-suite:latest`) and takes ~minutes to boot per CI
-run. Round 25 / 26 had a placeholder; round 27 lands the *configs*
-that target a coauth instance, plus a smoke runner that exercises
-discovery + a single plan locally. Driving the full Java suite as a
-GH-Actions job is intentionally deferred — that's the
-`TODO(oidc-conformance-full-suite)` marker tracked in `_todos.md`.
+run. PR coverage stays smoke-only: the runner boots or targets a coauth
+instance, fetches discovery, and lists the selected plan inventory
+unless `COAUTH_RUN_FULL_CONFORMANCE=1` is set. The full suite is wired
+through `.github/workflows/oidc-conformance.yaml` and runs nightly
+against the three shipped plan files.
 
 ## Files
 
@@ -36,21 +36,36 @@ GH-Actions job is intentionally deferred — that's the
 # 1. Build coauth.
 cargo build --release -p coauth-cli
 
-# 2. Run the smoke harness — boots coauth, fetches /.well-known/openid-configuration,
-#    and (when the conformance-suite Docker image is available) runs the
-#    `plan-basic-op` plan against it.
+# 2. Run the smoke harness: boots coauth, fetches
+#    /.well-known/openid-configuration, and prints plan inventory.
 ./scripts/oidc-conformance.sh
 ```
 
-The smoke runner detects whether `docker` is available + whether the
-conformance-suite image can be pulled. If neither is true it falls back
-to a discovery-only smoke (round 25 behaviour) and exits 0 — the
-intent is "don't break CI on environments that can't run Java/Mongo".
+The smoke runner does not invoke the Java suite unless
+`COAUTH_RUN_FULL_CONFORMANCE=1` is set. This keeps PR and local default
+runs cheap and avoids requiring Docker for the discovery-only smoke.
 
 ## Wiring the full suite
 
-To actually run the full conformance run (e.g. before a release), set
-`COAUTH_RUN_FULL_CONFORMANCE=1` in the environment. The runner will
+The nightly GitHub Actions workflow sets `COAUTH_RUN_FULL_CONFORMANCE=1`
+and runs:
+
+```bash
+./scripts/oidc-conformance.sh --plan all
+```
+
+`--plan all` expands to:
+
+- `plan-basic-op.json`
+- `plan-fapi2-baseline.json`
+- `plan-mtls-baseline.json`
+
+The workflow has no `pull_request` trigger; PR jobs remain smoke-only.
+It also exposes a `workflow_dispatch` input for targeted reruns of a
+single plan.
+
+To run the same full conformance path locally (e.g. before a release),
+set `COAUTH_RUN_FULL_CONFORMANCE=1` in the environment. The runner will
 then:
 
 1. `docker pull openid/conformance-suite:latest`

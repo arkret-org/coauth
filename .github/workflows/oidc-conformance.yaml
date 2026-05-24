@@ -1,1 +1,139 @@
-name: OIDC conformance suite        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v# real CI invocation of the OpenID Foundation conformance harness        run: docker compose -f docker-compose.integration.yaml down -v# (`openid/conformance-suite:latest`) against a live coauth fronted by        run: docker compose -f docker-compose.integration.yaml down -v# Postgres via the integration docker-compose stack. The plan-based JSON        run: docker compose -f docker-compose.integration.yaml down -v# configs in `conformance/` are mounted into the suite container and the        run: docker compose -f docker-compose.integration.yaml down -v# basic-OP plan is executed; the JSON results are uploaded as a workflow        run: docker compose -f docker-compose.integration.yaml down -v# artefact and the job fails red on any failed module.        run: docker compose -f docker-compose.integration.yaml down -v#        run: docker compose -f docker-compose.integration.yaml down -v# left this as a scaffold; round 27 added plan configs +        run: docker compose -f docker-compose.integration.yaml down -v# opt-in (`COAUTH_RUN_FULL_CONFORMANCE=1`) wrapper script. This iteration        run: docker compose -f docker-compose.integration.yaml down -v# flips the env var on in CI so the suite actually runs.        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -von:        run: docker compose -f docker-compose.integration.yaml down -v  workflow_dispatch:        run: docker compose -f docker-compose.integration.yaml down -v    inputs:        run: docker compose -f docker-compose.integration.yaml down -v      plan:        run: docker compose -f docker-compose.integration.yaml down -v        description: "Conformance plan to run (basic-op | fapi2-baseline | mtls-baseline | all)"        run: docker compose -f docker-compose.integration.yaml down -v        required: false        run: docker compose -f docker-compose.integration.yaml down -v        default: "basic-op"        run: docker compose -f docker-compose.integration.yaml down -v  schedule:        run: docker compose -f docker-compose.integration.yaml down -v    # 04:13 UTC every Monday. Off-peak so the GH runner pool is mostly        run: docker compose -f docker-compose.integration.yaml down -v    # idle and we get the cheapest possible runtime.        run: docker compose -f docker-compose.integration.yaml down -v    - cron: "13 4 * * 1"        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -venv:        run: docker compose -f docker-compose.integration.yaml down -v  CARGO_NET_GIT_FETCH_WITH_CLI: "true"        run: docker compose -f docker-compose.integration.yaml down -v  CARGO_TERM_COLOR: always        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -vconcurrency:        run: docker compose -f docker-compose.integration.yaml down -v  group: oidc-conformance-${{ github.ref }}        run: docker compose -f docker-compose.integration.yaml down -v  cancel-in-progress: true        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -vjobs:        run: docker compose -f docker-compose.integration.yaml down -v  conformance:        run: docker compose -f docker-compose.integration.yaml down -v    name: OIDC conformance run        run: docker compose -f docker-compose.integration.yaml down -v    runs-on: ubuntu-24.04        run: docker compose -f docker-compose.integration.yaml down -v    timeout-minutes: 45        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v    permissions:        run: docker compose -f docker-compose.integration.yaml down -v      contents: read        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v    steps:        run: docker compose -f docker-compose.integration.yaml down -v      - name: Fetch repository        run: docker compose -f docker-compose.integration.yaml down -v        uses: actions/checkout@v6        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Set up stable Rust        run: docker compose -f docker-compose.integration.yaml down -v        uses: dtolnay/rust-toolchain@stable        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Cache cargo registry        run: docker compose -f docker-compose.integration.yaml down -v        uses: Swatinem/rust-cache@v2        run: docker compose -f docker-compose.integration.yaml down -v        with:        run: docker compose -f docker-compose.integration.yaml down -v          shared-key: oidc-conformance        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Install jq        run: docker compose -f docker-compose.integration.yaml down -v        run: |        run: docker compose -f docker-compose.integration.yaml down -v          if ! command -v jq >/dev/null 2>&1; then        run: docker compose -f docker-compose.integration.yaml down -v            sudo apt-get update -y && sudo apt-get install -y jq        run: docker compose -f docker-compose.integration.yaml down -v          fi        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Pre-pull conformance suite image        run: docker compose -f docker-compose.integration.yaml down -v        # Pull this concurrently with the cargo build to amortise the        run: docker compose -f docker-compose.integration.yaml down -v        # 500MB image fetch — the layer cache is also reused across        run: docker compose -f docker-compose.integration.yaml down -v        # weekly runs on the same hosted runner pool.        run: docker compose -f docker-compose.integration.yaml down -v        run: docker pull openid/conformance-suite:latest        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Preflight (catch obvious misconfig before the build)        run: docker compose -f docker-compose.integration.yaml down -v        run: bash scripts/preflight-check.sh        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Bring up integration stack (Postgres + coauth)        run: docker compose -f docker-compose.integration.yaml down -v        env:        run: docker compose -f docker-compose.integration.yaml down -v          # Build the coauth image locally inside compose; soland/sodmin        run: docker compose -f docker-compose.integration.yaml down -v          # are profile-gated and not pulled here — only coauth is        run: docker compose -f docker-compose.integration.yaml down -v          # exercised by the OIDC harness.        run: docker compose -f docker-compose.integration.yaml down -v          COAUTH_IMAGE: coauth:ci        run: docker compose -f docker-compose.integration.yaml down -v        run: |        run: docker compose -f docker-compose.integration.yaml down -v          # integration-up.sh handles: build coauth → generate a fresh        run: docker compose -f docker-compose.integration.yaml down -v          # test-config (with real signing keys) via an ephemeral coauth        run: docker compose -f docker-compose.integration.yaml down -v          # container → compose up --wait postgres + coauth. soland/sodmin        run: docker compose -f docker-compose.integration.yaml down -v          # remain off because they're behind --profile downstream.        run: docker compose -f docker-compose.integration.yaml down -v          bash scripts/integration-up.sh        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Wait for coauth /health        run: docker compose -f docker-compose.integration.yaml down -v        run: |        run: docker compose -f docker-compose.integration.yaml down -v          for attempt in $(seq 1 30); do        run: docker compose -f docker-compose.integration.yaml down -v            if curl -fsS -o /dev/null -m 2 http://127.0.0.1:57080/health; then        run: docker compose -f docker-compose.integration.yaml down -v              echo "coauth healthy after ${attempt}s"        run: docker compose -f docker-compose.integration.yaml down -v              break        run: docker compose -f docker-compose.integration.yaml down -v            fi        run: docker compose -f docker-compose.integration.yaml down -v            sleep 1        run: docker compose -f docker-compose.integration.yaml down -v            if [[ "${attempt}" -eq 30 ]]; then        run: docker compose -f docker-compose.integration.yaml down -v              echo "coauth /health never returned 200" >&2        run: docker compose -f docker-compose.integration.yaml down -v              docker compose -f docker-compose.integration.yaml logs coauth >&2 || true        run: docker compose -f docker-compose.integration.yaml down -v              exit 3        run: docker compose -f docker-compose.integration.yaml down -v            fi        run: docker compose -f docker-compose.integration.yaml down -v          done        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Run OIDC conformance suite        run: docker compose -f docker-compose.integration.yaml down -v        env:        run: docker compose -f docker-compose.integration.yaml down -v          COAUTH_RUN_FULL_CONFORMANCE: "1"        run: docker compose -f docker-compose.integration.yaml down -v          # Override the discovery target so the harness reaches the        run: docker compose -f docker-compose.integration.yaml down -v          # compose-published port instead of the default 8080. The        run: docker compose -f docker-compose.integration.yaml down -v          # script reads this and rewrites the plan JSON into a temp        run: docker compose -f docker-compose.integration.yaml down -v          # working copy before invoking the suite.        run: docker compose -f docker-compose.integration.yaml down -v          COAUTH_BIND: "127.0.0.1:57080"        run: docker compose -f docker-compose.integration.yaml down -v          # Skip the in-script "boot a fresh coauth-cli binary" path —        run: docker compose -f docker-compose.integration.yaml down -v          # we already have a containerised coauth running.        run: docker compose -f docker-compose.integration.yaml down -v          COAUTH_SKIP_BOOT: "1"        run: docker compose -f docker-compose.integration.yaml down -v          CONFORMANCE_PLAN: ${{ github.event.inputs.plan || 'basic-op' }}        run: docker compose -f docker-compose.integration.yaml down -v        run: |        run: docker compose -f docker-compose.integration.yaml down -v          bash scripts/oidc-conformance.sh --plan "${CONFORMANCE_PLAN}"        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Upload conformance results        run: docker compose -f docker-compose.integration.yaml down -v        if: ${{ always() }}        run: docker compose -f docker-compose.integration.yaml down -v        uses: actions/upload-artifact@v7.0.0        run: docker compose -f docker-compose.integration.yaml down -v        with:        run: docker compose -f docker-compose.integration.yaml down -v          name: conformance-results        run: docker compose -f docker-compose.integration.yaml down -v          path: target/conformance-results/        run: docker compose -f docker-compose.integration.yaml down -v          if-no-files-found: ignore        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Capture coauth logs on failure        run: docker compose -f docker-compose.integration.yaml down -v        if: ${{ failure() }}        run: docker compose -f docker-compose.integration.yaml down -v        run: |        run: docker compose -f docker-compose.integration.yaml down -v          mkdir -p target/conformance-logs        run: docker compose -f docker-compose.integration.yaml down -v          docker compose -f docker-compose.integration.yaml logs --no-color coauth   > target/conformance-logs/coauth.log   || true        run: docker compose -f docker-compose.integration.yaml down -v          docker compose -f docker-compose.integration.yaml logs --no-color postgres > target/conformance-logs/postgres.log || true        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Upload diagnostic logs        run: docker compose -f docker-compose.integration.yaml down -v        if: ${{ failure() }}        run: docker compose -f docker-compose.integration.yaml down -v        uses: actions/upload-artifact@v7.0.0        run: docker compose -f docker-compose.integration.yaml down -v        with:        run: docker compose -f docker-compose.integration.yaml down -v          name: conformance-diagnostic-logs        run: docker compose -f docker-compose.integration.yaml down -v          path: target/conformance-logs/        run: docker compose -f docker-compose.integration.yaml down -v          if-no-files-found: ignore        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v      - name: Tear down integration stack        run: docker compose -f docker-compose.integration.yaml down -v        if: ${{ always() }}        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v        run: docker compose -f docker-compose.integration.yaml down -v
+name: OIDC conformance suite
+
+# Full OpenID Foundation conformance is intentionally kept out of PRs.
+# PR coverage remains smoke-only through the integration scripts; this
+# workflow runs the full suite on a nightly schedule or on explicit
+# workflow_dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan:
+        description: "Conformance plan to run"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - basic-op
+          - fapi2-baseline
+          - mtls-baseline
+  schedule:
+    # Nightly at 04:13 UTC.
+    - cron: "13 4 * * *"
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_TERM_COLOR: always
+  COAUTH_CONFORMANCE_IMAGE: ${{ vars.COAUTH_CONFORMANCE_IMAGE || 'openid/conformance-suite:latest' }}
+
+concurrency:
+  group: oidc-conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    name: OIDC conformance run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v6
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: oidc-conformance
+
+      - name: Install jq
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y jq
+          fi
+
+      - name: Check nightly conformance plans
+        run: |
+          set -euo pipefail
+          for plan in \
+            conformance/plan-basic-op.json \
+            conformance/plan-fapi2-baseline.json \
+            conformance/plan-mtls-baseline.json
+          do
+            test -f "${plan}"
+            jq empty "${plan}"
+          done
+
+      - name: Pre-pull conformance suite image
+        run: docker pull "${COAUTH_CONFORMANCE_IMAGE}"
+
+      - name: Preflight (catch obvious misconfig before the build)
+        run: bash scripts/preflight-check.sh
+
+      - name: Bring up integration stack (Postgres + coauth)
+        env:
+          # Build the coauth image locally inside compose; soland/sodmin
+          # are profile-gated and not pulled here. Only coauth is
+          # exercised by the OIDC harness.
+          COAUTH_IMAGE: coauth:ci
+        run: |
+          # integration-up.sh handles: build coauth, generate a fresh
+          # test config with signing keys, then compose up postgres + coauth.
+          bash scripts/integration-up.sh
+
+      - name: Wait for coauth /health
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null -m 2 http://127.0.0.1:57080/health; then
+              echo "coauth healthy after ${attempt}s"
+              break
+            fi
+            sleep 1
+            if [[ "${attempt}" -eq 30 ]]; then
+              echo "coauth /health never returned 200" >&2
+              docker compose -f docker-compose.integration.yaml logs coauth >&2 || true
+              exit 3
+            fi
+          done
+
+      - name: Run OIDC conformance suite
+        env:
+          COAUTH_RUN_FULL_CONFORMANCE: "1"
+          COAUTH_BIND: "127.0.0.1:57080"
+          COAUTH_SKIP_BOOT: "1"
+          CONFORMANCE_PLAN: ${{ github.event.inputs.plan || 'all' }}
+        run: |
+          bash scripts/oidc-conformance.sh --plan "${CONFORMANCE_PLAN}"
+
+      - name: Upload conformance results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: conformance-results
+          path: target/conformance-results/
+          if-no-files-found: ignore
+
+      - name: Capture coauth logs on failure
+        if: ${{ failure() }}
+        run: |
+          mkdir -p target/conformance-logs
+          docker compose -f docker-compose.integration.yaml logs --no-color coauth > target/conformance-logs/coauth.log || true
+          docker compose -f docker-compose.integration.yaml logs --no-color postgres > target/conformance-logs/postgres.log || true
+
+      - name: Upload diagnostic logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: conformance-diagnostic-logs
+          path: target/conformance-logs/
+          if-no-files-found: ignore
+
+      - name: Tear down integration stack
+        if: ${{ always() }}
+        run: docker compose -f docker-compose.integration.yaml down -v
