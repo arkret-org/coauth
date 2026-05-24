@@ -29,7 +29,7 @@
 
 ### Admin types extraction
 - [x] §7 Land the `TODO(a0-shared-crate)` items: extract applets_admin, bridge_admin, federation_admin, space_policy_admin into `coauth-admin-types`. sodmin currently has these inline (a known duplicate).
-- [x] §8 Publish OpenAPI examples for the admin bridge surface (currently noted as TODO).
+- [x] §8 Document OpenAPI examples for the admin bridge surface locally (currently noted as TODO).
 
 ### Frontend (Dioxus SPA) polish
 - [x] §9 Cross-check `crates/frontend/src/pages/login.rs` against sodmin's login flow — confirm they hit the same endpoints. (Today they share `coauth-admin-types` but with different request flows.)
@@ -70,5 +70,5 @@ All of:
 
 ## Notes
 
-- The book (mdBook) at `book.toml` / `book-zh.toml` should publish per-PR previews — confirm `docs.yaml` workflow does this.
+- The book (mdBook) at `book.toml` / `book-zh.toml` should render locally; remote preview publishing is out of scope for this local plan.
 - Policy default rules: ship a `policies/` directory of Cedar policies as a reference deployment.
