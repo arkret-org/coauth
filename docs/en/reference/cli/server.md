@@ -37,9 +37,11 @@ The server supports graceful shutdown via `SIGTERM` or `SIGINT` (Ctrl+C):
 1. On the first signal, the server stops accepting new connections and waits for in-flight requests to complete.
 2. On a second signal, the server forcefully terminates all connections.
 
-### Health check
+### Health and readiness checks
 
-The server exposes health endpoints at `/health` and `/healthz` that return HTTP 200 when the service is ready to handle requests. These endpoints can be used for load balancer health checks and container orchestration readiness probes.
+The server exposes `/health` and `/healthz` for liveness checks, and
+`/readyz` for readiness. `/readyz` verifies that Postgres is reachable and
+that the configured signing keys can produce a public JWKS.
 
 ### Example: systemd service
 

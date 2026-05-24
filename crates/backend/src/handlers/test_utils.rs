@@ -200,6 +200,7 @@ impl Handler for InjectTestState {
         ctrl: &mut FlowCtrl,
     ) {
         let state = &self.0;
+        depot.insert("pg_pool", state.repository_factory.pool().clone());
         depot.insert(
             "box_repository_factory",
             state.repository_factory.clone().boxed(),
@@ -406,6 +407,8 @@ impl TestState {
             .hoop(InjectTestState(self.clone()))
             // Health
             .push(Router::with_path("/health").get(crate::handlers::health::get))
+            .push(Router::with_path("/healthz").get(crate::handlers::health::get))
+            .push(Router::with_path("/readyz").get(crate::handlers::health::readyz))
             .push(
                 Router::with_path("/webhooks/email/{provider}")
                     .post(crate::handlers::email_webhooks::post),

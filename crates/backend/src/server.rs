@@ -497,7 +497,8 @@ pub fn build_router(
         router = match resource {
             coauth_config::HttpResource::Health => router
                 .push(Router::with_path("/health").get(health::get))
-                .push(Router::with_path("/healthz").get(health::get)),
+                .push(Router::with_path("/healthz").get(health::get))
+                .push(Router::with_path("/readyz").get(health::readyz)),
             coauth_config::HttpResource::Prometheus => {
                 router.push(Router::with_path("/metrics").get(crate::telemetry::prometheus_handler))
             }

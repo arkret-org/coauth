@@ -44,7 +44,7 @@ services:
       - "8091:8091"   # internal listener (health, metrics)
     # The container declares its own HEALTHCHECK that smoke-tests the
     # binary. For real liveness / readiness the orchestrator should
-    # probe the /health endpoint on the internal listener.
+    # probe the /healthz and /readyz endpoints on the internal listener.
     restart: unless-stopped
 
 volumes:
@@ -87,8 +87,10 @@ passwords:
 
 ## Health probes
 
-The internal listener exposes `/health` (and `/healthz`) with a 200 OK
-when the database connection pool is reachable.
+The internal listener exposes `/health`, `/healthz`, and `/readyz`.
+`/health` and `/healthz` return 200 OK when the database connection pool
+is reachable. `/readyz` also checks that the public JWKS can be
+materialized from the configured signing keys.
 
 For Kubernetes:
 
@@ -101,16 +103,21 @@ livenessProbe:
   periodSeconds: 30
 readinessProbe:
   httpGet:
-    path: /health
+    path: /readyz
     port: 8091
   initialDelaySeconds: 5
   periodSeconds: 10
 ```
 
 For Docker Compose users that want to override the built-in HEALTHCHECK
-with a real `/health` probe, a sidecar container with `curl` is the
+with a real `/healthz` or `/readyz` probe, a sidecar container with `curl` is the
 simplest path; the distroless `coauth` image intentionally does not
 ship `curl` or `wget`.
+
+To keep Prometheus metrics on a separate listener, set
+`COAUTH_METRICS_BIND`, for example `COAUTH_METRICS_BIND=127.0.0.1:9091`.
+This adds a metrics-only listener at `/metrics`; see
+[Observability](../observability.md#prometheus-metrics).
 
 ## Verifying image signatures
 

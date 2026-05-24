@@ -25,6 +25,7 @@
 
 # Operations
 
+- [Observability](./observability.md)
 - [Backup and restore](./operations/backup-restore.md)
 - [Upgrades](./operations/upgrades.md)
 

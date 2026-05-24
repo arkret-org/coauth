@@ -41,7 +41,8 @@ Common resource names:
 - `restapi` for the SPA/API backend
 - `assets` for frontend assets
 - `adminapi` for `/api/admin/v1/*`
-- `health` and `prometheus` for internal operations
+- `health` for `/health`, `/healthz`, and `/readyz` probes
+- `prometheus` for `/metrics`
 
 ### Request limits and timeouts
 
@@ -222,6 +223,11 @@ telemetry:
   sentry:
     dsn: https://public@host/1
 ```
+
+Prometheus metrics can also be exposed on a dedicated listener with
+`COAUTH_METRICS_BIND`, for example `COAUTH_METRICS_BIND=127.0.0.1:9091`.
+See [Observability](../observability.md) for OTLP collector examples and
+Prometheus scraping options.
 
 ## `email`
 

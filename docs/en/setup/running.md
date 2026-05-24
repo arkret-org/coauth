@@ -17,7 +17,7 @@ Other than the binary, the service needs a few files to run:
  - The templates, referenced by the [`templates.path`](../reference/configuration.md#templates) configuration option
  - The compiled policy, referenced by the [`policy.path`](../reference/configuration.md#policy) configuration option
  - The frontend assets, referenced by the `path` option of the `assets` resource in the [`http.listeners`](../reference/configuration.md#http) configuration section
- - The frontend manifest file, referenced by tge [`templates.assets_manifest`](../reference/configuration.md#templates) configuration option
+ - The frontend manifest file, referenced by the [`templates.assets_manifest`](../reference/configuration.md#templates) configuration option
 
 Be sure to check the [installation instructions](./installation.md) for more information on how to get these files, and make sure the configuration file is updated accordingly.
 
@@ -67,17 +67,20 @@ For container deployments see [Running with Docker](./docker.md).
 
 ## Liveness / readiness probes
 
-The service exposes `/health` and `/healthz` on the internal listener
-(default `localhost:8091`). Both return `200 OK` with body `ok` when
-the configured Postgres pool is reachable.
+The service exposes `/health`, `/healthz`, and `/readyz` on the internal
+listener (default `localhost:8091`). `/health` and `/healthz` return
+`200 OK` with body `ok` when the configured Postgres pool is reachable.
+`/readyz` also checks that the public JWKS can be materialized from the
+configured signing keys.
 
 ```sh
 curl --fail http://localhost:8091/health
 ```
 
-In Kubernetes, point both `livenessProbe.httpGet.path` and
-`readinessProbe.httpGet.path` at `/healthz` on the internal listener
-(see [Running with Docker](./docker.md) for a full example).
+In Kubernetes, point `livenessProbe.httpGet.path` at `/healthz` and
+`readinessProbe.httpGet.path` at `/readyz` on the internal listener
+(see [Running with Docker](./docker.md) for a full example). See
+[Observability](../observability.md) for telemetry and Prometheus setup.
 
 
 ## Troubleshoot common issues

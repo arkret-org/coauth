@@ -17,8 +17,8 @@ use coauth_backend::{
     },
 };
 use coauth_config::{
-    AppConfig, ClientsConfig, ConfigurationSection, ConfigurationSectionExt, HttpResource,
-    UpstreamOAuthConfig,
+    AppConfig, ClientsConfig, ConfigurationSection, ConfigurationSectionExt, HttpBindConfig,
+    HttpListenerConfig, HttpResource, UpstreamOAuthConfig,
 };
 use coauth_data::{PgRepositoryFactory, SystemClock, UrlBuilder};
 use figment::Figment;
@@ -179,7 +179,14 @@ impl Options {
             .await?;
         }
 
-        let listeners_config = config.http.listeners.clone();
+        let mut listeners_config = config.http.listeners.clone();
+        if let Some(metrics_listener) = metrics_listener_from_env()? {
+            info!(
+                env = super::METRICS_BIND_ENV,
+                "Enabling dedicated Prometheus metrics listener"
+            );
+            listeners_config.push(metrics_listener);
+        }
 
         // Discover the hashed frontend script path from the Dioxus build output
         let frontend_script_src = listeners_config
@@ -390,5 +397,112 @@ impl Options {
         let exit_code = shutdown.run().await;
 
         Ok(exit_code)
+    }
+}
+
+fn metrics_listener_from_env() -> anyhow::Result<Option<HttpListenerConfig>> {
+    let Ok(raw) = std::env::var(super::METRICS_BIND_ENV) else {
+        return Ok(None);
+    };
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(HttpListenerConfig {
+        name: Some("metrics".to_owned()),
+        resources: vec![HttpResource::Prometheus],
+        prefix: None,
+        binds: vec![parse_metrics_bind(raw)?],
+        proxy_protocol: false,
+        tls: None,
+    }))
+}
+
+fn parse_metrics_bind(raw: &str) -> anyhow::Result<HttpBindConfig> {
+    let value = raw.trim();
+    if value.is_empty() {
+        anyhow::bail!("{} must not be empty", super::METRICS_BIND_ENV);
+    }
+
+    if let Ok(port) = value.parse::<u16>() {
+        return Ok(HttpBindConfig::Listen {
+            host: Some("127.0.0.1".to_owned()),
+            port,
+        });
+    }
+
+    if value.parse::<std::net::SocketAddr>().is_ok() {
+        return Ok(HttpBindConfig::Address {
+            address: value.to_owned(),
+        });
+    }
+
+    if let Some((host, port)) = value.rsplit_once(':') {
+        let host = host.trim();
+        anyhow::ensure!(
+            !host.is_empty(),
+            "{} host must not be empty",
+            super::METRICS_BIND_ENV
+        );
+        let port = port
+            .trim()
+            .parse::<u16>()
+            .with_context(|| format!("{} must end in a TCP port", super::METRICS_BIND_ENV))?;
+        return Ok(HttpBindConfig::Listen {
+            host: Some(host.to_owned()),
+            port,
+        });
+    }
+
+    anyhow::bail!(
+        "{} must be a TCP port, host:port pair, or socket address",
+        super::METRICS_BIND_ENV
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metrics_bind_accepts_bare_port_on_loopback() {
+        let bind = parse_metrics_bind("9091").expect("bare port should parse");
+
+        match bind {
+            HttpBindConfig::Listen { host, port } => {
+                assert_eq!(host.as_deref(), Some("127.0.0.1"));
+                assert_eq!(port, 9091);
+            }
+            other => panic!("unexpected bind: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metrics_bind_accepts_named_host_and_port() {
+        let bind = parse_metrics_bind("localhost:9091").expect("host:port should parse");
+
+        match bind {
+            HttpBindConfig::Listen { host, port } => {
+                assert_eq!(host.as_deref(), Some("localhost"));
+                assert_eq!(port, 9091);
+            }
+            other => panic!("unexpected bind: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metrics_bind_accepts_socket_address() {
+        let bind = parse_metrics_bind("127.0.0.1:9091").expect("socket address should parse");
+
+        match bind {
+            HttpBindConfig::Address { address } => assert_eq!(address, "127.0.0.1:9091"),
+            other => panic!("unexpected bind: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metrics_bind_rejects_missing_port() {
+        assert!(parse_metrics_bind("localhost").is_err());
     }
 }

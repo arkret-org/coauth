@@ -11,7 +11,7 @@ use std::{io::IsTerminal, process::ExitCode, sync::Arc};
 
 use anyhow::Context;
 use clap::Parser;
-use coauth_config::{ConfigurationSectionExt, TelemetryConfig};
+use coauth_config::{ConfigurationSectionExt, MetricsExporterKind, TelemetryConfig};
 use sentry_tracing::EventFilter;
 use tracing_subscriber::{
     EnvFilter, Layer, Registry,
@@ -119,9 +119,15 @@ async fn execute_command() -> anyhow::Result<ExitCode> {
     let cli_opts = self::commands::Options::parse();
     let figment = cli_opts.figment();
 
-    let tel_cfg = TelemetryConfig::extract_or_default(&figment)
+    let mut tel_cfg = TelemetryConfig::extract_or_default(&figment)
         .map_err(anyhow::Error::from_boxed)
         .context("Failed to load telemetry config")?;
+    if cli_opts.runs_server()
+        && std::env::var(self::commands::METRICS_BIND_ENV)
+            .is_ok_and(|value| !value.trim().is_empty())
+    {
+        tel_cfg.metrics.exporter = MetricsExporterKind::Prometheus;
+    }
 
     // Sentry initialisation
     let sentry_guard = sentry::init((

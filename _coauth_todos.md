@@ -43,9 +43,9 @@
 - [x] §15 Set up Dependabot for cargo + actions.
 
 ### Observability
-- [ ] §16 Confirm OpenTelemetry exporter works against a real OTEL collector (jaeger/tempo) — currently jaeger/otlp/stdout exporters are present; add an example in `docs/en/observability.md`.
-- [ ] §17 Add `/readyz` probe (Postgres reachable + JWKS warmed).
-- [ ] §18 Expose Prometheus on a separate port via `COAUTH_METRICS_BIND`.
+- [x] §16 Confirm OpenTelemetry exporter works against a real OTEL collector (jaeger/tempo) — currently jaeger/otlp/stdout exporters are present; add an example in `docs/en/observability.md`.
+- [x] §17 Add `/readyz` probe (Postgres reachable + JWKS warmed).
+- [x] §18 Expose Prometheus on a separate port via `COAUTH_METRICS_BIND`.
 
 ### Doc updates
 - [ ] §19 Document the Round R4 wire-breaking changes in `docs/en/upgrade-to-r4.md` (cross-signing reset proofs must be reissued after trust_domain rotation).

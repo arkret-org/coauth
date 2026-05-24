@@ -17,6 +17,8 @@ mod server;
 mod templates;
 mod worker;
 
+pub(super) const METRICS_BIND_ENV: &str = "COAUTH_METRICS_BIND";
+
 #[derive(Parser, Debug)]
 enum Subcommand {
     /// Configuration-related commands
@@ -61,6 +63,10 @@ pub struct Options {
 }
 
 impl Options {
+    pub(super) fn runs_server(&self) -> bool {
+        matches!(&self.subcommand, Some(Subcommand::Server(_)) | None)
+    }
+
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
         use Subcommand as S;
         // We Box the futures for each subcommand so that we avoid this function being
