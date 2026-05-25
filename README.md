@@ -1,5 +1,12 @@
 # coauth
 
+> **DO NOT commit secrets.** Files like `config.dev.yaml`, `config.local.*`,
+> `*.log`, and unencrypted private keys are gitignored and must stay local.
+> Use [`config.example.yaml`](config.example.yaml) as a template and source
+> real values from environment variables. A CI `gitleaks` job (see
+> [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) fails the build
+> if anything that looks like a credential lands in a tracked path.
+
 `coauth` is the Contrix Auth / Account Server. It provides OIDC/OAuth login,
 account lifecycle management, short-lived session grants, policy hooks,
 notifications, and a stable admin API for Contrix deployments.
@@ -231,3 +238,10 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 ## License
 
 `coauth` is distributed under `AGPL-3.0-only`. See [LICENSE](LICENSE).
+
+---
+
+<!-- circle-rollout milestone pointer -->
+> **Active milestone tracking** (local-only, gitignored): see
+> `_coauth_todos.md` in the parent `contrix-dev/` directory for the
+> circle-rollout (CXP-0007) work item list and per-stage checkpoints.

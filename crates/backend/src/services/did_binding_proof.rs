@@ -26,12 +26,19 @@
 //!   6. Reject if the embedded binding statement doesn't match the request
 //!      (`account_did` + `cx_account_id` + nonce all match exactly).
 //!
-//! SDK note: `contrix::identity::binding::verify_binding_proof` is the
-//! available pure SDK verifier today, but it accepts a raw Ed25519 proof
-//! tuple, not coauth's compact JWS + DID-document JWKS envelope. Until
-//! the SDK grows a JWS/JWKS binding-proof adapter, this module keeps the
-//! envelope verification in `coauth_jose` and pins the statement checks
-//! below with targeted unit tests.
+//! SDK integration: signature verification is performed by the SDK's
+//! pure-Rust `contrix_signatures::PublicKeyMaterial::ed25519_bytes()`
+//! helper (which understands raw / multibase / JWK Ed25519 keys) plus
+//! the underlying `ed25519_dalek` verifier. The compact JWS envelope is
+//! parsed locally (header.payload.signature segments) and the canonical
+//! signing input is recomputed from the wire bytes so that no JWS
+//! library state intervenes between the resolved DID-document JWK and
+//! the verification call. The embedded coauth_jose
+//! `jwt.verify_with_jwks(...)` path has been removed; coauth_jose's JWT
+//! parser is still used to extract the typed `BindingStatementClaims` /
+//! `VerificationServiceProofClaims` payload, but the signature check
+//! itself is now a single SDK-mediated `ed25519_dalek::Verifier::verify`
+//! call against raw key bytes recovered from the OKP JWK.
 //!
 //! ## Verification-service proof
 //!
@@ -50,9 +57,11 @@ use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::ContrixConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
-use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
+use coauth_jose::jwt::Jwt;
 use coauth_keystore::Keystore;
 use contrix_core::canonical::canonical_json_bytes;
+use contrix_signatures::proof::PublicKeyMaterial;
+use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ulid::Ulid;
@@ -200,11 +209,8 @@ pub async fn validate_control_proof(
         return Err(DidBindingProofError::NoVerificationKey);
     }
 
-    let jwks = jwks_for_verification_method(verification_methods, &verification_method)
-        .ok_or(DidBindingProofError::VerificationMethodNotFound)?;
-    if jwt.verify_with_jwks(&jwks).is_err() {
-        return Err(DidBindingProofError::SignatureMismatch);
-    }
+    verify_compact_jws_with_sdk(proof_jws, verification_methods, &verification_method)
+        .map_err(|_| DidBindingProofError::SignatureMismatch)?;
 
     validate_binding_statement_claims(claims, account_did, cx_account_id, nonce, now)?;
 
@@ -251,16 +257,89 @@ fn validate_canonical_statement_payload(
     Ok(())
 }
 
-fn jwks_for_verification_method(
+/// Error returned by [`verify_compact_jws_with_sdk`]. Kept private to
+/// this module — callers map it onto the bound public
+/// `DidBindingProofError::SignatureMismatch` /
+/// `VerificationProofError::SignatureMismatch` variant.
+#[derive(Debug, thiserror::Error)]
+enum SdkJwsVerifyError {
+    #[error("compact JWS shape is invalid: {0}")]
+    InvalidShape(String),
+    #[error("verification_method '{0}' not present in the resolved DID document")]
+    MethodNotFound(String),
+    #[error("resolved verification_method JWK is not a supported Ed25519 OKP key: {0}")]
+    UnsupportedJwk(String),
+    #[error("Ed25519 signature did not verify: {0}")]
+    SignatureMismatch(String),
+}
+
+/// Verify a compact JWS using the SDK's pure-Rust Ed25519 verifier.
+///
+/// CXP-0007 P2B.3.1: this replaces the previous embedded
+/// `coauth_jose::jwt::Jwt::verify_with_jwks` envelope-verification path.
+/// The compact-JWS shape (`header.payload.signature`) is parsed into
+/// segment bytes here; the signing input
+/// (`b64url(header) "." b64url(payload)`) is reconstructed from the wire
+/// bytes themselves so no JWS library state intervenes between the
+/// resolved DID-document JWK and the final
+/// `ed25519_dalek::Verifier::verify` call. The raw Ed25519 verifying-key
+/// bytes are extracted from the resolved OKP JWK via the SDK helper
+/// [`contrix_signatures::proof::PublicKeyMaterial::ed25519_bytes`].
+fn verify_compact_jws_with_sdk(
+    proof_jws: &str,
     verification_methods: &[crate::handlers::contrix::VerificationMethod],
-    verification_method: &str,
-) -> Option<PublicJsonWebKeySet> {
+    verification_method_id: &str,
+) -> Result<(), SdkJwsVerifyError> {
     let method = verification_methods
         .iter()
-        .find(|method| method.id == verification_method)?;
-    Some(PublicJsonWebKeySet::new(vec![
-        method.public_key_jwk.clone().with_kid(method.id.clone()),
-    ]))
+        .find(|method| method.id == verification_method_id)
+        .ok_or_else(|| SdkJwsVerifyError::MethodNotFound(verification_method_id.to_owned()))?;
+
+    let mut parts = proof_jws.split('.');
+    let header_b64u = parts
+        .next()
+        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing protected header".to_owned()))?;
+    let payload_b64u = parts
+        .next()
+        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing payload segment".to_owned()))?;
+    let signature_b64u = parts
+        .next()
+        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing signature segment".to_owned()))?;
+    if parts.next().is_some() {
+        return Err(SdkJwsVerifyError::InvalidShape("too many segments".to_owned()));
+    }
+
+    let signature_bytes = Base64UrlUnpadded::decode_vec(signature_b64u)
+        .map_err(|err| SdkJwsVerifyError::InvalidShape(format!("invalid sig b64url: {err}")))?;
+    if signature_bytes.len() != 64 {
+        return Err(SdkJwsVerifyError::SignatureMismatch(format!(
+            "Ed25519 signature must be 64 bytes, got {}",
+            signature_bytes.len()
+        )));
+    }
+    let mut sig_arr = [0u8; 64];
+    sig_arr.copy_from_slice(&signature_bytes);
+    let signature = Signature::from_bytes(&sig_arr);
+
+    // RFC 7515 §5.2 signing input: ASCII bytes of "<header_b64u>.<payload_b64u>".
+    let mut signing_input = String::with_capacity(header_b64u.len() + 1 + payload_b64u.len());
+    signing_input.push_str(header_b64u);
+    signing_input.push('.');
+    signing_input.push_str(payload_b64u);
+
+    // SDK helper: bridge JWK → raw 32-byte Ed25519 verifying key.
+    let jwk_value = serde_json::to_value(&method.public_key_jwk)
+        .map_err(|err| SdkJwsVerifyError::UnsupportedJwk(format!("jwk serialize: {err}")))?;
+    let material = PublicKeyMaterial::Jwk { value: jwk_value };
+    let key_bytes = material
+        .ed25519_bytes()
+        .map_err(|err| SdkJwsVerifyError::UnsupportedJwk(err.to_string()))?;
+    let verifying = VerifyingKey::from_bytes(&key_bytes)
+        .map_err(|err| SdkJwsVerifyError::UnsupportedJwk(err.to_string()))?;
+
+    verifying
+        .verify(signing_input.as_bytes(), &signature)
+        .map_err(|err| SdkJwsVerifyError::SignatureMismatch(err.to_string()))
 }
 
 fn validate_binding_statement_claims(
@@ -439,11 +518,8 @@ pub async fn verify_verification_service_proof(
     if verification_methods.is_empty() {
         return Err(VerificationProofError::NoVerificationKey);
     }
-    let jwks = jwks_for_verification_method(verification_methods, &verification_method)
-        .ok_or(VerificationProofError::VerificationMethodNotFound)?;
-    if jwt.verify_with_jwks(&jwks).is_err() {
-        return Err(VerificationProofError::SignatureMismatch);
-    }
+    verify_compact_jws_with_sdk(proof_jws, verification_methods, &verification_method)
+        .map_err(|_| VerificationProofError::SignatureMismatch)?;
 
     Ok(claims.clone())
 }
@@ -642,17 +718,17 @@ mod tests {
             controller: vector.did_document_fragment.controller.clone(),
             public_key_jwk: vector.did_document_fragment.public_key_jwk.clone(),
         };
-        let jwks = jwks_for_verification_method(std::slice::from_ref(&method), kid)
-            .expect("fixture verification method should resolve");
-        assert!(
-            jwks_for_verification_method(
-                std::slice::from_ref(&method),
-                "did:web:alice.example#unknown"
-            )
-            .is_none()
-        );
-        jwt.verify_with_jwks(&jwks)
+        // CXP-0007 P2B.3.1: verify through the SDK-mediated pure-Rust path.
+        verify_compact_jws_with_sdk(&compact, std::slice::from_ref(&method), kid)
             .expect("fixture JWS should verify against DID method key");
+        assert!(
+            verify_compact_jws_with_sdk(
+                &compact,
+                std::slice::from_ref(&method),
+                "did:web:alice.example#unknown",
+            )
+            .is_err()
+        );
 
         let mut tampered_binding = vector.binding_object.clone();
         tampered_binding["event_digest"] =
@@ -663,10 +739,13 @@ mod tests {
             &vector.proof.jws,
             &Base64UrlUnpadded::encode_string(&tampered_payload),
         );
-        let tampered: Jwt<'_, serde_json::Value> =
-            Jwt::try_from(tampered_compact.as_str()).unwrap();
         assert!(
-            tampered.verify_with_jwks(&jwks).is_err(),
+            verify_compact_jws_with_sdk(
+                &tampered_compact,
+                std::slice::from_ref(&method),
+                kid,
+            )
+            .is_err(),
             "altered canonical binding payload must break the fixture signature"
         );
     }

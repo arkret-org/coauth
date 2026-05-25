@@ -1,2 +1,12 @@
+# Dockerfile.integration-config
+#
+# Helper image used by scripts/integration-up.sh to bake the conformance
+# test config into a `coauth:dev` image at a fixed path. It expects
+# `conformance/test-config.yaml` to have been generated already (the
+# integration script does this; the file itself is gitignored because it
+# contains synthetic signing keys that should never be committed).
+#
+# Build manually with:
+#   docker build -t coauth-integration:dev -f Dockerfile.integration-config .
 FROM coauth:dev
 COPY conformance/test-config.yaml /etc/coauth/config.yaml

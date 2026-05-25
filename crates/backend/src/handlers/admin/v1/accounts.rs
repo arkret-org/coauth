@@ -358,6 +358,7 @@ pub async fn lock_account(
             ..AdminUserPatch::default()
         },
         false,
+        "lock",
     )
     .await
 }
@@ -376,6 +377,7 @@ pub async fn disable_account(
             ..AdminUserPatch::default()
         },
         false,
+        "disable",
     )
     .await
 }
@@ -394,6 +396,7 @@ pub async fn erase_account(
             ..AdminUserPatch::default()
         },
         true,
+        "erase",
     )
     .await
 }
@@ -412,6 +415,7 @@ pub async fn reset_recovery(
             ..AdminUserPatch::default()
         },
         false,
+        "reset_recovery",
     )
     .await
 }
@@ -421,6 +425,7 @@ async fn patch_account(
     depot: &Depot,
     patch: AdminUserPatch,
     principal_erase: bool,
+    action_label: &str,
 ) -> JsonResult<SingleResponse<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
@@ -435,8 +440,68 @@ async fn patch_account(
     let principal_server = depot.principal_server()?;
     let mut rng = crate::handlers::account::make_rng();
 
-    // TODO(contrix): require and persist reason/approval proof for high-risk
-    // account mutations once the audit schema includes request context.
+    // CXP-0007 P2B.5: high-risk patches (disable / erase / reset_recovery)
+    // MUST be preceded by an N-of-M approved RiskActionProposal. The
+    // proposal id is bound to the request via the `risk_action_proposal_id`
+    // query / header parameter; the propose / approve workflow lives in
+    // `admin/v1/accounts/risk_action.rs` and persists each approval as an
+    // `ApprovalProof` row inside the proposal's `approval_proofs` JSONB
+    // column. We mark the proposal `executed` *after* `patch_user`
+    // succeeds so a failed mutation does not consume the approval set.
+    let approved_proposal = if crate::services::risk_action_proposals::is_high_risk_action(
+        action_label,
+    ) {
+        let proposal_id_raw = req
+            .query::<String>("risk_action_proposal_id")
+            .or_else(|| {
+                req.header::<String>("x-coauth-risk-action-proposal-id")
+            })
+            .ok_or_else(|| {
+                AppError::bad_request(format!(
+                    "high-risk action '{action_label}' requires an approved \
+                     risk_action_proposal_id (query parameter or \
+                     x-coauth-risk-action-proposal-id header)"
+                ))
+            })?;
+        let proposal_ulid = Ulid::from_string(proposal_id_raw.trim())
+            .map_err(|err| AppError::bad_request(format!("invalid proposal_id: {err}")))?;
+        let proposals = depot.risk_action_proposals_service()?;
+        let existing = proposals
+            .get(proposal_ulid)
+            .await
+            .map_err(|err| {
+                AppError::new(
+                    salvo::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("risk_action lookup: {err}"),
+                )
+            })?
+            .ok_or_else(|| AppError::not_found("risk_action proposal not found"))?;
+        if existing.account_id != id {
+            return Err(AppError::bad_request(
+                "risk_action proposal targets a different account",
+            ));
+        }
+        if existing.action != action_label {
+            return Err(AppError::bad_request(format!(
+                "risk_action proposal action {:?} does not match endpoint action {action_label:?}",
+                existing.action
+            )));
+        }
+        if existing.state
+            != crate::services::risk_action_proposals::ProposalState::Approved
+        {
+            return Err(AppError::bad_request(format!(
+                "risk_action proposal state {:?} is not 'approved'; need at \
+                 least {} signed admin approvals before execution",
+                existing.state.as_str(),
+                existing.required_approvals
+            )));
+        }
+        Some(proposal_ulid)
+    } else {
+        None
+    };
+
     let account = crate::services::user_admin::patch_user(
         &mut repo,
         &mut rng,
@@ -449,6 +514,20 @@ async fn patch_account(
     )
     .await
     .map_err(map_service_error)?;
+
+    // Mark the proposal `executed` on success so it cannot be replayed.
+    if let Some(proposal_ulid) = approved_proposal {
+        let proposals = depot.risk_action_proposals_service()?;
+        let _ = proposals
+            .mark_executed(proposal_ulid, clock.now())
+            .await
+            .map_err(|err| {
+                AppError::new(
+                    salvo::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("risk_action mark_executed: {err}"),
+                )
+            })?;
+    }
 
     repo.save().await?;
 

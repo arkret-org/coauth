@@ -8,6 +8,7 @@ mod symmetric;
 
 pub use self::{
     asymmetric::{AsymmetricKeyFromJwkError, AsymmetricSigningKey, AsymmetricVerifyingKey},
+    signature::Signature,
     symmetric::{InvalidAlgorithm, SymmetricKey},
 };
 

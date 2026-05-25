@@ -898,11 +898,11 @@ fn build_account_api_router(router: Router) -> Router {
 
 fn build_admin_router(router: Router) -> Router {
     use crate::handlers::admin::v1::{
-        account_dids, accounts, audit_feed, claims, connector_health, devices, invite_quarantine,
-        notification_channels, notification_templates, oauth_clients, oauth_clients_i18n,
-        oauth_clients_register, oauth_sessions, passkeys, personal_sessions, policy_checks,
-        policy_data, site_config, upstream_oauth_links, upstream_oauth_providers, user_emails,
-        user_registration_tokens, user_sessions, users, version,
+        account_dids, accounts, audit_feed, circle_capabilities, claims, connector_health, devices,
+        invite_quarantine, notification_channels, notification_templates, oauth_clients,
+        oauth_clients_i18n, oauth_clients_register, oauth_sessions, passkeys, personal_sessions,
+        policy_checks, policy_data, site_config, upstream_oauth_links, upstream_oauth_providers,
+        user_emails, user_registration_tokens, user_sessions, users, version,
     };
 
     let admin_router = Router::with_path("/api/admin/v1")
@@ -921,6 +921,18 @@ fn build_admin_router(router: Router) -> Router {
         )
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
+        // CXP-0007 cx.circle.* capability grants (P2B.2). Wire shape is in
+        // coauth-admin-types::circle_capability_admin; persistence is
+        // in-memory until the follow-up migration lands.
+        .push(
+            Router::with_path("circles/capabilities")
+                .get(circle_capabilities::list_handler)
+                .post(circle_capabilities::create_handler)
+                .push(
+                    Router::with_path("{grant_id}")
+                        .delete(circle_capabilities::revoke_handler),
+                ),
+        )
         // Invite-quarantine outbox (C10.E §6.1 default-profile path)
         .push(
             Router::with_path("invite-quarantine")

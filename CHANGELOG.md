@@ -12,6 +12,83 @@ for the full release process.
 
 ## [Unreleased]
 
+### CXP-0007 circle rollout — coauth P2B closeout (2026-05-26)
+
+- **Added** (P2B.3.1) `did_binding_proof.rs` now verifies compact JWS
+  binding proofs through the SDK's pure-Rust `contrix_signatures::proof::
+  PublicKeyMaterial` JWK → raw-Ed25519-bytes helper plus
+  `ed25519_dalek::Verifier::verify` directly. The previous embedded
+  `coauth_jose::jwt::Jwt::verify_with_jwks(...)` envelope path is removed
+  from both `validate_control_proof` and
+  `verify_verification_service_proof`. The compact JWS is parsed locally
+  and the RFC 7515 signing input (`b64url(header) "." b64url(payload)`)
+  is reconstructed from the wire bytes themselves so no JWS-library
+  state intervenes between the resolved DID-document JWK and the final
+  signature check. The contrix-spec Ed25519 detached-JWS fixture test
+  (`contrix_spec_binding_proof_fixture_verifies`) still passes against
+  the new path. New private `verify_compact_jws_with_sdk` helper plus
+  `SdkJwsVerifyError` enum consolidate the verify pipeline.
+- **Added** (P2B.5) High-risk admin account mutations (`disable`,
+  `erase`, `reset_recovery` — anything `is_high_risk_action()` matches)
+  in `admin/v1/accounts.rs::patch_account` now MUST be bound to an
+  approved `RiskActionProposal` via the `risk_action_proposal_id` query
+  parameter or `x-coauth-risk-action-proposal-id` header. The proposal
+  is loaded through the existing `risk_action_proposals_service`, its
+  state must be `Approved`, its `account_id` / `action` must match the
+  request, and it is marked `Executed` after the patch succeeds (so an
+  approval set cannot be replayed). Low-risk `lock` retains the legacy
+  unsigned path.
+- **Added** (P2B.5) High-tier `cx.circle.*` capability grants
+  (`MemberAddOthers`, `Audit` — per `CircleCapabilityAction::risk_tier`)
+  in `admin/v1/circle_capabilities.rs::create_handler` now require the
+  same `RiskActionProposal` binding before the grant is persisted.
+  Low / Medium tier grants (Create, Manage, MemberAdd, MemberManage)
+  keep the unsigned path.
+- **Fixed** `coauth_jose::jwa::Signature` is now `pub`-re-exported from
+  `jwa::mod`; the previous module-private visibility blocked the
+  existing test-only `policy_check.rs` and `accounts.rs` callers from
+  compiling the lib-test target. (Pre-existing breakage unrelated to
+  this round; surfacing it was a prerequisite for re-running the
+  `did_binding_proof::tests::*` suite that exercises the new
+  SDK-mediated verifier.)
+- **Notes** One follow-up marker planted:
+  `TODO(circle-rollout-followup-A.2)` in
+  `admin/v1/circle_capabilities.rs` records that the in-process grant
+  store still needs a diesel migration + repository (the original P2B.2
+  marker mentioning a "sqlx migration" was inaccurate — coauth uses
+  diesel + diesel-async). The `admin/v1/account_dids.rs` line 375
+  reference in the original P2B.5 brief did not match a live stub; no
+  change made there.
+
+### CXP-0007 circle rollout — coauth P2B (2026-05-26, contrix-spec `9cb47c1..2b0d70d`)
+
+- **Security** (P1.5) `config.dev.yaml` (real Gmail SMTP password + RSA/EC
+  private keys + DB credentials) and `coauth-dev.log` were never committed
+  to git history — they only existed locally — but they are now explicitly
+  enumerated in `.gitignore`, a sanitized `config.example.yaml` is provided
+  as a template, and a dedicated `gitleaks` workflow at
+  `.github/workflows/secret-scan.yaml` (configured by `.gitleaks.toml`)
+  blocks any future credential commits. The workflow runs on every push
+  (all branches) and every pull request — broader than the previous
+  `ci.yaml`-embedded job that only triggered on PRs and pushes to
+  `main`/`release/**` — so a leaked credential is caught on the feature
+  branch where it lands. Closes P1.5.8. Operators still need to rotate
+  the Gmail app password / signing keys / DB credentials out-of-band,
+  since they were exposed locally.
+- **Breaking** Admin policy dictionary now ships the six CXP-0007
+  `cx.circle.*` capability actions (`create`, `manage`, `member.add`,
+  `member.manage`, `member.add.others`, `audit`) and exposes admin endpoints
+  to list / grant / revoke them.
+- **Added** Admin audit trail middleware (`audit_helper::record`) is wired
+  through every admin create/update/delete route; new
+  `/api/admin/v1/audit/feed` endpoint with cursor pagination.
+- **Added** High-risk admin actions (account unlock, claim unbind, force
+  DID rebind, session delete, etc.) now produce a persisted approval-proof
+  record (N-of-M signers; see TODO markers for the remaining wiring).
+- **Added** Principal Control Realm vs Collaboration Realm distinction is
+  surfaced on admin DTOs and documented in admin-api topic.
+- **Notes** Version stays at 1.8.0; this is not a release.
+
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
 
 Closes 8 protocol-review commits on the auth / identity / policy surfaces.

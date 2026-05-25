@@ -353,5 +353,73 @@ Sample output
 
 </details>
 
+## Realm classification — Principal Control vs Collaboration
+
+CXP-0007 (contrix-spec commit `44abbd6`) made the distinction between two
+realm classes explicit. Every admin route belongs to one of them:
+
+- **Principal Control Realm** — identity, device, handle, claim, DID
+  binding, OAuth client, registration token, upstream-link, password,
+  session-grant management. Operators who hold capabilities here can
+  alter who the principal *is*.
+- **Collaboration Realm** — Spaces, Flows, Circles, membership, content
+  policy. Operators who hold capabilities here govern what the principal
+  *does together with other principals*. The six CXP-0007
+  `cx.circle.*` capability actions live in this class.
+
+| Route prefix                                              | Class                  |
+|-----------------------------------------------------------|------------------------|
+| `/api/admin/v1/accounts/*`                                | Principal Control      |
+| `/api/admin/v1/users/*`                                   | Principal Control      |
+| `/api/admin/v1/accounts/{id}/dids`                        | Principal Control      |
+| `/api/admin/v1/accounts/{id}/claims`                      | Principal Control      |
+| `/api/admin/v1/accounts/{id}/session-grants`              | Principal Control      |
+| `/api/admin/v1/accounts/{id}/risk-action*`                | Principal Control      |
+| `/api/admin/v1/oauth-clients*`                            | Principal Control      |
+| `/api/admin/v1/upstream-oauth-*`                          | Principal Control      |
+| `/api/admin/v1/user-registration-tokens*`                 | Principal Control      |
+| `/api/admin/v1/devices`                                   | Principal Control      |
+| `/api/admin/v1/passkeys`                                  | Principal Control      |
+| `/api/admin/v1/personal-sessions`                         | Principal Control      |
+| `/api/admin/v1/user-sessions`                             | Principal Control      |
+| `/api/admin/v1/oauth-sessions`                            | Principal Control      |
+| `/api/admin/v1/circles/capabilities*`                     | **Collaboration**      |
+| `/api/admin/v1/notification-*`                            | Cross-cutting (audit)  |
+| `/api/admin/v1/audit-feed`                                | Cross-cutting (audit)  |
+| `/api/admin/v1/invite-quarantine*`                        | Cross-cutting (audit)  |
+| `/api/admin/v1/site-config`                               | Cross-cutting (config) |
+
+This classification is informational today — gating is still done by the
+single `urn:coauth:admin` / `urn:contrix:admin:*` scope. The next round
+of the rollout will split these into per-class scopes so that an
+operator can be granted Collaboration-only access without being able to
+mutate identity state.
+
+## CXP-0007 `cx.circle.*` capability grants
+
+The Collaboration class exposes a typed grant surface for the six
+CXP-0007 capability actions:
+
+| action                        | risk   | required constraint        |
+|-------------------------------|--------|----------------------------|
+| `cx.circle.create`            | medium | (none)                     |
+| `cx.circle.manage`            | medium | `allowed_circle_refs`      |
+| `cx.circle.member.add`        | low    | (none)                     |
+| `cx.circle.member.manage`     | medium | `allowed_circle_refs`      |
+| `cx.circle.member.add.others` | high   | `allowed_circle_refs`      |
+| `cx.circle.audit`             | high   | (paired with audit check)  |
+
+Endpoints:
+
+```text
+GET    /api/admin/v1/circles/capabilities
+POST   /api/admin/v1/circles/capabilities
+DELETE /api/admin/v1/circles/capabilities/{grant_id}
+```
+
+Request / response shapes are defined in
+[`coauth_admin_types::circle_capability_admin`](https://github.com/contrix-dev/coauth/blob/main/crates/admin-types/src/circle_capability_admin.rs).
+See `_todos_all.md` (P2B.2) for the persistence backlog.
+
 [authorization code]: ../topics/authorization.md#authorization-code-grant
 [device authorization]: ../topics/authorization.md#device-authorization-grant
