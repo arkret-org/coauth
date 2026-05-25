@@ -69,30 +69,6 @@ jobs:
         run: |
           cargo clippy --workspace --tests --bins --lib -- -D warnings
 
-  gitleaks:
-    name: Scan for committed secrets
-    runs-on: ubuntu-24.04
-
-    permissions:
-      contents: read
-
-    env:
-      # No Rust toolchain needed here.
-      RUSTC_WRAPPER: ""
-
-    steps:
-      - name: Fetch repository
-        uses: actions/checkout@v6
-        with:
-          # Full history so we catch secrets in any reachable commit.
-          fetch-depth: 0
-
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-
   cargo-deny:
     name: Audit dependencies with cargo-deny
     runs-on: ubuntu-24.04
@@ -273,7 +249,6 @@ jobs:
       - rustfmt
       - clippy
       - cargo-deny
-      - gitleaks
       - check-schema
       - contrix-contract-drift
       - test

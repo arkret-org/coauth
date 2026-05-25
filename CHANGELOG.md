@@ -18,10 +18,15 @@ for the full release process.
   private keys + DB credentials) and `coauth-dev.log` were never committed
   to git history — they only existed locally — but they are now explicitly
   enumerated in `.gitignore`, a sanitized `config.example.yaml` is provided
-  as a template, and a `gitleaks` job in `.github/workflows/ci.yaml`
-  (configured by `.gitleaks.toml`) blocks any future credential commits.
-  Operators still need to rotate the Gmail app password / signing keys /
-  DB credentials out-of-band, since they were exposed locally.
+  as a template, and a dedicated `gitleaks` workflow at
+  `.github/workflows/secret-scan.yaml` (configured by `.gitleaks.toml`)
+  blocks any future credential commits. The workflow runs on every push
+  (all branches) and every pull request — broader than the previous
+  `ci.yaml`-embedded job that only triggered on PRs and pushes to
+  `main`/`release/**` — so a leaked credential is caught on the feature
+  branch where it lands. Closes P1.5.8. Operators still need to rotate
+  the Gmail app password / signing keys / DB credentials out-of-band,
+  since they were exposed locally.
 - **Breaking** Admin policy dictionary now ships the six CXP-0007
   `cx.circle.*` capability actions (`create`, `manage`, `member.add`,
   `member.manage`, `member.add.others`, `audit`) and exposes admin endpoints
