@@ -238,3 +238,10 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 ## License
 
 `coauth` is distributed under `AGPL-3.0-only`. See [LICENSE](LICENSE).
+
+---
+
+<!-- circle-rollout milestone pointer -->
+> **Active milestone tracking** (local-only, gitignored): see
+> `_coauth_todos.md` in the parent `contrix-dev/` directory for the
+> circle-rollout (CXP-0007) work item list and per-stage checkpoints.
