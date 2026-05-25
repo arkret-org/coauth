@@ -1,15 +1,16 @@
 # Running with Docker / Docker Compose
 
-`coauth` ships an OCI image at
-`ghcr.io/contrix-dev/coauth`. Two variants are published per release:
+`coauth` can be built as a local OCI image for Docker or Docker Compose. This
+local readiness workflow does not push registry images or publish release tags.
+Use the same variant names for local image tags:
 
 - `:latest` / `:vX.Y.Z` — distroless `nonroot` image, suitable for production.
 - `:latest-debug` / `:vX.Y.Z-debug` — distroless `debug-nonroot` image with
   a busybox shell, useful for poking at a deployment.
 
-The image is multi-arch (`linux/amd64` and `linux/arm64`) and is signed
-with [Sigstore Cosign](https://docs.sigstore.dev/cosign/overview/) on
-the canonical owner identity.
+Local image archives and provenance can be signed with
+[Sigstore Cosign](https://docs.sigstore.dev/cosign/overview/) without registry
+pushes or transparency-log uploads.
 
 ## Minimal `docker-compose.yaml`
 

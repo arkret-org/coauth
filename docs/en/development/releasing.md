@@ -156,8 +156,8 @@ jq -n \
 ```
 
 Sign and verify that provenance file locally with Cosign. The
-`--tlog-upload=false` flag keeps this dry-run offline; published image
-signing remains the job of the release workflow.
+`--tlog-upload=false` flag keeps this dry-run offline; remote image publication
+and registry signing are outside this local workflow.
 
 ```sh
 KEY_DIR="${ARTIFACT_DIR}/cosign-local"
