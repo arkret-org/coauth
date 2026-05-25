@@ -9,23 +9,31 @@
 //! Wire shape lives in
 //! [`coauth_admin_types::circle_capability_admin`].
 //!
-//! TODO(circle-rollout-P2B.2): The current implementation persists grants
-//! in a process-wide `Mutex<Vec<…>>`. Migrating this to the
-//! `coauth-data` repository pattern (a new `circle_capability_grant`
-//! repository + Postgres table + sqlx migration) is tracked as the
-//! follow-up for the next pass. The wire shape is stable enough that
-//! sodmin can integrate against it today.
+//! TODO(circle-rollout-followup-A.2): the in-process `Mutex<Vec<…>>`
+//! store below is functionally complete for sodmin integration but is
+//! still in-memory. Migrating to a `coauth-data` repository pattern
+//! requires a fresh diesel migration that adds a
+//! `circle_capability_grants` table (and a matching repository trait /
+//! Postgres implementation) so the grants survive coauth-backend
+//! restarts. coauth uses diesel + diesel-async (not sqlx) — the original
+//! P2B.2 marker mentioning a "sqlx migration" was inaccurate. Tracked
+//! out-of-band because the additional ~400 LoC of repo plumbing did not
+//! fit inside the circle-rollout P1 closeout window.
 
 use std::sync::{LazyLock, Mutex};
 
 use chrono::Utc;
 use coauth_admin_types::circle_capability_admin::{
     CircleCapabilityGrant, CreateCircleCapabilityGrant, ListCircleCapabilityGrantsResponse,
+    RiskTier,
 };
 use salvo::{http::StatusCode, oapi::extract::PathParam, prelude::*};
 use ulid::Ulid;
 
-use crate::{JsonResult, error::AppError, handlers::admin::call_context::extract_call_context};
+use crate::{
+    JsonResult, error::AppError,
+    handlers::{admin::call_context::extract_call_context, common::DepotExt},
+};
 
 /// In-memory grant store. See module TODO.
 static GRANTS: LazyLock<Mutex<Vec<CircleCapabilityGrant>>> =
@@ -68,6 +76,58 @@ pub async fn create_handler(
         return Err(AppError::bad_request(msg));
     }
 
+    // CXP-0007 P2B.5: High-risk Circle capability grants
+    // (cx.circle.member.add.others, cx.circle.audit) MUST be preceded by
+    // an N-of-M approved RiskActionProposal. The propose / approve
+    // workflow lives in `admin/v1/accounts/risk_action.rs` and persists
+    // each approval as an `ApprovalProof` row inside the proposal's
+    // `approval_proofs` JSONB column. We bind the proposal id via the
+    // `risk_action_proposal_id` query parameter or
+    // `x-coauth-risk-action-proposal-id` header. The proposal is marked
+    // `executed` after the grant is persisted so it cannot be replayed.
+    let tier = body.action.risk_tier();
+    let approved_proposal = if tier == RiskTier::High {
+        let proposal_id_raw = req
+            .query::<String>("risk_action_proposal_id")
+            .or_else(|| {
+                req.header::<String>("x-coauth-risk-action-proposal-id")
+            })
+            .ok_or_else(|| {
+                AppError::bad_request(
+                    "high-risk Circle capability grants require an approved \
+                     risk_action_proposal_id (query parameter or \
+                     x-coauth-risk-action-proposal-id header)",
+                )
+            })?;
+        let proposal_ulid = Ulid::from_string(proposal_id_raw.trim())
+            .map_err(|err| AppError::bad_request(format!("invalid proposal_id: {err}")))?;
+        let proposals = depot.risk_action_proposals_service()?;
+        let existing = proposals
+            .get(proposal_ulid)
+            .await
+            .map_err(|err| {
+                AppError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("risk_action lookup: {err}"),
+                )
+            })?
+            .ok_or_else(|| AppError::not_found("risk_action proposal not found"))?;
+        if existing.state
+            != crate::services::risk_action_proposals::ProposalState::Approved
+        {
+            return Err(AppError::bad_request(format!(
+                "risk_action proposal state {:?} is not 'approved'; need at \
+                 least {} signed admin approvals before issuing this \
+                 high-risk Circle capability grant",
+                existing.state.as_str(),
+                existing.required_approvals
+            )));
+        }
+        Some((proposal_ulid, existing.approval_proofs.len()))
+    } else {
+        None
+    };
+
     let actor_did = call_context
         .user
         .as_ref()
@@ -90,11 +150,22 @@ pub async fn create_handler(
         .expect("circle capability grant mutex poisoned")
         .push(grant.clone());
 
-    // High-risk grants should produce an admin-audit row. TODO(circle-rollout-P2B.5):
-    // wire approval-proof persistence (N-of-M signers) for the High tier.
-    let _ = grant.action.risk_tier();
+    // Mark the proposal `executed` so the approval set can't be replayed
+    // for a second grant.
+    if let Some((proposal_ulid, _approval_count)) = approved_proposal {
+        let proposals = depot.risk_action_proposals_service()?;
+        let _ = proposals
+            .mark_executed(proposal_ulid, Utc::now())
+            .await
+            .map_err(|err| {
+                AppError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("risk_action mark_executed: {err}"),
+                )
+            })?;
+    }
 
-    call_context.repo.cancel().await?; // no DB writes yet
+    call_context.repo.cancel().await?; // no DB writes for in-memory grant store
 
     Ok(Json(grant))
 }

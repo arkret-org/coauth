@@ -12,6 +12,54 @@ for the full release process.
 
 ## [Unreleased]
 
+### CXP-0007 circle rollout — coauth P2B closeout (2026-05-26)
+
+- **Added** (P2B.3.1) `did_binding_proof.rs` now verifies compact JWS
+  binding proofs through the SDK's pure-Rust `contrix_signatures::proof::
+  PublicKeyMaterial` JWK → raw-Ed25519-bytes helper plus
+  `ed25519_dalek::Verifier::verify` directly. The previous embedded
+  `coauth_jose::jwt::Jwt::verify_with_jwks(...)` envelope path is removed
+  from both `validate_control_proof` and
+  `verify_verification_service_proof`. The compact JWS is parsed locally
+  and the RFC 7515 signing input (`b64url(header) "." b64url(payload)`)
+  is reconstructed from the wire bytes themselves so no JWS-library
+  state intervenes between the resolved DID-document JWK and the final
+  signature check. The contrix-spec Ed25519 detached-JWS fixture test
+  (`contrix_spec_binding_proof_fixture_verifies`) still passes against
+  the new path. New private `verify_compact_jws_with_sdk` helper plus
+  `SdkJwsVerifyError` enum consolidate the verify pipeline.
+- **Added** (P2B.5) High-risk admin account mutations (`disable`,
+  `erase`, `reset_recovery` — anything `is_high_risk_action()` matches)
+  in `admin/v1/accounts.rs::patch_account` now MUST be bound to an
+  approved `RiskActionProposal` via the `risk_action_proposal_id` query
+  parameter or `x-coauth-risk-action-proposal-id` header. The proposal
+  is loaded through the existing `risk_action_proposals_service`, its
+  state must be `Approved`, its `account_id` / `action` must match the
+  request, and it is marked `Executed` after the patch succeeds (so an
+  approval set cannot be replayed). Low-risk `lock` retains the legacy
+  unsigned path.
+- **Added** (P2B.5) High-tier `cx.circle.*` capability grants
+  (`MemberAddOthers`, `Audit` — per `CircleCapabilityAction::risk_tier`)
+  in `admin/v1/circle_capabilities.rs::create_handler` now require the
+  same `RiskActionProposal` binding before the grant is persisted.
+  Low / Medium tier grants (Create, Manage, MemberAdd, MemberManage)
+  keep the unsigned path.
+- **Fixed** `coauth_jose::jwa::Signature` is now `pub`-re-exported from
+  `jwa::mod`; the previous module-private visibility blocked the
+  existing test-only `policy_check.rs` and `accounts.rs` callers from
+  compiling the lib-test target. (Pre-existing breakage unrelated to
+  this round; surfacing it was a prerequisite for re-running the
+  `did_binding_proof::tests::*` suite that exercises the new
+  SDK-mediated verifier.)
+- **Notes** One follow-up marker planted:
+  `TODO(circle-rollout-followup-A.2)` in
+  `admin/v1/circle_capabilities.rs` records that the in-process grant
+  store still needs a diesel migration + repository (the original P2B.2
+  marker mentioning a "sqlx migration" was inaccurate — coauth uses
+  diesel + diesel-async). The `admin/v1/account_dids.rs` line 375
+  reference in the original P2B.5 brief did not match a live stub; no
+  change made there.
+
 ### CXP-0007 circle rollout — coauth P2B (2026-05-26, contrix-spec `9cb47c1..2b0d70d`)
 
 - **Security** (P1.5) `config.dev.yaml` (real Gmail SMTP password + RSA/EC
