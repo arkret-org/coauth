@@ -1,10 +1,16 @@
 # Releasing
 
-coauth follows a two-week release cadence: one full release cycle every two weeks, with one week of release candidates beforehand.
+coauth's local release-readiness workflow records build, SBOM, and
+provenance evidence without publishing anything. Do not push git tags,
+push container images, publish GitHub releases, or upload attestations
+from this workspace.
 
 ## GitHub Action workflows
 
-There are four main GitHub Action workflows involved in releasing coauth:
+The upstream project has GitHub Action workflows for translations,
+release branches, version bumps, and external builds. They are not part
+of this local readiness workflow and must not be triggered to publish
+remote artifacts.
 
 ### [`translations-download` workflow]
 
@@ -15,21 +21,22 @@ Before running it, make sure to review pending translations in [Localazy], enabl
 
 ### [`release-branch` workflow]
 
-This workflow starts a new major/minor release branch and bumps the version to the next major/minor pre-version.
-It will tag the version, triggering the `build` workflow for it.
+Do not run this workflow for the local readiness pass. It creates remote
+release-branch state and tags in the upstream release flow.
 
 The next major/minor pre-version is computed from the current version on the main branch, so it works as follows:
 
  - `v1.2.3` will become `v2.0.0-rc.0` for a major release
  - `v1.2.3` will become `v1.3.0-rc.0` for a minor release
 
-The release branch will be called `release/vX.Y`, and a PR will be automatically opened to merge it into the main branch.
+Local evidence does not require a release branch or pull request.
 
 
 ### [`release-bump` workflow]
 
-This workflow bumps the version on a release branch to either the next stable version or the next release candidate version.
-This *cannot* be run on the main branch (and will fail if you try).
+Do not run this workflow for the local readiness pass. It exists for the
+upstream remote release flow and can create version/tag state that is
+outside the scope of this workspace.
 
 This workflow has three meaningful inputs:
 
@@ -41,30 +48,9 @@ This workflow has three meaningful inputs:
 
 ### [`build` workflow]
 
-This workflow is automatically run in three conditions:
-
- - When a `v*` tag is pushed
- - On the `main` branch
- - When a PR is tagged with the `Z-Build-Workflow` label (**note that this doesn't work on PRs from forks**)
-
-In all cases, it will build and push a container image to ghcr.io and build binaries to GitHub Action assets.
-
-For `v*` tags:
-
- - It will push the container image with the `MAJOR`, `MAJOR.MINOR`, `MAJOR.MINOR.PATCH`, `sha-HASH`, and `latest` tags for stable releases.
- - It will push the container image with the `MAJOR.MINOR.PATCH-rc.N` and `sha-HASH` tags for pre-releases.
- - It will **draft** a release on GitHub, with generated changelogs, reference to the built container image, and pre-built binaries attached to the release.
-
-On the main branch:
-
- - It will push the container image with the `sha-HASH` and `main` tags.
- - It will update the [`unstable`](https://github.com/contrix-dev/coauth/releases/tag/unstable) GitHub release with the built container image and pre-built binaries.
-
-When a PR is tagged with the `Z-Build-Workflow` label:
-
- - It will push the container image with the `sha-HASH` and `pr-NUMBER` tags.
- - It will comment on the PR with the built container image.
- - Pre-built binaries are available in the workflow artifacts.
+Do not trigger the remote build workflow for this workspace. The local
+artifact path below replaces remote image pushes, GitHub Action assets,
+draft releases, PR comments, and unstable release updates.
 
 
 ## Changelog generation
@@ -85,18 +71,9 @@ They are calculated based on the previous release. For release candidates, this 
 
 ## Container image signing
 
-Published container images are signed with [Sigstore Cosign](https://docs.sigstore.dev/cosign/overview/) using GitHub OIDC keyless signing. **Signing only runs on tagged `v*` releases and on `main`** (see [`.github/workflows/release.yaml`](https://github.com/contrix-dev/coauth/blob/main/.github/workflows/release.yaml)). PR / branch builds are intentionally unsigned because the GitHub OIDC identity is not stable for short-lived builds and would create a forest of single-use Rekor entries.
-
-Operators can verify a release like this:
-
-```sh
-cosign verify \
-  --certificate-identity-regexp 'https://github\.com/contrix-dev/coauth/' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/contrix-dev/coauth:vX.Y.Z
-```
-
-If you need to verify a per-PR build, fall back to `docker pull` + the recorded digest from the workflow run.
+The local evidence path signs provenance blobs with a local key and
+`--tlog-upload=false`. It does not publish container images, upload to
+Rekor, or require verification against GHCR.
 
 ## Local SBOM and provenance artifacts
 
@@ -203,35 +180,15 @@ cosign verify-blob \
   "${PROVENANCE}"
 ```
 
-## Undrafting releases
+## Local release process
 
-Releases are manually undrafted when the release is ready to be published.
-At this point, the releaser should check the changelog and ensure the "Set as pre-release" and "Set as latest release" checkboxes are checked as appropriate.
-
-## Full release process
-
- - Start a new release cycle:
-   1. Run the [`translations-download` workflow] on the main branch.
-   1. Wait for the [translation download PR] to be automatically merged.
-   1. Run the [`release-branch` workflow] on the main branch.
-   1. Wait for [CI to churn] and the [draft release to appear]. This takes about 30 minutes.
-   1. Double-check the changelog on the draft release.
-   1. Check the "Set as pre-release" checkbox, and publish the release.
-   1. Delete the N-2 release branch on [Localazy](https://localazy.com/console/branching), meaning that once the 0.16 release cycle begins, the 0.14 release branch will be deleted.
- - Create new release candidates if needed:
-   1. Run the `translations-download` workflow on the release branch.
-   1. Wait for the [translation download PR] to be automatically merged.
-   1. Run the [`release-bump` workflow] on the release branch, with the `rc` input **checked**.
-   1. Wait for [CI to churn] and the [draft release to appear]. This takes about 30 minutes.
-   1. Double-check the changelog on the draft release.
-   1. Check the "Set as pre-release" checkbox and publish the release.
- - Create a new stable release:
-   1. Run the [`translations-download` workflow] on the release branch
-   1. Wait for the [translation download PR] to be automatically merged
-   1. Run the [`release-bump` workflow] on the release branch, with the `rc` input **unchecked**.
-   1. Wait for [CI to churn] and the [draft release to appear]. This takes about 30 minutes.
-   1. Double-check the changelog on the draft release.
-   1. Check the "Set as latest release" checkbox and publish the release.
+1. Run the local build and test commands for the current phase.
+2. Generate local SBOM and provenance artifacts under
+   `target/release-artifacts/`.
+3. Record the evidence in the project milestone or release-evidence
+   document.
+4. Do not undraft releases, publish releases, create tags, push images,
+   or upload remote attestations.
 
 [Localazy]: https://localazy.com/p/coauth
 [`translations-download` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/translations-download.yaml
