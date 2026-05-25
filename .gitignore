@@ -24,3 +24,5 @@ config.dev.yaml
 # (synthetic, for the integration stack only — but never commit).
 conformance/test-config.yaml
 conformance/test-config.yaml.raw
+/_circle_rollout_baseline.md
+/_*_todos.md
