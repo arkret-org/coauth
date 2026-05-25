@@ -682,6 +682,7 @@ fn build_account_api_router(router: Router) -> Router {
     };
 
     let api_router = Router::with_path("/api/v1")
+        .hoop(public_oidc_browser_cors())
         // Contrix service surface
         .push(Router::with_path("server/describe").get(contrix::server_describe))
         .push(Router::with_path("identity/describe").get(contrix::identity_describe))
@@ -766,6 +767,7 @@ fn build_account_api_router(router: Router) -> Router {
                 .push(Router::with_path("login").post(auth::login))
                 .push(
                     Router::with_path("oidc/browser-bridge/session")
+                        .options(oidc_preflight_handler)
                         .post(auth::oidc_browser_bridge_session),
                 )
                 .push(Router::with_path("oidc/exchange/describe").get(auth::oidc_exchange_describe))
