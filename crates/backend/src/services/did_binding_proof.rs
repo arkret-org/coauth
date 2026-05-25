@@ -33,6 +33,12 @@
 //! envelope verification in `coauth_jose` and pins the statement checks
 //! below with targeted unit tests.
 //!
+//! TODO(circle-rollout-P2B.3): swap this hand-rolled envelope path over
+//! to the SDK once `contrix::identity::binding` grows a JWS+JWKS
+//! verifier with did:web / did:key / did:webvh method allow-listing and
+//! starid `verification_service_did` pinning. The corresponding trust
+//! model needs to land in `docs/en/topics/did-resolver-trust.md`.
+//!
 //! ## Verification-service proof
 //!
 //! [`verify_verification_service_proof`] is the sister verifier for the

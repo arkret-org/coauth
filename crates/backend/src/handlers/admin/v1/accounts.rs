@@ -435,8 +435,13 @@ async fn patch_account(
     let principal_server = depot.principal_server()?;
     let mut rng = crate::handlers::account::make_rng();
 
-    // TODO(contrix): require and persist reason/approval proof for high-risk
-    // account mutations once the audit schema includes request context.
+    // TODO(circle-rollout-P2B.5): require and persist N-of-M signed
+    // approval proof for high-risk account mutations (account unlock,
+    // claim unbind, forced DID rebind, session-delete) before executing
+    // the patch. The propose -> approve -> execute pipeline shares the
+    // schema with `coauth_admin_types::risk_action`; wire the
+    // RiskActionProposal store + signature aggregator here once the
+    // schema column for `request_context` lands.
     let account = crate::services::user_admin::patch_user(
         &mut repo,
         &mut rng,
