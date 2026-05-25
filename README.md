@@ -1,5 +1,12 @@
 # coauth
 
+> **DO NOT commit secrets.** Files like `config.dev.yaml`, `config.local.*`,
+> `*.log`, and unencrypted private keys are gitignored and must stay local.
+> Use [`config.example.yaml`](config.example.yaml) as a template and source
+> real values from environment variables. A CI `gitleaks` job (see
+> [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) fails the build
+> if anything that looks like a credential lands in a tracked path.
+
 `coauth` is the Contrix Auth / Account Server. It provides OIDC/OAuth login,
 account lifecycle management, short-lived session grants, policy hooks,
 notifications, and a stable admin API for Contrix deployments.

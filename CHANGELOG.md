@@ -12,6 +12,30 @@ for the full release process.
 
 ## [Unreleased]
 
+### CXP-0007 circle rollout — coauth P2B (2026-05-26, contrix-spec `9cb47c1..2b0d70d`)
+
+- **Security** (P1.5) `config.dev.yaml` (real Gmail SMTP password + RSA/EC
+  private keys + DB credentials) and `coauth-dev.log` were never committed
+  to git history — they only existed locally — but they are now explicitly
+  enumerated in `.gitignore`, a sanitized `config.example.yaml` is provided
+  as a template, and a `gitleaks` job in `.github/workflows/ci.yaml`
+  (configured by `.gitleaks.toml`) blocks any future credential commits.
+  Operators still need to rotate the Gmail app password / signing keys /
+  DB credentials out-of-band, since they were exposed locally.
+- **Breaking** Admin policy dictionary now ships the six CXP-0007
+  `cx.circle.*` capability actions (`create`, `manage`, `member.add`,
+  `member.manage`, `member.add.others`, `audit`) and exposes admin endpoints
+  to list / grant / revoke them.
+- **Added** Admin audit trail middleware (`audit_helper::record`) is wired
+  through every admin create/update/delete route; new
+  `/api/admin/v1/audit/feed` endpoint with cursor pagination.
+- **Added** High-risk admin actions (account unlock, claim unbind, force
+  DID rebind, session delete, etc.) now produce a persisted approval-proof
+  record (N-of-M signers; see TODO markers for the remaining wiring).
+- **Added** Principal Control Realm vs Collaboration Realm distinction is
+  surfaced on admin DTOs and documented in admin-api topic.
+- **Notes** Version stays at 1.8.0; this is not a release.
+
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
 
 Closes 8 protocol-review commits on the auth / identity / policy surfaces.

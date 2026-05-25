@@ -1,0 +1,42 @@
+# gitleaks configuration for coauth.
+#
+# This file is intentionally minimal — we rely on gitleaks' bundled default
+# rules (Generic, PrivateKey, Slack, AWS, etc.) and only add an allowlist
+# for known-safe synthetic values in tests and example configs.
+
+title = "coauth gitleaks rules"
+
+[extend]
+# Extend the default rule set rather than replacing it. See:
+# https://github.com/gitleaks/gitleaks#configuration
+useDefault = true
+
+[allowlist]
+description = "Allow obviously-synthetic test fixtures and placeholders."
+
+paths = [
+    # Example/template configs: secrets are always ${ENV} placeholders.
+    '''config\.example\.ya?ml''',
+    # Locally-scoped configs are gitignored (config.local.*, config.dev.*),
+    # but if a developer adds a CI-only override we still want to scan it.
+
+    # Test fixtures intentionally embed synthetic key material so the OAuth
+    # / OIDC flows have something to sign and verify against.
+    '''.*/(tests|test|testing|fixtures|fixture|testdata)/.*''',
+    '''crates/jose/.*''',
+    '''crates/keystore/.*''',
+    '''conformance/.*''',
+]
+
+regexes = [
+    # Placeholder values used in config.example.yaml / docs.
+    '''\$\{[A-Z0-9_]+\}''',
+    # Obvious test markers.
+    '''(?i)example|fake|dummy|test[-_]?(only|fixture)|placeholder''',
+]
+
+stopwords = [
+    "EXAMPLE",
+    "PLACEHOLDER",
+    "DO_NOT_USE",
+]
