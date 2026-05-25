@@ -1,6 +1,7 @@
 pub mod account_dids;
 pub mod accounts;
 pub mod audit_feed;
+pub mod circle_capabilities;
 pub mod claims;
 pub mod connector_health;
 pub mod devices;
