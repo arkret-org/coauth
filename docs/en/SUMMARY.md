@@ -51,6 +51,5 @@
 - [Releasing](./development/releasing.md)
 - [Admin types / sodmin pairing status](./development/admin-types-sodmin-status.md)
 - [External security review readiness](./development/security-review-readiness.md)
-- [v1.0.0 local milestone](./development/v1-local-milestone.md)
 - [Architecture](./development/architecture.md)
 - [Database](./development/database.md)
