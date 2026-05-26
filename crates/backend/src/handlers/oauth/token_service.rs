@@ -55,6 +55,13 @@ pub(crate) fn authorization_code_pkce_required(client: &Client) -> bool {
         )
 }
 
+/// Whether a given PKCE challenge method is acceptable.
+///
+/// SECURITY: `plain` is rejected universally — for both public *and*
+/// confidential clients — because it offers no protection against an
+/// authorization-code interception attack. RFC 7636 §4.2 marks `plain`
+/// as deprecated and OAuth 2.1 (§7.5) outright bans it. Since this
+/// project has no released clients, there is no compatibility cost.
 #[must_use]
 pub(crate) fn required_pkce_method_is_allowed(method: &PkceCodeChallengeMethod) -> bool {
     *method == PkceCodeChallengeMethod::S256
@@ -466,15 +473,22 @@ pub async fn exchange_authorization_code(
             );
             return Err(AuthorizationCodeExchangeError::BadRequest);
         }
-        // If we have both, we need to check the code validity
+        // If we have both, we need to check the code validity.
+        //
+        // SECURITY: `plain` is rejected for *all* clients (not just
+        // `pkce_required` public clients) — see
+        // `required_pkce_method_is_allowed`. A grant that was somehow
+        // recorded with `plain` (e.g. legacy data) is treated as a
+        // bad request rather than allowed through.
         (Some(pkce), Some(verifier)) => {
-            if pkce_required && !required_pkce_method_is_allowed(&pkce.challenge_method) {
+            if !required_pkce_method_is_allowed(&pkce.challenge_method) {
                 warn!(
                     oauth_client.id = %client.id,
                     authorization_grant.id = %authz_grant.id,
                     oauth_session.id = %session.id,
                     method = %pkce.challenge_method,
-                    "Public authorization_code client used a disallowed PKCE challenge method"
+                    pkce_required,
+                    "Rejecting authorization_code exchange with disallowed PKCE method (only S256 is accepted)"
                 );
                 return Err(AuthorizationCodeExchangeError::BadRequest);
             }

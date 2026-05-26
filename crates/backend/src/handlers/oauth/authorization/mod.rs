@@ -256,12 +256,16 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                             ClientError::from(ClientErrorCode::InvalidRequest),
                         )?);
                     }
+                    // SECURITY: when a challenge is present, it MUST use
+                    // S256 regardless of whether PKCE is "required" for
+                    // this client (see `required_pkce_method_is_allowed`
+                    // for the deprecation rationale). An empty challenge
+                    // is also rejected.
                     Some(pkce)
                         if pkce.code_challenge.trim().is_empty()
-                            || (pkce_required
-                                && !super::token_service::required_pkce_method_is_allowed(
-                                    &pkce.code_challenge_method,
-                                )) =>
+                            || !super::token_service::required_pkce_method_is_allowed(
+                                &pkce.code_challenge_method,
+                            ) =>
                     {
                         return Ok(callback_destination.go(
                             &templates,

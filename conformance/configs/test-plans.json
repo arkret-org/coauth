@@ -1,0 +1,79 @@
+{
+  "_comment": "OIDC Core (OIDCC) certification test-plan matrix consumed by conformance/scripts/run-oidcc-suite.sh. The complementary FAPI 2.0 and mTLS plans live in conformance/plan-*.json and are driven by scripts/oidc-conformance.sh; this file is dedicated to the OpenID Connect Core certification plans defined by the OpenID Foundation conformance suite (https://gitlab.com/openid/conformance-suite). Each entry names a published plan id from https://openid.net/certification/ and pins the variant matrix that maps to coauth's static client registration. Adding a new plan: append an entry, then re-run conformance/scripts/run-oidcc-suite.sh --list to verify the runner picks it up.",
+  "schema_version": 1,
+  "plans": [
+    {
+      "id": "oidcc-basic-certification-test-plan",
+      "alias": "coauth-oidcc-basic",
+      "description": "OpenID Connect Core 1.0 Basic OP certification profile: response_type=code, client_secret_basic auth, discovery + dynamic registration + userinfo + id_token + RP-initiated logout.",
+      "profile": "openid-connect-basic",
+      "client": {
+        "client_id": "coauth-oidcc-basic-client",
+        "client_secret": "coauth-oidcc-basic-secret",
+        "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+        "scope": "openid profile email"
+      },
+      "client2": {
+        "client_id": "coauth-oidcc-basic-client-2",
+        "client_secret": "coauth-oidcc-basic-secret-2",
+        "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+        "scope": "openid profile email"
+      },
+      "variant": {
+        "server_metadata": "discovery",
+        "client_registration": "static_client",
+        "response_type": "code",
+        "response_mode": "default",
+        "client_auth_type": "client_secret_basic",
+        "request_type": "plain_http_request"
+      }
+    },
+    {
+      "id": "oidcc-hybrid-certification-test-plan",
+      "alias": "coauth-oidcc-hybrid",
+      "description": "OpenID Connect Core 1.0 Hybrid OP certification profile: response_type=code id_token / code token / code id_token token, nonce + at_hash + c_hash verification, fragment response_mode.",
+      "profile": "openid-connect-hybrid",
+      "client": {
+        "client_id": "coauth-oidcc-hybrid-client",
+        "client_secret": "coauth-oidcc-hybrid-secret",
+        "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+        "scope": "openid profile email"
+      },
+      "client2": {
+        "client_id": "coauth-oidcc-hybrid-client-2",
+        "client_secret": "coauth-oidcc-hybrid-secret-2",
+        "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/coauth/callback",
+        "scope": "openid profile email"
+      },
+      "variant": {
+        "server_metadata": "discovery",
+        "client_registration": "static_client",
+        "response_type": "code id_token",
+        "response_mode": "default",
+        "client_auth_type": "client_secret_basic",
+        "request_type": "plain_http_request"
+      }
+    },
+    {
+      "id": "oidcc-device-code-certification-test-plan",
+      "alias": "coauth-oidcc-device-code",
+      "description": "OpenID Connect Device Authorization (RFC 8628 + OIDC binding) certification profile: device_authorization_endpoint, slow_down / authorization_pending polling semantics, expires_in + interval enforcement.",
+      "profile": "openid-connect-device",
+      "client": {
+        "client_id": "coauth-oidcc-device-client",
+        "client_secret": "coauth-oidcc-device-secret",
+        "scope": "openid profile email"
+      },
+      "client2": {
+        "client_id": "coauth-oidcc-device-client-2",
+        "client_secret": "coauth-oidcc-device-secret-2",
+        "scope": "openid profile email"
+      },
+      "variant": {
+        "server_metadata": "discovery",
+        "client_registration": "static_client",
+        "client_auth_type": "client_secret_basic"
+      }
+    }
+  ]
+}

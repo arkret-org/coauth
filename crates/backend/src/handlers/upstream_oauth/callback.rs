@@ -125,6 +125,17 @@ pub enum RouteError {
         expected: UpstreamOAuthProviderResponseMode,
     },
 
+    /// A non-standard provider (QQ / Feishu / Lark / DingTalk / WeChat /
+    /// WeCom) MUST contact the upstream over HTTPS. These providers do
+    /// not return a signed ID token, so the channel is the only thing
+    /// authenticating the userinfo payload — plaintext HTTP would let
+    /// an on-path attacker forge identities.
+    #[error("Non-standard provider endpoint must be HTTPS (got '{scheme}' for {endpoint})")]
+    InsecureUpstreamEndpoint {
+        endpoint: &'static str,
+        scheme: String,
+    },
+
     #[error(transparent)]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
@@ -150,6 +161,55 @@ impl Scribe for RouteError {
             e => GenericError::new(StatusCode::BAD_REQUEST, e).render(res),
         }
     }
+}
+
+/// SECURITY: every endpoint we hit for a non-standard provider MUST
+/// be HTTPS. These providers (QQ / Feishu / Lark / DingTalk / WeChat
+/// / WeCom) do not return a signed ID token, so the TLS channel is
+/// the only thing authenticating the response body. Self-signed
+/// certificates are rejected automatically by the platform verifier
+/// configured on the shared HTTP client (see
+/// `outbound_http::reqwest_client`); this helper guards against a
+/// misconfigured override URL that downgrades the scheme to `http`.
+fn require_https_endpoint(
+    name: &'static str,
+    url: &::url::Url,
+) -> Result<(), RouteError> {
+    if url.scheme().eq_ignore_ascii_case("https") {
+        Ok(())
+    } else {
+        Err(RouteError::InsecureUpstreamEndpoint {
+            endpoint: name,
+            scheme: url.scheme().to_owned(),
+        })
+    }
+}
+
+/// Emit a structured audit record for each callback that took the
+/// non-standard provider path. Used by SIEM / ops to flag flows where
+/// the identity payload came from a userinfo-only flow rather than a
+/// signed ID token (no JWT signature, no `nonce` binding, no audience
+/// check) so that downstream policy can apply extra scrutiny.
+///
+/// The `provider_kind` label is a short stable identifier (e.g.
+/// `"qq_connect"`, `"feishu"`); the `session_had_nonce` flag tells
+/// the auditor whether the original `/authorize` request bound a
+/// nonce that we ultimately could not verify (because the provider
+/// returned no ID token).
+fn audit_non_standard_token_source(
+    provider_id: ulid::Ulid,
+    provider_kind: &'static str,
+    session_had_nonce: bool,
+) {
+    tracing::info!(
+        provider.id = %provider_id,
+        provider.kind = provider_kind,
+        non_standard_token_source = true,
+        session_had_nonce,
+        nonce_verifiable = false,
+        "Upstream OAuth callback completed via non-standard (userinfo-only) flow; \
+         identity is bound to TLS chain only — no signed ID token / nonce check possible"
+    );
 }
 
 #[handler]
@@ -317,10 +377,18 @@ pub async fn handler(
             client_id,
             client_secret,
         } => {
+            // SECURITY: QQ Connect has no ID token. We enforce HTTPS on
+            // the configured token endpoint (the userinfo endpoint URLs
+            // are hard-coded in the QQ request module and are HTTPS by
+            // construction). Self-signed certificates are rejected by
+            // the platform verifier on the shared HTTP client.
+            let token_endpoint = lazy_metadata.token_endpoint().await?;
+            require_https_endpoint("token", token_endpoint)?;
+
             // 1. Exchange code for access token
             let token_response = crate::oidc_client::requests::qq_connect::request_access_token(
                 &client,
-                lazy_metadata.token_endpoint().await?,
+                token_endpoint,
                 client_id,
                 client_secret,
                 &code,
@@ -363,6 +431,11 @@ pub async fn handler(
                 context = context.with_extra_callback_parameters(extra);
             }
 
+            audit_non_standard_token_source(
+                provider.id,
+                "qq_connect",
+                session.nonce.is_some(),
+            );
             (None, None, context.build(), Some(userinfo_value))
         }
 
@@ -375,6 +448,14 @@ pub async fn handler(
             client_id,
             client_secret,
         } => {
+            // SECURITY: Feishu / Lark have no signed ID token. Enforce
+            // HTTPS on the configured token endpoint; the userinfo
+            // endpoint comes from discovery / override and is also
+            // checked. The hard-coded `app_access_token` endpoints
+            // are HTTPS by construction (see `feishu.rs`).
+            let token_endpoint = lazy_metadata.token_endpoint().await?;
+            require_https_endpoint("token", token_endpoint)?;
+
             let app_token_endpoint =
                 if matches!(&client_credentials, ClientCredentials::Lark { .. }) {
                     crate::oidc_client::requests::feishu::LARK_APP_TOKEN_ENDPOINT
@@ -394,7 +475,7 @@ pub async fn handler(
             // 2. Exchange code using app_access_token as Bearer
             let feishu_response = crate::oidc_client::requests::feishu::request_access_token(
                 &client,
-                lazy_metadata.token_endpoint().await?,
+                token_endpoint,
                 &app_token,
                 &code,
             )
@@ -402,9 +483,11 @@ pub async fn handler(
 
             // 3. Optionally fetch full userinfo
             let userinfo = if provider.fetch_userinfo {
+                let userinfo_endpoint = lazy_metadata.userinfo_endpoint().await?;
+                require_https_endpoint("userinfo", userinfo_endpoint)?;
                 let ui = crate::oidc_client::requests::feishu::fetch_userinfo(
                     &client,
-                    lazy_metadata.userinfo_endpoint().await?,
+                    userinfo_endpoint,
                     &feishu_response.access_token,
                 )
                 .await?;
@@ -429,6 +512,12 @@ pub async fn handler(
                 context = context.with_extra_callback_parameters(extra);
             }
 
+            let kind = if matches!(&client_credentials, ClientCredentials::Lark { .. }) {
+                "lark"
+            } else {
+                "feishu"
+            };
+            audit_non_standard_token_source(provider.id, kind, session.nonce.is_some());
             (None, None, context.build(), userinfo)
         }
 
@@ -437,10 +526,15 @@ pub async fn handler(
             client_id,
             client_secret,
         } => {
+            // SECURITY: DingTalk has no signed ID token. Enforce HTTPS
+            // on the token + userinfo endpoints.
+            let token_endpoint = lazy_metadata.token_endpoint().await?;
+            require_https_endpoint("token", token_endpoint)?;
+
             // 1. Exchange code for access token
             let token_response = crate::oidc_client::requests::dingtalk::request_access_token(
                 &client,
-                lazy_metadata.token_endpoint().await?,
+                token_endpoint,
                 client_id,
                 client_secret,
                 &code,
@@ -449,9 +543,11 @@ pub async fn handler(
 
             // 2. Fetch user info
             let userinfo = if provider.fetch_userinfo {
+                let userinfo_endpoint = lazy_metadata.userinfo_endpoint().await?;
+                require_https_endpoint("userinfo", userinfo_endpoint)?;
                 let ui = crate::oidc_client::requests::dingtalk::fetch_userinfo(
                     &client,
-                    lazy_metadata.userinfo_endpoint().await?,
+                    userinfo_endpoint,
                     &token_response.access_token,
                 )
                 .await?;
@@ -474,6 +570,7 @@ pub async fn handler(
                 context = context.with_extra_callback_parameters(extra);
             }
 
+            audit_non_standard_token_source(provider.id, "dingtalk", session.nonce.is_some());
             (None, None, context.build(), userinfo)
         }
 
@@ -482,10 +579,16 @@ pub async fn handler(
             client_id,
             client_secret,
         } => {
+            // SECURITY: WeChat has no signed ID token. Token endpoint
+            // must be HTTPS; userinfo endpoint is hard-coded HTTPS in
+            // the request module.
+            let token_endpoint = lazy_metadata.token_endpoint().await?;
+            require_https_endpoint("token", token_endpoint)?;
+
             // 1. Exchange code for access token (includes openid)
             let token_response = crate::oidc_client::requests::wechat::request_access_token(
                 &client,
-                lazy_metadata.token_endpoint().await?,
+                token_endpoint,
                 client_id,
                 client_secret,
                 &code,
@@ -525,6 +628,7 @@ pub async fn handler(
                 context = context.with_extra_callback_parameters(extra);
             }
 
+            audit_non_standard_token_source(provider.id, "wechat", session.nonce.is_some());
             (None, None, context.build(), Some(userinfo_value))
         }
 
@@ -533,6 +637,10 @@ pub async fn handler(
             client_id,
             client_secret,
         } => {
+            // SECURITY: WeCom uses hard-coded HTTPS endpoints in
+            // `wecom.rs`; no upstream-overridable URL flows through
+            // here, but we still surface the audit marker so the
+            // callback is visibly tied to a non-standard provider.
             // 1. Get corp access_token
             let corp_token = crate::oidc_client::requests::wecom::get_corp_access_token(
                 &client,
@@ -592,6 +700,7 @@ pub async fn handler(
                 context = context.with_extra_callback_parameters(extra);
             }
 
+            audit_non_standard_token_source(provider.id, "wecom", session.nonce.is_some());
             (None, None, context.build(), userinfo)
         }
 

@@ -163,6 +163,18 @@ intl-memoizer = "0.5"
 figment = { version = "0.10.19", features = ["env", "yaml", "test"] }
 form_urlencoded = "1.2.2"
 futures-util = "0.3.32"
+# NOTE: pinned to 0.14 because the entire RustCrypto stack we depend on
+# transitively (digest 0.10, sha2 0.10, hmac 0.12, aead 0.5, aes-gcm 0.10,
+# chacha20poly1305 0.10) still re-exports `generic_array 0.14`. The crates
+# that bridge to generic-array 1.x (digest 0.11, sha2 0.11, aead 0.6, …)
+# are still in pre-release as of 2026-05; bumping `generic-array` here in
+# isolation would land us with two side-by-side versions and break any
+# trait bound like `OutputSizeUser::OutputSize: ArrayLength<u8>`. The
+# `#[deprecated]` warnings on `digest::generic_array::*` are expected
+# until the upstream RustCrypto migration ships — tracked in
+# `_improve_todos.md` C.4 (last verified: cargo tree -i generic-array
+# shows 13+ transitive consumers all on 0.14). Revisit once `sha2 0.11`
+# is stable on crates.io.
 generic-array = "0.14.9"
 hmac = "0.12.1"
 headers = "0.4.1"

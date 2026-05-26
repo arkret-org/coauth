@@ -161,10 +161,11 @@ fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
     let introspection_endpoint_auth_signing_alg_values_supported =
         client_auth_signing_alg_values_supported;
 
-    let code_challenge_methods_supported = Some(vec![
-        PkceCodeChallengeMethod::Plain,
-        PkceCodeChallengeMethod::S256,
-    ]);
+    // SECURITY: advertise only `S256` — `plain` is rejected at the
+    // token endpoint (see `required_pkce_method_is_allowed`), so the
+    // discovery document MUST NOT claim otherwise. RFC 7636 §4.2
+    // marks `plain` as deprecated and OAuth 2.1 §7.5 outright bans it.
+    let code_challenge_methods_supported = Some(vec![PkceCodeChallengeMethod::S256]);
 
     let subject_types_supported = Some(vec![SubjectType::Public]);
 
