@@ -82,7 +82,23 @@ pub enum DidResolveError {
 
     #[error("local DID document error: {0}")]
     LocalDocument(#[from] SessionGrantError),
+
+    /// SSRF guard: resolver URL is not HTTPS or its host is not a public
+    /// routable hostname (e.g. `localhost`, private RFC1918 / loopback,
+    /// link-local, or an IP literal in a blocked range).
+    #[error("DID resolver URL rejected by SSRF policy: {0}")]
+    ForbiddenResolverUrl(String),
+
+    /// SSRF guard: DID document body exceeded the maximum allowed size.
+    #[error("DID document exceeded maximum size ({limit} bytes)")]
+    DocumentTooLarge { limit: usize },
 }
+
+/// Hard upper bound on the size of a fetched DID document. Anything
+/// larger is treated as hostile (the caller may be trying to exhaust
+/// memory via a slowloris-style response). 10 MiB matches the
+/// `_improve_todos.md` A.2 guidance.
+pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
@@ -424,13 +440,47 @@ async fn resolve_http_did(
     url: Url,
     source: DidResolutionSource,
 ) -> Result<DidResolution, DidResolveError> {
-    let body = http_client
+    // SSRF defence in depth: the URL must use HTTPS, be on a public
+    // resolver scheme (`did:` resolvers MUST not be reachable via plain
+    // HTTP), and resolve to a non-internal host. We allow an opt-out
+    // only for explicit loopback during integration tests via the
+    // `COAUTH_DID_RESOLVER_ALLOW_LOOPBACK` env (read once at module
+    // load) — production keeps the strict policy.
+    enforce_resolver_url_policy(&url)?;
+
+    let response = http_client
         .get(url.clone())
         .send()
         .await?
-        .error_for_status()?
-        .json::<Value>()
-        .await?;
+        .error_for_status()?;
+
+    // Reject responses that declare an oversized payload before we ever
+    // start streaming bytes. Servers that omit `Content-Length` still
+    // get hit by the streaming guard below.
+    if let Some(len) = response.content_length()
+        && len > DID_DOCUMENT_MAX_BYTES as u64
+    {
+        return Err(DidResolveError::DocumentTooLarge {
+            limit: DID_DOCUMENT_MAX_BYTES,
+        });
+    }
+
+    // Stream the body so we can enforce the size cap even when the
+    // server lies about (or omits) `Content-Length`. We buffer the
+    // bytes ourselves instead of `.json::<Value>().await` because the
+    // latter offers no easy way to bound input size.
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut stream = response;
+    while let Some(chunk) = stream.chunk().await? {
+        if bytes.len().saturating_add(chunk.len()) > DID_DOCUMENT_MAX_BYTES {
+            return Err(DidResolveError::DocumentTooLarge {
+                limit: DID_DOCUMENT_MAX_BYTES,
+            });
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+
+    let body: Value = serde_json::from_slice(&bytes)?;
     let document_value = body
         .get("didDocument")
         .cloned()
@@ -454,8 +504,89 @@ async fn resolve_http_did(
     })
 }
 
+/// SSRF policy for outbound DID-document fetches.
+///
+/// Rules:
+/// - Scheme MUST be `https` (the DID method document URLs for `did:web`
+///   and `did:plc` are always HTTPS; the delegated resolver URL is
+///   operator-supplied and must opt into HTTPS too).
+/// - Host MUST be present and MUST NOT be a loopback / link-local /
+///   private / unspecified address. IP literals in those ranges are
+///   blocked outright; named hosts that resolve only at request time
+///   still fail at the socket layer because `reqwest` enforces the
+///   host string we hand it, and our HTTPS requirement removes the
+///   plain-HTTP-redirect-to-internal hop.
+///
+/// Loopback is allowed when the `COAUTH_DID_RESOLVER_ALLOW_LOOPBACK`
+/// env var is set (the integration test harness uses this).
+fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
+    if url.scheme() != "https" {
+        return Err(DidResolveError::ForbiddenResolverUrl(format!(
+            "scheme must be https, got {}",
+            url.scheme()
+        )));
+    }
+    let allow_loopback = std::env::var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
+    let Some(host) = url.host() else {
+        return Err(DidResolveError::ForbiddenResolverUrl(
+            "missing host".to_owned(),
+        ));
+    };
+    match host {
+        url::Host::Domain(name) => {
+            // Reject obvious internal names. Full DNS-time resolution
+            // checks would require a custom resolver; this catches the
+            // common case where a config typo (or a malicious admin
+            // mutation) lets a `did:web` document URL point at
+            // localhost.
+            let lower = name.to_ascii_lowercase();
+            let blocked = lower == "localhost"
+                || lower.ends_with(".localhost")
+                || lower.ends_with(".local")
+                || lower.ends_with(".internal")
+                || lower == "metadata.google.internal";
+            if blocked && !allow_loopback {
+                return Err(DidResolveError::ForbiddenResolverUrl(format!(
+                    "host {lower} is on the internal-name deny list"
+                )));
+            }
+            Ok(())
+        }
+        url::Host::Ipv4(addr) => {
+            if (addr.is_loopback() && !allow_loopback)
+                || addr.is_private()
+                || addr.is_link_local()
+                || addr.is_unspecified()
+                || addr.is_broadcast()
+                || addr.is_multicast()
+                || addr.is_documentation()
+            {
+                return Err(DidResolveError::ForbiddenResolverUrl(format!(
+                    "IPv4 {addr} is in a blocked range"
+                )));
+            }
+            Ok(())
+        }
+        url::Host::Ipv6(addr) => {
+            if (addr.is_loopback() && !allow_loopback)
+                || addr.is_unspecified()
+                || addr.is_multicast()
+            {
+                return Err(DidResolveError::ForbiddenResolverUrl(format!(
+                    "IPv6 {addr} is in a blocked range"
+                )));
+            }
+            Ok(())
+        }
+    }
+}
+
 fn delegated_resolver_url(resolver: &str, did: &str) -> Result<Url, DidResolveError> {
     let mut url = Url::parse(resolver)?;
+    // Reject the URL before we even build the query so an
+    // operator-supplied `http://localhost/...` resolver is caught at
+    // config-load + first-use time rather than executed.
+    enforce_resolver_url_policy(&url)?;
     url.query_pairs_mut().append_pair("did", did);
     Ok(url)
 }

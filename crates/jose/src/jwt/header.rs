@@ -7,6 +7,7 @@ use crate::{Base64, base64::Base64UrlNoPad, jwk::PublicJsonWebKey};
 
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct JsonWebSignatureHeader {
     alg: JsonWebSignatureAlg,
 

@@ -154,6 +154,18 @@ pub struct MetadataCache {
 }
 
 impl MetadataCache {
+    /// Lower bound on the metadata-refresh interval. Faster than this
+    /// is just hammering upstream providers and risks rate-limit
+    /// retaliation; values below the floor are silently clamped up.
+    pub const MIN_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+
+    /// Upper bound on the metadata-refresh interval. SSRF / staleness
+    /// guard: a poisoned or compromised discovery document MUST NOT
+    /// remain live indefinitely. 24h matches the rough TTL the OIDC
+    /// discovery RFC suggests for client-side caches.
+    pub const MAX_REFRESH_INTERVAL: std::time::Duration =
+        std::time::Duration::from_secs(60 * 60 * 24);
+
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -168,6 +180,17 @@ impl MetadataCache {
     /// # Errors
     ///
     /// Returns an error if the warm up task could not be started.
+    ///
+    /// # SSRF / freshness note
+    ///
+    /// The refresh interval is clamped to at most
+    /// [`Self::MAX_REFRESH_INTERVAL`] before the background task is
+    /// spawned. The cap prevents a misconfigured deployment (or a
+    /// hostile admin mutation) from disabling refresh entirely and
+    /// keeping a stale / poisoned discovery document live for an
+    /// unbounded time. The TLS verification policy for outbound
+    /// requests is controlled by `provider.discovery_mode` in
+    /// [`Self::fetch`].
     #[tracing::instrument(name = "metadata_cache.warm_up_and_run", skip_all)]
     pub async fn warm_up_and_run<R: RepositoryAccess>(
         &self,
@@ -175,6 +198,11 @@ impl MetadataCache {
         interval: std::time::Duration,
         repository: &mut R,
     ) -> Result<tokio::task::JoinHandle<()>, R::Error> {
+        // Clamp refresh interval into a sane window. Anything longer
+        // than the cap is treated as the cap; zero is treated as the
+        // floor (otherwise the background loop spin-fetches forever).
+        let interval = interval
+            .clamp(Self::MIN_REFRESH_INTERVAL, Self::MAX_REFRESH_INTERVAL);
         let providers = repository.upstream_oauth_provider().all_enabled().await?;
 
         for provider in providers {

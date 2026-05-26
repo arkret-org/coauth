@@ -371,6 +371,24 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             };
             // TODO(contrix): replace password bootstrap minting with the real
             // coauth-owned OIDC/passkey exchange and proof-bound grant issuance.
+            //
+            // STATUS: scaffold — NOT for production.
+            // CATEGORY: P0 / auth-issuance.
+            // RISK: this path mints a principal-server session grant
+            //   directly from a password login without the canonical
+            //   OIDC `authorize -> token` ceremony. It bypasses
+            //   per-grant scope negotiation, PKCE binding, and the
+            //   proof-of-possession flow that real deployments
+            //   require. Acceptable for the bring-up phase because it
+            //   keeps the development loop short, but MUST be replaced
+            //   before any external relying party trusts these grants.
+            // PRE-PROD CHECKLIST:
+            //   - swap to passkey / OIDC exchange via
+            //     `crate::handlers::account::auth::oidc_bridge`.
+            //   - bind the grant `cnf.jkt` to a DPoP proof carried on
+            //     the actual exchange request (not the kickoff one).
+            //   - enforce policy on scopes the caller may request.
+            // Tracked in `_improve_todos.md` C.4 (TODO scaffold).
             let session_grant = contrix::issue_session_grant_for_audience(
                 &mut rng,
                 &clock,

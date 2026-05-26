@@ -74,6 +74,14 @@ impl<T> Jwt<'_, T> {
     ///
     /// Fails when the algorithm is unsupported or the signature is wrong.
     pub fn verify_with_shared_secret(&self, secret: Vec<u8>) -> Result<(), NoKeyWorked> {
+        // SECURITY: refuse `alg=none` (and any algorithm not on the
+        // supported whitelist) before touching the key material. This
+        // closes the classic JWT alg-stripping / alg-confusion attacks
+        // where an attacker rewrites a token's header to claim no
+        // signature is required.
+        if !crate::jwa::is_supported_signing_alg(self.header.alg()) {
+            return Err(NoKeyWorked::default());
+        }
         let sym = crate::jwa::SymmetricKey::new_for_alg(secret, self.header.alg())
             .map_err(|_| NoKeyWorked::default())?;
         self.verify(&sym).map_err(|_| NoKeyWorked::default())
@@ -88,6 +96,15 @@ impl<T> Jwt<'_, T> {
     /// Returns [`NoKeyWorked`] when no candidate key produces a valid
     /// signature.
     pub fn verify_with_jwks(&self, jwks: &PublicJsonWebKeySet) -> Result<(), NoKeyWorked> {
+        // SECURITY: gate verification on the supported-signing whitelist
+        // first. The `alg=none` value (and any value not present in
+        // `SUPPORTED_SIGNING_ALGORITHMS`) is rejected before any JWK
+        // candidate is considered, so a forged token cannot bypass the
+        // signature check by claiming an empty / unknown algorithm.
+        if !crate::jwa::is_supported_signing_alg(self.header.alg()) {
+            return Err(NoKeyWorked::default());
+        }
+
         let constraints = ConstraintSet::from(&self.header);
         let candidates = constraints.filter(&**jwks);
 

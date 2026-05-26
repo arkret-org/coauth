@@ -293,6 +293,14 @@ pub fn cascade_any_revoke(
 /// TODO(round23-T17): when `cross_account_bus` lands, replace the
 /// `tracing::info!` below with a real publish. Until then the broadcast
 /// is best-effort and idempotency is on the receiver.
+///
+/// STATUS: stub — NOT for production cache-invalidation.
+/// CATEGORY: P1 / cross-service-bus.
+/// RISK: silent no-op means downstream caches (teabay, floria) keep
+///   stale grant state until their own TTLs expire. Acceptable while
+///   no downstream actually consumes this signal; flip to a hard
+///   failure once `services::cross_account_bus` lands.
+/// Tracked in `_improve_todos.md` C.4 (TODO scaffold).
 pub fn broadcast_cache_invalidation_for_any_revoke(
     holder_did: &str,
     consent_id: &str,

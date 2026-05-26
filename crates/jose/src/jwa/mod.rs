@@ -42,6 +42,13 @@ pub type EdDsaSigningKey = ed25519_dalek::SigningKey;
 pub type EdDsaVerifyingKey = ed25519_dalek::VerifyingKey;
 
 /// All the signing algorithms supported by this crate.
+///
+/// SECURITY: `alg=none` is intentionally NOT listed here and MUST never
+/// be added. Verification helpers (`Jwt::verify_with_jwks`, etc.) reject
+/// any algorithm that is not present in this whitelist before any key
+/// lookup, which closes the classic JWT alg-confusion / alg-stripping
+/// attack family (a peer cannot get an unsigned token accepted just by
+/// setting `alg` to `none`).
 pub const SUPPORTED_SIGNING_ALGORITHMS: [JsonWebSignatureAlg; 14] = [
     JsonWebSignatureAlg::Hs256,
     JsonWebSignatureAlg::Hs384,
@@ -58,3 +65,14 @@ pub const SUPPORTED_SIGNING_ALGORITHMS: [JsonWebSignatureAlg; 14] = [
     JsonWebSignatureAlg::Es512,
     JsonWebSignatureAlg::EdDsa,
 ];
+
+/// Returns `true` when `alg` is in the supported whitelist.
+///
+/// Used by JWT verification entry points to refuse `alg=none` (and any
+/// not-yet-supported algorithm) up front.
+#[must_use]
+pub fn is_supported_signing_alg(alg: &JsonWebSignatureAlg) -> bool {
+    SUPPORTED_SIGNING_ALGORITHMS
+        .iter()
+        .any(|candidate| candidate == alg)
+}

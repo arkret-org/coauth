@@ -102,6 +102,12 @@ pub async fn query_consent_cell(
     // compatible guess that mirrors the existing `/api/v1/moves` POST
     // surface. Once soland adds the read endpoint, update this path and
     // align the response struct with the official schema.
+    //
+    // STATUS: scaffold — NOT for production.
+    // CATEGORY: P1 / external-integration.
+    // RISK: probing an unimplemented URL today returns `Unknown` which
+    //   the consent gate is documented to treat as fail-open (see
+    //   module comment). Tracked in `_improve_todos.md` C.4.
     let cell_id = build_cell_id(consent_id);
     let path = format!("api/v1/admin/cells/{}", urlencoding::encode_path(&cell_id));
     let url = match base.join(&path) {

@@ -3,6 +3,25 @@
 //! The payload is a list of in-flight upstream authorization attempts. It
 //! implements the shared [`TimedCookie`] trait, which supplies `load`/`save`
 //! and centralises the expiry ceremony.
+//!
+//! # Session-fixation hardening
+//!
+//! The payload carries an opaque `state` token that is *also* embedded
+//! in the upstream `redirect_uri` query and verified on callback
+//! ([`super::authorize::get`] writes the entry; the callback handler
+//! cross-checks the cookie and the inbound `state`). Without this
+//! pair, an attacker who can plant a cookie on the victim's UA could
+//! convince them to complete an upstream sign-in that links a
+//! different identity than they think — classic session fixation /
+//! authz-code injection. The cross-check is the primary defence; the
+//! cookie attributes ([`crate::salvo_utils::cookies::CookieOption`])
+//! supply `HttpOnly` + `Secure` + `SameSite=Lax` so that a
+//! third-party iframe cannot tamper with the cookie state mid-flow.
+//!
+//! NOTE: the upstream callback is a top-level navigation back to our
+//! origin from a foreign IdP, so the cookie deliberately stays at
+//! `SameSite=Lax` instead of `Strict`; `Strict` would drop the cookie
+//! on the very redirect that needs to read it.
 
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::PostAuthAction;

@@ -108,6 +108,29 @@ impl Scribe for Rejection {
 ///
 /// Because we need to load the database repository and the clock, we keep them
 /// in the context to avoid creating two instances for each request.
+///
+/// # Multi-tenant guard (deferred)
+///
+/// IDOR (Insecure Direct Object Reference) hardening for the admin
+/// API normally pairs the bearer-token caller with a tenant /
+/// organization scope and refuses any resource lookup whose `org_id`
+/// doesn't match. The current coauth data model does NOT carry an
+/// `org_id` column on its first-class entities (users, sessions,
+/// OAuth clients, etc.) — admin API access is implicitly bound to
+/// the deployment as a whole. When the multi-tenant data model
+/// lands, the additions below are required:
+///
+/// 1. Add an `org_id: Option<Ulid>` field to [`CallContext`] derived
+///    from the authenticated session's tenant binding.
+/// 2. Add an `assert_tenant_match(&CallContext, resource_org_id)`
+///    guard helper next to this struct, called by every admin
+///    handler immediately after the resource lookup.
+/// 3. Push `org_id` into every repo query as a `WHERE` predicate so
+///    a SQL injection of a foreign ULID can't bypass the guard.
+///
+/// Tracked in `_improve_todos.md` A.2 (IDOR hardening). The scaffold
+/// here documents the entry point so future migrations have a single
+/// place to hook.
 #[non_exhaustive]
 pub struct CallContext {
     pub repo: BoxRepository,

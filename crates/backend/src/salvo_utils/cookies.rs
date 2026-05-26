@@ -91,11 +91,54 @@ impl CookieOption {
         self.base_url.path()
     }
 
+    /// True when the deployment is mounted at the root path (`/`),
+    /// HTTPS, and therefore eligible for the cookie `__Host-` prefix.
+    /// `__Host-` cookies are bound to a single origin: the browser
+    /// guarantees `Secure`, `Path=/`, and no `Domain` attribute, which
+    /// removes a class of session-fixation tricks where a sibling
+    /// subdomain plants a cookie that the auth host then reads.
+    fn host_prefix_eligible(&self) -> bool {
+        self.secure() && self.path() == "/"
+    }
+
+    /// Apply the **default** baseline cookie attributes.
+    ///
+    /// SECURITY baseline:
+    /// - `HttpOnly` — no JS access (defence vs XSS-driven token theft).
+    /// - `Secure` (when the base URL is HTTPS) — never travels over
+    ///   plaintext HTTP.
+    /// - `SameSite=Lax` — default for ordinary session cookies. We
+    ///   intentionally do NOT use `Strict` at the baseline because
+    ///   upstream-OIDC and SSO callbacks are top-level navigations
+    ///   from a foreign origin and `Strict` would drop the cookie on
+    ///   that round-trip.
+    /// - Path defaults to the deployment's base path.
+    ///
+    /// For cross-site OAuth state cookies that must NOT be reused
+    /// across cross-site contexts, prefer
+    /// [`Self::apply_cross_site_hardened`].
     fn apply<'a>(&self, mut cookie: Cookie<'a>) -> Cookie<'a> {
         cookie.set_http_only(true);
         cookie.set_secure(self.secure());
         cookie.set_path(self.path().to_owned());
         cookie.set_same_site(SameSite::Lax);
+        cookie
+    }
+
+    /// Apply the **hardened** profile used for cross-site auth state
+    /// (the upstream OAuth `state` cookie, the CSRF cookie). Inherits
+    /// `HttpOnly` + `Secure` from the baseline. Always sets
+    /// `SameSite=Strict` because these slots are read by callers that
+    /// expect a same-site response (the callback runs on our own
+    /// origin once the user-agent has been redirected back). Caller
+    /// renames the cookie to use the `__Host-` prefix when
+    /// [`Self::host_prefix_eligible`] returns true.
+    #[allow(dead_code)]
+    fn apply_cross_site_hardened<'a>(&self, mut cookie: Cookie<'a>) -> Cookie<'a> {
+        cookie.set_http_only(true);
+        cookie.set_secure(self.secure());
+        cookie.set_path(self.path().to_owned());
+        cookie.set_same_site(SameSite::Strict);
         cookie
     }
 }

@@ -691,10 +691,29 @@ mod rfc7519 {
 mod oidc_core {
     use url::Url;
 
-    use super::{Claim, Equality, Timestamp, TokenHash};
+    use super::{Claim, Equality, OneOrMany, Timestamp, TokenHash};
 
+    /// Time of end-user authentication. OIDC requires it as an integer
+    /// seconds-since-epoch (RFC 7519 `NumericDate`), so the strongly
+    /// typed extractor lands on `Timestamp` — not a free-form integer.
     pub const AUTH_TIME: Claim<Timestamp> = Claim::new("auth_time");
+    /// OIDC nonce. MUST equal the one minted by the relying party at
+    /// authorize time; the `Equality<str>` validator enforces that.
     pub const NONCE: Claim<String, Equality<str>> = Claim::new("nonce");
+    /// OIDC Authentication Context Class Reference. Treated as a
+    /// single string (the spec also permits a space-separated set;
+    /// callers requesting a specific class typically check for the
+    /// requested value via [`Equality`]).
+    pub const ACR: Claim<String> = Claim::new("acr");
+    /// OIDC Authentication Methods References. List of identifiers
+    /// describing the authentication ceremony (e.g. `["pwd",
+    /// "mfa"]`). Accepts both single-string and array shapes via
+    /// [`OneOrMany`].
+    pub const AMR: Claim<OneOrMany<String>> = Claim::new("amr");
+    /// OIDC Authorized Party for the ID token (when `aud` has
+    /// multiple entries the `azp` claim names the intended primary
+    /// consumer).
+    pub const AZP: Claim<String> = Claim::new("azp");
     pub const AT_HASH: Claim<String, TokenHash> = Claim::new("at_hash");
     pub const C_HASH: Claim<String, TokenHash> = Claim::new("c_hash");
 

@@ -120,6 +120,14 @@ pub async fn get(
         }
     }
 
+    // SECURITY (session fixation): a fresh upstream-session row is
+    // minted on every `authorize` invocation with a freshly generated
+    // CSPRNG `state` (via the OIDC-client builder above) and `nonce`.
+    // The state is mirrored into the cookie below and re-checked on
+    // callback; the nonce lands in the upstream ID token's `nonce`
+    // claim. An attacker who can plant the cookie cannot fixate a
+    // session because they cannot predict the freshly generated
+    // `state`, and the callback handler rejects mismatches.
     let session = repo
         .upstream_oauth_session()
         .add(
@@ -132,6 +140,13 @@ pub async fn get(
         )
         .await?;
 
+    // The cookie payload mirrors `(session_id, provider_id, state)`
+    // and is signed/encrypted by the private cookie jar. The cookie
+    // attributes (HttpOnly + Secure + SameSite=Lax) are applied by
+    // `CookieOption::apply` — see
+    // `crates/backend/src/salvo_utils/cookies.rs` for the baseline,
+    // and `crates/backend/src/handlers/upstream_oauth/cookie.rs` for
+    // the documented threat model.
     let cookie_jar = UpstreamSessionsCookie::load(&cookie_jar)
         .add(session.id, provider.id, data.state, query.post_auth_action)
         .save(cookie_jar, &clock);
