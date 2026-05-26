@@ -90,7 +90,10 @@ impl CircleCapabilityAction {
     /// `required_constraints` field.
     #[must_use]
     pub fn requires_allowed_circle_refs(&self) -> bool {
-        matches!(self, Self::Manage | Self::MemberManage | Self::MemberAddOthers)
+        matches!(
+            self,
+            Self::Manage | Self::MemberManage | Self::MemberAddOthers
+        )
     }
 }
 
@@ -208,8 +211,14 @@ mod tests {
         // These six strings come directly from
         // contrix-spec/spec/v1/artifacts/registry/capability-action-registry.json
         // and MUST NOT drift.
-        assert_eq!(CircleCapabilityAction::Create.as_action_str(), "cx.circle.create");
-        assert_eq!(CircleCapabilityAction::Manage.as_action_str(), "cx.circle.manage");
+        assert_eq!(
+            CircleCapabilityAction::Create.as_action_str(),
+            "cx.circle.create"
+        );
+        assert_eq!(
+            CircleCapabilityAction::Manage.as_action_str(),
+            "cx.circle.manage"
+        );
         assert_eq!(
             CircleCapabilityAction::MemberAdd.as_action_str(),
             "cx.circle.member.add"
@@ -222,7 +231,10 @@ mod tests {
             CircleCapabilityAction::MemberAddOthers.as_action_str(),
             "cx.circle.member.add.others"
         );
-        assert_eq!(CircleCapabilityAction::Audit.as_action_str(), "cx.circle.audit");
+        assert_eq!(
+            CircleCapabilityAction::Audit.as_action_str(),
+            "cx.circle.audit"
+        );
     }
 
     #[test]

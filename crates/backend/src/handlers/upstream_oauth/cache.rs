@@ -201,8 +201,7 @@ impl MetadataCache {
         // Clamp refresh interval into a sane window. Anything longer
         // than the cap is treated as the cap; zero is treated as the
         // floor (otherwise the background loop spin-fetches forever).
-        let interval = interval
-            .clamp(Self::MIN_REFRESH_INTERVAL, Self::MAX_REFRESH_INTERVAL);
+        let interval = interval.clamp(Self::MIN_REFRESH_INTERVAL, Self::MAX_REFRESH_INTERVAL);
         let providers = repository.upstream_oauth_provider().all_enabled().await?;
 
         for provider in providers {

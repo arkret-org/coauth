@@ -674,7 +674,7 @@ fn build_oauth_router(router: Router) -> Router {
 fn build_account_api_router(router: Router) -> Router {
     use crate::handlers::{
         account::{
-            auth, avatar, bootstrap_admin_status, consent, emails, flow, invite_accept,
+            agents, auth, avatar, bootstrap_admin_status, consent, emails, flow, invite_accept,
             invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
             recovery, register, sessions, site_config, upstream_oauth, users, viewer,
         },
@@ -890,6 +890,14 @@ fn build_account_api_router(router: Router) -> Router {
                         .get(flow::get_flow_session)
                         .push(Router::with_path("respond").post(flow::respond_flow)),
                 ),
+        )
+        // CXP-0008 personal-agent controller approval. Internal
+        // server-to-server endpoint: accepts only soland / sodmin
+        // static bearers. Issues a `accountability_grant` payload
+        // referencing the agent principal + capability set.
+        .push(
+            Router::with_path("agents/{id}/accountability-grant")
+                .post(agents::post_accountability_grant),
         );
     let docs_router = openapi::build_openapi_router(&api_router);
 
@@ -928,10 +936,7 @@ fn build_admin_router(router: Router) -> Router {
             Router::with_path("circles/capabilities")
                 .get(circle_capabilities::list_handler)
                 .post(circle_capabilities::create_handler)
-                .push(
-                    Router::with_path("{grant_id}")
-                        .delete(circle_capabilities::revoke_handler),
-                ),
+                .push(Router::with_path("{grant_id}").delete(circle_capabilities::revoke_handler)),
         )
         // Invite-quarantine outbox (C10.E §6.1 default-profile path)
         .push(

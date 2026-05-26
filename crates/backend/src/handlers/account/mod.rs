@@ -22,6 +22,7 @@ use crate::{
     salvo_utils::SessionInfo,
 };
 
+pub mod agents;
 pub mod anchor_view_query;
 pub mod auth;
 pub mod avatar;

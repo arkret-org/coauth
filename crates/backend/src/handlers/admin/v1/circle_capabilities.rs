@@ -31,7 +31,8 @@ use salvo::{http::StatusCode, oapi::extract::PathParam, prelude::*};
 use ulid::Ulid;
 
 use crate::{
-    JsonResult, error::AppError,
+    JsonResult,
+    error::AppError,
     handlers::{admin::call_context::extract_call_context, common::DepotExt},
 };
 
@@ -61,10 +62,7 @@ pub async fn list_handler(
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.circle_capabilities.create", skip_all)]
-pub async fn create_handler(
-    req: &mut Request,
-    depot: &Depot,
-) -> JsonResult<CircleCapabilityGrant> {
+pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<CircleCapabilityGrant> {
     let call_context = extract_call_context(req, depot).await?;
 
     let body: CreateCircleCapabilityGrant = req
@@ -89,9 +87,7 @@ pub async fn create_handler(
     let approved_proposal = if tier == RiskTier::High {
         let proposal_id_raw = req
             .query::<String>("risk_action_proposal_id")
-            .or_else(|| {
-                req.header::<String>("x-coauth-risk-action-proposal-id")
-            })
+            .or_else(|| req.header::<String>("x-coauth-risk-action-proposal-id"))
             .ok_or_else(|| {
                 AppError::bad_request(
                     "high-risk Circle capability grants require an approved \
@@ -112,9 +108,7 @@ pub async fn create_handler(
                 )
             })?
             .ok_or_else(|| AppError::not_found("risk_action proposal not found"))?;
-        if existing.state
-            != crate::services::risk_action_proposals::ProposalState::Approved
-        {
+        if existing.state != crate::services::risk_action_proposals::ProposalState::Approved {
             return Err(AppError::bad_request(format!(
                 "risk_action proposal state {:?} is not 'approved'; need at \
                  least {} signed admin approvals before issuing this \
@@ -189,7 +183,10 @@ pub async fn revoke_handler(
                 g.revoked_at = Some(Utc::now().to_rfc3339());
                 Ok(StatusCode::NO_CONTENT)
             }
-            Some(_) => Err(AppError::new(StatusCode::NOT_FOUND, "grant already revoked")),
+            Some(_) => Err(AppError::new(
+                StatusCode::NOT_FOUND,
+                "grant already revoked",
+            )),
             None => Err(AppError::new(StatusCode::NOT_FOUND, "grant not found")),
         }
     };

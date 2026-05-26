@@ -171,10 +171,7 @@ impl Scribe for RouteError {
 /// configured on the shared HTTP client (see
 /// `outbound_http::reqwest_client`); this helper guards against a
 /// misconfigured override URL that downgrades the scheme to `http`.
-fn require_https_endpoint(
-    name: &'static str,
-    url: &::url::Url,
-) -> Result<(), RouteError> {
+fn require_https_endpoint(name: &'static str, url: &::url::Url) -> Result<(), RouteError> {
     if url.scheme().eq_ignore_ascii_case("https") {
         Ok(())
     } else {
@@ -431,11 +428,7 @@ pub async fn handler(
                 context = context.with_extra_callback_parameters(extra);
             }
 
-            audit_non_standard_token_source(
-                provider.id,
-                "qq_connect",
-                session.nonce.is_some(),
-            );
+            audit_non_standard_token_source(provider.id, "qq_connect", session.nonce.is_some());
             (None, None, context.build(), Some(userinfo_value))
         }
 

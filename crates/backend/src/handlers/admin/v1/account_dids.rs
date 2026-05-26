@@ -23,7 +23,9 @@ use crate::{
         common::DepotExt,
     },
     services::{
-        did_binding_proof::{DidBindingProofError, validate_control_proof},
+        did_binding_proof::{
+            DidBindingProofError, normalize_did_for_binding, validate_control_proof,
+        },
         did_resolver::DidResolverService,
     },
 };
@@ -149,11 +151,12 @@ pub async fn add_account_did(
     enforce_did_binding_rate_limit(req, depot, id).await?;
     enforce_captcha(req, depot, body.captcha_token.as_deref()).await?;
 
-    let did = body.did.trim();
-    if did.is_empty() || !did.starts_with("did:") {
-        return Err(AppError::bad_request("did must be a non-empty DID URI"));
-    }
-    let did = did.to_owned();
+    // Phase P2 (B-D): all DID binding writes round-trip through the SDK
+    // `Did::new` validator (Round-4 regex `^did:[a-z0-9]+:[^\s]+$`). Reject
+    // legacy / wire-broken DIDs BEFORE invoking the resolver chain so
+    // network I/O never fires on a non-canonical value.
+    let did = normalize_did_for_binding(&body.did)
+        .map_err(|error| AppError::bad_request(format!("did_invalid: {error}")))?;
 
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {

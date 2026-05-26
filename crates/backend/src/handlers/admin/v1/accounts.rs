@@ -453,9 +453,7 @@ async fn patch_account(
     ) {
         let proposal_id_raw = req
             .query::<String>("risk_action_proposal_id")
-            .or_else(|| {
-                req.header::<String>("x-coauth-risk-action-proposal-id")
-            })
+            .or_else(|| req.header::<String>("x-coauth-risk-action-proposal-id"))
             .ok_or_else(|| {
                 AppError::bad_request(format!(
                     "high-risk action '{action_label}' requires an approved \
@@ -487,9 +485,7 @@ async fn patch_account(
                 existing.action
             )));
         }
-        if existing.state
-            != crate::services::risk_action_proposals::ProposalState::Approved
-        {
+        if existing.state != crate::services::risk_action_proposals::ProposalState::Approved {
             return Err(AppError::bad_request(format!(
                 "risk_action proposal state {:?} is not 'approved'; need at \
                  least {} signed admin approvals before execution",

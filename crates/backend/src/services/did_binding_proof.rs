@@ -140,6 +140,33 @@ pub enum DidBindingProofError {
 /// this window rejects the proof.
 const MAX_IAT_SKEW_SECS: i64 = 5 * 60;
 
+/// Normalize a DID for any binding-write path: trim whitespace, then run
+/// the value through the SDK `Did::new` validator (which enforces the
+/// Round-4 `^did:[a-z0-9]+:[^\s]+$` regex).
+///
+/// Returns the normalized DID string on success, or
+/// `DidBindingProofError::InvalidJws` on rejection (re-using the
+/// existing error variant so the wire surface stays stable).
+///
+/// Phase P2 (B-D): all DID binding writes MUST round-trip through this
+/// helper so coauth never persists a legacy-shape DID. The SDK validator
+/// is the single source of truth — coauth does not maintain its own
+/// regex.
+pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofError> {
+    let trimmed = did.trim();
+    if trimmed.is_empty() {
+        return Err(DidBindingProofError::InvalidJws(
+            "did must be a non-empty DID URI".to_owned(),
+        ));
+    }
+    if contrix_core::Did::new(trimmed.to_owned()).is_err() {
+        return Err(DidBindingProofError::InvalidJws(format!(
+            "did {trimmed:?} fails round-4 DID regex (^did:[a-z0-9]+:[^\\s]+$)"
+        )));
+    }
+    Ok(trimmed.to_owned())
+}
+
 /// Validate a `control_proof` JWS against the resolved DID document and
 /// the requested binding statement.
 ///
@@ -306,7 +333,9 @@ fn verify_compact_jws_with_sdk(
         .next()
         .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing signature segment".to_owned()))?;
     if parts.next().is_some() {
-        return Err(SdkJwsVerifyError::InvalidShape("too many segments".to_owned()));
+        return Err(SdkJwsVerifyError::InvalidShape(
+            "too many segments".to_owned(),
+        ));
     }
 
     let signature_bytes = Base64UrlUnpadded::decode_vec(signature_b64u)
@@ -561,6 +590,50 @@ mod tests {
         );
     }
 
+    /// Phase P2 (B-D) regression: every DID-binding write path MUST
+    /// reject non-canonical DID forms BEFORE persistence. Wire shape is
+    /// the SDK's Round-4 regex `^did:[a-z0-9]+:[^\s]+$`.
+    #[test]
+    fn normalize_did_for_binding_enforces_round4_regex() {
+        // Accepted canonical forms.
+        assert_eq!(
+            normalize_did_for_binding("did:web:alice.example").unwrap(),
+            "did:web:alice.example"
+        );
+        assert_eq!(
+            normalize_did_for_binding("did:webvh:example").unwrap(),
+            "did:webvh:example"
+        );
+        assert_eq!(
+            normalize_did_for_binding("  did:key:z6Mki  ").unwrap(),
+            "did:key:z6Mki"
+        );
+
+        // Rejected: empty / whitespace-only / not a DID URI.
+        assert!(normalize_did_for_binding("").is_err());
+        assert!(normalize_did_for_binding("   ").is_err());
+        assert!(normalize_did_for_binding("alice.example").is_err());
+
+        // Rejected: forbidden `did:uuid:*` method (Round 4 reserves uuid).
+        assert!(
+            normalize_did_for_binding("did:uuid:550e8400-e29b-41d4-a716-446655440000").is_err()
+        );
+
+        // Rejected: method names with `.`/`-`/`_` (Round-4 tightens to
+        // lowercase ASCII alnum only).
+        assert!(normalize_did_for_binding("did:web.test:example").is_err());
+        assert!(normalize_did_for_binding("did:web-test:example").is_err());
+        assert!(normalize_did_for_binding("did:web_test:example").is_err());
+
+        // Rejected: method-specific-id contains whitespace.
+        assert!(normalize_did_for_binding("did:web:exa mple").is_err());
+        assert!(normalize_did_for_binding("did:web:exa\tmple").is_err());
+
+        // Rejected: missing method-specific-id segment entirely.
+        assert!(normalize_did_for_binding("did:web:").is_err());
+        assert!(normalize_did_for_binding("did::abc").is_err());
+    }
+
     #[test]
     fn binding_statement_validation_accepts_exact_request_context() {
         let claims = statement_claims_default();
@@ -740,12 +813,8 @@ mod tests {
             &Base64UrlUnpadded::encode_string(&tampered_payload),
         );
         assert!(
-            verify_compact_jws_with_sdk(
-                &tampered_compact,
-                std::slice::from_ref(&method),
-                kid,
-            )
-            .is_err(),
+            verify_compact_jws_with_sdk(&tampered_compact, std::slice::from_ref(&method), kid,)
+                .is_err(),
             "altered canonical binding payload must break the fixture signature"
         );
     }

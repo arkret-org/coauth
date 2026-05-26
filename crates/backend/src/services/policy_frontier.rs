@@ -288,6 +288,9 @@ mod tests {
             "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
         assert_eq!(empty.auth_state_digest, empty.policy_frontier_digest);
-        assert_eq!(empty.policy_frontier_digest, empty.membership_frontier_digest);
+        assert_eq!(
+            empty.policy_frontier_digest,
+            empty.membership_frontier_digest
+        );
     }
 }

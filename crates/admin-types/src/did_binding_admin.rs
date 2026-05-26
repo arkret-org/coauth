@@ -68,6 +68,20 @@ impl DidBindingKind {
 /// `PendingProof` until the resolver / control proof is verified, then
 /// transitions to `Active` (or `Rejected` if the proof failed).
 /// `Revoked` is the terminal explicit-removal state.
+///
+/// **alsoKnownAs / `binding_state` is a HINT, not authoritative.**
+/// Per spec `identity/identity-handles.md` §6.0 (verifier authority
+/// vs. cache split), the `binding_state` field — and any
+/// `alsoKnownAs`-derived hint embedded in admin / API responses — is
+/// a cache hint only. A verifier MUST first-party verify the DID
+/// Document (and `alsoKnownAs` proof) for any trust decision (wallet
+/// disclosure, accept-invite, join-official-realm, cross-org
+/// federation, audit-trail). Cache-allowed UI surfaces (verified
+/// badge, mention autocomplete, contact card) MAY use a bounded
+/// cache, but MUST degrade to unverified on cache miss or §6.1.2
+/// invalidation. coauth (and any teabay / soland mirror) is NOT a
+/// trust authority — it MUST NOT be treated as a wire-normative
+/// source of binding state.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(
     feature = "schema",
@@ -231,6 +245,11 @@ pub struct AccountDidBindingPreview {
     pub kind: DidBindingKind,
 
     /// High-level lifecycle state for downstream admin/UI surfaces.
+    ///
+    /// HINT ONLY, NOT AUTHORITATIVE — verifier MUST first-party verify
+    /// the DID Document for trust decisions. See [`DidBindingState`]
+    /// docs for the full cache-vs-authority split (spec
+    /// `identity/identity-handles.md` §6.0).
     #[serde(default)]
     pub state: DidBindingState,
 
@@ -267,6 +286,13 @@ pub struct AdminAccountDidBinding {
     pub kind: DidBindingKind,
 
     /// High-level lifecycle state.
+    ///
+    /// HINT ONLY, NOT AUTHORITATIVE — verifier MUST first-party verify
+    /// the DID Document for trust decisions. coauth's `binding_state`
+    /// is a cache hint for UI surfaces (badge / autocomplete / contact
+    /// card); the authority is the resolved DID Document. See
+    /// [`DidBindingState`] docs for the full cache-vs-authority split
+    /// (spec `identity/identity-handles.md` §6.0).
     #[serde(default)]
     pub state: DidBindingState,
 
