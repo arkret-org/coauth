@@ -1,5 +1,11 @@
 # OIDC conformance harness configs
 
+> **Status (2026-05-26): actively used by CI.** This directory is wired
+> into `.github/workflows/oidc-conformance.yaml` (nightly schedule +
+> `workflow_dispatch`) and into `scripts/oidc-conformance.sh` /
+> `scripts/integration-up.sh`. Do not relocate or rename the plan files
+> without updating those references.
+
 This directory ships **plan-based YAML configs** for the
 [OpenID Foundation conformance suite][openid-cs] that target a localhost
 coauth instance brought up by `scripts/oidc-conformance.sh`. Each
