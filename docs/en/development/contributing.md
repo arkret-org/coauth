@@ -8,10 +8,7 @@ Everyone is welcome to contribute code to [coauth](https://github.com/contrix-de
 
 ## 2. What can I contribute?
 
-There are two main ways to contribute to coauth:
-
-- **Code and documentation**: You can contribute code to coauth and help improve its documentation by submitting pull requests to the [GitHub repository](https://github.com/contrix-dev/coauth).
-- **Translations**: You can contribute translations to the coauth through [Localazy](https://localazy.com/p/coauth).
+You can contribute code to coauth and help improve its documentation by submitting pull requests to the [GitHub repository](https://github.com/contrix-dev/coauth).
 
 ## 3. What do I need?
 

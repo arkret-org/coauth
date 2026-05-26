@@ -2,10 +2,7 @@
 default-members = ["crates/cli"]
 members = ["crates/*"]
 exclude = [
-    "crates/data-model",
     "crates/iana-codegen",
-    "crates/storage",
-    "crates/storage-pg",
 ]
 resolver = "3"
 

@@ -12,13 +12,6 @@ release branches, version bumps, and external builds. They are not part
 of this local readiness workflow and must not be triggered to publish
 remote artifacts.
 
-### [`translations-download` workflow]
-
-This workflow downloads the latest translations from [Localazy] onto the target branch.
-It is intended to be run before the start of each release cycle on the main branch and before each release on the release branch.
-
-Before running it, make sure to review pending translations in [Localazy], enabling new languages that pass the 70% threshold.
-
 ### [`release-branch` workflow]
 
 Do not run this workflow for the local readiness pass. It creates remote
@@ -190,11 +183,8 @@ cosign verify-blob \
 4. Do not undraft releases, publish releases, create tags, push images,
    or upload remote attestations.
 
-[Localazy]: https://localazy.com/p/coauth
-[`translations-download` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/translations-download.yaml
 [`release-branch` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/release-branch.yaml
 [`release-bump` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/release-bump.yaml
 [`release` workflow]: https://github.com/contrix-dev/coauth/actions/workflows/release.yaml
-[translation download PR]: https://github.com/contrix-dev/coauth/pulls?q=is%3Apr+label%3AA-I18n
 [CI to churn]: https://github.com/contrix-dev/coauth/actions/workflows/release.yaml?query=event%3Apush
 [draft release to appear]: https://github.com/contrix-dev/coauth/releases
