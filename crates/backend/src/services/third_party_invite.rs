@@ -272,9 +272,10 @@ pub fn offline_token_commitment(token: &[u8], salt: &[u8]) -> String {
 /// returns the `due_at` instant — the call-site posts a `coauth-tasks`
 /// job that runs `zeroize_secrets` at or before `due_at`.
 ///
-/// TODO(round4-zeroize-task): wire this to the production
-/// `coauth-tasks` queue once the round-4 admin migration lands. The
-/// terminal_at + 24h policy is documented in `oob_code.rs`.
+/// Note: the wiring to the production `coauth-tasks` queue is not yet
+/// in place; today this only computes the deadline and call-sites are
+/// expected to schedule their own job. The terminal_at + 24h policy is
+/// documented in `oob_code.rs`.
 pub fn schedule_terminal_zeroize(rec: &ThirdPartyInviteRecord) -> Option<DateTime<Utc>> {
     rec.zeroize_due_at()
 }
