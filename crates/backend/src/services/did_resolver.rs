@@ -305,10 +305,11 @@ impl DidResolverService for DefaultDidResolverService {
 
         DidDocument {
             id: did.clone(),
-            also_known_as: vec![format!(
-                "contrix://{}",
-                crate::handlers::contrix::user_handle(url_builder, user)
-            )],
+            // Spec 7157ee8 §3.1 — canonical handle form is
+            // `<localpart>:<domain>`; the legacy `contrix://…` URI is
+            // retired. `user_handle` now emits the canonical form
+            // directly.
+            also_known_as: vec![crate::handlers::contrix::user_handle(url_builder, user)],
             verification_method: Vec::new(),
             authentication: Vec::new(),
             assertion_method: Vec::new(),

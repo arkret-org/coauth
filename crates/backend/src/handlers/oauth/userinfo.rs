@@ -173,7 +173,10 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
     let user_info = UserInfo {
         sub: contrix::user_did_for(&url_builder, &contrix_config, &user),
         username: user.handle.clone(),
-        preferred_username: contrix::user_handle(&url_builder, &user),
+        // OIDC `preferred_username` keeps the human-readable `local@host`
+        // display form (spec 7157ee8 retires the URI form but the display
+        // shape stays for OIDC client compatibility).
+        preferred_username: contrix::user_handle_display(&url_builder, &user),
         principal_did: contrix::user_did_for(&url_builder, &contrix_config, &user),
         device_id: contrix::primary_device_id(&session.scope),
         session_id: session.id.to_string(),

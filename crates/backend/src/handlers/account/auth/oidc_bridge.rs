@@ -348,6 +348,10 @@ fn login_hint_matches_user(
     login_hint == user.handle
         || login_hint == contrix::user_did_for(url_builder, contrix_config, user)
         || login_hint == contrix::user_handle(url_builder, user)
+        // Spec 7157ee8 retired the `local@host` display form as canonical,
+        // but legacy OIDC clients still send it as a login_hint — accept
+        // for backward compatibility.
+        || login_hint == contrix::user_handle_display(url_builder, user)
 }
 
 /// OIDC authorization-code exchange bridge that now validates the incoming

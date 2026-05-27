@@ -810,9 +810,9 @@ pub(crate) fn user_did_for(
 }
 
 /// Legacy display form `local@host` used by some logging / display
-/// paths. NOT the canonical handle URI form — use [`user_handle_uri`]
-/// (spec 0a5ab85) for `alsoKnownAs` / DID Document / claim emission.
-pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
+/// paths. NOT the canonical handle form — use [`user_handle`]
+/// (spec 7157ee8 §3.1) for `alsoKnownAs` / DID Document / claim emission.
+pub(crate) fn user_handle_display(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
         "{}@{}",
         user.handle,
@@ -820,20 +820,20 @@ pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
     )
 }
 
-/// Canonical Contrix handle URI for a user per spec 0a5ab85:
-/// `contrix://<lowercase-host>/users/<lowercase-localpart>`. This is the
-/// form that MUST appear in `alsoKnownAs` and on any handle claim
-/// `handle_uri`. `acct:<local>@<host>` is interop-only and lives in
+/// Canonical Contrix handle for a user per spec 7157ee8 §3.1:
+/// `<lowercase-localpart>:<lowercase-domain>`. This is the form that MUST
+/// appear in `alsoKnownAs`, on any handle claim `handle` field, and as
+/// directory cache key. `acct:<local>@<host>` is interop-only and lives in
 /// `handle_aliases[]` on the handle claim.
-pub(crate) fn user_handle_uri(url_builder: &UrlBuilder, user: &User) -> String {
+pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
-        "contrix://{}/users/{}",
-        url_builder.public_hostname().to_lowercase(),
-        user.handle.to_lowercase()
+        "{}:{}",
+        user.handle.to_lowercase(),
+        url_builder.public_hostname().to_lowercase()
     )
 }
 
-/// `acct:` interop alias for [`user_handle_uri`]. Use this for
+/// `acct:` interop alias for [`user_handle`]. Use this for
 /// `handle_aliases[]` on a `handle-claim.schema.json` payload.
 pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
@@ -843,23 +843,24 @@ pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> S
     )
 }
 
-/// Stable wire-level error code returned when a caller passes an `acct:`
-/// alias (or any other non-canonical string) as a `handle_uri` input.
+/// Stable wire-level error code returned when a caller passes a non-
+/// canonical handle string (legacy `contrix://` URI, `acct:` alias, or
+/// other malformed input).
 ///
-/// Mirrored by [`coauth_data::users::HANDLE_URI_NOT_CANONICAL_CODE`] —
-/// kept in sync so the audit / HTTP layers can refer to the same constant
-/// without an extra dependency.
-pub const HANDLE_URI_NOT_CANONICAL_CODE: &str = "handle_uri_not_canonical";
+/// Mirrored by [`coauth_data::user::HANDLE_NOT_CANONICAL_CODE`] — kept in
+/// sync so the audit / HTTP layers can refer to the same constant without
+/// an extra dependency.
+pub const HANDLE_NOT_CANONICAL_CODE: &str = "handle_not_canonical";
 
-/// Reject any inbound `handle_uri` that is not in the canonical
-/// `contrix://<host>/users/<localpart>` shape. Returns a
+/// Reject any inbound `handle` that is not in the canonical
+/// `<localpart>:<domain>` shape (spec 7157ee8 §3.1). Returns a
 /// [`ContrixRouteError::BadRequest`] wrapping the standard error envelope
-/// `code = "handle_uri_not_canonical"`.
-pub(crate) fn require_canonical_handle_uri(input: &str) -> Result<&str, ContrixRouteError> {
-    coauth_data::user::validate_canonical_handle_uri(input).map_err(|(_code, message)| {
+/// `code = "handle_not_canonical"`.
+pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, ContrixRouteError> {
+    coauth_data::user::validate_canonical_handle(input).map_err(|(_code, message)| {
         // The error envelope sets `code` from the variant; we embed the
         // reason text so callers see why their input was rejected.
-        ContrixRouteError::BadRequest(format!("{HANDLE_URI_NOT_CANONICAL_CODE}: {message}"))
+        ContrixRouteError::BadRequest(format!("{HANDLE_NOT_CANONICAL_CODE}: {message}"))
     })
 }
 
@@ -909,7 +910,9 @@ pub struct HandleClaimPayload {
     #[serde(rename = "type")]
     pub kind: String,
     pub subject_id: String,
-    pub handle_uri: String,
+    /// Canonical Contrix handle of the form `<localpart>:<domain>` per
+    /// spec 7157ee8 §3.1 (replaces the legacy `handle_uri` URI form).
+    pub handle: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub handle_aliases: Vec<String>,
     pub issuer_service_did: String,
@@ -957,7 +960,9 @@ pub(crate) fn issue_handle_claim(
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
     let issuer_service_did = service_did_for(url_builder, contrix_config);
     let subject_id = user_did_for(url_builder, contrix_config, user);
-    let handle_uri = user_handle_uri(url_builder, user);
+    // Spec 7157ee8 §3.1 — canonical handle wire form is
+    // `<localpart>:<domain>`; the legacy `contrix://…` URI is retired.
+    let handle = user_handle(url_builder, user);
     let mut aliases = vec![user_handle_acct_alias(url_builder, user)];
     aliases.extend(user.handle_aliases.iter().cloned());
     // De-duplicate while preserving first-seen order.
@@ -973,7 +978,7 @@ pub(crate) fn issue_handle_claim(
     let mut payload_no_proofs = HandleClaimPayload {
         kind: "cx.handle.claim".to_owned(),
         subject_id: subject_id.clone(),
-        handle_uri,
+        handle,
         handle_aliases: aliases.clone(),
         issuer_service_did: issuer_service_did.clone(),
         audience: audience.clone(),
@@ -983,10 +988,15 @@ pub(crate) fn issue_handle_claim(
         proofs: Vec::new(),
         claim_digest: String::new(),
     };
+    // PROOF-1 (spec 7157ee8 §3.2): the signing transcript MUST cover the
+    // canonical `handle` field, not the retired `handle_uri`. The digest
+    // input mirrors the wire shape of `HandleClaimPayload` exactly so
+    // downstream verifiers can reproduce the hash from the on-the-wire
+    // claim without renaming.
     let claim_digest = canonical_json_sha256(&HandleClaimDigestInput {
         kind: &payload_no_proofs.kind,
         subject_id: &payload_no_proofs.subject_id,
-        handle_uri: &payload_no_proofs.handle_uri,
+        handle: &payload_no_proofs.handle,
         handle_aliases: &payload_no_proofs.handle_aliases,
         issuer_service_did: &payload_no_proofs.issuer_service_did,
         audience: &payload_no_proofs.audience,
@@ -1047,12 +1057,16 @@ pub(crate) fn issue_handle_claim(
 /// payload minus the `proofs[]` and `claim_digest` fields. Sorting and
 /// shape must match the wire shape of `HandleClaimPayload` for
 /// downstream digesters to reproduce the hash.
+///
+/// PROOF-1: spec 7157ee8 §3.2 mandates the transcript covers `handle`
+/// (canonical `<localpart>:<domain>` form). The legacy `handle_uri` shape
+/// is no longer included in the digest input on any code path.
 #[derive(Debug, Serialize)]
 struct HandleClaimDigestInput<'a> {
     #[serde(rename = "type")]
     kind: &'a str,
     subject_id: &'a str,
-    handle_uri: &'a str,
+    handle: &'a str,
     handle_aliases: &'a Vec<String>,
     issuer_service_did: &'a str,
     audience: &'a str,
@@ -1663,9 +1677,10 @@ pub(crate) fn user_did_document(
 
     DidDocument {
         id: did.clone(),
-        // Spec 0a5ab85: canonical handle URI form is
-        // `contrix://<host>/users/<localpart>`; `acct:` is interop-only.
-        also_known_as: vec![user_handle_uri(url_builder, user)],
+        // Spec 7157ee8 §3.1: canonical handle form is
+        // `<localpart>:<domain>`; `acct:` is interop-only and lives on
+        // `handle_claim.handle_aliases[]`, not on the DID document.
+        also_known_as: vec![user_handle(url_builder, user)],
         verification_method: Vec::new(),
         authentication: Vec::new(),
         assertion_method: Vec::new(),
@@ -1900,9 +1915,17 @@ pub(crate) fn parse_local_user_did_for(
 }
 
 pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Option<String> {
-    let suffix = format!("@{}", url_builder.public_hostname().to_lowercase());
-    handle
-        .strip_suffix(&suffix)
+    // Spec 7157ee8 §3.1 canonical form: `<localpart>:<domain>`. Also
+    // accept the legacy `<localpart>@<domain>` display form for clients
+    // that have not yet migrated. `acct:` prefix is stripped first so
+    // both `acct:alice@host` and bare `alice@host` round-trip the same.
+    let trimmed = handle.trim().trim_start_matches("acct:");
+    let host = url_builder.public_hostname().to_lowercase();
+    let colon_suffix = format!(":{host}");
+    let at_suffix = format!("@{host}");
+    trimmed
+        .strip_suffix(&colon_suffix)
+        .or_else(|| trimmed.strip_suffix(&at_suffix))
         .filter(|h| !h.is_empty())
         .map(ToOwned::to_owned)
 }
@@ -2839,8 +2862,15 @@ mod tests {
             user_did(&url_builder, &user),
             format!("did:web:auth.example.com:coauth:users:{}", user.id)
         );
+        // Spec 7157ee8 §3.1 — canonical handle form is
+        // `<localpart>:<domain>` (was `<localpart>@<domain>` pre-R3.1).
         assert_eq!(
             user_handle(&url_builder, &user),
+            format!("{}:auth.example.com", user.handle.to_lowercase())
+        );
+        // Display form is still available via `user_handle_display`.
+        assert_eq!(
+            user_handle_display(&url_builder, &user),
             format!("{}@auth.example.com", user.handle)
         );
     }
@@ -3588,14 +3618,28 @@ mod tests {
         let mut rng = ChaChaRng::seed_from_u64(12);
         let now = Utc::now();
         let user = User::samples(now, &mut rng).into_iter().next().unwrap();
-        let handle = user_handle(&url_builder, &user);
 
+        // Canonical `<localpart>:<domain>` form (spec 7157ee8 §3.1).
+        let canonical = user_handle(&url_builder, &user);
         assert_eq!(
-            parse_local_handle(&url_builder, &handle),
+            parse_local_handle(&url_builder, &canonical),
             Some(user.handle.clone())
         );
+
+        // Legacy `<localpart>@<domain>` display form — still accepted
+        // for backward-compatible clients.
+        let display = user_handle_display(&url_builder, &user);
+        assert_eq!(
+            parse_local_handle(&url_builder, &display),
+            Some(user.handle.clone())
+        );
+
         assert_eq!(
             parse_local_handle(&url_builder, "alice@elsewhere.example"),
+            None
+        );
+        assert_eq!(
+            parse_local_handle(&url_builder, "alice:elsewhere.example"),
             None
         );
     }
@@ -3614,17 +3658,21 @@ mod tests {
             document.id,
             user_did_for(&url_builder, &contrix_config, &user)
         );
-        // Spec 0a5ab85: `alsoKnownAs` carries the canonical
-        // `contrix://<host>/users/<localpart>` form; `acct:` aliases live
-        // on `handle_claim.handle_aliases[]`, not on the DID document.
+        // Spec 7157ee8 §3.1: `alsoKnownAs` carries the canonical
+        // `<localpart>:<domain>` form; `acct:` aliases live on
+        // `handle_claim.handle_aliases[]`, not on the DID document.
         assert_eq!(
             document.also_known_as,
-            vec![user_handle_uri(&url_builder, &user)]
+            vec![user_handle(&url_builder, &user)]
         );
         assert!(
-            document.also_known_as[0].contains("/users/"),
-            "alsoKnownAs MUST use the canonical handle URI form, got {}",
+            document.also_known_as[0].contains(':'),
+            "alsoKnownAs MUST use the canonical `<localpart>:<domain>` form, got {}",
             document.also_known_as[0]
+        );
+        assert!(
+            !document.also_known_as[0].starts_with("contrix://"),
+            "alsoKnownAs MUST NOT carry the retired contrix:// URI form"
         );
         assert!(
             !document.also_known_as[0].starts_with("acct:"),
@@ -3640,12 +3688,12 @@ mod tests {
     }
 
     #[test]
-    fn require_canonical_handle_uri_rejects_acct_aliases() {
-        let err = require_canonical_handle_uri("acct:alice@example.com").unwrap_err();
+    fn require_canonical_handle_rejects_acct_aliases() {
+        let err = require_canonical_handle("acct:alice@example.com").unwrap_err();
         match err {
             ContrixRouteError::BadRequest(message) => {
                 assert!(
-                    message.starts_with(HANDLE_URI_NOT_CANONICAL_CODE),
+                    message.starts_with(HANDLE_NOT_CANONICAL_CODE),
                     "expected code prefix, got {message}"
                 );
                 assert!(
@@ -3658,24 +3706,28 @@ mod tests {
     }
 
     #[test]
-    fn require_canonical_handle_uri_rejects_bare_handle() {
-        require_canonical_handle_uri("alice@example.com")
-            .expect_err("bare host strings MUST be rejected as canonical handle URIs");
-        require_canonical_handle_uri("contrix://example.com/users/")
-            .expect_err("empty localpart MUST be rejected");
-        require_canonical_handle_uri("contrix://Example.com/users/alice")
-            .expect_err("uppercase host MUST be rejected");
-        require_canonical_handle_uri("").expect_err("empty input MUST be rejected");
+    fn require_canonical_handle_rejects_non_canonical_inputs() {
+        require_canonical_handle("alice@example.com")
+            .expect_err("display `local@host` form MUST be rejected as canonical");
+        require_canonical_handle("@alice:example.com")
+            .expect_err("leading @ display marker MUST be rejected");
+        require_canonical_handle("contrix://example.com/users/alice")
+            .expect_err("legacy contrix:// URI form MUST be rejected");
+        require_canonical_handle(":example.com").expect_err("empty localpart MUST be rejected");
+        require_canonical_handle("alice:").expect_err("empty domain MUST be rejected");
+        require_canonical_handle("Alice:example.com")
+            .expect_err("uppercase localpart MUST be rejected");
+        require_canonical_handle("").expect_err("empty input MUST be rejected");
     }
 
     #[test]
-    fn require_canonical_handle_uri_accepts_canonical_form() {
-        let result = require_canonical_handle_uri("contrix://example.com/users/alice").unwrap();
-        assert_eq!(result, "contrix://example.com/users/alice");
+    fn require_canonical_handle_accepts_canonical_form() {
+        let result = require_canonical_handle("alice:example.com").unwrap();
+        assert_eq!(result, "alice:example.com");
     }
 
     #[test]
-    fn issue_handle_claim_emits_canonical_uri_and_aliases() {
+    fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         use coauth_data::clock::MockClock;
         let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
         let contrix_config = ContrixConfig::default();
@@ -3705,16 +3757,22 @@ mod tests {
         )
         .expect("handle claim must mint with the test keystore");
 
-        let canonical = user_handle_uri(&url_builder, &user);
+        let canonical = user_handle(&url_builder, &user);
         let acct = user_handle_acct_alias(&url_builder, &user);
-        assert_eq!(material.payload.handle_uri, canonical);
+        // Spec 7157ee8 §3.1 — canonical `<localpart>:<domain>` form on
+        // the wire `handle` field.
+        assert_eq!(material.payload.handle, canonical);
         assert!(
-            material.payload.handle_uri.starts_with("contrix://"),
-            "handle_uri MUST be canonical contrix:// form"
+            material.payload.handle.contains(':'),
+            "handle MUST be the canonical `<localpart>:<domain>` form"
         );
         assert!(
-            !material.payload.handle_uri.starts_with("acct:"),
-            "handle_uri MUST NOT be an acct: alias"
+            !material.payload.handle.starts_with("contrix://"),
+            "handle MUST NOT carry the retired contrix:// URI form"
+        );
+        assert!(
+            !material.payload.handle.starts_with("acct:"),
+            "handle MUST NOT be an acct: alias"
         );
         assert!(
             material.payload.handle_aliases.contains(&acct),
