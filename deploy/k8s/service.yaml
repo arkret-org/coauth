@@ -1,0 +1,16 @@
+# Minimal R3 example; production deploys should use Helm.
+apiVersion: v1
+kind: Service
+metadata:
+  name: coauth
+  labels:
+    app: coauth
+spec:
+  type: ClusterIP
+  selector:
+    app: coauth
+  ports:
+    - name: http
+      port: 7080
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,36 @@
+# Minimal R3 example; production deploys should use Helm.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coauth
+  labels:
+    app: coauth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coauth
+  template:
+    metadata:
+      labels:
+        app: coauth
+    spec:
+      containers:
+        - name: coauth
+          image: ghcr.io/contrix-dev/coauth:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 7080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
