@@ -12,6 +12,11 @@
 //! migration `20260520000100_handle_claims_and_audit/up.sql`. This module
 //! therefore exposes only `record` and read accessors; there is no patch
 //! API by design.
+//!
+//! Spec 7157ee8 (R3.1) renamed the persisted handle column from
+//! `canonical_handle_uri` (legacy `contrix://<host>/users/<localpart>`
+//! URI) to `handle` (canonical `<localpart>:<domain>` form) — see
+//! migration `20260527000200_handle_canonicalize_rename`.
 
 use async_trait::async_trait;
 use coauth_data::{Clock, audit::HandleAuditEvent};
@@ -26,7 +31,7 @@ use crate::repository_impl;
 pub struct NewHandleAuditEvent {
     user_id: Option<Ulid>,
     event_type: HandleAuditEventType,
-    canonical_handle_uri: Option<String>,
+    handle: Option<String>,
     handle_aliases: Vec<String>,
     old_did: Option<String>,
     new_did: Option<String>,
@@ -45,7 +50,7 @@ impl NewHandleAuditEvent {
         Self {
             user_id: None,
             event_type,
-            canonical_handle_uri: None,
+            handle: None,
             handle_aliases: Vec::new(),
             old_did: None,
             new_did: None,
@@ -64,10 +69,13 @@ impl NewHandleAuditEvent {
         self
     }
 
-    /// Set the canonical `contrix://…` handle URI affected.
+    /// Set the canonical `<localpart>:<domain>` handle affected.
+    ///
+    /// Spec 7157ee8 §3.1 — the wire form is the colon-joined canonical
+    /// shape (replacing the legacy `contrix://…` URI used pre-R3.1).
     #[must_use]
-    pub fn with_canonical_handle_uri(mut self, uri: impl Into<String>) -> Self {
-        self.canonical_handle_uri = Some(uri.into());
+    pub fn with_handle(mut self, handle: impl Into<String>) -> Self {
+        self.handle = Some(handle.into());
         self
     }
 
@@ -140,10 +148,10 @@ impl NewHandleAuditEvent {
         &self.event_type
     }
 
-    /// Borrow the canonical handle URI, if any.
+    /// Borrow the canonical `<localpart>:<domain>` handle, if any.
     #[must_use]
-    pub fn canonical_handle_uri(&self) -> Option<&str> {
-        self.canonical_handle_uri.as_deref()
+    pub fn handle(&self) -> Option<&str> {
+        self.handle.as_deref()
     }
 
     /// Borrow the aliases at the time of the event.

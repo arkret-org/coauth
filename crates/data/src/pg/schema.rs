@@ -26,7 +26,7 @@ diesel::table! {
         id -> Uuid,
         user_id -> Nullable<Uuid>,
         event_type -> Text,
-        canonical_handle_uri -> Nullable<Text>,
+        handle -> Nullable<Text>,
         handle_aliases -> Array<Text>,
         old_did -> Nullable<Text>,
         new_did -> Nullable<Text>,

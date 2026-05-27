@@ -124,9 +124,9 @@ pub struct HandleAuditEvent {
     pub user_id: Option<Ulid>,
     /// The kind of event recorded.
     pub event_type: HandleAuditEventType,
-    /// Canonical `contrix://<host>/users/<localpart>` URI affected by the
-    /// event.
-    pub canonical_handle_uri: Option<String>,
+    /// Canonical `<localpart>:<domain>` handle affected by the event
+    /// (spec 7157ee8 §3.1 — replaces the legacy `contrix://…` URI form).
+    pub handle: Option<String>,
     /// Interop aliases (e.g. `acct:<local>@<host>`) recorded with the event.
     pub handle_aliases: Vec<String>,
     /// Previous DID this handle resolved to (reassignment / divergence).
