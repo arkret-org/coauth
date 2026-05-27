@@ -78,6 +78,12 @@ pub enum BeginPasswordRegistrationIssue {
     RegistrationDisabled,
     HandleRequired,
     HandleExists,
+    /// HDL-1 (R3 spec-sync 2026-05-27, contrix-spec b47ff6ec) — the
+    /// candidate handle localpart failed the wire-level homograph guard
+    /// (NFC + UTS#39 confusable + script-mixed). Renders as the
+    /// canonical `handle_homograph_forbidden` wire code from the SDK
+    /// helper [`contrix_core::normalize_handle_localpart`].
+    HandleHomographForbidden,
     EmailOrPhoneRequired,
     EmailInvalid,
     EmailInUse,
@@ -101,6 +107,7 @@ impl BeginPasswordRegistrationIssue {
             Self::RegistrationDisabled => "registration_disabled".into(),
             Self::HandleRequired => "handle_required".into(),
             Self::HandleExists => "handle_exists".into(),
+            Self::HandleHomographForbidden => "handle_homograph_forbidden".into(),
             Self::EmailOrPhoneRequired => "email_or_phone_required".into(),
             Self::EmailInvalid => "email_invalid".into(),
             Self::EmailInUse => "email_in_use".into(),
@@ -1125,6 +1132,14 @@ pub async fn begin_password_registration(
 
     if request.handle.is_empty() {
         issues.push(BeginPasswordRegistrationIssue::HandleRequired);
+    } else if contrix_core::normalize_handle_localpart(&request.handle).is_err() {
+        // HDL-1 (R3 spec-sync 2026-05-27, contrix-spec b47ff6ec) —
+        // wire-level NFC + UTS#39 confusable skeleton + script-mixed
+        // reject. MUST run before any storage / availability lookup so
+        // confusable handles can never reach the user table or the
+        // upstream principal server. The SDK helper is the single
+        // source of truth for the rejection set.
+        issues.push(BeginPasswordRegistrationIssue::HandleHomographForbidden);
     } else if repo.user().exists(&request.handle).await? {
         issues.push(BeginPasswordRegistrationIssue::HandleExists);
     } else {

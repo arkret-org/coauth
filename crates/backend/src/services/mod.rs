@@ -14,6 +14,7 @@ pub mod passkey_derive;
 pub mod policy_evaluator;
 pub mod policy_frontier;
 pub mod policy_signer;
+pub mod recovery_policy_proof;
 pub mod refresh_token_rotation;
 pub mod risk_action_proposals;
 pub mod risk_action_state;

@@ -257,6 +257,21 @@ pub async fn post_webvh_start(
             error: Some("username_required".into()),
         }));
     }
+    // HDL-1 (R3 spec-sync 2026-05-27, contrix-spec b47ff6ec) —
+    // wire-level handle normalize / homograph check via the SDK helper.
+    // MUST run before any storage lookup so confusable handles never
+    // hit `repo.user().exists(...)` or the principal server.
+    if contrix_core::normalize_handle_localpart(&username).is_err() {
+        return Ok(Json(WebvhRegistrationStartResponse {
+            status: "error",
+            registration_id: None,
+            next_step: None,
+            provider_id: None,
+            email_verification_bypass_allowed: site_config
+                .registration_email_delivery_bypass_allowed,
+            error: Some("handle_homograph_forbidden".into()),
+        }));
+    }
 
     let principal_server = depot.principal_server()?;
     let repo_factory = depot.repo_factory()?;

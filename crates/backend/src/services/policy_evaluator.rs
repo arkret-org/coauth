@@ -41,11 +41,63 @@ use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use chrono::{DateTime, Utc};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
-use contrix_core::{AuthzDecision, PolicyCheckRequest};
+use contrix_core::{
+    AuthzDecision, CAP_ACTION_CALL_JOIN, CAP_ACTION_CALL_MODERATE, CAP_ACTION_CALL_RECORD,
+    CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, PolicyCheckRequest,
+};
 use serde_json::Value;
 use thiserror::Error;
 
 use crate::services::policy_frontier::Frontier;
+
+/// CXP-0010 (R3 spec-sync 2026-05-27, contrix-spec b47ff6ec) — call /
+/// media capability actions registered in
+/// `capability-action-registry.json`. CAP-1: capability evaluator MUST
+/// recognise these five actions so deny/review/allow rules can target
+/// them by name. Mirrors `contrix_core::CALL_CAPABILITY_ACTIONS`.
+pub const RECOGNISED_CALL_CAPABILITY_ACTIONS: &[&str] = &[
+    CAP_ACTION_CALL_JOIN,
+    CAP_ACTION_CALL_SCREEN_SHARE,
+    CAP_ACTION_CALL_RECORD,
+    CAP_ACTION_CALL_TRANSCRIBE,
+    CAP_ACTION_CALL_MODERATE,
+];
+
+/// CAP-1: returns true when `action` is one of the five CXP-0010 call /
+/// media capability actions. Used by handlers that need to short-circuit
+/// validation when the realm policy hasn't loaded yet but the action is
+/// nevertheless known to the evaluator.
+#[must_use]
+pub fn is_recognised_call_capability_action(action: &str) -> bool {
+    RECOGNISED_CALL_CAPABILITY_ACTIONS.contains(&action)
+}
+
+/// CAP-2: returns true when the candidate resource selector wire string
+/// is a `cx:circle:<uuid>` typed id. The evaluator accepts `circle`
+/// selectors verbatim as `deny_actors` / `deny_actions` / target lists
+/// per `resource-selector-grammar.md` §6 (R3).
+#[must_use]
+pub fn is_circle_selector(selector: &str) -> bool {
+    contrix_core::CircleId::new(selector.to_owned()).is_ok()
+}
+
+/// POLICY-1: deployment-level "strict reject" mode for unverified
+/// `accountable_to[]` entries. When the `cx.profile.accountable_to.
+/// strict_reject.v1` profile is declared by the deployment, Actor Profile
+/// create/update events that carry unverified `accountable_to[]` entries
+/// MUST be rejected wholesale with `failed_precondition /
+/// accountability_grant_missing`. Otherwise, the legacy strip+audit-log
+/// path applies.
+///
+/// Signalled to the reducer / submit endpoint via shared policy
+/// decisions: see [`PolicyDecision::strict_reject_accountable_to`] and
+/// the `obligations[]` carrying the `accountability_grant_required`
+/// kind so the caller knows the reducer will hard-reject rather than
+/// strip.
+#[must_use]
+pub fn strict_reject_profile_active(profile_ids: &[&str]) -> bool {
+    profile_ids.contains(&"cx.profile.accountable_to.strict_reject.v1")
+}
 
 #[derive(Debug, Error)]
 pub enum EvaluatorError {
@@ -126,6 +178,36 @@ impl PolicyDecision {
             decision: AuthzDecision::Deny,
             reason_code: reason_code.into(),
             obligations: Vec::new(),
+            policy_version,
+        }
+    }
+
+    /// POLICY-1: signal "strict reject" mode for the
+    /// `cx.profile.accountable_to.strict_reject.v1` deployment profile.
+    /// When the profile is declared, Actor Profile create/update events
+    /// containing unverified `accountable_to[]` entries MUST be rejected
+    /// with `failed_precondition / accountability_grant_missing` (the
+    /// reducer and submit endpoint use this signal to short-circuit the
+    /// legacy strip+audit path).
+    ///
+    /// The reason code on the wire is `failed_precondition`; the
+    /// obligation carries the canonical
+    /// [`contrix_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING`]
+    /// string so downstream consumers can render the exact registry
+    /// rejection.
+    #[must_use]
+    pub fn strict_reject_accountable_to(policy_version: String) -> Self {
+        Self {
+            decision: AuthzDecision::Deny,
+            reason_code: "failed_precondition".to_owned(),
+            obligations: vec![PolicyObligation {
+                kind: "accountability_grant_required".to_owned(),
+                expires_at: None,
+                payload: serde_json::json!({
+                    "reason": contrix_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING,
+                    "profile": "cx.profile.accountable_to.strict_reject.v1",
+                }),
+            }],
             policy_version,
         }
     }
@@ -212,40 +294,90 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
     let actor_str = request.actor.as_str();
     let action_str = request.action.as_str();
 
+    // POLICY-1 (R3 spec-sync) — if the loose JSON declares the
+    // `strict_reject_profile` flag (deployment has enabled
+    // `cx.profile.accountable_to.strict_reject.v1`), AND the request
+    // carries an Actor Profile create/update with an unverified
+    // `accountable_to[]` entry, short-circuit with
+    // `failed_precondition / accountability_grant_missing`. Only the
+    // explicit flag form is checked here — the reducer-side strict
+    // path lives in soland.
+    if data
+        .get("strict_reject_profile")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        && action_str.starts_with("cx.actor.profile.")
+        && request
+            .event_preview
+            .get("accountable_to_unverified")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    {
+        return PolicyDecision::strict_reject_accountable_to(policy_version.to_owned());
+    }
+
     // Per-realm scope: rules MAY be nested under a `realms` object keyed
     // by realm id, with a `default` fall-through. When the loose JSON
     // is a flat object we treat it as the default scope.
-    let scope: &Value = data
+    //
+    // CAP-2 (R3 spec-sync) — when the request carries a circle target id
+    // in `auth_context.circle_id` we ALSO consult a nested
+    // `circles.<circle_id>` scope, allowing per-circle deny/review rules.
+    // The flat rule list still applies for cases where the realm-scoped
+    // rules don't carve out the circle.
+    let realm_scope: &Value = data
         .get("realms")
         .and_then(|m| m.get(request.realm_id.as_str()))
         .unwrap_or(data);
 
-    if value_contains_str(scope.get("deny_actors"), actor_str) {
-        return PolicyDecision {
-            decision: AuthzDecision::Deny,
-            reason_code: "policy_violation".to_owned(),
-            obligations: Vec::new(),
-            policy_version: policy_version.to_owned(),
-        };
+    let circle_scope: Option<&Value> = request
+        .auth_context
+        .get("circle_id")
+        .and_then(Value::as_str)
+        .filter(|c| is_circle_selector(c))
+        .and_then(|c| realm_scope.get("circles").and_then(|m| m.get(c)));
+
+    let scopes: [&Value; 2] = match circle_scope {
+        Some(circle) => [circle, realm_scope],
+        None => [realm_scope, realm_scope],
+    };
+
+    for scope in scopes {
+        if value_contains_str(scope.get("deny_actors"), actor_str) {
+            return PolicyDecision {
+                decision: AuthzDecision::Deny,
+                reason_code: "policy_violation".to_owned(),
+                obligations: Vec::new(),
+                policy_version: policy_version.to_owned(),
+            };
+        }
+
+        if value_contains_str(scope.get("deny_actions"), action_str) {
+            return PolicyDecision {
+                decision: AuthzDecision::Deny,
+                reason_code: "policy_violation".to_owned(),
+                obligations: Vec::new(),
+                policy_version: policy_version.to_owned(),
+            };
+        }
+
+        if value_contains_str(scope.get("require_review_actions"), action_str) {
+            return PolicyDecision {
+                decision: AuthzDecision::RequireReview,
+                reason_code: "policy_review_required".to_owned(),
+                obligations: Vec::new(),
+                policy_version: policy_version.to_owned(),
+            };
+        }
     }
 
-    if value_contains_str(scope.get("deny_actions"), action_str) {
-        return PolicyDecision {
-            decision: AuthzDecision::Deny,
-            reason_code: "policy_violation".to_owned(),
-            obligations: Vec::new(),
-            policy_version: policy_version.to_owned(),
-        };
-    }
-
-    if value_contains_str(scope.get("require_review_actions"), action_str) {
-        return PolicyDecision {
-            decision: AuthzDecision::RequireReview,
-            reason_code: "policy_review_required".to_owned(),
-            obligations: Vec::new(),
-            policy_version: policy_version.to_owned(),
-        };
-    }
+    // CAP-1 (R3 spec-sync) — `cx.call.{join,screen_share,record,
+    // transcribe,moderate}` are recognised capability actions even when
+    // no realm rule names them explicitly. Default-allow path; the
+    // recognition is a no-op for matching purposes but ensures the
+    // evaluator surface knows about the action namespace so handlers
+    // can branch on it without re-importing the constants.
+    let _recognised_call_action = is_recognised_call_capability_action(action_str);
 
     PolicyDecision::allow(policy_version.to_owned())
 }
@@ -338,6 +470,75 @@ mod tests {
             }
         });
         let r = req("did:web:alice.example", "cx.message.create");
+        let d = match_rules(&data, &r, "v");
+        assert!(matches!(d.decision, AuthzDecision::Allow));
+    }
+
+    #[test]
+    fn cap1_recognises_call_actions() {
+        assert!(is_recognised_call_capability_action("cx.call.join"));
+        assert!(is_recognised_call_capability_action("cx.call.screen_share"));
+        assert!(is_recognised_call_capability_action("cx.call.record"));
+        assert!(is_recognised_call_capability_action("cx.call.transcribe"));
+        assert!(is_recognised_call_capability_action("cx.call.moderate"));
+        assert!(!is_recognised_call_capability_action("cx.message.create"));
+    }
+
+    #[test]
+    fn cap1_deny_action_on_cx_call_join_matches() {
+        let data = serde_json::json!({
+            "deny_actions": ["cx.call.join"]
+        });
+        let r = req("did:web:alice.example", "cx.call.join");
+        let d = match_rules(&data, &r, "v");
+        assert!(matches!(d.decision, AuthzDecision::Deny));
+        assert_eq!(d.reason_code, "policy_violation");
+    }
+
+    #[test]
+    fn cap2_circle_selector_accepts_valid_typed_id() {
+        assert!(is_circle_selector(
+            "cx:circle:01904100-0000-7000-8000-000000000001"
+        ));
+        assert!(!is_circle_selector("not-a-circle"));
+        assert!(!is_circle_selector("cx:space:01904100-0000-7000-8000-000000000001"));
+    }
+
+    #[test]
+    fn cap2_circle_scoped_deny_overrides_realm_default() {
+        let circle_id = "cx:circle:01904100-0000-7000-8000-000000000002";
+        let data = serde_json::json!({
+            "circles": {
+                circle_id: {
+                    "deny_actions": ["cx.call.record"],
+                }
+            }
+        });
+        let mut r = req("did:web:alice.example", "cx.call.record");
+        r.auth_context = serde_json::json!({ "circle_id": circle_id });
+        let d = match_rules(&data, &r, "v");
+        assert!(matches!(d.decision, AuthzDecision::Deny));
+    }
+
+    #[test]
+    fn policy1_strict_reject_yields_failed_precondition() {
+        let data = serde_json::json!({
+            "strict_reject_profile": true,
+        });
+        let mut r = req("did:web:alice.example", "cx.actor.profile.update");
+        r.event_preview = serde_json::json!({ "accountable_to_unverified": true });
+        let d = match_rules(&data, &r, "v");
+        assert!(matches!(d.decision, AuthzDecision::Deny));
+        assert_eq!(d.reason_code, "failed_precondition");
+        assert_eq!(d.obligations.len(), 1);
+        assert_eq!(d.obligations[0].kind, "accountability_grant_required");
+    }
+
+    #[test]
+    fn policy1_strict_reject_inert_when_profile_off() {
+        let data = serde_json::json!({});
+        let mut r = req("did:web:alice.example", "cx.actor.profile.update");
+        r.event_preview = serde_json::json!({ "accountable_to_unverified": true });
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
     }
