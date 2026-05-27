@@ -2,6 +2,20 @@
 
 > **Spec target**: [contrix-spec @ b47ff6ec](../contrix-spec) (R3 sync 2026-05-27)
 
+## Pre-commit hook setup
+
+After cloning, enable the project's pre-commit hooks:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
+warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on a
+branch, copy it from
+[`contrix-rust-sdk`](https://github.com/contrix-dev/contrix-rust-sdk) and
+adapt the package list to coauth's workspace.
+
 > **DO NOT commit secrets.** Files like `config.dev.yaml`, `config.local.*`,
 > `*.log`, and unencrypted private keys are gitignored and must stay local.
 > Use [`config.example.yaml`](config.example.yaml) as a template and source

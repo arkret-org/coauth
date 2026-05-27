@@ -501,7 +501,9 @@ mod tests {
             "cx:circle:01904100-0000-7000-8000-000000000001"
         ));
         assert!(!is_circle_selector("not-a-circle"));
-        assert!(!is_circle_selector("cx:space:01904100-0000-7000-8000-000000000001"));
+        assert!(!is_circle_selector(
+            "cx:space:01904100-0000-7000-8000-000000000001"
+        ));
     }
 
     #[test]

@@ -377,8 +377,7 @@ mod agent_auth_error_matrix_tests {
     fn verification_method_mismatch_fires_before_proof_validator() {
         let agent_did = "did:web:agent.example";
         let bad_vm = "did:web:other.example#key-1";
-        let err =
-            enforce_verification_method_binding(bad_vm, agent_did).expect_err("must reject");
+        let err = enforce_verification_method_binding(bad_vm, agent_did).expect_err("must reject");
         assert_eq!(
             err.code(),
             "verification_method_principal_mismatch",
