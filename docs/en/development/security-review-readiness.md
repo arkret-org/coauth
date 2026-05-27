@@ -41,8 +41,7 @@ The intended external review scope is the v1.0 coauth service:
 ## Reviewer Intake Checklist
 
 - Export a read-only source archive from a clean local commit.
-- Include the generated OpenAPI contract from a local run once the local SDK
-  version mismatch is resolved.
+- Include the generated OpenAPI contract from a local run.
 - Include the local SBOM and SLSA provenance files generated under
   `target/release-artifacts/`.
 - Include the nightly OIDC conformance run URLs for `plan-basic-op.json`,
@@ -56,14 +55,10 @@ The intended external review scope is the v1.0 coauth service:
 
 ## Known Local Blockers
 
-- Full cargo and `dx build` verification are blocked until the sibling
-  `contrix-rust-sdk` checkout provides a version compatible with coauth's
-  `contrix = "^0.7.0"` dependency requirement, or coauth intentionally updates
-  its dependency requirement in a separate change.
 - External vendor scheduling is not performed by this repository change.
 
 ## Local Readiness Status
 
 The repository has a local readiness record and an evidence checklist. The
-external review can be scheduled after the local SDK version alignment is fixed
-and a clean build/conformance evidence bundle is generated.
+external review can be scheduled once a clean build/conformance evidence bundle
+is generated.

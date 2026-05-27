@@ -30,6 +30,17 @@ pub struct AdminOperationLog {
     pub user_agent: Option<String>,
     /// When the operation occurred.
     pub created_at: DateTime<Utc>,
+    /// Optional detached signature (base64url-unpadded) over the
+    /// canonical-JSON form of the row, produced with the coauth
+    /// service signing key. `None` during the staged rollout —
+    /// readers MUST tolerate `None` and treat unsigned rows as
+    /// "signature pending" rather than rejecting them.
+    ///
+    /// TODO(P5-impl): verification side. Today only the write path
+    /// is populated; an `audit_verify` helper will arrive once the
+    /// reader handlers know which kid was active at write-time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit_signature: Option<String>,
 }
 
 /// Types of admin operations.

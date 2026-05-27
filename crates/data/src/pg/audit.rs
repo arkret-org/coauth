@@ -49,6 +49,7 @@ struct AdminOperationLogRow {
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
     created_at: DateTime<Utc>,
+    audit_signature: Option<String>,
 }
 
 impl TryFrom<AdminOperationLogRow> for AdminOperationLog {
@@ -69,6 +70,7 @@ impl TryFrom<AdminOperationLogRow> for AdminOperationLog {
             ip_address: value.ip_address.map(|ip| ip.ip()),
             user_agent: value.user_agent,
             created_at: value.created_at,
+            audit_signature: value.audit_signature,
         })
     }
 }
@@ -121,6 +123,7 @@ struct InsertableAdminOperationLog {
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
     created_at: DateTime<Utc>,
+    audit_signature: Option<String>,
 }
 
 #[derive(Insertable)]
@@ -214,6 +217,7 @@ impl AuditRepository for PgAuditRepository<'_> {
             ip_address: ip_address.map(IpNetwork::from),
             user_agent: params.user_agent().map(ToOwned::to_owned),
             created_at,
+            audit_signature: params.audit_signature().map(ToOwned::to_owned),
         };
 
         diesel::insert_into(admin_operation_logs::table)
@@ -231,6 +235,7 @@ impl AuditRepository for PgAuditRepository<'_> {
             ip_address,
             user_agent: row.user_agent,
             created_at,
+            audit_signature: row.audit_signature,
         })
     }
 

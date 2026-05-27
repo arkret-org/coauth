@@ -74,11 +74,35 @@ pub struct AdminClientRegistrationRequest {
 
 /// Response body — RFC 7591 §3.2.1 with the addition of
 /// `registration_access_token` (RFC 7592).
+///
+/// # Normative: one-shot `client_secret`
+///
+/// The `client_secret` field is returned **exactly once**, in the body
+/// of this registration response. It is never echoed by subsequent
+/// `GET`s of the registration. If the operator loses it, they MUST
+/// rotate the credential by calling the registration management
+/// endpoint with the `registration_access_token`:
+///
+/// ```text
+/// POST /api/admin/v1/oauth/clients/{client_id}/rotate-secret
+/// Authorization: Bearer <registration_access_token>
+/// ```
+///
+/// The `registration_access_token` is the long-lived RFC 7592 bearer
+/// that authorises `GET` / `PUT` / `DELETE` on the registration; it is
+/// stored hashed server-side and SHOULD be treated by the operator with
+/// the same care as the `client_secret` itself.
 #[derive(Debug, Serialize, JsonSchema, ToSchema)]
 pub struct AdminClientRegistrationResponse {
     pub client_id: String,
     /// Only present for confidential clients (i.e. when the auth method
     /// is one of the `client_secret_*` variants).
+    ///
+    /// **Returned exactly once.** This value is not stored in
+    /// plaintext server-side and cannot be recovered via subsequent
+    /// `GET` of the registration. Use the
+    /// `registration_access_token` to rotate the secret if it is
+    /// lost.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
     /// Time the client id was issued (Unix seconds).

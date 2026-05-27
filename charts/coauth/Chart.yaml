@@ -1,0 +1,23 @@
+apiVersion: v2
+name: coauth
+description: |
+  Helm chart skeleton for the Contrix coauth principal-server.
+  This is a STARTING POINT — operators should customize values.yaml
+  and probably add their own NetworkPolicy / PodDisruptionBudget /
+  HorizontalPodAutoscaler templates for production use.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - oauth
+  - oidc
+  - authentication
+  - contrix
+home: https://github.com/contrix-dev/coauth
+sources:
+  - https://github.com/contrix-dev/coauth
+maintainers:
+  - name: Contrix Authors
+icon: https://contrix.dev/icon.png
+annotations:
+  category: Security

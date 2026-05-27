@@ -20,13 +20,16 @@
 
 - [策略引擎](./topics/policy.md)
 - [授权与会话](./topics/authorization.md)
+- [账户生命周期](./account-lifecycle.md)
 - [使用管理 API](./topics/admin-api.md)
 - [获取访问令牌](./topics/access-token.md)
 
 # 运维
 
+- [可观测性](./observability.md)
 - [备份与恢复](./operations/backup-restore.md)
 - [升级](./operations/upgrades.md)
+- [升级到 Round R4](./upgrade-to-r4.md)
 
 # 参考
 

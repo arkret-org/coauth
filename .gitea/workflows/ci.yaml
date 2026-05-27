@@ -78,6 +78,23 @@ jobs:
       - name: Execute Clippy lints
         run: cargo clippy --workspace --tests --bins --lib -- -D warnings
 
+  typos:
+    name: Spell-check sources with typos
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v4
+
+      - name: Install typos-cli
+        run: cargo install typos-cli --locked
+
+      - name: Run typos
+        run: typos --config ./typos.toml
+
   cargo-deny:
     name: Audit dependencies with cargo-deny
     runs-on: ubuntu-24.04

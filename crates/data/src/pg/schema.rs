@@ -725,6 +725,7 @@ diesel::table! {
         ip_address -> Nullable<Inet>,
         user_agent -> Nullable<Text>,
         created_at -> Timestamptz,
+        audit_signature -> Nullable<Text>,
     }
 }
 

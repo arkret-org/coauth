@@ -1,6 +1,82 @@
+# Integration-compose override.
+#
+# This file is loaded automatically by `docker compose` when present in the
+# same directory as `docker-compose.integration.yaml`. The block below
+# pins the integration image and removes the host-port publishes that the
+# base file binds for interactive dev.
 services:
   postgres:
     ports: !reset []
   coauth:
     image: coauth:dev-int
     volumes: !override []
+
+# ----------------------------------------------------------------------
+# Production template (template ONLY — NOT production-ready as-is)
+# ----------------------------------------------------------------------
+#
+# The block below is a *starting point* for operators who want to adapt
+# this compose stack for a production deployment. It is intentionally
+# commented out. Before enabling it you MUST:
+#
+#   1. Replace every `__REPLACE_ME__` placeholder with a real value
+#      sourced from your secret manager (Vault, Doppler, AWS Secrets
+#      Manager, sops-encrypted file, etc.).
+#   2. Set image tags to a pinned semver, not `latest` / `dev-int`.
+#   3. Set up an external Postgres (RDS, CloudSQL, …) — running
+#      Postgres in a single-node compose stack is NOT a production
+#      database.
+#   4. Replace `restart: unless-stopped` with an orchestrator that
+#      provides health-driven restart (systemd / Kubernetes / Nomad).
+#   5. Front coauth with a TLS-terminating reverse proxy. Do NOT
+#      expose port 8080 directly to the internet.
+#
+# Once those are addressed, remove the leading `# >>>` and `# <<<`
+# fence markers and the `#` prefix from each line below.
+#
+# >>> production template — uncomment to use, then customize <<<
+#
+# services:
+#   coauth:
+#     image: ghcr.io/contrix-dev/coauth:1.0.0  # pin a real release tag
+#     restart: unless-stopped
+#     environment:
+#       # Pull every secret from a secret manager. Inline values below
+#       # are placeholders; do NOT commit real credentials.
+#       DATABASE_URL: __REPLACE_ME__
+#       COAUTH_METRICS_BIND: "127.0.0.1:9091"
+#     # Resource limits. Tune to your traffic; the values below match
+#     # the docs/en/kubernetes.md Deployment example for parity.
+#     deploy:
+#       resources:
+#         limits:
+#           cpus: "1.0"
+#           memory: 512M
+#         reservations:
+#           cpus: "0.2"
+#           memory: 256M
+#     # Container-level hardening.
+#     read_only: true
+#     security_opt:
+#       - no-new-privileges:true
+#     cap_drop: ["ALL"]
+#     tmpfs:
+#       - /tmp
+#     healthcheck:
+#       test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/readyz"]
+#       interval: 10s
+#       timeout: 3s
+#       retries: 3
+#       start_period: 10s
+#     # Inject the config from a secret rather than a volume mount.
+#     # `docker compose` reads `secrets:` from a top-level block.
+#     secrets:
+#       - source: coauth_config
+#         target: /etc/coauth/config.yaml
+#         mode: 0440
+#
+# secrets:
+#   coauth_config:
+#     file: __REPLACE_ME__/config.production.yaml
+#
+# >>> end production template <<<

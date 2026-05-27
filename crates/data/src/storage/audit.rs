@@ -20,6 +20,7 @@ pub struct NewAdminOperationLog {
     details: Value,
     ip_address: Option<std::net::IpAddr>,
     user_agent: Option<String>,
+    audit_signature: Option<String>,
 }
 
 impl NewAdminOperationLog {
@@ -39,6 +40,7 @@ impl NewAdminOperationLog {
             details,
             ip_address: None,
             user_agent: None,
+            audit_signature: None,
         }
     }
 
@@ -61,6 +63,23 @@ impl NewAdminOperationLog {
     pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
         self.user_agent = Some(user_agent.into());
         self
+    }
+
+    /// Attach a base64url-unpadded detached signature over the
+    /// canonical-JSON form of the row. The signature is produced by
+    /// the coauth service signing key in the caller (see
+    /// [`audit_helper::record_admin_operation`]). Optional during
+    /// the staged rollout.
+    #[must_use]
+    pub fn with_audit_signature(mut self, signature: impl Into<String>) -> Self {
+        self.audit_signature = Some(signature.into());
+        self
+    }
+
+    /// The detached audit-row signature, if any.
+    #[must_use]
+    pub fn audit_signature(&self) -> Option<&str> {
+        self.audit_signature.as_deref()
     }
 
     /// The admin user who performed the operation.

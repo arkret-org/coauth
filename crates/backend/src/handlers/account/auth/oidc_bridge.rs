@@ -9,7 +9,7 @@ use oauth_types::{
     errors::{ClientError, ClientErrorCode},
     requests::{
         AccessTokenRequest, AccessTokenResponse,
-        AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
+        AuthorizationCodeGrant as OAuthAuthorizationCodeGrant, GrantType,
     },
 };
 use salvo::{oapi::ToSchema, prelude::*};
@@ -1642,11 +1642,41 @@ pub async fn oidc_browser_bridge_session(
         .clone()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| contrix::required_audience_for(&url_builder, &contrix_config));
-    let client_id = input
+    let client_id = if let Some(hint) = input
         .client_id_hint
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "yougen".to_owned());
+    {
+        hint
+    } else {
+        let redirect_url = url::Url::parse(input.redirect_uri.trim()).map_err(|err| {
+            RouteError::BadRequest(format!("redirect_uri is not a valid URL: {err}"))
+        })?;
+        let mut repo = depot.repo().await?;
+        let candidates = repo.oauth_client().all_static().await?;
+        repo.cancel().await?;
+        let redirect_lookup = Some(redirect_url);
+        candidates
+            .into_iter()
+            .filter(|client| {
+                client
+                    .grant_types
+                    .iter()
+                    .any(|grant_type| matches!(grant_type, GrantType::AuthorizationCode))
+            })
+            .filter(|client| {
+                client.token_endpoint_auth_method.as_ref()
+                    == Some(&OAuthClientAuthenticationMethod::None)
+            })
+            .find(|client| client.resolve_redirect_uri(&redirect_lookup).is_ok())
+            .map(|client| client.client_id)
+            .ok_or_else(|| {
+                RouteError::BadRequest(format!(
+                    "no public authorization_code OAuth client is registered with a redirect_uri matching {}; pass client_id_hint or register a static client",
+                    input.redirect_uri.trim()
+                ))
+            })?
+    };
     let state = format!("cx-state-{}", Ulid::new().to_string().to_lowercase());
     let nonce = format!("cx-nonce-{}", Ulid::new().to_string().to_lowercase());
     let code_verifier = format!(

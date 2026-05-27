@@ -1,0 +1,84 @@
+# Default values for coauth.
+# This file is intentionally minimal — production deployments should
+# override the database URL secret, image tag, and resource limits.
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/contrix-dev/coauth
+  tag: ""  # Defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9091
+
+# Database connection. The chart does NOT package PostgreSQL — operators
+# must provide an external (or sibling-chart) Postgres and reference the
+# secret here.
+database:
+  urlSecret: coauth-db   # Secret containing key `url`
+  urlSecretKey: url
+
+config:
+  # Inline config.yaml; mounted as a ConfigMap.
+  # Replace with your own configuration.
+  yaml: |
+    http:
+      listeners:
+        - name: public
+          resources: [oauth, oidc, admin]
+          binds:
+            - host: 0.0.0.0
+              port: 8080
+        - name: internal
+          resources: [health]
+          binds:
+            - host: 0.0.0.0
+              port: 8080
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 2
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
