@@ -1,5 +1,7 @@
 # coauth
 
+> **Spec target**: [contrix-spec @ b47ff6ec](../contrix-spec) (R3 sync 2026-05-27)
+
 > **DO NOT commit secrets.** Files like `config.dev.yaml`, `config.local.*`,
 > `*.log`, and unencrypted private keys are gitignored and must stay local.
 > Use [`config.example.yaml`](config.example.yaml) as a template and source

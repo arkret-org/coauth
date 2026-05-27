@@ -10,6 +10,16 @@ releases) are produced by `.github/workflows/release.yaml`. See
 [`docs/en/development/releasing.md`](docs/en/development/releasing.md)
 for the full release process.
 
+## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
+
+- AUTH-1 / AUTH-2: `cx.account.agent_key_pair` and `cx.account.issue_session_grant` agent branches now emit distinct error codes — `verification_method_principal_mismatch`, `pairing_request_expired`, `proof_invalid`, `agent_paused`, `agent_deactivated`, `accountability_grant_missing` — with fail-closed DID-match check before proof validation.
+- AUTH-3: fail-closed revocation freshness window so paused-agent tokens fail closed within the propagation window.
+- CAP-1 / CAP-2: capability evaluator accepts the five new call actions (`cx.call.{join,screen_share,record,transcribe,moderate}`) and the `circle` selector kind (`cx:circle:<uuid>`).
+- POLICY-1: shared policy decision signals `cx.profile.accountable_to.strict_reject.v1` mode to reducer / submit endpoint when declared by deployment.
+- REC-1 / HDL-1: wire-level recovery-policy `proof_kind` enum guard helper added in `crates/backend/src/services/recovery_policy_proof.rs`; organization handle claims gate through NFC + UTS#39 confusable + script-mixed reject before signing.
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
+
 ## [Unreleased]
 
 ### CXP-0007 circle rollout — coauth P2B closeout (2026-05-26)
