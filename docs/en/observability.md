@@ -113,3 +113,146 @@ The `health` resource exposes three probe endpoints:
   JWKS can be materialized from the configured signing keys.
 
 Use `/healthz` for liveness and `/readyz` for readiness in orchestrators.
+
+### Example responses
+
+`/healthz` (success):
+
+```http
+HTTP/1.1 200 OK
+content-type: application/json
+
+{
+  "status": "ok",
+  "checks": { "postgres": "ok" }
+}
+```
+
+`/healthz` (failure — Postgres unreachable):
+
+```http
+HTTP/1.1 503 Service Unavailable
+content-type: application/json
+
+{
+  "status": "fail",
+  "checks": { "postgres": "fail: connection refused (after 3 retries)" }
+}
+```
+
+`/readyz` (success — pool warm + JWKS materialized):
+
+```http
+HTTP/1.1 200 OK
+content-type: application/json
+
+{
+  "status": "ready",
+  "checks": {
+    "postgres": "ok",
+    "signing_keys": "ok (3 active keys, jwks materialized)"
+  }
+}
+```
+
+`/readyz` (failure — signing keys not yet materialized):
+
+```http
+HTTP/1.1 503 Service Unavailable
+content-type: application/json
+
+{
+  "status": "not_ready",
+  "checks": {
+    "postgres": "ok",
+    "signing_keys": "fail: no active key in keyring"
+  }
+}
+```
+
+`/metrics` (Prometheus text exposition; truncated):
+
+```text
+# HELP coauth_session_grant_total Total session grants issued by reason
+# TYPE coauth_session_grant_total counter
+coauth_session_grant_total{reason="ok"} 12345
+coauth_session_grant_total{reason="agent_paused"} 4
+coauth_session_grant_total{reason="agent_deactivated"} 1
+coauth_session_grant_total{reason="accountability_grant_missing"} 0
+
+# HELP coauth_agent_pairing_attempts_total Agent pairing attempts by outcome
+# TYPE coauth_agent_pairing_attempts_total counter
+coauth_agent_pairing_attempts_total{outcome="ok"} 87
+coauth_agent_pairing_attempts_total{outcome="pairing_request_expired"} 2
+coauth_agent_pairing_attempts_total{outcome="proof_invalid"} 0
+coauth_agent_pairing_attempts_total{outcome="verification_method_principal_mismatch"} 0
+
+# HELP coauth_revocation_mirror_age_seconds Age of mirrored revocation state
+# TYPE coauth_revocation_mirror_age_seconds gauge
+coauth_revocation_mirror_age_seconds 7
+
+# HELP process_resident_memory_bytes Resident memory size in bytes
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 1.31e+08
+```
+
+### Prometheus scrape configuration
+
+A minimal Prometheus scrape job for a single coauth instance running with
+the metrics listener on `127.0.0.1:9091`:
+
+```yaml
+scrape_configs:
+  - job_name: coauth
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    static_configs:
+      - targets:
+          - "127.0.0.1:9091"
+        labels:
+          service: coauth
+          deployment: prod
+```
+
+For Kubernetes (Prometheus Operator `ServiceMonitor`):
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: coauth
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: coauth
+  endpoints:
+    - port: metrics       # Service port named "metrics" pointing at 9091
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 5s
+```
+
+Liveness / readiness probe snippets (Kubernetes):
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 3
+  failureThreshold: 3
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 2
+```
