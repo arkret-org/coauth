@@ -1,7 +1,8 @@
-//! SMS transport backends
-//
-// Outbound HTTP here uses raw `reqwest` rather than `outbound_http::send_traced`
-// because the messaging crate doesn't depend on `outbound_http`.
+//! SMS transport backends.
+//!
+//! The messaging crate stays transport-generic and therefore does not
+//! depend on `coauth-backend::outbound_http`. Server callers should use
+//! the `*_with_client` constructors and pass the backend guarded client.
 #![allow(clippy::disallowed_methods)]
 
 use std::sync::{
@@ -91,8 +92,19 @@ impl SmsTransport {
     /// Construct a Twilio transport
     #[must_use]
     pub fn twilio(account_sid: String, auth_token: String, from_number: String) -> Self {
+        Self::twilio_with_client(Client::new(), account_sid, auth_token, from_number)
+    }
+
+    /// Construct a Twilio transport with a caller-supplied HTTP client.
+    #[must_use]
+    pub fn twilio_with_client(
+        client: Client,
+        account_sid: String,
+        auth_token: String,
+        from_number: String,
+    ) -> Self {
         Self::new(SmsTransportInner::Twilio {
-            client: Client::new(),
+            client,
             account_sid,
             auth_token,
             from_number,
@@ -102,8 +114,19 @@ impl SmsTransport {
     /// Construct an HTTP webhook transport
     #[must_use]
     pub fn http_webhook(url: Url, api_key: Option<String>, from_number: String) -> Self {
+        Self::http_webhook_with_client(Client::new(), url, api_key, from_number)
+    }
+
+    /// Construct an HTTP webhook transport with a caller-supplied HTTP client.
+    #[must_use]
+    pub fn http_webhook_with_client(
+        client: Client,
+        url: Url,
+        api_key: Option<String>,
+        from_number: String,
+    ) -> Self {
         Self::new(SmsTransportInner::HttpWebhook {
-            client: Client::new(),
+            client,
             url,
             api_key,
             from_number,
@@ -118,8 +141,20 @@ impl SmsTransport {
         secret: String,
         workspace: Option<String>,
     ) -> Self {
+        Self::paloud_internal_with_client(Client::new(), url, key_id, secret, workspace)
+    }
+
+    /// Construct a Paloud internal notification API transport with a caller-supplied HTTP client.
+    #[must_use]
+    pub fn paloud_internal_with_client(
+        client: Client,
+        url: Url,
+        key_id: String,
+        secret: String,
+        workspace: Option<String>,
+    ) -> Self {
         Self::new(SmsTransportInner::PaloudInternal {
-            client: Client::new(),
+            client,
             url,
             key_id,
             secret,
@@ -135,8 +170,26 @@ impl SmsTransport {
         sign_name: String,
         template_code: String,
     ) -> Self {
+        Self::aliyun_with_client(
+            Client::new(),
+            access_key_id,
+            access_key_secret,
+            sign_name,
+            template_code,
+        )
+    }
+
+    /// Construct an Aliyun SMS transport with a caller-supplied HTTP client.
+    #[must_use]
+    pub fn aliyun_with_client(
+        client: Client,
+        access_key_id: String,
+        access_key_secret: String,
+        sign_name: String,
+        template_code: String,
+    ) -> Self {
         Self::new(SmsTransportInner::AliyunSms(AliyunSmsTransport {
-            client: Client::new(),
+            client,
             access_key_id,
             access_key_secret,
             sign_name,
@@ -153,8 +206,28 @@ impl SmsTransport {
         sign_name: String,
         template_id: String,
     ) -> Self {
+        Self::tencent_cloud_with_client(
+            Client::new(),
+            secret_id,
+            secret_key,
+            sdk_app_id,
+            sign_name,
+            template_id,
+        )
+    }
+
+    /// Construct a Tencent Cloud SMS transport with a caller-supplied HTTP client.
+    #[must_use]
+    pub fn tencent_cloud_with_client(
+        client: Client,
+        secret_id: String,
+        secret_key: String,
+        sdk_app_id: String,
+        sign_name: String,
+        template_id: String,
+    ) -> Self {
         Self::new(SmsTransportInner::TencentCloudSms(TencentSmsTransport {
-            client: Client::new(),
+            client,
             secret_id,
             secret_key,
             sdk_app_id,

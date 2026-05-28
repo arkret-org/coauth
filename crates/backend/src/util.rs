@@ -279,12 +279,14 @@ pub fn mailer_from_config(
 pub fn sms_sender_from_config(config: &SmsConfig) -> Result<SmsSender, anyhow::Error> {
     let transport = match &config.provider {
         SmsProviderConfig::Blackhole => SmsTransport::blackhole(),
-        SmsProviderConfig::Twilio(provider) => SmsTransport::twilio(
+        SmsProviderConfig::Twilio(provider) => SmsTransport::twilio_with_client(
+            crate::reqwest_client(),
             provider.account_sid.clone(),
             provider.auth_token.clone(),
             provider.from_number.clone(),
         ),
-        SmsProviderConfig::HttpWebhook(provider) => SmsTransport::http_webhook(
+        SmsProviderConfig::HttpWebhook(provider) => SmsTransport::http_webhook_with_client(
+            crate::reqwest_client(),
             provider
                 .url
                 .parse()
@@ -292,20 +294,23 @@ pub fn sms_sender_from_config(config: &SmsConfig) -> Result<SmsSender, anyhow::E
             provider.api_key.clone(),
             provider.from_number.clone(),
         ),
-        SmsProviderConfig::AliyunSms(provider) => SmsTransport::aliyun(
+        SmsProviderConfig::AliyunSms(provider) => SmsTransport::aliyun_with_client(
+            crate::reqwest_client(),
             provider.access_key_id.clone(),
             provider.access_key_secret.clone(),
             provider.sign_name.clone(),
             provider.template_code.clone(),
         ),
-        SmsProviderConfig::TencentCloudSms(provider) => SmsTransport::tencent_cloud(
+        SmsProviderConfig::TencentCloudSms(provider) => SmsTransport::tencent_cloud_with_client(
+            crate::reqwest_client(),
             provider.secret_id.clone(),
             provider.secret_key.clone(),
             provider.sdk_app_id.clone(),
             provider.sign_name.clone(),
             provider.template_id.clone(),
         ),
-        SmsProviderConfig::PaloudInternal(provider) => SmsTransport::paloud_internal(
+        SmsProviderConfig::PaloudInternal(provider) => SmsTransport::paloud_internal_with_client(
+            crate::reqwest_client(),
             provider
                 .url
                 .parse()
@@ -382,7 +387,7 @@ pub async fn policy_factory_from_config(
                     .remote_endpoint
                     .as_ref()
                     .context("remote_endpoint must be set when using the Remote engine")?;
-                let client = reqwest::Client::new();
+                let client = crate::reqwest_client();
                 PolicyFactory::load_remote(endpoint.clone(), client)
                     .context("failed to create remote policy factory")
             }

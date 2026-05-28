@@ -1,8 +1,7 @@
 //! Aliyun SMS (阿里云短信) transport
 //
-// Outbound HTTP here uses raw `reqwest` rather than `outbound_http::send_traced`
-// because the messaging crate doesn't depend on `outbound_http`. Switching
-// would require restructuring the workspace dep graph; keep the allow until then.
+// Production server callers inject the backend guarded client through
+// `SmsTransport::aliyun_with_client`; this crate stays backend-agnostic.
 #![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;

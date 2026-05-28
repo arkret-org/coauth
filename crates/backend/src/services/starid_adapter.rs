@@ -19,8 +19,6 @@
 //! because it carries an HTTP dependency. `coauth-data` is intentionally
 //! transport-free; placing an HTTP client there would mix layers.
 
-use std::time::Duration;
-
 use async_trait::async_trait;
 use coauth_config::StaridConfig;
 use contrix_core::ErrorEnvelope;
@@ -28,6 +26,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
 use url::Url;
+
+use crate::outbound_http::RequestBuilderExt as _;
 
 /// Error returned by [`StaridResolver`] HTTP calls.
 ///
@@ -208,10 +208,7 @@ impl StaridResolver {
     /// callers should pass their own `reqwest::Client` via
     /// [`Self::with_http_client`] so they share connection pools.
     pub fn from_config(config: &StaridConfig) -> Result<Self, StaridError> {
-        let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build()
-            .map_err(StaridError::Http)?;
+        let http = crate::reqwest_client();
         Self::with_http_client(config, http)
     }
 
@@ -304,7 +301,7 @@ impl StaridResolver {
         if let Some(token) = &self.admin_token {
             request = request.bearer_auth(token);
         }
-        let response = request.send().await?;
+        let response = request.send_traced().await?;
         let status = response.status();
         let bytes = response.bytes().await?;
         if !status.is_success() {
@@ -385,7 +382,7 @@ impl StaridRegistry for StaridResolver {
         if let Some(token) = &self.admin_token {
             request = request.bearer_auth(token);
         }
-        let response = request.send().await?;
+        let response = request.send_traced().await?;
         let status = response.status();
         let bytes = response.bytes().await?;
         if !status.is_success() {
@@ -410,7 +407,7 @@ impl StaridRegistry for StaridResolver {
         if let Some(token) = &self.admin_token {
             request = request.bearer_auth(token);
         }
-        let response = request.send().await?;
+        let response = request.send_traced().await?;
         let status = response.status();
         let bytes = response.bytes().await?;
         if !status.is_success() {

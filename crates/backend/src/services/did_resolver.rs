@@ -9,9 +9,12 @@ use thiserror::Error;
 use ulid::Ulid;
 use url::Url;
 
-use crate::handlers::contrix::{
-    DidDocument, DidService, SessionGrantError, VerificationMethod, issuer_did_for,
-    service_did_for, user_did_for,
+use crate::{
+    handlers::contrix::{
+        DidDocument, DidService, SessionGrantError, VerificationMethod, issuer_did_for,
+        service_did_for, user_did_for,
+    },
+    outbound_http::RequestBuilderExt as _,
 };
 
 pub type DidResolverServiceHandle = Arc<dyn DidResolverService>;
@@ -439,7 +442,7 @@ async fn resolve_http_did(
 
     let response = http_client
         .get(url.clone())
-        .send()
+        .send_traced()
         .await?
         .error_for_status()?;
 

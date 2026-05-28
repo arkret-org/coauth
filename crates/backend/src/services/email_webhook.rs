@@ -33,6 +33,8 @@ use thiserror::Error;
 use url::Url;
 use x509_cert::Certificate;
 
+use crate::outbound_http::RequestBuilderExt as _;
+
 type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Clone)]
@@ -668,7 +670,7 @@ impl AwsSesWebhookRuntime {
                     })?;
                     self.client
                         .get(subscribe_url)
-                        .send()
+                        .send_traced()
                         .await
                         .context("failed to confirm SNS subscription")?
                         .error_for_status()
@@ -1293,7 +1295,7 @@ async fn verify_sns_signature(
 
     let cert_pem = client
         .get(&envelope.signing_cert_url)
-        .send()
+        .send_traced()
         .await
         .context("failed to fetch SNS signing certificate")?
         .error_for_status()

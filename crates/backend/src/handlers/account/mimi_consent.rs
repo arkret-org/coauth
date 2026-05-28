@@ -45,6 +45,8 @@ use contrix_core::move_event::{Effect, LatticeOp, LatticeOpType};
 use contrix_core::{AnchorId, CellRef, Did, Hlc, Move, SpaceId, UnsignedMove};
 use contrix_signatures::Ed25519MoveSigner;
 
+use crate::outbound_http::RequestBuilderExt as _;
+
 /// Inbound MIMI `request_consent` payload (subset).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[non_exhaustive]
@@ -542,7 +544,7 @@ pub async fn anchor_pending_move(
         .header("X-Contrix-Holder-Did", anchorer_holder_did)
         .json(&body)
         .timeout(std::time::Duration::from_secs(5))
-        .send()
+        .send_traced()
         .await
         .map_err(|error| MimiConsentError::PrincipalServerForwardFailed {
             reason: format!("HTTP send failed: {error}"),

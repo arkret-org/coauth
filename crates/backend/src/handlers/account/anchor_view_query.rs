@@ -42,6 +42,8 @@ use serde::Deserialize;
 use tracing::{debug, warn};
 use url::Url;
 
+use crate::outbound_http::RequestBuilderExt as _;
+
 /// Result of consulting a space's anchor-dag snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LatestAnchorView {
@@ -118,7 +120,7 @@ pub async fn query_latest_anchor(
     let response = http_client
         .get(url)
         .timeout(Duration::from_secs(5))
-        .send()
+        .send_traced()
         .await
         .map_err(|error| {
             warn!(?error, "anchor-view: HTTP error");

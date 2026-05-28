@@ -1,4 +1,12 @@
-use std::{future::Future, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    error::Error as StdError,
+    fmt,
+    future::Future,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use futures_util::FutureExt as _;
 use headers::{ContentLength, HeaderMapExt as _, UserAgent};
@@ -62,21 +70,201 @@ impl TracingResolver {
 
 impl reqwest::dns::Resolve for TracingResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
-        let span = tracing::info_span!("dns.resolve", name = name.as_str());
-        let inner = &mut self.inner.clone();
+        let requested_name = name.as_str().to_owned();
+        let span = tracing::info_span!("dns.resolve", name = requested_name);
+        if !private_networks_allowed() {
+            if let Some(reason) = blocked_domain_reason(&requested_name) {
+                return Box::pin(async move {
+                    Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
+                        as Box<dyn StdError + Send + Sync>)
+                });
+            }
+            if let Ok(ip) = requested_name.parse::<IpAddr>()
+                && let Some(reason) = blocked_ip_reason(ip)
+            {
+                return Box::pin(async move {
+                    Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
+                        as Box<dyn StdError + Send + Sync>)
+                });
+            }
+        }
+        let mut inner = self.inner.clone();
         Box::pin(
             inner
                 .call(Name::from_str(name.as_str()).unwrap())
-                .map(|result| {
-                    result
-                        .map(|addrs| -> reqwest::dns::Addrs { Box::new(addrs) })
-                        .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
-                            Box::new(err)
-                        })
+                .map(move |result| {
+                    let addrs = result
+                        .map_err(|err| -> Box<dyn StdError + Send + Sync> { Box::new(err) })?;
+                    let addrs: Vec<SocketAddr> = addrs.collect();
+                    enforce_resolved_egress_policy(&requested_name, &addrs)?;
+                    Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
                 })
                 .instrument(span),
         )
     }
+}
+
+#[derive(Debug)]
+struct BlockedEgressTarget {
+    target: String,
+    reason: &'static str,
+}
+
+impl BlockedEgressTarget {
+    fn new(target: impl Into<String>, reason: &'static str) -> Self {
+        Self {
+            target: target.into(),
+            reason,
+        }
+    }
+}
+
+impl fmt::Display for BlockedEgressTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "outbound HTTP target {} blocked by egress policy: {}",
+            self.target, self.reason
+        )
+    }
+}
+
+impl StdError for BlockedEgressTarget {}
+
+fn enforce_resolved_egress_policy(
+    host: &str,
+    addrs: &[SocketAddr],
+) -> Result<(), Box<dyn StdError + Send + Sync>> {
+    if private_networks_allowed() {
+        return Ok(());
+    }
+
+    if let Some(reason) = blocked_domain_reason(host) {
+        return Err(Box::new(BlockedEgressTarget::new(host, reason)));
+    }
+
+    for addr in addrs {
+        if let Some(reason) = blocked_ip_reason(addr.ip()) {
+            return Err(Box::new(BlockedEgressTarget::new(
+                format!("{} ({})", host, addr.ip()),
+                reason,
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn private_networks_allowed() -> bool {
+    if env_flag_enabled("COAUTH_OUTBOUND_HTTP_DENY_PRIVATE") {
+        return false;
+    }
+    cfg!(debug_assertions)
+        || env_flag_enabled("COAUTH_OUTBOUND_HTTP_ALLOW_PRIVATE")
+        || env_flag_enabled("COAUTH_ALLOW_PRIVATE_EGRESS")
+}
+
+fn env_flag_enabled(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| {
+            let value = value.trim();
+            !(value.is_empty()
+                || value.eq_ignore_ascii_case("0")
+                || value.eq_ignore_ascii_case("false")
+                || value.eq_ignore_ascii_case("no"))
+        })
+        .unwrap_or(false)
+}
+
+fn blocked_domain_reason(host: &str) -> Option<&'static str> {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    if host == "localhost" || host.ends_with(".localhost") {
+        return Some("localhost names are not routable outbound targets");
+    }
+    if host.ends_with(".local") || host.ends_with(".internal") {
+        return Some("internal-only DNS suffix");
+    }
+    if host == "metadata.google.internal" {
+        return Some("cloud metadata hostname");
+    }
+    None
+}
+
+fn blocked_ip_reason(ip: IpAddr) -> Option<&'static str> {
+    match ip {
+        IpAddr::V4(addr) => blocked_ipv4_reason(addr),
+        IpAddr::V6(addr) => blocked_ipv6_reason(addr),
+    }
+}
+
+fn blocked_ipv4_reason(addr: Ipv4Addr) -> Option<&'static str> {
+    let octets = addr.octets();
+    if octets[0] == 0 {
+        return Some("this-network IPv4 range");
+    }
+    if octets[0] == 10
+        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+        || (octets[0] == 192 && octets[1] == 168)
+    {
+        return Some("private IPv4 range");
+    }
+    if octets[0] == 127 {
+        return Some("loopback IPv4 range");
+    }
+    if octets[0] == 169 && octets[1] == 254 {
+        return Some("link-local IPv4 range");
+    }
+    if octets[0] == 100 && (64..=127).contains(&octets[1]) {
+        return Some("carrier-grade NAT IPv4 range");
+    }
+    if octets[0] == 192 && octets[1] == 0 && octets[2] == 0 {
+        return Some("IETF protocol-assignment IPv4 range");
+    }
+    if octets[0] == 192 && octets[1] == 0 && octets[2] == 2 {
+        return Some("documentation IPv4 range");
+    }
+    if octets[0] == 198 && (octets[1] == 18 || octets[1] == 19) {
+        return Some("benchmark IPv4 range");
+    }
+    if octets[0] == 198 && octets[1] == 51 && octets[2] == 100 {
+        return Some("documentation IPv4 range");
+    }
+    if octets[0] == 203 && octets[1] == 0 && octets[2] == 113 {
+        return Some("documentation IPv4 range");
+    }
+    if (224..=239).contains(&octets[0]) {
+        return Some("multicast IPv4 range");
+    }
+    if octets[0] >= 240 {
+        return Some("reserved IPv4 range");
+    }
+    if addr == Ipv4Addr::BROADCAST {
+        return Some("broadcast IPv4 address");
+    }
+    None
+}
+
+fn blocked_ipv6_reason(addr: Ipv6Addr) -> Option<&'static str> {
+    let segments = addr.segments();
+    if addr.is_unspecified() {
+        return Some("unspecified IPv6 address");
+    }
+    if addr.is_loopback() {
+        return Some("loopback IPv6 address");
+    }
+    if segments[0] & 0xfe00 == 0xfc00 {
+        return Some("unique-local IPv6 range");
+    }
+    if segments[0] & 0xffc0 == 0xfe80 {
+        return Some("link-local IPv6 range");
+    }
+    if segments[0] & 0xff00 == 0xff00 {
+        return Some("multicast IPv6 range");
+    }
+    if segments[0] == 0x2001 && segments[1] == 0x0db8 {
+        return Some("documentation IPv6 range");
+    }
+    None
 }
 
 /// Create a new [`reqwest::Client`] with sane parameters.
@@ -92,6 +280,8 @@ pub fn reqwest_client() -> reqwest::Client {
     reqwest::Client::builder()
         .dns_resolver(Arc::new(TracingResolver::new()))
         .use_preconfigured_tls(tls_config)
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_mins(1))
         .connect_timeout(Duration::from_secs(30))
@@ -218,5 +408,39 @@ pub(crate) trait RequestBuilderExt {
 impl RequestBuilderExt for reqwest::RequestBuilder {
     fn send_traced(self) -> impl Future<Output = Result<reqwest::Response, reqwest::Error>> + Send {
         send_traced(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{blocked_domain_reason, blocked_ip_reason};
+
+    #[test]
+    fn egress_policy_blocks_internal_names() {
+        assert!(blocked_domain_reason("localhost").is_some());
+        assert!(blocked_domain_reason("api.internal").is_some());
+        assert!(blocked_domain_reason("metadata.google.internal").is_some());
+        assert!(blocked_domain_reason("example.com").is_none());
+    }
+
+    #[test]
+    fn egress_policy_blocks_non_public_ip_ranges() {
+        for ip in [
+            "127.0.0.1",
+            "10.0.0.1",
+            "172.16.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "100.64.0.1",
+            "::1",
+            "fc00::1",
+            "fe80::1",
+        ] {
+            let ip = ip.parse().unwrap();
+            assert!(blocked_ip_reason(ip).is_some(), "{ip}");
+        }
+
+        assert!(blocked_ip_reason("8.8.8.8".parse().unwrap()).is_none());
+        assert!(blocked_ip_reason("2001:4860:4860::8888".parse().unwrap()).is_none());
     }
 }

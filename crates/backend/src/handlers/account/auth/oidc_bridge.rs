@@ -25,6 +25,7 @@ use crate::{
     handlers::contrix,
     oidc_client::requests::discovery,
     oidc_client::types::client_credentials::ClientCredentials,
+    outbound_http::RequestBuilderExt as _,
     services::soland_webvh,
     services::upstream_oidc::UpstreamOidcExchangeMode,
     services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token},
@@ -324,7 +325,7 @@ async fn ensure_soland_account_registered(
             display_name,
             device_id: Some(device_id),
         })
-        .send()
+        .send_traced()
         .await
         .map_err(|error| format!("principal account register request failed: {error}"))?;
     let status = response.status();
@@ -1160,7 +1161,7 @@ pub async fn oidc_code_exchange(
     // back into coauth. The local token endpoint needs its own repo access.
     repo.cancel().await?;
     let oauth_token_http_response = oauth_token_http_request
-        .send()
+        .send_traced()
         .await
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
     if !oauth_token_http_response.status().is_success() {

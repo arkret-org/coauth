@@ -19,6 +19,7 @@ use crate::{
         jose::{JwtVerificationData, fetch_jwks, verify_id_token, verify_signed_jwt},
         token::request_access_token,
     },
+    outbound_http::RequestBuilderExt as _,
 };
 
 pub type UpstreamOidcServiceHandle = Arc<dyn UpstreamOidcService>;
@@ -469,7 +470,7 @@ async fn fetch_oidc_userinfo(
     let response = http_client
         .get(userinfo_endpoint.clone())
         .bearer_auth(access_token)
-        .send()
+        .send_traced()
         .await
         .map_err(|error| format!("userinfo endpoint request failed: {error}"))?
         .error_for_status()

@@ -39,6 +39,7 @@ use crate::{
         },
         notification_dispatch::{NotificationIntent, schedule_notification},
     },
+    outbound_http::RequestBuilderExt as _,
     salvo_utils::SessionInfoExt,
 };
 
@@ -911,7 +912,7 @@ async fn register_soland_webvh(
             "version_time": webvh_version_time,
             "proof": webvh_proof,
         }))
-        .send()
+        .send_traced()
         .await
         .map_err(|error| format!("embedded_webvh_provider_unreachable:{error}"))?;
     let status = response.status();

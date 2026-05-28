@@ -34,6 +34,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
 
+use crate::outbound_http::RequestBuilderExt as _;
+
 const WEBVH_SCID_PLACEHOLDER: &str = "{SCID}";
 const WEBVH_METHOD_VERSION: &str = "did:webvh:1.0";
 const ED25519_MULTICODEC_PREFIX: [u8; 2] = [0xed, 0x01];
@@ -237,7 +239,7 @@ pub async fn register_against_principal(
     if let Some(token) = bearer {
         request = request.bearer_auth(token);
     }
-    let response = request.send().await?;
+    let response = request.send_traced().await?;
     let status = response.status();
     if status.is_success() || status == reqwest::StatusCode::CONFLICT {
         return Ok(());

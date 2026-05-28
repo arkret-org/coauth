@@ -42,8 +42,11 @@ use tracing::{debug, warn};
 use url::Url;
 
 use super::{DepotExt, RouteError};
-use crate::handlers::account::consent_cell_query::{
-    InviteGateDecision, evaluate_invite_gate, query_consent_cell,
+use crate::{
+    handlers::account::consent_cell_query::{
+        InviteGateDecision, evaluate_invite_gate, query_consent_cell,
+    },
+    outbound_http::RequestBuilderExt as _,
 };
 
 // ── Request / response shapes ──────────────────────────────────
@@ -216,7 +219,7 @@ pub async fn relay_invite_with(
                 .post(target.clone())
                 .json(payload)
                 .timeout(Duration::from_secs(10))
-                .send()
+                .send_traced()
                 .await
             {
                 Ok(r) if r.status().is_success() => true,

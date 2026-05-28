@@ -39,6 +39,8 @@ use contrix_core::{Hash, RealmId};
 use thiserror::Error;
 use url::Url;
 
+use crate::outbound_http::RequestBuilderExt as _;
+
 #[derive(Debug, Error)]
 pub enum FrontierError {
     #[error("frontier fetch failed: {0}")]
@@ -184,7 +186,7 @@ impl FrontierSource for SolandFrontierSource {
                 .http_client
                 .get(url)
                 .timeout(self.request_timeout)
-                .send()
+                .send_traced()
                 .await
                 .map_err(|e| {
                     if e.is_timeout() {

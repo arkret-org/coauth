@@ -32,6 +32,8 @@ use serde::Deserialize;
 use tracing::{debug, warn};
 use url::Url;
 
+use crate::outbound_http::RequestBuilderExt as _;
+
 /// Result of consulting a holder's consent cell.
 ///
 /// `tags` are the `OrSet` tag identifiers currently joined into the cell.
@@ -124,7 +126,7 @@ pub async fn query_consent_cell(
         .get(url)
         .header("X-Contrix-Holder-Did", holder_did)
         .timeout(Duration::from_secs(5))
-        .send()
+        .send_traced()
         .await
     {
         Ok(r) => r,
