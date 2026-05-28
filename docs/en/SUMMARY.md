@@ -26,6 +26,7 @@
 - [Get an access token](./topics/access-token.md)
 - [Password reset](./topics/password-reset.md)
 - [Agent runtime](./topics/agent_runtime.md)
+- [Handle-claim ledger](./topics/handle-claim-ledger.md)
 - [Deployment hardening](./topics/deployment_hardening.md)
 
 # Operations

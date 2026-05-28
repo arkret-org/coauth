@@ -49,6 +49,12 @@ pub enum SessionGrantError {
     #[error("failed to encode session private key as PEM: {0}")]
     PemEncode(String),
 
+    /// R3.2 (HC-COAUTH-1/2) — the handle-claim issuance request failed the
+    /// `claim_type` allow-list or subject (holder/principal DID)
+    /// validation. Carries the SDK / shared wire reason code.
+    #[error(transparent)]
+    HandleClaimSubject(#[from] crate::services::handle_subject_validator::HandleClaimSubjectError),
+
     #[error(transparent)]
     Other(#[from] AnyhowError),
 }
@@ -306,6 +312,49 @@ pub struct DidDocument {
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub service: Vec<DidService>,
+
+    /// R3.2 (DID-COAUTH-1) — holder-preference metadata block carrying
+    /// `primary_handle` (spec identity-handles.md §3.2.1
+    /// `holder_primary_handle_at_as_of`). Always emitted for the current
+    /// version of a coauth-controlled document (defaulting to `null`
+    /// `primary_handle` until the holder records a preference); omitted
+    /// when empty so external `did:web` / `did:plc` documents that lack a
+    /// metadata block still round-trip unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<DidDocumentMetadata>,
+}
+
+/// R3.2 — DID Document `metadata` block.
+///
+/// Per identity-handles.md §3.2.1 the only field coauth populates is
+/// `primary_handle`: a *holder preference pointer* indicating which of the
+/// holder's verified handle claims they'd prefer surfaced as the canonical
+/// display handle. It is explicitly **NOT** a handle declaration channel —
+/// a verifier MUST still construct the `claim_set_snapshot` from signed
+/// `cx.schema.handle_claim.v1` evidence and MUST ignore this field if the
+/// pointed-at handle is not backed by such a claim. Default is `null`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DidDocumentMetadata {
+    /// Canonical `<localpart>:<domain>` handle the holder prefers as their
+    /// primary display handle, or `null` when no preference is recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_handle: Option<String>,
+}
+
+impl DidDocumentMetadata {
+    /// Build the metadata block for a coauth-controlled DID Document's
+    /// *current* version.
+    ///
+    /// TODO(R3.2.1): the `primary_handle` preference is not yet persisted
+    /// (no DB column / self-service endpoint — see DID-COAUTH-3), so this
+    /// is always `None` today. When persistence lands, source the value
+    /// from the holder's recorded preference. Historical
+    /// (`did:webvh` as-of) resolution MUST return the preference value as
+    /// of the requested version — also deferred to R3.2.1 / starid.
+    #[must_use]
+    pub fn current_for_holder(primary_handle: Option<String>) -> Self {
+        Self { primary_handle }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -909,6 +958,11 @@ pub struct HandleClaimProof {
 pub struct HandleClaimPayload {
     #[serde(rename = "type")]
     pub kind: String,
+    /// R3.2 — `cx.schema.handle_claim.v1` `claim_type`. coauth only emits
+    /// the allow-listed values (`handle_binding` / `organization_handle`);
+    /// the removed `service_handle` value is rejected at issuance time by
+    /// [`crate::services::handle_subject_validator::ensure_claim_type_supported`].
+    pub claim_type: String,
     pub subject_id: String,
     /// Canonical Contrix handle of the form `<localpart>:<domain>` per
     /// spec 7157ee8 §3.1 (replaces the legacy `handle_uri` URI form).
@@ -942,6 +996,33 @@ pub struct HandleClaimMaterial {
 /// be stored as long-lived bearer credentials.
 pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 
+/// R3.2 — the `claim_type` coauth's handle-claim issuer stamps on the
+/// emitted `cx.handle.claim` payload.
+///
+/// Modelled as an enum so the removed `service_handle` value can never be
+/// *named* by an in-process caller (fail-closed at the type level), while
+/// [`issue_handle_claim`] still runs the runtime
+/// [`crate::services::handle_subject_validator::ensure_claim_type_supported`]
+/// allow-list check for defence in depth against future drift. Matches the
+/// SDK `HandleClass::{UserHandle, OrganizationHandle}` enum, serialised as
+/// the `cx.schema.handle_claim.v1` `claim_type` snake-case strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HandleClaimType {
+    /// A holder-bound user handle (`HandleClass::UserHandle`).
+    HandleBinding,
+    /// An organization-assigned handle (`HandleClass::OrganizationHandle`).
+    OrganizationHandle,
+}
+
+impl HandleClaimType {
+    pub(crate) const fn as_wire(self) -> &'static str {
+        match self {
+            Self::HandleBinding => "handle_binding",
+            Self::OrganizationHandle => "organization_handle",
+        }
+    }
+}
+
 /// Mint a handle-claim JWT bound to `audience`. The claim's
 /// `member_delivery_binding` MUST come from upstream policy (handed to this
 /// function by the caller); we never default to `did_document_default`.
@@ -955,11 +1036,31 @@ pub(crate) fn issue_handle_claim(
     contrix_config: &ContrixConfig,
     key_store: &Keystore,
     user: &User,
+    claim_type: HandleClaimType,
     audience: String,
     member_delivery_binding: HandleClaimDeliveryBindingHint,
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
+    use crate::services::handle_subject_validator::{
+        ensure_claim_type_supported, ensure_subject_is_principal_did,
+    };
+
     let issuer_service_did = service_did_for(url_builder, contrix_config);
     let subject_id = user_did_for(url_builder, contrix_config, user);
+
+    // HC-COAUTH-1 (business layer) — fail closed against the removed
+    // `service_handle` (and any other non-allow-listed) `claim_type`. The
+    // [`HandleClaimType`] enum already prevents an in-process caller from
+    // naming `service_handle`; this re-checks the wire string so the deny
+    // also covers any future code path that bypasses the enum.
+    ensure_claim_type_supported(claim_type.as_wire())?;
+
+    // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
+    // `cx:actor:` / `cx:account:` typed id or a service DID. coauth always
+    // derives `subject_id` from `user_did_for`, but validating here keeps
+    // the issuer honest if that derivation ever changes and lets the same
+    // reason code surface as soland / the SDK.
+    ensure_subject_is_principal_did(&subject_id)?;
+
     // Spec 7157ee8 §3.1 — canonical handle wire form is
     // `<localpart>:<domain>`; the legacy `contrix://…` URI is retired.
     let handle = user_handle(url_builder, user);
@@ -977,6 +1078,7 @@ pub(crate) fn issue_handle_claim(
     // payload.
     let mut payload_no_proofs = HandleClaimPayload {
         kind: "cx.handle.claim".to_owned(),
+        claim_type: claim_type.as_wire().to_owned(),
         subject_id: subject_id.clone(),
         handle,
         handle_aliases: aliases.clone(),
@@ -995,6 +1097,7 @@ pub(crate) fn issue_handle_claim(
     // claim without renaming.
     let claim_digest = canonical_json_sha256(&HandleClaimDigestInput {
         kind: &payload_no_proofs.kind,
+        claim_type: &payload_no_proofs.claim_type,
         subject_id: &payload_no_proofs.subject_id,
         handle: &payload_no_proofs.handle,
         handle_aliases: &payload_no_proofs.handle_aliases,
@@ -1065,6 +1168,7 @@ pub(crate) fn issue_handle_claim(
 struct HandleClaimDigestInput<'a> {
     #[serde(rename = "type")]
     kind: &'a str,
+    claim_type: &'a str,
     subject_id: &'a str,
     handle: &'a str,
     handle_aliases: &'a Vec<String>,
@@ -1665,6 +1769,9 @@ pub(crate) fn service_did_document(
                 service_endpoint: url_builder.oidc_discovery().to_string(),
             },
         ],
+        // A service DID is not a handle holder, so no `primary_handle`
+        // preference applies; omit the metadata block entirely.
+        metadata: None,
     })
 }
 
@@ -1691,7 +1798,29 @@ pub(crate) fn user_did_document(
                 .absolute_url("/api/v1/server/describe")
                 .to_string(),
         }],
+        // DID-COAUTH-1 — a user DID is a handle holder, so always emit the
+        // metadata block. `primary_handle` defaults to `null` until the
+        // holder records a preference (DID-COAUTH-3 / TODO(R3.2.1)).
+        metadata: Some(DidDocumentMetadata::current_for_holder(
+            user_primary_handle_preference(user),
+        )),
     }
+}
+
+/// DID-COAUTH-1 / DID-COAUTH-2 — resolve the holder's recorded
+/// `primary_handle` preference for inclusion in the DID Document
+/// `metadata` block.
+///
+/// TODO(R3.2.1): there is no persisted preference column yet
+/// (DID-COAUTH-3 self-service PATCH is deferred), so this always returns
+/// `None` (metadata.primary_handle = null). For `did:webvh` historical
+/// resolution the value MUST be the preference as of the requested
+/// version; coauth's current `did:web` / `did:key` documents only have a
+/// single (current) version so returning the current value is correct.
+/// Wiring the as-of lookup is deferred to R3.2.1 / starid.
+#[must_use]
+fn user_primary_handle_preference(_user: &User) -> Option<String> {
+    None
 }
 
 pub(crate) fn issue_session_grant(
@@ -3753,6 +3882,7 @@ mod tests {
             &contrix_config,
             &key_store,
             &user,
+            HandleClaimType::HandleBinding,
             "did:web:space.example".to_owned(),
             hint.clone(),
         )
@@ -3790,5 +3920,41 @@ mod tests {
         assert_eq!(material.payload.proofs.len(), 1);
         assert_eq!(material.payload.proofs[0].audience, "did:web:space.example");
         assert_eq!(material.payload.proofs[0].jws, material.claim_jwt);
+        // HC-COAUTH-1 — coauth only stamps allow-listed claim_type values.
+        assert_eq!(material.payload.claim_type, "handle_binding");
+    }
+
+    #[test]
+    fn issue_handle_claim_accepts_organization_handle_claim_type() {
+        use coauth_data::clock::MockClock;
+        let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
+        let contrix_config = ContrixConfig::default();
+        let mut rng = ChaChaRng::seed_from_u64(0xc15b);
+        let clock = MockClock::default();
+        let now = clock.now();
+        let user = User::samples(now, &mut rng).into_iter().next().unwrap();
+        let key_store = test_keystore();
+
+        let hint = HandleClaimDeliveryBindingHint {
+            recipient_service_did: "did:web:soland.example".to_owned(),
+            recipient_service_type: Some("principal_server".to_owned()),
+            binding_source: "organization_policy".to_owned(),
+            delivery_modes: vec!["events".to_owned()],
+            service_acceptance_ref: None,
+            policy_ref: None,
+        };
+
+        let material = issue_handle_claim(
+            &clock,
+            &url_builder,
+            &contrix_config,
+            &key_store,
+            &user,
+            HandleClaimType::OrganizationHandle,
+            "did:web:space.example".to_owned(),
+            hint,
+        )
+        .expect("organization_handle claim_type must be accepted");
+        assert_eq!(material.payload.claim_type, "organization_handle");
     }
 }

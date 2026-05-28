@@ -292,6 +292,8 @@ impl DidResolverService for DefaultDidResolverService {
                     service_endpoint: url_builder.oidc_discovery().to_string(),
                 },
             ],
+            // A service DID is not a handle holder — no primary_handle.
+            metadata: None,
         })
     }
 
@@ -301,26 +303,10 @@ impl DidResolverService for DefaultDidResolverService {
         contrix_config: &ContrixConfig,
         user: &User,
     ) -> DidDocument {
-        let did = self.user_did(url_builder, contrix_config, user);
-
-        DidDocument {
-            id: did.clone(),
-            // Spec 7157ee8 §3.1 — canonical handle form is
-            // `<localpart>:<domain>`; the legacy `contrix://…` URI is
-            // retired. `user_handle` now emits the canonical form
-            // directly.
-            also_known_as: vec![crate::handlers::contrix::user_handle(url_builder, user)],
-            verification_method: Vec::new(),
-            authentication: Vec::new(),
-            assertion_method: Vec::new(),
-            service: vec![DidService {
-                id: format!("{did}#auth-server"),
-                kind: "ContrixAuthServer".to_owned(),
-                service_endpoint: url_builder
-                    .absolute_url("/api/v1/server/describe")
-                    .to_string(),
-            }],
-        }
+        // Delegate to the canonical builder in `handlers::contrix` so the
+        // R3.2 `metadata.primary_handle` holder-preference logic
+        // (DID-COAUTH-1) lives in exactly one place.
+        crate::handlers::contrix::user_did_document(url_builder, contrix_config, user)
     }
 
     fn verify_user_binding(
@@ -392,6 +378,8 @@ impl DidResolverService for DefaultDidResolverService {
                     authentication: Vec::new(),
                     assertion_method: Vec::new(),
                     service: Vec::new(),
+                    // External `did:key` — coauth does not own its metadata.
+                    metadata: None,
                 },
                 DidResolutionSource::DidKey,
                 false,
