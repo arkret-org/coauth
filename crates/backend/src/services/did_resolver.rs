@@ -541,6 +541,10 @@ fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
             // mutation) lets a `did:web` document URL point at
             // localhost.
             let lower = name.to_ascii_lowercase();
+            // `ends_with(".local")` is ASCII-only by construction (we just
+            // lowercased the host above); the clippy lint that nudges toward
+            // `Path::extension` doesn't apply here.
+            #[allow(clippy::case_sensitive_file_extension_comparisons)]
             let blocked = lower == "localhost"
                 || lower.ends_with(".localhost")
                 || lower.ends_with(".local")

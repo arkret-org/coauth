@@ -165,7 +165,7 @@ impl ContrixConfig {
     /// - the scope is empty or > 128 bytes
     /// - the first character is not `[a-z0-9]`
     /// - any byte is outside `[a-z0-9._:-]`
-    pub fn validate_trust_domain<'a>(value: &'a str) -> Result<&'a str, &'static str> {
+    pub fn validate_trust_domain(value: &str) -> Result<&str, &'static str> {
         let scope = value
             .strip_prefix(TRUST_DOMAIN_PREFIX)
             .ok_or("trust_domain MUST start with `cx:trust_domain:`")?;

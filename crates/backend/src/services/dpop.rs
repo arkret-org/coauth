@@ -60,7 +60,7 @@ const MAX_CLOCK_SKEW: Duration = Duration::seconds(60);
 
 /// Time window for jti replay detection — once a jti is observed it is
 /// rejected until this many seconds after its `iat`.
-const NONCE_TTL: StdDuration = StdDuration::from_secs(300);
+const NONCE_TTL: StdDuration = StdDuration::from_mins(5);
 
 /// Standard `typ` value the proof header must carry per RFC 9449 §4.2.
 const DPOP_TYP: &str = "dpop+jwt";

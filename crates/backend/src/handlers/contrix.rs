@@ -2711,7 +2711,7 @@ pub fn test_endpoints_enabled() -> bool {
         std::env::var("COAUTH_ENABLE_TEST_ENDPOINTS")
             .ok()
             .as_deref(),
-        Some("1") | Some("true") | Some("yes")
+        Some("1" | "true" | "yes")
     )
 }
 

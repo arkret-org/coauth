@@ -255,9 +255,9 @@ impl QueueWorker {
 
         self.am_i_leader = leader;
         if leader {
-            tracing::info!("I'm the leader now")
+            tracing::info!("I'm the leader now");
         } else {
-            tracing::warn!("I am no longer the leader")
+            tracing::warn!("I am no longer the leader");
         }
     }
 
