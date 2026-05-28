@@ -187,7 +187,7 @@ mod tests {
                 "did": "did:webvh:ztest:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
                 "scid": "ztest",
                 "version_id": "1-zhead",
-                "raw_document_hash": "zhash",
+                "raw_document_digest": "zhash",
                 "host": "starid.local",
                 "path": "accounts/01arz3ndektsv4rrffq69g5fav",
             })))
@@ -226,7 +226,7 @@ mod tests {
                 "did": "did:webvh:ztest:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
                 "scid": "ztest",
                 "version_id": "2-zrotated",
-                "raw_document_hash": "zhash",
+                "raw_document_digest": "zhash",
                 "host": "starid.local",
                 "path": "accounts/01arz3ndektsv4rrffq69g5fav",
             })))

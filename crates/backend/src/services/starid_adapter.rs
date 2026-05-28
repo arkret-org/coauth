@@ -512,7 +512,7 @@ mod tests {
                 "did": "did:webvh:zminted:starid.local:accounts:01aryz",
                 "scid": "zminted",
                 "version_id": "1-zhead",
-                "raw_document_hash": "zhash",
+                "raw_document_digest": "zhash",
                 "host": "starid.local",
                 "path": "accounts/01aryz",
             })))
@@ -541,7 +541,7 @@ mod tests {
                 "did": "did:webvh:zadmin:starid.local:accounts:01aryz",
                 "scid": "zadmin",
                 "version_id": "1-zheadadmin",
-                "raw_document_hash": "zhash",
+                "raw_document_digest": "zhash",
                 "host": "starid.local",
                 "path": "accounts/01aryz",
             })))
@@ -603,7 +603,7 @@ mod tests {
                 "did": "did:webvh:zrecovered:starid.local:accounts:01aryz-recovered-2",
                 "scid": "zrecovered",
                 "version_id": "1-zhead",
-                "raw_document_hash": "zhash",
+                "raw_document_digest": "zhash",
                 "host": "starid.local",
                 "path": "accounts/01aryz-recovered-2",
             })))
@@ -635,7 +635,7 @@ mod tests {
                 "did": "did:webvh:zminted:starid.local:accounts:01aryz",
                 "scid": "zminted",
                 "version_id": "2-znext",
-                "raw_document_hash": "zhash",
+                "raw_document_digest": "zhash",
                 "host": "starid.local",
                 "path": "accounts/01aryz",
             })))
