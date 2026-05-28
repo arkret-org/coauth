@@ -10,6 +10,11 @@ releases) are produced by `.github/workflows/release.yaml`. See
 [`docs/en/development/releasing.md`](docs/en/development/releasing.md)
 for the full release process.
 
+## R3.3 — Spec sync 2026-05-28 (contrix-spec @ cced4b8)
+
+- R3.3 spec sync — pin to contrix-spec @ cced4b8 (CXP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3.2 — Spec sync 2026-05-28 (contrix-spec @ b56cab1)
 
 - Handle-claim issuance rejects `claim_type=service_handle` (type-level + wire check, `claim_type_unsupported`) and non-principal-DID subjects (`handle_claim_subject_not_principal_did`).
