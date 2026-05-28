@@ -10,6 +10,14 @@ releases) are produced by `.github/workflows/release.yaml`. See
 [`docs/en/development/releasing.md`](docs/en/development/releasing.md)
 for the full release process.
 
+## R3.2 — Spec sync 2026-05-28 (contrix-spec @ b56cab1)
+
+- Handle-claim issuance rejects `claim_type=service_handle` (type-level + wire check, `claim_type_unsupported`) and non-principal-DID subjects (`handle_claim_subject_not_principal_did`).
+- DID Documents for holders emit optional `metadata.primary_handle` (preference pointer, default null; NOT a handle declaration channel).
+- New `docs/en/topics/handle-claim-ledger.md`: `cx.directory.list_handles_for_subject` is teabay's directory op; coauth provides only an issuer-internal ledger view.
+- `did:webvh` as_of metadata + self-service preference PATCH deferred `TODO(R3.2.1)`.
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
 
 - AUTH-1 / AUTH-2: `cx.account.agent_key_pair` and `cx.account.issue_session_grant` agent branches now emit distinct error codes — `verification_method_principal_mismatch`, `pairing_request_expired`, `proof_invalid`, `agent_paused`, `agent_deactivated`, `accountability_grant_missing` — with fail-closed DID-match check before proof validation.
