@@ -291,6 +291,13 @@ mod rsa_impls {
 // Elliptic Curve conversion implementations
 // ---------------------------------------------------------------------------
 
+// `FieldBytes::<C>::from_slice` ultimately resolves to
+// `generic_array 0.14::GenericArray::from_slice`, which `digest 0.10`
+// re-exports with a `#[deprecated]` nudge toward `generic-array 1.x`. The
+// workspace is pinned to the 0.10/0.14 RustCrypto stack (see root
+// `Cargo.toml`), so suppress the warning module-locally until the upstream
+// migration ships.
+#[allow(deprecated)]
 mod ec_impls {
     use digest::typenum::Unsigned;
     use ecdsa::EncodedPoint;

@@ -129,10 +129,10 @@ fn parse_account_id(value: &str) -> Option<Ulid> {
     if let Ok(id) = value.parse::<Ulid>() {
         return Some(id);
     }
-    if let Some((prefix, id)) = value.split_once(':') {
-        if matches!(prefix, "user" | "account") {
-            return id.parse::<Ulid>().ok();
-        }
+    if let Some((prefix, id)) = value.split_once(':')
+        && matches!(prefix, "user" | "account")
+    {
+        return id.parse::<Ulid>().ok();
     }
     value
         .rsplit_once(":users:")

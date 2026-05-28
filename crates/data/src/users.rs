@@ -216,25 +216,6 @@ pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, Str
     Ok(trimmed)
 }
 
-/// Legacy alias for [`HANDLE_NOT_CANONICAL_CODE`]. Pre-R3.1 callers wired
-/// to the URI-form constant; retained as a `#[deprecated]` shim for one
-/// release so external consumers can migrate.
-#[deprecated(
-    since = "1.9.0",
-    note = "use HANDLE_NOT_CANONICAL_CODE — spec 7157ee8 retires the URI form"
-)]
-pub const HANDLE_URI_NOT_CANONICAL_CODE: &str = HANDLE_NOT_CANONICAL_CODE;
-
-/// Legacy alias for [`validate_canonical_handle`]. The validator now
-/// requires the canonical `<localpart>:<domain>` shape.
-#[deprecated(
-    since = "1.9.0",
-    note = "use validate_canonical_handle — spec 7157ee8 retires the URI form"
-)]
-pub fn validate_canonical_handle_uri(value: &str) -> Result<&str, (&'static str, String)> {
-    validate_canonical_handle(value)
-}
-
 impl User {
     /// Canonical Contrix handle per spec 7157ee8:
     /// `<lowercase-localpart>:<lowercase-domain>`.

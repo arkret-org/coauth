@@ -107,8 +107,7 @@ pub fn finalise_oob_failure(
 /// exported because the metrics fan-out is owned by `telemetry.rs`.
 pub async fn pad_to_non_enumerable(arrival: Instant) {
     let elapsed = arrival.elapsed();
-    if elapsed < NON_ENUMERABLE_PAD {
-        let remaining = NON_ENUMERABLE_PAD - elapsed;
+    if let Some(remaining) = NON_ENUMERABLE_PAD.checked_sub(elapsed) {
         tokio::time::sleep(remaining).await;
     }
 }

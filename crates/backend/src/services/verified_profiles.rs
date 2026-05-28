@@ -21,9 +21,9 @@
 //! module just parses + role-filters and leaves the claim invariant to the
 //! describe builder where the truth source for `claimed_profiles` lives.
 
+use camino::Utf8Path;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use std::path::Path;
 use std::sync::Arc;
 
 /// Env var coauth reads at startup to locate the cotest
@@ -111,14 +111,14 @@ pub fn load_from_env() -> Arc<Vec<VerifiedProfileDescriptor>> {
 
 /// Split-out body of [`load_from_env`] for tests and for callers that
 /// already have the artifact path resolved.
-pub fn load_from_path(path: impl AsRef<Path>) -> Vec<VerifiedProfileDescriptor> {
+pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescriptor> {
     let path = path.as_ref();
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
         Err(error) => {
             tracing::warn!(
                 target: "verified_profiles",
-                path = %path.display(),
+                path = %path,
                 %error,
                 "verified-profiles artifact path is set but file is unreadable; verified_profiles=[]"
             );
@@ -130,7 +130,7 @@ pub fn load_from_path(path: impl AsRef<Path>) -> Vec<VerifiedProfileDescriptor> 
         Err(error) => {
             tracing::warn!(
                 target: "verified_profiles",
-                path = %path.display(),
+                path = %path,
                 %error,
                 "verified-profiles artifact failed to parse as JSON; verified_profiles=[]"
             );
@@ -203,7 +203,7 @@ pub fn load_from_path(path: impl AsRef<Path>) -> Vec<VerifiedProfileDescriptor> 
 
     tracing::info!(
         target: "verified_profiles",
-        path = %path.display(),
+        path = %path,
         version = parsed.version.as_deref().unwrap_or(""),
         run_id = %run_id,
         loaded = out.len(),
@@ -319,9 +319,10 @@ mod tests {
         );
     }
 
-    fn tempfile_dir() -> std::path::PathBuf {
-        let mut p = std::env::temp_dir();
-        p.push(format!("coauth-verified-profiles-{}", uniq()));
+    fn tempfile_dir() -> camino::Utf8PathBuf {
+        let temp = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .expect("system temp dir is not valid UTF-8");
+        let p = temp.join(format!("coauth-verified-profiles-{}", uniq()));
         std::fs::create_dir_all(&p).unwrap();
         p
     }

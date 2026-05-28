@@ -1,3 +1,11 @@
+// The `chacha20poly1305 0.10` API still consumes `generic-array 0.14`
+// `GenericArray<u8, _>` values for its key / nonce arguments. `digest 0.10`
+// re-exports those `generic_array` items with `#[deprecated]` nudges toward
+// the not-yet-stable `generic-array 1.x` migration. The workspace is pinned
+// to the RustCrypto 0.10/0.14 line (see root `Cargo.toml`), so suppress the
+// warnings file-locally until upstream ships a stable 1.x bridge.
+#![allow(deprecated)]
+
 use std::sync::Arc;
 
 use aead::Aead;

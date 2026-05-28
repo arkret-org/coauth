@@ -103,7 +103,7 @@ pub const LOOKUP_RATE_LIMIT_FAILURES: u8 = 3;
 /// Window after the terminal state in which the engine MUST scrub the
 /// stored salt (offline_token mode) or pepper (lookup mode). Round 4
 /// requirement.
-pub const TERMINAL_ZEROIZE_WITHIN: Duration = Duration::from_secs(24 * 60 * 60);
+pub const TERMINAL_ZEROIZE_WITHIN: Duration = Duration::from_hours(24);
 
 /// Errors raised by the 3PID invite engine.
 #[derive(Debug, Error)]
@@ -507,10 +507,10 @@ impl NonceStore {
         let mut guard = self.inner.lock().expect("nonce store mutex poisoned");
         // Prune expired entries opportunistically.
         guard.retain(|_, e| *e > now);
-        if let Some(existing_exp) = guard.get(jti) {
-            if *existing_exp > now {
-                return Err(());
-            }
+        if let Some(existing_exp) = guard.get(jti)
+            && *existing_exp > now
+        {
+            return Err(());
         }
         guard.insert(jti.to_owned(), exp);
         Ok(())

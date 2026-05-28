@@ -125,8 +125,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
     let actor_did = call_context
         .user
         .as_ref()
-        .map(|u| format!("user:{}", u.id))
-        .unwrap_or_else(|| "service".to_owned());
+        .map_or_else(|| "service".to_owned(), |u| format!("user:{}", u.id));
 
     let grant = CircleCapabilityGrant {
         id: Ulid::new().to_string(),

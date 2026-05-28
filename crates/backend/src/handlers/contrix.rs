@@ -1004,7 +1004,7 @@ pub(crate) fn issue_handle_claim(
         issued_at: payload_no_proofs.issued_at,
         expires_at: payload_no_proofs.expires_at,
     })?;
-    payload_no_proofs.claim_digest = claim_digest.clone();
+    payload_no_proofs.claim_digest.clone_from(&claim_digest);
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
@@ -1735,9 +1735,10 @@ pub(crate) fn issue_session_grant_for_audience(
     subject_override: Option<&str>,
     dpop_jkt: Option<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
-    let subject = subject_override
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| user_did_for(url_builder, contrix_config, &browser_session.user));
+    let subject = subject_override.map_or_else(
+        || user_did_for(url_builder, contrix_config, &browser_session.user),
+        ToOwned::to_owned,
+    );
     let session_key = PrivateKey::generate_ed25519(rng);
     let session_public_key = JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
         .with_use(JsonWebKeyUse::Sig)

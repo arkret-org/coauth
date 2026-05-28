@@ -1,3 +1,14 @@
+// `digest 0.10` re-exports `generic-array 0.14` items from its own
+// `digest::generic_array` module and flags them with `#[deprecated]` to push
+// callers toward the not-yet-stable `digest 0.11` / `generic-array 1.x`
+// migration. We're pinned to the 0.10/0.14 line workspace-wide (see the long
+// note on `generic-array` in the root `Cargo.toml`) until the RustCrypto
+// stack ships a stable 1.x bridge. The `ArrayLength`/`GenericArray` symbols
+// used below are the only public hook for the `signature::SignatureEncoding`
+// trait we implement, so we suppress the warnings locally rather than gating
+// the file with conditional compilation we'd have to remove later anyway.
+#![allow(deprecated)]
+
 use std::marker::PhantomData;
 
 use digest::{

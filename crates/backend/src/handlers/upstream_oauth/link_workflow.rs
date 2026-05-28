@@ -607,7 +607,11 @@ enum HandlePreCheckResult {
     Available(Option<String>),
     /// The username matched an existing user whose conflict was resolved by
     /// linking. The caller should log this user in.
-    ConflictResolved { user: User, provider_id: Ulid },
+    ///
+    /// `user` is boxed because [`User`] is ~240 bytes — keeping the enum
+    /// itself small avoids forcing every `Available(...)` value to carry
+    /// that footprint through call-stack returns.
+    ConflictResolved { user: Box<User>, provider_id: Ulid },
 }
 
 /// Pre-check a suggested username from the upstream provider.
@@ -774,7 +778,7 @@ async fn pre_check_handle(
 
         // Conflict resolved by linking. The caller should log this user in.
         return Ok(HandlePreCheckResult::ConflictResolved {
-            user: existing_user,
+            user: Box::new(existing_user),
             provider_id: provider.id,
         });
     }

@@ -157,14 +157,13 @@ impl MetadataCache {
     /// Lower bound on the metadata-refresh interval. Faster than this
     /// is just hammering upstream providers and risks rate-limit
     /// retaliation; values below the floor are silently clamped up.
-    pub const MIN_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+    pub const MIN_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_mins(1);
 
     /// Upper bound on the metadata-refresh interval. SSRF / staleness
     /// guard: a poisoned or compromised discovery document MUST NOT
     /// remain live indefinitely. 24h matches the rough TTL the OIDC
     /// discovery RFC suggests for client-side caches.
-    pub const MAX_REFRESH_INTERVAL: std::time::Duration =
-        std::time::Duration::from_secs(60 * 60 * 24);
+    pub const MAX_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_hours(24);
 
     #[must_use]
     pub fn new() -> Self {
