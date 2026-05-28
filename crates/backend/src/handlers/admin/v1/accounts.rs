@@ -625,7 +625,6 @@ mod tests {
     use base64ct::{Base64UrlUnpadded, Encoding as _};
     use coauth_data::{Clock, RepositoryAccess};
     use coauth_iana::jose::JsonWebSignatureAlg;
-    use coauth_jose::constraints::Constrainable;
     use coauth_jose::jwt::JsonWebSignatureHeader;
     use hyper::{Request, StatusCode};
     use serde_json::Value;
