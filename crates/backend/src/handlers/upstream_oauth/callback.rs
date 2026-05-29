@@ -223,6 +223,7 @@ pub async fn handler(
     let mut rng = crate::handlers::account::make_rng();
     let clock = crate::handlers::account::make_clock();
     let metadata_cache = depot.metadata_cache()?;
+    let jwks_cache = depot.jwks_cache()?;
     let mut repo = depot.repo().await?;
     let url_builder = depot.url_builder()?;
     let encrypter = depot.encrypter()?;
@@ -720,29 +721,37 @@ pub async fn handler(
 
             let mut context = AttributeMappingContext::new();
             if let Some(id_token) = token_response.id_token.as_ref() {
-                jwks = Some(
-                    crate::oidc_client::requests::jose::fetch_jwks(
-                        &client,
-                        lazy_metadata.jwks_uri().await?,
-                    )
-                    .await?,
-                );
+                // Resolve the JWKS URI once, then serve the keyset from the
+                // shared cache (falling back to a network fetch on a miss /
+                // stale entry). Cloning the URL releases the mutable borrow of
+                // `lazy_metadata` so it can be reused for later endpoints.
+                let jwks_uri = lazy_metadata.jwks_uri().await?.clone();
+                let mut current_jwks = jwks_cache.get_or_fetch(&client, &jwks_uri).await?;
 
-                let id_token_verification_data = JwtVerificationData {
-                    issuer: provider.issuer.as_deref(),
-                    jwks: jwks.as_ref().unwrap(),
-                    signing_algorithm: &provider.id_token_signed_response_alg,
-                    client_id: &provider.client_id,
-                };
-
-                let id_token = crate::oidc_client::requests::jose::verify_id_token(
+                // Verify the ID token. If verification fails because the
+                // signature did not validate against the cached keyset, the
+                // upstream may have rotated its signing key: force a single
+                // re-fetch (bypassing the cache) and retry verification once
+                // before surfacing the error.
+                let verified = verify_id_token_with_rotation_retry(
+                    &jwks_cache,
+                    &client,
+                    &jwks_uri,
+                    &mut current_jwks,
                     id_token,
-                    id_token_verification_data,
-                    None,
+                    provider.issuer.as_deref(),
+                    &provider.id_token_signed_response_alg,
+                    &provider.client_id,
                     clock.now(),
-                )?;
+                )
+                .await?;
 
-                let (_headers, mut claims) = id_token.into_parts();
+                // `current_jwks` now holds the keyset that actually verified the
+                // token (refreshed in place if the upstream had rotated its
+                // key); stash it so the userinfo path can reuse it.
+                jwks = Some(current_jwks);
+
+                let (_headers, mut claims) = verified.into_parts();
 
                 id_token_claims =
                     Some(serde_json::to_value(&claims).expect(
@@ -753,7 +762,7 @@ pub async fn handler(
                     .extract_optional_with_options(
                         &mut claims,
                         TokenHash::new(
-                            id_token_verification_data.signing_algorithm,
+                            &provider.id_token_signed_response_alg,
                             &token_response.access_token,
                         ),
                     )
@@ -762,7 +771,7 @@ pub async fn handler(
                 coauth_jose::claims::C_HASH
                     .extract_optional_with_options(
                         &mut claims,
-                        TokenHash::new(id_token_verification_data.signing_algorithm, &code),
+                        TokenHash::new(&provider.id_token_signed_response_alg, &code),
                     )
                     .map_err(crate::oidc_client::error::IdTokenError::from)?;
 
@@ -785,11 +794,9 @@ pub async fn handler(
                         let jwks = match jwks {
                             Some(jwks) => jwks,
                             None => {
-                                crate::oidc_client::requests::jose::fetch_jwks(
-                                    &client,
-                                    lazy_metadata.jwks_uri().await?,
-                                )
-                                .await?
+                                jwks_cache
+                                    .get_or_fetch(&client, lazy_metadata.jwks_uri().await?)
+                                    .await?
                             }
                         };
 
@@ -907,4 +914,75 @@ pub async fn handler(
         ),
     );
     Ok(())
+}
+
+/// Verify an ID token against a cached JWKS, transparently recovering from an
+/// upstream signing-key rotation.
+///
+/// The happy path verifies `id_token` against `*current_jwks` (served from the
+/// shared [`super::jwks_cache::JwksCache`]). If verification fails *because the
+/// signature did not validate* — the symptom of the upstream having rotated its
+/// signing key out from under our cached copy — this forces a single
+/// cache-bypassing re-fetch via [`super::jwks_cache::JwksCache::force_refresh`],
+/// updates `*current_jwks` in place, and retries verification once. Any other
+/// failure (expired token, wrong audience, etc.) is returned immediately
+/// without a re-fetch, since a fresh keyset would not change the outcome.
+///
+/// On success `*current_jwks` holds the keyset that actually verified the token
+/// (refreshed or not), so the caller can reuse it for downstream userinfo
+/// verification.
+#[allow(clippy::too_many_arguments)]
+async fn verify_id_token_with_rotation_retry<'a>(
+    jwks_cache: &super::jwks_cache::JwksCache,
+    client: &reqwest::Client,
+    jwks_uri: &::url::Url,
+    current_jwks: &mut coauth_jose::jwk::PublicJsonWebKeySet,
+    id_token: &'a str,
+    issuer: Option<&str>,
+    signing_algorithm: &coauth_iana::jose::JsonWebSignatureAlg,
+    client_id: &String,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<crate::oidc_client::types::IdToken<'a>, RouteError> {
+    use crate::oidc_client::error::{IdTokenError, JwtVerificationError};
+
+    let first_attempt = crate::oidc_client::requests::jose::verify_id_token(
+        id_token,
+        JwtVerificationData {
+            issuer,
+            jwks: current_jwks,
+            signing_algorithm,
+            client_id,
+        },
+        None,
+        now,
+    );
+
+    match first_attempt {
+        Ok(verified) => Ok(verified),
+        // Signature did not validate against the cached keyset — the upstream
+        // may have rotated its kid. Force a single re-fetch and retry once.
+        Err(IdTokenError::Jwt(JwtVerificationError::JwtSignature(_))) => {
+            tracing::info!(
+                %jwks_uri,
+                "ID token signature did not validate against cached JWKS; \
+                 forcing a JWKS re-fetch in case the upstream rotated its key"
+            );
+            let refreshed = jwks_cache.force_refresh(client, jwks_uri).await?;
+            *current_jwks = refreshed;
+
+            let verified = crate::oidc_client::requests::jose::verify_id_token(
+                id_token,
+                JwtVerificationData {
+                    issuer,
+                    jwks: current_jwks,
+                    signing_algorithm,
+                    client_id,
+                },
+                None,
+                now,
+            )?;
+            Ok(verified)
+        }
+        Err(e) => Err(e.into()),
+    }
 }

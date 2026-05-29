@@ -44,7 +44,6 @@ chrono.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 rand_core.workspace = true
-crc.workspace = true
 ulid.workspace = true
 
 # -- OAuth / OpenID Connect ------------------------------------------------

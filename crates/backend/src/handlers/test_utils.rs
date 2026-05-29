@@ -60,6 +60,7 @@ use crate::{
         ActivityTracker, Limiter,
         passwords::{Hasher, PasswordManager},
         upstream_oauth::cache::MetadataCache,
+        upstream_oauth::jwks_cache::JwksCache,
     },
     salvo_utils::cookies::{CookieJar, CookieManager},
     services::{
@@ -215,6 +216,7 @@ impl Handler for InjectTestState {
         depot.insert("password_manager", state.password_manager.clone());
         depot.insert("cookie_manager", state.cookie_manager.clone());
         depot.insert("metadata_cache", state.metadata_cache.clone());
+        depot.insert("jwks_cache", JwksCache::new());
         depot.insert("site_config", state.site_config.clone());
         depot.insert("limiter", state.limiter.clone());
         depot.insert("policy_factory", state.policy_factory.clone());

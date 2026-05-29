@@ -102,9 +102,9 @@ impl<'a> PolicySigner<'a> {
         let (alg, key) =
             preferred_service_signing_key(self.key_store).ok_or(PolicySignerError::NoSigningKey)?;
         let key_id = key.kid().ok_or(PolicySignerError::NoSigningKey)?;
-        let signer = key
-            .params()
-            .signing_key_for_alg(&alg)
+        let signer = self
+            .key_store
+            .signer_for_algorithm(&alg)
             .map_err(|_| PolicySignerError::KeyAlgMismatch)?;
 
         // RandomizedSigner: ECDSA needs an RNG; Ed25519 ignores it. Seed

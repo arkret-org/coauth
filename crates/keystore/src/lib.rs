@@ -5,6 +5,7 @@ use std::{ops::Deref, sync::Arc};
 use coauth_iana::jose::{JsonWebKeyType, JsonWebSignatureAlg};
 pub use coauth_jose::jwk::{JsonWebKey, JsonWebKeySet};
 use coauth_jose::{
+    constraints::Constrainable,
     jwa::{AsymmetricSigningKey, AsymmetricVerifyingKey},
     jwk::{JsonWebKeyPublicParameters, ParametersInfo, PublicJsonWebKeySet, Thumbprint},
 };

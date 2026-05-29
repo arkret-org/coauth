@@ -1047,8 +1047,7 @@ mod tests {
         .into_iter()
         .find(|alg| state.key_store.signing_key_for_algorithm(alg).is_some())
         .expect("test keystore should expose a signing key");
-        let key = state.key_store.signing_key_for_algorithm(&alg).unwrap();
-        let signer = key.params().signing_key_for_alg(&alg).unwrap();
+        let signer = state.key_store.signer_for_algorithm(&alg).unwrap();
         let verification_method = format!("{did}#key-1");
         let header = JsonWebSignatureHeader::new(alg).with_kid(verification_method.clone());
         let claims = BindingStatementClaims {

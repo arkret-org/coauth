@@ -66,13 +66,40 @@ struct IdentityRegistryMetadata {
     proof_required_for_pairwise: bool,
 }
 
+/// Process-wide cache of the serialized OIDC discovery document.
+///
+/// Every input to the discovery document — the URL builder, site config,
+/// contrix config and the keystore's available signing algorithms — is fixed
+/// for the lifetime of the process (a single config per process). So the
+/// document only needs to be built once; subsequent requests clone the cached
+/// JSON value instead of rebuilding the whole `DiscoveryResponse` and
+/// re-serializing it.
+///
+/// We cache the serialized `serde_json::Value` (rather than the
+/// `DiscoveryResponse`, which is not `Clone`) and hand it back wrapped in
+/// [`Json`], which preserves the `application/json` content type and exact
+/// response shape.
+static DISCOVERY: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+
 #[handler]
 #[tracing::instrument(name = "handlers.oauth.discovery.get", skip_all)]
-pub async fn get(depot: &Depot) -> Json<DiscoveryResponse> {
-    get_inner(depot)
+pub async fn get(depot: &Depot) -> Json<serde_json::Value> {
+    // Populate the cache from the depot values on first request; clone the
+    // cached JSON value on every subsequent request.
+    let value = DISCOVERY.get_or_init(|| {
+        let Json(response) = build_response(depot);
+        serde_json::to_value(response)
+            .expect("serializing the discovery document into a Value should never fail")
+    });
+    Json(value.clone())
 }
 
-fn get_inner(depot: &Depot) -> Json<DiscoveryResponse> {
+/// Build the discovery document from the depot values, without caching.
+///
+/// Kept separate from [`get`] so the unit tests can exercise the full document
+/// construction directly without going through the process-wide
+/// [`OnceLock`](std::sync::OnceLock) cache.
+fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
     let key_store = depot
         .get::<Keystore>("keystore")
         .expect("Keystore not found in depot");
@@ -336,7 +363,7 @@ mod tests {
     async fn discovery_reports_extended_signing_algorithms() {
         crate::handlers::test_utils::setup();
 
-        let Json(response) = get_inner(&test_depot());
+        let Json(response) = build_response(&test_depot());
         let body = serde_json::to_value(response).unwrap();
 
         let id_token_algs: Vec<_> = body["id_token_signing_alg_values_supported"]
@@ -364,7 +391,7 @@ mod tests {
     async fn discovery_advertises_contrix_scopes_and_claims() {
         crate::handlers::test_utils::setup();
 
-        let Json(response) = get_inner(&test_depot());
+        let Json(response) = build_response(&test_depot());
         let body = serde_json::to_value(response).unwrap();
 
         let scopes = body["scopes_supported"].as_array().unwrap();
@@ -410,7 +437,7 @@ mod tests {
     async fn discovery_does_not_advertise_unbacked_email_claims() {
         crate::handlers::test_utils::setup();
 
-        let Json(response) = get_inner(&test_depot());
+        let Json(response) = build_response(&test_depot());
         let body = serde_json::to_value(response).unwrap();
 
         let scopes = body["scopes_supported"].as_array().unwrap();
@@ -436,7 +463,7 @@ mod tests {
     async fn discovery_scopes_and_claims_snapshot() {
         crate::handlers::test_utils::setup();
 
-        let Json(response) = get_inner(&test_depot());
+        let Json(response) = build_response(&test_depot());
         let body = serde_json::to_value(response).unwrap();
 
         let mut scopes: Vec<String> = body["scopes_supported"]

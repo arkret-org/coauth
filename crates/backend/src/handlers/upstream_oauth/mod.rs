@@ -32,6 +32,7 @@ pub mod authorize;
 pub mod backchannel_logout;
 pub mod cache;
 pub mod callback;
+pub mod jwks_cache;
 pub(crate) mod cookie;
 pub(crate) mod template;
 

@@ -19,7 +19,8 @@ use tracing::Instrument;
 
 use crate::{
     handlers::{
-        ActivityTracker, CookieManager, Limiter, MetadataCache, passwords::PasswordManager,
+        ActivityTracker, CookieManager, JwksCache, Limiter, MetadataCache,
+        passwords::PasswordManager,
     },
     services::{
         account_claims::account_claims_service,
@@ -35,6 +36,15 @@ use crate::{
     },
     telemetry::METER,
 };
+
+/// Process-wide JWKS cache shared across all requests.
+///
+/// Unlike [`MetadataCache`], the JWKS cache is not a field on [`AppState`]
+/// (which is constructed in the `coauth-cli` crate); it lives as a single
+/// lazily-initialised value here and a cheap clone (the inner map is behind an
+/// `Arc`) is injected into the depot by [`inject_app_state`]. All clones share
+/// the same underlying map, so the cache is genuinely shared across requests.
+static JWKS_CACHE: std::sync::LazyLock<JwksCache> = std::sync::LazyLock::new(JwksCache::new);
 
 /// Shared application state that is cloned into the Salvo [`Depot`] for every
 /// incoming request. Holds all the service-level dependencies (database pool,
@@ -196,6 +206,7 @@ pub async fn inject_app_state(
     depot.insert("password_manager", state.password_manager.clone());
     depot.insert("cookie_manager", state.cookie_manager.clone());
     depot.insert("metadata_cache", state.metadata_cache.clone());
+    depot.insert("jwks_cache", JWKS_CACHE.clone());
     depot.insert("site_config", state.site_config.clone());
     depot.insert("limiter", state.limiter.clone());
     depot.insert("policy_factory", state.policy_factory.clone());

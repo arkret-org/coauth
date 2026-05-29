@@ -124,5 +124,6 @@ pub use self::{
     preferred_language::preferred_language,
     rate_limit::{Limiter, RequesterFingerprint},
     upstream_oauth::cache::MetadataCache,
+    upstream_oauth::jwks_cache::JwksCache,
 };
 pub use crate::salvo_utils::cookies::CookieManager;

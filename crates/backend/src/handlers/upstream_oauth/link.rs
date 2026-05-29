@@ -630,18 +630,13 @@ mod tests {
         // Grab a key to sign the id_token
         // We could generate a key on the fly, but because we have one available here,
         // why not use it?
-        let key = state
+        let signer = state
             .key_store
-            .signing_key_for_algorithm(&JsonWebSignatureAlg::Rs256)
-            .unwrap();
-
-        let signer = key
-            .params()
-            .signing_key_for_alg(&JsonWebSignatureAlg::Rs256)
+            .signer_for_algorithm(&JsonWebSignatureAlg::Rs256)
             .unwrap();
         let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Rs256);
         let id_token =
-            Jwt::sign_with_rng(&mut rng, header, id_token_claims.clone(), &signer).unwrap();
+            Jwt::sign_with_rng(&mut rng, header, id_token_claims.clone(), &*signer).unwrap();
 
         // Provision a provider and a link
         let mut repo = state.repository().await.unwrap();
@@ -830,18 +825,13 @@ mod tests {
         // Grab a key to sign the id_token
         // We could generate a key on the fly, but because we have one available here,
         // why not use it?
-        let key = state
+        let signer = state
             .key_store
-            .signing_key_for_algorithm(&JsonWebSignatureAlg::Rs256)
-            .unwrap();
-
-        let signer = key
-            .params()
-            .signing_key_for_alg(&JsonWebSignatureAlg::Rs256)
+            .signer_for_algorithm(&JsonWebSignatureAlg::Rs256)
             .unwrap();
         let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Rs256);
         let id_token =
-            Jwt::sign_with_rng(&mut rng, header, id_token_claims.clone(), &signer).unwrap();
+            Jwt::sign_with_rng(&mut rng, header, id_token_claims.clone(), &*signer).unwrap();
 
         // Provision a provider and a link
         let mut repo = state.repository().await.unwrap();
@@ -1208,18 +1198,13 @@ mod tests {
         keystore: &Keystore,
         payload: Value,
     ) -> Result<Jwt<'static, Value>, coauth_jose::jwt::JwtSignatureError> {
-        let key = keystore
-            .signing_key_for_algorithm(&JsonWebSignatureAlg::Rs256)
-            .unwrap();
-
-        let signer = key
-            .params()
-            .signing_key_for_alg(&JsonWebSignatureAlg::Rs256)
+        let signer = keystore
+            .signer_for_algorithm(&JsonWebSignatureAlg::Rs256)
             .unwrap();
 
         let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Rs256);
 
-        Jwt::sign_with_rng(rng, header, payload, &signer)
+        Jwt::sign_with_rng(rng, header, payload, &*signer)
     }
 
     async fn add_linked_upstream_session(

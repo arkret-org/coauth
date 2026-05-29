@@ -301,9 +301,8 @@ impl ClientCredentials {
                 let key = keystore
                     .signing_key_for_algorithm(signing_algorithm)
                     .ok_or(CredentialsError::NoPrivateKeyFound)?;
-                let signer = key
-                    .params()
-                    .signing_key_for_alg(signing_algorithm)
+                let signer = keystore
+                    .signer_for_algorithm(signing_algorithm)
                     .map_err(|_| CredentialsError::JwtWrongAlgorithm)?;
                 let mut header = JsonWebSignatureHeader::new(signing_algorithm.clone());
 
@@ -311,7 +310,7 @@ impl ClientCredentials {
                     header = header.with_kid(kid);
                 }
 
-                let client_assertion = Jwt::sign(header, claims, &signer)?;
+                let client_assertion = Jwt::sign(header, claims, &*signer)?;
 
                 request.form(&AuthenticatedForm {
                     body: form,

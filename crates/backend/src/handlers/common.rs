@@ -242,6 +242,7 @@ pub trait DepotExt {
     fn contrix_config(&self) -> Result<ContrixConfig, RouteError>;
     fn cookie_manager(&self) -> Result<crate::handlers::CookieManager, RouteError>;
     fn metadata_cache(&self) -> Result<crate::handlers::MetadataCache, RouteError>;
+    fn jwks_cache(&self) -> Result<crate::handlers::JwksCache, RouteError>;
     fn http_client(&self) -> Result<reqwest::Client, RouteError>;
     fn encrypter(&self) -> Result<coauth_keystore::Encrypter, RouteError>;
     fn key_store(&self) -> Result<coauth_keystore::Keystore, RouteError>;
@@ -348,6 +349,10 @@ impl DepotExt for Depot {
 
     fn metadata_cache(&self) -> Result<crate::handlers::MetadataCache, RouteError> {
         depot_get(self, "metadata_cache")
+    }
+
+    fn jwks_cache(&self) -> Result<crate::handlers::JwksCache, RouteError> {
+        depot_get(self, "jwks_cache")
     }
 
     fn http_client(&self) -> Result<reqwest::Client, RouteError> {

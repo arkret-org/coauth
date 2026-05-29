@@ -170,9 +170,8 @@ fn sign_transcript(
 
     // Ensure the key has a JWK kid; if not we cannot verify later.
     key.kid().ok_or(SignError::NoSigningKey)?;
-    let signer = key
-        .params()
-        .signing_key_for_alg(&alg)
+    let signer = keystore
+        .signer_for_algorithm(&alg)
         .map_err(|_| SignError::KeyAlgMismatch)?;
 
     let mut rng = ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| SignError::Sign)?;
