@@ -12,7 +12,7 @@
 //! - [RFC 9126 - Pushed Authorization Requests](https://datatracker.ietf.org/doc/html/rfc9126)
 //! - [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)
 
-use std::{collections::HashSet, fmt, hash::Hash, num::NonZeroU32};
+use std::{collections::HashSet, fmt, hash::Hash};
 
 use chrono::{DateTime, Duration, Utc};
 use coauth_iana::oauth::{OAuthAccessTokenType, OAuthTokenTypeHint};
@@ -306,7 +306,7 @@ pub struct AuthorizationRequest {
     /// was actively authenticated by the OpenID Provider.
     #[serde(default)]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub max_age: Option<NonZeroU32>,
+    pub max_age: Option<u32>,
 
     /// End-User's preferred languages and scripts for the user interface.
     #[serde_as(as = "Option<StringWithSeparator::<SpaceSeparator, LanguageTag>>")]
@@ -874,6 +874,7 @@ pub struct PushedAuthorizationResponse {
 
 #[cfg(test)]
 mod tests {
+    use coauth_iana::oauth::OAuthAuthorizationEndpointResponseType;
     use serde_json::json;
 
     use super::*;
@@ -921,6 +922,21 @@ mod tests {
         });
 
         assert_serde_json(&req, expected);
+    }
+
+    #[test]
+    fn authorization_request_accepts_zero_max_age() {
+        let request: AuthorizationRequest = serde_urlencoded::from_str(
+            "response_type=code&client_id=client&redirect_uri=https%3A%2F%2Fexample.com%2Fredirect&scope=openid&prompt=login&max_age=0",
+        )
+        .expect("max_age=0 is a valid OIDC authorization request parameter");
+
+        assert_eq!(
+            request.response_type,
+            OAuthAuthorizationEndpointResponseType::Code.into()
+        );
+        assert_eq!(request.max_age, Some(0));
+        assert_eq!(request.prompt, Some(vec![Prompt::Login]));
     }
 
     // -- GrantType serialization --------------------------------------------

@@ -34,3 +34,4 @@ coauth-jose.workspace = true
 [dev-dependencies]
 assert_matches.workspace = true
 insta.workspace = true
+serde_urlencoded.workspace = true

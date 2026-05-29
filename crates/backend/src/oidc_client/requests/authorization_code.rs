@@ -16,7 +16,7 @@
 //!
 //! [Authorization Code flow]: https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
 
-use std::{collections::HashSet, num::NonZeroU32};
+use std::collections::HashSet;
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use chrono::{DateTime, Utc};
@@ -80,7 +80,7 @@ pub struct AuthorizationRequestData {
 
     /// The allowable elapsed time in seconds since the last time the End-User
     /// was actively authenticated by the OpenID Provider.
-    pub max_age: Option<NonZeroU32>,
+    pub max_age: Option<u32>,
 
     /// End-User's preferred languages and scripts for the user interface.
     pub ui_locales: Option<Vec<LanguageTag>>,
@@ -152,7 +152,7 @@ impl AuthorizationRequestData {
 
     /// Set the `max_age` field of this `AuthorizationRequestData`.
     #[must_use]
-    pub fn with_max_age(mut self, max_age: NonZeroU32) -> Self {
+    pub fn with_max_age(mut self, max_age: u32) -> Self {
         self.max_age = Some(max_age);
         self
     }
