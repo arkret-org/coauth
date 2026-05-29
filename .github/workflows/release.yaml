@@ -143,6 +143,13 @@ jobs:
     steps:
       - name: Fetch repository
         uses: actions/checkout@v6
+        with:
+          path: coauth
+
+      - name: Fetch Contrix Rust SDK
+        env:
+          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
+        run: bash coauth/.ci/checkout-sibling.sh contrix-rust-sdk contrix-rust-sdk
 
       - name: Configure Docker Buildx
         uses: docker/setup-buildx-action@v3.11.1
@@ -152,6 +159,7 @@ jobs:
               mirrors = ["mirror.gcr.io"]
 
       - name: Authenticate with GitHub Container Registry
+        if: github.server_url == 'https://github.com'
         uses: docker/login-action@v3.6.0
         with:
           registry: ghcr.io
@@ -188,17 +196,18 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
+          file: coauth/Dockerfile
           platforms: ${{ matrix.platform }}
           pull: true
-          push: true
+          push: ${{ github.server_url == 'https://github.com' }}
+          load: ${{ github.server_url != 'https://github.com' }}
           provenance: false
           sbom: false
           build-args: |
             VERGEN_GIT_DESCRIBE=${{ needs.compute-version.outputs.describe }}
           tags: ${{ steps.arch-tags.outputs.release }}
           cache-from: type=registry,ref=${{ env.BUILDCACHE }}:buildcache-${{ matrix.arch }}
-          cache-to: type=registry,ref=${{ env.BUILDCACHE }}:buildcache-${{ matrix.arch }},mode=max
+          cache-to: type=registry,ref=${{ env.BUILDCACHE }}:buildcache-${{ matrix.arch }},mode=max,ignore-error=true
 
       - name: Smoke test release image for ${{ matrix.arch }}
         shell: bash
@@ -213,7 +222,9 @@ jobs:
             exit 1
           fi
 
-          docker pull "$image"
+          if [ "${{ github.server_url }}" = "https://github.com" ]; then
+            docker pull "$image"
+          fi
           docker run --rm "$image" --version
 
       - name: Scan release image with Trivy for ${{ matrix.arch }}
@@ -230,7 +241,7 @@ jobs:
   build-image:
     name: Publish container image manifests
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' || github.event.label.name == 'Z-Build-Workflow'
+    if: github.server_url == 'https://github.com' && (github.event_name == 'push' || github.event.label.name == 'Z-Build-Workflow')
     needs:
       - prepare-image-build
       - build-image-arch
