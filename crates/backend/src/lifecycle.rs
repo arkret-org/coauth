@@ -180,6 +180,11 @@ impl LifecycleManager {
     /// Run until we finish completely shutting down.
     pub async fn run(self) -> ExitCode {
         #[cfg(unix)]
+        let mut state = self;
+        #[cfg(not(unix))]
+        let state = self;
+
+        #[cfg(unix)]
         notify(&[sd_notify::NotifyState::Ready]);
 
         // This will be `Some` if we have the watchdog enabled, and `None` if not
@@ -210,17 +215,17 @@ impl LifecycleManager {
                 };
 
                 tokio::select! {
-                    () = self.soft_shutdown_token.cancelled() => {
+                    () = state.soft_shutdown_token.cancelled() => {
                         tracing::warn!("Another task triggered a shutdown, it likely crashed! Shutting down");
                         break true;
                     },
 
-                    _ = self.sigterm.recv() => {
+                    _ = state.sigterm.recv() => {
                         tracing::info!("Shutdown signal received (SIGTERM), shutting down");
                         break false;
                     },
 
-                    _ = self.sigint.recv() => {
+                    _ = state.sigint.recv() => {
                         tracing::info!("Shutdown signal received (SIGINT), shutting down");
                         break false;
                     },
@@ -231,7 +236,7 @@ impl LifecycleManager {
                         ]);
                     },
 
-                    _ = self.sighup.recv() => {
+                    _ = state.sighup.recv() => {
                         tracing::info!("Reload signal received (SIGHUP), reloading");
 
                         notify(&[
@@ -245,16 +250,16 @@ impl LifecycleManager {
                         // does not finish within `reload_timeout`, we log and
                         // return to serving traffic.
                         let reload_fut = futures_util::future::join_all(
-                            self.reload_handlers
+                            state.reload_handlers
                                 .iter()
                                 .map(|handler| handler()),
                         );
-                        if tokio::time::timeout(self.reload_timeout, reload_fut)
+                        if tokio::time::timeout(state.reload_timeout, reload_fut)
                             .await
                             .is_err()
                         {
                             tracing::warn!(
-                                timeout_secs = self.reload_timeout.as_secs(),
+                                timeout_secs = state.reload_timeout.as_secs(),
                                 "Reload handlers did not finish in time, proceeding"
                             );
                         }
@@ -269,7 +274,7 @@ impl LifecycleManager {
             #[cfg(not(unix))]
             {
                 tokio::select! {
-                    () = self.soft_shutdown_token.cancelled() => {
+                    () = state.soft_shutdown_token.cancelled() => {
                         tracing::warn!("Another task triggered a shutdown, it likely crashed! Shutting down");
                         break true;
                     },
@@ -285,24 +290,24 @@ impl LifecycleManager {
         #[cfg(unix)]
         notify(&[sd_notify::NotifyState::Stopping]);
 
-        self.soft_shutdown_token.cancel();
-        self.task_tracker.close();
+        state.soft_shutdown_token.cancel();
+        state.task_tracker.close();
 
         // Start the timeout
-        let timeout = tokio::time::sleep(self.timeout);
+        let timeout = tokio::time::sleep(state.timeout);
 
         #[cfg(unix)]
         tokio::select! {
-            _ = self.sigterm.recv() => {
+            _ = state.sigterm.recv() => {
                 tracing::warn!("Second shutdown signal received (SIGTERM), abort");
             },
-            _ = self.sigint.recv() => {
+            _ = state.sigint.recv() => {
                 tracing::warn!("Second shutdown signal received (SIGINT), abort");
             },
             () = timeout => {
                 tracing::warn!("Shutdown timeout reached, abort");
             },
-            () = self.task_tracker.wait() => {
+            () = state.task_tracker.wait() => {
                 // This is the "happy path", we have gracefully shutdown
             },
         }
@@ -315,20 +320,20 @@ impl LifecycleManager {
             () = timeout => {
                 tracing::warn!("Shutdown timeout reached, abort");
             },
-            () = self.task_tracker.wait() => {
+            () = state.task_tracker.wait() => {
                 // This is the "happy path", we have gracefully shutdown
             },
         }
 
-        self.hard_shutdown_token().cancel();
+        state.hard_shutdown_token().cancel();
 
         // Give remaining tasks a bounded grace period before forcing exit.
-        if tokio::time::timeout(self.hard_timeout, self.task_tracker().wait())
+        if tokio::time::timeout(state.hard_timeout, state.task_tracker().wait())
             .await
             .is_err()
         {
             tracing::warn!(
-                timeout_secs = self.hard_timeout.as_secs(),
+                timeout_secs = state.hard_timeout.as_secs(),
                 "Task tracker did not drain in time, proceeding with exit"
             );
         }

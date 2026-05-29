@@ -84,7 +84,7 @@ RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
   --mount=type=cache,id=frontend-cargo-git,target=/usr/local/cargo/git,sharing=locked \
   --mount=type=cache,id=frontend-target,target=/app/target,sharing=locked \
-  for i in 1 2 3; do dx build -p coauth-frontend --release && break || echo "Retry $i..." && sleep 10; done \
+  for i in 1 2 3; do dx build -p coauth-frontend --release --debug-symbols false && break || echo "Retry $i..." && sleep 10; done \
   && cp -r target/dx/coauth-frontend/release/web/public /frontend-dist
 
 # Export the built frontend assets as a filesystem root so workflows can
