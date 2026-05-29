@@ -38,7 +38,7 @@
 //! };
 //! ```
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use cedar_policy::{Authorizer, Context, Decision, Entities, EntityUid, PolicySet, Request};
@@ -163,14 +163,28 @@ impl CedarEvaluator {
             );
         }
 
-        let principal: EntityUid = r#"Requester::"anonymous""#.parse().map_err(|e| {
-            EvaluationError::Evaluation(anyhow::anyhow!("Failed to parse principal: {e}"))
-        })?;
+        // The principal and resource EntityUids are constant; parse them once
+        // and clone the cached value (cloning an `EntityUid` is cheap).
+        static PRINCIPAL: OnceLock<EntityUid> = OnceLock::new();
+        static RESOURCE: OnceLock<EntityUid> = OnceLock::new();
+        let principal = PRINCIPAL
+            .get_or_init(|| {
+                r#"Requester::"anonymous""#
+                    .parse()
+                    .expect("constant principal EntityUid must parse")
+            })
+            .clone();
+        let resource = RESOURCE
+            .get_or_init(|| {
+                r#"Resource::"default""#
+                    .parse()
+                    .expect("constant resource EntityUid must parse")
+            })
+            .clone();
+
+        // The action is genuinely dynamic, so parse it per-call.
         let action: EntityUid = format!(r#"Action::"{action_name}""#).parse().map_err(|e| {
             EvaluationError::Evaluation(anyhow::anyhow!("Failed to parse action: {e}"))
-        })?;
-        let resource: EntityUid = r#"Resource::"default""#.parse().map_err(|e| {
-            EvaluationError::Evaluation(anyhow::anyhow!("Failed to parse resource: {e}"))
         })?;
 
         // Cedar does not support JSON null values; strip them before building
@@ -178,11 +192,10 @@ impl CedarEvaluator {
         // a parse error.
         strip_json_nulls(&mut context_json);
 
-        let context = Context::from_json_value(context_json.clone(), None).map_err(|e| {
+        let context = Context::from_json_value(context_json, None).map_err(|e| {
             tracing::error!(
                 action = action_name,
                 error = %e,
-                context = %context_json,
                 "Failed to build Cedar context"
             );
             EvaluationError::Evaluation(anyhow::anyhow!("Failed to build Cedar context: {e}"))

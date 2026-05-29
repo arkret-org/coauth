@@ -1,24 +1,15 @@
 use chrono::Duration;
-use coauth_data::{DatabaseError, PgRepository, RepositoryAccess, queue::InsertableJob};
+use coauth_data::{
+    DatabaseError, PgRepository, RepositoryAccess,
+    pg::advisory_lock::{AdvisoryLockResult, advisory_lock_key},
+    queue::InsertableJob,
+};
 use cron::Schedule;
-use diesel::{sql_query, sql_types::Bool};
+use diesel::sql_query;
 use diesel_async::RunQueryDsl;
 
 use super::{QueueRunnerError, shared::MAX_ATTEMPTS};
 use crate::State;
-
-/// Result of a `pg_try_advisory_lock` query.
-#[derive(diesel::QueryableByName)]
-struct AdvisoryLockResult {
-    #[diesel(sql_type = Bool)]
-    acquired: bool,
-}
-
-/// Derive a stable i64 key from a human-readable lock name using CRC-32.
-fn advisory_lock_key(name: &str) -> i64 {
-    const CRC_IEEE: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
-    i64::from(CRC_IEEE.checksum(name.as_bytes()))
-}
 
 /// A cron-like schedule definition that the leader evaluates every tick.
 pub(super) struct ScheduleDefinition {

@@ -5,28 +5,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use coauth_config::{ClientsConfig, UpstreamOAuthConfig};
 use coauth_data::{
     Clock, Pagination, PgRepository, RepositoryAccess, UpstreamOAuthProviderSource,
+    pg::advisory_lock::advisory_lock_key,
     upstream_oauth::{UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams},
 };
 use coauth_keystore::Encrypter;
-use diesel::{sql_query, sql_types::Bool};
+use diesel::sql_query;
 use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object as PooledConnection,
 };
 use tracing::{error, info, info_span, warn};
-
-/// Result of a `pg_try_advisory_lock` query
-#[derive(diesel::QueryableByName)]
-#[allow(dead_code)]
-struct AdvisoryLockResult {
-    #[diesel(sql_type = Bool)]
-    acquired: bool,
-}
-
-/// Compute a stable advisory lock key from a string
-fn advisory_lock_key(name: &str) -> i64 {
-    const CRC_IEEE: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
-    i64::from(CRC_IEEE.checksum(name.as_bytes()))
-}
 
 fn map_import_action(
     config: coauth_config::UpstreamOAuthImportAction,
@@ -114,12 +101,11 @@ pub async fn config_sync(
     // hold different locks and step on each other.
     let lock_key = advisory_lock_key("coauth config sync");
 
-    // pg_advisory_lock blocks until the lock is acquired (returns void/true)
-    let _: AdvisoryLockResult = sql_query(format!(
-        "SELECT pg_advisory_lock({lock_key}) IS NOT NULL AS acquired"
-    ))
-    .get_result(&mut *conn)
-    .await?;
+    // pg_advisory_lock blocks until the lock is acquired (returns void), so
+    // there is no boolean to inspect here.
+    sql_query(format!("SELECT pg_advisory_lock({lock_key})"))
+        .execute(&mut *conn)
+        .await?;
 
     // Create a repository from the locked connection
     let mut repo = PgRepository::new(conn);

@@ -42,8 +42,6 @@ struct AppAccessTokenResponse {
     msg: String,
     #[serde(default)]
     app_access_token: String,
-    #[allow(dead_code)]
-    expire: Option<u64>,
 }
 
 /// Feishu user token response data.

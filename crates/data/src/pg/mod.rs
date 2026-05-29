@@ -6,12 +6,14 @@
 #![allow(clippy::module_name_repetitions, clippy::blocks_in_conditions)]
 
 use ::tracing::{info, warn};
-use diesel::sql_types::{BigInt, Bool};
+use diesel::sql_types::BigInt;
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Pool};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
 /// PostgreSQL account aggregate repositories.
 pub mod account;
+/// Shared helpers for PostgreSQL advisory locks.
+pub mod advisory_lock;
 /// PostgreSQL app session repositories.
 pub mod app_session;
 /// PostgreSQL audit log repositories.
@@ -47,7 +49,6 @@ pub(crate) mod telemetry;
 /// can use `coauth_data::test_utils::setup_test_pool()` in their own
 /// test code.
 pub mod test_utils;
-pub(crate) mod tracing;
 
 pub(crate) use self::errors::DatabaseInconsistencyError;
 pub use self::{
@@ -93,7 +94,7 @@ pub async fn migrate(
     // Try to acquire the advisory lock, retrying with backoff
     let mut backoff = std::time::Duration::from_millis(250);
     loop {
-        let result: AdvisoryLockResult =
+        let result: self::advisory_lock::AdvisoryLockResult =
             diesel::sql_query("SELECT pg_try_advisory_lock($1) AS acquired")
                 .bind::<BigInt, _>(lock_id)
                 .get_result(&mut *conn)
@@ -174,13 +175,6 @@ pub async fn has_pending_migrations(database_url: &str) -> Result<bool, anyhow::
 fn generate_lock_id(database_name: &str) -> i64 {
     const CRC_IEEE: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
     0x3d32_ad9e * i64::from(CRC_IEEE.checksum(database_name.as_bytes()))
-}
-
-/// Helper struct for advisory lock queries
-#[derive(diesel::QueryableByName)]
-struct AdvisoryLockResult {
-    #[diesel(sql_type = Bool)]
-    acquired: bool,
 }
 
 /// Helper struct for database name query

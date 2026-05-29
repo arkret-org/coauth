@@ -608,6 +608,15 @@ pub async fn load_policy_factory_dynamic_data_continuously(
 ) -> Result<(), anyhow::Error> {
     let policy_factory = policy_factory.clone();
 
+    // Static providers (e.g. Cedar) ignore dynamic data, so there is no point
+    // loading it from the database or spawning a periodic refresh task.
+    if !policy_factory.supports_dynamic_data() {
+        tracing::debug!(
+            "Policy backend does not support dynamic data; skipping dynamic data polling"
+        );
+        return Ok(());
+    }
+
     load_policy_factory_dynamic_data(&policy_factory, &*repository_factory).await?;
 
     task_tracker.spawn(async move {

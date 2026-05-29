@@ -102,6 +102,10 @@ impl PolicyProviderFactory for RemoteProviderFactory {
             )))
         }
     }
+
+    fn supports_dynamic_data(&self) -> bool {
+        true
+    }
 }
 
 /// The response format expected from the remote policy service.

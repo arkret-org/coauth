@@ -18,7 +18,7 @@
 //!   policy checks (registration, email, authorization, etc.).
 //!
 //! [`PolicyFactory`] and [`Policy`] are the public-facing types that wrap
-//! these traits, preserving backward compatibility with existing handler code.
+//! these traits and form the public API used by handler code.
 
 pub mod audit;
 pub mod model;
@@ -177,6 +177,15 @@ impl PolicyFactory {
         dynamic_data: coauth_data::PolicyData,
     ) -> Result<bool, LoadError> {
         self.inner.set_dynamic_data(dynamic_data).await
+    }
+
+    /// Whether the underlying backend consumes dynamic policy data.
+    ///
+    /// Returns `false` for static backends (e.g. Cedar), allowing callers to
+    /// skip periodic polling of the database.
+    #[must_use]
+    pub fn supports_dynamic_data(&self) -> bool {
+        self.inner.supports_dynamic_data()
     }
 
     /// Create a new policy instance.

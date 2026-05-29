@@ -59,7 +59,7 @@ impl AliyunSmsTransport {
         template_params: &HashMap<String, String>,
     ) -> Result<(), SmsTransportError> {
         let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-        let nonce = uuid_v4_string();
+        let nonce = random_nonce();
         let template_param_json =
             serde_json::to_string(template_params).unwrap_or_else(|_| String::from("{}"));
 
@@ -137,13 +137,8 @@ impl AliyunSmsTransport {
     }
 }
 
-/// Generate a simple UUID v4-like random string for the nonce
-fn uuid_v4_string() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    // Use a combination of timestamp and a hash to produce a unique nonce
-    format!("{now:032x}")
+/// Generate a cryptographically random UUID v4 string for use as the Aliyun
+/// `SignatureNonce`.
+fn random_nonce() -> String {
+    uuid::Uuid::new_v4().to_string()
 }

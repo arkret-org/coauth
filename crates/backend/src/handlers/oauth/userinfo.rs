@@ -198,7 +198,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
             .signing_key_for_algorithm(&alg)
             .ok_or(RouteError::InvalidSigningKey)?;
 
-        let signer = key.params().signing_key_for_alg(&alg)?;
+        let signer = key_store.signer_for_algorithm(&alg)?;
         let header = JsonWebSignatureHeader::new(alg)
             .with_kid(key.kid().ok_or(RouteError::InvalidSigningKey)?);
 
@@ -208,7 +208,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
             user_info,
         };
 
-        let token = Jwt::sign_with_rng(&mut rng, header, signed_user_info, &signer)?;
+        let token = Jwt::sign_with_rng(&mut rng, header, signed_user_info, &*signer)?;
         Ok(UserinfoResponse::Jwt(token.into_string()))
     } else {
         Ok(UserinfoResponse::Json(user_info))

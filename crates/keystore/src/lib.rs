@@ -668,30 +668,97 @@ impl Thumbprint for PrivateKey {
     }
 }
 
+/// Cache key for a built [`AsymmetricSigningKey`]: the JWK `kid` (or an empty
+/// string when the key has none) paired with the signature algorithm.
+type SignerCacheKey = (String, JsonWebSignatureAlg);
+
 /// A structure to store a list of [`PrivateKey`]. The keys are held in an
 /// [`Arc`] to ensure they are only loaded once in memory and allow cheap
 /// cloning
 #[derive(Clone, Default)]
 pub struct Keystore {
     inner: Arc<JsonWebKeySet<PrivateKey>>,
+
+    /// Precomputed public JWKS, built once in [`Keystore::new`] so that
+    /// [`Keystore::public_jwks`] does not have to rebuild it on every call.
+    public_jwks: Arc<PublicJsonWebKeySet>,
+
+    /// Cache of already-built signers, keyed by `(kid, alg)`, so that the
+    /// (potentially expensive) RSA/EC key clone + signer construction in
+    /// [`PrivateKey::try_build_signer`] happens at most once per
+    /// `(kid, alg)` pair.
+    signer_cache: Arc<std::sync::RwLock<std::collections::HashMap<SignerCacheKey, Arc<AsymmetricSigningKey>>>>,
 }
 
 impl Keystore {
     /// Create a keystore out of a JSON Web Key Set
     #[must_use]
     pub fn new(keys: JsonWebKeySet<PrivateKey>) -> Self {
+        let inner = Arc::new(keys);
+        let public_jwks: PublicJsonWebKeySet = inner
+            .iter()
+            .map(|jwk| jwk.cloned_map(|priv_params: &PrivateKey| priv_params.into()))
+            .collect();
+        let public_jwks = Arc::new(public_jwks);
         Self {
-            inner: Arc::new(keys),
+            inner,
+            public_jwks,
+            signer_cache: Arc::default(),
         }
     }
 
     /// Get the public JSON Web Key Set for the keys stored in this [`Keystore`]
+    ///
+    /// The set is computed once in [`Keystore::new`]; this returns a clone of
+    /// the precomputed value (the keyset is immutable after construction).
     #[must_use]
     pub fn public_jwks(&self) -> PublicJsonWebKeySet {
-        self.inner
-            .iter()
-            .map(|jwk| jwk.cloned_map(|priv_params: &PrivateKey| priv_params.into()))
-            .collect()
+        (*self.public_jwks).clone()
+    }
+
+    /// Get a signer for the given algorithm, reusing a previously built signer
+    /// when available.
+    ///
+    /// On a cache miss this finds the JWK matching the algorithm (via
+    /// [`JsonWebKeySet::signing_key_for_algorithm`]), builds the signer once
+    /// through the existing [`PrivateKey::signing_key_for_alg`] path, caches it
+    /// keyed by `(kid, alg)` and returns the [`Arc`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WrongAlgorithmError`] if no key in the store can sign with the
+    /// requested algorithm.
+    pub fn signer_for_algorithm(
+        &self,
+        alg: &JsonWebSignatureAlg,
+    ) -> Result<Arc<AsymmetricSigningKey>, WrongAlgorithmError> {
+        let jwk = self
+            .inner
+            .signing_key_for_algorithm(alg)
+            .ok_or(WrongAlgorithmError)?;
+        let kid = jwk.kid().unwrap_or_default().to_owned();
+        let cache_key: SignerCacheKey = (kid, alg.clone());
+
+        // Fast path: return a cached signer if present.
+        if let Ok(cache) = self.signer_cache.read() {
+            if let Some(signer) = cache.get(&cache_key) {
+                return Ok(Arc::clone(signer));
+            }
+        }
+
+        // Cache miss: build the signer once via the existing builder path.
+        let signer = Arc::new(jwk.params().signing_key_for_alg(alg)?);
+
+        if let Ok(mut cache) = self.signer_cache.write() {
+            // Another thread may have inserted the same key in the meantime;
+            // `entry` keeps whichever signer is already there.
+            let entry = cache
+                .entry(cache_key)
+                .or_insert_with(|| Arc::clone(&signer));
+            return Ok(Arc::clone(entry));
+        }
+
+        Ok(signer)
     }
 }
 

@@ -1,7 +1,7 @@
 // Schema generator binary for policy input types.
 //
 // Produces JSON schemas that can be used for validating
-// policy input types with Open Policy Agent.
+// policy input types (e.g. for Cedar or a remote HTTP authorization service).
 
 #![expect(
     clippy::disallowed_types,

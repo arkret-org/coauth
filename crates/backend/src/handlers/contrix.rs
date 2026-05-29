@@ -1115,7 +1115,7 @@ pub(crate) fn issue_handle_claim(
     let proof_payload_digest = claim_digest.clone();
 
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
-    let signer = key.params().signing_key_for_alg(&alg)?;
+    let signer = key_store.signer_for_algorithm(&alg)?;
     let unsigned_payload = HandleClaimPayload {
         proofs: vec![HandleClaimProof {
             kind: "cx.handle.claim.proof.v1".to_owned(),
@@ -1131,7 +1131,7 @@ pub(crate) fn issue_handle_claim(
         }],
         ..payload_no_proofs.clone()
     };
-    let claim_jwt = Jwt::sign(header, unsigned_payload.clone(), &signer)?.into_string();
+    let claim_jwt = Jwt::sign(header, unsigned_payload.clone(), &*signer)?.into_string();
 
     let final_payload = HandleClaimPayload {
         proofs: vec![HandleClaimProof {
@@ -1932,8 +1932,8 @@ pub(crate) fn issue_session_grant_for_audience(
         },
     };
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
-    let signer = key.params().signing_key_for_alg(&alg)?;
-    let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
+    let signer = key_store.signer_for_algorithm(&alg)?;
+    let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
 
     Ok(SessionGrantMaterial {
         grant_jwt,

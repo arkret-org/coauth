@@ -1,8 +1,8 @@
 //! Input and output types for policy evaluation.
 //!
 //! These types define the data structures passed to and returned from
-//! the Open Policy Agent policy engine. JSON schemas can be generated
-//! from the input types for compile-time validation.
+//! the policy engine (Cedar or a remote HTTP authorization service). JSON
+//! schemas can be generated from the input types for compile-time validation.
 
 use std::net::IpAddr;
 

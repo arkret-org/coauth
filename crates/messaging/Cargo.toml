@@ -30,6 +30,10 @@ serde_json.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 url.workspace = true
+# The workspace pins uuid with only the `v7` feature; we need `v4` for the
+# random Aliyun SignatureNonce, so declare it explicitly (matching the
+# workspace version 1.23.1).
+uuid = { version = "1.23.1", features = ["v4"] }
 
 [dev-dependencies]
 tokio.workspace = true

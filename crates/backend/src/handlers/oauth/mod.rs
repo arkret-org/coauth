@@ -146,10 +146,10 @@ pub(crate) fn generate_id_token(
         claims::C_HASH.insert(&mut claims, hash_token(&alg, &code.code)?)?;
     }
 
-    let signer = key.params().signing_key_for_alg(&alg)?;
+    let signer = key_store.signer_for_algorithm(&alg)?;
     let header = JsonWebSignatureHeader::new(alg)
         .with_kid(key.kid().ok_or(IdTokenSignatureError::InvalidSigningKey)?);
-    let id_token = Jwt::sign_with_rng(rng, header, claims, &signer)?;
+    let id_token = Jwt::sign_with_rng(rng, header, claims, &*signer)?;
 
     Ok(id_token.into_string())
 }
