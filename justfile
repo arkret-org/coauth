@@ -51,9 +51,9 @@ frontend-build:
     dx build -p coauth-frontend --release
     {{ if os() == "windows" { "if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse target/dx/coauth-frontend/release/web/public dist" } else { "rm -rf dist && cp -r target/dx/coauth-frontend/release/web/public dist" } }}
 
-# Ensure backend-served frontend assets exist
+# Build backend-served frontend assets from the current source tree
 frontend-assets:
-    {{ if os() == "windows" { "if (!(Test-Path dist\\assets) -or -not (Get-ChildItem dist\\assets -Filter 'coauth-frontend*.js' -ErrorAction SilentlyContinue)) { just frontend-build }" } else { "if ! find dist/assets -maxdepth 1 -name 'coauth-frontend*.js' -print -quit 2>/dev/null | grep -q .; then just frontend-build; fi" } }}
+    just frontend-build
 
 # ── Build ────────────────────────────────────────────────────
 
