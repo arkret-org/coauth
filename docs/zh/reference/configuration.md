@@ -155,10 +155,25 @@ account:
   email_change_allowed: true
   displayname_change_allowed: true
   password_registration_enabled: false
+  password_registration_contact_required: true
+  registration_email_delivery_bypass_allowed: false
   password_change_allowed: true
   password_recovery_enabled: false
+  account_deactivation_allowed: true
   login_with_email_allowed: false
   admin_portal_url: https://admin.example.com/
+  registration_token_required: false
+  bootstrap_admin_token: null
+```
+
+`bootstrap_admin_token` 是首个管理员账号的可选引导密钥。配置后，如果当前还没有管理员，
+注册完成页会要求输入该 token；匹配成功的新账号会被标记为管理员。不输入 token 的注册
+仍会作为普通用户完成；一旦系统里已有任意管理员，该 token 就不再授予管理员权限。
+
+环境变量示例：
+
+```bash
+COAUTH_ACCOUNT__BOOTSTRAP_ADMIN_TOKEN=bootstrap-secret
 ```
 
 ## `captcha`

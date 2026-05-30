@@ -2,8 +2,8 @@ use dioxus::prelude::*;
 
 use crate::{
     api::types::{
-        ChangeRegistrationEmailResponse, ProvidersResponse, RegisterResponse,
-        RegisterStatusResponse, ResendEmailAuthCodePayload, SiteConfig, StepResponse,
+        BootstrapAdminStatus, ChangeRegistrationEmailResponse, ProvidersResponse, RegisterResponse,
+        RegisterStatusResponse, ResendEmailAuthCodePayload, StepResponse,
     },
     components::{
         layout::Layout, loading::LoadingSpinner, password_input::PasswordCreationDoubleInput,
@@ -795,17 +795,18 @@ pub fn RegisterFinish(id: String) -> Element {
     let mut submitting = use_signal(|| false);
     let mut auto_submit_started = use_signal(|| false);
 
-    let site_config =
-        use_resource(|| async { crate::api::api_get::<SiteConfig>("/site-config").await });
-    let site_config_binding = site_config.read();
-    let bootstrap_admin_enabled = matches!(
-        &*site_config_binding,
-        Some(Ok(cfg)) if cfg.bootstrap_admin_token_enabled
+    let bootstrap_status = use_resource(|| async {
+        crate::api::api_get::<BootstrapAdminStatus>("/bootstrap-admin-status").await
+    });
+    let bootstrap_status_binding = bootstrap_status.read();
+    let bootstrap_admin_setup_required = matches!(
+        &*bootstrap_status_binding,
+        Some(Ok(status)) if status.setup_required
     );
-    let site_config_ready = site_config_binding.is_some();
+    let bootstrap_status_ready = bootstrap_status_binding.is_some();
 
-    if site_config_ready
-        && !bootstrap_admin_enabled
+    if bootstrap_status_ready
+        && !bootstrap_admin_setup_required
         && finish_result.read().is_none()
         && !auto_submit_started()
     {
@@ -874,7 +875,7 @@ pub fn RegisterFinish(id: String) -> Element {
                 }
             }
         }
-        Some(Ok(resp)) if !bootstrap_admin_enabled => rsx! {
+        Some(Ok(resp)) if !bootstrap_admin_setup_required => rsx! {
             Layout {
                 div { class: "login-page",
                     div { class: "login-container",
@@ -889,7 +890,7 @@ pub fn RegisterFinish(id: String) -> Element {
                 }
             }
         },
-        Some(Err(e)) if !bootstrap_admin_enabled => rsx! {
+        Some(Err(e)) if !bootstrap_admin_setup_required => rsx! {
             Layout {
                 div { class: "login-page",
                     div { class: "login-container",
@@ -901,7 +902,7 @@ pub fn RegisterFinish(id: String) -> Element {
                 }
             }
         },
-        _ if bootstrap_admin_enabled => {
+        _ if bootstrap_admin_setup_required => {
             let error_message = match finish_result.read().as_ref() {
                 Some(Ok(resp)) if resp.status != "success" => {
                     resp.error.as_deref().map(registration_error_message)

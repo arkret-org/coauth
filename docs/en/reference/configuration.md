@@ -163,10 +163,27 @@ account:
   email_change_allowed: true
   displayname_change_allowed: true
   password_registration_enabled: false
+  password_registration_contact_required: true
+  registration_email_delivery_bypass_allowed: false
   password_change_allowed: true
   password_recovery_enabled: false
+  account_deactivation_allowed: true
   login_with_email_allowed: false
   admin_portal_url: https://admin.example.com/
+  registration_token_required: false
+  bootstrap_admin_token: null
+```
+
+`bootstrap_admin_token` is an optional one-time bootstrap secret for the first
+administrator. When it is set and no admin user exists yet, the registration
+finish page asks for the token; a matching token marks that new account as an
+admin. Registrations without the token still complete as regular users, and
+the token stops granting admin access after any admin exists.
+
+Environment override example:
+
+```sh
+COAUTH_ACCOUNT__BOOTSTRAP_ADMIN_TOKEN=bootstrap-secret
 ```
 
 ## `captcha`

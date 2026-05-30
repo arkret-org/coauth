@@ -282,6 +282,16 @@ pub struct SiteConfig {
     pub plan_management_iframe_uri: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct BootstrapAdminStatus {
+    #[serde(default)]
+    pub has_admin: bool,
+    #[serde(default)]
+    pub token_configured: bool,
+    #[serde(default)]
+    pub setup_required: bool,
+}
+
 // ── Mutation payloads ──────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
