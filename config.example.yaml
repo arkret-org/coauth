@@ -70,6 +70,10 @@ sms:
 account:
   password_registration_enabled: true
   registration_email_delivery_bypass_allowed: false
+  registration_token_required: false
+  # Optional first-admin bootstrap token. If no admin exists yet, entering this
+  # token on the final registration step grants admin privileges to that user.
+  bootstrap_admin_token: ${COAUTH_ACCOUNT__BOOTSTRAP_ADMIN_TOKEN}
 passwords:
   enabled: true
   schemes:
