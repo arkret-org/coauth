@@ -382,7 +382,7 @@ mod ec_impls {
         fn from(key: &PublicKey<C>) -> Self {
             let uncompressed_point = key.to_encoded_point(false);
             let Coordinates::Uncompressed { x, y } = uncompressed_point.coordinates() else {
-                unreachable!()
+                unreachable!("SEC1 encoding was explicitly requested as uncompressed")
             };
             EcPublicParameters {
                 crv: C::CRV,

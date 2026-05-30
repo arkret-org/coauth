@@ -269,6 +269,7 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
         | DidBindingProofError::InvalidJws(_)
         | DidBindingProofError::NoVerificationKey
         | DidBindingProofError::MissingVerificationMethod
+        | DidBindingProofError::UnsupportedAlgorithm(_)
         | DidBindingProofError::VerificationMethodMismatch
         | DidBindingProofError::VerificationMethodNotFound
         | DidBindingProofError::SignatureMismatch

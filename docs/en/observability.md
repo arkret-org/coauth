@@ -176,16 +176,6 @@ content-type: application/json
 # HELP coauth_session_grant_total Total session grants issued by reason
 # TYPE coauth_session_grant_total counter
 coauth_session_grant_total{reason="ok"} 12345
-coauth_session_grant_total{reason="agent_paused"} 4
-coauth_session_grant_total{reason="agent_deactivated"} 1
-coauth_session_grant_total{reason="accountability_grant_missing"} 0
-
-# HELP coauth_agent_pairing_attempts_total Agent pairing attempts by outcome
-# TYPE coauth_agent_pairing_attempts_total counter
-coauth_agent_pairing_attempts_total{outcome="ok"} 87
-coauth_agent_pairing_attempts_total{outcome="pairing_request_expired"} 2
-coauth_agent_pairing_attempts_total{outcome="proof_invalid"} 0
-coauth_agent_pairing_attempts_total{outcome="verification_method_principal_mismatch"} 0
 
 # HELP coauth_revocation_mirror_age_seconds Age of mirrored revocation state
 # TYPE coauth_revocation_mirror_age_seconds gauge

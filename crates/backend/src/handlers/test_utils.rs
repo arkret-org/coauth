@@ -24,6 +24,7 @@ use coauth_data::{
     },
     user::UserRepository,
 };
+use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
 use coauth_messaging::{
     NotificationCenter,
@@ -280,12 +281,14 @@ impl TestState {
 
         let http_client = crate::reqwest_client();
 
-        // TODO: add more test keys to the store
         let rsa = PrivateKey::load_pem(include_str!("../../../keystore/tests/keys/rsa.pkcs1.pem"))
             .unwrap();
         let rsa = JsonWebKey::new(rsa).with_kid("test-rsa");
+        let eddsa = JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(43)))
+            .with_kid("test-eddsa")
+            .with_alg(JsonWebSignatureAlg::EdDsa);
 
-        let jwks = JsonWebKeySet::new(vec![rsa]);
+        let jwks = JsonWebKeySet::new(vec![rsa, eddsa]);
         let key_store = Keystore::new(jwks);
 
         let encrypter = Encrypter::new(&[0x42; 32]);
@@ -631,6 +634,26 @@ impl TestState {
                                     .push(
                                         Router::with_path("reset-recovery")
                                             .post(accounts::reset_recovery),
+                                    )
+                                    .push(
+                                        Router::with_path("risk-action/history")
+                                            .get(accounts::risk_action::list_history),
+                                    )
+                                    .push(
+                                        Router::with_path("risk-action/current")
+                                            .get(accounts::risk_action::get_current),
+                                    )
+                                    .push(
+                                        Router::with_path("risk-action")
+                                            .post(accounts::risk_action::propose),
+                                    )
+                                    .push(
+                                        Router::with_path("risk-action/{proposal_id}/approve")
+                                            .post(accounts::risk_action::approve),
+                                    )
+                                    .push(
+                                        Router::with_path("risk-action/{proposal_id}/execute")
+                                            .post(accounts::risk_action::execute),
                                     )
                                     .push(
                                         Router::with_path("dids")

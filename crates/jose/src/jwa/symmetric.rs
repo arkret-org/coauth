@@ -79,7 +79,9 @@ impl signature::RandomizedSigner<Signature> for SymmetricKey {
         _rng: &mut impl signature::rand_core::CryptoRngCore,
         msg: &[u8],
     ) -> Result<Signature, signature::Error> {
-        // XXX: is that implementation alright?
+        // HMAC signatures are deterministic and do not consume caller RNG.
+        // Implementing RandomizedSigner by delegating to Signer lets generic
+        // JWT signing code treat symmetric and asymmetric keys uniformly.
         signature::Signer::try_sign(self, msg)
     }
 }

@@ -410,6 +410,32 @@ fn blocked_ipv6_reason(addr: Ipv6Addr) -> Option<&'static str> {
 /// Panics if the client fails to build, which should never happen.
 #[must_use]
 pub fn reqwest_client() -> reqwest::Client {
+    reqwest_client_builder()
+        .build()
+        .expect("failed to create HTTP client")
+}
+
+/// Create a new [`reqwest::Client`] that pins `host` to already-resolved
+/// socket addresses while retaining the standard outbound HTTP guardrails.
+///
+/// This is used by SSRF-sensitive callers that pre-resolve and validate DNS
+/// answers before request dispatch and then need to prevent a second DNS lookup
+/// from rebinding to a different address set.
+///
+/// # Panics
+///
+/// Panics if the client fails to build, which should never happen.
+pub(crate) fn reqwest_client_with_static_resolution(
+    host: &str,
+    addrs: &[SocketAddr],
+) -> reqwest::Client {
+    reqwest_client_builder()
+        .resolve_to_addrs(host, addrs)
+        .build()
+        .expect("failed to create static-resolution HTTP client")
+}
+
+fn reqwest_client_builder() -> reqwest::ClientBuilder {
     let tls_config: rustls::ClientConfig =
         rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
 
@@ -421,8 +447,6 @@ pub fn reqwest_client() -> reqwest::Client {
         .user_agent(USER_AGENT)
         .timeout(Duration::from_mins(1))
         .connect_timeout(Duration::from_secs(30))
-        .build()
-        .expect("failed to create HTTP client")
 }
 
 async fn send_traced(

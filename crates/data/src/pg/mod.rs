@@ -20,6 +20,8 @@ pub mod advisory_lock;
 pub mod app_session;
 /// PostgreSQL audit log repositories.
 pub mod audit;
+/// PostgreSQL Circle capability grant repository.
+pub mod circle_capability;
 /// PostgreSQL append-only handle audit log repository (T3.2).
 pub mod handle_audit;
 /// PostgreSQL notification persistence repositories.

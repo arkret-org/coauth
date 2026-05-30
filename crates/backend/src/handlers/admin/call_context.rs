@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+use coauth_config::ContrixConfig;
 use coauth_data::{
     BoxClock, BoxRepository, RepositoryError, Session, TokenFormatError, TokenType, User,
     personal::session::{PersonalSession, PersonalSessionOwner},
@@ -63,6 +64,11 @@ pub enum Rejection {
     /// The session does not have the required admin scope
     #[error("Missing admin scope (expected urn:coauth:admin or urn:contrix:admin:*)")]
     MissingScope,
+
+    /// The request was scoped to an organization this deployment does not
+    /// serve.
+    #[error("Invalid admin organization scope")]
+    InvalidAdminOrg,
 }
 
 impl Scribe for Rejection {
@@ -85,6 +91,7 @@ impl Scribe for Rejection {
             | Rejection::TokenExpired
             | Rejection::SessionRevoked
             | Rejection::UserLocked
+            | Rejection::InvalidAdminOrg
             | Rejection::MissingScope
             | Rejection::InvalidAccessTokenType(_) => StatusCode::UNAUTHORIZED,
 
@@ -109,34 +116,23 @@ impl Scribe for Rejection {
 /// Because we need to load the database repository and the clock, we keep them
 /// in the context to avoid creating two instances for each request.
 ///
-/// # Multi-tenant guard (deferred)
+/// # Multi-tenant guard
 ///
-/// IDOR (Insecure Direct Object Reference) hardening for the admin
-/// API normally pairs the bearer-token caller with a tenant /
-/// organization scope and refuses any resource lookup whose `org_id`
-/// doesn't match. The current coauth data model does NOT carry an
-/// `org_id` column on its first-class entities (users, sessions,
-/// OAuth clients, etc.) — admin API access is implicitly bound to
-/// the deployment as a whole. When the multi-tenant data model
-/// lands, the additions below are required:
-///
-/// 1. Add an `org_id: Option<Ulid>` field to [`CallContext`] derived
-///    from the authenticated session's tenant binding.
-/// 2. Add an `assert_tenant_match(&CallContext, resource_org_id)`
-///    guard helper next to this struct, called by every admin
-///    handler immediately after the resource lookup.
-/// 3. Push `org_id` into every repo query as a `WHERE` predicate so
-///    a SQL injection of a foreign ULID can't bypass the guard.
-///
-/// Tracked in `_improve_todos.md` A.2 (IDOR hardening). The scaffold
-/// here documents the entry point so future migrations have a single
-/// place to hook.
+/// The current coauth data model is deployment-scoped rather than true
+/// multi-tenant: first-class entities do not carry per-row `org_id`.
+/// To avoid pretending cross-tenant isolation exists, Admin API calls
+/// support only a configured deployment org. If
+/// `contrix.admin_org_id` is set, every admin request MUST carry the
+/// matching `x-coauth-org-id`; a different value or missing header is
+/// rejected before any resource lookup. Requests that carry an org
+/// header when the deployment has no configured org are also rejected.
 #[non_exhaustive]
 pub struct CallContext {
     pub repo: BoxRepository,
     pub clock: BoxClock,
     pub user: Option<User>,
     pub session: CallerSession,
+    pub org_id: Option<String>,
 }
 
 pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallContext, Rejection> {
@@ -290,12 +286,36 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
         return Err(Rejection::MissingScope);
     }
 
+    let configured_org_id = depot
+        .get::<ContrixConfig>("contrix_config")
+        .ok()
+        .and_then(|config| config.admin_org_id.clone());
+    let presented_org_id = req
+        .headers()
+        .get("x-coauth-org-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let org_id = validate_admin_org(configured_org_id.as_deref(), presented_org_id)?;
+
     Ok(CallContext {
         repo,
         clock,
         user,
         session,
+        org_id,
     })
+}
+
+fn validate_admin_org(
+    configured_org_id: Option<&str>,
+    presented_org_id: Option<&str>,
+) -> Result<Option<String>, Rejection> {
+    match (configured_org_id, presented_org_id) {
+        (Some(expected), Some(actual)) if expected == actual => Ok(Some(expected.to_owned())),
+        (Some(_), _) | (None, Some(_)) => Err(Rejection::InvalidAdminOrg),
+        (None, None) => Ok(None),
+    }
 }
 
 /// The session representing the caller of the Admin API;
@@ -303,6 +323,23 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
 pub enum CallerSession {
     OAuthSession(Session),
     PersonalSession(PersonalSession),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn admin_org_guard_requires_exact_configured_org() {
+        assert_eq!(
+            validate_admin_org(Some("cx:org:alpha"), Some("cx:org:alpha")).unwrap(),
+            Some("cx:org:alpha".to_owned())
+        );
+        assert!(validate_admin_org(Some("cx:org:alpha"), None).is_err());
+        assert!(validate_admin_org(Some("cx:org:alpha"), Some("cx:org:beta")).is_err());
+        assert!(validate_admin_org(None, Some("cx:org:alpha")).is_err());
+        assert_eq!(validate_admin_org(None, None).unwrap(), None);
+    }
 }
 
 impl CallerSession {

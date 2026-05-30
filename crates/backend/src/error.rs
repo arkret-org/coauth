@@ -215,6 +215,7 @@ impl From<AdminCallContextRejection> for AppError {
             | AdminCallContextRejection::TokenExpired
             | AdminCallContextRejection::SessionRevoked
             | AdminCallContextRejection::UserLocked
+            | AdminCallContextRejection::InvalidAdminOrg
             | AdminCallContextRejection::MissingScope => Self::unauthorized(error.to_string()),
             AdminCallContextRejection::RepositorySetup(source) => Self::with_source(
                 StatusCode::INTERNAL_SERVER_ERROR,

@@ -97,6 +97,32 @@ impl CircleCapabilityAction {
     }
 }
 
+impl std::fmt::Display for CircleCapabilityAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_action_str())
+    }
+}
+
+impl std::str::FromStr for CircleCapabilityAction {
+    type Err = ParseCircleCapabilityActionError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "cx.circle.create" => Ok(Self::Create),
+            "cx.circle.manage" => Ok(Self::Manage),
+            "cx.circle.member.add" => Ok(Self::MemberAdd),
+            "cx.circle.member.manage" => Ok(Self::MemberManage),
+            "cx.circle.member.add.others" => Ok(Self::MemberAddOthers),
+            "cx.circle.audit" => Ok(Self::Audit),
+            _ => Err(ParseCircleCapabilityActionError),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("unknown Circle capability action")]
+pub struct ParseCircleCapabilityActionError;
+
 /// Risk tier per the capability-action-registry. Drives whether the
 /// admin SPA renders a confirmation modal and whether the route gates
 /// on a separate approval proof (see `risk_action` module).

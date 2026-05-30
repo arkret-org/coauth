@@ -101,6 +101,25 @@ pub struct ContrixConfig {
     #[serde(default)]
     pub oob_code_kind: OobCodeKindConfig,
 
+    /// Fail-closed gate for the temporary password-login bridge that returns a
+    /// Contrix principal-server session grant directly from
+    /// `POST /api/v1/auth/login`.
+    ///
+    /// Defaults to `false`: production callers must use the OIDC/passkey bridge
+    /// and proof-bound grant exchange. When enabled for development, the login
+    /// handler still requires a valid DPoP proof before minting the grant.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub password_login_session_grants_enabled: bool,
+
+    /// Deployment-scoped organization id accepted by the Admin API.
+    ///
+    /// coauth does not yet model true multi-tenant ownership on every entity.
+    /// Setting this makes admin requests supply the same
+    /// `x-coauth-org-id` value and rejects all other orgs, so a deployment can
+    /// fail closed instead of pretending cross-tenant admin isolation exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_org_id: Option<String>,
+
     /// Round 4 — DID of the trusted 3PID verification service whose
     /// `binding_proof` JWTs this coauth deployment will accept on
     /// `POST /api/v1/invites/3pid/verify`. When omitted, the invite
@@ -141,6 +160,8 @@ impl Default for ContrixConfig {
             high_risk_threshold: default_high_risk_threshold(),
             trust_domain: None,
             oob_code_kind: OobCodeKindConfig::default(),
+            password_login_session_grants_enabled: false,
+            admin_org_id: None,
             verification_service_did: None,
             audit_signature_fail_closed: false,
         }
@@ -161,6 +182,8 @@ impl ContrixConfig {
             && self.high_risk_threshold == default_high_risk_threshold()
             && self.trust_domain.is_none()
             && matches!(self.oob_code_kind, OobCodeKindConfig::OfflineVerifiable)
+            && !self.password_login_session_grants_enabled
+            && self.admin_org_id.is_none()
             && self.verification_service_did.is_none()
             && !self.audit_signature_fail_closed
     }
@@ -222,6 +245,30 @@ pub enum OobCodeKindConfig {
 
 impl ConfigurationSection for ContrixConfig {
     const PATH: &'static str = "contrix";
+
+    fn validate(
+        &self,
+        _figment: &figment::Figment,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        if let Some(trust_domain) = self.trust_domain.as_deref() {
+            Self::validate_trust_domain(trust_domain).map_err(std::io::Error::other)?;
+        }
+
+        if matches!(self.oob_code_kind, OobCodeKindConfig::Lookup) {
+            return Err(std::io::Error::other(
+                "contrix.oob_code_kind=lookup is disabled until lookup-mode strike counters are durable",
+            )
+            .into());
+        }
+
+        if let Some(org_id) = self.admin_org_id.as_deref()
+            && org_id.trim().is_empty()
+        {
+            return Err(std::io::Error::other("contrix.admin_org_id must not be empty").into());
+        }
+
+        Ok(())
+    }
 }
 
 /// Trusted Principal Server metadata published through Contrix discovery.
@@ -362,5 +409,15 @@ mod tests {
         assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:bad/slash").is_err());
         // Scope MUST start with [a-z0-9], not a separator.
         assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:.dotleader").is_err());
+    }
+
+    #[test]
+    fn lookup_oob_kind_is_fail_closed_until_strikes_are_durable() {
+        let config = ContrixConfig {
+            oob_code_kind: OobCodeKindConfig::Lookup,
+            ..ContrixConfig::default()
+        };
+        let figment = figment::Figment::new();
+        assert!(config.validate(&figment).is_err());
     }
 }

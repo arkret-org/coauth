@@ -102,9 +102,11 @@ pub fn finalise_oob_failure(
 /// `TODO(round23-T15)` below). Always-async to keep the timing window
 /// uniform across runtimes.
 ///
-/// TODO(round23-T15): emit a `coauth_oob_failure_slow_path_total`
-/// counter when the elapsed > pad window. Today the metric isn't
-/// exported because the metrics fan-out is owned by `telemetry.rs`.
+/// TODO(round23-T15, telemetry-followup): emit a
+/// `coauth_oob_failure_slow_path_total` counter when the elapsed > pad
+/// window. This is observability-only: the fail-closed wire behavior is
+/// already uniform (`404`) and the padding still executes for fast paths.
+/// The metric is deferred because metrics fan-out is owned by `telemetry.rs`.
 pub async fn pad_to_non_enumerable(arrival: Instant) {
     let elapsed = arrival.elapsed();
     if let Some(remaining) = NON_ENUMERABLE_PAD.checked_sub(elapsed) {

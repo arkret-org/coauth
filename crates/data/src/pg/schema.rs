@@ -91,6 +91,21 @@ diesel::table! {
 }
 
 diesel::table! {
+    circle_capability_grants (id) {
+        id -> Uuid,
+        subject -> Text,
+        realm_id -> Text,
+        action -> Text,
+        allowed_circle_refs -> Array<Text>,
+        granted_by -> Text,
+        granted_at -> Timestamptz,
+        revoked_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     account_claims (id) {
         id -> Uuid,
         account_id -> Nullable<Uuid>,
@@ -929,4 +944,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     user_primary_handle_preferences,
     accountability_grants,
     accountability_subject_revocations,
+    circle_capability_grants,
 );

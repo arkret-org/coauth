@@ -82,7 +82,8 @@ schema, backend response, and Rust consumers share one source of truth.
       "action": "lock",
       "ticket": "INC-2026-0504",
       "approved_by": "did:web:admin.example",
-      "approval_note": "approved for controlled execution"
+      "approval_note": "approved for controlled execution",
+      "approval_proof_jws": "protected..signature"
     },
     "execute_request": {
       "action": "lock",
@@ -106,7 +107,7 @@ curl -X POST \
 curl -X POST \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"action":"lock","ticket":"INC-2026-0504","approved_by":"did:web:admin.example","approval_note":"approved for controlled execution"}' \
+  -d '{"action":"lock","ticket":"INC-2026-0504","approved_by":"did:web:admin.example","approval_note":"approved for controlled execution","approval_proof_jws":"protected..signature"}' \
   "https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/approve"
 
 curl -X POST \
@@ -115,6 +116,11 @@ curl -X POST \
   -d '{"action":"lock","ticket":"INC-2026-0504","execution_note":"execute via controlled mutation worker"}' \
   "https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/execute"
 ```
+
+`approval_proof_jws` is a detached EdDSA JWS (`protected..signature`) by
+`approved_by`. Its detached payload is the canonical JSON transcript binding
+`proposal_id`, `account_id`, `action`, `ticket`, `approval_note`, and
+`approved_by`.
 
 The Contrix-native admin surface now includes `GET /api/admin/v1/accounts`,
 `GET /api/admin/v1/accounts/{id}`, `POST /api/admin/v1/accounts/{id}/lock`,

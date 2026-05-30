@@ -111,6 +111,8 @@ pub mod accountability;
 pub mod app_session;
 /// Audit log repositories.
 pub mod audit;
+/// Circle capability grant repositories.
+pub mod circle_capability;
 /// Append-only handle audit log repository (T3.2: handle reassignment,
 /// revocation, TTL expiry, DID Document `alsoKnownAs` divergence).
 pub mod handle_audit;

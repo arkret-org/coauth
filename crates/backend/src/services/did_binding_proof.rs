@@ -57,7 +57,8 @@ use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::ContrixConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
-use coauth_jose::jwt::Jwt;
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use contrix_core::canonical::canonical_json_bytes;
 use contrix_signatures::proof::PublicKeyMaterial;
@@ -104,6 +105,9 @@ pub enum DidBindingProofError {
 
     #[error("control_proof JWS header is missing a verificationMethod kid")]
     MissingVerificationMethod,
+
+    #[error("control_proof JWS alg must be EdDSA, got {0}")]
+    UnsupportedAlgorithm(String),
 
     #[error("control_proof verificationMethod does not match the binding statement")]
     VerificationMethodMismatch,
@@ -206,6 +210,11 @@ pub async fn validate_control_proof(
     // Parse JWS
     let jwt: Jwt<'_, BindingStatementClaims> =
         Jwt::try_from(proof_jws).map_err(|e| DidBindingProofError::InvalidJws(e.to_string()))?;
+    if jwt.header().alg() != &JsonWebSignatureAlg::EdDsa {
+        return Err(DidBindingProofError::UnsupportedAlgorithm(
+            jwt.header().alg().to_string(),
+        ));
+    }
     let payload_bytes = decode_attached_jws_payload(proof_jws)?;
     let verification_method = jwt
         .header()
@@ -289,9 +298,11 @@ fn validate_canonical_statement_payload(
 /// `DidBindingProofError::SignatureMismatch` /
 /// `VerificationProofError::SignatureMismatch` variant.
 #[derive(Debug, thiserror::Error)]
-enum SdkJwsVerifyError {
+pub(crate) enum SdkJwsVerifyError {
     #[error("compact JWS shape is invalid: {0}")]
     InvalidShape(String),
+    #[error("compact JWS alg must be EdDSA, got {0}")]
+    UnsupportedAlgorithm(String),
     #[error("verification_method '{0}' not present in the resolved DID document")]
     MethodNotFound(String),
     #[error("resolved verification_method JWK is not a supported Ed25519 OKP key: {0}")]
@@ -312,16 +323,11 @@ enum SdkJwsVerifyError {
 /// `ed25519_dalek::Verifier::verify` call. The raw Ed25519 verifying-key
 /// bytes are extracted from the resolved OKP JWK via the SDK helper
 /// [`contrix_signatures::proof::PublicKeyMaterial::ed25519_bytes`].
-fn verify_compact_jws_with_sdk(
+pub(crate) fn verify_compact_jws_with_sdk(
     proof_jws: &str,
     verification_methods: &[crate::handlers::contrix::VerificationMethod],
     verification_method_id: &str,
 ) -> Result<(), SdkJwsVerifyError> {
-    let method = verification_methods
-        .iter()
-        .find(|method| method.id == verification_method_id)
-        .ok_or_else(|| SdkJwsVerifyError::MethodNotFound(verification_method_id.to_owned()))?;
-
     let mut parts = proof_jws.split('.');
     let header_b64u = parts
         .next()
@@ -337,6 +343,22 @@ fn verify_compact_jws_with_sdk(
             "too many segments".to_owned(),
         ));
     }
+
+    let header_bytes = Base64UrlUnpadded::decode_vec(header_b64u)
+        .map_err(|err| SdkJwsVerifyError::InvalidShape(format!("invalid header b64url: {err}")))?;
+    let header: JsonWebSignatureHeader = serde_json::from_slice(&header_bytes).map_err(|err| {
+        SdkJwsVerifyError::InvalidShape(format!("invalid protected header: {err}"))
+    })?;
+    if header.alg() != &JsonWebSignatureAlg::EdDsa {
+        return Err(SdkJwsVerifyError::UnsupportedAlgorithm(
+            header.alg().to_string(),
+        ));
+    }
+
+    let method = verification_methods
+        .iter()
+        .find(|method| method.id == verification_method_id)
+        .ok_or_else(|| SdkJwsVerifyError::MethodNotFound(verification_method_id.to_owned()))?;
 
     let signature_bytes = Base64UrlUnpadded::decode_vec(signature_b64u)
         .map_err(|err| SdkJwsVerifyError::InvalidShape(format!("invalid sig b64url: {err}")))?;
@@ -369,6 +391,55 @@ fn verify_compact_jws_with_sdk(
     verifying
         .verify(signing_input.as_bytes(), &signature)
         .map_err(|err| SdkJwsVerifyError::SignatureMismatch(err.to_string()))
+}
+
+/// Verify a compact detached JWS (`protected..signature`) over `payload_bytes`
+/// using the `kid` verification method from the protected header.
+pub(crate) fn verify_detached_jws_with_sdk(
+    detached_jws: &str,
+    payload_bytes: &[u8],
+    verification_methods: &[crate::handlers::contrix::VerificationMethod],
+) -> Result<String, SdkJwsVerifyError> {
+    let mut parts = detached_jws.split('.');
+    let header_b64u = parts
+        .next()
+        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing protected header".to_owned()))?;
+    let payload_b64u = parts
+        .next()
+        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing payload segment".to_owned()))?;
+    let signature_b64u = parts
+        .next()
+        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing signature segment".to_owned()))?;
+    if parts.next().is_some() {
+        return Err(SdkJwsVerifyError::InvalidShape(
+            "too many segments".to_owned(),
+        ));
+    }
+    if !payload_b64u.is_empty() {
+        return Err(SdkJwsVerifyError::InvalidShape(
+            "detached JWS payload segment must be empty".to_owned(),
+        ));
+    }
+
+    let header_bytes = Base64UrlUnpadded::decode_vec(header_b64u)
+        .map_err(|err| SdkJwsVerifyError::InvalidShape(format!("invalid header b64url: {err}")))?;
+    let header: JsonWebSignatureHeader = serde_json::from_slice(&header_bytes).map_err(|err| {
+        SdkJwsVerifyError::InvalidShape(format!("invalid protected header: {err}"))
+    })?;
+    if header.alg() != &JsonWebSignatureAlg::EdDsa {
+        return Err(SdkJwsVerifyError::UnsupportedAlgorithm(
+            header.alg().to_string(),
+        ));
+    }
+    let verification_method = header
+        .kid()
+        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing kid".to_owned()))?
+        .to_owned();
+
+    let attached_payload_b64u = Base64UrlUnpadded::encode_string(payload_bytes);
+    let attached = format!("{header_b64u}.{attached_payload_b64u}.{signature_b64u}");
+    verify_compact_jws_with_sdk(&attached, verification_methods, &verification_method)?;
+    Ok(verification_method)
 }
 
 fn validate_binding_statement_claims(
@@ -444,6 +515,8 @@ pub enum VerificationProofError {
     NoVerificationKey,
     #[error("JWS header is missing a verificationMethod kid")]
     MissingVerificationMethod,
+    #[error("JWS alg must be EdDSA, got {0}")]
+    UnsupportedAlgorithm(String),
     #[error("JWS verificationMethod is not present in the resolved DID document")]
     VerificationMethodNotFound,
     #[error("JWS signature did not verify against any verification-service key")]
@@ -493,6 +566,11 @@ pub async fn verify_verification_service_proof(
 
     let jwt: Jwt<'_, VerificationServiceProofClaims> =
         Jwt::try_from(proof_jws).map_err(|e| VerificationProofError::InvalidJws(e.to_string()))?;
+    if jwt.header().alg() != &JsonWebSignatureAlg::EdDsa {
+        return Err(VerificationProofError::UnsupportedAlgorithm(
+            jwt.header().alg().to_string(),
+        ));
+    }
 
     let claims = jwt.payload();
     if claims.sub.trim().is_empty() {
@@ -694,6 +772,29 @@ mod tests {
         assert!(matches!(
             err,
             DidBindingProofError::CanonicalStatementMismatch
+        ));
+    }
+
+    #[test]
+    fn compact_jws_sdk_verifier_requires_eddsa_alg() {
+        let header_b64u = Base64UrlUnpadded::encode_string(
+            serde_json::json!({
+                "alg": "HS256",
+                "kid": "did:web:alice.example#key-1",
+            })
+            .to_string()
+            .as_bytes(),
+        );
+        let payload_b64u = Base64UrlUnpadded::encode_string(b"{}");
+        let signature_b64u = Base64UrlUnpadded::encode_string(&[0_u8; 64]);
+        let compact = format!("{header_b64u}.{payload_b64u}.{signature_b64u}");
+
+        let err = verify_compact_jws_with_sdk(&compact, &[], "did:web:alice.example#key-1")
+            .expect_err("non-EdDSA alg must reject before key lookup");
+
+        assert!(matches!(
+            err,
+            SdkJwsVerifyError::UnsupportedAlgorithm(alg) if alg == "HS256"
         ));
     }
 

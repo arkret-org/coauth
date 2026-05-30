@@ -56,10 +56,10 @@ Once you flip the profile on:
    the revocation-freshness window to `<= 30s`, which means coauth refreshes
    mirrored state more often. Expect ~2× the baseline upstream RPC rate
    to soland for the agent-state and accountability-grant endpoints.
-4. **Hard rejects on agent-runtime calls.** `agent_paused`,
-   `agent_deactivated`, and `accountability_grant_missing` go from
-   "logged + reject" to "logged + reject + alert" — make sure ops is
-   ready.
+4. **Hard rejects on agent-runtime calls once those routes are enabled.**
+   `agent_paused`, `agent_deactivated`, and `accountability_grant_missing`
+   go from "logged + reject" to "logged + reject + alert" — make sure ops is
+   ready before exposing the deferred agent runtime surface.
 
 ### Pre-flip checklist
 
@@ -75,7 +75,8 @@ Once you flip the profile on:
 5. Watch for 30 minutes:
    - `coauth_accountable_to_reject_total{profile="strict"}` — should rise
      from zero, level off within the staleness baseline +20%.
-   - `coauth_session_grant_failure_total{reason="agent_paused" | "agent_deactivated" | "accountability_grant_missing"}` — should remain at the
+   - `coauth_session_grant_failure_total{reason="agent_paused" | "agent_deactivated" | "accountability_grant_missing"}` — applies only after the
+     deferred agent runtime surface is routed; then it should remain at the
      pre-flip baseline.
 6. If reject counts exceed threshold: rollback (toggle off), file a bug
    against the noisiest peer, retry the flip after the peer upgrades.

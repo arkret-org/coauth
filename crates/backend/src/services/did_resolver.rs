@@ -1,8 +1,13 @@
-use std::sync::Arc;
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use coauth_config::ContrixConfig;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder, User};
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_keystore::Keystore;
 use serde_json::Value;
 use thiserror::Error;
@@ -354,6 +359,17 @@ impl DidResolverService for DefaultDidResolverService {
             ));
         }
 
+        if let Some(user_id) = parse_local_primary_account_did(did) {
+            let Some(user) = repo.user().lookup(user_id).await? else {
+                return Err(DidResolveError::NotFound);
+            };
+            return Ok(local_resolution(
+                local_primary_account_did_document(url_builder, did, &user, key_store),
+                DidResolutionSource::LocalUser,
+                true,
+            ));
+        }
+
         match did_method(did).as_deref() {
             Some("web") => {
                 resolve_http_did(
@@ -405,6 +421,51 @@ impl DidResolverService for DefaultDidResolverService {
     }
 }
 
+fn parse_local_primary_account_did(did: &str) -> Option<Ulid> {
+    let slug = did.strip_prefix("did:web:coauth.invalid:accounts:")?;
+    Ulid::from_string(&slug.to_ascii_uppercase()).ok()
+}
+
+fn local_primary_account_did_document(
+    url_builder: &UrlBuilder,
+    did: &str,
+    user: &User,
+    key_store: &Keystore,
+) -> DidDocument {
+    let mut verification_method = Vec::new();
+    let mut authentication = Vec::new();
+    let mut assertion_method = Vec::new();
+    if let Some(public_key) = preferred_public_eddsa_key(key_store) {
+        let key_id = format!("{did}#key-1");
+        verification_method.push(VerificationMethod {
+            id: key_id.clone(),
+            kind: "JsonWebKey2020".to_owned(),
+            controller: did.to_owned(),
+            public_key_jwk: public_key,
+        });
+        authentication.push(key_id.clone());
+        assertion_method.push(key_id);
+    }
+
+    DidDocument {
+        id: did.to_owned(),
+        also_known_as: vec![crate::handlers::contrix::user_handle(url_builder, user)],
+        verification_method,
+        authentication,
+        assertion_method,
+        service: Vec::new(),
+        metadata: Some(crate::handlers::contrix::DidDocumentMetadata::current_for_holder(None)),
+    }
+}
+
+fn preferred_public_eddsa_key(key_store: &Keystore) -> Option<PublicJsonWebKey> {
+    key_store
+        .public_jwks()
+        .iter()
+        .find(|candidate| candidate.alg() == Some(&JsonWebSignatureAlg::EdDsa))
+        .cloned()
+}
+
 #[must_use]
 pub fn default_did_resolver_service() -> DidResolverServiceHandle {
     Arc::new(DefaultDidResolverService)
@@ -432,15 +493,21 @@ async fn resolve_http_did(
     url: Url,
     source: DidResolutionSource,
 ) -> Result<DidResolution, DidResolveError> {
-    // SSRF defence in depth: the URL must use HTTPS, be on a public
-    // resolver scheme (`did:` resolvers MUST not be reachable via plain
-    // HTTP), and resolve to a non-internal host. We allow an opt-out
-    // only for explicit loopback during integration tests via the
-    // `COAUTH_DID_RESOLVER_ALLOW_LOOPBACK` env (read once at module
-    // load) — production keeps the strict policy.
+    // SSRF defence in depth: validate the URL, pre-resolve named hosts before
+    // connecting, then pin the request client to that validated address set so
+    // DNS cannot rebind between policy check and socket connection.
     enforce_resolver_url_policy(&url)?;
+    let pinned_resolution = enforce_resolver_dns_policy(&url).await?;
+    let pinned_http_client;
+    let request_client = if let Some((host, addrs)) = pinned_resolution.as_ref() {
+        pinned_http_client =
+            crate::outbound_http::reqwest_client_with_static_resolution(host, addrs);
+        &pinned_http_client
+    } else {
+        http_client
+    };
 
-    let response = http_client
+    let response = request_client
         .get(url.clone())
         .send_traced()
         .await?
@@ -504,10 +571,10 @@ async fn resolve_http_did(
 ///   operator-supplied and must opt into HTTPS too).
 /// - Host MUST be present and MUST NOT be a loopback / link-local /
 ///   private / unspecified address. IP literals in those ranges are
-///   blocked outright; named hosts that resolve only at request time
-///   still fail at the socket layer because `reqwest` enforces the
-///   host string we hand it, and our HTTPS requirement removes the
-///   plain-HTTP-redirect-to-internal hop.
+///   blocked outright; named hosts are resolved immediately before the
+///   request and rejected if any returned address is non-public. The request
+///   is then dispatched through a static-resolution outbound client pinned to
+///   that validated address set, closing the DNS rebinding window.
 ///
 /// Loopback is allowed when the `COAUTH_DID_RESOLVER_ALLOW_LOOPBACK`
 /// env var is set (the integration test harness uses this).
@@ -549,14 +616,7 @@ fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
             Ok(())
         }
         url::Host::Ipv4(addr) => {
-            if (addr.is_loopback() && !allow_loopback)
-                || addr.is_private()
-                || addr.is_link_local()
-                || addr.is_unspecified()
-                || addr.is_broadcast()
-                || addr.is_multicast()
-                || addr.is_documentation()
-            {
+            if blocked_resolver_ip_reason(IpAddr::V4(addr), allow_loopback).is_some() {
                 return Err(DidResolveError::ForbiddenResolverUrl(format!(
                     "IPv4 {addr} is in a blocked range"
                 )));
@@ -564,10 +624,7 @@ fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
             Ok(())
         }
         url::Host::Ipv6(addr) => {
-            if (addr.is_loopback() && !allow_loopback)
-                || addr.is_unspecified()
-                || addr.is_multicast()
-            {
+            if blocked_resolver_ip_reason(IpAddr::V6(addr), allow_loopback).is_some() {
                 return Err(DidResolveError::ForbiddenResolverUrl(format!(
                     "IPv6 {addr} is in a blocked range"
                 )));
@@ -575,6 +632,125 @@ fn enforce_resolver_url_policy(url: &Url) -> Result<(), DidResolveError> {
             Ok(())
         }
     }
+}
+
+async fn enforce_resolver_dns_policy(
+    url: &Url,
+) -> Result<Option<(String, Vec<SocketAddr>)>, DidResolveError> {
+    let Some(url::Host::Domain(host)) = url.host() else {
+        return Ok(None);
+    };
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| DidResolveError::ForbiddenResolverUrl("missing port".to_owned()))?;
+    let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|err| {
+            DidResolveError::ForbiddenResolverUrl(format!("DNS lookup for {host} failed: {err}"))
+        })?
+        .collect();
+    enforce_resolved_resolver_ip_policy(host, &addrs)?;
+    Ok(Some((host.to_owned(), addrs)))
+}
+
+fn enforce_resolved_resolver_ip_policy(
+    host: &str,
+    addrs: &[SocketAddr],
+) -> Result<(), DidResolveError> {
+    if addrs.is_empty() {
+        return Err(DidResolveError::ForbiddenResolverUrl(format!(
+            "DNS lookup for {host} returned no addresses"
+        )));
+    }
+
+    let allow_loopback = std::env::var_os("COAUTH_DID_RESOLVER_ALLOW_LOOPBACK").is_some();
+    for addr in addrs {
+        if let Some(reason) = blocked_resolver_ip_reason(addr.ip(), allow_loopback) {
+            return Err(DidResolveError::ForbiddenResolverUrl(format!(
+                "host {host} resolved to blocked address {} ({reason})",
+                addr.ip()
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn blocked_resolver_ip_reason(ip: IpAddr, allow_loopback: bool) -> Option<&'static str> {
+    match ip {
+        IpAddr::V4(addr) => blocked_resolver_ipv4_reason(addr, allow_loopback),
+        IpAddr::V6(addr) => blocked_resolver_ipv6_reason(addr, allow_loopback),
+    }
+}
+
+fn blocked_resolver_ipv4_reason(addr: Ipv4Addr, allow_loopback: bool) -> Option<&'static str> {
+    let octets = addr.octets();
+    if octets[0] == 0 {
+        return Some("this-network IPv4 range");
+    }
+    if octets[0] == 10
+        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+        || (octets[0] == 192 && octets[1] == 168)
+    {
+        return Some("private IPv4 range");
+    }
+    if octets[0] == 127 && !allow_loopback {
+        return Some("loopback IPv4 range");
+    }
+    if octets[0] == 169 && octets[1] == 254 {
+        return Some("link-local IPv4 range");
+    }
+    if octets[0] == 100 && (64..=127).contains(&octets[1]) {
+        return Some("carrier-grade NAT IPv4 range");
+    }
+    if octets[0] == 192 && octets[1] == 0 && octets[2] == 0 {
+        return Some("IETF protocol-assignment IPv4 range");
+    }
+    if octets[0] == 192 && octets[1] == 0 && octets[2] == 2 {
+        return Some("documentation IPv4 range");
+    }
+    if octets[0] == 198 && (octets[1] == 18 || octets[1] == 19) {
+        return Some("benchmark IPv4 range");
+    }
+    if octets[0] == 198 && octets[1] == 51 && octets[2] == 100 {
+        return Some("documentation IPv4 range");
+    }
+    if octets[0] == 203 && octets[1] == 0 && octets[2] == 113 {
+        return Some("documentation IPv4 range");
+    }
+    if (224..=239).contains(&octets[0]) {
+        return Some("multicast IPv4 range");
+    }
+    if octets[0] >= 240 {
+        return Some("reserved IPv4 range");
+    }
+    if addr == Ipv4Addr::BROADCAST {
+        return Some("broadcast IPv4 address");
+    }
+    None
+}
+
+fn blocked_resolver_ipv6_reason(addr: Ipv6Addr, allow_loopback: bool) -> Option<&'static str> {
+    let segments = addr.segments();
+    if addr.is_unspecified() {
+        return Some("unspecified IPv6 address");
+    }
+    if addr.is_loopback() && !allow_loopback {
+        return Some("loopback IPv6 address");
+    }
+    if segments[0] & 0xfe00 == 0xfc00 {
+        return Some("unique-local IPv6 range");
+    }
+    if segments[0] & 0xffc0 == 0xfe80 {
+        return Some("link-local IPv6 range");
+    }
+    if segments[0] & 0xff00 == 0xff00 {
+        return Some("multicast IPv6 range");
+    }
+    if segments[0] == 0x2001 && segments[1] == 0x0db8 {
+        return Some("documentation IPv6 range");
+    }
+    None
 }
 
 fn delegated_resolver_url(resolver: &str, did: &str) -> Result<Url, DidResolveError> {
@@ -639,4 +815,60 @@ fn binding_slug(value: &str) -> String {
         }
     }
     out.trim_matches('-').to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn addr(value: &str) -> SocketAddr {
+        value.parse().expect("test socket address must parse")
+    }
+
+    #[test]
+    fn resolver_url_policy_rejects_internal_names_and_ip_literals() {
+        for raw in [
+            "http://example.com/.well-known/did.json",
+            "https://localhost/.well-known/did.json",
+            "https://auth.internal/.well-known/did.json",
+            "https://metadata.google.internal/.well-known/did.json",
+            "https://127.0.0.1/.well-known/did.json",
+            "https://10.0.0.1/.well-known/did.json",
+            "https://[::1]/.well-known/did.json",
+        ] {
+            let url = Url::parse(raw).unwrap();
+            assert!(
+                matches!(
+                    enforce_resolver_url_policy(&url),
+                    Err(DidResolveError::ForbiddenResolverUrl(_))
+                ),
+                "{raw} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn resolved_resolver_ip_policy_rejects_private_and_rebinding_targets() {
+        for addrs in [
+            vec![addr("10.0.0.1:443")],
+            vec![addr("169.254.169.254:443")],
+            vec![addr("100.64.0.1:443")],
+            vec![addr("[fc00::1]:443")],
+            vec![addr("8.8.8.8:443"), addr("192.168.1.10:443")],
+        ] {
+            assert!(matches!(
+                enforce_resolved_resolver_ip_policy("resolver.example", &addrs),
+                Err(DidResolveError::ForbiddenResolverUrl(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn resolved_resolver_ip_policy_accepts_public_addresses() {
+        enforce_resolved_resolver_ip_policy(
+            "resolver.example",
+            &[addr("8.8.8.8:443"), addr("[2001:4860:4860::8888]:443")],
+        )
+        .expect("public resolver addresses should be accepted");
+    }
 }

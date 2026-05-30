@@ -1,113 +1,69 @@
-# Agent Runtime
+# Agent Runtime Status
 
-The agent runtime is the surface coauth exposes for **agent principals** — a
-distinct principal kind from human principals. Agent principals carry their
-own DIDs, their own key pairs, and a finite-state lifecycle (Active → Paused
-→ Deactivated) that gates every session-grant decision.
+coauth currently exposes only the internal accountability-grant issuance
+surface for agent principals. It does not expose
+`cx.account.agent_key_pair` or the agent branch of
+`cx.account.issue_session_grant`.
 
-This chapter covers the two coauth-side wire operations agent runtime drives
-through, and the error matrix you will encounter when an integration is
-mis-paired or stale.
+Until those routes are wired, clients and sodmin must not present them as
+available coauth operations. The rejection helpers and error-code matrix remain
+in `handlers/account/agents.rs` so future wiring has a single source of truth,
+but they are reserved implementation details rather than a callable public API.
 
-## `cx.account.agent_key_pair`
+## Exposed Surface
 
-Pairs an agent's DID with a freshly generated key pair under the human
-principal's umbrella account. The pairing flow:
+### `POST /api/v1/agents/{id}/accountability-grant`
 
-```text
-[human principal]                  [coauth]                       [agent client]
-   |                                  |                                |
-   |  POST agent_key_pair (proof)     |                                |
-   |--------------------------------->|                                |
-   |                                  | resolve agent DID              |
-   |                                  | verify proof bytes (JCS)       |
-   |                                  | check verification_method      |
-   |                                  | open pairing window (10 min)   |
-   |                                  |                                |
-   |                                  |  pairing token                 |
-   |                                  |------------------------------->|
-   |                                  |                                |
-   |                                  |  agent signs over key_pair     |
-   |                                  |<-------------------------------|
-   |                                  |                                |
-   |                                  | bind key_pair to agent DID     |
-   |                                  | emit cx.account.agent_key_pair |
-```
+This internal CXP-0008 endpoint issues an accountability grant linking a human
+controller DID to an agent principal id and a canonical set of `cx.agent.*`
+capabilities.
 
-Wire failure modes:
+The endpoint is server-to-server only:
 
-- **`pairing_request_expired`** — the 10-minute pairing window elapsed. The
-  human principal must re-issue. Common root cause: agent client clock skew
-  >5 minutes. Confirm NTP on both ends.
-- **`proof_invalid`** — canonical-digest mismatch between submitted proof
-  and the bytes coauth re-derives. Usually a JSON serializer drift on the
-  client — capture the raw payload and diff JCS bytes.
-- **`verification_method_principal_mismatch`** — the `verification_method`
-  in the proof resolves to a different DID than the agent's claimed
-  principal. Either a DID-doc misconfiguration, a key rotation that didn't
-  finish, or a malicious caller. Reject and audit; do not retry blindly.
+- it accepts the soland/sodmin static bearer configured under
+  `contrix.principal_servers[].session_grant_introspection_bearer`;
+- browser sessions and end-user OAuth tokens are rejected;
+- the path `{id}` must be a canonical `cx:agent_principal:<uuid7>` typed id;
+- the `controller_did` is normalized before use;
+- each requested capability must be registered in the local `cx.agent.*`
+  capability registry.
 
-Successful pairings emit a `cx.account.agent_key_pair` event whose payload
-includes the agent's DID, the issued key pair fingerprint, and the
-canonical proof digest. Downstream services (soland) trust this event as
-the only attestation that this agent is bound to this human principal.
+On success coauth persists the accountability grant, writes a signed admin audit
+row, and schedules a soland fan-out job. Duplicate active grants for the same
+controller, agent, and capability fingerprint are rejected. Previously revoked
+controller DIDs or agent principals are also rejected.
 
-## `cx.account.issue_session_grant` — agent branch
+## Deferred Surface
 
-When an agent presents itself for a session grant, coauth runs an
-additional gate beyond the human-session checks:
+### `cx.account.agent_key_pair`
 
-1. Resolve the agent principal's FSM state from soland's `agent_state` cell
-   (mirrored locally for freshness).
-2. If state == `Paused`, reject with `agent_paused`. The grant is NOT
-   issued; the caller MUST resume the agent before retrying.
-3. If state == `Deactivated`, reject with `agent_deactivated`. Terminal —
-   do not retry without rebinding under a new agent DID.
-4. If no `accountability_grant` is on file linking the human principal to
-   the agent at session-issue time, reject with
-   `accountability_grant_missing`. Common cause: human principal's
-   accountability grant was revoked while a stale agent token was in
-   flight.
+This operation is not routed in coauth. No pairing token is created, no key pair
+is bound to an agent DID, and no `cx.account.agent_key_pair` event is emitted by
+the current coauth service.
 
-### Error matrix
+Reserved failure codes such as `pairing_request_expired`, `proof_invalid`, and
+`verification_method_principal_mismatch` describe the future wire contract only.
+They are not evidence that a production pairing route exists.
 
-| Error | When | Recovery |
-|---|---|---|
-| `agent_paused` | Agent FSM = Paused | Operator resumes the agent (POST /agents/{id}/resume in soland), then retry |
-| `agent_deactivated` | Agent FSM = Deactivated (terminal) | Bind a new agent under a new DID; old agent cannot recover |
-| `accountability_grant_missing` | No matching `accountable_to` chain at grant time | Re-issue the accountability grant from the human principal; retry session |
-| `pairing_request_expired` | 10-min pairing window elapsed | Re-issue `cx.account.agent_key_pair` |
-| `proof_invalid` | Pairing proof canonical-bytes mismatch | Inspect client serializer; resubmit |
-| `verification_method_principal_mismatch` | Pairing `verification_method` resolves to a different DID | Fix DID document; resubmit |
+### `cx.account.issue_session_grant` agent branch
 
-## Revocation freshness window
+The agent-principal branch of session-grant issuance is not routed in coauth.
+Existing session-grant endpoints do not accept agent-principal issuance
+requests, and coauth does not currently evaluate agent FSM state or
+accountability-grant freshness for such an issuance path.
 
-The agent FSM and the accountability grant chain live in soland but are
-mirrored into coauth so that session-grant decisions don't make a synchronous
-upstream call per request. The mirror has a **freshness window** of 60s by
-default (configurable via
-`auth.agent.revocation_freshness_window`).
+Reserved failure codes such as `agent_paused`, `agent_deactivated`, and
+`accountability_grant_missing` remain unavailable to external clients until the
+agent branch is implemented.
 
-If a state change (pause / deactivate / accountability-grant revoke) is
-issued at soland at `t = 0`, coauth MUST refuse to issue a session grant
-based on stale data older than `t - freshness_window`.
+## Wiring Requirements
 
-Mechanics:
+Before the deferred surface can be exposed, the implementation must add routed
+handlers and focused tests for:
 
-- Each mirror record carries a `mirrored_at` timestamp from coauth's local
-  clock when it was last refreshed.
-- Session-grant evaluation reads the record AND verifies
-  `now - mirrored_at <= freshness_window`. If stale, coauth synchronously
-  refreshes the mirror before deciding.
-- Synchronous refresh failures within the freshness window behave fail-closed
-  — the session grant is rejected with the corresponding `agent_*` or
-  `accountability_grant_missing` error and the failure is logged for ops
-  triage.
-
-When tuning the freshness window:
-
-- Smaller window → tighter revocation propagation, more upstream traffic.
-- Larger window → looser propagation guarantee, lower upstream load.
-- The strict-reject deployment posture (see
-  [Deployment hardening](./deployment_hardening.md)) typically pins the
-  freshness window <= 30s.
+- explicit agent DID to verification-method binding before proof validation;
+- pairing token lifetime and replay handling;
+- agent FSM fail-closed gates for paused and deactivated agents;
+- durable accountability-grant freshness checks;
+- discovery and documentation updates that publish the new routes only after
+  the handlers are live.

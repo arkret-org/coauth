@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use coauth_data::{
     Clock, UpstreamOAuthProvider, UpstreamOAuthProviderResponseMode,
+    UpstreamOAuthProviderTokenAuthMethod,
     upstream_oauth::{
         UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
         UpstreamOAuthSessionRepository,
@@ -39,6 +40,7 @@ static CALLBACK_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
 });
 const PROVIDER: Key = Key::from_static_str("provider");
 const RESULT: Key = Key::from_static_str("result");
+const ALLOW_NON_STANDARD_UPSTREAM_OAUTH_ENV: &str = "COAUTH_ALLOW_NON_STANDARD_UPSTREAM_OAUTH";
 
 #[derive(Serialize, Deserialize)]
 pub struct Params {
@@ -136,6 +138,13 @@ pub enum RouteError {
         scheme: String,
     },
 
+    #[error(
+        "Non-standard upstream OAuth provider '{provider_kind}' is disabled by default; set \
+         COAUTH_ALLOW_NON_STANDARD_UPSTREAM_OAUTH=true only after accepting userinfo-only \
+         TLS-bound identity risk"
+    )]
+    NonStandardProviderDisabled { provider_kind: &'static str },
+
     #[error(transparent)]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
@@ -157,6 +166,9 @@ impl Scribe for RouteError {
             Self::Internal(e) => InternalError::new(e).render(res),
             e @ (Self::ProviderNotFound | Self::SessionNotFound) => {
                 GenericError::new(StatusCode::NOT_FOUND, e).render(res);
+            }
+            e @ Self::NonStandardProviderDisabled { .. } => {
+                GenericError::new(StatusCode::FORBIDDEN, e).render(res);
             }
             e => GenericError::new(StatusCode::BAD_REQUEST, e).render(res),
         }
@@ -180,6 +192,38 @@ fn require_https_endpoint(name: &'static str, url: &::url::Url) -> Result<(), Ro
             scheme: url.scheme().to_owned(),
         })
     }
+}
+
+fn non_standard_provider_kind(
+    method: UpstreamOAuthProviderTokenAuthMethod,
+) -> Option<&'static str> {
+    match method {
+        UpstreamOAuthProviderTokenAuthMethod::QQConnect => Some("qq_connect"),
+        UpstreamOAuthProviderTokenAuthMethod::Feishu => Some("feishu"),
+        UpstreamOAuthProviderTokenAuthMethod::Lark => Some("lark"),
+        UpstreamOAuthProviderTokenAuthMethod::DingTalk => Some("dingtalk"),
+        UpstreamOAuthProviderTokenAuthMethod::WeChat => Some("wechat"),
+        UpstreamOAuthProviderTokenAuthMethod::WeCom => Some("wecom"),
+        _ => None,
+    }
+}
+
+fn non_standard_upstream_oauth_allowed() -> bool {
+    non_standard_upstream_oauth_allowed_from_env(
+        std::env::var(ALLOW_NON_STANDARD_UPSTREAM_OAUTH_ENV)
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn non_standard_upstream_oauth_allowed_from_env(value: Option<&str>) -> bool {
+    value.is_some_and(|value| {
+        let value = value.trim();
+        !(value.is_empty()
+            || value.eq_ignore_ascii_case("0")
+            || value.eq_ignore_ascii_case("false")
+            || value.eq_ignore_ascii_case("no"))
+    })
 }
 
 /// Emit a structured audit record for each callback that took the
@@ -263,6 +307,18 @@ pub async fn handler(
         .await?
         .filter(UpstreamOAuthProvider::enabled)
         .ok_or(RouteError::ProviderNotFound)?;
+
+    if let Some(provider_kind) = non_standard_provider_kind(provider.token_endpoint_auth_method)
+        && !non_standard_upstream_oauth_allowed()
+    {
+        tracing::warn!(
+            provider.id = %provider.id,
+            provider.kind = provider_kind,
+            env = ALLOW_NON_STANDARD_UPSTREAM_OAUTH_ENV,
+            "Rejected non-standard upstream OAuth callback because userinfo-only identity flows are disabled by default"
+        );
+        return Err(RouteError::NonStandardProviderDisabled { provider_kind });
+    }
 
     let sessions_cookie = UpstreamSessionsCookie::load(&cookie_jar);
 
@@ -984,5 +1040,56 @@ async fn verify_id_token_with_rotation_retry<'a>(
             Ok(verified)
         }
         Err(e) => Err(e.into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_standard_provider_kind_identifies_userinfo_only_adapters() {
+        assert_eq!(
+            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::QQConnect),
+            Some("qq_connect")
+        );
+        assert_eq!(
+            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::Feishu),
+            Some("feishu")
+        );
+        assert_eq!(
+            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::Lark),
+            Some("lark")
+        );
+        assert_eq!(
+            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::DingTalk),
+            Some("dingtalk")
+        );
+        assert_eq!(
+            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::WeChat),
+            Some("wechat")
+        );
+        assert_eq!(
+            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::WeCom),
+            Some("wecom")
+        );
+        assert_eq!(
+            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::ClientSecretPost),
+            None
+        );
+        assert_eq!(
+            non_standard_provider_kind(UpstreamOAuthProviderTokenAuthMethod::SignInWithApple),
+            None
+        );
+    }
+
+    #[test]
+    fn non_standard_provider_gate_is_closed_by_default() {
+        for value in [None, Some(""), Some("0"), Some("false"), Some("no")] {
+            assert!(!non_standard_upstream_oauth_allowed_from_env(value));
+        }
+        for value in [Some("1"), Some("true"), Some("yes"), Some("enabled")] {
+            assert!(non_standard_upstream_oauth_allowed_from_env(value));
+        }
     }
 }

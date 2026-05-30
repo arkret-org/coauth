@@ -203,9 +203,11 @@ pub fn pepper_lookup_code(pepper: &[u8], code: &str) -> [u8; 32] {
 /// code MUST be marked `RateLimitInvalidated` and verification MUST
 /// fail thereafter, even with the correct code.
 ///
-/// TODO(round23-T15): wire this into the diesel `oob_codes` row so the
-/// strike counter survives process restarts. For now it's in-memory and
-/// suitable only for the unit-test path.
+/// TODO(round23-T15, durable-blocker): wire this into the diesel `oob_codes`
+/// row so the strike counter survives process restarts and horizontal
+/// replicas. This helper is safe only for pure unit tests; production lookup
+/// verification MUST use a durable row transition before enabling lookup-mode
+/// invites.
 #[derive(Debug, Clone, Copy)]
 pub struct LookupStrikes {
     pub wrong_attempts: u8,

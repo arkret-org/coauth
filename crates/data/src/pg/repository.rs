@@ -6,6 +6,7 @@ use coauth_data::{
     accountability::AccountabilityGrantRepository,
     app_session::AppSessionRepository,
     audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository},
+    circle_capability::CircleCapabilityGrantRepository,
     notification::{NotificationRepository, NotificationTemplateRepository},
     oauth::{
         OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -40,6 +41,7 @@ use crate::{
     accountability::PgAccountabilityGrantRepository,
     app_session::PgAppSessionRepository,
     audit::PgAuditRepository,
+    circle_capability::PgCircleCapabilityGrantRepository,
     notification::{PgNotificationRepository, PgNotificationTemplateRepository},
     oauth::{
         PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
@@ -196,6 +198,12 @@ impl RepositoryAccess for PgRepository {
         &'c mut self,
     ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
         Box::new(PgAccountabilityGrantRepository::new(&mut self.conn))
+    }
+
+    fn circle_capability_grant<'c>(
+        &'c mut self,
+    ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
+        Box::new(PgCircleCapabilityGrantRepository::new(&mut self.conn))
     }
 
     fn upstream_oauth_link<'c>(

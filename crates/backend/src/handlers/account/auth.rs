@@ -350,6 +350,43 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
+            if !contrix_config.password_login_session_grants_enabled {
+                cookie_jar.finalize(
+                    res,
+                    Json(LoginResponse {
+                        status: "success",
+                        error: None,
+                        viewer: Some(ViewerInfo {
+                            id: NodeType::User.serialize(user.id),
+                            handle: user.handle.clone(),
+                            did: contrix::user_did_for(&url_builder, &contrix_config, &user),
+                            federated_handle: contrix::user_handle(&url_builder, &user),
+                            principal_id: principal_server.principal_id(&user.handle),
+                            display_name,
+                        }),
+                        session_grant: None,
+                        warnings: vec![
+                            "password_login_session_grants_disabled; use the OIDC/passkey bridge"
+                                .to_owned(),
+                        ],
+                    }),
+                );
+                return Ok(());
+            }
+            if dpop_jkt.is_none() {
+                PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                res.status_code(StatusCode::BAD_REQUEST);
+                res.render(Json(LoginResponse {
+                    status: "error",
+                    error: Some("invalid_dpop_proof"),
+                    viewer: None,
+                    session_grant: None,
+                    warnings: vec![
+                        "password login session grants require a valid DPoP proof".to_owned(),
+                    ],
+                }));
+                return Ok(());
+            }
             let grant_target = match contrix::password_login_session_grant_target(
                 &url_builder,
                 &contrix_config,
@@ -372,7 +409,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             // TODO(contrix): replace password bootstrap minting with the real
             // coauth-owned OIDC/passkey exchange and proof-bound grant issuance.
             //
-            // STATUS: scaffold — NOT for production.
+            // STATUS: scaffold — disabled by default; NOT for production.
             // CATEGORY: P0 / auth-issuance.
             // RISK: this path mints a principal-server session grant
             //   directly from a password login without the canonical
@@ -381,7 +418,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             //   proof-of-possession flow that real deployments
             //   require. Acceptable for the bring-up phase because it
             //   keeps the development loop short, but MUST be replaced
-            //   before any external relying party trusts these grants.
+            //   before any external relying party trusts these grants. The
+            //   handler now requires
+            //   `contrix.password_login_session_grants_enabled=true` and a
+            //   valid DPoP proof before this branch can run.
             // PRE-PROD CHECKLIST:
             //   - swap to passkey / OIDC exchange via
             //     `crate::handlers::account::auth::oidc_bridge`.

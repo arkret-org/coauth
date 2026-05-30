@@ -8,6 +8,7 @@ use crate::{
     accountability::AccountabilityGrantRepository,
     app_session::AppSessionRepository,
     audit::AuditRepository,
+    circle_capability::CircleCapabilityGrantRepository,
     notification::NotificationRepository,
     oauth::{
         OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -124,6 +125,11 @@ pub trait RepositoryAccess: Send {
     fn accountability_grant<'c>(
         &'c mut self,
     ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c>;
+
+    /// Get a [`CircleCapabilityGrantRepository`].
+    fn circle_capability_grant<'c>(
+        &'c mut self,
+    ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c>;
 
     /// Get an [`UpstreamOAuthLinkRepository`]
     fn upstream_oauth_link<'c>(
@@ -278,6 +284,7 @@ mod impls {
         accountability::AccountabilityGrantRepository,
         app_session::AppSessionRepository,
         audit::AuditRepository,
+        circle_capability::CircleCapabilityGrantRepository,
         notification::NotificationRepository,
         oauth::{
             OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -349,6 +356,15 @@ mod impls {
         ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
                 self.inner.accountability_grant(),
+                &mut self.mapper,
+            ))
+        }
+
+        fn circle_capability_grant<'c>(
+            &'c mut self,
+        ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.circle_capability_grant(),
                 &mut self.mapper,
             ))
         }
@@ -592,6 +608,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
             (**self).accountability_grant()
+        }
+
+        fn circle_capability_grant<'c>(
+            &'c mut self,
+        ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
+            (**self).circle_capability_grant()
         }
 
         fn upstream_oauth_link<'c>(

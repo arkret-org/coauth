@@ -3237,6 +3237,8 @@ mod tests {
             high_risk_threshold: 2,
             trust_domain: None,
             oob_code_kind: Default::default(),
+            password_login_session_grants_enabled: false,
+            admin_org_id: None,
             verification_service_did: None,
             audit_signature_fail_closed: false,
         };

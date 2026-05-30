@@ -7,38 +7,27 @@
 //! - `DELETE /api/admin/v1/circles/capabilities/{id}` — revoke a grant
 //!
 //! Wire shape lives in
-//! [`coauth_admin_types::circle_capability_admin`].
-//!
-//! TODO(circle-rollout-followup-A.2): the in-process `Mutex<Vec<…>>`
-//! store below is functionally complete for sodmin integration but is
-//! still in-memory. Migrating to a `coauth-data` repository pattern
-//! requires a fresh diesel migration that adds a
-//! `circle_capability_grants` table (and a matching repository trait /
-//! Postgres implementation) so the grants survive coauth-backend
-//! restarts. coauth uses diesel + diesel-async (not sqlx) — the original
-//! P2B.2 marker mentioning a "sqlx migration" was inaccurate. Tracked
-//! out-of-band because the additional ~400 LoC of repo plumbing did not
-//! fit inside the circle-rollout P1 closeout window.
+//! [`coauth_admin_types::circle_capability_admin`]. Grants are durable:
+//! the handlers below use `circle_capability_grants` through the normal
+//! repository transaction boundary, so they survive restarts and are
+//! visible across horizontally scaled replicas that share Postgres.
 
-use std::sync::{LazyLock, Mutex};
-
-use chrono::Utc;
 use coauth_admin_types::circle_capability_admin::{
     CircleCapabilityGrant, CreateCircleCapabilityGrant, ListCircleCapabilityGrantsResponse,
     RiskTier,
 };
+use coauth_data::{NewCircleCapabilityGrant, RepositoryAccess};
 use salvo::{http::StatusCode, oapi::extract::PathParam, prelude::*};
 use ulid::Ulid;
 
 use crate::{
     JsonResult,
     error::AppError,
-    handlers::{admin::call_context::extract_call_context, common::DepotExt},
+    handlers::{
+        admin::call_context::extract_call_context,
+        common::{DepotExt, make_clock, make_rng},
+    },
 };
-
-/// In-memory grant store. See module TODO.
-static GRANTS: LazyLock<Mutex<Vec<CircleCapabilityGrant>>> =
-    LazyLock::new(|| Mutex::new(Vec::new()));
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.circle_capabilities.list", skip_all)]
@@ -46,16 +35,9 @@ pub async fn list_handler(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<ListCircleCapabilityGrantsResponse> {
-    let call_context = extract_call_context(req, depot).await?;
-    call_context.repo.cancel().await?; // read-only
-
-    let data = GRANTS
-        .lock()
-        .expect("circle capability grant mutex poisoned")
-        .iter()
-        .filter(|g| g.revoked_at.is_none())
-        .cloned()
-        .collect();
+    let mut repo = extract_call_context(req, depot).await?.repo;
+    let data = repo.circle_capability_grant().list_active().await?;
+    repo.cancel().await?;
 
     Ok(Json(ListCircleCapabilityGrantsResponse { data }))
 }
@@ -65,7 +47,7 @@ pub async fn list_handler(
 pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<CircleCapabilityGrant> {
     let call_context = extract_call_context(req, depot).await?;
 
-    let body: CreateCircleCapabilityGrant = req
+    let mut body: CreateCircleCapabilityGrant = req
         .parse_json()
         .await
         .map_err(|e| AppError::bad_request(format!("invalid grant body: {e}")))?;
@@ -117,7 +99,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
                 existing.required_approvals
             )));
         }
-        Some((proposal_ulid, existing.approval_proofs.len()))
+        Some(proposal_ulid)
     } else {
         None
     };
@@ -127,28 +109,28 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
         .as_ref()
         .map_or_else(|| "service".to_owned(), |u| format!("user:{}", u.id));
 
-    let grant = CircleCapabilityGrant {
-        id: Ulid::new().to_string(),
-        subject: body.subject,
-        realm_id: body.realm_id,
-        action: body.action,
-        allowed_circle_refs: body.allowed_circle_refs,
-        granted_by: actor_did,
-        granted_at: Utc::now().to_rfc3339(),
-        revoked_at: None,
-    };
+    canonicalize_circle_refs(&mut body.allowed_circle_refs);
+    let mut rng = make_rng();
+    let mut repo = call_context.repo;
+    let grant = repo
+        .circle_capability_grant()
+        .add(
+            &mut *rng,
+            &*call_context.clock,
+            NewCircleCapabilityGrant {
+                subject: body.subject,
+                realm_id: body.realm_id,
+                action: body.action,
+                allowed_circle_refs: body.allowed_circle_refs,
+                granted_by: actor_did,
+            },
+        )
+        .await?;
 
-    GRANTS
-        .lock()
-        .expect("circle capability grant mutex poisoned")
-        .push(grant.clone());
-
-    // Mark the proposal `executed` so the approval set can't be replayed
-    // for a second grant.
-    if let Some((proposal_ulid, _approval_count)) = approved_proposal {
+    if let Some(proposal_ulid) = approved_proposal {
         let proposals = depot.risk_action_proposals_service()?;
-        let _ = proposals
-            .mark_executed(proposal_ulid, Utc::now())
+        proposals
+            .mark_executed(proposal_ulid, chrono::Utc::now())
             .await
             .map_err(|err| {
                 AppError::new(
@@ -158,7 +140,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
             })?;
     }
 
-    call_context.repo.cancel().await?; // no DB writes for in-memory grant store
+    repo.save().await?;
 
     Ok(Json(grant))
 }
@@ -170,37 +152,30 @@ pub async fn revoke_handler(
     depot: &Depot,
     grant_id: PathParam<String>,
 ) -> Result<StatusCode, AppError> {
-    let call_context = extract_call_context(req, depot).await?;
+    let mut repo = extract_call_context(req, depot).await?.repo;
     let grant_id = grant_id.into_inner();
+    let clock = make_clock();
 
     let revoked = {
-        let mut grants = GRANTS
-            .lock()
-            .expect("circle capability grant mutex poisoned");
-        match grants.iter_mut().find(|g| g.id == grant_id) {
-            Some(g) if g.revoked_at.is_none() => {
-                g.revoked_at = Some(Utc::now().to_rfc3339());
-                Ok(StatusCode::NO_CONTENT)
-            }
-            Some(_) => Err(AppError::new(
-                StatusCode::NOT_FOUND,
-                "grant already revoked",
-            )),
-            None => Err(AppError::new(StatusCode::NOT_FOUND, "grant not found")),
-        }
+        let mut grants = repo.circle_capability_grant();
+        grants.revoke_by_id(&*clock, &grant_id).await?
     };
 
-    let _ = call_context.repo.cancel().await;
-    revoked
+    match revoked {
+        Some(_) => {
+            repo.save().await?;
+            Ok(StatusCode::NO_CONTENT)
+        }
+        None => {
+            repo.cancel().await?;
+            Err(AppError::new(StatusCode::NOT_FOUND, "grant not found"))
+        }
+    }
 }
 
-/// Test-only: clear the in-memory grant store between tests.
-#[cfg(test)]
-pub fn _reset_for_tests() {
-    GRANTS
-        .lock()
-        .expect("circle capability grant mutex poisoned")
-        .clear();
+fn canonicalize_circle_refs(refs: &mut Vec<String>) {
+    refs.sort();
+    refs.dedup();
 }
 
 #[cfg(test)]
@@ -210,57 +185,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn create_then_revoke_lifecycle() {
-        _reset_for_tests();
+    fn canonicalize_circle_refs_sorts_and_deduplicates() {
+        let mut refs = vec![
+            "cx:circle:c".to_owned(),
+            "cx:circle:a".to_owned(),
+            "cx:circle:c".to_owned(),
+        ];
+        canonicalize_circle_refs(&mut refs);
+        assert_eq!(refs, vec!["cx:circle:a", "cx:circle:c"]);
+    }
 
-        // Simulate what the handler bodies do, sans HTTP plumbing.
+    #[test]
+    fn create_request_validation_still_mirrors_registry_constraints() {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
             realm_id: "cx:realm:demo".into(),
-            action: CircleCapabilityAction::Create,
+            action: CircleCapabilityAction::Manage,
             allowed_circle_refs: vec![],
         };
-        assert!(req.validate().is_ok());
-
-        let grant = CircleCapabilityGrant {
-            id: Ulid::new().to_string(),
-            subject: req.subject,
-            realm_id: req.realm_id,
-            action: req.action,
-            allowed_circle_refs: req.allowed_circle_refs,
-            granted_by: "service".into(),
-            granted_at: Utc::now().to_rfc3339(),
-            revoked_at: None,
-        };
-        GRANTS.lock().unwrap().push(grant.clone());
-
-        // List should contain it.
-        let listed: Vec<_> = GRANTS
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|g| g.revoked_at.is_none())
-            .cloned()
-            .collect();
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].id, grant.id);
-
-        // Revoke.
-        for g in GRANTS.lock().unwrap().iter_mut() {
-            if g.id == grant.id {
-                g.revoked_at = Some(Utc::now().to_rfc3339());
-            }
-        }
-
-        let listed_after: Vec<_> = GRANTS
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|g| g.revoked_at.is_none())
-            .cloned()
-            .collect();
-        assert!(listed_after.is_empty());
-
-        _reset_for_tests();
+        assert!(req.validate().is_err());
     }
 }

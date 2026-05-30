@@ -13,6 +13,7 @@ use coauth_admin_types::{
 };
 use coauth_data::audit::AdminOperation;
 use coauth_data::{AdminUserPatch, RepositoryAccess};
+use contrix_core::canonical::canonical_json_bytes;
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -31,6 +32,7 @@ use crate::{
         contrix::service_did_for,
     },
     services::{
+        did_binding_proof::verify_detached_jws_with_sdk,
         did_resolver::DidResolverService,
         risk_action_proposals::{
             ApprovalProof, CreateProposal, ProposalState, RiskActionProposalRecord,
@@ -200,6 +202,26 @@ async fn admin_actor_did(
         .await)
 }
 
+fn bind_approval_admin_did(
+    caller_admin_did: String,
+    request_approved_by: Option<&str>,
+) -> Result<String, AppError> {
+    let Some(request_approved_by) = request_approved_by
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(caller_admin_did);
+    };
+
+    if request_approved_by != caller_admin_did {
+        return Err(AppError::bad_request(
+            "approved_by must match the authenticated admin DID",
+        ));
+    }
+
+    Ok(caller_admin_did)
+}
+
 fn ensure_proposal_targets(
     proposal: &RiskActionProposalRecord,
     account_id: Ulid,
@@ -223,6 +245,110 @@ fn ensure_proposal_targets(
         ));
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct RiskActionApprovalTranscript {
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    pub proposal_id: String,
+    pub account_id: String,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ticket: Option<String>,
+    pub approval_note: String,
+    pub approved_by: String,
+}
+
+pub(crate) fn risk_action_approval_transcript(
+    proposal_id: &str,
+    account_id: Ulid,
+    action: &str,
+    ticket: Option<&str>,
+    approval_note: &str,
+    approved_by: &str,
+) -> RiskActionApprovalTranscript {
+    RiskActionApprovalTranscript {
+        kind: "cx.coauth.account_risk_action.approval.v1",
+        proposal_id: proposal_id.to_owned(),
+        account_id: account_id.to_string(),
+        action: action.to_owned(),
+        ticket: ticket.map(str::to_owned),
+        approval_note: approval_note.to_owned(),
+        approved_by: approved_by.to_owned(),
+    }
+}
+
+pub(crate) fn risk_action_approval_transcript_bytes(
+    proposal_id: &str,
+    account_id: Ulid,
+    action: &str,
+    ticket: Option<&str>,
+    approval_note: &str,
+    approved_by: &str,
+) -> Result<Vec<u8>, AppError> {
+    canonical_json_bytes(&risk_action_approval_transcript(
+        proposal_id,
+        account_id,
+        action,
+        ticket,
+        approval_note,
+        approved_by,
+    ))
+    .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn verify_approval_proof_jws(
+    http_client: &reqwest::Client,
+    url_builder: &coauth_data::UrlBuilder,
+    contrix_config: &coauth_config::ContrixConfig,
+    key_store: &coauth_keystore::Keystore,
+    repo: &mut coauth_data::BoxRepository,
+    did_resolver: &dyn DidResolverService,
+    proof_jws: &str,
+    proposal_id: &str,
+    account_id: Ulid,
+    action: &str,
+    ticket: Option<&str>,
+    approval_note: &str,
+    approved_by: &str,
+) -> Result<String, AppError> {
+    if proof_jws.trim().is_empty() {
+        return Err(AppError::bad_request(
+            "risk action approvals require approval_proof_jws",
+        ));
+    }
+    let payload = risk_action_approval_transcript_bytes(
+        proposal_id,
+        account_id,
+        action,
+        ticket,
+        approval_note,
+        approved_by,
+    )?;
+    let resolution = did_resolver
+        .resolve_did_document(
+            http_client,
+            url_builder,
+            contrix_config,
+            key_store,
+            repo,
+            approved_by,
+        )
+        .await
+        .map_err(|error| AppError::bad_request(format!("admin_did_resolve_failed: {error}")))?;
+    if resolution.document.verification_method.is_empty() {
+        return Err(AppError::bad_request(
+            "approved_by DID document has no verificationMethod entries",
+        ));
+    }
+    verify_detached_jws_with_sdk(
+        proof_jws,
+        &payload,
+        &resolution.document.verification_method,
+    )
+    .map_err(|error| AppError::bad_request(format!("approval_proof_jws_invalid: {error}")))
 }
 
 fn state_revision_for(proposal: &RiskActionProposalRecord) -> u64 {
@@ -390,6 +516,11 @@ pub async fn approve(
             "risk action approvals require a non-empty approval_note",
         ));
     }
+    if params.approval_proof_jws.trim().is_empty() {
+        return Err(AppError::bad_request(
+            "risk action approvals require approval_proof_jws",
+        ));
+    }
 
     let risk_action_state = depot.risk_action_state_service()?;
     let risk_action_proposals = depot.risk_action_proposals_service()?;
@@ -397,6 +528,7 @@ pub async fn approve(
     let did_resolver = depot.did_resolver_service()?;
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
+    let http_client = depot.http_client().map_err(AppError::internal)?;
     let service_did = service_did_for(&url_builder, &contrix_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -426,19 +558,32 @@ pub async fn approve(
         &params.action,
         params.ticket.as_deref(),
     )?;
-    let fallback_admin_did =
+    let caller_admin_did =
         admin_actor_did(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
-    let approved_by = params
-        .approved_by
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(fallback_admin_did);
+    let approved_by = bind_approval_admin_did(caller_admin_did, params.approved_by.as_deref())?;
+    let approval_note = params.approval_note.as_deref().unwrap_or_default();
+    let verification_method = verify_approval_proof_jws(
+        &http_client,
+        &url_builder,
+        &contrix_config,
+        &key_store,
+        &mut repo,
+        did_resolver.as_ref(),
+        &params.approval_proof_jws,
+        &proposal_id,
+        account.id,
+        &params.action,
+        existing.ticket.as_deref(),
+        approval_note,
+        &approved_by,
+    )
+    .await?;
     let approved = risk_action_proposals
         .approve(
             proposal_ulid,
             ApprovalProof {
                 admin_did: approved_by.clone(),
-                signature: format!("coauth-admin-risk-action-approval:{proposal_id}:{approved_by}"),
+                signature: params.approval_proof_jws.clone(),
                 note: params.approval_note.clone(),
                 recorded_at: approved_at,
             },
@@ -482,6 +627,7 @@ pub async fn approve(
                 "next_state": approved.state.as_str(),
                 "ticket": params.ticket,
                 "approved_by": approved_by,
+                "approval_verification_method": verification_method,
                 "approved_by_handle": admin_user.as_ref().map(|user| user.handle.as_str()),
                 "approval_note": params.approval_note,
                 "execution_endpoint": execution_endpoint,
@@ -514,6 +660,56 @@ pub async fn approve(
         state_store_kind: state_store_kind.to_owned(),
         todo,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use ulid::Ulid;
+
+    use super::{bind_approval_admin_did, risk_action_approval_transcript};
+
+    #[test]
+    fn approval_admin_did_is_bound_to_authenticated_caller() {
+        let caller = "did:web:coauth.invalid:accounts:admin";
+
+        assert_eq!(
+            bind_approval_admin_did(caller.to_owned(), None).unwrap(),
+            caller
+        );
+        assert_eq!(
+            bind_approval_admin_did(caller.to_owned(), Some(caller)).unwrap(),
+            caller
+        );
+        assert_eq!(
+            bind_approval_admin_did(
+                caller.to_owned(),
+                Some("  did:web:coauth.invalid:accounts:admin  ")
+            )
+            .unwrap(),
+            caller
+        );
+        assert!(bind_approval_admin_did(caller.to_owned(), Some("did:web:forged-admin")).is_err());
+    }
+
+    #[test]
+    fn approval_transcript_binds_security_fields() {
+        let account_id = Ulid::nil();
+        let transcript = risk_action_approval_transcript(
+            "01H00000000000000000000000",
+            account_id,
+            "erase",
+            Some("INC-9"),
+            "approved with incident note",
+            "did:web:admin.example",
+        );
+
+        assert_eq!(transcript.proposal_id, "01H00000000000000000000000");
+        assert_eq!(transcript.account_id, account_id.to_string());
+        assert_eq!(transcript.action, "erase");
+        assert_eq!(transcript.ticket.as_deref(), Some("INC-9"));
+        assert_eq!(transcript.approval_note, "approved with incident note");
+        assert_eq!(transcript.approved_by, "did:web:admin.example");
+    }
 }
 
 #[endpoint]

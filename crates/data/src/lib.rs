@@ -43,6 +43,8 @@ pub mod accountability;
 pub mod app_session;
 /// Admin operation logs and account security event models.
 pub mod audit;
+/// Durable Circle capability grants.
+pub mod circle_capability;
 /// Clock abstraction for testability (`SystemClock` in production, mock clock
 /// in tests).
 pub mod clock;
@@ -132,6 +134,7 @@ pub use self::{
         AccountabilitySubjectRevocation,
     },
     audit::{AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType},
+    circle_capability::{CircleCapabilityGrantRepository, NewCircleCapabilityGrant},
     clock::{Clock, SystemClock},
     flow::{
         FlowDefinition, FlowDesignation, FlowSession, FlowSessionStatus, FlowStageBinding,

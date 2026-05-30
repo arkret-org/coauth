@@ -23,5 +23,6 @@ schema = ["dep:schemars", "dep:salvo"]
 chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+thiserror.workspace = true
 schemars = { workspace = true, optional = true }
 salvo = { workspace = true, optional = true }

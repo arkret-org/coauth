@@ -57,13 +57,23 @@ pub struct AccountRiskActionApprovalRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ticket: Option<String>,
 
-    /// Optional approver identifier override.
+    /// Optional approver identifier. If present, the backend requires it to
+    /// match the authenticated caller's admin DID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_by: Option<String>,
 
     /// Human approval note for the scaffold audit trail.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_note: Option<String>,
+
+    /// Detached EdDSA JWS over the canonical approval transcript.
+    ///
+    /// The payload segment MUST be empty (`protected..signature`). The
+    /// detached payload is canonical JSON binding
+    /// `proposal_id`, `account_id`, `action`, `ticket`, `approval_note`,
+    /// and `approved_by`.
+    #[serde(default)]
+    pub approval_proof_jws: String,
 }
 
 /// Execute an approved risk-action proposal.

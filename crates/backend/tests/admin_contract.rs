@@ -93,6 +93,7 @@ fn risk_action_approval_request_contract() {
         json!({
             "action": "disable",
             "approval_note": "approved by on-call",
+            "approval_proof_jws": "protected..signature",
         }),
         json!({ "action": 7 }),
     );

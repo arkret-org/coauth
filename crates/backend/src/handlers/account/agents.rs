@@ -13,10 +13,9 @@
 //! the same trust anchor used elsewhere for server-to-server flows.
 //! Browser sessions and end-user OAuth tokens are NOT accepted.
 //!
-//! Persistence: this is currently a thin stub. The grant payload is
-//! built deterministically (typed id + agent principal id + capability
-//! list) and returned to the caller. Actual persistence (audit log row +
-//! revocation index + soland fan-out) is tracked at TODO(P2-impl) below.
+//! Persistence: coauth stores the accountability grant, writes a signed
+//! audit row, and queues soland fan-out. soland remains the reducer-side
+//! authority for agent lifecycle state.
 //!
 //! Wire shape: see [`AccountabilityGrantRequest`] and
 //! [`AccountabilityGrantResponse`].
@@ -150,10 +149,10 @@ pub struct AccountabilityGrantResponse {
 /// configured for the deployment); browser sessions and end-user
 /// bearers are rejected with 401.
 ///
-/// On success returns a freshly minted `accountability_grant` payload
-/// referencing the agent principal id + capability set. Persistence is
-/// a stub (TODO(P2-impl) below); the returned payload is canonical and
-/// soland can accept it once the persistence cut-over lands.
+/// On success stores and returns a freshly minted `accountability_grant`
+/// payload referencing the agent principal id + capability set. The
+/// returned payload is canonical and a soland fan-out job is queued for
+/// reducer ingestion.
 #[endpoint]
 #[tracing::instrument(name = "handler.account.agents.accountability_grant", skip_all)]
 pub async fn post_accountability_grant(
@@ -503,13 +502,12 @@ pub async fn revoke_accountability_grant_by_id(
 //         fail closed within the configured window even before reducer
 //         convergence catches up.
 //
-// Full reducer/persistence wiring of these endpoints is in soland (the
-// principal server is the persistence authority). coauth owns the wire-level
-// error matrix exposed by `agent_key_pair` / `issue_session_grant`'s agent
-// branch when they front through the OIDC bridge. We expose the canonical
-// rejection helpers here so the (future) handler module — landing in R3.1
-// alongside the rest of the agent_runtime surface — has a single source of
-// truth for the wire codes.
+// Full reducer/persistence wiring of these deferred endpoints is in soland
+// (the principal server is the persistence authority). coauth keeps the
+// wire-level error matrix for `agent_key_pair` / `issue_session_grant`'s
+// agent branch as reserved internal helpers until the routes are implemented.
+// Do not expose these operations in discovery, docs, or sodmin before routed
+// handlers land.
 //
 // TODO(R3.1): wire up the actual `POST /api/v1/account/agent-key-pair` and
 // agent-branch session-grant handlers. The error matrix below is the bound

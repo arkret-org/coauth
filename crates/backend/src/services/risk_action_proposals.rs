@@ -1,10 +1,12 @@
 //! Durable storage for risk-action proposals.
 //!
 //! Persists proposal records to the `risk_action_proposals` table. Approval
-//! proofs (admin DID + signed approval blob + recorded-at timestamp) are
-//! stored as a JSON array in the `approval_proofs` column. High-risk actions
-//! require `ContrixConfig::high_risk_threshold` distinct admin DIDs to
-//! approve before the proposal transitions to `approved`.
+//! proofs (admin DID + detached JWS approval proof + recorded-at timestamp)
+//! are stored as a JSON array in the `approval_proofs` column. The HTTP
+//! handler verifies each JWS against the approver DID before calling this
+//! service. High-risk actions require `ContrixConfig::high_risk_threshold`
+//! distinct admin DIDs to approve before the proposal transitions to
+//! `approved`.
 
 use std::sync::Arc;
 
@@ -63,7 +65,7 @@ impl ProposalState {
 pub struct ApprovalProof {
     /// Admin DID that signed the approval.
     pub admin_did: String,
-    /// Detached signature / approval JWT (opaque blob; not validated here).
+    /// Detached approval JWS. The admin handler validates it before storage.
     pub signature: String,
     /// Free-form approval note for audit.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -45,9 +45,10 @@ session grant 签发。这是多租户部署下的安全默认值——某些对
    固定到 `<= 30s`，这意味着 coauth 更频繁地刷新镜像状态。预计针对
    agent-state 与 accountability-grant 接口的上游 RPC 速率会到基线的
    约 2 倍。
-4. **agent 运行时硬拒绝放大**。`agent_paused`、`agent_deactivated`、
-   `accountability_grant_missing` 从“记日志+拒绝”升级为“记日志+拒绝+
-   告警”——确保运维准备就绪。
+4. **agent 运行时路由启用后的硬拒绝放大**。`agent_paused`、
+   `agent_deactivated`、`accountability_grant_missing` 从“记日志+拒绝”
+   升级为“记日志+拒绝+告警”——在暴露暂缓的 agent runtime 接口前，确保
+   运维准备就绪。
 
 ### Flip 前检查清单
 
@@ -60,8 +61,8 @@ session grant 签发。这是多租户部署下的安全默认值——某些对
 5. 持续观察 30 分钟：
    - `coauth_accountable_to_reject_total{profile="strict"}` —— 从 0 起跳
      后，应在“陈旧基线 + 20%”范围内趋稳。
-   - `coauth_session_grant_failure_total{reason="agent_paused" | "agent_deactivated" | "accountability_grant_missing"}` —— 应保持在 flip
-     前的基线。
+   - `coauth_session_grant_failure_total{reason="agent_paused" | "agent_deactivated" | "accountability_grant_missing"}` —— 仅在暂缓的 agent runtime
+     接口接线后适用；届时应保持在 flip 前的基线。
 6. 若拒绝数超阈值：回滚（关掉 profile），对最吵的对端立 bug，等待对端
    升级后再次 flip。
 

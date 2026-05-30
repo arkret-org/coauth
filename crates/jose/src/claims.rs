@@ -726,20 +726,26 @@ mod oidc_core {
     pub const PROFILE: Claim<Url> = Claim::new("profile");
     pub const PICTURE: Claim<Url> = Claim::new("picture");
     pub const WEBSITE: Claim<Url> = Claim::new("website");
-    // TODO: email type?
+    // Security review 2026-05-31: string is intentional for claim extraction.
+    // Email syntax and deliverability validation belong at account/profile
+    // boundaries; JOSE keeps OIDC claim values lossless.
     pub const EMAIL: Claim<String> = Claim::new("email");
     pub const EMAIL_VERIFIED: Claim<bool> = Claim::new("email_verified");
     pub const GENDER: Claim<String> = Claim::new("gender");
-    // TODO: date type
+    // OIDC `birthdate` permits partial dates such as YYYY-MM; keep it as
+    // string here and let product-specific validators opt into stricter forms.
     pub const BIRTHDATE: Claim<String> = Claim::new("birthdate");
-    // TODO: timezone type
+    // IANA time-zone validation is intentionally outside this JOSE crate.
     pub const ZONEINFO: Claim<String> = Claim::new("zoneinfo");
-    // TODO: locale type
+    // Locale parsing is caller-owned so this crate does not force one ICU
+    // representation for all consumers.
     pub const LOCALE: Claim<String> = Claim::new("locale");
-    // TODO: phone number type
+    // Phone numbers are caller-normalized (usually E.164) before claims are
+    // minted; extraction stays string-preserving.
     pub const PHONE_NUMBER: Claim<String> = Claim::new("phone_number");
     pub const PHONE_NUMBER_VERIFIED: Claim<bool> = Claim::new("phone_number_verified");
-    // TODO: pub const ADDRESS: Claim<Timestamp> = Claim::new("address");
+    // OIDC `address` is a structured object, not a Timestamp. Add a dedicated
+    // AddressClaim type when a caller needs typed extraction.
     pub const UPDATED_AT: Claim<Timestamp> = Claim::new("updated_at");
 }
 

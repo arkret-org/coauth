@@ -200,6 +200,8 @@ pub struct AdminBridgeRiskActionApprovalExample {
     pub approved_by: String,
     #[serde(default)]
     pub approval_note: String,
+    #[serde(default)]
+    pub approval_proof_jws: String,
 }
 
 /// Example shape for the execute request body.
@@ -278,6 +280,7 @@ pub fn admin_bridge_risk_action_approval_example() -> AdminBridgeRiskActionAppro
         ticket: "INC-2026-0504".to_owned(),
         approved_by: "did:web:admin.example".to_owned(),
         approval_note: "approved for controlled execution".to_owned(),
+        approval_proof_jws: "protected..signature".to_owned(),
     }
 }
 
@@ -355,7 +358,8 @@ mod tests {
                     "action": "lock",
                     "ticket": "INC-2026-0504",
                     "approved_by": "did:web:admin.example",
-                    "approval_note": "approved for controlled execution"
+                    "approval_note": "approved for controlled execution",
+                    "approval_proof_jws": "protected..signature"
                 },
                 "execute_request": {
                     "action": "lock",
@@ -377,6 +381,10 @@ mod tests {
         assert_eq!(
             d.risk_action_examples.approve_request.approved_by,
             "did:web:admin.example"
+        );
+        assert_eq!(
+            d.risk_action_examples.approve_request.approval_proof_jws,
+            "protected..signature"
         );
         assert_eq!(
             d.risk_action_examples.execute_request.execution_note,

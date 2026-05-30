@@ -634,7 +634,7 @@ fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGra
 #[cfg(test)]
 mod tests {
     use base64ct::{Base64UrlUnpadded, Encoding as _};
-    use coauth_data::{Clock, RepositoryAccess};
+    use coauth_data::{Clock, RepositoryAccess, personal::session::PersonalSessionOwner};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::jwt::JsonWebSignatureHeader;
     use hyper::{Request, StatusCode};
@@ -782,6 +782,17 @@ mod tests {
         let body: serde_json::Value = response.json();
         let proposal_id = body["proposal_id"].as_str().unwrap().to_owned();
         assert_eq!(body["approval_mode"], "durable_proposal_required");
+        let admin_did = admin_did_for_token(&state, &token).await;
+        let approval_note = "approved for controlled executor";
+        let approval_proof_jws = sign_risk_action_approval_proof(
+            &state,
+            &proposal_id,
+            user.id,
+            "lock",
+            Some("INC-2.1"),
+            approval_note,
+            &admin_did,
+        );
 
         let proposals =
             crate::services::risk_action_proposals::risk_action_proposals_service(pool.clone());
@@ -817,8 +828,8 @@ mod tests {
                 .json(serde_json::json!({
                     "action": "lock",
                     "ticket": "INC-2.1",
-                    "approved_by": "did:web:admin.example",
-                    "approval_note": "approved for controlled executor",
+                    "approval_note": approval_note,
+                    "approval_proof_jws": approval_proof_jws,
                 })),
             )
             .await;
@@ -896,6 +907,130 @@ mod tests {
         let updated = repo.user().lookup(user.id).await.unwrap().unwrap();
         repo.cancel().await.unwrap();
         assert!(updated.locked_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_risk_action_approve_rejects_forged_approved_by_threshold_bypass() {
+        setup();
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+        let token = state.token_with_scope("urn:coauth:admin").await;
+
+        let mut rng = state.rng();
+        let mut repo = state.repository().await.unwrap();
+        let user = repo
+            .user()
+            .add(&mut rng, &*state.clock, "alice".to_owned())
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+
+        let response = state
+            .request(
+                Request::post(format!("/api/admin/v1/accounts/{}/risk-action", user.id))
+                    .bearer(&token)
+                    .json(serde_json::json!({
+                        "action": "disable",
+                        "reason": "confirmed account takeover",
+                        "ticket": "INC-SEC-COA-1",
+                    })),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        let proposal_id = body["proposal_id"].as_str().unwrap().to_owned();
+        let proposal_ulid = proposal_id.parse::<ulid::Ulid>().unwrap();
+        let proposals =
+            crate::services::risk_action_proposals::risk_action_proposals_service(pool.clone());
+        let admin_did = admin_did_for_token(&state, &token).await;
+        let approval_note = "first real admin approval";
+        let approval_proof_jws = sign_risk_action_approval_proof(
+            &state,
+            &proposal_id,
+            user.id,
+            "disable",
+            Some("INC-SEC-COA-1"),
+            approval_note,
+            &admin_did,
+        );
+
+        let response = state
+            .request(
+                Request::post(format!(
+                    "/api/admin/v1/accounts/{}/risk-action/{}/approve",
+                    user.id, proposal_id
+                ))
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "action": "disable",
+                    "ticket": "INC-SEC-COA-1",
+                    "approval_note": approval_note,
+                    "approval_proof_jws": approval_proof_jws,
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["approval_state"], "draft");
+        let authenticated_admin_did = body["approved_by"].as_str().unwrap().to_owned();
+
+        let persisted = proposals.get(proposal_ulid).await.unwrap().unwrap();
+        assert_eq!(persisted.required_approvals, 2);
+        assert_eq!(persisted.state.as_str(), "draft");
+        assert_eq!(persisted.approval_proofs.len(), 1);
+        assert_eq!(
+            persisted.approval_proofs[0].admin_did,
+            authenticated_admin_did
+        );
+
+        for forged_approved_by in [
+            "did:web:forged-admin-one.example",
+            "did:web:forged-admin-two.example",
+        ] {
+            let response = state
+                .request(
+                    Request::post(format!(
+                        "/api/admin/v1/accounts/{}/risk-action/{}/approve",
+                        user.id, proposal_id
+                    ))
+                    .bearer(&token)
+                    .json(serde_json::json!({
+                        "action": "disable",
+                        "ticket": "INC-SEC-COA-1",
+                        "approved_by": forged_approved_by,
+                        "approval_note": "attempt forged threshold bypass",
+                        "approval_proof_jws": "protected..signature",
+                    })),
+                )
+                .await;
+            response.assert_status(StatusCode::BAD_REQUEST);
+
+            let persisted = proposals.get(proposal_ulid).await.unwrap().unwrap();
+            assert_eq!(persisted.state.as_str(), "draft");
+            assert_eq!(persisted.approval_proofs.len(), 1);
+            assert_eq!(
+                persisted.approval_proofs[0].admin_did,
+                authenticated_admin_did
+            );
+        }
+
+        let response = state
+            .request(
+                Request::post(format!(
+                    "/api/admin/v1/accounts/{}/risk-action/{}/execute",
+                    user.id, proposal_id
+                ))
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "action": "disable",
+                    "ticket": "INC-SEC-COA-1",
+                    "execution_note": "attempt before real N-of-M approval",
+                })),
+            )
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -1080,6 +1215,74 @@ mod tests {
         let raw_sig: Box<[u8]> = raw_sig.into();
         format!(
             "{signing_input}.{}",
+            Base64UrlUnpadded::encode_string(raw_sig.as_ref())
+        )
+    }
+
+    async fn admin_did_for_token(state: &TestState, token: &str) -> String {
+        let mut repo = state.repository().await.unwrap();
+        let access = repo
+            .personal_access_token()
+            .find_by_token(token)
+            .await
+            .unwrap()
+            .expect("test token should resolve");
+        let session = repo
+            .personal_session()
+            .lookup(access.session_id)
+            .await
+            .unwrap()
+            .expect("test token session should resolve");
+        let PersonalSessionOwner::User(user_id) = session.owner else {
+            panic!("admin test token should be user-owned");
+        };
+        let user = repo
+            .user()
+            .lookup(user_id)
+            .await
+            .unwrap()
+            .expect("admin token user should resolve");
+        repo.cancel().await.unwrap();
+        format!(
+            "did:web:coauth.invalid:accounts:{}",
+            user.id.to_string().to_ascii_lowercase()
+        )
+    }
+
+    fn sign_risk_action_approval_proof(
+        state: &TestState,
+        proposal_id: &str,
+        account_id: Ulid,
+        action: &str,
+        ticket: Option<&str>,
+        approval_note: &str,
+        approved_by: &str,
+    ) -> String {
+        let alg = JsonWebSignatureAlg::EdDsa;
+        let signer = state
+            .key_store
+            .signer_for_algorithm(&alg)
+            .expect("test keystore should expose an EdDSA signing key");
+        let header = JsonWebSignatureHeader::new(alg).with_kid(format!("{approved_by}#key-1"));
+        let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
+        let payload = super::risk_action::risk_action_approval_transcript_bytes(
+            proposal_id,
+            account_id,
+            action,
+            ticket,
+            approval_note,
+            approved_by,
+        )
+        .unwrap();
+        let payload_b64 = Base64UrlUnpadded::encode_string(&payload);
+        let signing_input = format!("{header_b64}.{payload_b64}");
+        let mut rng = state.rng();
+        let raw_sig: coauth_jose::jwa::Signature = signer
+            .try_sign_with_rng(&mut rng, signing_input.as_bytes())
+            .unwrap();
+        let raw_sig: Box<[u8]> = raw_sig.into();
+        format!(
+            "{header_b64}..{}",
             Base64UrlUnpadded::encode_string(raw_sig.as_ref())
         )
     }
