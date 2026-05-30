@@ -365,7 +365,7 @@ zeroize = "1.8.2"
 zxcvbn = "3.1.0"
 
 # --- Front-end (Dioxus WASM) dependencies ---
-dioxus = { version = "0.7.5", features = ["web", "router"] }
+dioxus = { version = "0.7.9", features = ["web", "router"] }
 gloo-timers = { version = "0.4", features = ["futures"] }
 web-sys = { version = "0.3", features = [
     "Window",
