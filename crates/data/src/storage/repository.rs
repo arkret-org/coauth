@@ -5,6 +5,7 @@ use thiserror::Error;
 use super::notification_template::NotificationTemplateRepository;
 use crate::{
     account::AccountRepository,
+    accountability::AccountabilityGrantRepository,
     app_session::AppSessionRepository,
     audit::AuditRepository,
     notification::NotificationRepository,
@@ -22,9 +23,9 @@ use crate::{
     },
     user::{
         BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
-        UserPasswordRepository, UserPhoneRepository, UserRecoveryRepository,
-        UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
-        UserTermsRepository, UserTotpRepository,
+        UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
+        UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
+        UserRepository, UserTermsRepository, UserTotpRepository,
     },
     workflow::WorkflowRepository,
 };
@@ -119,6 +120,11 @@ pub trait RepositoryAccess: Send {
     /// Get an [`AccountRepository`]
     fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c>;
 
+    /// Get an [`AccountabilityGrantRepository`]
+    fn accountability_grant<'c>(
+        &'c mut self,
+    ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c>;
+
     /// Get an [`UpstreamOAuthLinkRepository`]
     fn upstream_oauth_link<'c>(
         &'c mut self,
@@ -166,6 +172,11 @@ pub trait RepositoryAccess: Send {
 
     /// Get an [`UserTotpRepository`]
     fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c>;
+
+    /// Get a [`UserPrimaryHandlePreferenceRepository`].
+    fn user_primary_handle_preference<'c>(
+        &'c mut self,
+    ) -> Box<dyn UserPrimaryHandlePreferenceRepository<Error = Self::Error> + 'c>;
 
     /// Get a [`PrincipalDidRepository`]
     fn principal_did<'c>(&'c mut self)
@@ -264,6 +275,7 @@ mod impls {
     use crate::{
         MapErr, Repository, RepositoryTransaction,
         account::AccountRepository,
+        accountability::AccountabilityGrantRepository,
         app_session::AppSessionRepository,
         audit::AuditRepository,
         notification::NotificationRepository,
@@ -282,9 +294,9 @@ mod impls {
         },
         user::{
             BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
-            UserPasswordRepository, UserPhoneRepository, UserRegistrationRepository,
-            UserRegistrationTokenRepository, UserRepository, UserTermsRepository,
-            UserTotpRepository,
+            UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
+            UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
+            UserTermsRepository, UserTotpRepository,
         },
         workflow::WorkflowRepository,
     };
@@ -330,6 +342,15 @@ mod impls {
 
         fn account<'c>(&'c mut self) -> Box<dyn AccountRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.account(), &mut self.mapper))
+        }
+
+        fn accountability_grant<'c>(
+            &'c mut self,
+        ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.accountability_grant(),
+                &mut self.mapper,
+            ))
         }
 
         fn upstream_oauth_link<'c>(
@@ -407,6 +428,15 @@ mod impls {
 
         fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(self.inner.user_totp(), &mut self.mapper))
+        }
+
+        fn user_primary_handle_preference<'c>(
+            &'c mut self,
+        ) -> Box<dyn UserPrimaryHandlePreferenceRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.user_primary_handle_preference(),
+                &mut self.mapper,
+            ))
         }
 
         fn principal_did<'c>(
@@ -558,6 +588,12 @@ mod impls {
             (**self).account()
         }
 
+        fn accountability_grant<'c>(
+            &'c mut self,
+        ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
+            (**self).accountability_grant()
+        }
+
         fn upstream_oauth_link<'c>(
             &'c mut self,
         ) -> Box<dyn UpstreamOAuthLinkRepository<Error = Self::Error> + 'c> {
@@ -624,6 +660,12 @@ mod impls {
 
         fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {
             (**self).user_totp()
+        }
+
+        fn user_primary_handle_preference<'c>(
+            &'c mut self,
+        ) -> Box<dyn UserPrimaryHandlePreferenceRepository<Error = Self::Error> + 'c> {
+            (**self).user_primary_handle_preference()
         }
 
         fn browser_session<'c>(

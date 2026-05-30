@@ -39,7 +39,7 @@ use contrix_core::{Hash, RealmId};
 use thiserror::Error;
 use url::Url;
 
-use crate::outbound_http::RequestBuilderExt as _;
+use crate::outbound_http;
 
 #[derive(Debug, Error)]
 pub enum FrontierError {
@@ -182,19 +182,18 @@ impl FrontierSource for SolandFrontierSource {
                 pairs.append_pair("realm_id", realm_id.as_str());
             }
 
-            let response = self
-                .http_client
-                .get(url)
-                .timeout(self.request_timeout)
-                .send_traced()
-                .await
-                .map_err(|e| {
-                    if e.is_timeout() {
-                        FrontierError::Timeout
-                    } else {
-                        FrontierError::Http(e.to_string())
-                    }
-                })?;
+            let response = outbound_http::send_with_policy(
+                outbound_http::policy_frontier_policy().with_timeout(self.request_timeout),
+                || self.http_client.get(url.clone()),
+            )
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    FrontierError::Timeout
+                } else {
+                    FrontierError::Http(e.to_string())
+                }
+            })?;
 
             if !response.status().is_success() {
                 return Err(FrontierError::Http(format!(
@@ -261,7 +260,16 @@ pub type PolicyFrontierSourceHandle = Arc<dyn FrontierSource>;
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Once;
+
     use super::*;
+
+    fn install_crypto_provider() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        });
+    }
 
     fn realm() -> RealmId {
         RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001").unwrap()
@@ -277,6 +285,7 @@ mod tests {
 
     #[tokio::test]
     async fn soland_source_with_no_base_url_returns_sentinel() {
+        install_crypto_provider();
         let source = SolandFrontierSource::new(None, reqwest::Client::new());
         let got = source.fetch(&realm()).await.unwrap();
         assert_eq!(got, Frontier::empty());

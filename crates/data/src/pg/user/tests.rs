@@ -1,7 +1,8 @@
 use chrono::Duration;
 use coauth_data::{
-    Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _, UserEmailPatch, UserPatch,
-    UserProfilePatch,
+    Clock, NewUserPrimaryHandlePreference, Pagination, RepositoryAccess as _,
+    RepositoryFactory as _, UserEmailPatch, UserPatch, UserProfilePatch,
+    audit::{HandleAuditEventType, NewHandleAuditEvent},
     clock::MockClock,
     upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter},
     user::{
@@ -231,6 +232,219 @@ async fn test_user_repo() {
     assert_eq!(list.edges[0].node.id, user.id);
 
     repo.save().await.unwrap();
+}
+
+#[tokio::test]
+async fn primary_handle_preference_versions_current_and_as_of() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+
+    let mut repo = PgRepositoryFactory::new(pool.clone())
+        .create()
+        .await
+        .unwrap();
+    let mut rng = ChaChaRng::seed_from_u64(0x4844_4c31);
+    let clock = MockClock::default();
+    let user = repo
+        .user()
+        .add(&mut rng, &clock, "alice".to_owned())
+        .await
+        .unwrap();
+    let handle = "alice:example.com";
+
+    assert!(
+        repo.user_primary_handle_preference()
+            .current(user.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    let claim = repo
+        .handle_audit()
+        .record(
+            &mut rng,
+            &clock,
+            NewHandleAuditEvent::new(HandleAuditEventType::ClaimIssued)
+                .with_user(user.id)
+                .with_handle(handle)
+                .with_claim_digest("sha256:primary"),
+        )
+        .await
+        .unwrap();
+
+    let verified = repo
+        .user_primary_handle_preference()
+        .verified_handle_claim(user.id, handle, clock.now())
+        .await
+        .unwrap()
+        .expect("claim_issued audit event should verify the holder handle");
+    assert_eq!(verified.id, claim.id);
+    assert_eq!(verified.claim_digest, "sha256:primary");
+
+    let first = repo
+        .user_primary_handle_preference()
+        .set(
+            &mut rng,
+            &clock,
+            NewUserPrimaryHandlePreference::self_service(
+                user.id,
+                Some(handle.to_owned()),
+                Some(&verified),
+                user.id,
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.handle.as_deref(), Some(handle));
+    let first_effective_at = first.effective_at;
+
+    clock.advance(Duration::seconds(60));
+    let cleared = repo
+        .user_primary_handle_preference()
+        .set(
+            &mut rng,
+            &clock,
+            NewUserPrimaryHandlePreference::self_service(user.id, None, None, user.id),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cleared.handle, None);
+
+    let current = repo
+        .user_primary_handle_preference()
+        .current(user.id)
+        .await
+        .unwrap()
+        .expect("clear operation is persisted as current version");
+    assert_eq!(current.id, cleared.id);
+    assert_eq!(current.handle, None);
+
+    let as_of_first = repo
+        .user_primary_handle_preference()
+        .at(user.id, first_effective_at)
+        .await
+        .unwrap()
+        .expect("as-of lookup should return historical preference");
+    assert_eq!(as_of_first.id, first.id);
+    assert_eq!(as_of_first.handle.as_deref(), Some(handle));
+}
+
+#[tokio::test]
+async fn primary_handle_verified_claim_rejects_unknown_wrong_holder_and_expired_claims() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+
+    let mut repo = PgRepositoryFactory::new(pool.clone())
+        .create()
+        .await
+        .unwrap();
+    let mut rng = ChaChaRng::seed_from_u64(0x4844_4c32);
+    let clock = MockClock::default();
+    let alice = repo
+        .user()
+        .add(&mut rng, &clock, "alice".to_owned())
+        .await
+        .unwrap();
+    let bob = repo
+        .user()
+        .add(&mut rng, &clock, "bob".to_owned())
+        .await
+        .unwrap();
+    let handle = "alice:example.com";
+
+    assert!(
+        repo.user_primary_handle_preference()
+            .verified_handle_claim(alice.id, handle, clock.now())
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    repo.handle_audit()
+        .record(
+            &mut rng,
+            &clock,
+            NewHandleAuditEvent::new(HandleAuditEventType::ClaimIssued)
+                .with_user(alice.id)
+                .with_handle(handle)
+                .with_claim_digest("sha256:alice"),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        repo.user_primary_handle_preference()
+            .verified_handle_claim(bob.id, handle, clock.now())
+            .await
+            .unwrap()
+            .is_none(),
+        "a different holder must not be able to use alice's handle claim"
+    );
+
+    clock.advance(Duration::seconds(60));
+    repo.handle_audit()
+        .record(
+            &mut rng,
+            &clock,
+            NewHandleAuditEvent::new(HandleAuditEventType::ClaimExpired)
+                .with_user(alice.id)
+                .with_handle(handle),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        repo.user_primary_handle_preference()
+            .verified_handle_claim(alice.id, handle, clock.now())
+            .await
+            .unwrap()
+            .is_none(),
+        "expired claim evidence must not verify a preference"
+    );
+
+    clock.advance(Duration::seconds(60));
+    repo.handle_audit()
+        .record(
+            &mut rng,
+            &clock,
+            NewHandleAuditEvent::new(HandleAuditEventType::ClaimIssued)
+                .with_user(alice.id)
+                .with_handle(handle)
+                .with_claim_digest("sha256:alice-renewed"),
+        )
+        .await
+        .unwrap();
+    assert!(
+        repo.user_primary_handle_preference()
+            .verified_handle_claim(alice.id, handle, clock.now())
+            .await
+            .unwrap()
+            .is_some(),
+        "renewed claim evidence should verify again before revocation"
+    );
+
+    clock.advance(Duration::seconds(60));
+    repo.handle_audit()
+        .record(
+            &mut rng,
+            &clock,
+            NewHandleAuditEvent::new(HandleAuditEventType::Revoked)
+                .with_user(alice.id)
+                .with_handle(handle),
+        )
+        .await
+        .unwrap();
+    assert!(
+        repo.user_primary_handle_preference()
+            .verified_handle_claim(alice.id, handle, clock.now())
+            .await
+            .unwrap()
+            .is_none(),
+        "revoked claim evidence must not verify a preference"
+    );
 }
 
 /// Test [`UserRepository::find_by_handle`] with different casings.

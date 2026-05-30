@@ -37,7 +37,6 @@
 
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tracing::{debug, warn};
 use url::Url;
 
@@ -46,7 +45,7 @@ use crate::{
     handlers::account::consent_cell_query::{
         InviteGateDecision, evaluate_invite_gate, query_consent_cell,
     },
-    outbound_http::RequestBuilderExt as _,
+    outbound_http,
 };
 
 // ── Request / response shapes ──────────────────────────────────
@@ -215,12 +214,11 @@ pub async fn relay_invite_with(
                 return Ok(RelayOutcome::Forwarded { forwarded_ok: true });
             };
 
-            let forwarded_ok = match http_client
-                .post(target.clone())
-                .json(payload)
-                .timeout(Duration::from_secs(10))
-                .send_traced()
-                .await
+            let forwarded_ok = match outbound_http::send_with_policy(
+                outbound_http::soland_policy("invite_forward"),
+                || http_client.post(target.clone()).json(payload),
+            )
+            .await
             {
                 Ok(r) if r.status().is_success() => true,
                 Ok(r) => {

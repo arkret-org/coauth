@@ -105,6 +105,8 @@ mod utils;
 /// Account aggregate repositories (unified contact points, identity bindings,
 /// and security summary).
 pub mod account;
+/// Accountability grant repositories.
+pub mod accountability;
 /// App session repositories.
 pub mod app_session;
 /// Audit log repositories.

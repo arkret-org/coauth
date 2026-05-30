@@ -25,7 +25,7 @@ use crate::{
     handlers::contrix,
     oidc_client::requests::discovery,
     oidc_client::types::client_credentials::ClientCredentials,
-    outbound_http::RequestBuilderExt as _,
+    outbound_http::{self, RequestBuilderExt as _},
     services::soland_webvh,
     services::upstream_oidc::UpstreamOidcExchangeMode,
     services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token},
@@ -316,16 +316,16 @@ async fn ensure_soland_account_registered(
         return Ok(());
     };
     let endpoint = soland_account_register_endpoint(principal_endpoint)?;
-    let response = http_client
-        .post(endpoint)
-        .timeout(std::time::Duration::from_secs(10))
-        .json(&SolandAccountRegisterRequest {
-            did: principal_did,
-            handle: soland_account_handle_for_did(principal_did),
-            display_name,
-            device_id: Some(device_id),
+    let body = SolandAccountRegisterRequest {
+        did: principal_did,
+        handle: soland_account_handle_for_did(principal_did),
+        display_name,
+        device_id: Some(device_id),
+    };
+    let response =
+        outbound_http::send_with_policy(outbound_http::soland_policy("account_register"), || {
+            http_client.post(endpoint.clone()).json(&body)
         })
-        .send_traced()
         .await
         .map_err(|error| format!("principal account register request failed: {error}"))?;
     let status = response.status();

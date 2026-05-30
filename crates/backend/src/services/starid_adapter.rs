@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 use thiserror::Error;
 use url::Url;
 
-use crate::outbound_http::RequestBuilderExt as _;
+use crate::outbound_http;
 
 /// Error returned by [`StaridResolver`] HTTP calls.
 ///
@@ -297,11 +297,18 @@ impl StaridResolver {
         &self,
         body: &CreateWebvhDidRequest<'_>,
     ) -> Result<CreateWebvhDidResponse, StaridError> {
-        let mut request = self.http.post(self.create_url()?).json(body);
-        if let Some(token) = &self.admin_token {
-            request = request.bearer_auth(token);
-        }
-        let response = request.send_traced().await?;
+        let url = self.create_url()?;
+        let response = outbound_http::send_with_policy(
+            outbound_http::starid_mutation_policy("create_principal_did"),
+            || {
+                let mut request = self.http.post(url.clone()).json(body);
+                if let Some(token) = &self.admin_token {
+                    request = request.bearer_auth(token);
+                }
+                request
+            },
+        )
+        .await?;
         let status = response.status();
         let bytes = response.bytes().await?;
         if !status.is_success() {
@@ -378,11 +385,18 @@ impl StaridRegistry for StaridResolver {
                 "verificationMethod": {"key-1": new_update_key},
             }),
         };
-        let mut request = self.http.post(self.update_url(did)?).json(&body);
-        if let Some(token) = &self.admin_token {
-            request = request.bearer_auth(token);
-        }
-        let response = request.send_traced().await?;
+        let url = self.update_url(did)?;
+        let response = outbound_http::send_with_policy(
+            outbound_http::starid_mutation_policy("rotate_update_key"),
+            || {
+                let mut request = self.http.post(url.clone()).json(&body);
+                if let Some(token) = &self.admin_token {
+                    request = request.bearer_auth(token);
+                }
+                request
+            },
+        )
+        .await?;
         let status = response.status();
         let bytes = response.bytes().await?;
         if !status.is_success() {
@@ -400,14 +414,18 @@ impl StaridRegistry for StaridResolver {
         did: &str,
         entry: &Value,
     ) -> Result<StaridVerifyResult, StaridError> {
-        let mut request = self
-            .http
-            .post(self.verify_url(did)?)
-            .json(&json!({"entry": entry}));
-        if let Some(token) = &self.admin_token {
-            request = request.bearer_auth(token);
-        }
-        let response = request.send_traced().await?;
+        let url = self.verify_url(did)?;
+        let response = outbound_http::send_with_policy(
+            outbound_http::starid_verification_policy("verify_control_proof"),
+            || {
+                let mut request = self.http.post(url.clone()).json(&json!({"entry": entry}));
+                if let Some(token) = &self.admin_token {
+                    request = request.bearer_auth(token);
+                }
+                request
+            },
+        )
+        .await?;
         let status = response.status();
         let bytes = response.bytes().await?;
         if !status.is_success() {

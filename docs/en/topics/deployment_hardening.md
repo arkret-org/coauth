@@ -106,6 +106,34 @@ These rows are consumed by the compliance pipeline. Do NOT prune them
 within the audit retention window (default 90 days; check your tenant
 SLA).
 
+Signed admin audit rows use transcript schema
+`cx.coauth.audit.admin_operation.v2`. The detached signature binds the
+repository row id, `created_at`, `admin_user_id`, operation, resource type,
+resource id, details, IP address, user agent, and schema version. Admin audit
+read/export surfaces return `signature_status`:
+
+- `verified` — the row verifies against the current service JWKS.
+- `unsigned_legacy` — the row predates v2 signed writes, carries only the
+  pre-v2 weak transcript, or was allowed during rollout fail-open mode.
+- `invalid` — the signature is present but no longer matches the row.
+- `key_unavailable` — the row references a service DID/kid that this process
+  cannot verify.
+
+Keep `contrix.audit_signature_fail_closed: false` while rolling out signing
+keys. For production regulated workloads, publish the service JWKS, verify the
+audit feed reports `verified` for new rows, then set
+`contrix.audit_signature_fail_closed: true` so sensitive admin mutations fail
+closed when coauth cannot produce a signed audit row.
+
+During key rotation, keep retired public keys in the deployment JWKS until the
+audit retention window has elapsed; otherwise historical rows will move from
+`verified` to `key_unavailable`. Treat `invalid` as a tamper or corruption
+signal: preserve the database snapshot, compare the exported row JSON with the
+operator system of record, and do not delete the row to silence the alert.
+Exports should carry the same `signature_status` field as the admin audit feed
+so offline auditors can distinguish legacy unsigned rows from failed
+verification.
+
 ### Rollback
 
 To rollback strict-reject:
@@ -123,3 +151,41 @@ To rollback strict-reject:
 The toggle is **realm-scoped**, not deployment-global. A single coauth
 deployment may simultaneously serve some realms in strict-reject and
 others in the default posture.
+
+## Outbound HTTP and SSRF guardrails
+
+coauth production code must use the shared `outbound_http::reqwest_client`
+factory. The factory installs:
+
+- rustls platform certificate verification;
+- no redirects and no proxy inheritance;
+- a DNS resolver that rejects localhost, private, link-local, multicast,
+  documentation, and cloud metadata targets unless private egress is explicitly
+  enabled;
+- request and connect timeouts;
+- OpenTelemetry client spans and metrics.
+
+The static test in `crates/backend/src/outbound_http.rs` fails if production
+code adds `reqwest::Client::new()` or `reqwest::Client::builder()` outside the
+factory. Tests may still construct local clients after `#[cfg(test)]`.
+
+OIDC discovery and JWKS fetches use this shared client and reject response
+bodies above 1 MiB. This prevents a malicious or misconfigured upstream from
+turning metadata refresh into an unbounded memory sink.
+
+Private-network egress is denied in release builds by default. The escape
+hatches are intentionally explicit:
+
+- `COAUTH_OUTBOUND_HTTP_DENY_PRIVATE=1` forces denial even in debug builds.
+- `COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST` allows exact hosts, exact IP
+  literals, or wildcard DNS suffixes such as
+  `host:soland.internal,10.10.20.30,*.svc.cluster.local` without disabling SSRF
+  checks for every destination.
+- `COAUTH_OUTBOUND_HTTP_ALLOW_PRIVATE=1` or
+  `COAUTH_ALLOW_PRIVATE_EGRESS=1` allows private egress for controlled
+  deployments; prefer the narrower allow-list above.
+
+Prefer public, routable service endpoints for upstream OIDC, starid, soland
+webvh registration, and policy frontier calls. If a deployment truly needs
+private service URLs, document the target service, owner, and expected CIDR in
+the cluster egress policy before enabling the escape hatch.

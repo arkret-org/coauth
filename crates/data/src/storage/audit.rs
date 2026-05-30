@@ -66,10 +66,10 @@ impl NewAdminOperationLog {
     }
 
     /// Attach a base64url-unpadded detached signature over the
-    /// canonical-JSON form of the row. The signature is produced by
-    /// the coauth service signing key in the caller (see
-    /// [`audit_helper::record_admin_operation`]). Optional during
-    /// the staged rollout.
+    /// canonical-JSON form of the row. Optional during the staged
+    /// rollout; new signed writers should prefer inserting first and
+    /// then calling [`AuditRepository::set_admin_operation_signature`]
+    /// so the signature can bind repository-generated metadata.
     #[must_use]
     pub fn with_audit_signature(mut self, signature: impl Into<String>) -> Self {
         self.audit_signature = Some(signature.into());
@@ -271,6 +271,13 @@ pub trait AuditRepository: Send + Sync {
         id: Ulid,
     ) -> Result<Option<AdminOperationLog>, Self::Error>;
 
+    /// Set the detached signature for an existing admin operation log entry.
+    async fn set_admin_operation_signature(
+        &mut self,
+        id: Ulid,
+        audit_signature: &str,
+    ) -> Result<AdminOperationLog, Self::Error>;
+
     /// List admin operation log entries, optionally filtered by admin user.
     async fn list_admin_operations(
         &mut self,
@@ -309,6 +316,11 @@ repository_impl!(AuditRepository:
         &mut self,
         id: Ulid,
     ) -> Result<Option<AdminOperationLog>, Self::Error>;
+    async fn set_admin_operation_signature(
+        &mut self,
+        id: Ulid,
+        audit_signature: &str,
+    ) -> Result<AdminOperationLog, Self::Error>;
     async fn list_admin_operations(
         &mut self,
         filter: AdminOperationFilter,

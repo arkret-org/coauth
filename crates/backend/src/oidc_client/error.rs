@@ -46,6 +46,13 @@ pub enum DiscoveryError {
     /// The server returned an HTTP error status code.
     Http(#[from] reqwest::Error),
 
+    /// The provider metadata response body exceeded the configured safety cap.
+    #[error("provider metadata response exceeded {limit} bytes (actual {actual})")]
+    ResponseTooLarge { limit: usize, actual: usize },
+
+    /// The provider metadata response body was not valid JSON.
+    Json(#[from] serde_json::Error),
+
     /// An error occurred validating the metadata.
     Validation(#[from] ProviderMetadataVerificationError),
 
@@ -165,6 +172,13 @@ pub enum UserInfoError {
 pub enum JwksError {
     /// An error occurred sending the request.
     Http(#[from] reqwest::Error),
+
+    /// The JWKS response body exceeded the configured safety cap.
+    #[error("JWKS response exceeded {limit} bytes (actual {actual})")]
+    ResponseTooLarge { limit: usize, actual: usize },
+
+    /// The JWKS response body was not valid JSON.
+    Json(#[from] serde_json::Error),
 }
 
 /// All possible errors when verifying a JWT.

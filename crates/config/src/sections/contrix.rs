@@ -110,10 +110,22 @@ pub struct ContrixConfig {
     /// Override at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_service_did: Option<String>,
+
+    /// Require signed admin-audit writes to succeed before committing
+    /// security-sensitive admin mutations. Defaults to `false` so existing
+    /// deployments tolerate missing service signing keys during rollout; set
+    /// to `true` in production once JWKS publication and key rotation are
+    /// operational.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub audit_signature_fail_closed: bool,
 }
 
 fn default_high_risk_threshold() -> u32 {
     2
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl Default for ContrixConfig {
@@ -130,6 +142,7 @@ impl Default for ContrixConfig {
             trust_domain: None,
             oob_code_kind: OobCodeKindConfig::default(),
             verification_service_did: None,
+            audit_signature_fail_closed: false,
         }
     }
 }
@@ -149,6 +162,7 @@ impl ContrixConfig {
             && self.trust_domain.is_none()
             && matches!(self.oob_code_kind, OobCodeKindConfig::OfflineVerifiable)
             && self.verification_service_did.is_none()
+            && !self.audit_signature_fail_closed
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK

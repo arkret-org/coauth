@@ -32,8 +32,8 @@ pub mod authorize;
 pub mod backchannel_logout;
 pub mod cache;
 pub mod callback;
-pub mod jwks_cache;
 pub(crate) mod cookie;
+pub mod jwks_cache;
 pub(crate) mod template;
 
 pub(crate) use self::cookie::UpstreamSessions as UpstreamSessionsCookie;

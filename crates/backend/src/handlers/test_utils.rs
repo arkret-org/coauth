@@ -490,6 +490,7 @@ impl TestState {
             .push(Router::with_path("/api/v1/identity/describe").get(crate::handlers::contrix::identity_describe))
             .push(Router::with_path("/api/v1/identity/resolve").post(crate::handlers::contrix::identity_resolve))
             .push(Router::with_path("/api/v1/identity/document").get(crate::handlers::contrix::identity_document))
+            .push(Router::with_path("/api/v1/identity/primary-handle").patch(crate::handlers::contrix::patch_primary_handle_preference))
             .push(Router::with_path("/api/v1/directory/describe").get(crate::handlers::contrix::directory_describe))
             .push(Router::with_path("/api/v1/directory/resolve-handle").post(crate::handlers::contrix::directory_resolve_handle))
             .push(

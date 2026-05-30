@@ -34,7 +34,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
 
-use crate::outbound_http::RequestBuilderExt as _;
+use crate::outbound_http;
 
 const WEBVH_SCID_PLACEHOLDER: &str = "{SCID}";
 const WEBVH_METHOD_VERSION: &str = "did:webvh:1.0";
@@ -232,14 +232,20 @@ pub async fn register_against_principal(
     let endpoint = principal_endpoint
         .join("api/v1/identity/webvh/register")
         .map_err(SolandWebvhError::InvalidEndpoint)?;
-    let mut request = http_client
-        .post(endpoint)
-        .timeout(std::time::Duration::from_secs(15))
-        .json(&prepared.registration_body);
-    if let Some(token) = bearer {
-        request = request.bearer_auth(token);
-    }
-    let response = request.send_traced().await?;
+    let response = outbound_http::send_with_policy(
+        outbound_http::soland_policy("embedded_webvh_register")
+            .with_timeout(std::time::Duration::from_secs(15)),
+        || {
+            let mut request = http_client
+                .post(endpoint.clone())
+                .json(&prepared.registration_body);
+            if let Some(token) = bearer {
+                request = request.bearer_auth(token);
+            }
+            request
+        },
+    )
+    .await?;
     let status = response.status();
     if status.is_success() || status == reqwest::StatusCode::CONFLICT {
         return Ok(());

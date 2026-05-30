@@ -19,9 +19,8 @@
 //!    revokes the whole rotation chain — past, present, and future —
 //!    along with any access tokens that descend from it.
 //! 3. **Revoke chain on device lock / logout.** Locking a device or
-//!    explicit logout calls [`revoke_chain_for_device`] / the session
-//!    grant revoke path to ensure no refresh token from that device
-//!    can continue to mint access tokens.
+//!    explicit logout calls the repository/device revoke path to ensure
+//!    no refresh token from that device can continue to mint access tokens.
 //! 4. **Rotation window.** The maximum lifetime of any single refresh
 //!    token in a chain is 24 hours by default
 //!    ([`DEFAULT_ROTATION_WINDOW`]). After the window the token MUST
@@ -32,17 +31,9 @@
 //!
 //! This module is intentionally a *policy* layer — it does not own
 //! the token table. It exposes pure decision functions
-//! ([`evaluate_refresh`]) and orchestration helpers
-//! ([`revoke_chain`], [`revoke_chain_for_device`]) that callers in
-//! `handlers::oauth::token` and `handlers::admin::*` invoke inside
-//! their own transactions.
-//!
-//! TODO(P5-impl): wire the storage side once the
-//! `oauth_refresh_token.chain_root_id` / `superseded_by` columns land
-//! in `coauth-data`. Today the data layer carries a flat
-//! `revoked_at` flag without explicit rotation chains, so chain
-//! revocation falls back to "revoke this token only" with the chain
-//! semantics enforced at the session-grant level.
+//! ([`evaluate_refresh`]); storage-side chain mutation lives in
+//! `OAuthRefreshTokenRepository::revoke_chain_by_root` so callers can
+//! execute and commit revocation inside their own transactions.
 
 use chrono::{DateTime, Duration, Utc};
 use thiserror::Error;
@@ -159,29 +150,6 @@ impl RotationDecision {
             Self::IdleExpired => Err(RotationError::IdleExpired),
         }
     }
-}
-
-/// Marker function for the chain-revocation path. Today this is a
-/// no-op pending the storage-side `chain_root_id` column; the
-/// session-grant level revoke owns the actual data mutation. The
-/// stub is here so handlers can call the policy module with a stable
-/// signature and the impl can land without further handler churn.
-///
-/// TODO(P5-impl): walk `oauth_refresh_token WHERE chain_root_id = ?`
-/// and bulk-update `revoked_at`. Today the cascading revoke is
-/// performed at the `oauth_session_grant` level via
-/// [`super::device_revoke::cascade_revoke_session_grants`].
-pub fn revoke_chain(_chain_root_id: &str) {
-    // Stub: see TODO above.
-}
-
-/// Convenience wrapper: revoke every rotation chain owned by a
-/// device. Delegates to the session-grant cascade today.
-///
-/// TODO(P5-impl): once `oauth_refresh_token.device_id` is denormalised
-/// on the chain root, this becomes a single bulk update.
-pub fn revoke_chain_for_device(_device_id: &str) {
-    // Stub: see TODO above.
 }
 
 #[cfg(test)]

@@ -261,6 +261,31 @@ impl AuditRepository for PgAuditRepository<'_> {
     }
 
     #[tracing::instrument(
+        name = "db.audit.set_admin_operation_signature",
+        skip_all,
+        fields(admin_operation_log.id = %id),
+        err,
+    )]
+    async fn set_admin_operation_signature(
+        &mut self,
+        id: Ulid,
+        audit_signature: &str,
+    ) -> Result<AdminOperationLog, Self::Error> {
+        let rows_affected = diesel::update(admin_operation_logs::table.find(Uuid::from(id)))
+            .set(admin_operation_logs::audit_signature.eq(Some(audit_signature.to_owned())))
+            .execute(self.conn)
+            .await?;
+        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
+
+        self.lookup_admin_operation(id)
+            .await?
+            .ok_or(DatabaseError::RowsAffected {
+                expected: 1,
+                actual: 0,
+            })
+    }
+
+    #[tracing::instrument(
         name = "db.audit.list_admin_operations",
         skip_all,
         fields(

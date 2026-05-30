@@ -37,6 +37,8 @@ diesel::define_sql_function! {
 
 /// Unified contact points and external identity bindings for user accounts.
 pub mod account;
+/// Durable accountability grants for Personal Agent capability approval.
+pub mod accountability;
 /// App session repositories and PostgreSQL implementations.
 pub mod app_session;
 /// Admin operation logs and account security event models.
@@ -125,6 +127,10 @@ pub fn new_id(
 pub(crate) use self::pg::DatabaseInconsistencyError;
 pub use self::{
     account::{AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType},
+    accountability::{
+        AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,
+        AccountabilitySubjectRevocation,
+    },
     audit::{AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType},
     clock::{Clock, SystemClock},
     flow::{
@@ -149,7 +155,8 @@ pub use self::{
         CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,
     },
     tokens::{
-        AccessToken, AccessTokenState, RefreshToken, RefreshTokenState, TokenFormatError, TokenType,
+        AccessToken, AccessTokenState, RefreshToken, RefreshTokenChainRevokeOutcome,
+        RefreshTokenState, TokenFormatError, TokenType,
     },
     upstream_oauth::{
         UpstreamOAuthAuthorizationSession, UpstreamOAuthAuthorizationSessionState,
@@ -164,12 +171,13 @@ pub use self::{
     url_builder::UrlBuilder,
     user_agent::{DeviceType, UserAgent},
     users::{
-        AdminUserPatch, Authentication, AuthenticationMethod, BrowserSession, Password,
-        PrincipalDidUpdateKey, PrincipalUser, User, UserEmail, UserEmailAuthentication,
-        UserEmailAuthenticationCode, UserEmailPatch, UserPatch, UserPhone, UserPhoneAuthentication,
-        UserPhoneAuthenticationCode, UserProfile, UserProfilePatch, UserRecoverySession,
+        AdminUserPatch, Authentication, AuthenticationMethod, BrowserSession,
+        NewUserPrimaryHandlePreference, Password, PrincipalDidUpdateKey, PrincipalUser, User,
+        UserEmail, UserEmailAuthentication, UserEmailAuthenticationCode, UserEmailPatch, UserPatch,
+        UserPhone, UserPhoneAuthentication, UserPhoneAuthenticationCode,
+        UserPrimaryHandlePreference, UserProfile, UserProfilePatch, UserRecoverySession,
         UserRecoveryTicket, UserRegistration, UserRegistrationPassword, UserRegistrationToken,
-        UserTotpConfig,
+        UserTotpConfig, VerifiedUserHandleClaim,
     },
     utils::{BoxClock, BoxRng},
     version::AppVersion,

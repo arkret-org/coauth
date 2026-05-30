@@ -14,7 +14,17 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use crate::{JsonResult, handlers::admin::call_context::extract_call_context};
+use crate::{
+    JsonResult,
+    handlers::{
+        admin::{
+            audit_helper::{AuditSignatureStatus, verify_admin_operation_signature},
+            call_context::extract_call_context,
+        },
+        common::DepotExt,
+        contrix::service_did_for,
+    },
+};
 
 /// A single entry in the admin audit feed.
 #[derive(Serialize, JsonSchema, ToSchema)]
@@ -42,6 +52,9 @@ pub struct AuditEntry {
 
     /// When the operation was performed.
     pub created_at: DateTime<Utc>,
+
+    /// Verification state for the detached admin-audit signature.
+    pub signature_status: AuditSignatureStatus,
 }
 
 /// Convert an [`AdminOperation`] enum variant into a human-readable
@@ -74,8 +87,8 @@ fn format_operation(op: &AdminOperation) -> String {
     }
 }
 
-impl From<AdminOperationLog> for AuditEntry {
-    fn from(log: AdminOperationLog) -> Self {
+impl AuditEntry {
+    fn from_log(log: AdminOperationLog, signature_status: AuditSignatureStatus) -> Self {
         let details = if log.details.is_null() || log.details == serde_json::json!({}) {
             None
         } else {
@@ -90,6 +103,7 @@ impl From<AdminOperationLog> for AuditEntry {
             resource_id: log.resource_id.map(|id| id.to_string()).unwrap_or_default(),
             details,
             created_at: log.created_at,
+            signature_status,
         }
     }
 }
@@ -121,6 +135,10 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedRe
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
 
     let query: AuditFeedQuery = req.parse_queries().unwrap_or_default();
+    let key_store = depot.key_store()?;
+    let contrix_config = depot.contrix_config()?;
+    let url_builder = depot.url_builder()?;
+    let service_did = service_did_for(&url_builder, &contrix_config);
 
     let mut filter = AdminOperationFilter::new().with_limit(query.limit.unwrap_or(50));
 
@@ -138,7 +156,13 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedRe
 
     repo.cancel().await?; // read-only, no save needed
 
-    let data: Vec<AuditEntry> = logs.into_iter().map(AuditEntry::from).collect();
+    let data: Vec<AuditEntry> = logs
+        .into_iter()
+        .map(|log| {
+            let signature_status = verify_admin_operation_signature(&log, &key_store, &service_did);
+            AuditEntry::from_log(log, signature_status)
+        })
+        .collect();
 
     Ok(Json(AuditFeedResponse { data }))
 }

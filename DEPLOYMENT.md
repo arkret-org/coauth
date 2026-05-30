@@ -66,19 +66,31 @@ For PITR-class recovery use `pg_basebackup` + WAL archiving; see PostgreSQL ops 
 A reference chart lives at `charts/coauth/` with values defaults at `charts/coauth/values.yaml`:
 
 ```sh
+kubectl create secret generic coauth-db \
+  --namespace contrix-system \
+  --from-literal=url="postgres://coauth:$(vault read -field=password secret/coauth/db)@pg.acme.example/coauth"
+
 helm upgrade --install coauth charts/coauth \
   --namespace contrix-system --create-namespace \
-  --set postgres.dsn=postgres://coauth:$(vault read -field=password secret/coauth/db)@pg.acme.example/coauth \
+  --set database.urlSecret=coauth-db \
   --set image.tag=$(git rev-parse --short HEAD)
 ```
 
 Defaults:
-- `replicaCount: 3` (with `topologySpreadConstraints`)
+- `replicaCount: 3`
 - `service.port: 8080`
 - `resources.requests.memory: 256Mi`
 - `livenessProbe: /healthz`, `readinessProbe: /readyz`
+- `podDisruptionBudget.enabled: true`
+- `autoscaling.enabled: false` (enable HPA explicitly)
+- `networkPolicy.enabled: false` (enable and fill ingress/egress CIDRs per cluster)
 
 External Postgres is REQUIRED — chart does not bundle a database.
+
+NetworkPolicy application egress is default-deny when enabled without explicit
+CIDRs. Add Postgres, upstream OIDC, and soland CIDR blocks through
+`networkPolicy.egress.{postgresCidrs,oidcProviderCidrs,solandCidrs}`; DNS egress
+is enabled for the cluster DNS pods by default.
 
 ## Operational hooks
 

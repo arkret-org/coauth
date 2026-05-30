@@ -16,7 +16,9 @@ use thiserror::Error;
 use ulid::Ulid;
 
 use crate::{
-    handlers::admin::audit_helper::record_admin_operation,
+    handlers::admin::audit_helper::{
+        AdminAuditSigning, record_admin_operation, record_admin_operation_signed,
+    },
     services::user_profile::{sync_display_name_patch, validate_display_name_patch},
 };
 
@@ -70,6 +72,7 @@ pub async fn patch_user(
     user_id: Ulid,
     patch: AdminUserPatch,
     principal_erase: bool,
+    audit_signing: Option<AdminAuditSigning<'_>>,
 ) -> Result<User, UserAdminServiceError> {
     validate_admin_patch(&patch)?;
 
@@ -138,20 +141,38 @@ pub async fn patch_user(
             .await?;
     }
 
-    record_admin_operation(
-        repo,
-        rng,
-        clock,
-        admin_user,
-        AdminOperation::UserUpdated,
-        "user",
-        Some(updated.id),
-        serde_json::json!({
-            "patch": patch,
-            "principal_erase": principal_erase,
-        }),
-    )
-    .await?;
+    let details = serde_json::json!({
+        "patch": patch,
+        "principal_erase": principal_erase,
+    });
+    if let Some(signing) = audit_signing {
+        record_admin_operation_signed(
+            repo,
+            rng,
+            clock,
+            signing.keystore,
+            signing.service_did,
+            signing.fail_closed,
+            admin_user,
+            AdminOperation::UserUpdated,
+            "user",
+            Some(updated.id),
+            details,
+        )
+        .await?;
+    } else {
+        record_admin_operation(
+            repo,
+            rng,
+            clock,
+            admin_user,
+            AdminOperation::UserUpdated,
+            "user",
+            Some(updated.id),
+            details,
+        )
+        .await?;
+    }
 
     Ok(updated)
 }

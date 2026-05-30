@@ -688,6 +688,10 @@ fn build_account_api_router(router: Router) -> Router {
         .push(Router::with_path("identity/describe").get(contrix::identity_describe))
         .push(Router::with_path("identity/resolve").post(contrix::identity_resolve))
         .push(Router::with_path("identity/document").get(contrix::identity_document))
+        .push(
+            Router::with_path("identity/primary-handle")
+                .patch(contrix::patch_primary_handle_preference),
+        )
         .push(Router::with_path("directory/describe").get(contrix::directory_describe))
         .push(Router::with_path("directory/resolve-handle").post(contrix::directory_resolve_handle))
         // Round 4 (spec a77b995) — `/policy/check` v2 returns a signed

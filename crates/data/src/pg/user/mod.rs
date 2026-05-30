@@ -19,6 +19,7 @@ use crate::{DatabaseError, schema::users};
 mod email;
 mod password;
 mod phone;
+mod primary_handle;
 mod principal_did;
 mod recovery;
 mod registration;
@@ -32,6 +33,7 @@ mod tests;
 
 pub use self::{
     email::PgUserEmailRepository, password::PgUserPasswordRepository, phone::PgUserPhoneRepository,
+    primary_handle::PgUserPrimaryHandlePreferenceRepository,
     principal_did::PgPrincipalDidRepository, recovery::PgUserRecoveryRepository,
     registration::PgUserRegistrationRepository,
     registration_token::PgUserRegistrationTokenRepository, session::PgBrowserSessionRepository,

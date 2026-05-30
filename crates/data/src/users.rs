@@ -85,6 +85,65 @@ pub struct User {
     pub handle_aliases: Vec<String>,
 }
 
+/// A versioned holder preference for DID `metadata.primary_handle`.
+///
+/// `handle = None` is a deliberate clear operation and must still be persisted
+/// so historical as-of queries can distinguish "not set yet" from "explicitly
+/// cleared at this time".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserPrimaryHandlePreference {
+    pub id: Ulid,
+    pub user_id: Ulid,
+    pub handle: Option<String>,
+    pub effective_at: DateTime<Utc>,
+    pub replaced_at: Option<DateTime<Utc>>,
+    pub source_claim_id: Option<Ulid>,
+    pub source_claim_digest: Option<String>,
+    pub actor_user_id: Option<Ulid>,
+    pub source: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Verified handle-claim evidence that can back a primary-handle preference.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerifiedUserHandleClaim {
+    pub id: Ulid,
+    pub user_id: Ulid,
+    pub handle: String,
+    pub claim_digest: String,
+    pub issued_at: DateTime<Utc>,
+}
+
+/// Insert parameters for a new primary-handle preference version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewUserPrimaryHandlePreference {
+    pub user_id: Ulid,
+    pub handle: Option<String>,
+    pub source_claim_id: Option<Ulid>,
+    pub source_claim_digest: Option<String>,
+    pub actor_user_id: Option<Ulid>,
+    pub source: String,
+}
+
+impl NewUserPrimaryHandlePreference {
+    #[must_use]
+    pub fn self_service(
+        user_id: Ulid,
+        handle: Option<String>,
+        claim: Option<&VerifiedUserHandleClaim>,
+        actor_user_id: Ulid,
+    ) -> Self {
+        Self {
+            user_id,
+            handle,
+            source_claim_id: claim.map(|claim| claim.id),
+            source_claim_digest: claim.map(|claim| claim.claim_digest.clone()),
+            actor_user_id: Some(actor_user_id),
+            source: "self_service".to_owned(),
+        }
+    }
+}
+
 impl Queryable<UserSqlType, Pg> for User {
     type Row = UserSqlRow;
 

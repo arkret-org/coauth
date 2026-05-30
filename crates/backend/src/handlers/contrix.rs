@@ -2,7 +2,8 @@ use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::{ContrixConfig, IdentityRegistryKind};
 use coauth_data::{
-    BrowserSession, Clock, Pagination, RepositoryAccess, SessionGrant, UrlBuilder, User,
+    BrowserSession, Clock, NewUserPrimaryHandlePreference, Pagination, RepositoryAccess,
+    SessionGrant, UrlBuilder, User,
     oauth::{NewSessionGrant, SessionGrantFilter},
 };
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
@@ -337,7 +338,7 @@ pub struct DidDocument {
 pub struct DidDocumentMetadata {
     /// Canonical `<localpart>:<domain>` handle the holder prefers as their
     /// primary display handle, or `null` when no preference is recorded.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub primary_handle: Option<String>,
 }
 
@@ -345,12 +346,9 @@ impl DidDocumentMetadata {
     /// Build the metadata block for a coauth-controlled DID Document's
     /// *current* version.
     ///
-    /// TODO(R3.2.1): the `primary_handle` preference is not yet persisted
-    /// (no DB column / self-service endpoint — see DID-COAUTH-3), so this
-    /// is always `None` today. When persistence lands, source the value
-    /// from the holder's recorded preference. Historical
-    /// (`did:webvh` as-of) resolution MUST return the preference value as
-    /// of the requested version — also deferred to R3.2.1 / starid.
+    /// The caller supplies the already-resolved preference because current
+    /// DID document handlers read it from the database while pure builders
+    /// used in unit tests can still pass `None`.
     #[must_use]
     pub fn current_for_holder(primary_handle: Option<String>) -> Self {
         Self { primary_handle }
@@ -1780,6 +1778,20 @@ pub(crate) fn user_did_document(
     contrix_config: &ContrixConfig,
     user: &User,
 ) -> DidDocument {
+    user_did_document_with_primary_handle(
+        url_builder,
+        contrix_config,
+        user,
+        user_primary_handle_preference(user),
+    )
+}
+
+pub(crate) fn user_did_document_with_primary_handle(
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    user: &User,
+    primary_handle: Option<String>,
+) -> DidDocument {
     let did = user_did_for(url_builder, contrix_config, user);
 
     DidDocument {
@@ -1801,9 +1813,7 @@ pub(crate) fn user_did_document(
         // DID-COAUTH-1 — a user DID is a handle holder, so always emit the
         // metadata block. `primary_handle` defaults to `null` until the
         // holder records a preference (DID-COAUTH-3 / TODO(R3.2.1)).
-        metadata: Some(DidDocumentMetadata::current_for_holder(
-            user_primary_handle_preference(user),
-        )),
+        metadata: Some(DidDocumentMetadata::current_for_holder(primary_handle)),
     }
 }
 
@@ -1811,16 +1821,64 @@ pub(crate) fn user_did_document(
 /// `primary_handle` preference for inclusion in the DID Document
 /// `metadata` block.
 ///
-/// TODO(R3.2.1): there is no persisted preference column yet
-/// (DID-COAUTH-3 self-service PATCH is deferred), so this always returns
-/// `None` (metadata.primary_handle = null). For `did:webvh` historical
-/// resolution the value MUST be the preference as of the requested
-/// version; coauth's current `did:web` / `did:key` documents only have a
-/// single (current) version so returning the current value is correct.
-/// Wiring the as-of lookup is deferred to R3.2.1 / starid.
+/// Pure builder fallback for callers that have not loaded the database-backed
+/// preference. HTTP DID document and local identity resolution paths pass the
+/// repository value through [`user_did_document_with_primary_handle`].
 #[must_use]
 fn user_primary_handle_preference(_user: &User) -> Option<String> {
     None
+}
+
+fn did_document_as_of_query(req: &Request) -> Result<Option<DateTime<Utc>>, ContrixRouteError> {
+    let Some(raw) = req
+        .query::<String>("as_of")
+        .or_else(|| req.query::<String>("asOf"))
+    else {
+        return Ok(None);
+    };
+
+    DateTime::parse_from_rfc3339(&raw)
+        .map(|dt| Some(dt.with_timezone(&Utc)))
+        .map_err(|_| ContrixRouteError::BadRequest("invalid as_of query parameter".to_owned()))
+}
+
+async fn local_user_did_document_if_owned(
+    repo: &mut coauth_data::BoxRepository,
+    url_builder: &UrlBuilder,
+    contrix_config: &ContrixConfig,
+    did: &str,
+    as_of: Option<DateTime<Utc>>,
+) -> Result<Option<DidDocument>, ContrixRouteError> {
+    let Some(user_id) = parse_local_user_did_for(url_builder, contrix_config, did) else {
+        return Ok(None);
+    };
+
+    let Some(user) = repo
+        .user()
+        .lookup(user_id)
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+    else {
+        return Err(ContrixRouteError::NotFound);
+    };
+
+    let primary_handle = match as_of {
+        Some(as_of) => {
+            repo.user_primary_handle_preference()
+                .at(user.id, as_of)
+                .await
+        }
+        None => repo.user_primary_handle_preference().current(user.id).await,
+    }
+    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+    .and_then(|preference| preference.handle);
+
+    Ok(Some(user_did_document_with_primary_handle(
+        url_builder,
+        contrix_config,
+        &user,
+        primary_handle,
+    )))
 }
 
 pub(crate) fn issue_session_grant(
@@ -2154,6 +2212,27 @@ pub async fn identity_resolve(
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
     let mut repo = depot.repo().await?;
+    let as_of = did_document_as_of_query(req)?;
+
+    if let Some(did_document) =
+        local_user_did_document_if_owned(&mut repo, &url_builder, &contrix_config, &body.did, as_of)
+            .await?
+    {
+        repo.cancel()
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        return Ok(Json(IdentityResolveResBody {
+            did_document,
+            key_log_head: None,
+            seq: None,
+            receipts: None,
+            method_evidence: Some(serde_json::json!({
+                "resolver": "local_user",
+                "verified_local_binding": true,
+            })),
+        }));
+    }
+
     let resolution = did_resolver
         .resolve_did_document(
             &http_client,
@@ -2192,6 +2271,23 @@ pub async fn identity_document(
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
     let mut repo = depot.repo().await?;
+    let as_of = did_document_as_of_query(req)?;
+
+    if let Some(did_document) =
+        local_user_did_document_if_owned(&mut repo, &url_builder, &contrix_config, &did, as_of)
+            .await?
+    {
+        repo.cancel()
+            .await
+            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        return Ok(Json(IdentityDocumentResBody {
+            did_document,
+            head_event_digest: None,
+            seq: None,
+            receipts: None,
+        }));
+    }
+
     let resolution = did_resolver
         .resolve_did_document(
             &http_client,
@@ -2588,8 +2684,8 @@ pub async fn user_did_json(
         .map_err(|_| ContrixRouteError::BadRequest("invalid user id".into()))?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let mut repo = depot.repo().await?;
+    let as_of = did_document_as_of_query(req)?;
     let Some(user) = repo
         .user()
         .lookup(user_id)
@@ -2599,11 +2695,118 @@ pub async fn user_did_json(
         return Err(ContrixRouteError::NotFound);
     };
 
-    Ok(Json(did_resolver.user_did_document(
+    let primary_handle = match as_of {
+        Some(as_of) => {
+            repo.user_primary_handle_preference()
+                .at(user.id, as_of)
+                .await
+        }
+        None => repo.user_primary_handle_preference().current(user.id).await,
+    }
+    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+    .and_then(|preference| preference.handle);
+
+    Ok(Json(user_did_document_with_primary_handle(
         &url_builder,
         &contrix_config,
         &user,
+        primary_handle,
     )))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchPrimaryHandlePreferenceRequest {
+    #[serde(
+        default,
+        deserialize_with = "serde_with::rust::double_option::deserialize"
+    )]
+    pub primary_handle: Option<Option<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PrimaryHandlePreferenceResponse {
+    pub primary_handle: Option<String>,
+    pub effective_at: DateTime<Utc>,
+    pub source_claim_id: Option<String>,
+    pub source_claim_digest: Option<String>,
+}
+
+/// `PATCH /api/v1/identity/primary-handle` — self-service holder
+/// preference for DID `metadata.primary_handle`.
+///
+/// Body shape: `{ "primary_handle": "alice:example.com" }` to set, or
+/// `{ "primary_handle": null }` to clear. Setting requires a current
+/// `claim_issued` handle-audit event for the same holder and handle.
+#[handler]
+pub async fn patch_primary_handle_preference(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<PrimaryHandlePreferenceResponse>, ContrixRouteError> {
+    let body: PatchPrimaryHandlePreferenceRequest = req
+        .parse_json()
+        .await
+        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
+    let requested = body
+        .primary_handle
+        .ok_or_else(|| ContrixRouteError::BadRequest("missing primary_handle".to_owned()))?;
+
+    let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
+    let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
+    let session_info = crate::handlers::account::extract_session_info(req, depot);
+    let repo = depot.repo().await?;
+    let (requester, mut repo) =
+        crate::handlers::account::get_requester(&clock, &activity_tracker, repo, &session_info)
+            .await?;
+
+    let user = requester
+        .entity
+        .browser_session()
+        .map(|session| session.user.clone())
+        .ok_or_else(|| ContrixRouteError::Unauthorized("browser session required".to_owned()))?;
+
+    let claim = if let Some(handle) = requested.as_deref() {
+        require_canonical_handle(handle)?;
+        Some(
+            repo.user_primary_handle_preference()
+                .verified_handle_claim(user.id, handle, clock.now())
+                .await
+                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .ok_or_else(|| {
+                    ContrixRouteError::BadRequest(
+                        "primary_handle_not_verified_for_holder".to_owned(),
+                    )
+                })?,
+        )
+    } else {
+        None
+    };
+
+    let preference = repo
+        .user_primary_handle_preference()
+        .set(
+            &mut rng,
+            &*clock,
+            NewUserPrimaryHandlePreference::self_service(
+                user.id,
+                requested.clone(),
+                claim.as_ref(),
+                user.id,
+            ),
+        )
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    repo.save()
+        .await
+        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+
+    Ok(Json(PrimaryHandlePreferenceResponse {
+        primary_handle: preference.handle,
+        effective_at: preference.effective_at,
+        source_claim_id: preference.source_claim_id.map(|id| id.to_string()),
+        source_claim_digest: preference.source_claim_digest,
+    }))
 }
 
 // ── DPoP-bound session-grant refresh + debug seed ──────────────
@@ -2965,7 +3168,10 @@ mod tests {
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use crate::handlers::test_utils::{
+        CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
+    };
+    use crate::salvo_utils::SessionInfoExt;
 
     use super::*;
 
@@ -3032,6 +3238,7 @@ mod tests {
             trust_domain: None,
             oob_code_kind: Default::default(),
             verification_service_did: None,
+            audit_signature_fail_closed: false,
         };
 
         let body = serde_json::to_value(service_describe_response(
@@ -3736,6 +3943,249 @@ mod tests {
         assert_eq!(body["status"], "revoked");
         assert_eq!(body["grant"]["id"], grant.id.to_string());
         assert!(body["grant"]["revoked_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn primary_handle_patch_validates_claims_and_updates_did_documents() {
+        setup();
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
+        let unique = unique_test_nonce();
+        let alice_handle = format!("alice{unique}");
+        let bob_handle = format!("bob{unique}");
+
+        let mut rng = state.rng();
+        let mut repo = state.repository().await.unwrap();
+        let alice = repo
+            .user()
+            .add(&mut rng, &*state.clock, alice_handle)
+            .await
+            .unwrap();
+        let bob = repo
+            .user()
+            .add(&mut rng, &*state.clock, bob_handle)
+            .await
+            .unwrap();
+        let alice_session = repo
+            .browser_session()
+            .add(
+                &mut rng,
+                &*state.clock,
+                &alice,
+                Some("Mozilla/5.0".to_owned()),
+            )
+            .await
+            .unwrap();
+        let bob_session = repo
+            .browser_session()
+            .add(
+                &mut rng,
+                &*state.clock,
+                &bob,
+                Some("Mozilla/5.0".to_owned()),
+            )
+            .await
+            .unwrap();
+
+        let handle = user_handle(&state.url_builder, &alice);
+        repo.handle_audit()
+            .record(
+                &mut rng,
+                &*state.clock,
+                coauth_data::audit::NewHandleAuditEvent::new(
+                    coauth_data::audit::HandleAuditEventType::ClaimIssued,
+                )
+                .with_user(alice.id)
+                .with_handle(&handle)
+                .with_claim_digest("sha256:alice-primary"),
+            )
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+
+        let response = state
+            .request(Request::get(format!("/users/{}/did.json", alice.id)).empty())
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["metadata"]["primary_handle"], serde_json::Value::Null);
+
+        let alice_cookies = CookieHelper::new();
+        alice_cookies.import(state.cookie_jar().set_session(&alice_session));
+        let response = state
+            .request(alice_cookies.with_cookies(
+                Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
+                    "primary_handle": handle,
+                })),
+            ))
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["primary_handle"], handle);
+        assert_eq!(body["source_claim_digest"], "sha256:alice-primary");
+
+        let response = state
+            .request(Request::get(format!("/users/{}/did.json", alice.id)).empty())
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["metadata"]["primary_handle"], handle);
+
+        let did = user_did_for(&state.url_builder, &state.contrix_config, &alice);
+        let response = state
+            .request(Request::get(format!("/api/v1/identity/document?did={did}")).empty())
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["did_document"]["metadata"]["primary_handle"], handle);
+
+        let response = state
+            .request(alice_cookies.with_cookies(
+                Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
+                    "primary_handle": "unknown:example.com",
+                })),
+            ))
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+        let body: serde_json::Value = response.json();
+        assert_eq!(
+            body["error"]["message"],
+            "primary_handle_not_verified_for_holder"
+        );
+
+        let bob_cookies = CookieHelper::new();
+        bob_cookies.import(state.cookie_jar().set_session(&bob_session));
+        let response = state
+            .request(bob_cookies.with_cookies(
+                Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
+                    "primary_handle": handle,
+                })),
+            ))
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+
+        let response = state
+            .request(alice_cookies.with_cookies(
+                Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
+                    "primary_handle": null,
+                })),
+            ))
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["primary_handle"], serde_json::Value::Null);
+
+        let response = state
+            .request(Request::get(format!("/users/{}/did.json", alice.id)).empty())
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["metadata"]["primary_handle"], serde_json::Value::Null);
+    }
+
+    #[tokio::test]
+    async fn did_document_resolution_uses_primary_handle_preference_as_of_query() {
+        setup();
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let state = TestState::from_pool(pool.clone()).await.unwrap();
+        let unique = unique_test_nonce();
+        let user_handle = format!("history{unique}");
+        let first_handle = format!("{user_handle}:{}", state.url_builder.public_hostname());
+        let second_handle = format!("{user_handle}-alt:{}", state.url_builder.public_hostname());
+
+        let mut rng = state.rng();
+        let mut repo = state.repository().await.unwrap();
+        let user = repo
+            .user()
+            .add(&mut rng, &*state.clock, user_handle)
+            .await
+            .unwrap();
+        let first_preference = repo
+            .user_primary_handle_preference()
+            .set(
+                &mut rng,
+                &*state.clock,
+                NewUserPrimaryHandlePreference::self_service(
+                    user.id,
+                    Some(first_handle.clone()),
+                    None,
+                    user.id,
+                ),
+            )
+            .await
+            .unwrap();
+        let first_as_of = first_preference.effective_at.to_rfc3339();
+        state.clock.advance(Duration::try_seconds(10).unwrap());
+        repo.user_primary_handle_preference()
+            .set(
+                &mut rng,
+                &*state.clock,
+                NewUserPrimaryHandlePreference::self_service(
+                    user.id,
+                    Some(second_handle.clone()),
+                    None,
+                    user.id,
+                ),
+            )
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+
+        let did = user_did_for(&state.url_builder, &state.contrix_config, &user);
+
+        let response = state
+            .request(Request::get(format!("/api/v1/identity/document?did={did}")).empty())
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(
+            body["did_document"]["metadata"]["primary_handle"],
+            second_handle
+        );
+
+        let response = state
+            .request(
+                Request::get(format!(
+                    "/api/v1/identity/document?did={did}&as_of={first_as_of}"
+                ))
+                .empty(),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(
+            body["did_document"]["metadata"]["primary_handle"],
+            first_handle
+        );
+
+        let response = state
+            .request(
+                Request::get(format!("/users/{}/did.json?asOf={first_as_of}", user.id)).empty(),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["metadata"]["primary_handle"], first_handle);
+
+        let response = state
+            .request(
+                Request::post(format!("/api/v1/identity/resolve?as_of={first_as_of}")).json(
+                    serde_json::json!({
+                        "did": did,
+                    }),
+                ),
+            )
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(
+            body["did_document"]["metadata"]["primary_handle"],
+            first_handle
+        );
     }
 
     #[test]

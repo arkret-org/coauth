@@ -1,10 +1,9 @@
 apiVersion: v2
 name: coauth
 description: |
-  Helm chart skeleton for the Contrix coauth principal-server.
-  This is a STARTING POINT — operators should customize values.yaml
-  and probably add their own NetworkPolicy / PodDisruptionBudget /
-  HorizontalPodAutoscaler templates for production use.
+  Helm chart for the Contrix coauth authorization service.
+  Operators should customize values.yaml, provide an external PostgreSQL
+  secret, and enable NetworkPolicy/HPA controls for production clusters.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

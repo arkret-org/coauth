@@ -168,10 +168,14 @@ charts/coauth/
   Chart.yaml
   values.yaml
   templates/
+    _helpers.tpl
     deployment.yaml
     service.yaml
     configmap.yaml
     serviceaccount.yaml
+    pdb.yaml
+    hpa.yaml
+    networkpolicy.yaml
 ```
 
 Install with:
@@ -186,6 +190,11 @@ helm install coauth ./charts/coauth \
 The chart intentionally does **not** package PostgreSQL; depend on a
 managed Postgres or an external chart (e.g. `bitnami/postgresql`) and
 inject the connection URL through `database.urlSecret`.
+
+Production operators should review `podDisruptionBudget`, `autoscaling`, and
+`networkPolicy` values before rollout. When `networkPolicy.enabled=true`, egress
+is limited to DNS plus the relevant Postgres, upstream OIDC, and soland CIDR
+blocks listed in values.
 
 ## Debugging a distroless container
 

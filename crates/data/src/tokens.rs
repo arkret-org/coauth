@@ -181,7 +181,17 @@ pub struct RefreshToken {
     pub refresh_token: String,
     pub session_id: Ulid,
     pub created_at: DateTime<Utc>,
+    pub chain_root_id: Ulid,
+    pub chain_created_at: DateTime<Utc>,
+    pub last_seen_at: DateTime<Utc>,
     pub access_token_id: Option<Ulid>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RefreshTokenChainRevokeOutcome {
+    pub refresh_tokens: usize,
+    pub access_tokens: usize,
+    pub session_grants: usize,
 }
 
 impl std::ops::Deref for RefreshToken {
@@ -209,6 +219,7 @@ impl RefreshToken {
         replaced_by: &Self,
     ) -> Result<Self, InvalidTransitionError> {
         self.state = self.state.consume(consumed_at, replaced_by)?;
+        self.last_seen_at = consumed_at;
         Ok(self)
     }
 
@@ -424,5 +435,40 @@ mod tests {
                 assert_eq!(TokenType::check(&token).unwrap(), t);
             }
         }
+    }
+
+    #[test]
+    fn refresh_token_consume_records_successor_and_last_seen() {
+        let created_at = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let consumed_at = created_at + chrono::Duration::minutes(5);
+        let root_id = Ulid::new();
+        let successor_id = Ulid::new();
+        let token = RefreshToken {
+            id: root_id,
+            state: RefreshTokenState::Valid,
+            refresh_token: "refresh-token".to_owned(),
+            session_id: Ulid::new(),
+            created_at,
+            chain_root_id: root_id,
+            chain_created_at: created_at,
+            last_seen_at: created_at,
+            access_token_id: Some(Ulid::new()),
+        };
+        let successor = RefreshToken {
+            id: successor_id,
+            state: RefreshTokenState::Valid,
+            refresh_token: "successor-token".to_owned(),
+            session_id: token.session_id,
+            created_at: consumed_at,
+            chain_root_id: successor_id,
+            chain_created_at: consumed_at,
+            last_seen_at: consumed_at,
+            access_token_id: Some(Ulid::new()),
+        };
+
+        let consumed = token.consume(consumed_at, &successor).unwrap();
+
+        assert_eq!(consumed.last_seen_at, consumed_at);
+        assert_eq!(consumed.state.next_refresh_token_id(), Some(successor_id));
     }
 }

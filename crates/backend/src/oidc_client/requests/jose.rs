@@ -32,6 +32,8 @@ use super::super::{
 };
 use crate::outbound_http::RequestBuilderExt;
 
+const MAX_JWKS_BYTES: usize = 1_048_576;
+
 /// Fetch a JWKS at the given URL.
 ///
 /// # Arguments
@@ -50,13 +52,28 @@ pub async fn fetch_jwks(
 ) -> Result<PublicJsonWebKeySet, JwksError> {
     tracing::debug!("Fetching JWKS...");
 
-    let response: PublicJsonWebKeySet = client
+    let response = client
         .get(jwks_uri.as_str())
         .send_traced()
         .await?
-        .error_for_status()?
-        .json()
-        .await?;
+        .error_for_status()?;
+    if response
+        .content_length()
+        .is_some_and(|len| len > MAX_JWKS_BYTES as u64)
+    {
+        return Err(JwksError::ResponseTooLarge {
+            limit: MAX_JWKS_BYTES,
+            actual: usize::MAX,
+        });
+    }
+    let bytes = response.bytes().await?;
+    if bytes.len() > MAX_JWKS_BYTES {
+        return Err(JwksError::ResponseTooLarge {
+            limit: MAX_JWKS_BYTES,
+            actual: bytes.len(),
+        });
+    }
+    let response = serde_json::from_slice(&bytes)?;
 
     Ok(response)
 }

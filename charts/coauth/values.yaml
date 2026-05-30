@@ -4,6 +4,9 @@
 
 replicaCount: 3
 
+nameOverride: ""
+fullnameOverride: ""
+
 image:
   repository: ghcr.io/contrix-dev/coauth
   tag: ""  # Defaults to .Chart.AppVersion
@@ -52,6 +55,33 @@ resources:
     cpu: 1000m
     memory: 512Mi
 
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+networkPolicy:
+  enabled: false
+  ingressCidrs: []
+  egress:
+    postgresCidrs: []
+    postgresPort: 5432
+    oidcProviderCidrs: []
+    oidcProviderPort: 443
+    solandCidrs: []
+    solandPort: 443
+    dns:
+      enabled: true
+      namespaceSelector:
+        kubernetes.io/metadata.name: kube-system
+      podSelector:
+        k8s-app: kube-dns
+
 probes:
   liveness:
     path: /healthz
@@ -82,3 +112,4 @@ containerSecurityContext:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+topologySpreadConstraints: []

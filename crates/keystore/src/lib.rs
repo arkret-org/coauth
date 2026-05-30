@@ -688,7 +688,9 @@ pub struct Keystore {
     /// (potentially expensive) RSA/EC key clone + signer construction in
     /// [`PrivateKey::try_build_signer`] happens at most once per
     /// `(kid, alg)` pair.
-    signer_cache: Arc<std::sync::RwLock<std::collections::HashMap<SignerCacheKey, Arc<AsymmetricSigningKey>>>>,
+    signer_cache: Arc<
+        std::sync::RwLock<std::collections::HashMap<SignerCacheKey, Arc<AsymmetricSigningKey>>>,
+    >,
 }
 
 impl Keystore {

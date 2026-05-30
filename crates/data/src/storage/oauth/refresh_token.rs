@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use coauth_data::{AccessToken, Clock, RefreshToken, Session};
+use coauth_data::{AccessToken, Clock, RefreshToken, RefreshTokenChainRevokeOutcome, Session};
 use rand_core::RngCore;
 use ulid::Ulid;
 
@@ -106,6 +106,25 @@ pub trait OAuthRefreshTokenRepository: Send + Sync {
         refresh_token: RefreshToken,
     ) -> Result<RefreshToken, Self::Error>;
 
+    /// Revoke every refresh token in a rotation chain.
+    ///
+    /// This also revokes access tokens minted alongside the chain's refresh
+    /// tokens and any session grants bound to the same browser session.
+    ///
+    /// # Parameters
+    ///
+    /// * `clock`: The clock used to generate timestamps
+    /// * `chain_root_id`: The root ID shared by every token in the chain
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] if the underlying repository fails
+    async fn revoke_chain_by_root(
+        &mut self,
+        clock: &dyn Clock,
+        chain_root_id: Ulid,
+    ) -> Result<RefreshTokenChainRevokeOutcome, Self::Error>;
+
     /// Cleanup revoked refresh tokens that were revoked before a certain time
     ///
     /// Returns the number of deleted tokens and the last `revoked_at` timestamp
@@ -182,6 +201,12 @@ repository_impl!(OAuthRefreshTokenRepository:
         clock: &dyn Clock,
         refresh_token: RefreshToken,
     ) -> Result<RefreshToken, Self::Error>;
+
+    async fn revoke_chain_by_root(
+        &mut self,
+        clock: &dyn Clock,
+        chain_root_id: Ulid,
+    ) -> Result<RefreshTokenChainRevokeOutcome, Self::Error>;
 
     async fn cleanup_revoked(
         &mut self,

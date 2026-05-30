@@ -22,7 +22,7 @@ http:
   - ::1/128
   public_base: https://auth.local.host/
   issuer: https://auth.local.host/
-  csp_html: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
+  csp_html: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
 clients:
 - client_id: 01GFWR28C4KNE04WG3HKXB7C9R
   client_name: Example Client
@@ -78,6 +78,9 @@ passwords:
   minimum_complexity: 3
 contrix:
   principal_server_url: https://local.host/
+  # Keep false during rollout; set true in production after service signing
+  # keys and JWKS publication are operational.
+  audit_signature_fail_closed: false
   principal_servers:
   - name: soland-example
     audience: did:web:local.host

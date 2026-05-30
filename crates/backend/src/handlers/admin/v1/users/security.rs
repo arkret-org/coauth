@@ -8,7 +8,7 @@
 //! Both endpoints require admin auth and write to the audit log; they are
 //! grouped here to keep the security-sensitive code paths together.
 
-use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
+use coauth_data::audit::AdminOperation;
 use salvo::{http::StatusCode, oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -18,10 +18,11 @@ use crate::{
     AppError, AppResult, JsonResult,
     handlers::{
         admin::{
-            call_context::extract_call_context, model::User, params::extract_ulid_param,
-            response::SingleResponse,
+            audit_helper::record_admin_operation_signed, call_context::extract_call_context,
+            model::User, params::extract_ulid_param, response::SingleResponse,
         },
         common::DepotExt,
+        contrix::service_did_for,
     },
 };
 
@@ -52,6 +53,20 @@ pub struct RiskActionResponse {
     /// Number of sessions terminated (only for `terminate_sessions` action)
     #[serde(skip_serializing_if = "Option::is_none")]
     sessions_terminated: Option<usize>,
+}
+
+fn audit_signing_context(
+    depot: &Depot,
+) -> Result<(coauth_keystore::Keystore, String, bool), AppError> {
+    let key_store = depot.key_store()?;
+    let contrix_config = depot.contrix_config()?;
+    let url_builder = depot.url_builder()?;
+    let service_did = service_did_for(&url_builder, &contrix_config);
+    Ok((
+        key_store,
+        service_did,
+        contrix_config.audit_signature_fail_closed,
+    ))
 }
 
 #[endpoint]
@@ -101,30 +116,29 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
         }
     };
 
-    // Record audit log for the risk action
-    if let Some(admin_user) = &admin_user {
-        let operation = match params.action.as_str() {
-            "lock" | "force_password_reset" => AdminOperation::UserLocked,
-            "terminate_sessions" => AdminOperation::Other("terminate_sessions".into()),
-            _ => AdminOperation::Other(params.action.clone()),
-        };
-        repo.audit()
-            .add_admin_operation(
-                &mut rng,
-                &clock,
-                NewAdminOperationLog::new(
-                    admin_user.id,
-                    operation,
-                    "user",
-                    serde_json::json!({
-                        "action": params.action,
-                        "reason": params.reason,
-                    }),
-                )
-                .with_resource_id(user.id),
-            )
-            .await?;
-    }
+    let operation = match params.action.as_str() {
+        "lock" | "force_password_reset" => AdminOperation::UserLocked,
+        "terminate_sessions" => AdminOperation::Other("terminate_sessions".into()),
+        _ => AdminOperation::Other(params.action.clone()),
+    };
+    let (key_store, service_did, audit_fail_closed) = audit_signing_context(depot)?;
+    record_admin_operation_signed(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        &key_store,
+        &service_did,
+        audit_fail_closed,
+        admin_user.as_ref(),
+        operation,
+        "user",
+        Some(user.id),
+        serde_json::json!({
+            "action": params.action,
+            "reason": params.reason,
+        }),
+    )
+    .await?;
 
     repo.save().await?;
 
@@ -206,10 +220,14 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
         .add(&mut rng, &clock, &user, version, hashed_password, None)
         .await?;
 
-    crate::handlers::admin::audit_helper::record_admin_operation(
+    let (key_store, service_did, audit_fail_closed) = audit_signing_context(depot)?;
+    record_admin_operation_signed(
         &mut repo,
         &mut rng,
         &*clock,
+        &key_store,
+        &service_did,
+        audit_fail_closed,
         admin_user.as_ref(),
         AdminOperation::UserPasswordSet,
         "user",

@@ -21,9 +21,12 @@ pub use self::{
 mod tests {
     use chrono::Duration;
     use coauth_data::{
-        AuthorizationCode, Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _,
+        AuthorizationCode, Clock, Pagination, RefreshTokenState, RepositoryAccess as _,
+        RepositoryFactory as _,
         clock::MockClock,
-        oauth::{OAuthDeviceCodeGrantParams, OAuthSessionFilter, OAuthSessionRepository},
+        oauth::{
+            NewSessionGrant, OAuthDeviceCodeGrantParams, OAuthSessionFilter, OAuthSessionRepository,
+        },
     };
     use oauth_types::{
         requests::{GrantType, ResponseMode},
@@ -366,6 +369,224 @@ mod tests {
         assert!(session.is_valid());
         let session = repo.oauth_session().finish(&clock, session).await.unwrap();
         assert!(!session.is_valid());
+    }
+
+    #[tokio::test]
+    async fn refresh_token_chain_root_and_bulk_revoke() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut rng = ChaChaRng::seed_from_u64(43);
+        let clock = MockClock::default();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+
+        let client = repo
+            .oauth_client()
+            .add(
+                &mut rng,
+                &clock,
+                vec!["https://example.com/redirect".parse().unwrap()],
+                None,
+                None,
+                None,
+                vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
+                Some("Refresh client".to_owned()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, "refresh-chain-user".to_owned())
+            .await
+            .unwrap();
+        let user_session = repo
+            .browser_session()
+            .add(&mut rng, &clock, &user, None)
+            .await
+            .unwrap();
+        let scope = Scope::from_iter([OPENID]);
+        let session = repo
+            .oauth_session()
+            .add_from_browser_session(&mut rng, &clock, &client, &user_session, scope.clone())
+            .await
+            .unwrap();
+
+        let session_grant = repo
+            .oauth_session_grant()
+            .add(
+                &mut rng,
+                &clock,
+                NewSessionGrant {
+                    browser_session_id: user_session.id,
+                    issuer: "did:web:issuer.example",
+                    subject: "did:web:subject.example",
+                    device_id: Some("device-1"),
+                    audience: "did:web:audience.example",
+                    scope: scope.clone(),
+                    grant_jwt: "session-grant-jwt",
+                    session_public_key: "session-public-key",
+                    expires_at: clock.now() + Duration::try_hours(1).unwrap(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let access_token_1 = repo
+            .oauth_access_token()
+            .add(
+                &mut rng,
+                &clock,
+                &session,
+                "access-token-1".to_owned(),
+                Some(Duration::try_minutes(5).unwrap()),
+            )
+            .await
+            .unwrap();
+        let refresh_token_1 = repo
+            .oauth_refresh_token()
+            .add(
+                &mut rng,
+                &clock,
+                &session,
+                &access_token_1,
+                "refresh-token-1".to_owned(),
+            )
+            .await
+            .unwrap();
+
+        let access_token_2 = repo
+            .oauth_access_token()
+            .add(
+                &mut rng,
+                &clock,
+                &session,
+                "access-token-2".to_owned(),
+                Some(Duration::try_minutes(5).unwrap()),
+            )
+            .await
+            .unwrap();
+        let refresh_token_2 = repo
+            .oauth_refresh_token()
+            .add(
+                &mut rng,
+                &clock,
+                &session,
+                &access_token_2,
+                "refresh-token-2".to_owned(),
+            )
+            .await
+            .unwrap();
+
+        let consumed_1 = repo
+            .oauth_refresh_token()
+            .consume(&clock, refresh_token_1.clone(), &refresh_token_2)
+            .await
+            .unwrap();
+        assert_eq!(
+            consumed_1.state.next_refresh_token_id(),
+            Some(refresh_token_2.id)
+        );
+
+        let refresh_token_2 = repo
+            .oauth_refresh_token()
+            .lookup(refresh_token_2.id)
+            .await
+            .unwrap()
+            .expect("second refresh token should exist");
+        assert_eq!(refresh_token_2.chain_root_id, refresh_token_1.id);
+        assert_eq!(
+            refresh_token_2.chain_created_at,
+            refresh_token_1.chain_created_at
+        );
+
+        let access_token_3 = repo
+            .oauth_access_token()
+            .add(
+                &mut rng,
+                &clock,
+                &session,
+                "access-token-3".to_owned(),
+                Some(Duration::try_minutes(5).unwrap()),
+            )
+            .await
+            .unwrap();
+        let refresh_token_3 = repo
+            .oauth_refresh_token()
+            .add(
+                &mut rng,
+                &clock,
+                &session,
+                &access_token_3,
+                "refresh-token-3".to_owned(),
+            )
+            .await
+            .unwrap();
+
+        repo.oauth_refresh_token()
+            .consume(&clock, refresh_token_2.clone(), &refresh_token_3)
+            .await
+            .unwrap();
+
+        let outcome = repo
+            .oauth_refresh_token()
+            .revoke_chain_by_root(&clock, refresh_token_1.id)
+            .await
+            .unwrap();
+        assert_eq!(outcome.refresh_tokens, 3);
+        assert_eq!(outcome.access_tokens, 3);
+        assert_eq!(outcome.session_grants, 1);
+
+        for id in [refresh_token_1.id, refresh_token_2.id, refresh_token_3.id] {
+            let token = repo
+                .oauth_refresh_token()
+                .lookup(id)
+                .await
+                .unwrap()
+                .expect("refresh token should exist");
+            assert!(matches!(token.state, RefreshTokenState::Revoked { .. }));
+        }
+
+        for id in [access_token_1.id, access_token_2.id, access_token_3.id] {
+            let token = repo
+                .oauth_access_token()
+                .lookup(id)
+                .await
+                .unwrap()
+                .expect("access token should exist");
+            assert!(token.state.is_revoked());
+        }
+
+        let session_grant = repo
+            .oauth_session_grant()
+            .lookup(session_grant.id)
+            .await
+            .unwrap()
+            .expect("session grant should exist");
+        assert!(session_grant.revoked_at.is_some());
+
+        let second_outcome = repo
+            .oauth_refresh_token()
+            .revoke_chain_by_root(&clock, refresh_token_1.id)
+            .await
+            .unwrap();
+        assert_eq!(second_outcome.refresh_tokens, 0);
+        assert_eq!(second_outcome.access_tokens, 0);
+        assert_eq!(second_outcome.session_grants, 0);
     }
 
     /// Test the [`OAuthSessionRepository::list`] and

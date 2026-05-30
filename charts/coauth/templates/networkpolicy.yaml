@@ -1,0 +1,80 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $egress := .Values.networkPolicy.egress }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "coauth.fullname" . }}
+  labels:
+    {{- include "coauth.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "coauth.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        {{- if .Values.networkPolicy.ingressCidrs }}
+        {{- range .Values.networkPolicy.ingressCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+        {{- else }}
+        - namespaceSelector: {}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+        - protocol: TCP
+          port: {{ .Values.service.metricsPort }}
+  {{- if or $egress.postgresCidrs $egress.oidcProviderCidrs $egress.solandCidrs $egress.dns.enabled }}
+  egress:
+    {{- if $egress.postgresCidrs }}
+    - to:
+        {{- range $egress.postgresCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ $egress.postgresPort }}
+    {{- end }}
+    {{- if $egress.oidcProviderCidrs }}
+    - to:
+        {{- range $egress.oidcProviderCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ $egress.oidcProviderPort }}
+    {{- end }}
+    {{- if $egress.solandCidrs }}
+    - to:
+        {{- range $egress.solandCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ $egress.solandPort }}
+    {{- end }}
+    {{- if $egress.dns.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $egress.dns.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $egress.dns.podSelector | nindent 14 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+  {{- else }}
+  egress: []
+  {{- end }}
+{{- end }}

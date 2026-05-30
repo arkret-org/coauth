@@ -40,6 +40,57 @@ diesel::table! {
 }
 
 diesel::table! {
+    user_primary_handle_preferences (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        handle -> Nullable<Text>,
+        effective_at -> Timestamptz,
+        replaced_at -> Nullable<Timestamptz>,
+        source_claim_id -> Nullable<Uuid>,
+        source_claim_digest -> Nullable<Text>,
+        actor_user_id -> Nullable<Uuid>,
+        source -> Text,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    accountability_grants (id) {
+        id -> Uuid,
+        accountability_grant_id -> Text,
+        agent_principal_id -> Text,
+        controller_did -> Text,
+        capabilities -> Array<Text>,
+        capabilities_digest -> Text,
+        reason -> Nullable<Text>,
+        issued_at -> Timestamptz,
+        revoked_at -> Nullable<Timestamptz>,
+        revoked_reason -> Nullable<Text>,
+        raw_payload_digest -> Text,
+        soland_fanout_state -> Text,
+        soland_fanout_idempotency_key -> Text,
+        soland_fanout_payload -> Jsonb,
+        soland_fanout_attempt -> Int4,
+        soland_fanout_next_retry_at -> Nullable<Timestamptz>,
+        soland_fanout_dead_letter_reason -> Nullable<Text>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    accountability_subject_revocations (id) {
+        id -> Uuid,
+        subject_kind -> Text,
+        subject_id -> Text,
+        reason -> Text,
+        revoked_at -> Timestamptz,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     account_claims (id) {
         id -> Uuid,
         account_id -> Nullable<Uuid>,
@@ -360,6 +411,9 @@ diesel::table! {
         consumed_at -> Nullable<Timestamptz>,
         revoked_at -> Nullable<Timestamptz>,
         next_oauth_refresh_token_id -> Nullable<Uuid>,
+        chain_root_oauth_refresh_token_id -> Uuid,
+        chain_created_at -> Timestamptz,
+        last_seen_at -> Timestamptz,
     }
 }
 
@@ -785,6 +839,7 @@ diesel::table! {
 
 // Foreign key relationships
 diesel::joinable!(user_totp_configs -> users (user_id));
+diesel::joinable!(user_primary_handle_preferences -> users (user_id));
 diesel::joinable!(principal_did_update_keys -> users (user_id));
 diesel::joinable!(user_passwords -> users (user_id));
 diesel::joinable!(user_emails -> users (user_id));
@@ -871,4 +926,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     workflow_deadlines,
     workflow_audit_logs,
     handle_audit_log,
+    user_primary_handle_preferences,
+    accountability_grants,
+    accountability_subject_revocations,
 );

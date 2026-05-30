@@ -21,9 +21,19 @@
 //! Wire shape: see [`AccountabilityGrantRequest`] and
 //! [`AccountabilityGrantResponse`].
 
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, Utc};
 use coauth_config::ContrixConfig;
+use coauth_data::{
+    RepositoryAccess,
+    accountability::{
+        AccountabilityGrantFanoutState, AccountabilitySubjectKind, NewAccountabilityGrant,
+    },
+    audit::AdminOperation,
+};
 use contrix_core::{
+    canonical::canonical_sha256,
     error::{
         ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_PAIRING_REQUEST_EXPIRED,
         ERROR_CODE_PROOF_INVALID, ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
@@ -35,11 +45,44 @@ use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::DepotExt;
+use super::{DepotExt, make_clock, make_rng};
 use crate::{
-    AppError, CreatedJsonResult, handlers::admin::CreatedJson,
+    AppError, CreatedJsonResult,
+    handlers::{
+        admin::{CreatedJson, audit_helper::record_service_admin_operation_signed},
+        contrix::service_did_for,
+    },
     services::did_binding_proof::normalize_did_for_binding,
 };
+
+const ACCOUNTABILITY_GRANT_FANOUT_QUEUE: &str = "soland-accountability-grant-fanout";
+
+const AGENT_CAPABILITY_ACTIONS: &[&str] = &[
+    "cx.agent.key.authorize",
+    "cx.agent.key.revoke",
+    "cx.agent.key.rotate",
+    "cx.agent.provision",
+    "cx.agent.pause",
+    "cx.agent.resume",
+    "cx.agent.deactivate",
+    "cx.agent.draft.propose",
+    "cx.agent.action_request",
+    "cx.agent.action_approve",
+    "cx.agent.action_reject",
+    "cx.agent.sidecar_thread.ensure",
+    "cx.agent.sidecar_thread.write",
+    "cx.agent.sidecar_thread.publish",
+    "cx.agent.protocol.discover",
+    "cx.agent.session.start",
+    "cx.agent.session.cancel",
+    "cx.agent.session.stream_status",
+    "cx.agent.session.attach_artifact",
+    "cx.agent.session.read_transcript",
+];
+
+fn is_registered_agent_capability(action: &str) -> bool {
+    AGENT_CAPABILITY_ACTIONS.contains(&action)
+}
 
 /// Request body for `POST /api/v1/agents/{id}/accountability-grant`.
 #[derive(Deserialize, JsonSchema, ToSchema)]
@@ -49,9 +92,10 @@ pub struct AccountabilityGrantRequest {
     /// `^did:[a-z0-9]+:[^\s]+$`).
     pub controller_did: String,
 
-    /// Capability actions covered by the grant. Each entry is a
-    /// `cx.agent.*` action name from the 14-action registry; the typed
-    /// id below references the union as a single accountability grant.
+    /// Capability actions covered by the grant. Each entry must be a
+    /// registered `cx.agent.*` action from `capability-action-registry.json`;
+    /// the typed id below references the union as a single accountability
+    /// grant.
     pub capabilities: Vec<String>,
 
     /// Optional human-readable reason recorded with the grant for the
@@ -65,8 +109,9 @@ pub struct AccountabilityGrantRequest {
 /// CXP-0008 (`id-kind-registry.json`): the wire shape carries the
 /// freshly minted `cx:accountability_grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
-/// controller DID. soland MUST verify each capability action is in the
-/// registered 14-action set before accepting the grant.
+/// controller DID. coauth rejects actions outside the registered
+/// `cx.agent.*` set before issuing the response; soland still verifies
+/// the grant on ingest.
 ///
 /// `accountability_grant_id` and `agent_principal_id` are emitted as
 /// raw strings in the OpenAPI surface — the SDK `AccountabilityGrantId`
@@ -137,51 +182,311 @@ pub async fn post_accountability_grant(
     let controller_did = normalize_did_for_binding(&body.controller_did)
         .map_err(|error| AppError::bad_request(format!("controller_did invalid: {error}")))?;
 
-    if body.capabilities.is_empty() {
+    let capabilities = normalize_capabilities(body.capabilities)?;
+
+    let clock = make_clock();
+    let mut rng = make_rng();
+    let issued_at = clock.now();
+    let accountability_grant_id =
+        AccountabilityGrantId::new(new_prefixed_uuid7("cx:accountability_grant:"))
+            .map_err(|err| AppError::internal_box(Box::new(err)))?;
+    let accountability_grant_id = accountability_grant_id.into_string();
+    let agent_principal_id = agent_principal_id.into_string();
+
+    let response = AccountabilityGrantResponse {
+        accountability_grant_id: accountability_grant_id.clone(),
+        agent_principal_id: agent_principal_id.clone(),
+        controller_did: controller_did.clone(),
+        capabilities: capabilities.clone(),
+        reason: body.reason.clone(),
+        issued_at,
+    };
+
+    let raw_payload_digest = canonical_digest(&response)?;
+    let capabilities_digest =
+        accountability_capabilities_digest(&agent_principal_id, &controller_did, &capabilities)?;
+    let idempotency_key = accountability_grant_idempotency_key(&accountability_grant_id);
+    let url_builder = depot.url_builder()?;
+    let service_did = service_did_for(&url_builder, &contrix_config);
+    let fanout_payload = build_soland_fanout_payload(
+        &response,
+        &raw_payload_digest,
+        &service_did,
+        &contrix_config,
+    )?;
+
+    let mut repo = depot.repo().await?;
+    if repo
+        .accountability_grant()
+        .subject_revoked(AccountabilitySubjectKind::ControllerDid, &controller_did)
+        .await?
+    {
+        return Err(AppError::forbidden(
+            "controller DID is revoked for accountability grants",
+        ));
+    }
+    if repo
+        .accountability_grant()
+        .subject_revoked(
+            AccountabilitySubjectKind::AgentPrincipalId,
+            &agent_principal_id,
+        )
+        .await?
+    {
+        return Err(AppError::forbidden(
+            "agent principal is revoked for accountability grants",
+        ));
+    }
+    if repo
+        .accountability_grant()
+        .find_active_by_fingerprint(&agent_principal_id, &controller_did, &capabilities_digest)
+        .await?
+        .is_some()
+    {
+        return Err(AppError::conflict(
+            "active accountability grant already exists for this controller, agent, and capability set",
+        ));
+    }
+
+    let grant = repo
+        .accountability_grant()
+        .add(
+            &mut *rng,
+            &*clock,
+            NewAccountabilityGrant {
+                accountability_grant_id: accountability_grant_id.clone(),
+                agent_principal_id: agent_principal_id.clone(),
+                controller_did: controller_did.clone(),
+                capabilities: capabilities.clone(),
+                capabilities_digest,
+                reason: body.reason.clone(),
+                issued_at,
+                raw_payload_digest: raw_payload_digest.clone(),
+                soland_fanout_state: AccountabilityGrantFanoutState::Queued,
+                soland_fanout_idempotency_key: idempotency_key.clone(),
+                soland_fanout_payload: fanout_payload.clone(),
+                soland_fanout_attempt: 0,
+                soland_fanout_next_retry_at: Some(issued_at),
+                soland_fanout_dead_letter_reason: None,
+            },
+        )
+        .await?;
+
+    let audit_details = serde_json::json!({
+        "actor": {
+            "kind": "service",
+            "service_did": &service_did,
+        },
+        "operation": "accountability_grant_issued",
+        "accountability_grant_id": &grant.accountability_grant_id,
+        "agent_principal_id": &grant.agent_principal_id,
+        "controller_did": &controller_did,
+        "capabilities": &capabilities,
+        "reason": &grant.reason,
+        "issued_at": issued_at,
+        "raw_payload_digest": &raw_payload_digest,
+        "soland_fanout": {
+            "state": grant.soland_fanout_state,
+            "idempotency_key": &idempotency_key,
+            "queue": ACCOUNTABILITY_GRANT_FANOUT_QUEUE,
+            "next_retry_at": issued_at,
+        }
+    });
+    let key_store = depot.key_store()?;
+    record_service_admin_operation_signed(
+        &mut repo,
+        &mut *rng,
+        &*clock,
+        &key_store,
+        &service_did,
+        contrix_config.audit_signature_fail_closed,
+        AdminOperation::Other("accountability_grant_issued".to_owned()),
+        "agent",
+        typed_id_suffix_as_ulid(&agent_principal_id, "cx:agent_principal:"),
+        audit_details,
+    )
+    .await?;
+
+    repo.queue_job()
+        .schedule(
+            &mut *rng,
+            &*clock,
+            ACCOUNTABILITY_GRANT_FANOUT_QUEUE,
+            fanout_payload,
+            serde_json::json!({
+                "idempotency_key": grant.soland_fanout_idempotency_key,
+                "accountability_grant_id": grant.accountability_grant_id,
+                "raw_payload_digest": grant.raw_payload_digest,
+                "next_retry_at": issued_at,
+                "attempt": 0,
+            }),
+        )
+        .await?;
+    repo.save().await?;
+
+    Ok(CreatedJson(response))
+}
+
+fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<String>, AppError> {
+    if capabilities.is_empty() {
         return Err(AppError::bad_request(
             "capabilities must list at least one cx.agent.* action",
         ));
     }
-    // Minimal wire-shape check: all entries MUST be in the cx.agent.*
-    // namespace per `capability-action-registry.json` (14-action set).
-    if let Some(bad) = body
-        .capabilities
-        .iter()
-        .find(|c| !c.starts_with("cx.agent."))
-    {
-        return Err(AppError::bad_request(format!(
-            "capability {bad:?} is not in the cx.agent.* action namespace"
-        )));
+
+    let mut unique = BTreeSet::new();
+    for raw in capabilities {
+        let capability = raw.trim();
+        if capability.is_empty() {
+            return Err(AppError::bad_request(
+                "capabilities must not contain empty actions",
+            ));
+        }
+        if !is_registered_agent_capability(capability) {
+            return Err(AppError::bad_request(format!(
+                "capability {capability:?} is not a registered cx.agent.* action"
+            )));
+        }
+        unique.insert(capability.to_owned());
     }
 
-    let issued_at = Utc::now();
-    let accountability_grant_id =
-        AccountabilityGrantId::new(new_prefixed_uuid7("cx:accountability_grant:"))
-            .map_err(|err| AppError::internal_box(Box::new(err)))?;
+    Ok(unique.into_iter().collect())
+}
 
-    // TODO(P2-impl): persist the grant.
-    //
-    //   - append an admin-operation audit-log row (resource_type:
-    //     "agent", resource_id: <agent_principal_id>, operation:
-    //     "accountability_grant_issued") whose `details` JSON is the
-    //     canonical wire form of the response below;
-    //   - fan-out to soland over the existing principal-server HTTP
-    //     binding so soland's reducer can stamp `cx.capability.grant`
-    //     events with the agent_principal_id target;
-    //   - maintain a revocation index so a controller-side pause /
-    //     deactivate event automatically revokes the grant.
-    //
-    // For Phase P2 the wire response is canonical and soland can begin
-    // testing against it; persistence lands in the follow-up CL.
+#[derive(Serialize)]
+struct CapabilityDigestInput<'a> {
+    kind: &'a str,
+    agent_principal_id: &'a str,
+    controller_did: &'a str,
+    capabilities: &'a [String],
+}
 
-    Ok(CreatedJson(AccountabilityGrantResponse {
-        accountability_grant_id: accountability_grant_id.into_string(),
-        agent_principal_id: agent_principal_id.into_string(),
+fn accountability_capabilities_digest(
+    agent_principal_id: &str,
+    controller_did: &str,
+    capabilities: &[String],
+) -> Result<String, AppError> {
+    canonical_digest(&CapabilityDigestInput {
+        kind: "cx.coauth.accountability_grant.capabilities.v1",
+        agent_principal_id,
         controller_did,
-        capabilities: body.capabilities,
-        reason: body.reason,
-        issued_at,
+        capabilities,
+    })
+}
+
+fn canonical_digest(value: &impl Serialize) -> Result<String, AppError> {
+    canonical_sha256(value).map_err(|error| {
+        AppError::internal_box(Box::new(std::io::Error::other(format!(
+            "canonical digest failed: {error}"
+        ))))
+    })
+}
+
+fn accountability_grant_idempotency_key(accountability_grant_id: &str) -> String {
+    format!("coauth:accountability_grant:{accountability_grant_id}")
+}
+
+fn build_soland_fanout_payload(
+    response: &AccountabilityGrantResponse,
+    raw_payload_digest: &str,
+    service_did: &str,
+    contrix_config: &ContrixConfig,
+) -> Result<serde_json::Value, AppError> {
+    let principal_servers: Vec<_> = contrix_config
+        .principal_servers
+        .iter()
+        .map(|server| {
+            serde_json::json!({
+                "name": server.name.as_str(),
+                "audience": server.audience.as_str(),
+                "endpoint": server.endpoint.as_str(),
+                "did": server.did.as_deref(),
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "kind": "cx.coauth.accountability_grant.fanout.v1",
+        "issuer_service_did": service_did,
+        "raw_payload_digest": raw_payload_digest,
+        "grant": response,
+        "principal_servers": principal_servers,
     }))
+}
+
+fn typed_id_suffix_as_ulid(value: &str, prefix: &str) -> Option<ulid::Ulid> {
+    value
+        .strip_prefix(prefix)
+        .and_then(|suffix| uuid::Uuid::parse_str(suffix).ok())
+        .map(ulid::Ulid::from)
+}
+
+/// Revoke all active accountability grants for a controller DID and mark the
+/// subject as blocked for future grant issuance.
+pub async fn revoke_accountability_grants_for_controller(
+    repo: &mut coauth_data::BoxRepository,
+    rng: &mut (dyn rand_core::RngCore + Send),
+    clock: &dyn coauth_data::Clock,
+    controller_did: &str,
+    reason: &str,
+) -> Result<usize, coauth_data::RepositoryError> {
+    repo.accountability_grant()
+        .mark_subject_revoked(
+            rng,
+            clock,
+            AccountabilitySubjectKind::ControllerDid,
+            controller_did,
+            reason,
+        )
+        .await?;
+    repo.accountability_grant()
+        .revoke_for_subject(
+            clock,
+            AccountabilitySubjectKind::ControllerDid,
+            controller_did,
+            reason,
+        )
+        .await
+}
+
+/// Revoke all active accountability grants for an agent principal and mark the
+/// subject as blocked for future grant issuance.
+pub async fn revoke_accountability_grants_for_agent(
+    repo: &mut coauth_data::BoxRepository,
+    rng: &mut (dyn rand_core::RngCore + Send),
+    clock: &dyn coauth_data::Clock,
+    agent_principal_id: &str,
+    reason: &str,
+) -> Result<usize, coauth_data::RepositoryError> {
+    repo.accountability_grant()
+        .mark_subject_revoked(
+            rng,
+            clock,
+            AccountabilitySubjectKind::AgentPrincipalId,
+            agent_principal_id,
+            reason,
+        )
+        .await?;
+    repo.accountability_grant()
+        .revoke_for_subject(
+            clock,
+            AccountabilitySubjectKind::AgentPrincipalId,
+            agent_principal_id,
+            reason,
+        )
+        .await
+}
+
+/// Revoke one accountability grant by its wire typed id.
+pub async fn revoke_accountability_grant_by_id(
+    repo: &mut coauth_data::BoxRepository,
+    clock: &dyn coauth_data::Clock,
+    accountability_grant_id: &str,
+    reason: &str,
+) -> Result<Option<coauth_data::AccountabilityGrant>, coauth_data::RepositoryError> {
+    repo.accountability_grant()
+        .revoke_by_grant_id(clock, accountability_grant_id, reason)
+        .await
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -428,6 +733,64 @@ mod agent_auth_error_matrix_tests {
         let err = AgentAuthRejection::AccountabilityGrantMissing;
         assert_eq!(err.code(), "accountability_grant_missing");
         assert_eq!(err.http_status(), http::StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn unknown_accountability_grant_action_is_rejected() {
+        let err = normalize_capabilities(vec!["cx.agent.unregistered".to_owned()])
+            .expect_err("unknown action must fail closed");
+        assert_eq!(err.status(), http::StatusCode::BAD_REQUEST);
+        assert!(
+            err.message()
+                .contains("is not a registered cx.agent.* action")
+        );
+    }
+
+    #[test]
+    fn capability_set_is_trimmed_sorted_and_deduplicated() {
+        let normalized = normalize_capabilities(vec![
+            " cx.agent.resume ".to_owned(),
+            "cx.agent.provision".to_owned(),
+            "cx.agent.resume".to_owned(),
+        ])
+        .expect("registered actions normalize");
+        assert_eq!(
+            normalized,
+            vec![
+                "cx.agent.provision".to_owned(),
+                "cx.agent.resume".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn capability_digest_is_stable_after_normalization() {
+        let left = normalize_capabilities(vec![
+            "cx.agent.resume".to_owned(),
+            "cx.agent.provision".to_owned(),
+        ])
+        .unwrap();
+        let right = normalize_capabilities(vec![
+            " cx.agent.provision ".to_owned(),
+            "cx.agent.resume".to_owned(),
+            "cx.agent.resume".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(left, right);
+        assert_eq!(
+            accountability_capabilities_digest(
+                "cx:agent_principal:018f0b15-1fc4-7b6f-b9f8-73ae9a76f8e0",
+                "did:web:controller.example",
+                &left,
+            )
+            .unwrap(),
+            accountability_capabilities_digest(
+                "cx:agent_principal:018f0b15-1fc4-7b6f-b9f8-73ae9a76f8e0",
+                "did:web:controller.example",
+                &right,
+            )
+            .unwrap()
+        );
     }
 
     #[test]

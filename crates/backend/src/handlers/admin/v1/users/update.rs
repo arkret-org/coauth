@@ -12,10 +12,11 @@ use crate::{
     AppError, JsonResult,
     handlers::{
         admin::{
-            call_context::extract_call_context, model::User, params::extract_ulid_param,
-            response::SingleResponse,
+            audit_helper::AdminAuditSigning, call_context::extract_call_context, model::User,
+            params::extract_ulid_param, response::SingleResponse,
         },
         common::DepotExt,
+        contrix::service_did_for,
     },
 };
 
@@ -42,6 +43,15 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleR
     } = call_context;
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
+    let key_store = depot.key_store()?;
+    let contrix_config = depot.contrix_config()?;
+    let url_builder = depot.url_builder()?;
+    let service_did = service_did_for(&url_builder, &contrix_config);
+    let audit_signing = AdminAuditSigning {
+        keystore: &key_store,
+        service_did: &service_did,
+        fail_closed: contrix_config.audit_signature_fail_closed,
+    };
     let mut rng = crate::handlers::account::make_rng();
     let body: UpdateRequest = req
         .parse_json()
@@ -66,6 +76,7 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleR
         id,
         patch,
         body.principal_erase.unwrap_or(true),
+        Some(audit_signing),
     )
     .await
     .map_err(map_service_error)?;

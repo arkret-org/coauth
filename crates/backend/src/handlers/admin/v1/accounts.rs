@@ -19,6 +19,7 @@ use crate::{
     handlers::admin::v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
     handlers::{
         admin::{
+            audit_helper::AdminAuditSigning,
             call_context::extract_call_context,
             model::Resource,
             params::{IncludeCount, extract_pagination, extract_ulid_param},
@@ -28,6 +29,7 @@ use crate::{
             },
         },
         common::DepotExt,
+        contrix::service_did_for,
     },
     services::account_claims::{
         AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord,
@@ -438,6 +440,14 @@ async fn patch_account(
     let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
+    let key_store = depot.key_store()?;
+    let url_builder = depot.url_builder()?;
+    let service_did = service_did_for(&url_builder, &contrix_config);
+    let audit_signing = AdminAuditSigning {
+        keystore: &key_store,
+        service_did: &service_did,
+        fail_closed: contrix_config.audit_signature_fail_closed,
+    };
     let mut rng = crate::handlers::account::make_rng();
 
     // CXP-0007 P2B.5: high-risk patches (disable / erase / reset_recovery)
@@ -507,6 +517,7 @@ async fn patch_account(
         id,
         patch,
         principal_erase,
+        Some(audit_signing),
     )
     .await
     .map_err(map_service_error)?;

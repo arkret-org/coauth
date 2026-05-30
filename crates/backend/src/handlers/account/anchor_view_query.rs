@@ -36,13 +36,11 @@
 //! absent on every leaf we fall back to the first array entry (matches
 //! soland's natural emission order — newest-first).
 
-use std::time::Duration;
-
 use serde::Deserialize;
 use tracing::{debug, warn};
 use url::Url;
 
-use crate::outbound_http::RequestBuilderExt as _;
+use crate::outbound_http;
 
 /// Result of consulting a space's anchor-dag snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,17 +115,18 @@ pub async fn query_latest_anchor(
             reason: format!("{error}"),
         })?;
 
-    let response = http_client
-        .get(url)
-        .timeout(Duration::from_secs(5))
-        .send_traced()
-        .await
-        .map_err(|error| {
-            warn!(?error, "anchor-view: HTTP error");
-            AnchorViewError::PrincipalServerUnreachable {
-                reason: format!("{error}"),
-            }
-        })?;
+    let response = outbound_http::send_with_policy(
+        outbound_http::soland_policy("anchor_dag_snapshot")
+            .with_timeout(std::time::Duration::from_secs(5)),
+        || http_client.get(url.clone()),
+    )
+    .await
+    .map_err(|error| {
+        warn!(?error, "anchor-view: HTTP error");
+        AnchorViewError::PrincipalServerUnreachable {
+            reason: format!("{error}"),
+        }
+    })?;
 
     let status = response.status();
     if !status.is_success() {

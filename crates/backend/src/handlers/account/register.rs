@@ -5,7 +5,7 @@
 //! check config/policy constraints, delegate to service functions, and map
 //! results to JSON responses.
 
-use std::{str::FromStr, time::Duration as StdDuration};
+use std::str::FromStr;
 
 use chrono::Duration;
 use coauth_data::{
@@ -39,7 +39,7 @@ use crate::{
         },
         notification_dispatch::{NotificationIntent, schedule_notification},
     },
-    outbound_http::RequestBuilderExt as _,
+    outbound_http,
     salvo_utils::SessionInfoExt,
 };
 
@@ -898,23 +898,27 @@ async fn register_soland_webvh(
     webvh_proof: Value,
 ) -> Result<SolandEmbeddedWebvhResponse, String> {
     let local_id = normalize_webvh_local_id(username).unwrap_or_else(|| username.to_owned());
-    let response = http_client
-        .post(target.endpoint.clone())
-        .bearer_auth(target.bearer.as_str())
-        .timeout(StdDuration::from_secs(10))
-        .json(&json!({
-            "local_id": local_id,
-            "did_public_key_multibase": did_public_key_multibase,
-            "update_public_key_multibase": update_public_key_multibase,
-            "did_key_id": did_key_id,
-            "update_key_id": update_key_id,
-            "also_known_as": [format!("acct:{local_id}")],
-            "version_time": webvh_version_time,
-            "proof": webvh_proof,
-        }))
-        .send_traced()
-        .await
-        .map_err(|error| format!("embedded_webvh_provider_unreachable:{error}"))?;
+    let body = json!({
+        "local_id": local_id,
+        "did_public_key_multibase": did_public_key_multibase,
+        "update_public_key_multibase": update_public_key_multibase,
+        "did_key_id": did_key_id,
+        "update_key_id": update_key_id,
+        "also_known_as": [format!("acct:{local_id}")],
+        "version_time": webvh_version_time,
+        "proof": webvh_proof,
+    });
+    let response = outbound_http::send_with_policy(
+        outbound_http::soland_policy("webvh_registration_finish"),
+        || {
+            http_client
+                .post(target.endpoint.clone())
+                .bearer_auth(target.bearer.as_str())
+                .json(&body)
+        },
+    )
+    .await
+    .map_err(|error| format!("embedded_webvh_provider_unreachable:{error}"))?;
     let status = response.status();
     let body = response
         .text()

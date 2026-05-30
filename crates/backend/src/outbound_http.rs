@@ -16,7 +16,7 @@ use hyper_util::client::legacy::connect::{
 };
 use opentelemetry::{
     KeyValue,
-    metrics::{Histogram, UpDownCounter},
+    metrics::{Counter, Histogram, UpDownCounter},
 };
 use opentelemetry_http::HeaderInjector;
 use opentelemetry_semantic_conventions::{
@@ -29,7 +29,7 @@ use opentelemetry_semantic_conventions::{
     },
 };
 use rustls_platform_verifier::ConfigVerifierExt;
-use tokio::time::Instant;
+use tokio::time::{Instant, sleep};
 use tower_service::Service as _;
 use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -37,6 +37,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use crate::telemetry::METER;
 
 static USER_AGENT: &str = concat!("coauth/", env!("CARGO_PKG_VERSION"));
+const COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST: &str = "COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST";
 
 static HTTP_REQUESTS_DURATION_HISTOGRAM: std::sync::LazyLock<Histogram<u64>> =
     std::sync::LazyLock::new(|| {
@@ -56,6 +57,97 @@ static HTTP_REQUESTS_IN_FLIGHT: std::sync::LazyLock<UpDownCounter<i64>> =
             .build()
     });
 
+static OUTBOUND_HTTP_RETRIES: std::sync::LazyLock<Counter<u64>> = std::sync::LazyLock::new(|| {
+    METER
+        .u64_counter("coauth.outbound_http.retries")
+        .with_unit("{retry}")
+        .with_description("Outbound HTTP retry attempts by upstream service and operation")
+        .build()
+});
+
+static OUTBOUND_HTTP_ERRORS: std::sync::LazyLock<Counter<u64>> = std::sync::LazyLock::new(|| {
+    METER
+        .u64_counter("coauth.outbound_http.errors")
+        .with_unit("{error}")
+        .with_description("Outbound HTTP terminal errors by upstream service and operation")
+        .build()
+});
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct OutboundRequestPolicy {
+    service: &'static str,
+    operation: &'static str,
+    timeout: Duration,
+    max_attempts: usize,
+    backoff: Duration,
+}
+
+impl OutboundRequestPolicy {
+    #[must_use]
+    pub(crate) const fn new(service: &'static str, operation: &'static str) -> Self {
+        Self {
+            service,
+            operation,
+            timeout: Duration::from_secs(10),
+            max_attempts: 1,
+            backoff: Duration::from_millis(100),
+        }
+    }
+
+    #[must_use]
+    pub(crate) const fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    #[must_use]
+    pub(crate) const fn with_max_attempts(mut self, max_attempts: usize) -> Self {
+        self.max_attempts = max_attempts;
+        self
+    }
+
+    #[must_use]
+    pub(crate) const fn with_backoff(mut self, backoff: Duration) -> Self {
+        self.backoff = backoff;
+        self
+    }
+
+    fn max_attempts(self) -> usize {
+        self.max_attempts.max(1)
+    }
+}
+
+#[must_use]
+pub(crate) const fn starid_mutation_policy(operation: &'static str) -> OutboundRequestPolicy {
+    OutboundRequestPolicy::new("starid", operation)
+        .with_timeout(Duration::from_secs(10))
+        .with_max_attempts(1)
+}
+
+#[must_use]
+pub(crate) const fn starid_verification_policy(operation: &'static str) -> OutboundRequestPolicy {
+    OutboundRequestPolicy::new("starid", operation)
+        .with_timeout(Duration::from_secs(10))
+        .with_max_attempts(2)
+        .with_backoff(Duration::from_millis(100))
+}
+
+#[must_use]
+pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPolicy {
+    OutboundRequestPolicy::new("soland", operation)
+        .with_timeout(Duration::from_secs(10))
+        .with_max_attempts(2)
+        .with_backoff(Duration::from_millis(100))
+}
+
+#[must_use]
+pub(crate) const fn policy_frontier_policy() -> OutboundRequestPolicy {
+    OutboundRequestPolicy::new("policy_frontier", "fetch")
+        .with_timeout(Duration::from_millis(1_500))
+        .with_max_attempts(2)
+        .with_backoff(Duration::from_millis(50))
+}
+
 struct TracingResolver {
     inner: GaiResolver,
 }
@@ -73,6 +165,22 @@ impl reqwest::dns::Resolve for TracingResolver {
         let requested_name = name.as_str().to_owned();
         let span = tracing::info_span!("dns.resolve", name = requested_name);
         if !private_networks_allowed() {
+            if private_egress_target_allowed(&requested_name) {
+                let mut inner = self.inner.clone();
+                return Box::pin(
+                    inner
+                        .call(Name::from_str(name.as_str()).unwrap())
+                        .map(move |result| {
+                            let addrs =
+                                result.map_err(|err| -> Box<dyn StdError + Send + Sync> {
+                                    Box::new(err)
+                                })?;
+                            let addrs: Vec<SocketAddr> = addrs.collect();
+                            Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
+                        })
+                        .instrument(span),
+                );
+            }
             if let Some(reason) = blocked_domain_reason(&requested_name) {
                 return Box::pin(async move {
                     Err(Box::new(BlockedEgressTarget::new(requested_name, reason))
@@ -139,6 +247,10 @@ fn enforce_resolved_egress_policy(
         return Ok(());
     }
 
+    if private_egress_target_allowed(host) {
+        return Ok(());
+    }
+
     if let Some(reason) = blocked_domain_reason(host) {
         return Err(Box::new(BlockedEgressTarget::new(host, reason)));
     }
@@ -174,6 +286,30 @@ fn env_flag_enabled(name: &str) -> bool {
                 || value.eq_ignore_ascii_case("no"))
         })
         .unwrap_or(false)
+}
+
+fn private_egress_target_allowed(host: &str) -> bool {
+    std::env::var(COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST)
+        .ok()
+        .is_some_and(|raw| target_allowed_by_private_allowlist(host, &raw))
+}
+
+fn target_allowed_by_private_allowlist(host: &str, raw: &str) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    raw.split([',', ';', '\n'])
+        .map(|entry| entry.trim().trim_end_matches('.').to_ascii_lowercase())
+        .filter(|entry| !entry.is_empty())
+        .any(|entry| {
+            let entry = entry
+                .strip_prefix("host:")
+                .or_else(|| entry.strip_prefix("domain:"))
+                .unwrap_or(entry.as_str());
+            if let Some(domain) = entry.strip_prefix("*.") {
+                host.ends_with(&format!(".{domain}"))
+            } else {
+                host == entry
+            }
+        })
 }
 
 fn blocked_domain_reason(host: &str) -> Option<&'static str> {
@@ -401,6 +537,129 @@ async fn send_traced(
     .await
 }
 
+pub(crate) async fn send_with_policy<F>(
+    policy: OutboundRequestPolicy,
+    build_request: F,
+) -> Result<reqwest::Response, reqwest::Error>
+where
+    F: Fn() -> reqwest::RequestBuilder,
+{
+    let max_attempts = policy.max_attempts();
+    for attempt in 1..=max_attempts {
+        let result = build_request().timeout(policy.timeout).send_traced().await;
+        match result {
+            Ok(response) => {
+                let status = response.status();
+                if retryable_status(status) && attempt < max_attempts {
+                    record_retry(
+                        policy,
+                        attempt,
+                        "http_status",
+                        Some(i64::from(status.as_u16())),
+                    );
+                    sleep(policy.backoff).await;
+                    continue;
+                }
+                if !status.is_success() {
+                    record_terminal_error(policy, "http_status", Some(i64::from(status.as_u16())));
+                }
+                return Ok(response);
+            }
+            Err(error) if retryable_error(&error) && attempt < max_attempts => {
+                record_retry(policy, attempt, reqwest_error_type(&error), None);
+                sleep(policy.backoff).await;
+            }
+            Err(error) => {
+                record_terminal_error(policy, reqwest_error_type(&error), None);
+                return Err(error);
+            }
+        }
+    }
+
+    unreachable!("outbound retry loop must return from the final attempt")
+}
+
+fn retryable_status(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::REQUEST_TIMEOUT
+        || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || status.is_server_error()
+}
+
+fn retryable_error(error: &reqwest::Error) -> bool {
+    error.is_timeout() || error.is_connect()
+}
+
+fn reqwest_error_type(error: &reqwest::Error) -> &'static str {
+    if error.is_timeout() {
+        "timeout"
+    } else if error.is_connect() {
+        "connect"
+    } else if error.is_decode() {
+        "decode"
+    } else if error.is_body() {
+        "body"
+    } else if error.is_builder() {
+        "builder"
+    } else {
+        "request"
+    }
+}
+
+fn policy_labels(
+    policy: OutboundRequestPolicy,
+    outcome: &'static str,
+    status_code: Option<i64>,
+) -> Vec<KeyValue> {
+    let mut labels = vec![
+        KeyValue::new("service", policy.service),
+        KeyValue::new("operation", policy.operation),
+        KeyValue::new("outcome", outcome),
+    ];
+    if let Some(status_code) = status_code {
+        labels.push(KeyValue::new(HTTP_RESPONSE_STATUS_CODE, status_code));
+    }
+    labels
+}
+
+fn record_retry(
+    policy: OutboundRequestPolicy,
+    attempt: usize,
+    outcome: &'static str,
+    status_code: Option<i64>,
+) {
+    let labels = policy_labels(policy, outcome, status_code);
+    OUTBOUND_HTTP_RETRIES.add(1, &labels);
+    tracing::warn!(
+        service = policy.service,
+        operation = policy.operation,
+        attempt,
+        max_attempts = policy.max_attempts(),
+        timeout_ms = policy.timeout.as_millis(),
+        backoff_ms = policy.backoff.as_millis(),
+        outcome,
+        status_code,
+        "outbound HTTP request failed; retrying within budget"
+    );
+}
+
+fn record_terminal_error(
+    policy: OutboundRequestPolicy,
+    outcome: &'static str,
+    status_code: Option<i64>,
+) {
+    let labels = policy_labels(policy, outcome, status_code);
+    OUTBOUND_HTTP_ERRORS.add(1, &labels);
+    tracing::warn!(
+        service = policy.service,
+        operation = policy.operation,
+        max_attempts = policy.max_attempts(),
+        timeout_ms = policy.timeout.as_millis(),
+        outcome,
+        status_code,
+        "outbound HTTP request failed"
+    );
+}
+
 pub(crate) trait RequestBuilderExt {
     fn send_traced(self) -> impl Future<Output = Result<reqwest::Response, reqwest::Error>> + Send;
 }
@@ -413,7 +672,32 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::{blocked_domain_reason, blocked_ip_reason};
+    use std::{
+        future::Future,
+        path::Path,
+        sync::{
+            Arc, Once,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::Duration,
+    };
+
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
+
+    use super::{
+        OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason, send_with_policy,
+        target_allowed_by_private_allowlist,
+    };
+
+    fn install_crypto_provider() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        });
+    }
 
     #[test]
     fn egress_policy_blocks_internal_names() {
@@ -421,6 +705,26 @@ mod tests {
         assert!(blocked_domain_reason("api.internal").is_some());
         assert!(blocked_domain_reason("metadata.google.internal").is_some());
         assert!(blocked_domain_reason("example.com").is_none());
+    }
+
+    #[test]
+    fn private_egress_allowlist_matches_exact_and_wildcard_hosts() {
+        let raw = "host:soland.internal,*.svc.cluster.local,10.10.20.30";
+
+        assert!(target_allowed_by_private_allowlist("soland.internal", raw));
+        assert!(target_allowed_by_private_allowlist(
+            "coauth.auth.svc.cluster.local",
+            raw
+        ));
+        assert!(target_allowed_by_private_allowlist("10.10.20.30", raw));
+        assert!(!target_allowed_by_private_allowlist(
+            "metadata.google.internal",
+            raw
+        ));
+        assert!(!target_allowed_by_private_allowlist(
+            "evilsoland.internal",
+            raw
+        ));
     }
 
     #[test]
@@ -442,5 +746,134 @@ mod tests {
 
         assert!(blocked_ip_reason("8.8.8.8".parse().unwrap()).is_none());
         assert!(blocked_ip_reason("2001:4860:4860::8888".parse().unwrap()).is_none());
+    }
+
+    #[tokio::test]
+    async fn send_with_policy_applies_timeout() {
+        install_crypto_provider();
+        let (url, attempts) = spawn_sleeping_http_server(Duration::from_millis(200)).await;
+        let client = reqwest::Client::new();
+        let policy = OutboundRequestPolicy::new("test", "timeout")
+            .with_timeout(Duration::from_millis(20))
+            .with_max_attempts(1);
+
+        let err = send_with_policy(policy, || client.get(url.clone()))
+            .await
+            .expect_err("request should time out");
+
+        assert!(err.is_timeout(), "expected timeout, got {err}");
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn send_with_policy_stops_at_retry_budget() {
+        install_crypto_provider();
+        let (url, attempts) = spawn_status_http_server(500).await;
+        let client = reqwest::Client::new();
+        let policy = OutboundRequestPolicy::new("test", "retry_budget")
+            .with_timeout(Duration::from_secs(1))
+            .with_max_attempts(2)
+            .with_backoff(Duration::ZERO);
+
+        let response = send_with_policy(policy, || client.get(url.clone()))
+            .await
+            .expect("final HTTP response is returned after retry budget is spent");
+
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn production_code_uses_shared_reqwest_client_factory() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders = Vec::new();
+        collect_direct_reqwest_constructors(&src, &mut offenders);
+        assert!(
+            offenders.is_empty(),
+            "production code must use outbound_http::reqwest_client, not direct reqwest constructors: {offenders:?}"
+        );
+    }
+
+    fn collect_direct_reqwest_constructors(path: &Path, offenders: &mut Vec<String>) {
+        let entries = std::fs::read_dir(path).expect("read src dir");
+        for entry in entries {
+            let entry = entry.expect("read src entry");
+            let path = entry.path();
+            if path.is_dir() {
+                collect_direct_reqwest_constructors(&path, offenders);
+                continue;
+            }
+            if path.extension().and_then(|ext| ext.to_str()) != Some("rs")
+                || path.file_name().and_then(|name| name.to_str()) == Some("outbound_http.rs")
+            {
+                continue;
+            }
+            let content = std::fs::read_to_string(&path).expect("read rust source");
+            let test_start = content
+                .lines()
+                .position(|line| line.contains("#[cfg(test)]"))
+                .unwrap_or(usize::MAX);
+            for (index, line) in content.lines().enumerate() {
+                if index >= test_start {
+                    continue;
+                }
+                if line.contains("reqwest::Client::new()")
+                    || line.contains("reqwest::Client::builder()")
+                {
+                    offenders.push(format!("{}:{}", path.display(), index + 1));
+                }
+            }
+        }
+    }
+
+    async fn spawn_sleeping_http_server(delay: Duration) -> (String, Arc<AtomicUsize>) {
+        spawn_http_server(move |_| {
+            let delay = delay;
+            async move {
+                tokio::time::sleep(delay).await;
+                "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+            }
+        })
+        .await
+    }
+
+    async fn spawn_status_http_server(status: u16) -> (String, Arc<AtomicUsize>) {
+        spawn_http_server(move |_| async move {
+            format!("HTTP/1.1 {status} test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        })
+        .await
+    }
+
+    async fn spawn_http_server<F, Fut>(response: F) -> (String, Arc<AtomicUsize>)
+    where
+        F: Fn(usize) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = String> + Send + 'static,
+    {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test http server");
+        let addr = listener.local_addr().expect("test server addr");
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let response = Arc::new(response);
+        let attempts_for_task = Arc::clone(&attempts);
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    break;
+                };
+                let attempt = attempts_for_task.fetch_add(1, Ordering::SeqCst) + 1;
+                let response = Arc::clone(&response);
+                tokio::spawn(async move {
+                    let mut buffer = [0u8; 1024];
+                    let _ = stream.read(&mut buffer).await;
+                    let body = response(attempt).await;
+                    let _ = stream.write_all(body.as_bytes()).await;
+                });
+            }
+        });
+        (format!("http://{addr}/"), attempts)
     }
 }

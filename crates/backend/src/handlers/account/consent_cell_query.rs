@@ -26,13 +26,11 @@
 //! returns `ConsentLookup::Unknown` from the network call so callers can
 //! degrade safely.
 
-use std::time::Duration;
-
 use serde::Deserialize;
 use tracing::{debug, warn};
 use url::Url;
 
-use crate::outbound_http::RequestBuilderExt as _;
+use crate::outbound_http;
 
 /// Result of consulting a holder's consent cell.
 ///
@@ -122,12 +120,16 @@ pub async fn query_consent_cell(
         }
     };
 
-    let response = match http_client
-        .get(url)
-        .header("X-Contrix-Holder-Did", holder_did)
-        .timeout(Duration::from_secs(5))
-        .send_traced()
-        .await
+    let response = match outbound_http::send_with_policy(
+        outbound_http::soland_policy("consent_cell_read")
+            .with_timeout(std::time::Duration::from_secs(5)),
+        || {
+            http_client
+                .get(url.clone())
+                .header("X-Contrix-Holder-Did", holder_did)
+        },
+    )
+    .await
     {
         Ok(r) => r,
         Err(error) => {

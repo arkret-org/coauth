@@ -3,6 +3,7 @@ use coauth_data::{
     BoxRepository, BoxRepositoryFactory, MapErr, Repository, RepositoryAccess, RepositoryError,
     RepositoryFactory, RepositoryTransaction,
     account::AccountRepository,
+    accountability::AccountabilityGrantRepository,
     app_session::AppSessionRepository,
     audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository},
     notification::{NotificationRepository, NotificationTemplateRepository},
@@ -20,9 +21,9 @@ use coauth_data::{
     },
     user::{
         BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
-        UserPasswordRepository, UserPhoneRepository, UserRecoveryRepository,
-        UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
-        UserTermsRepository, UserTotpRepository,
+        UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
+        UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
+        UserRepository, UserTermsRepository, UserTotpRepository,
     },
     workflow::WorkflowRepository,
 };
@@ -36,6 +37,7 @@ use tracing::Instrument;
 use crate::{
     DatabaseError,
     account::PgAccountRepository,
+    accountability::PgAccountabilityGrantRepository,
     app_session::PgAppSessionRepository,
     audit::PgAuditRepository,
     notification::{PgNotificationRepository, PgNotificationTemplateRepository},
@@ -57,9 +59,9 @@ use crate::{
     },
     user::{
         PgBrowserSessionRepository, PgPrincipalDidRepository, PgUserEmailRepository,
-        PgUserPasswordRepository, PgUserPhoneRepository, PgUserRecoveryRepository,
-        PgUserRegistrationRepository, PgUserRegistrationTokenRepository, PgUserRepository,
-        PgUserTermsRepository, PgUserTotpRepository,
+        PgUserPasswordRepository, PgUserPhoneRepository, PgUserPrimaryHandlePreferenceRepository,
+        PgUserRecoveryRepository, PgUserRegistrationRepository, PgUserRegistrationTokenRepository,
+        PgUserRepository, PgUserTermsRepository, PgUserTotpRepository,
     },
     workflow::PgWorkflowRepository,
 };
@@ -190,6 +192,12 @@ impl RepositoryAccess for PgRepository {
         Box::new(PgAccountRepository::new(&mut self.conn))
     }
 
+    fn accountability_grant<'c>(
+        &'c mut self,
+    ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
+        Box::new(PgAccountabilityGrantRepository::new(&mut self.conn))
+    }
+
     fn upstream_oauth_link<'c>(
         &'c mut self,
     ) -> Box<dyn UpstreamOAuthLinkRepository<Error = Self::Error> + 'c> {
@@ -238,6 +246,12 @@ impl RepositoryAccess for PgRepository {
 
     fn user_totp<'c>(&'c mut self) -> Box<dyn UserTotpRepository<Error = Self::Error> + 'c> {
         Box::new(PgUserTotpRepository::new(&mut self.conn))
+    }
+
+    fn user_primary_handle_preference<'c>(
+        &'c mut self,
+    ) -> Box<dyn UserPrimaryHandlePreferenceRepository<Error = Self::Error> + 'c> {
+        Box::new(PgUserPrimaryHandlePreferenceRepository::new(&mut self.conn))
     }
 
     fn principal_did<'c>(

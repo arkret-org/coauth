@@ -11,7 +11,7 @@ use coauth_admin_types::{
     AccountRiskActionHistoryResponse, AccountRiskActionProposalRequest,
     AccountRiskActionProposalResponse, AccountRiskActionTransitionRecord,
 };
-use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
+use coauth_data::audit::AdminOperation;
 use coauth_data::{AdminUserPatch, RepositoryAccess};
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -22,10 +22,13 @@ use crate::{
     AppError, JsonResult,
     handlers::{
         admin::{
-            call_context::extract_call_context, params::extract_ulid_param,
+            audit_helper::{AdminAuditSigning, record_admin_operation_signed},
+            call_context::extract_call_context,
+            params::extract_ulid_param,
             response::SingleResponse,
         },
         common::DepotExt,
+        contrix::service_did_for,
     },
     services::{
         did_resolver::DidResolverService,
@@ -264,6 +267,9 @@ pub async fn propose(
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let contrix_config = depot.contrix_config()?;
     let did_resolver = depot.did_resolver_service()?;
+    let key_store = depot.key_store()?;
+    let url_builder = depot.url_builder()?;
+    let service_did = service_did_for(&url_builder, &contrix_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -303,38 +309,39 @@ pub async fn propose(
     let state_store_kind = risk_action_state.state_store_kind();
     let todo = "Durable proposal record persisted; execute requires explicit persisted approval and consumes this proposal before mutation.".to_owned();
 
-    if let Some(admin_user) = &admin_user {
+    if admin_user.is_some() {
         let mut rng = crate::handlers::account::make_rng();
-        repo.audit()
-            .add_admin_operation(
-                &mut rng,
-                &clock,
-                NewAdminOperationLog::new(
-                    admin_user.id,
-                    AdminOperation::Other(format!("account_{}_proposal", params.action)),
-                    "account",
-                    serde_json::json!({
-                        "state_record_id": state_record_id,
-                        "state_store_kind": state_store_kind,
-                        "state_revision": 1_u64,
-                        "proposal_id": proposal_id,
-                        "action": params.action,
-                        "transition_kind": "proposal_requested",
-                        "previous_state": "idle",
-                        "next_state": "draft",
-                        "reason": params.reason,
-                        "ticket": params.ticket,
-                        "approved_by": params.approved_by,
-                        "requested_by": requested_by,
-                        "requested_by_handle": requested_by_handle,
-                        "execution_endpoint": execution_endpoint,
-                        "allowed_next_transitions": allowed_next_transitions.clone(),
-                        "todo": todo,
-                    }),
-                )
-                .with_resource_id(account.id),
-            )
-            .await?;
+        record_admin_operation_signed(
+            &mut repo,
+            &mut rng,
+            &*clock,
+            &key_store,
+            &service_did,
+            contrix_config.audit_signature_fail_closed,
+            admin_user.as_ref(),
+            AdminOperation::Other(format!("account_{}_proposal", params.action)),
+            "account",
+            Some(account.id),
+            serde_json::json!({
+                "state_record_id": state_record_id,
+                "state_store_kind": state_store_kind,
+                "state_revision": 1_u64,
+                "proposal_id": proposal_id,
+                "action": params.action,
+                "transition_kind": "proposal_requested",
+                "previous_state": "idle",
+                "next_state": "draft",
+                "reason": params.reason,
+                "ticket": params.ticket,
+                "approved_by": params.approved_by,
+                "requested_by": requested_by,
+                "requested_by_handle": requested_by_handle,
+                "execution_endpoint": execution_endpoint,
+                "allowed_next_transitions": allowed_next_transitions.clone(),
+                "todo": todo,
+            }),
+        )
+        .await?;
         repo.save().await?;
     } else {
         repo.cancel().await?;
@@ -388,6 +395,9 @@ pub async fn approve(
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let contrix_config = depot.contrix_config()?;
     let did_resolver = depot.did_resolver_service()?;
+    let key_store = depot.key_store()?;
+    let url_builder = depot.url_builder()?;
+    let service_did = service_did_for(&url_builder, &contrix_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -448,37 +458,38 @@ pub async fn approve(
     let state_revision = state_revision_for(&approved);
     let transition_kind = transition_for_state(approved.state).to_owned();
 
-    if let Some(admin_user) = &admin_user {
+    if admin_user.is_some() {
         let mut rng = crate::handlers::account::make_rng();
-        repo.audit()
-            .add_admin_operation(
-                &mut rng,
-                &clock,
-                NewAdminOperationLog::new(
-                    admin_user.id,
-                    AdminOperation::Other(format!("account_{}_proposal_approved", params.action)),
-                    "account",
-                    serde_json::json!({
-                        "state_record_id": state_record_id,
-                        "state_store_kind": state_store_kind,
-                        "state_revision": state_revision,
-                        "proposal_id": proposal_id,
-                        "action": params.action,
-                        "transition_kind": transition_kind,
-                        "previous_state": existing.state.as_str(),
-                        "next_state": approved.state.as_str(),
-                        "ticket": params.ticket,
-                        "approved_by": approved_by,
-                        "approved_by_handle": admin_user.handle,
-                        "approval_note": params.approval_note,
-                        "execution_endpoint": execution_endpoint,
-                        "allowed_next_transitions": allowed_next_transitions.clone(),
-                        "todo": todo,
-                    }),
-                )
-                .with_resource_id(account.id),
-            )
-            .await?;
+        record_admin_operation_signed(
+            &mut repo,
+            &mut rng,
+            &*clock,
+            &key_store,
+            &service_did,
+            contrix_config.audit_signature_fail_closed,
+            admin_user.as_ref(),
+            AdminOperation::Other(format!("account_{}_proposal_approved", params.action)),
+            "account",
+            Some(account.id),
+            serde_json::json!({
+                "state_record_id": state_record_id,
+                "state_store_kind": state_store_kind,
+                "state_revision": state_revision,
+                "proposal_id": proposal_id,
+                "action": params.action,
+                "transition_kind": transition_kind,
+                "previous_state": existing.state.as_str(),
+                "next_state": approved.state.as_str(),
+                "ticket": params.ticket,
+                "approved_by": approved_by,
+                "approved_by_handle": admin_user.as_ref().map(|user| user.handle.as_str()),
+                "approval_note": params.approval_note,
+                "execution_endpoint": execution_endpoint,
+                "allowed_next_transitions": allowed_next_transitions.clone(),
+                "todo": todo,
+            }),
+        )
+        .await?;
         repo.save().await?;
     } else {
         repo.cancel().await?;
@@ -538,6 +549,14 @@ pub async fn execute(
     let contrix_config = depot.contrix_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let principal_server = depot.principal_server()?;
+    let key_store = depot.key_store()?;
+    let url_builder = depot.url_builder()?;
+    let service_did = service_did_for(&url_builder, &contrix_config);
+    let audit_signing = AdminAuditSigning {
+        keystore: &key_store,
+        service_did: &service_did,
+        fail_closed: contrix_config.audit_signature_fail_closed,
+    };
     let executed_at = clock.now();
     let id = extract_ulid_param(req)?;
     let proposal_id = req
@@ -580,44 +599,44 @@ pub async fn execute(
         account.id,
         mutation.patch,
         mutation.principal_erase,
+        Some(audit_signing),
     )
     .await
     .map_err(super::map_service_error)?;
 
-    if let Some(admin_user) = &admin_user {
-        repo.audit()
-            .add_admin_operation(
-                &mut rng,
-                &clock,
-                NewAdminOperationLog::new(
-                    admin_user.id,
-                    AdminOperation::Other(format!("account_{}_proposal_executed", params.action)),
-                    "account",
-                    serde_json::json!({
-                        "state_record_id": state_record_id,
-                        "state_store_kind": state_store_kind,
-                        "state_revision": state_revision,
-                        "proposal_id": proposal_id,
-                        "action": params.action,
-                        "transition_kind": "proposal_executed",
-                        "previous_state": existing.state.as_str(),
-                        "next_state": "mutation_recorded",
-                        "mutation_kind": mutation.mutation_kind,
-                        "mutation_description": mutation.mutation_description,
-                        "principal_erase": mutation.principal_erase,
-                        "ticket": params.ticket,
-                        "executed_by": admin_user.id,
-                        "executed_by_handle": admin_user.handle,
-                        "execution_note": params.execution_note,
-                        "mutation_endpoint": mutation_endpoint,
-                        "allowed_next_transitions": allowed_next_transitions.clone(),
-                        "todo": todo,
-                    }),
-                )
-                .with_resource_id(account.id),
-            )
-            .await?;
-    }
+    record_admin_operation_signed(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        &key_store,
+        &service_did,
+        contrix_config.audit_signature_fail_closed,
+        admin_user.as_ref(),
+        AdminOperation::Other(format!("account_{}_proposal_executed", params.action)),
+        "account",
+        Some(account.id),
+        serde_json::json!({
+            "state_record_id": state_record_id,
+            "state_store_kind": state_store_kind,
+            "state_revision": state_revision,
+            "proposal_id": proposal_id,
+            "action": params.action,
+            "transition_kind": "proposal_executed",
+            "previous_state": existing.state.as_str(),
+            "next_state": "mutation_recorded",
+            "mutation_kind": mutation.mutation_kind,
+            "mutation_description": mutation.mutation_description,
+            "principal_erase": mutation.principal_erase,
+            "ticket": params.ticket,
+            "executed_by": admin_user.as_ref().map(|user| user.id.to_string()),
+            "executed_by_handle": admin_user.as_ref().map(|user| user.handle.as_str()),
+            "execution_note": params.execution_note,
+            "mutation_endpoint": mutation_endpoint,
+            "allowed_next_transitions": allowed_next_transitions.clone(),
+            "todo": todo,
+        }),
+    )
+    .await?;
     repo.save().await?;
 
     let account_response = SingleResponse::new_canonical(

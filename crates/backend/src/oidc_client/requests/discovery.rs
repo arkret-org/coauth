@@ -22,6 +22,8 @@ use url::Url;
 use super::super::error::DiscoveryError;
 use crate::outbound_http::RequestBuilderExt;
 
+const MAX_PROVIDER_METADATA_BYTES: usize = 1_048_576;
+
 /// Fetch the provider metadata.
 async fn discover_inner(
     client: &reqwest::Client,
@@ -45,9 +47,24 @@ async fn discover_inner(
         .get(config_url.as_str())
         .send_traced()
         .await?
-        .error_for_status()?
-        .json()
-        .await?;
+        .error_for_status()?;
+    if response
+        .content_length()
+        .is_some_and(|len| len > MAX_PROVIDER_METADATA_BYTES as u64)
+    {
+        return Err(DiscoveryError::ResponseTooLarge {
+            limit: MAX_PROVIDER_METADATA_BYTES,
+            actual: usize::MAX,
+        });
+    }
+    let bytes = response.bytes().await?;
+    if bytes.len() > MAX_PROVIDER_METADATA_BYTES {
+        return Err(DiscoveryError::ResponseTooLarge {
+            limit: MAX_PROVIDER_METADATA_BYTES,
+            actual: bytes.len(),
+        });
+    }
+    let response = serde_json::from_slice(&bytes)?;
 
     tracing::debug!(?response);
 
