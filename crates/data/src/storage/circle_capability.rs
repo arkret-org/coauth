@@ -16,8 +16,8 @@ pub struct NewCircleCapabilityGrant {
     pub realm_id: String,
     /// Capability action authorized by this grant.
     pub action: CircleCapabilityAction,
-    /// Canonical sorted/deduplicated Circle refs allowed by the grant.
-    pub allowed_circle_refs: Vec<String>,
+    /// Canonical sorted/deduplicated Circle IDs allowed by the grant.
+    pub allowed_circle_ids: Vec<String>,
     /// Admin/service actor that created the grant.
     pub granted_by: String,
 }

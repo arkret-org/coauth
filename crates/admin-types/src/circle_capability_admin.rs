@@ -7,10 +7,10 @@
 //! | action                       | risk   | required_constraints     |
 //! |------------------------------|--------|--------------------------|
 //! | `cx.circle.create`           | medium | (none)                   |
-//! | `cx.circle.manage`           | medium | `allowed_circle_refs`    |
+//! | `cx.circle.manage`           | medium | `allowed_circle_ids`     |
 //! | `cx.circle.member.add`       | low    | (none)                   |
-//! | `cx.circle.member.manage`    | medium | `allowed_circle_refs`    |
-//! | `cx.circle.member.add.others`| high   | `allowed_circle_refs`    |
+//! | `cx.circle.member.manage`    | medium | `allowed_circle_ids`     |
+//! | `cx.circle.member.add.others`| high   | `allowed_circle_ids`     |
 //! | `cx.circle.audit`            | high   | (none, requires pairing) |
 //!
 //! Source: contrix-spec
@@ -36,7 +36,7 @@ pub enum CircleCapabilityAction {
     #[serde(rename = "cx.circle.create")]
     Create,
     /// `cx.circle.manage` — update / archive / restore / tombstone an
-    /// existing Circle. Requires `allowed_circle_refs` constraint.
+    /// existing Circle. Requires `allowed_circle_ids` constraint.
     #[serde(rename = "cx.circle.manage")]
     Manage,
     /// `cx.circle.member.add` — add the *authenticated principal* to a
@@ -48,7 +48,7 @@ pub enum CircleCapabilityAction {
     #[serde(rename = "cx.circle.member.manage")]
     MemberManage,
     /// `cx.circle.member.add.others` — invite/add other principals into a
-    /// Circle. High-risk; always requires `allowed_circle_refs`.
+    /// Circle. High-risk; always requires `allowed_circle_ids`.
     #[serde(rename = "cx.circle.member.add.others")]
     MemberAddOthers,
     /// `cx.circle.audit` — read audit events for the Circle. Paired with
@@ -86,10 +86,10 @@ impl CircleCapabilityAction {
     }
 
     /// Whether the action requires the operator to scope it to a finite
-    /// set of Circle IDs via `allowed_circle_refs`. Mirrors the spec's
+    /// set of Circle IDs via `allowed_circle_ids`. Mirrors the spec's
     /// `required_constraints` field.
     #[must_use]
-    pub fn requires_allowed_circle_refs(&self) -> bool {
+    pub fn requires_allowed_circle_ids(&self) -> bool {
         matches!(
             self,
             Self::Manage | Self::MemberManage | Self::MemberAddOthers
@@ -166,10 +166,10 @@ pub struct CircleCapabilityGrant {
     /// The capability action this grant authorizes.
     pub action: CircleCapabilityAction,
     /// Optional set of typed Circle IDs the grant is limited to. Required
-    /// for actions that have `allowed_circle_refs` in their
+    /// for actions that have `allowed_circle_ids` in their
     /// `required_constraints`; empty for unconstrained grants.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub allowed_circle_refs: Vec<String>,
+    pub allowed_circle_ids: Vec<String>,
     /// Who granted it (admin DID or `system`).
     pub granted_by: String,
     /// RFC 3339 grant timestamp.
@@ -190,7 +190,7 @@ pub struct CreateCircleCapabilityGrant {
     pub realm_id: String,
     pub action: CircleCapabilityAction,
     #[serde(default)]
-    pub allowed_circle_refs: Vec<String>,
+    pub allowed_circle_ids: Vec<String>,
 }
 
 impl CreateCircleCapabilityGrant {
@@ -208,9 +208,9 @@ impl CreateCircleCapabilityGrant {
         if self.realm_id.is_empty() {
             return Err("realm_id is required".into());
         }
-        if self.action.requires_allowed_circle_refs() && self.allowed_circle_refs.is_empty() {
+        if self.action.requires_allowed_circle_ids() && self.allowed_circle_ids.is_empty() {
             return Err(format!(
-                "action `{}` requires non-empty allowed_circle_refs",
+                "action `{}` requires non-empty allowed_circle_ids",
                 self.action.as_action_str()
             ));
         }
@@ -264,9 +264,9 @@ mod tests {
     }
 
     #[test]
-    fn allowed_circle_refs_required_only_for_scoped_actions() {
+    fn allowed_circle_ids_required_only_for_scoped_actions() {
         for action in CircleCapabilityAction::all() {
-            let needs = action.requires_allowed_circle_refs();
+            let needs = action.requires_allowed_circle_ids();
             let expected = matches!(
                 action,
                 CircleCapabilityAction::Manage
@@ -283,7 +283,7 @@ mod tests {
             subject: "user:alice".into(),
             realm_id: "cx:realm:1".into(),
             action: CircleCapabilityAction::Manage,
-            allowed_circle_refs: vec![],
+            allowed_circle_ids: vec![],
         };
         assert!(req.validate().is_err());
     }
@@ -294,7 +294,7 @@ mod tests {
             subject: "user:alice".into(),
             realm_id: "cx:realm:1".into(),
             action: CircleCapabilityAction::Manage,
-            allowed_circle_refs: vec!["cx:circle:abc".into()],
+            allowed_circle_ids: vec!["cx:circle:abc".into()],
         };
         assert!(req.validate().is_ok());
     }

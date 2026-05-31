@@ -2,14 +2,14 @@
 
 This chapter covers the deployment-time posture decisions that affect how
 **strictly** coauth enforces accountability and revocation. The single most
-important toggle is the `cx.profile.accountable_to.strict_reject.v1`
+important toggle is the `cx.profile.accountable_principals.strict_reject.v1`
 profile, which converts soft warnings into hard rejects across the
-`accountable_to` chain.
+`accountable_principal_ids` chain.
 
-## `accountable_to.strict_reject` profile
+## `accountable_principals.strict_reject` profile
 
 By default, coauth runs a **lenient** accountability posture: stale or
-unknown links in the `accountable_to` chain log a structured warning but
+unknown links in the `accountable_principal_ids` chain log a structured warning but
 do not block session-grant decisions. This is the safe default for
 multi-tenant deployments where some peers haven't yet upgraded their
 accountability shape and a hard reject would cascade into user-visible
@@ -73,7 +73,7 @@ Once you flip the profile on:
    issues a `cx.realm.profile.update` with the strict-reject profile
    declared).
 5. Watch for 30 minutes:
-   - `coauth_accountable_to_reject_total{profile="strict"}` — should rise
+   - `coauth_accountable_principals_reject_total{profile="strict"}` — should rise
      from zero, level off within the staleness baseline +20%.
    - `coauth_session_grant_failure_total{reason="agent_paused" | "agent_deactivated" | "accountability_grant_missing"}` — applies only after the
      deferred agent runtime surface is routed; then it should remain at the
@@ -85,7 +85,7 @@ Once you flip the profile on:
 
 Strict-reject is an auditable posture change. Both the flip-on and
 flip-off events MUST appear in the audit log under the kind
-`profile.accountable_to.strict_reject.flip`. The audit row carries:
+`profile.accountable_principals.strict_reject.flip`. The audit row carries:
 
 - `realm_id`
 - `direction` (`on` or `off`)
@@ -95,7 +95,7 @@ flip-off events MUST appear in the audit log under the kind
 - `justification` free-form string (operator-supplied)
 
 While strict-reject is active, every reject also produces an audit row
-under `accountable_to.strict_reject.reject`:
+under `accountable_principals.strict_reject.reject`:
 
 - `realm_id`
 - `chain_anchor` (the offending principal)
@@ -140,13 +140,13 @@ verification.
 To rollback strict-reject:
 
 1. Operator issues another `cx.realm.profile.update` removing the
-   `cx.profile.accountable_to.strict_reject.v1` profile from the realm's
+   `cx.profile.accountable_principals.strict_reject.v1` profile from the realm's
    declared profile set.
 2. In-flight rejects already audited remain audited; no further reject
    decisions fire.
 3. coauth restores the default lenient posture on the next mirror refresh
    (within `revocation_freshness_window`).
-4. Audit a `profile.accountable_to.strict_reject.flip` row with
+4. Audit a `profile.accountable_principals.strict_reject.flip` row with
    `direction = off`.
 
 The toggle is **realm-scoped**, not deployment-global. A single coauth

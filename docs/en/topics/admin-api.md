@@ -409,10 +409,10 @@ CXP-0007 capability actions:
 | action                        | risk   | required constraint        |
 |-------------------------------|--------|----------------------------|
 | `cx.circle.create`            | medium | (none)                     |
-| `cx.circle.manage`            | medium | `allowed_circle_refs`      |
+| `cx.circle.manage`            | medium | `allowed_circle_ids`       |
 | `cx.circle.member.add`        | low    | (none)                     |
-| `cx.circle.member.manage`     | medium | `allowed_circle_refs`      |
-| `cx.circle.member.add.others` | high   | `allowed_circle_refs`      |
+| `cx.circle.member.manage`     | medium | `allowed_circle_ids`       |
+| `cx.circle.member.add.others` | high   | `allowed_circle_ids`       |
 | `cx.circle.audit`             | high   | (paired with audit check)  |
 
 Endpoints:

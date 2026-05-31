@@ -931,7 +931,7 @@ pub struct HandleClaimDeliveryBindingHint {
 }
 
 /// Detached-JWS proof attached to a `handle_claim`. Lightweight mirror of
-/// `event-schema.json#/$defs/proof`.
+/// `event-envelope.schema.json#/$defs/proof`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandleClaimProof {
     #[serde(rename = "type")]

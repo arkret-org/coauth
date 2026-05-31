@@ -82,21 +82,22 @@ pub fn is_circle_selector(selector: &str) -> bool {
 }
 
 /// POLICY-1: deployment-level "strict reject" mode for unverified
-/// `accountable_to[]` entries. When the `cx.profile.accountable_to.
-/// strict_reject.v1` profile is declared by the deployment, Actor Profile
-/// create/update events that carry unverified `accountable_to[]` entries
+/// `accountable_principal_ids[]` entries. When the
+/// `cx.profile.accountable_principals.strict_reject.v1` profile is
+/// declared by the deployment, Actor Profile create/update events that
+/// carry unverified `accountable_principal_ids[]` entries
 /// MUST be rejected wholesale with `failed_precondition /
 /// accountability_grant_missing`. Otherwise, the legacy strip+audit-log
 /// path applies.
 ///
 /// Signalled to the reducer / submit endpoint via shared policy
-/// decisions: see [`PolicyDecision::strict_reject_accountable_to`] and
+/// decisions: see [`PolicyDecision::strict_reject_accountable_principals`] and
 /// the `obligations[]` carrying the `accountability_grant_required`
 /// kind so the caller knows the reducer will hard-reject rather than
 /// strip.
 #[must_use]
 pub fn strict_reject_profile_active(profile_ids: &[&str]) -> bool {
-    profile_ids.contains(&"cx.profile.accountable_to.strict_reject.v1")
+    profile_ids.contains(&"cx.profile.accountable_principals.strict_reject.v1")
 }
 
 #[derive(Debug, Error)]
@@ -183,9 +184,9 @@ impl PolicyDecision {
     }
 
     /// POLICY-1: signal "strict reject" mode for the
-    /// `cx.profile.accountable_to.strict_reject.v1` deployment profile.
+    /// `cx.profile.accountable_principals.strict_reject.v1` deployment profile.
     /// When the profile is declared, Actor Profile create/update events
-    /// containing unverified `accountable_to[]` entries MUST be rejected
+    /// containing unverified `accountable_principal_ids[]` entries MUST be rejected
     /// with `failed_precondition / accountability_grant_missing` (the
     /// reducer and submit endpoint use this signal to short-circuit the
     /// legacy strip+audit path).
@@ -196,7 +197,7 @@ impl PolicyDecision {
     /// string so downstream consumers can render the exact registry
     /// rejection.
     #[must_use]
-    pub fn strict_reject_accountable_to(policy_version: String) -> Self {
+    pub fn strict_reject_accountable_principals(policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::Deny,
             reason_code: "failed_precondition".to_owned(),
@@ -205,7 +206,7 @@ impl PolicyDecision {
                 expires_at: None,
                 payload: serde_json::json!({
                     "reason": contrix_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING,
-                    "profile": "cx.profile.accountable_to.strict_reject.v1",
+                    "profile": "cx.profile.accountable_principals.strict_reject.v1",
                 }),
             }],
             policy_version,
@@ -296,9 +297,9 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
 
     // POLICY-1 (R3 spec-sync) — if the loose JSON declares the
     // `strict_reject_profile` flag (deployment has enabled
-    // `cx.profile.accountable_to.strict_reject.v1`), AND the request
+    // `cx.profile.accountable_principals.strict_reject.v1`), AND the request
     // carries an Actor Profile create/update with an unverified
-    // `accountable_to[]` entry, short-circuit with
+    // `accountable_principal_ids[]` entry, short-circuit with
     // `failed_precondition / accountability_grant_missing`. Only the
     // explicit flag form is checked here — the reducer-side strict
     // path lives in soland.
@@ -309,11 +310,11 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
         && action_str.starts_with("cx.actor.profile.")
         && request
             .event_preview
-            .get("accountable_to_unverified")
+            .get("accountable_principal_ids_unverified")
             .and_then(Value::as_bool)
             .unwrap_or(false)
     {
-        return PolicyDecision::strict_reject_accountable_to(policy_version.to_owned());
+        return PolicyDecision::strict_reject_accountable_principals(policy_version.to_owned());
     }
 
     // Per-realm scope: rules MAY be nested under a `realms` object keyed
@@ -528,7 +529,7 @@ mod tests {
             "strict_reject_profile": true,
         });
         let mut r = req("did:web:alice.example", "cx.actor.profile.update");
-        r.event_preview = serde_json::json!({ "accountable_to_unverified": true });
+        r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Deny));
         assert_eq!(d.reason_code, "failed_precondition");
@@ -540,7 +541,7 @@ mod tests {
     fn policy1_strict_reject_inert_when_profile_off() {
         let data = serde_json::json!({});
         let mut r = req("did:web:alice.example", "cx.actor.profile.update");
-        r.event_preview = serde_json::json!({ "accountable_to_unverified": true });
+        r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
     }

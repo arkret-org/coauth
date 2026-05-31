@@ -3,7 +3,7 @@ CREATE TABLE circle_capability_grants (
     subject TEXT NOT NULL,
     realm_id TEXT NOT NULL,
     action TEXT NOT NULL,
-    allowed_circle_refs TEXT[] NOT NULL DEFAULT '{}',
+    allowed_circle_ids TEXT[] NOT NULL DEFAULT '{}',
     granted_by TEXT NOT NULL,
     granted_at TIMESTAMPTZ NOT NULL,
     revoked_at TIMESTAMPTZ,
@@ -12,7 +12,7 @@ CREATE TABLE circle_capability_grants (
 );
 
 CREATE UNIQUE INDEX circle_capability_grants_active_fingerprint_idx
-    ON circle_capability_grants (subject, realm_id, action, allowed_circle_refs)
+    ON circle_capability_grants (subject, realm_id, action, allowed_circle_ids)
     WHERE revoked_at IS NULL;
 
 CREATE INDEX circle_capability_grants_active_realm_subject_idx

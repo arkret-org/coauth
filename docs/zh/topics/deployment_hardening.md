@@ -1,13 +1,13 @@
 # 部署强化（Deployment Hardening）
 
 本章讨论影响 coauth 对可问责性（accountability）和撤销链路严格程度的
-部署级开关。最重要的单个开关是 `cx.profile.accountable_to.strict_reject.v1`
+部署级开关。最重要的单个开关是 `cx.profile.accountable_principals.strict_reject.v1`
 profile，它将默认的“软警告”姿态切换为“硬拒绝”。
 
-## `accountable_to.strict_reject` profile
+## `accountable_principals.strict_reject` profile
 
 默认情况下，coauth 运行在**宽松**可问责性姿态：
-`accountable_to` 链上陈旧或未知的环节只会记录结构化告警，不会阻断
+`accountable_principal_ids` 链上陈旧或未知的环节只会记录结构化告警，不会阻断
 session grant 签发。这是多租户部署下的安全默认值——某些对端尚未升级
 其可问责性形状，硬拒绝会直接造成用户可见的故障级联。
 
@@ -59,7 +59,7 @@ session grant 签发。这是多租户部署下的安全默认值——某些对
 4. 由 realm 运营者发出 `cx.realm.profile.update`，将
    strict-reject profile 加入 realm 已声明的 profile 集合。
 5. 持续观察 30 分钟：
-   - `coauth_accountable_to_reject_total{profile="strict"}` —— 从 0 起跳
+   - `coauth_accountable_principals_reject_total{profile="strict"}` —— 从 0 起跳
      后，应在“陈旧基线 + 20%”范围内趋稳。
    - `coauth_session_grant_failure_total{reason="agent_paused" | "agent_deactivated" | "accountability_grant_missing"}` —— 仅在暂缓的 agent runtime
      接口接线后适用；届时应保持在 flip 前的基线。
@@ -70,7 +70,7 @@ session grant 签发。这是多租户部署下的安全默认值——某些对
 
 Strict-reject 是一项可审计的姿态变化。flip-on / flip-off 都 **必须** 出
 现在审计日志中，事件 kind 为
-`profile.accountable_to.strict_reject.flip`。该审计行携带：
+`profile.accountable_principals.strict_reject.flip`。该审计行携带：
 
 - `realm_id`
 - `direction`（`on` 或 `off`）
@@ -80,7 +80,7 @@ Strict-reject 是一项可审计的姿态变化。flip-on / flip-off 都 **必�
 - `justification`（操作者填写的自由文本）
 
 在 strict-reject 生效期间，每一次拒绝还会产生一行
-`accountable_to.strict_reject.reject` 审计行：
+`accountable_principals.strict_reject.reject` 审计行：
 
 - `realm_id`
 - `chain_anchor`（被拒绝的链锚 Principal）
@@ -96,13 +96,13 @@ Strict-reject 是一项可审计的姿态变化。flip-on / flip-off 都 **必�
 回滚 strict-reject：
 
 1. 运营者再发一次 `cx.realm.profile.update`，将
-   `cx.profile.accountable_to.strict_reject.v1` 从 realm 已声明的
+   `cx.profile.accountable_principals.strict_reject.v1` 从 realm 已声明的
    profile 集合中移除。
 2. 已审计的在途拒绝保持已审计状态；不再触发新的拒绝判断。
 3. coauth 在下一次镜像刷新内（`revocation_freshness_window` 内）恢复默
    认宽松姿态。
 4. 写入一行 `direction = off` 的
-   `profile.accountable_to.strict_reject.flip` 审计行。
+   `profile.accountable_principals.strict_reject.flip` 审计行。
 
 开关粒度是 **realm 级**，不是部署全局级。同一个 coauth 部署可以同时为
 某些 realm 启用 strict-reject，为另一些 realm 维持默认姿态。

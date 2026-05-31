@@ -109,7 +109,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
         .as_ref()
         .map_or_else(|| "service".to_owned(), |u| format!("user:{}", u.id));
 
-    canonicalize_circle_refs(&mut body.allowed_circle_refs);
+    canonicalize_circle_ids(&mut body.allowed_circle_ids);
     let mut rng = make_rng();
     let mut repo = call_context.repo;
     let grant = repo
@@ -121,7 +121,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
                 subject: body.subject,
                 realm_id: body.realm_id,
                 action: body.action,
-                allowed_circle_refs: body.allowed_circle_refs,
+                allowed_circle_ids: body.allowed_circle_ids,
                 granted_by: actor_did,
             },
         )
@@ -173,9 +173,9 @@ pub async fn revoke_handler(
     }
 }
 
-fn canonicalize_circle_refs(refs: &mut Vec<String>) {
-    refs.sort();
-    refs.dedup();
+fn canonicalize_circle_ids(ids: &mut Vec<String>) {
+    ids.sort();
+    ids.dedup();
 }
 
 #[cfg(test)]
@@ -185,14 +185,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn canonicalize_circle_refs_sorts_and_deduplicates() {
-        let mut refs = vec![
+    fn canonicalize_circle_ids_sorts_and_deduplicates() {
+        let mut ids = vec![
             "cx:circle:c".to_owned(),
             "cx:circle:a".to_owned(),
             "cx:circle:c".to_owned(),
         ];
-        canonicalize_circle_refs(&mut refs);
-        assert_eq!(refs, vec!["cx:circle:a", "cx:circle:c"]);
+        canonicalize_circle_ids(&mut ids);
+        assert_eq!(ids, vec!["cx:circle:a", "cx:circle:c"]);
     }
 
     #[test]
@@ -201,7 +201,7 @@ mod tests {
             subject: "user:alice".into(),
             realm_id: "cx:realm:demo".into(),
             action: CircleCapabilityAction::Manage,
-            allowed_circle_refs: vec![],
+            allowed_circle_ids: vec![],
         };
         assert!(req.validate().is_err());
     }

@@ -96,7 +96,7 @@ diesel::table! {
         subject -> Text,
         realm_id -> Text,
         action -> Text,
-        allowed_circle_refs -> Array<Text>,
+        allowed_circle_ids -> Array<Text>,
         granted_by -> Text,
         granted_at -> Timestamptz,
         revoked_at -> Nullable<Timestamptz>,
