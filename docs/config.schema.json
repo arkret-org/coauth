@@ -796,7 +796,7 @@
           }
         },
         "proxy_protocol": {
-          "description": "Enable HAProxy PROXY protocol v1 on accepted connections",
+          "description": "Enable `HAProxy` PROXY protocol v1 on accepted connections",
           "type": "boolean",
           "default": false
         },
@@ -1352,6 +1352,13 @@
             "null"
           ]
         },
+        "session_grant_ttl": {
+          "description": "Lifetime of Contrix session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and refreshed through\n`/api/v1/session-grants/refresh`. Default: 300 (5 min).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 60,
+          "maximum": 86400
+        },
         "admin_audience": {
           "description": "Audience string expected by Contrix admin integrations.\n\nWhen omitted, the backend falls back to the local `/api/v1` endpoint.",
           "type": [
@@ -1373,6 +1380,44 @@
           "format": "uint32",
           "minimum": 0,
           "default": 2
+        },
+        "trust_domain": {
+          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `cx:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `cx.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically injected into `soland` via its config API on first\nboot; see `services::onboarding_starid` for the call site.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "oob_code_kind": {
+          "description": "Round R2/R3 (2026-05-20) — selects the OOB code mint form for\n3PID invites. Default `OfflineVerifiable` mints a ≥128-bit\nopaque token; `Lookup` mints a short human-typeable code with\nserver-side pepper + 3-strike invalidation. See\n`backend::services::oob_code` for the implementation.",
+          "default": "offline_verifiable",
+          "allOf": [
+            {
+              "$ref": "#/definitions/OobCodeKindConfig"
+            }
+          ]
+        },
+        "password_login_session_grants_enabled": {
+          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nContrix principal-server session grant directly from\n`POST /api/v1/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
+          "type": "boolean"
+        },
+        "admin_org_id": {
+          "description": "Deployment-scoped organization id accepted by the Admin API.\n\ncoauth does not yet model true multi-tenant ownership on every entity.\nSetting this makes admin requests supply the same\n`x-coauth-org-id` value and rejects all other orgs, so a deployment can\nfail closed instead of pretending cross-tenant admin isolation exists.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification_service_did": {
+          "description": "Round 4 — DID of the trusted 3PID verification service whose\n`binding_proof` JWTs this coauth deployment will accept on\n`POST /api/v1/invites/3pid/verify`. When omitted, the invite\nverifier endpoint returns `503 verifier_not_configured` because\nit has no trusted `iss` to compare against.\n\nOverride at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audit_signature_fail_closed": {
+          "description": "Require signed admin-audit writes to succeed before committing\nsecurity-sensitive admin mutations. Defaults to `false` so existing\ndeployments tolerate missing service signing keys during rollout; set\nto `true` in production once JWKS publication and key rotation are\noperational.",
+          "type": "boolean"
         }
       }
     },
@@ -1502,6 +1547,21 @@
       },
       "required": [
         "base_url"
+      ]
+    },
+    "OobCodeKindConfig": {
+      "description": "Round R2/R3 — wire-config mirror of\n`backend::services::oob_code::OobCodeKind`. Lives in `config` so\nschema export can reach it without pulling the backend crate.",
+      "oneOf": [
+        {
+          "description": "Form 1 — offline-verifiable, ≥128-bit token.",
+          "type": "string",
+          "const": "offline_verifiable"
+        },
+        {
+          "description": "Form 2 — short lookup-style code; requires a server-side pepper\nand 3-strike invalidation.",
+          "type": "string",
+          "const": "lookup"
+        }
       ]
     },
     "TelemetryConfig": {
@@ -1882,7 +1942,7 @@
           ]
         },
         {
-          "description": "Deliver through the SendGrid email API",
+          "description": "Deliver through the `SendGrid` email API",
           "type": "object",
           "properties": {
             "type": {
@@ -1900,7 +1960,7 @@
           ]
         },
         {
-          "description": "Deliver through Twilio SendGrid",
+          "description": "Deliver through Twilio `SendGrid`",
           "type": "object",
           "properties": {
             "type": {
@@ -2143,7 +2203,7 @@
       ]
     },
     "SendgridWebhookConfig": {
-      "description": "SendGrid event webhook verification settings",
+      "description": "`SendGrid` event webhook verification settings",
       "type": "object",
       "properties": {
         "public_key_pem": {
@@ -2156,15 +2216,15 @@
       ]
     },
     "SendgridEmailProviderConfig": {
-      "description": "SendGrid email API delivery settings",
+      "description": "`SendGrid` email API delivery settings",
       "type": "object",
       "properties": {
         "api_key": {
-          "description": "SendGrid API key",
+          "description": "`SendGrid` API key",
           "type": "string"
         },
         "base_url": {
-          "description": "Base URL for the SendGrid API",
+          "description": "Base URL for the `SendGrid` API",
           "type": "string",
           "default": "https://api.sendgrid.com"
         },
@@ -2185,15 +2245,15 @@
       ]
     },
     "TwilioEmailProviderConfig": {
-      "description": "Twilio email API delivery settings.\n\nTwilio email delivery is implemented via Twilio SendGrid's mail send API.",
+      "description": "Twilio email API delivery settings.\n\nTwilio email delivery is implemented via Twilio `SendGrid`'s mail send API.",
       "type": "object",
       "properties": {
         "api_key": {
-          "description": "Twilio SendGrid API key",
+          "description": "Twilio `SendGrid` API key",
           "type": "string"
         },
         "base_url": {
-          "description": "Base URL for the Twilio SendGrid API",
+          "description": "Base URL for the Twilio `SendGrid` API",
           "type": "string",
           "default": "https://api.sendgrid.com"
         },
@@ -3190,7 +3250,7 @@
       "type": "object",
       "properties": {
         "per_account": {
-          "description": "Max TOTP attempts per account_id over a sliding window.\nDefault: 5 attempts per 15 minutes — matches NIST SP 800-63B\nguidance for time-based OTP throttling.",
+          "description": "Max TOTP attempts per `account_id` over a sliding window.\nDefault: 5 attempts per 15 minutes — matches NIST SP 800-63B\nguidance for time-based OTP throttling.",
           "default": {
             "burst": 5,
             "per_second": 0.005555555555555556
@@ -3432,22 +3492,22 @@
           "const": "none"
         },
         {
-          "description": "`client_secret_basic`: HTTP Basic auth with client_id and client_secret",
+          "description": "`client_secret_basic`: HTTP Basic auth with `client_id` and `client_secret`",
           "type": "string",
           "const": "client_secret_basic"
         },
         {
-          "description": "`client_secret_post`: client_id and client_secret in the POST body",
+          "description": "`client_secret_post`: `client_id` and `client_secret` in the POST body",
           "type": "string",
           "const": "client_secret_post"
         },
         {
-          "description": "`client_secret_jwt`: signed client_assertion using the client_secret",
+          "description": "`client_secret_jwt`: signed `client_assertion` using the `client_secret`",
           "type": "string",
           "const": "client_secret_jwt"
         },
         {
-          "description": "`private_key_jwt`: signed client_assertion using an asymmetric key",
+          "description": "`private_key_jwt`: signed `client_assertion` using an asymmetric key",
           "type": "string",
           "const": "private_key_jwt"
         },
@@ -3472,17 +3532,17 @@
           "const": "lark"
         },
         {
-          "description": "`dingtalk`: DingTalk OAuth flow",
+          "description": "`dingtalk`: `DingTalk` OAuth flow",
           "type": "string",
           "const": "ding_talk"
         },
         {
-          "description": "`wechat`: WeChat Open Platform OAuth flow",
+          "description": "`wechat`: `WeChat` Open Platform OAuth flow",
           "type": "string",
           "const": "we_chat"
         },
         {
-          "description": "`wecom`: WeCom (Enterprise WeChat) OAuth flow",
+          "description": "`wecom`: `WeCom` (Enterprise `WeChat`) OAuth flow",
           "type": "string",
           "const": "we_com"
         }
@@ -4087,7 +4147,7 @@
           ]
         },
         {
-          "description": "S3-compatible object storage (AWS S3, Cloudflare R2, MinIO, etc.).",
+          "description": "S3-compatible object storage (AWS S3, Cloudflare R2, `MinIO`, etc.).",
           "type": "object",
           "properties": {
             "bucket": {
@@ -4126,7 +4186,7 @@
               "default": "media/"
             },
             "path_style": {
-              "description": "Enable path-style access (required for MinIO).",
+              "description": "Enable path-style access (required for `MinIO`).",
               "type": "boolean",
               "default": false
             },

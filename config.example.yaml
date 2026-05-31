@@ -82,6 +82,9 @@ passwords:
   minimum_complexity: 3
 contrix:
   principal_server_url: https://local.host/
+  # Lifetime, in seconds, of Contrix session-grant JWTs returned by the
+  # REST auth bridge login/exchange paths. Default: 300 (5 minutes).
+  session_grant_ttl: 300
   # Keep false during rollout; set true in production after service signing
   # keys and JWKS publication are operational.
   audit_signature_fail_closed: false

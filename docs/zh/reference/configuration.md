@@ -87,6 +87,7 @@ contrix:
   service_did: did:web:auth.example.com
   issuer_did: did:web:auth.example.com
   admin_audience: https://auth.example.com/api/v1
+  session_grant_ttl: 300
 ```
 
 - `principal_servers`：通过 Contrix discovery 发布的受信任 Principal Server 描述
@@ -94,6 +95,8 @@ contrix:
 - `service_did`：显式 service DID；未配置时从 `http.public_base` 推导
 - `issuer_did`：session grant 中写入的 DID；默认继承 `service_did`
 - `admin_audience`：Contrix admin 集成期望的 audience；默认回退到本地 `/api/v1`
+- `session_grant_ttl`：REST auth bridge 登录/交换路径以及 refresh endpoint
+  返回的 Contrix session-grant JWT 生命周期，单位秒；默认 `300`（5 分钟）。
 
 ## `templates`
 

@@ -90,6 +90,7 @@ contrix:
   service_did: did:web:auth.example.com
   issuer_did: did:web:auth.example.com
   admin_audience: https://auth.example.com/api/v1
+  session_grant_ttl: 300
 ```
 
 - `principal_servers`: trusted Principal Server descriptors published through
@@ -99,6 +100,9 @@ contrix:
 - `issuer_did`: DID emitted in session grants, defaults to `service_did`
 - `admin_audience`: audience expected by Contrix admin integrations, defaults
   to the local `/api/v1` endpoint
+- `session_grant_ttl`: lifetime in seconds for Contrix session-grant JWTs
+  returned by the REST auth bridge login/exchange paths and refresh endpoint.
+  Default: `300` (5 minutes).
 
 ## `templates`
 

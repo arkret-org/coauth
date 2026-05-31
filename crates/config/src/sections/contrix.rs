@@ -1,5 +1,7 @@
+use chrono::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use url::Url;
 
 use super::ConfigurationSection;
@@ -13,9 +15,21 @@ use super::ConfigurationSection;
 /// [`validate_trust_domain`].
 const TRUST_DOMAIN_PREFIX: &str = "cx:trust_domain:";
 const TRUST_DOMAIN_MAX_SCOPE_LEN: usize = 128;
+const SESSION_GRANT_TTL_MICROS: i64 = 5 * 60 * 1_000_000;
+const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
+const SESSION_GRANT_TTL_MAX_SECONDS: i64 = 86_400;
+
+fn default_session_grant_ttl() -> Duration {
+    Duration::microseconds(SESSION_GRANT_TTL_MICROS)
+}
+
+fn session_grant_ttl_is_default(ttl: &Duration) -> bool {
+    *ttl == default_session_grant_ttl()
+}
 
 /// Contrix-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ContrixConfig {
     /// Principal Server audiences trusted to consume session grants and admin
@@ -46,6 +60,19 @@ pub struct ContrixConfig {
     /// documents. Defaults to `service_did`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer_did: Option<String>,
+
+    /// Lifetime of Contrix session grants, in seconds.
+    ///
+    /// These are the DPoP-bound JWT grants returned by the REST auth bridge
+    /// login/exchange paths and refreshed through
+    /// `/api/v1/session-grants/refresh`. Default: 300 (5 min).
+    #[schemars(with = "u64", range(min = 60, max = 86400))]
+    #[serde(
+        default = "default_session_grant_ttl",
+        skip_serializing_if = "session_grant_ttl_is_default"
+    )]
+    #[serde_as(as = "serde_with::DurationSeconds<i64>")]
+    pub session_grant_ttl: Duration,
 
     /// Audience string expected by Contrix admin integrations.
     ///
@@ -155,6 +182,7 @@ impl Default for ContrixConfig {
             starid: None,
             service_did: None,
             issuer_did: None,
+            session_grant_ttl: default_session_grant_ttl(),
             admin_audience: None,
             principal_server_url: None,
             high_risk_threshold: default_high_risk_threshold(),
@@ -177,6 +205,7 @@ impl ContrixConfig {
             && self.starid.is_none()
             && self.service_did.is_none()
             && self.issuer_did.is_none()
+            && session_grant_ttl_is_default(&self.session_grant_ttl)
             && self.admin_audience.is_none()
             && self.principal_server_url.is_none()
             && self.high_risk_threshold == default_high_risk_threshold()
@@ -250,6 +279,15 @@ impl ConfigurationSection for ContrixConfig {
         &self,
         _figment: &figment::Figment,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        let min_ttl = Duration::try_seconds(SESSION_GRANT_TTL_MIN_SECONDS).unwrap();
+        let max_ttl = Duration::try_seconds(SESSION_GRANT_TTL_MAX_SECONDS).unwrap();
+        if self.session_grant_ttl < min_ttl || self.session_grant_ttl > max_ttl {
+            return Err(std::io::Error::other(
+                "contrix.session_grant_ttl must be between 60 and 86400 seconds",
+            )
+            .into());
+        }
+
         if let Some(trust_domain) = self.trust_domain.as_deref() {
             Self::validate_trust_domain(trust_domain).map_err(std::io::Error::other)?;
         }
@@ -418,6 +456,32 @@ mod tests {
             ..ContrixConfig::default()
         };
         let figment = figment::Figment::new();
+        assert!(config.validate(&figment).is_err());
+    }
+
+    #[test]
+    fn session_grant_ttl_defaults_to_five_minutes() {
+        assert_eq!(
+            ContrixConfig::default().session_grant_ttl,
+            Duration::try_minutes(5).unwrap()
+        );
+    }
+
+    #[test]
+    fn session_grant_ttl_deserializes_seconds() {
+        let config: ContrixConfig =
+            serde_json::from_value(serde_json::json!({ "session_grant_ttl": 900 })).unwrap();
+
+        assert_eq!(config.session_grant_ttl, Duration::try_minutes(15).unwrap());
+    }
+
+    #[test]
+    fn session_grant_ttl_rejects_out_of_range_values() {
+        let figment = figment::Figment::new();
+        let config = ContrixConfig {
+            session_grant_ttl: Duration::try_seconds(30).unwrap(),
+            ..ContrixConfig::default()
+        };
         assert!(config.validate(&figment).is_err());
     }
 }

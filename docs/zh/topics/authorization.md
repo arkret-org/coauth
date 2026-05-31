@@ -24,6 +24,9 @@ Principal Server 应验证 `cx.session.grant` 来执行下游账号和设备访�
 包含 issuer service DID、subject principal DID、service account ID、可选 device
 ID、audience、scope、expiry、revocation reference 以及 proof block。
 
+session-grant JWT 默认生命周期为 300 秒，可通过配置文件中的
+`contrix.session_grant_ttl` 调整。
+
 `POST /api/v1/session-grants/introspect` 接受 grant ID 或 signed grant JWT，并可附带
 audience。响应只返回 `active`、标准状态（`active`、`revoked`、`expired`、`locked`、
 `suspended`、`audience_mismatch`、`not_found`）和非敏感元数据，不返回已存储 JWT、

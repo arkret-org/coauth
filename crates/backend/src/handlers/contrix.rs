@@ -27,7 +27,6 @@ use crate::handlers::common::{DepotExt, RouteError};
 
 const CONTRIX_PROTOCOL_VERSION: &str = "1.0";
 const CONTRIX_HTTP_BINDING: &str = "http_json";
-const SESSION_GRANT_TTL_MINUTES: i64 = 5;
 pub const CLAIM_PRINCIPAL_DID: &str = "org.contrix.principal_did";
 pub const CLAIM_DEVICE_ID: &str = "org.contrix.device_id";
 pub const CLAIM_SESSION_ID: &str = "org.contrix.session_id";
@@ -1649,7 +1648,7 @@ fn service_describe_response(
         limits: ServiceLimitsDescriptor {
             max_body_bytes: 1_048_576,
             max_page_size: 100,
-            session_grant_ttl_seconds: SESSION_GRANT_TTL_MINUTES * 60,
+            session_grant_ttl_seconds: contrix_config.session_grant_ttl.num_seconds(),
         },
         standard_error_envelope: standard_error_envelope_descriptor(),
     }
@@ -1939,7 +1938,7 @@ pub(crate) fn issue_session_grant_for_audience(
         .to_string();
 
     let now = clock.now();
-    let expires_at = now + Duration::try_minutes(SESSION_GRANT_TTL_MINUTES).unwrap();
+    let expires_at = now + contrix_config.session_grant_ttl;
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
     let issuer = issuer_did_for(url_builder, contrix_config);
     let cnf = dpop_jkt
@@ -3233,6 +3232,7 @@ mod tests {
                 proof_required_for_pairwise: true,
             }),
             starid: None,
+            session_grant_ttl: Duration::try_minutes(5).unwrap(),
             principal_server_url: None,
             high_risk_threshold: 2,
             trust_domain: None,
@@ -3586,6 +3586,24 @@ mod tests {
     }
 
     #[test]
+    fn service_describe_advertises_configured_session_grant_ttl() {
+        let url_builder = UrlBuilder::new(
+            "https://auth.example.com/coauth/".parse().unwrap(),
+            None,
+            None,
+        );
+        let config = ContrixConfig {
+            session_grant_ttl: Duration::try_minutes(15).unwrap(),
+            ..ContrixConfig::default()
+        };
+
+        let body =
+            serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
+
+        assert_eq!(body["limits"]["session_grant_ttl_seconds"], 900);
+    }
+
+    #[test]
     fn session_grant_is_signed_for_the_user_did() {
         let clock = SystemClock::default();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
@@ -3634,7 +3652,10 @@ mod tests {
         assert_eq!(payload.scopes, vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE]);
         assert_eq!(payload.session_id, browser_session.id.to_string());
         assert_eq!(payload.device_id, None);
-        assert!(payload.expires_at > payload.not_before);
+        assert_eq!(
+            payload.expires_at - payload.not_before,
+            Duration::try_minutes(5).unwrap()
+        );
         assert_eq!(payload.proof.kind, "cx.session.grant.proof.v1");
         assert_eq!(payload.proof.alg, "EdDSA");
         assert_eq!(payload.proof.key_id, "test-eddsa");
@@ -3645,6 +3666,43 @@ mod tests {
         );
         assert!(grant.session_private_key_pem.contains("PRIVATE KEY"));
         assert!(payload.session_public_key.contains("\"kid\":\"session-"));
+    }
+
+    #[test]
+    fn session_grant_uses_configured_ttl() {
+        let clock = SystemClock::default();
+        let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
+        let contrix_config = ContrixConfig {
+            session_grant_ttl: Duration::try_minutes(15).unwrap(),
+            ..ContrixConfig::default()
+        };
+        let key_store = test_keystore();
+        let now = clock.now();
+        let mut fixture_rng = ChaChaRng::seed_from_u64(9);
+        let browser_session = BrowserSession::samples(now, &mut fixture_rng)
+            .into_iter()
+            .next()
+            .unwrap();
+        let mut signing_rng = ChaChaRng::seed_from_u64(11);
+
+        let grant = issue_session_grant(
+            &mut signing_rng,
+            &clock,
+            &url_builder,
+            &contrix_config,
+            &key_store,
+            &browser_session,
+            vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        )
+        .unwrap();
+
+        let jwt = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str()).unwrap();
+        let payload = jwt.payload();
+        assert_eq!(
+            payload.expires_at - payload.not_before,
+            Duration::try_minutes(15).unwrap()
+        );
+        assert_eq!(grant.expires_at_timestamp, payload.expires_at);
     }
 
     #[test]
