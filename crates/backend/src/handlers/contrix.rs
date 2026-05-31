@@ -927,7 +927,7 @@ pub struct HandleClaimDeliveryBindingHint {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_acceptance_ref: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub policy_ref: Option<String>,
+    pub policy_event_ref: Option<String>,
 }
 
 /// Detached-JWS proof attached to a `handle_claim`. Lightweight mirror of
@@ -959,7 +959,7 @@ pub struct HandleClaimPayload {
     /// the allow-listed values (`handle_binding` / `organization_handle`);
     /// the removed `service_handle` value is rejected at issuance time by
     /// [`crate::services::handle_subject_validator::ensure_claim_type_supported`].
-    pub claim_type: String,
+    pub claim_kind: String,
     pub subject_id: String,
     /// Canonical Contrix handle of the form `<localpart>:<domain>` per
     /// spec 7157ee8 §3.1 (replaces the legacy `handle_uri` URI form).
@@ -1075,7 +1075,7 @@ pub(crate) fn issue_handle_claim(
     // payload.
     let mut payload_no_proofs = HandleClaimPayload {
         kind: "cx.handle.claim".to_owned(),
-        claim_type: claim_type.as_wire().to_owned(),
+        claim_kind: claim_type.as_wire().to_owned(),
         subject_id: subject_id.clone(),
         handle,
         handle_aliases: aliases.clone(),
@@ -1094,7 +1094,7 @@ pub(crate) fn issue_handle_claim(
     // claim without renaming.
     let claim_digest = canonical_json_sha256(&HandleClaimDigestInput {
         kind: &payload_no_proofs.kind,
-        claim_type: &payload_no_proofs.claim_type,
+        claim_kind: &payload_no_proofs.claim_kind,
         subject_id: &payload_no_proofs.subject_id,
         handle: &payload_no_proofs.handle,
         handle_aliases: &payload_no_proofs.handle_aliases,
@@ -1165,7 +1165,7 @@ pub(crate) fn issue_handle_claim(
 struct HandleClaimDigestInput<'a> {
     #[serde(rename = "type")]
     kind: &'a str,
-    claim_type: &'a str,
+    claim_kind: &'a str,
     subject_id: &'a str,
     handle: &'a str,
     handle_aliases: &'a Vec<String>,
@@ -4383,7 +4383,7 @@ mod tests {
             binding_source: "organization_policy".to_owned(),
             delivery_modes: vec!["events".to_owned()],
             service_acceptance_ref: None,
-            policy_ref: None,
+            policy_event_ref: None,
         };
 
         let material = issue_handle_claim(
@@ -4431,7 +4431,7 @@ mod tests {
         assert_eq!(material.payload.proofs[0].audience, "did:web:space.example");
         assert_eq!(material.payload.proofs[0].jws, material.claim_jwt);
         // HC-COAUTH-1 — coauth only stamps allow-listed claim_type values.
-        assert_eq!(material.payload.claim_type, "handle_binding");
+        assert_eq!(material.payload.claim_kind, "handle_binding");
     }
 
     #[test]
@@ -4451,7 +4451,7 @@ mod tests {
             binding_source: "organization_policy".to_owned(),
             delivery_modes: vec!["events".to_owned()],
             service_acceptance_ref: None,
-            policy_ref: None,
+            policy_event_ref: None,
         };
 
         let material = issue_handle_claim(
@@ -4465,6 +4465,6 @@ mod tests {
             hint,
         )
         .expect("organization_handle claim_type must be accepted");
-        assert_eq!(material.payload.claim_type, "organization_handle");
+        assert_eq!(material.payload.claim_kind, "organization_handle");
     }
 }
