@@ -590,7 +590,7 @@ mod tests {
             None,
             serde_json::json!({
                 "accountability_grant_id": "cx:accountability_grant:test",
-                "agent_principal_id": "cx:agent_principal:test",
+                "agent_principal_id": "did:web:agent.example",
             }),
         )
         .await

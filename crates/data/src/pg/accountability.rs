@@ -67,6 +67,10 @@ mod tests {
         )
     }
 
+    fn agent_did(label: &str) -> String {
+        format!("did:web:{label}-agent.example")
+    }
+
     fn sample_new(label: &str, agent: &str, controller: &str) -> NewAccountabilityGrant {
         NewAccountabilityGrant {
             accountability_grant_id: grant_id(),
@@ -98,7 +102,7 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(42);
         let label = unique_label("duplicate");
-        let agent = format!("cx:agent_principal:{}", uuid::Uuid::from(ulid::Ulid::new()));
+        let agent = agent_did(&label);
         let controller = format!("did:web:{label}.example");
 
         repo.accountability_grant()
@@ -127,7 +131,7 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(43);
         let label = unique_label("fanout");
-        let agent = format!("cx:agent_principal:{}", uuid::Uuid::from(ulid::Ulid::new()));
+        let agent = agent_did(&label);
         let controller = format!("did:web:{label}.example");
         let grant = repo
             .accountability_grant()
@@ -182,7 +186,7 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(45);
         let label = unique_label("durable");
-        let agent = format!("cx:agent_principal:{}", uuid::Uuid::from(ulid::Ulid::new()));
+        let agent = agent_did(&label);
         let controller = format!("did:web:{label}.example");
 
         let mut repo = factory.create().await.unwrap();
@@ -225,8 +229,8 @@ mod tests {
         let label = unique_label("revocation");
         let controller = format!("did:web:{label}.example");
         let other_controller = format!("did:web:{label}-other.example");
-        let agent_one = format!("cx:agent_principal:{}", uuid::Uuid::from(ulid::Ulid::new()));
-        let agent_two = format!("cx:agent_principal:{}", uuid::Uuid::from(ulid::Ulid::new()));
+        let agent_one = format!("did:web:{label}-agent-one.example");
+        let agent_two = format!("did:web:{label}-agent-two.example");
 
         let grant_one = repo
             .accountability_grant()

@@ -23,7 +23,8 @@ The endpoint is server-to-server only:
 - it accepts the soland/sodmin static bearer configured under
   `contrix.principal_servers[].session_grant_introspection_bearer`;
 - browser sessions and end-user OAuth tokens are rejected;
-- the path `{id}` must be a canonical `cx:agent_principal:<uuid7>` typed id;
+- the path `{id}` must be the agent principal DID, percent-encoded as a single
+  URL path segment;
 - the `controller_did` is normalized before use;
 - each requested capability must be registered in the local `cx.agent.*`
   capability registry.

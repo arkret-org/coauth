@@ -38,7 +38,7 @@ use contrix_core::{
         ERROR_CODE_PROOF_INVALID, ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
         REASON_ACCOUNTABILITY_GRANT_MISSING,
     },
-    identifiers::{AccountabilityGrantId, AgentPrincipalId, new_prefixed_uuid7},
+    identifiers::{AccountabilityGrantId, new_prefixed_uuid7},
 };
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -93,7 +93,7 @@ pub struct AccountabilityGrantRequest {
 
     /// Capability actions covered by the grant. Each entry must be a
     /// registered `cx.agent.*` action from `capability-action-registry.json`;
-    /// the typed id below references the union as a single accountability
+    /// the agent principal below references the union as a single accountability
     /// grant.
     pub capabilities: Vec<String>,
 
@@ -113,18 +113,17 @@ pub struct AccountabilityGrantRequest {
 /// the grant on ingest.
 ///
 /// `accountability_grant_id` and `agent_principal_id` are emitted as
-/// raw strings in the OpenAPI surface — the SDK `AccountabilityGrantId`
-/// / `AgentPrincipalId` newtypes are construction-validated by the
-/// handler before the payload is built, so the wire shape is canonical
-/// without dragging the SDK's `salvo` feature into coauth's dep graph.
+/// raw strings in the OpenAPI surface — the grant id is construction-validated
+/// by the SDK typed id helper, while `agent_principal_id` is a DID-as-id per
+/// `contrix-spec` common-fields §4.2.
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantResponse {
     /// Typed id of the issued grant. Wire form: `cx:accountability_grant:<uuid7>`.
     pub accountability_grant_id: String,
 
-    /// Agent principal id this grant authorizes capability actions on.
-    /// Wire form: `cx:agent_principal:<uuid7>` typed id. The {id} URL
-    /// segment is canonicalized into this field.
+    /// Agent principal DID this grant authorizes capability actions on.
+    /// The {id} URL segment is percent-decoded by the router and canonicalized
+    /// into this DID-as-id field.
     pub agent_principal_id: String,
 
     /// Controller DID this grant attributes accountability to.
@@ -162,12 +161,8 @@ pub async fn post_accountability_grant(
     let agent_principal_raw = req
         .param::<String>("id")
         .ok_or_else(|| AppError::bad_request("missing agent principal id"))?;
-    let agent_principal_raw = agent_principal_raw.trim().to_owned();
-    // Validate that the path {id} is a canonical `cx:agent_principal:<uuid7>`
-    // typed id BEFORE doing any further work. The SDK's strict typed-id
-    // check rejects non-canonical payloads at the edge.
-    let agent_principal_id = AgentPrincipalId::new(agent_principal_raw)
-        .map_err(|err| AppError::bad_request(format!("agent principal id invalid: {err}")))?;
+    let agent_principal_id = normalize_did_for_binding(agent_principal_raw.trim())
+        .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
 
     // soland / sodmin only — reject browser sessions and end-user bearers.
     let contrix_config = depot.contrix_config()?;
@@ -190,8 +185,6 @@ pub async fn post_accountability_grant(
         AccountabilityGrantId::new(new_prefixed_uuid7("cx:accountability_grant:"))
             .map_err(|err| AppError::internal_box(Box::new(err)))?;
     let accountability_grant_id = accountability_grant_id.into_string();
-    let agent_principal_id = agent_principal_id.into_string();
-
     let response = AccountabilityGrantResponse {
         accountability_grant_id: accountability_grant_id.clone(),
         agent_principal_id: agent_principal_id.clone(),
@@ -301,7 +294,7 @@ pub async fn post_accountability_grant(
         contrix_config.audit_signature_fail_closed,
         AdminOperation::Other("accountability_grant_issued".to_owned()),
         "agent",
-        typed_id_suffix_as_ulid(&agent_principal_id, "cx:agent_principal:"),
+        None,
         audit_details,
     )
     .await?;
@@ -411,13 +404,6 @@ fn build_soland_fanout_payload(
         "grant": response,
         "principal_servers": principal_servers,
     }))
-}
-
-fn typed_id_suffix_as_ulid(value: &str, prefix: &str) -> Option<ulid::Ulid> {
-    value
-        .strip_prefix(prefix)
-        .and_then(|suffix| uuid::Uuid::parse_str(suffix).ok())
-        .map(ulid::Ulid::from)
 }
 
 /// Revoke all active accountability grants for a controller DID and mark the
@@ -619,14 +605,20 @@ pub const PAUSED_REVOCATION_FRESHNESS_WINDOW: chrono::Duration = chrono::Duratio
 ///
 /// `verification_method` is the DID URL extracted from the JWS header (or
 /// the embedded `verification_method` claim); `agent_principal_did` is the
-/// canonical DID resolved from the agent_principal_id newtype.
+/// canonical DID carried by `agent_principal_id`.
 pub fn enforce_verification_method_binding(
     verification_method: &str,
     agent_principal_did: &str,
 ) -> Result<(), AgentAuthRejection> {
-    // The verification_method is a DID URL of the form `<did>#<fragment>`.
-    // Strip the fragment before comparing to the principal DID.
-    let vm_did = verification_method.split('#').next().unwrap_or("");
+    // The verification_method is a DID URL. Strip query and fragment before
+    // comparing to the scalar principal DID.
+    let vm_did = verification_method
+        .split('#')
+        .next()
+        .unwrap_or("")
+        .split('?')
+        .next()
+        .unwrap_or("");
     if vm_did != agent_principal_did {
         return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch);
     }
@@ -777,13 +769,13 @@ mod agent_auth_error_matrix_tests {
         assert_eq!(left, right);
         assert_eq!(
             accountability_capabilities_digest(
-                "cx:agent_principal:018f0b15-1fc4-7b6f-b9f8-73ae9a76f8e0",
+                "did:web:agent.example",
                 "did:web:controller.example",
                 &left,
             )
             .unwrap(),
             accountability_capabilities_digest(
-                "cx:agent_principal:018f0b15-1fc4-7b6f-b9f8-73ae9a76f8e0",
+                "did:web:agent.example",
                 "did:web:controller.example",
                 &right,
             )

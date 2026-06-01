@@ -21,7 +21,7 @@ controller DID、agent principal id，以及一组规范化的 `cx.agent.*`
 - 只接受 `contrix.principal_servers[].session_grant_introspection_bearer`
   中配置的 soland/sodmin 静态 bearer；
 - 浏览器 session 与终端用户 OAuth token 会被拒绝；
-- 路径 `{id}` 必须是规范 `cx:agent_principal:<uuid7>` typed id；
+- 路径 `{id}` 必须是 agent principal DID，并按单个 URL path segment 做 percent-encoding；
 - `controller_did` 会在使用前规范化；
 - 每个请求的 capability 都必须存在于本地 `cx.agent.*` capability registry。
 
