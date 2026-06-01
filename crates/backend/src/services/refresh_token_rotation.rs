@@ -10,24 +10,24 @@
 //! exchange, following the OAuth 2.1 / FAPI 2.0 baseline:
 //!
 //! 1. **Rotate on every refresh.** A successful `POST /token` with
-//!    `grant_type=refresh_token` MUST invalidate the presented refresh
-//!    token and mint a new one. The old token can never be redeemed
-//!    again, even within its TTL.
-//! 2. **Revoke the entire chain on reuse.** If a refresh token that
-//!    has already been rotated (i.e. already has a `successor`) is
-//!    presented again, `coauth` treats it as a leak indicator and
-//!    revokes the whole rotation chain — past, present, and future —
-//!    along with any access tokens that descend from it.
-//! 3. **Revoke chain on device lock / logout.** Locking a device or
-//!    explicit logout calls the repository/device revoke path to ensure
-//!    no refresh token from that device can continue to mint access tokens.
-//! 4. **Rotation window.** The maximum lifetime of any single refresh
-//!    token in a chain is 24 hours by default
-//!    ([`DEFAULT_ROTATION_WINDOW`]). After the window the token MUST
-//!    NOT be exchanged even if it hasn't been rotated yet.
-//! 5. **Idle window.** Independent of the absolute rotation window,
-//!    a refresh token that has not been used for `idle_window` (12h
-//!    default) is treated as abandoned and rejected.
+//!    `grant_type=refresh_token` MUST invalidate the presented refresh token
+//!    and mint a new one. The old token can never be redeemed again, even
+//!    within its TTL.
+//! 2. **Revoke the entire chain on reuse.** If a refresh token that has already
+//!    been rotated (i.e. already has a `successor`) is presented again,
+//!    `coauth` treats it as a leak indicator and revokes the whole rotation
+//!    chain — past, present, and future — along with any access tokens that
+//!    descend from it.
+//! 3. **Revoke chain on device lock / logout.** Locking a device or explicit
+//!    logout calls the repository/device revoke path to ensure no refresh token
+//!    from that device can continue to mint access tokens.
+//! 4. **Rotation window.** The maximum lifetime of any single refresh token in
+//!    a chain is 24 hours by default ([`DEFAULT_ROTATION_WINDOW`]). After the
+//!    window the token MUST NOT be exchanged even if it hasn't been rotated
+//!    yet.
+//! 5. **Idle window.** Independent of the absolute rotation window, a refresh
+//!    token that has not been used for `idle_window` (12h default) is treated
+//!    as abandoned and rejected.
 //!
 //! This module is intentionally a *policy* layer — it does not own
 //! the token table. It exposes pure decision functions

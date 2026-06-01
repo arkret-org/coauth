@@ -108,7 +108,8 @@ pub struct IssueClaimRequest {
     /// Subject account, local DID, username, or external DID.
     subject: String,
 
-    /// Issuer DID or trusted issuer identifier. Defaults to the local issuer DID.
+    /// Issuer DID or trusted issuer identifier. Defaults to the local issuer
+    /// DID.
     issuer: Option<String>,
 
     /// DID of the verifier that checked the progressive-disclosure claim.

@@ -581,11 +581,9 @@ pub struct ProviderMetadata {
     // -- Section 4: Account-management extensions --
     /// URL where the user is able to access the account management capabilities
     /// of this OP.
-    ///
     pub account_management_uri: Option<Url>,
 
     /// Array of actions that the account management URL supports.
-    ///
     pub account_management_actions_supported: Option<Vec<AccountManagementAction>>,
 }
 

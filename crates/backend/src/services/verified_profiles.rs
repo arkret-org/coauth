@@ -21,10 +21,11 @@
 //! module just parses + role-filters and leaves the claim invariant to the
 //! describe builder where the truth source for `claimed_profiles` lives.
 
+use std::sync::Arc;
+
 use camino::Utf8Path;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use std::sync::Arc;
 
 /// Env var coauth reads at startup to locate the cotest
 /// `verified-profiles.json` artifact. Empty / unset disables the loader.
@@ -33,7 +34,8 @@ pub const VERIFIED_PROFILES_ARTIFACT_ENV: &str = "COAUTH_VERIFIED_PROFILES_ARTIF
 /// coauth's role string. Mirrors `service_roles[]` in
 /// `handlers::contrix::service_describe_response` and the canonical role
 /// names in
-/// `contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json#/profile_role_map`.
+/// `contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json#/
+/// profile_role_map`.
 pub const COAUTH_SERVICE_ROLE: &str = "auth_server";
 
 #[derive(Debug, Deserialize)]
@@ -249,8 +251,9 @@ fn required_non_empty(value: Option<String>, field: &str, profile_id: &str) -> O
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
+
+    use super::*;
 
     #[test]
     fn malformed_json_yields_empty() {
@@ -331,7 +334,6 @@ mod tests {
         use std::time::{SystemTime, UNIX_EPOCH};
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
+            .map_or(0, |d| d.as_nanos())
     }
 }

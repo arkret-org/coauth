@@ -18,13 +18,12 @@
 //!
 //! ## Why both realm_id and trust_domain?
 //!
-//! - `realm_id` scopes the link to a single Realm policy graph: a
-//!   link valid for `cx:realm:r1` MUST NOT enable joining
-//!   `cx:realm:r2`.
+//! - `realm_id` scopes the link to a single Realm policy graph: a link valid
+//!   for `cx:realm:r1` MUST NOT enable joining `cx:realm:r2`.
 //! - `trust_domain` scopes the link to a deployment: a link minted in
 //!   `cx:trust_domain:tenant-a` MUST NOT be replayable into
-//!   `cx:trust_domain:tenant-b` even when the realm UUID happens to
-//!   collide (e.g. dev / staging / prod sharing a fixture realm).
+//!   `cx:trust_domain:tenant-b` even when the realm UUID happens to collide
+//!   (e.g. dev / staging / prod sharing a fixture realm).
 //!
 //! See `contrix-spec` round-4 §7fae9ba "Enhance third-party invites +
 //! transport bindings" — the same dual-scoping rule applies here.
@@ -108,8 +107,9 @@ impl IdentityLinkEnvelope {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::Duration;
+
+    use super::*;
 
     fn realm(s: &str) -> RealmId {
         RealmId::new(s).unwrap()

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
+// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License,
+// Version 2.0; see LICENSE-APACHE for details.
 
 //! Admin page: edit per-locale display name + description for an
 //! OAuth client.

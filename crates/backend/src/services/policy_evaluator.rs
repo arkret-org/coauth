@@ -186,10 +186,10 @@ impl PolicyDecision {
     /// POLICY-1: signal "strict reject" mode for the
     /// `cx.profile.accountable_principals.strict_reject.v1` deployment profile.
     /// When the profile is declared, Actor Profile create/update events
-    /// containing unverified `accountable_principal_ids[]` entries MUST be rejected
-    /// with `failed_precondition / accountability_grant_missing` (the
-    /// reducer and submit endpoint use this signal to short-circuit the
-    /// legacy strip+audit path).
+    /// containing unverified `accountable_principal_ids[]` entries MUST be
+    /// rejected with `failed_precondition / accountability_grant_missing`
+    /// (the reducer and submit endpoint use this signal to short-circuit
+    /// the legacy strip+audit path).
     ///
     /// The reason code on the wire is `failed_precondition`; the
     /// obligation carries the canonical
@@ -395,8 +395,9 @@ pub type PolicyEvaluatorHandle = Arc<dyn PolicyEvaluator>;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use contrix_core::{Did, Hash, PolicyCheckSource, RealmId};
+
+    use super::*;
 
     fn req(actor: &str, action: &str) -> PolicyCheckRequest {
         PolicyCheckRequest {

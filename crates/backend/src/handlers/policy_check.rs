@@ -19,12 +19,12 @@
 //! 1. parse + shape-validate the request body;
 //! 2. fetch the soland-backed [`Frontier`] via
 //!    [`policy_frontier::SolandFrontierSource`];
-//! 3. run the realm-scoped [`policy_evaluator::RuleEvaluator`] with a
-//!    hard 2-second budget (fail-closed on timeout per spec §6);
-//! 4. build the canonical [`policy_signer::DecisionTranscript`] and
-//!    detach-sign it with the keystore's preferred service key;
-//! 5. emit the [`PolicyCheckResponse`] with `bound_to`, three frontier
-//!    hashes, signature, reason code, expiry, and obligations;
+//! 3. run the realm-scoped [`policy_evaluator::RuleEvaluator`] with a hard
+//!    2-second budget (fail-closed on timeout per spec §6);
+//! 4. build the canonical [`policy_signer::DecisionTranscript`] and detach-sign
+//!    it with the keystore's preferred service key;
+//! 5. emit the [`PolicyCheckResponse`] with `bound_to`, three frontier hashes,
+//!    signature, reason code, expiry, and obligations;
 //! 6. append the canonical transcript + signature to the structured
 //!    `policy_audit` tracing target.
 //!
@@ -365,8 +365,8 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::services::policy_frontier::StaticFrontierSource;
+    use std::{future::Future, pin::Pin};
+
     use base64ct::{Base64UrlUnpadded, Encoding as _};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable as _;
@@ -374,8 +374,9 @@ mod tests {
     use contrix_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
     use rand_core::SeedableRng as _;
     use signature::Verifier as _;
-    use std::future::Future;
-    use std::pin::Pin;
+
+    use super::*;
+    use crate::services::policy_frontier::StaticFrontierSource;
 
     fn realm() -> RealmId {
         RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001").unwrap()
@@ -503,8 +504,6 @@ mod tests {
 
         let expires_at = response
             .expires_at
-            .as_ref()
-            .cloned()
             .expect("signed response should carry expires_at");
         let expires_at_str = format_canonical_rfc3339(expires_at);
         assert_eq!(

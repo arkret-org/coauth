@@ -8,27 +8,27 @@
 //! grants. A DPoP proof is a compact-serialisation JWS with:
 //!
 //! * `typ = "dpop+jwt"`
-//! * `alg ∈ { ES256, EdDSA }` — locked down to the asymmetric algs we
-//!   already support in `coauth_jose`.
-//! * `jwk` — the protected-header MUST carry the public key the proof is
-//!   signed with. We verify the JWS using exactly that embedded key, then
-//!   reconstruct the RFC 7638 JWK SHA-256 thumbprint (`jkt`) and bind it
-//!   to the issued session grant via a `cnf.jkt` claim (RFC 9449 §6.1).
+//! * `alg ∈ { ES256, EdDSA }` — locked down to the asymmetric algs we already
+//!   support in `coauth_jose`.
+//! * `jwk` — the protected-header MUST carry the public key the proof is signed
+//!   with. We verify the JWS using exactly that embedded key, then reconstruct
+//!   the RFC 7638 JWK SHA-256 thumbprint (`jkt`) and bind it to the issued
+//!   session grant via a `cnf.jkt` claim (RFC 9449 §6.1).
 //!
 //! Bindings enforced on every proof:
 //!
 //! * `htm` — HTTP method on the incoming request must match.
-//! * `htu` — Absolute endpoint URL on the incoming request must match
-//!   (scheme + authority + path; we explicitly strip query / fragment).
-//! * `ath` — When a Bearer access token is carried alongside the proof,
-//!   `ath = base64url(sha256(access_token))` (RFC 9449 §4.3).
+//! * `htu` — Absolute endpoint URL on the incoming request must match (scheme +
+//!   authority + path; we explicitly strip query / fragment).
+//! * `ath` — When a Bearer access token is carried alongside the proof, `ath =
+//!   base64url(sha256(access_token))` (RFC 9449 §4.3).
 //! * `iat` — Must be within `MAX_CLOCK_SKEW` of the verifier's clock.
-//! * `jti` — Must be unique inside the `NONCE_TTL` replay window; we
-//!   cache observed `jti` values in an in-memory map keyed by `jti`,
-//!   value `iat + NONCE_TTL`. Production deployments running multiple
-//!   coauth replicas behind a load balancer will eventually want a
-//!   Redis-backed cache, but the in-process map is enough for a
-//!   single-node deployment and for the cotest e2e harness.
+//! * `jti` — Must be unique inside the `NONCE_TTL` replay window; we cache
+//!   observed `jti` values in an in-memory map keyed by `jti`, value `iat +
+//!   NONCE_TTL`. Production deployments running multiple coauth replicas behind
+//!   a load balancer will eventually want a Redis-backed cache, but the
+//!   in-process map is enough for a single-node deployment and for the cotest
+//!   e2e harness.
 //!
 //! This module is brand-new and only ever reads / writes session-grant
 //! claims through the existing `coauth_jose` plumbing; we never roll our
@@ -429,13 +429,14 @@ fn canonicalize_htu(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::{
         jwa::AsymmetricSigningKey, jwk::JsonWebKeyPublicParameters, jwt::JsonWebSignatureHeader,
     };
     use ed25519_dalek::SigningKey;
     use rand_core::OsRng;
+
+    use super::*;
 
     fn sign_proof(claims: &DpopClaims, signing: &SigningKey) -> String {
         let verifying = signing.verifying_key();

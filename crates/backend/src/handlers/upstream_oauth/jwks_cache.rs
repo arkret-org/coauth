@@ -99,10 +99,10 @@ impl JwksCache {
     ) -> Result<PublicJsonWebKeySet, JwksError> {
         {
             let cache = self.cache.read().await;
-            if let Some(entry) = cache.get(jwks_uri) {
-                if entry.fetched_at.elapsed() < Self::TTL {
-                    return Ok(entry.jwks.clone());
-                }
+            if let Some(entry) = cache.get(jwks_uri)
+                && entry.fetched_at.elapsed() < Self::TTL
+            {
+                return Ok(entry.jwks.clone());
             }
         }
         // Either a miss or a stale entry: drop the read guard and fetch.

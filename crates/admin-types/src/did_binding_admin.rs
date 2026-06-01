@@ -4,12 +4,12 @@
 //! `coauth/crates/backend/src/handlers/admin/v1/account_dids.rs`:
 //!
 //! - `GET    /api/admin/v1/accounts/{account_id}/dids` — full per-binding
-//!   inventory (`AccountDidBinding`) plus a meta block describing the
-//!   resolver mode and which proof shapes the deployment accepts.
-//! - `POST   /api/admin/v1/accounts/{account_id}/dids` — request body
-//!   used to add a binding (`AddAccountDidBindingRequest`).
-//! - `DELETE /api/admin/v1/accounts/{account_id}/dids/{did}` — request
-//!   body for revoke (`RemoveAccountDidBindingRequest`).
+//!   inventory (`AccountDidBinding`) plus a meta block describing the resolver
+//!   mode and which proof shapes the deployment accepts.
+//! - `POST   /api/admin/v1/accounts/{account_id}/dids` — request body used to
+//!   add a binding (`AddAccountDidBindingRequest`).
+//! - `DELETE /api/admin/v1/accounts/{account_id}/dids/{did}` — request body for
+//!   revoke (`RemoveAccountDidBindingRequest`).
 //!
 //! Round-33 (C33.3): lifted out of the inline definitions in the
 //! backend handler and the divergent `CoauthAdminDidBindingRecord`
@@ -320,7 +320,8 @@ pub struct AdminAccountDidBinding {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_verified_at: Option<DateTime<Utc>>,
 
-    /// Resolver receipt or operation identifier, when delegated publication exists.
+    /// Resolver receipt or operation identifier, when delegated publication
+    /// exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_resolver_receipt_id: Option<String>,
 
@@ -344,7 +345,8 @@ pub struct AdminAccountDidBindingsMeta {
     #[serde(default)]
     pub supported_verification_methods: Vec<String>,
 
-    /// Stable signal that the surface exists but write logic is not complete yet.
+    /// Stable signal that the surface exists but write logic is not complete
+    /// yet.
     #[serde(default)]
     pub supports_write_operations: bool,
 }

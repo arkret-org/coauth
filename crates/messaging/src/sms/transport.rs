@@ -13,8 +13,7 @@ use std::sync::{
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::Utc;
 use hmac::{Hmac, Mac};
-use reqwest::Client;
-use reqwest::Method;
+use reqwest::{Client, Method};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
@@ -144,7 +143,8 @@ impl SmsTransport {
         Self::paloud_internal_with_client(Client::new(), url, key_id, secret, workspace)
     }
 
-    /// Construct a Paloud internal notification API transport with a caller-supplied HTTP client.
+    /// Construct a Paloud internal notification API transport with a
+    /// caller-supplied HTTP client.
     #[must_use]
     pub fn paloud_internal_with_client(
         client: Client,
@@ -216,7 +216,8 @@ impl SmsTransport {
         )
     }
 
-    /// Construct a Tencent Cloud SMS transport with a caller-supplied HTTP client.
+    /// Construct a Tencent Cloud SMS transport with a caller-supplied HTTP
+    /// client.
     #[must_use]
     pub fn tencent_cloud_with_client(
         client: Client,
@@ -487,12 +488,13 @@ fn sign_paloud_internal_request(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
         matchers::{body_partial_json, header, header_exists, method, path},
     };
+
+    use super::*;
 
     fn install_default_crypto_provider_once() {
         use std::sync::Once;

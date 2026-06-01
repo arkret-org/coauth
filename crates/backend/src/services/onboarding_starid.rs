@@ -2,22 +2,20 @@
 //!
 //! Two entry points, both deferred until the user enrols a passkey:
 //!
-//! * [`mint_principal_did_for_first_credential`] — called from the
-//!   passkey `register_finish` admin handler the **first** time an
-//!   account enrols a credential. Derives an `update_key` from the
-//!   passkey's COSE public key
+//! * [`mint_principal_did_for_first_credential`] — called from the passkey
+//!   `register_finish` admin handler the **first** time an account enrols a
+//!   credential. Derives an `update_key` from the passkey's COSE public key
 //!   ([`crate::services::passkey_derive::derive_update_key_from_credential`]),
-//!   posts `POST /api/v1/webvh/dids` to starid, persists
-//!   `(account → did, update_key, version_id)`, and flips
-//!   `user.starid_backend = true` so subsequent reads of
-//!   `primary_did_for_user` route to the starid form.
+//!   posts `POST /api/v1/webvh/dids` to starid, persists `(account → did,
+//!   update_key, version_id)`, and flips `user.starid_backend = true` so
+//!   subsequent reads of `primary_did_for_user` route to the starid form.
 //!
-//! * [`rotate_principal_did_for_credential`] — called from the same
-//!   handler on **subsequent** passkey enrolments (account already has
-//!   a starid-minted DID). Derives the new device's `update_key`, looks
-//!   up the prior `version_id` from the binding row, posts
-//!   `POST /api/v1/webvh/dids/{did}/update` to starid, and persists
-//!   the bumped version.
+//! * [`rotate_principal_did_for_credential`] — called from the same handler on
+//!   **subsequent** passkey enrolments (account already has a starid-minted
+//!   DID). Derives the new device's `update_key`, looks up the prior
+//!   `version_id` from the binding row, posts `POST
+//!   /api/v1/webvh/dids/{did}/update` to starid, and persists the bumped
+//!   version.
 //!
 //! Round 37.4 contract change (rip-and-replace): the old
 //! `mint_principal_did_if_configured` + `PLACEHOLDER_UPDATE_KEY` pair

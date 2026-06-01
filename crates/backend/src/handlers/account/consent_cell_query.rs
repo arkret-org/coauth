@@ -74,10 +74,10 @@ struct ConsentCellResponse {
 /// Look up the holder's consent-grant cell on their `server_name`.
 ///
 /// * `principal_server_url` — base URL of the holder's soland deployment.
-///   `None` means soland is not wired into this coauth instance and the
-///   gate degrades to `ConsentLookup::Unknown`.
-/// * `holder_did` — the cell-owner DID; embedded in the request path so
-///   soland can route the read to the right principal control Space.
+///   `None` means soland is not wired into this coauth instance and the gate
+///   degrades to `ConsentLookup::Unknown`.
+/// * `holder_did` — the cell-owner DID; embedded in the request path so soland
+///   can route the read to the right principal control Space.
 /// * `consent_id` — the consent-cell identifier per spec §6.
 /// * `http_client` — caller-provided client so tests can inject a wiremock
 ///   server and production callers can share the global pool.
@@ -278,12 +278,13 @@ mod urlencoding {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::handlers::test_utils::setup;
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
         matchers::{method, path_regex},
     };
+
+    use super::*;
+    use crate::handlers::test_utils::setup;
 
     #[tokio::test]
     async fn consent_unknown_when_principal_server_url_is_none() {

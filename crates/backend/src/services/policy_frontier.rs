@@ -24,11 +24,11 @@
 //! We define a [`FrontierSource`] trait so handler code never sees the
 //! HTTP wiring. Implementations:
 //!
-//! - [`SolandFrontierSource`] — production. Holds the soland base URL +
-//!   shared `reqwest::Client`; performs the GET and maps the result.
-//! - [`StaticFrontierSource`] — tests. Returns a fixed frontier so the
-//!   unit tests in `policy_check.rs` can assert byte-equal transcripts
-//!   without standing up an HTTP mock.
+//! - [`SolandFrontierSource`] — production. Holds the soland base URL + shared
+//!   `reqwest::Client`; performs the GET and maps the result.
+//! - [`StaticFrontierSource`] — tests. Returns a fixed frontier so the unit
+//!   tests in `policy_check.rs` can assert byte-equal transcripts without
+//!   standing up an HTTP mock.
 //!
 //! The trait is `async_trait`-free deliberately — the futures are
 //! `BoxFuture` so the trait stays object-safe for `dyn FrontierSource`.
@@ -113,7 +113,8 @@ impl fmt::Debug for dyn FrontierSource {
 }
 
 /// Production frontier source — calls soland's federation-peer frontier
-/// endpoint and lifts `frontier_root` into [`Frontier::policy_frontier_digest`].
+/// endpoint and lifts `frontier_root` into
+/// [`Frontier::policy_frontier_digest`].
 ///
 /// Today soland only exposes a single `frontier_root` covering all
 /// federation-visible events; the spec splits the digest into three

@@ -18,8 +18,8 @@
 //!   1. Read the principal's current accepted generation (from the
 //!      principal-server `cx.account.describe` or local cache),
 //!   2. Build a [`CrossSigningPublishContent`] with
-//!      `expected_previous_generation = current_accepted` and
-//!      `generation = current_accepted + 1`,
+//!      `expected_previous_generation = current_accepted` and `generation =
+//!      current_accepted + 1`,
 //!   3. Use [`cross_signing_publish_cell_subject(principal_id,
 //!      expected_previous_generation)`] for the lattice cell key.
 //!
@@ -94,8 +94,9 @@ pub fn publish_cell_subject(principal_id: &Did, expected_previous_generation: u6
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use contrix::crypto_protocol::CrossSigningBinding;
+
+    use super::*;
 
     fn principal() -> Did {
         Did::new("did:web:alice.example").unwrap()

@@ -4,8 +4,9 @@
 //!
 //! - `GET /api/admin/v1/accounts` — paginated account list.
 //! - `GET /api/admin/v1/accounts/{account_id}` — single-account detail.
-//! - `POST /api/admin/v1/accounts/{account_id}/{lock|disable|erase|reset-recovery}` —
-//!   mutation endpoints that return the same `AccountRecord` envelope.
+//! - `POST /api/admin/v1/accounts/{account_id}/
+//!   {lock|disable|erase|reset-recovery}` — mutation endpoints that return the
+//!   same `AccountRecord` envelope.
 //!
 //! Round-33 (C33.3): lifted out of the inline `AccountRecord`/`AccountStatus`
 //! definitions in

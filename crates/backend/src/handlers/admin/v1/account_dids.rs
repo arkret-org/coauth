@@ -52,7 +52,8 @@ pub struct AddAccountDidBindingRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub make_primary: Option<bool>,
 
-    /// Hint about the proof type, for example `did_controller_key` or `passkey`.
+    /// Hint about the proof type, for example `did_controller_key` or
+    /// `passkey`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_method: Option<String>,
 

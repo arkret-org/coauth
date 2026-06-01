@@ -16,7 +16,8 @@
 //! ```
 //!
 //! Verification flow:
-//!   1. Resolve the DID via the configured resolver chain (`DidResolverService`).
+//!   1. Resolve the DID via the configured resolver chain
+//!      (`DidResolverService`).
 //!   2. Reject if the resolver returns no `verificationMethod` keys.
 //!   3. Require the JWS `kid`, statement `verification_method`, and resolved
 //!      DID document `verificationMethod.id` to match exactly.
@@ -469,7 +470,8 @@ fn validate_binding_statement_claims(
     Ok(())
 }
 
-// ─────────────── Verification-service proof (3PID invite chain) ───────────────
+// ─────────────── Verification-service proof (3PID invite chain)
+// ───────────────
 
 /// JWT claims issued by the trusted 3PID verification service.
 ///
@@ -540,8 +542,7 @@ pub enum VerificationProofError {
 /// 2. Reject empty / malformed claims (`sub`).
 /// 3. Match `iss` / `aud` against the expected values.
 /// 4. Reject `nbf > now` and `exp <= now`.
-/// 5. Resolve the issuer DID document, verify the signature against
-///    its JWKS.
+/// 5. Resolve the issuer DID document, verify the signature against its JWKS.
 ///
 /// Replay defence (`jti` deduplication) is NOT done here — the caller
 /// owns the nonce store so a successful verify against a replayed
@@ -831,7 +832,7 @@ mod tests {
 
     #[test]
     fn contrix_spec_binding_proof_fixture_verifies() {
-        let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let fixture_path = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")
             .join("..")
@@ -846,13 +847,13 @@ mod tests {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 eprintln!(
                     "skipping contrix-spec fixture test; missing {}",
-                    fixture_path.display()
+                    fixture_path.as_str()
                 );
                 return;
             }
             Err(error) => panic!(
                 "failed reading contrix-spec fixture {}: {error}",
-                fixture_path.display()
+                fixture_path.as_str()
             ),
         };
 

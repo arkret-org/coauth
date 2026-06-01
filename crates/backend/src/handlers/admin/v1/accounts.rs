@@ -16,7 +16,6 @@ use ulid::Ulid;
 
 use crate::{
     AppError, JsonResult,
-    handlers::admin::v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
     handlers::{
         admin::{
             audit_helper::AdminAuditSigning,
@@ -27,14 +26,15 @@ use crate::{
                 PaginatedResponse, SingleResponse, paginated_response_for_count_only,
                 paginated_response_for_page,
             },
+            v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
         },
         common::DepotExt,
         contrix::service_did_for,
     },
-    services::account_claims::{
-        AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord,
+    services::{
+        account_claims::{AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord},
+        did_resolver::DidResolverService,
     },
-    services::did_resolver::DidResolverService,
 };
 
 // `AdminBridgeDescribeResponse` (and the nested `AdminBridgeRiskAction*Example`
@@ -642,8 +642,10 @@ mod tests {
     use signature::RandomizedSigner as _;
     use ulid::Ulid;
 
-    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
-    use crate::services::did_binding_proof::BindingStatementClaims;
+    use crate::{
+        handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup},
+        services::did_binding_proof::BindingStatementClaims,
+    };
 
     #[tokio::test]
     async fn test_list_and_get_accounts() {

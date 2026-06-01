@@ -5,16 +5,16 @@
 //!
 //!   1. **`claim_type` deny check** — the draft-era `service_handle`
 //!      `claim_type` was removed from `cx.schema.handle_claim.v1`
-//!      (`HandleClass::ServiceHandle` no longer exists in the SDK). v1
-//!      only allows `handle_binding` / `organization_handle`. coauth never
-//!      emits `service_handle` today, but to fail closed against future
-//!      drift we keep an explicit allow-list + deny check rather than
-//!      relying on the absence of a code path.
+//!      (`HandleClass::ServiceHandle` no longer exists in the SDK). v1 only
+//!      allows `handle_binding` / `organization_handle`. coauth never emits
+//!      `service_handle` today, but to fail closed against future drift we keep
+//!      an explicit allow-list + deny check rather than relying on the absence
+//!      of a code path.
 //!
-//!   2. **`subject` validator** — a handle claim subject MUST be a
-//!      holder / principal DID. It is NOT a Realm `actor_id`
-//!      (`cx:actor:`), a server-local `account_id` (`cx:account:`), a
-//!      service DID, or a generic resource id. We delegate to the SDK's
+//!   2. **`subject` validator** — a handle claim subject MUST be a holder /
+//!      principal DID. It is NOT a Realm `actor_id` (`cx:actor:`), a
+//!      server-local `account_id` (`cx:account:`), a service DID, or a generic
+//!      resource id. We delegate to the SDK's
 //!      [`contrix_core::validate_handle_claim_subject`] so the wire code
 //!      (`handle_claim_subject_not_principal_did`) stays in lockstep with
 //!      soland / cotest / the spec.

@@ -134,9 +134,9 @@ pub enum ClientCredentials {
         client_secret: String,
     },
 
-    /// Feishu (Lark): uses `app_access_token` as Bearer auth for token exchange.
-    /// The actual token exchange uses a Feishu-specific flow handled
-    /// separately.
+    /// Feishu (Lark): uses `app_access_token` as Bearer auth for token
+    /// exchange. The actual token exchange uses a Feishu-specific flow
+    /// handled separately.
     Feishu {
         /// The unique ID for the client (Feishu `app_id`).
         client_id: String,
@@ -155,7 +155,8 @@ pub enum ClientCredentials {
         client_secret: String,
     },
 
-    /// `DingTalk`: uses JSON body with clientId/clientSecret for token exchange.
+    /// `DingTalk`: uses JSON body with clientId/clientSecret for token
+    /// exchange.
     DingTalk {
         /// The unique ID for the client.
         client_id: String,

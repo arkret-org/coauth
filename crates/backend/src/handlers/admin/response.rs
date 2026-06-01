@@ -15,13 +15,12 @@
 //! error-response shape — both depend on `coauth_data` and therefore
 //! cannot live in admin-types.
 
+pub use coauth_admin_types::{PaginatedResponse, SingleResponse};
 use coauth_admin_types::{PaginationLinks, Resource, SingleResource};
 use coauth_data::{Pagination, pagination::Edge};
 use salvo::oapi::ToSchema;
 use schemars::JsonSchema;
 use serde::Serialize;
-
-pub use coauth_admin_types::{PaginatedResponse, SingleResponse};
 
 fn url_with_pagination(base: &str, pagination: Pagination) -> String {
     let (path, query) = base.split_once('?').unwrap_or((base, ""));

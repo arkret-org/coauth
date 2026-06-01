@@ -27,8 +27,8 @@
 //!  - the supplied code is HMAC-peppered before comparison
 //!  - per-(actor, target) rate-limit MUST be enforced upstream
 //!  - **3-strike invalidation**: three wrong attempts invalidate the code
-//!    (state transitions to `RateLimitInvalidated` and verification will
-//!    never succeed again for that code)
+//!    (state transitions to `RateLimitInvalidated` and verification will never
+//!    succeed again for that code)
 //!
 //! ## Non-enumerable failures (7-trigger state machine)
 //!
@@ -355,7 +355,7 @@ mod tests {
             OobInviteFailure::ClaimSuccess,
             OobInviteFailure::RateLimitInvalidated,
         ]
-        .map(|f| f.internal_reason_code());
+        .map(super::OobInviteFailure::internal_reason_code);
         let mut sorted = codes.to_vec();
         sorted.sort_unstable();
         sorted.dedup();

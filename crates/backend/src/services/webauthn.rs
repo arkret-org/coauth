@@ -2,12 +2,11 @@
 //!
 //! Wires `webauthn-rs` into a coauth-shaped service that:
 //!
-//! 1. starts a passkey registration ceremony for an account
-//!    (`register_start`);
-//! 2. finalises that ceremony, persists a `Passkey` to
-//!    `webauthn_credentials` (`register_finish`);
-//! 3. starts an authentication ceremony for an account that already has
-//!    one or more credentials (`auth_start`);
+//! 1. starts a passkey registration ceremony for an account (`register_start`);
+//! 2. finalises that ceremony, persists a `Passkey` to `webauthn_credentials`
+//!    (`register_finish`);
+//! 3. starts an authentication ceremony for an account that already has one or
+//!    more credentials (`auth_start`);
 //! 4. finalises authentication, updates the credential's `sign_count` and
 //!    `last_used_at` (`auth_finish`).
 //!
@@ -134,7 +133,8 @@ pub struct PgWebauthnService {
 impl PgWebauthnService {
     /// Build a new service.
     ///
-    /// * `rp_id` — the relying-party effective domain (e.g. `auth.example.com`).
+    /// * `rp_id` — the relying-party effective domain (e.g.
+    ///   `auth.example.com`).
     /// * `rp_origin` — the origin URL (`https://auth.example.com`).
     /// * `rp_name` — the human-readable RP name.
     pub fn new(

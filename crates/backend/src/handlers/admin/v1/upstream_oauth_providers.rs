@@ -144,8 +144,8 @@ pub struct ProviderRequest {
     /// Space-separated OAuth scope, e.g. "openid email profile"
     scope: String,
     /// One of: none, `client_secret_basic`, `client_secret_post`,
-    /// `client_secret_jwt`, `private_key_jwt`, `sign_in_with_apple`, `qq_connect`,
-    /// feishu, lark, dingtalk, wechat, wecom
+    /// `client_secret_jwt`, `private_key_jwt`, `sign_in_with_apple`,
+    /// `qq_connect`, feishu, lark, dingtalk, wechat, wecom
     token_endpoint_auth_method: String,
     token_endpoint_signing_alg: Option<String>,
     /// JWS algorithm name, e.g. "RS256"

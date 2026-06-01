@@ -2,8 +2,7 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /api/v1/integration/describe` —
-//!   `IntegrationManifestResponse` from
+//! - `GET /api/v1/integration/describe` — `IntegrationManifestResponse` from
 //!   `coauth/crates/backend/src/handlers/account/auth/oidc_bridge.rs`.
 //!
 //! Round-34 (C34.2): lifted out of the inline

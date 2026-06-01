@@ -441,18 +441,19 @@ mod tests {
     fn refresh_token_consume_records_successor_and_last_seen() {
         let created_at = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let consumed_at = created_at + chrono::Duration::minutes(5);
-        let root_id = Ulid::new();
-        let successor_id = Ulid::new();
+        let mut rng = rand_core::OsRng;
+        let root_id = crate::new_id(created_at, &mut rng);
+        let successor_id = crate::new_id(consumed_at, &mut rng);
         let token = RefreshToken {
             id: root_id,
             state: RefreshTokenState::Valid,
             refresh_token: "refresh-token".to_owned(),
-            session_id: Ulid::new(),
+            session_id: crate::new_id(created_at, &mut rng),
             created_at,
             chain_root_id: root_id,
             chain_created_at: created_at,
             last_seen_at: created_at,
-            access_token_id: Some(Ulid::new()),
+            access_token_id: Some(crate::new_id(created_at, &mut rng)),
         };
         let successor = RefreshToken {
             id: successor_id,
@@ -463,7 +464,7 @@ mod tests {
             chain_root_id: successor_id,
             chain_created_at: consumed_at,
             last_seen_at: consumed_at,
-            access_token_id: Some(Ulid::new()),
+            access_token_id: Some(crate::new_id(consumed_at, &mut rng)),
         };
 
         let consumed = token.consume(consumed_at, &successor).unwrap();

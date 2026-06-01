@@ -19,11 +19,11 @@
 //!   `account_claims` service style. The queue table is small and write-
 //!   through; no need for the full `Repository` abstraction.
 //! - `payload` carries an opaque JSON envelope so callers can stash the
-//!   minted-but-quarantined token bundle (or the original invite request
-//!   body) without coupling the queue schema to one caller's shape.
-//! - Status transitions are intentionally narrow: `pending` → `approved`
-//!   or `pending` → `rejected`. Re-opening a resolved row is a future
-//!   concern (out of scope this round).
+//!   minted-but-quarantined token bundle (or the original invite request body)
+//!   without coupling the queue schema to one caller's shape.
+//! - Status transitions are intentionally narrow: `pending` → `approved` or
+//!   `pending` → `rejected`. Re-opening a resolved row is a future concern (out
+//!   of scope this round).
 
 use std::sync::Arc;
 

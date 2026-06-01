@@ -13,8 +13,10 @@ use serde_with::skip_serializing_none;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::contrix;
-use crate::salvo_utils::user_authorization::{AuthorizationVerificationError, UserAuthorization};
+use crate::{
+    handlers::contrix,
+    salvo_utils::user_authorization::{AuthorizationVerificationError, UserAuthorization},
+};
 
 #[skip_serializing_none]
 #[derive(Serialize)]

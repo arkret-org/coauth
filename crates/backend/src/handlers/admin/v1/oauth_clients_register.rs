@@ -515,7 +515,8 @@ mod tests {
             "self_signed_tls_client_auth",
             "client_secret_basics", // common typo
             "BASIC",                // uppercase; allowlist is lowercase
-            "  ", // whitespace, falls through to default? — ensure not silently accepted
+            "  ",                   /* whitespace, falls through to default? — ensure not
+                                     * silently accepted */
         ] {
             // Whitespace-only intentionally falls through to the
             // default ("client_secret_basic") because `parse_auth_method`

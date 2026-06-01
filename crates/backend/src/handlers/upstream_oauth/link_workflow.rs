@@ -617,8 +617,8 @@ enum HandlePreCheckResult {
 /// Pre-check a suggested username from the upstream provider.
 ///
 /// This runs policy checks, user conflict resolution (using the provider's
-/// `on_conflict` setting), and `PrincipalServer` availability checks on the suggested
-/// username.
+/// `on_conflict` setting), and `PrincipalServer` availability checks on the
+/// suggested username.
 #[allow(clippy::too_many_arguments)]
 async fn pre_check_handle(
     repo: &mut BoxRepository,

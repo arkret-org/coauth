@@ -30,7 +30,8 @@ pub enum UpstreamOAuthAuthorizationSessionState {
         extra_callback_parameters: Option<serde_json::Value>,
         userinfo: Option<serde_json::Value>,
     },
-    /// coauth extension: the link has been removed after completion/consumption.
+    /// coauth extension: the link has been removed after
+    /// completion/consumption.
     Unlinked {
         completed_at: DateTime<Utc>,
         consumed_at: Option<DateTime<Utc>>,

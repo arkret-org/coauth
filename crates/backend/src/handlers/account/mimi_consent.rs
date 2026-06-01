@@ -13,13 +13,13 @@
 //! ```
 //!
 //! - `request_consent` → no Move yet (the holder hasn't decided); coauth
-//!   surfaces this to yougen as a pending-consent UI prompt and correlates
-//!   with `consent_id`.
+//!   surfaces this to yougen as a pending-consent UI prompt and correlates with
+//!   `consent_id`.
 //! - `update_consent { granted = true }` → `or-set add tag` Move with
-//!   `peer=<actor>;scope=<scope>` written to the holder's principal
-//!   control Space.
-//! - `update_consent { granted = false }` → `or-set remove tag` Move
-//!   that revokes the same `(peer, scope)` tag.
+//!   `peer=<actor>;scope=<scope>` written to the holder's principal control
+//!   Space.
+//! - `update_consent { granted = false }` → `or-set remove tag` Move that
+//!   revokes the same `(peer, scope)` tag.
 //!
 //! ## Round 22 (2026-05-09)
 //!
@@ -32,18 +32,19 @@
 //!    threaded in from upstream — typically populated either from the MIMI
 //!    envelope or from a `consent_cell_query` + `anchor_view_query`
 //!    round-trip).
-//! 2. `update_consent_to_pending_move(...)` produces a `PendingMove`
-//!    carrying everything needed to construct an `UnsignedMove`.
+//! 2. `update_consent_to_pending_move(...)` produces a `PendingMove` carrying
+//!    everything needed to construct an `UnsignedMove`.
 //! 3. `anchor_pending_move(...)` builds the `UnsignedMove`, calls
-//!    `Move::sign(&unsigned, signer)` against the deployment's
-//!    `AnchorerSigner` (an `Ed25519MoveSigner` wrapper), and POSTs the
-//!    resulting `Move` envelope to soland's `/api/v1/moves` endpoint.
+//!    `Move::sign(&unsigned, signer)` against the deployment's `AnchorerSigner`
+//!    (an `Ed25519MoveSigner` wrapper), and POSTs the resulting `Move` envelope
+//!    to soland's `/api/v1/moves` endpoint.
 
-use serde::{Deserialize, Serialize};
-
-use contrix_core::move_event::{Effect, LatticeOp, LatticeOpType};
-use contrix_core::{AnchorId, CellRef, Did, Hlc, Move, SpaceId, UnsignedMove};
+use contrix_core::{
+    AnchorId, CellRef, Did, Hlc, Move, SpaceId, UnsignedMove,
+    move_event::{Effect, LatticeOp, LatticeOpType},
+};
 use contrix_signatures::Ed25519MoveSigner;
+use serde::{Deserialize, Serialize};
 
 use crate::outbound_http;
 
@@ -355,7 +356,8 @@ pub fn update_consent_to_pending_move(
 /// How the anchorer signing key was obtained at process start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnchorerSigningKeyOrigin {
-    /// Loaded from `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
+    /// Loaded from `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte
+    /// seed).
     Configured,
     /// No env var present — generated at process start. Anything signed
     /// with this key is unverifiable across restarts.
@@ -964,8 +966,10 @@ mod tests {
 
     #[tokio::test]
     async fn anchor_pending_move_posts_signed_move_envelope_to_soland() {
-        use wiremock::matchers::{header, method, path};
-        use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+        use wiremock::{
+            Mock, MockServer, Request, ResponseTemplate,
+            matchers::{header, method, path},
+        };
 
         crate::handlers::test_utils::setup();
         let server = MockServer::start().await;
@@ -1007,8 +1011,10 @@ mod tests {
 
     #[tokio::test]
     async fn anchor_pending_move_surfaces_non_success_status() {
-        use wiremock::matchers::{method, path};
-        use wiremock::{Mock, MockServer, ResponseTemplate};
+        use wiremock::{
+            Mock, MockServer, ResponseTemplate,
+            matchers::{method, path},
+        };
 
         crate::handlers::test_utils::setup();
         let server = MockServer::start().await;

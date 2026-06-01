@@ -43,7 +43,7 @@ mod tests {
         RepositoryFactory as _, clock::MockClock,
     };
     use rand_chacha::ChaChaRng;
-    use rand_core::SeedableRng;
+    use rand_core::{RngCore, SeedableRng};
 
     use super::*;
     use crate::PgRepositoryFactory;
@@ -60,10 +60,10 @@ mod tests {
         format!("sha256:{label}")
     }
 
-    fn grant_id() -> String {
+    fn grant_id(rng: &mut impl RngCore, clock: &dyn Clock) -> String {
         format!(
             "cx:accountability_grant:{}",
-            uuid::Uuid::from(ulid::Ulid::new())
+            uuid::Uuid::from(new_id(clock.now(), rng))
         )
     }
 
@@ -71,15 +71,22 @@ mod tests {
         format!("did:web:{label}-agent.example")
     }
 
-    fn sample_new(label: &str, agent: &str, controller: &str) -> NewAccountabilityGrant {
+    fn sample_new(
+        rng: &mut impl RngCore,
+        clock: &dyn Clock,
+        label: &str,
+        agent: &str,
+        controller: &str,
+    ) -> NewAccountabilityGrant {
+        let now = clock.now();
         NewAccountabilityGrant {
-            accountability_grant_id: grant_id(),
+            accountability_grant_id: grant_id(rng, clock),
             agent_principal_id: agent.to_owned(),
             controller_did: controller.to_owned(),
             capabilities: vec!["cx.agent.provision".to_owned()],
             capabilities_digest: digest(label),
             reason: Some("test grant".to_owned()),
-            issued_at: chrono::Utc::now(),
+            issued_at: now,
             raw_payload_digest: digest(&format!("payload-{label}")),
             soland_fanout_state: AccountabilityGrantFanoutState::Queued,
             soland_fanout_idempotency_key: format!("idem-{label}"),
@@ -88,7 +95,7 @@ mod tests {
                 "label": label,
             }),
             soland_fanout_attempt: 0,
-            soland_fanout_next_retry_at: Some(chrono::Utc::now()),
+            soland_fanout_next_retry_at: Some(now),
             soland_fanout_dead_letter_reason: None,
         }
     }
@@ -105,13 +112,14 @@ mod tests {
         let agent = agent_did(&label);
         let controller = format!("did:web:{label}.example");
 
+        let grant = sample_new(&mut rng, &clock, &label, &agent, &controller);
         repo.accountability_grant()
-            .add(&mut rng, &clock, sample_new(&label, &agent, &controller))
+            .add(&mut rng, &clock, grant)
             .await
             .unwrap();
 
-        let mut duplicate = sample_new(&label, &agent, &controller);
-        duplicate.accountability_grant_id = grant_id();
+        let mut duplicate = sample_new(&mut rng, &clock, &label, &agent, &controller);
+        duplicate.accountability_grant_id = grant_id(&mut rng, &clock);
         duplicate.soland_fanout_idempotency_key = format!("idem-{label}-2");
         let err = repo
             .accountability_grant()
@@ -133,9 +141,10 @@ mod tests {
         let label = unique_label("fanout");
         let agent = agent_did(&label);
         let controller = format!("did:web:{label}.example");
+        let grant_input = sample_new(&mut rng, &clock, &label, &agent, &controller);
         let grant = repo
             .accountability_grant()
-            .add(&mut rng, &clock, sample_new(&label, &agent, &controller))
+            .add(&mut rng, &clock, grant_input)
             .await
             .unwrap();
 
@@ -190,9 +199,10 @@ mod tests {
         let controller = format!("did:web:{label}.example");
 
         let mut repo = factory.create().await.unwrap();
+        let grant_input = sample_new(&mut rng, &clock, &label, &agent, &controller);
         let grant = repo
             .accountability_grant()
-            .add(&mut rng, &clock, sample_new(&label, &agent, &controller))
+            .add(&mut rng, &clock, grant_input)
             .await
             .unwrap();
         repo.save().await.unwrap();
@@ -232,29 +242,38 @@ mod tests {
         let agent_one = format!("did:web:{label}-agent-one.example");
         let agent_two = format!("did:web:{label}-agent-two.example");
 
+        let grant_one_input = sample_new(
+            &mut rng,
+            &clock,
+            &format!("{label}-one"),
+            &agent_one,
+            &controller,
+        );
         let grant_one = repo
             .accountability_grant()
-            .add(
-                &mut rng,
-                &clock,
-                sample_new(&format!("{label}-one"), &agent_one, &controller),
-            )
+            .add(&mut rng, &clock, grant_one_input)
             .await
             .unwrap();
+        let grant_two_input = sample_new(
+            &mut rng,
+            &clock,
+            &format!("{label}-two"),
+            &agent_two,
+            &controller,
+        );
         repo.accountability_grant()
-            .add(
-                &mut rng,
-                &clock,
-                sample_new(&format!("{label}-two"), &agent_two, &controller),
-            )
+            .add(&mut rng, &clock, grant_two_input)
             .await
             .unwrap();
+        let grant_three_input = sample_new(
+            &mut rng,
+            &clock,
+            &format!("{label}-three"),
+            &agent_two,
+            &other_controller,
+        );
         repo.accountability_grant()
-            .add(
-                &mut rng,
-                &clock,
-                sample_new(&format!("{label}-three"), &agent_two, &other_controller),
-            )
+            .add(&mut rng, &clock, grant_three_input)
             .await
             .unwrap();
 

@@ -1,5 +1,6 @@
-// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
-// Originally developed for the legacy delegated-auth connector.
+// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License,
+// Version 2.0; see LICENSE-APACHE for details. Originally developed for the
+// legacy delegated-auth connector.
 
 mod mock;
 mod readonly;
@@ -249,27 +250,28 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the user does not
-    /// exist.
+    /// Returns an error if the downstream system is unreachable or the user
+    /// does not exist.
     async fn query_user(&self, handle: &str) -> Result<PrincipalAccountProfile, anyhow::Error>;
 
     /// Provision a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `request` - a [`PrincipalProvisionRequest`] containing the details of the user
-    ///   to provision.
+    /// * `request` - a [`PrincipalProvisionRequest`] containing the details of
+    ///   the user to provision.
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the user could not
-    /// be provisioned.
+    /// Returns an error if the downstream system is unreachable or the user
+    /// could not be provisioned.
     async fn provision_user(
         &self,
         request: &PrincipalProvisionRequest,
     ) -> Result<bool, anyhow::Error>;
 
-    /// Check whether a given handle is available in the downstream principal system.
+    /// Check whether a given handle is available in the downstream principal
+    /// system.
     ///
     /// # Parameters
     ///
@@ -289,8 +291,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the device could
-    /// not be created.
+    /// Returns an error if the downstream system is unreachable or the device
+    /// could not be created.
     async fn upsert_device(
         &self,
         handle: &str,
@@ -298,7 +300,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
         initial_display_name: Option<&str>,
     ) -> Result<(), anyhow::Error>;
 
-    /// Update the display name of a device for a user in the downstream principal system.
+    /// Update the display name of a device for a user in the downstream
+    /// principal system.
     ///
     /// # Parameters
     ///
@@ -308,8 +311,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the device could
-    /// not be updated.
+    /// Returns an error if the downstream system is unreachable or the device
+    /// could not be updated.
     async fn update_device_display_name(
         &self,
         handle: &str,
@@ -326,8 +329,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the device could
-    /// not be deleted.
+    /// Returns an error if the downstream system is unreachable or the device
+    /// could not be deleted.
     async fn delete_device(&self, handle: &str, device_id: &str) -> Result<(), anyhow::Error>;
 
     /// Sync the list of devices of a user with the downstream principal system.
@@ -339,8 +342,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the devices could
-    /// not be synced.
+    /// Returns an error if the downstream system is unreachable or the devices
+    /// could not be synced.
     async fn sync_devices(
         &self,
         handle: &str,
@@ -352,12 +355,13 @@ pub trait PrincipalServerAdmin: Send + Sync {
     /// # Parameters
     ///
     /// * `handle` - The handle of the user to delete.
-    /// * `erase` - Whether to ask the downstream system to erase the user's data.
+    /// * `erase` - Whether to ask the downstream system to erase the user's
+    ///   data.
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the user could not
-    /// be deleted.
+    /// Returns an error if the downstream system is unreachable or the user
+    /// could not be deleted.
     async fn delete_user(&self, handle: &str, erase: bool) -> Result<(), anyhow::Error>;
 
     /// Reactivate a user in the downstream principal system.
@@ -368,8 +372,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the user could not
-    /// be reactivated.
+    /// Returns an error if the downstream system is unreachable or the user
+    /// could not be reactivated.
     async fn reactivate_user(&self, handle: &str) -> Result<(), anyhow::Error>;
 
     /// Set the displayname of a user in the downstream principal system.
@@ -381,8 +385,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the displayname
-    /// could not be set.
+    /// Returns an error if the downstream system is unreachable or the
+    /// displayname could not be set.
     async fn set_displayname(&self, handle: &str, displayname: &str) -> Result<(), anyhow::Error>;
 
     /// Unset the displayname of a user in the downstream principal system.
@@ -393,8 +397,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the downstream system is unreachable or the displayname
-    /// could not be unset.
+    /// Returns an error if the downstream system is unreachable or the
+    /// displayname could not be unset.
     async fn unset_displayname(&self, handle: &str) -> Result<(), anyhow::Error>;
 }
 
@@ -419,8 +423,8 @@ impl<T: PrincipalServerAdmin + ?Sized> AsAdmin for Arc<T> {
     }
 }
 
-/// Blanket implementation: anything that can produce a `&dyn PrincipalServerAdmin`
-/// via [`AsAdmin`] is itself a valid admin handle.
+/// Blanket implementation: anything that can produce a `&dyn
+/// PrincipalServerAdmin` via [`AsAdmin`] is itself a valid admin handle.
 #[async_trait::async_trait]
 impl<W> PrincipalServerAdmin for W
 where

@@ -104,7 +104,8 @@ pub struct AccountRiskActionExecuteRequest {
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 pub struct AccountRiskActionProposalResponse {
-    /// Stable persisted state-record identifier for this risk-action state machine.
+    /// Stable persisted state-record identifier for this risk-action state
+    /// machine.
     #[serde(default)]
     pub state_record_id: String,
 
@@ -188,7 +189,8 @@ pub struct AccountRiskActionProposalResponse {
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
 pub struct AccountRiskActionApprovalResponse {
-    /// Stable persisted state-record identifier for this risk-action state machine.
+    /// Stable persisted state-record identifier for this risk-action state
+    /// machine.
     #[serde(default)]
     pub state_record_id: String,
 

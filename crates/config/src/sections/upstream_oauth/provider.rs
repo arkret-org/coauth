@@ -44,7 +44,8 @@ pub enum TokenAuthMethod {
     /// `none`: No client authentication
     None,
 
-    /// `client_secret_basic`: HTTP Basic auth with `client_id` and `client_secret`
+    /// `client_secret_basic`: HTTP Basic auth with `client_id` and
+    /// `client_secret`
     ClientSecretBasic,
 
     /// `client_secret_post`: `client_id` and `client_secret` in the POST body

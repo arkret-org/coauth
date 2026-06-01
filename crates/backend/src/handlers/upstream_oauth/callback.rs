@@ -979,10 +979,11 @@ pub async fn handler(
 /// shared [`super::jwks_cache::JwksCache`]). If verification fails *because the
 /// signature did not validate* — the symptom of the upstream having rotated its
 /// signing key out from under our cached copy — this forces a single
-/// cache-bypassing re-fetch via [`super::jwks_cache::JwksCache::force_refresh`],
-/// updates `*current_jwks` in place, and retries verification once. Any other
-/// failure (expired token, wrong audience, etc.) is returned immediately
-/// without a re-fetch, since a fresh keyset would not change the outcome.
+/// cache-bypassing re-fetch via
+/// [`super::jwks_cache::JwksCache::force_refresh`], updates `*current_jwks` in
+/// place, and retries verification once. Any other failure (expired token,
+/// wrong audience, etc.) is returned immediately without a re-fetch, since a
+/// fresh keyset would not change the outcome.
 ///
 /// On success `*current_jwks` holds the keyset that actually verified the token
 /// (refreshed or not), so the caller can reuse it for downstream userinfo

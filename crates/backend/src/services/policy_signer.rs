@@ -195,8 +195,9 @@ fn preferred_service_signing_key(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use contrix_core::{Did, RealmId};
+
+    use super::*;
 
     fn empty_sha256() -> Hash {
         Hash::new(format!(

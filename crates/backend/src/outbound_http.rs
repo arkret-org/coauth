@@ -277,15 +277,13 @@ fn private_networks_allowed() -> bool {
 }
 
 fn env_flag_enabled(name: &str) -> bool {
-    std::env::var(name)
-        .map(|value| {
-            let value = value.trim();
-            !(value.is_empty()
-                || value.eq_ignore_ascii_case("0")
-                || value.eq_ignore_ascii_case("false")
-                || value.eq_ignore_ascii_case("no"))
-        })
-        .unwrap_or(false)
+    std::env::var(name).is_ok_and(|value| {
+        let value = value.trim();
+        !(value.is_empty()
+            || value.eq_ignore_ascii_case("0")
+            || value.eq_ignore_ascii_case("false")
+            || value.eq_ignore_ascii_case("no"))
+    })
 }
 
 fn private_egress_target_allowed(host: &str) -> bool {
@@ -317,7 +315,10 @@ fn blocked_domain_reason(host: &str) -> Option<&'static str> {
     if host == "localhost" || host.ends_with(".localhost") {
         return Some("localhost names are not routable outbound targets");
     }
-    if host.ends_with(".local") || host.ends_with(".internal") {
+    if matches!(
+        host.rsplit_once('.').map(|(_, suffix)| suffix),
+        Some("local" | "internal")
+    ) {
         return Some("internal-only DNS suffix");
     }
     if host == "metadata.google.internal" {
@@ -698,7 +699,6 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
 mod tests {
     use std::{
         future::Future,
-        path::Path,
         sync::{
             Arc, Once,
             atomic::{AtomicUsize, Ordering},
@@ -812,7 +812,7 @@ mod tests {
 
     #[test]
     fn production_code_uses_shared_reqwest_client_factory() {
-        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let src = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut offenders = Vec::new();
         collect_direct_reqwest_constructors(&src, &mut offenders);
         assert!(
@@ -821,18 +821,17 @@ mod tests {
         );
     }
 
-    fn collect_direct_reqwest_constructors(path: &Path, offenders: &mut Vec<String>) {
+    fn collect_direct_reqwest_constructors(path: &camino::Utf8Path, offenders: &mut Vec<String>) {
         let entries = std::fs::read_dir(path).expect("read src dir");
         for entry in entries {
             let entry = entry.expect("read src entry");
-            let path = entry.path();
+            let path =
+                camino::Utf8PathBuf::from_path_buf(entry.path()).expect("src path is valid utf-8");
             if path.is_dir() {
                 collect_direct_reqwest_constructors(&path, offenders);
                 continue;
             }
-            if path.extension().and_then(|ext| ext.to_str()) != Some("rs")
-                || path.file_name().and_then(|name| name.to_str()) == Some("outbound_http.rs")
-            {
+            if path.extension() != Some("rs") || path.file_name() == Some("outbound_http.rs") {
                 continue;
             }
             let content = std::fs::read_to_string(&path).expect("read rust source");
@@ -847,7 +846,7 @@ mod tests {
                 if line.contains("reqwest::Client::new()")
                     || line.contains("reqwest::Client::builder()")
                 {
-                    offenders.push(format!("{}:{}", path.display(), index + 1));
+                    offenders.push(format!("{}:{}", path.as_str(), index + 1));
                 }
             }
         }

@@ -13,18 +13,18 @@
 //!
 //! ## Flow
 //!
-//! 1. The inviter signs an invite payload (out of band) and POSTs it to
-//!    `POST /api/v1/account/invites/relay` along with `(target_principal_url,
+//! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
+//!    /api/v1/account/invites/relay` along with `(target_principal_url,
 //!    target_holder_did, consent_id, scope)`.
 //! 2. Coauth queries the target's consent cell via
 //!    `consent_cell_query::query_consent_cell`.
 //! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup +
-//!    `require_consent` policy bit into an
-//!    `Allow / ConsentRequired / Quarantine` decision.
+//!    `require_consent` policy bit into an `Allow / ConsentRequired /
+//!    Quarantine` decision.
 //! 4. On `Allow`, coauth forwards the (already-signed) invite payload to the
-//!    target principal's invite-intake endpoint and returns 200.
-//!    On `ConsentRequired`, coauth returns 403 with `consent_required`.
-//!    On `Quarantine`, coauth returns 202 with `quarantined`; the actual
+//!    target principal's invite-intake endpoint and returns 200. On
+//!    `ConsentRequired`, coauth returns 403 with `consent_required`. On
+//!    `Quarantine`, coauth returns 202 with `quarantined`; the actual
 //!    holder-side queue management lives elsewhere (see `TODO(quarantine-
 //!    inbox)` in `users/create.rs`).
 //!
@@ -305,12 +305,13 @@ pub async fn post_invite_relay(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::handlers::test_utils::setup;
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
         matchers::{method, path_regex},
     };
+
+    use super::*;
+    use crate::handlers::test_utils::setup;
 
     fn payload() -> serde_json::Value {
         serde_json::json!({

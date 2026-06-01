@@ -64,8 +64,8 @@ pub struct SiteConfig {
     /// Whether password registration is enabled.
     pub password_registration_enabled: bool,
 
-    /// coauth extension: whether at least one contact method (email or phone) is
-    /// required for password registrations.
+    /// coauth extension: whether at least one contact method (email or phone)
+    /// is required for password registrations.
     pub password_registration_contact_required: bool,
 
     /// coauth extension: whether dev/test registration clients may skip

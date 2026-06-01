@@ -464,12 +464,13 @@ fn parse_api_fault(status: u16, bytes: &[u8]) -> StaridError {
 mod tests {
     use std::sync::Once;
 
-    use super::*;
     use serde_json::json;
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
         matchers::{body_partial_json, header, method, path, path_regex},
     };
+
+    use super::*;
 
     /// `reqwest`'s rustls feature requires a default crypto provider.
     /// Install it once per test process.

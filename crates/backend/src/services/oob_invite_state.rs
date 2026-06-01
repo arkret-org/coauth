@@ -116,8 +116,9 @@ pub async fn pad_to_non_enumerable(arrival: Instant) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
+    use super::*;
 
     #[test]
     fn all_seven_triggers_collapse_to_one_wire_body() {
@@ -171,7 +172,9 @@ mod tests {
     async fn pad_does_not_oversleep_when_already_past_window() {
         // Pretend the handler took longer than the pad — we should
         // return promptly without an extra delay.
-        let arrival = Instant::now() - Duration::from_millis(80);
+        let arrival = Instant::now()
+            .checked_sub(Duration::from_millis(80))
+            .unwrap();
         let before = Instant::now();
         pad_to_non_enumerable(arrival).await;
         let extra = before.elapsed();

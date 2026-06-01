@@ -37,7 +37,8 @@ const AUDIT_TRANSCRIPT_SCHEMA_VERSION: u32 = 2;
 pub enum AuditSignatureStatus {
     /// The row has a signature and the current service public key verifies it.
     Verified,
-    /// The row predates signed-audit rollout or was explicitly written unsigned.
+    /// The row predates signed-audit rollout or was explicitly written
+    /// unsigned.
     UnsignedLegacy,
     /// The row has a signature, but the signature no longer matches the row.
     Invalid,
@@ -525,7 +526,7 @@ mod tests {
         );
 
         let mut replayed_time = log;
-        replayed_time.created_at = replayed_time.created_at + chrono::Duration::seconds(1);
+        replayed_time.created_at += chrono::Duration::seconds(1);
         assert_eq!(
             verify_admin_operation_signature(&replayed_time, &keystore, service_did),
             AuditSignatureStatus::Invalid

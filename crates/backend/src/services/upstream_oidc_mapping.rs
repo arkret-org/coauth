@@ -16,8 +16,8 @@
 //! - the `iss` claim matches one of the trusted policies,
 //! - the `aud` claim contains the policy's expected audience,
 //! - signature verification against the issuer's JWKS,
-//! - `exp` is in the future and `iat` is not too far in the future
-//!   (≤ 5 min skew, matching SDK / spec convention).
+//! - `exp` is in the future and `iat` is not too far in the future (≤ 5 min
+//!   skew, matching SDK / spec convention).
 //!
 //! On success, claims are projected through the policy's `claims_mapping`
 //! into a `MappedUpstreamIdentity { sub, email?, name?, role }`. A missing

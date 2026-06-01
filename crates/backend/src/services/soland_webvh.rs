@@ -1,17 +1,20 @@
 //! Embedded `did:webvh` minting against soland's principal-server.
 //!
-//! Soland exposes `POST /api/v1/identity/webvh/register` ([`soland/src/routing/identity/did.rs`])
-//! to mint a `did:webvh:<scid>:<host>:webvh:<local_id>` DID under its own
-//! authority. Unlike the external starid adapter — which accepts an opaque
-//! `update_key` string and signs the inception entry server-side — soland's
-//! embedded provider requires the **client** to:
+//! Soland exposes `POST /api/v1/identity/webvh/register`
+//! ([`soland/src/routing/identity/did.rs`]) to mint a `did:webvh:<scid>:<host>:
+//! webvh:<local_id>` DID under its own authority. Unlike the external starid
+//! adapter — which accepts an opaque `update_key` string and signs the
+//! inception entry server-side — soland's embedded provider requires the
+//! **client** to:
 //!
 //! 1. generate the DID's verification keypair and a separate update keypair,
 //! 2. construct the inception webvh log entry with `{SCID}` placeholders,
-//! 3. derive the SCID (sha256-multihash-multibase of the canonical-JCS skeleton),
+//! 3. derive the SCID (sha256-multihash-multibase of the canonical-JCS
+//!    skeleton),
 //! 4. substitute the SCID and compute `versionId = 1-<entryHash>`,
-//! 5. sign the entry (sans `proof`) under `cryptosuite: eddsa-jcs-2022` with the
-//!    update key — soland verifies that signature in [`verify_webvh_log_proof`].
+//! 5. sign the entry (sans `proof`) under `cryptosuite: eddsa-jcs-2022` with
+//!    the update key — soland verifies that signature in
+//!    [`verify_webvh_log_proof`].
 //!
 //! This module owns step 1–5. It is intentionally storage-agnostic: it returns
 //! the registration request body, the resulting DID, and the secret seed bytes
@@ -514,7 +517,7 @@ fn base58btc_decode(value: &str) -> Option<Vec<u8>> {
             return None;
         }
         let mut carry: u32 = u32::from(idx);
-        for byte in acc.iter_mut() {
+        for byte in &mut acc {
             let acc_val = u32::from(*byte) * 58 + carry;
             *byte = (acc_val & 0xff) as u8;
             carry = acc_val >> 8;
@@ -531,9 +534,10 @@ fn base58btc_decode(value: &str) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH, Signature, Verifier, VerifyingKey};
     use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
+
+    use super::*;
 
     /// In-crate copy of soland's `verify_webvh_log_proof`. If soland tightens
     /// its verification rules, this copy must be updated — and the test below
@@ -555,13 +559,13 @@ mod tests {
             .get("verificationMethod")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let public_key_multibase = vm.rsplit_once('#').map(|(_, f)| f).unwrap_or(vm);
+        let public_key_multibase = vm.rsplit_once('#').map_or(vm, |(_, f)| f);
         let update_keys = entry
             .pointer("/parameters/updateKeys")
             .and_then(Value::as_array)
             .map(|items| items.iter().filter_map(Value::as_str).collect::<Vec<_>>())
             .unwrap_or_default();
-        if !update_keys.iter().any(|key| *key == public_key_multibase) {
+        if !update_keys.contains(&public_key_multibase) {
             return Err("proof verificationMethod must reference updateKeys[0]".to_owned());
         }
         let public_key = decode_pubkey(public_key_multibase)?;

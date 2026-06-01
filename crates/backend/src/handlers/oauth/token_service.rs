@@ -648,11 +648,10 @@ pub async fn exchange_authorization_code(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
-    use super::*;
     use std::sync::Arc;
 
-    use crate::handlers::ActivityTracker;
     use coauth_data::{
         PgRepositoryFactory, RepositoryFactory as _,
         clock::MockClock,
@@ -663,6 +662,9 @@ mod tests {
     use rand_core::SeedableRng;
     use tokio_util::{sync::CancellationToken, task::TaskTracker};
     use url::Url;
+
+    use super::*;
+    use crate::handlers::ActivityTracker;
 
     fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> Client {
         Client {
@@ -727,9 +729,7 @@ mod tests {
     }
 
     async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture> {
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
-            return None;
-        };
+        let pool = coauth_data::test_utils::setup_test_pool().await?;
 
         let factory = PgRepositoryFactory::new(pool);
         let clock = Arc::new(MockClock::default());
@@ -737,7 +737,7 @@ mod tests {
         let cancellation_token = CancellationToken::new();
         let activity_tracker = ActivityTracker::new(
             factory.clone().boxed(),
-            std::time::Duration::from_secs(60),
+            std::time::Duration::from_mins(1),
             &task_tracker,
             cancellation_token.clone(),
         )

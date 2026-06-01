@@ -3,10 +3,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::Ulid;
-pub use crate::{pg::audit::PgAuditRepository, storage::audit::*};
 pub use crate::{
-    pg::handle_audit::PgHandleAuditRepository,
-    storage::handle_audit::{HandleAuditEventType, HandleAuditRepository, NewHandleAuditEvent},
+    pg::{audit::PgAuditRepository, handle_audit::PgHandleAuditRepository},
+    storage::{
+        audit::*,
+        handle_audit::{HandleAuditEventType, HandleAuditRepository, NewHandleAuditEvent},
+    },
 };
 
 /// An admin operation log entry, recording actions taken by administrators.

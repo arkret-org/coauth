@@ -5,8 +5,7 @@
 //!
 //! # Modules
 //!
-//! - [`client_authorization`] — Extract and validate OAuth client
-//!   credentials
+//! - [`client_authorization`] — Extract and validate OAuth client credentials
 //! - [`cookies`] — Encrypted cookie jar (read/write encrypted session cookies)
 //! - [`csrf`] — CSRF token generation and verification
 //! - [`jwt`] — JWT creation and verification helpers

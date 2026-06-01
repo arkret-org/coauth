@@ -23,12 +23,13 @@ use super::{
 };
 use crate::{
     handlers::contrix,
-    oidc_client::requests::discovery,
-    oidc_client::types::client_credentials::ClientCredentials,
+    oidc_client::{requests::discovery, types::client_credentials::ClientCredentials},
     outbound_http::{self, RequestBuilderExt as _},
-    services::soland_webvh,
-    services::upstream_oidc::UpstreamOidcExchangeMode,
-    services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token},
+    services::{
+        soland_webvh,
+        upstream_oidc::UpstreamOidcExchangeMode,
+        upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token},
+    },
 };
 
 #[derive(Deserialize, ToSchema)]
@@ -1975,9 +1976,10 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
 
 #[cfg(test)]
 mod tests {
+    use hyper::{Request, StatusCode};
+
     use super::*;
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
-    use hyper::{Request, StatusCode};
 
     #[test]
     fn protocol_device_id_validation_matches_soland_boundary() {

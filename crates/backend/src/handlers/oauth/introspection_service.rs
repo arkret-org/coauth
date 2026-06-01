@@ -13,8 +13,7 @@ use oauth_types::requests::IntrospectionResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::ActivityTracker;
-use crate::handlers::contrix;
+use crate::handlers::{ActivityTracker, contrix};
 
 /// Errors that can occur during token introspection business logic.
 #[derive(Debug, Error)]

@@ -1,6 +1,6 @@
 //! Contrix device administration endpoints.
 
-use std::{collections::BTreeMap, collections::btree_map::Entry};
+use std::collections::{BTreeMap, btree_map::Entry};
 
 use chrono::{DateTime, Utc};
 use coauth_data::{
@@ -296,12 +296,12 @@ async fn apply_device_revocation_audit(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::TimeZone as _;
     use coauth_data::{Clock, oauth::NewSessionGrant};
     use hyper::{Request, StatusCode};
     use oauth_types::scope::Scope;
 
+    use super::*;
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
     #[test]

@@ -1,8 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
-use coauth_data::oauth::OAuthClientI18n;
-use coauth_data::{Client, Clock, LocalizedClientMetadata};
+use coauth_data::{Client, Clock, LocalizedClientMetadata, oauth::OAuthClientI18n};
 use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use oauth_types::{oidc::ApplicationType, requests::GrantType};

@@ -10,8 +10,7 @@ use super::{
     site_config::{SiteConfigResponse, from_site_config},
 };
 use crate::{
-    handlers::account::service::connections::load_linked_accounts,
-    handlers::contrix,
+    handlers::{account::service::connections::load_linked_accounts, contrix},
     services::user_profile::{UserProfileServiceError, load_viewer_profile},
 };
 

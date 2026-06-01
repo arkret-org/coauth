@@ -1456,17 +1456,12 @@ fn service_describe_response(
         // role is independent: any subset may be deployed off elsewhere
         // (e.g. dedicated starid for identity_resolver, dedicated
         // account-registry service) without affecting the others.
-        //   - "auth_server"        : OIDC / token issuance, the
-        //                            canonical role.
-        //   - "identity_resolver"  : DID / handle resolution proxy.
-        //                            NOT canonical identity registry;
-        //                            backed by `cx.identity.*` proxy
-        //                            operations that ultimately route
-        //                            to an upstream registry (configured
-        //                            via `identity_registry_resolver`).
-        //   - "account_registry"   : internal service-account /
-        //                            recovery / claim-attestation
-        //                            management.
+        //   - "auth_server"        : OIDC / token issuance, the canonical role.
+        //   - "identity_resolver"  : DID / handle resolution proxy. NOT canonical identity
+        //     registry; backed by `cx.identity.*` proxy operations that ultimately route to an
+        //     upstream registry (configured via `identity_registry_resolver`).
+        //   - "account_registry"   : internal service-account / recovery / claim-attestation
+        //     management.
         service_roles: vec!["auth_server", "identity_resolver", "account_registry"],
         protocol_version: CONTRIX_PROTOCOL_VERSION,
         supported_profiles: Vec::new(),
@@ -1530,21 +1525,16 @@ fn service_describe_response(
         // The other directory-role profiles that would superficially
         // apply are NOT claimed and the reason is documented inline:
         //
-        //   * `cx.profile.identity_registry.v1`   — role=directory.
-        //     coauth's `cx.identity.*` ops are a DELEGATED proxy onto
-        //     an upstream resolver, not a canonical registry. Claiming
-        //     this profile would lie about authority over DID
-        //     documents.
-        //   * `cx.profile.directory_service.v1`   — role=directory.
-        //     coauth exposes `cx.directory.resolve_handle` only for
-        //     local handles it issued; it does NOT publish a
+        //   * `cx.profile.identity_registry.v1`   — role=directory. coauth's `cx.identity.*` ops
+        //     are a DELEGATED proxy onto an upstream resolver, not a canonical registry. Claiming
+        //     this profile would lie about authority over DID documents.
+        //   * `cx.profile.directory_service.v1`   — role=directory. coauth exposes
+        //     `cx.directory.resolve_handle` only for local handles it issued; it does NOT publish a
         //     network-wide actor directory.
-        //   * `cx.profile.public_network_identity.v1` — role=directory.
-        //     Same reason — coauth is a service-local issuer, not the
-        //     network identity authority.
-        //   * `cx.profile.principal_server.v1`    — role=server.
-        //     coauth is not Realm-authoritative; principal-server
-        //     event acceptance is soland's role.
+        //   * `cx.profile.public_network_identity.v1` — role=directory. Same reason — coauth is a
+        //     service-local issuer, not the network identity authority.
+        //   * `cx.profile.principal_server.v1`    — role=server. coauth is not Realm-authoritative;
+        //     principal-server event acceptance is soland's role.
         //
         // The boundary against those non-claimed profiles is still
         // surfaced via `service_roles` + `compat_surfaces` (the
@@ -2842,9 +2832,8 @@ pub struct RefreshSessionGrantResponse {
 /// `POST /api/v1/session-grants/refresh` — exchange a near-expiry
 /// DPoP-bound session grant for a fresh one. The caller MUST present:
 ///
-/// * A `DPoP` header that proves possession of the same key the existing
-///   grant is bound to (`cnf.jkt` on the old grant must match the new
-///   proof's `jkt`).
+/// * A `DPoP` header that proves possession of the same key the existing grant
+///   is bound to (`cnf.jkt` on the old grant must match the new proof's `jkt`).
 /// * A request body carrying the prior grant JWT.
 ///
 /// On success the old grant is revoked (single-use semantics — its
@@ -2863,8 +2852,8 @@ pub async fn refresh_session_grant(
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
-    // 1. DPoP proof must be present — the refresh endpoint is the
-    //    canonical proof-of-possession check.
+    // 1. DPoP proof must be present — the refresh endpoint is the canonical
+    //    proof-of-possession check.
     let dpop_header = dpop_header_from_request(req)
         .ok_or_else(|| ContrixRouteError::BadRequest("device_proof_required".to_owned()))?;
 
@@ -2879,10 +2868,9 @@ pub async fn refresh_session_grant(
         ));
     }
 
-    // 2. Parse + load the existing grant. We never verify the JWT
-    //    signature here — the persisted row IS the source of truth — but
-    //    we DO read the `cnf.jkt` claim out of the JWT payload to bind
-    //    the proof.
+    // 2. Parse + load the existing grant. We never verify the JWT signature here —
+    //    the persisted row IS the source of truth — but we DO read the `cnf.jkt`
+    //    claim out of the JWT payload to bind the proof.
     let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(body.grant_jwt.as_str())
         .map_err(|_| ContrixRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let prior_payload = jwt.payload().clone();
@@ -2915,8 +2903,8 @@ pub async fn refresh_session_grant(
         ));
     }
 
-    // 3. Verify the DPoP proof against this exact endpoint, with the
-    //    prior grant_jwt as the bound access token (so `ath` MUST match).
+    // 3. Verify the DPoP proof against this exact endpoint, with the prior
+    //    grant_jwt as the bound access token (so `ath` MUST match).
     let verifier = DpopVerifier::shared();
     let now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
@@ -2930,8 +2918,8 @@ pub async fn refresh_session_grant(
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt)
         .map_err(|error| ContrixRouteError::BadRequest(error.to_string()))?;
 
-    // 4. Resolve the underlying browser session so the new grant lives
-    //    under the same authentication context.
+    // 4. Resolve the underlying browser session so the new grant lives under the
+    //    same authentication context.
     let browser_session = repo
         .browser_session()
         .lookup(prior_grant.browser_session_id)
@@ -2977,8 +2965,8 @@ pub async fn refresh_session_grant(
     .await
     .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
 
-    // 6. Single-use semantics: revoke the prior grant only AFTER the new
-    //    one is persisted.
+    // 6. Single-use semantics: revoke the prior grant only AFTER the new one is
+    //    persisted.
     let revoked_prior = repo
         .oauth_session_grant()
         .revoke(&*clock, prior_grant.clone())
@@ -3165,12 +3153,13 @@ mod tests {
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
-    use crate::handlers::test_utils::{
-        CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
-    };
-    use crate::salvo_utils::SessionInfoExt;
-
     use super::*;
+    use crate::{
+        handlers::test_utils::{
+            CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
+        },
+        salvo_utils::SessionInfoExt,
+    };
 
     fn test_keystore() -> Keystore {
         let mut rng = ChaChaRng::seed_from_u64(42);
@@ -3234,7 +3223,7 @@ mod tests {
             principal_server_url: None,
             high_risk_threshold: 2,
             trust_domain: None,
-            oob_code_kind: Default::default(),
+            oob_code_kind: ContrixConfig::default().oob_code_kind,
             password_login_session_grants_enabled: false,
             admin_org_id: None,
             verification_service_did: None,
@@ -3523,8 +3512,10 @@ mod tests {
             None,
             None,
         );
-        let mut config = ContrixConfig::default();
-        config.trust_domain = Some("cx:trust_domain:example.net".to_owned());
+        let config = ContrixConfig {
+            trust_domain: Some("cx:trust_domain:example.net".to_owned()),
+            ..Default::default()
+        };
 
         let body =
             serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();

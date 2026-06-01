@@ -330,10 +330,10 @@ fn signed_decision_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::{TimeZone as _, Utc};
     use hyper::{Request, StatusCode};
 
+    use super::*;
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
     #[test]

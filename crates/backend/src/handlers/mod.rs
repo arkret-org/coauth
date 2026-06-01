@@ -73,7 +73,8 @@ pub mod account;
 pub mod admin;
 /// Shared infrastructure types (DepotExt, RouteError, etc.).
 pub mod common;
-/// Contrix-facing identity, directory, DID document, and session grant handlers.
+/// Contrix-facing identity, directory, DID document, and session grant
+/// handlers.
 pub mod contrix;
 /// Public inbound webhooks for email delivery providers.
 pub mod email_webhooks;
@@ -123,7 +124,6 @@ pub use self::{
     notification_language::notification_language,
     preferred_language::preferred_language,
     rate_limit::{Limiter, RequesterFingerprint},
-    upstream_oauth::cache::MetadataCache,
-    upstream_oauth::jwks_cache::JwksCache,
+    upstream_oauth::{cache::MetadataCache, jwks_cache::JwksCache},
 };
 pub use crate::salvo_utils::cookies::CookieManager;

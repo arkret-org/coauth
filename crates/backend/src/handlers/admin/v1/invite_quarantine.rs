@@ -13,12 +13,11 @@
 //! Endpoints:
 //!
 //! - `GET  /api/admin/v1/invite-quarantine` — list pending entries.
-//! - `POST /api/admin/v1/invite-quarantine/{id}/resolve` — body
-//!   `{ "decision": "approve"|"reject", "note"?: "..." }`. Approve marks
-//!   the row resolved (the actual re-run of the original invite is the
-//!   caller's responsibility — sodmin re-issues `batch-invite` once it
-//!   has verified consent out of band). Reject marks the row resolved
-//!   without re-running.
+//! - `POST /api/admin/v1/invite-quarantine/{id}/resolve` — body `{ "decision":
+//!   "approve"|"reject", "note"?: "..." }`. Approve marks the row resolved (the
+//!   actual re-run of the original invite is the caller's responsibility —
+//!   sodmin re-issues `batch-invite` once it has verified consent out of band).
+//!   Reject marks the row resolved without re-running.
 //!
 //! ## Why approve does not auto-mint
 //!

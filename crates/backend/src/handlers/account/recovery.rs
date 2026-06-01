@@ -8,7 +8,6 @@ pub mod model;
 pub use model::{
     RecoveryStatusResponse, ResendRecoveryResponse, StartRecoveryInput, StartRecoveryResponse,
 };
-
 use salvo::prelude::*;
 use ulid::Ulid;
 

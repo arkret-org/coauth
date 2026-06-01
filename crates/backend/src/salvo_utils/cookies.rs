@@ -105,13 +105,12 @@ impl CookieOption {
     ///
     /// SECURITY baseline:
     /// - `HttpOnly` — no JS access (defence vs XSS-driven token theft).
-    /// - `Secure` (when the base URL is HTTPS) — never travels over
-    ///   plaintext HTTP.
+    /// - `Secure` (when the base URL is HTTPS) — never travels over plaintext
+    ///   HTTP.
     /// - `SameSite=Lax` — default for ordinary session cookies. We
     ///   intentionally do NOT use `Strict` at the baseline because
-    ///   upstream-OIDC and SSO callbacks are top-level navigations
-    ///   from a foreign origin and `Strict` would drop the cookie on
-    ///   that round-trip.
+    ///   upstream-OIDC and SSO callbacks are top-level navigations from a
+    ///   foreign origin and `Strict` would drop the cookie on that round-trip.
     /// - Path defaults to the deployment's base path.
     ///
     /// For cross-site OAuth state cookies that must NOT be reused

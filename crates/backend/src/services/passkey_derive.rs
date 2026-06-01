@@ -5,15 +5,14 @@
 //!
 //! 1. Browser finishes a `WebAuthn` registration ceremony
 //!    (`PgWebauthnService::register_finish`) producing a [`Passkey`].
-//! 2. coauth runs [`derive_update_key_from_credential`] over the
-//!    passkey's COSE public key, yielding a multibase `z…` string of
-//!    the same shape (`z6Mk…`) starid expects.
+//! 2. coauth runs [`derive_update_key_from_credential`] over the passkey's COSE
+//!    public key, yielding a multibase `z…` string of the same shape (`z6Mk…`)
+//!    starid expects.
 //! 3. coauth hands that key to starid as either:
-//!    * `StaridRegistry::create_principal_did` (first passkey on the
-//!      account → mints the DID), or
-//!    * `StaridRegistry::rotate_update_key` (subsequent enrolment →
-//!      `POST /api/v1/webvh/dids/{did}/update` swaps the key on the
-//!      existing DID).
+//!    * `StaridRegistry::create_principal_did` (first passkey on the account →
+//!      mints the DID), or
+//!    * `StaridRegistry::rotate_update_key` (subsequent enrolment → `POST
+//!      /api/v1/webvh/dids/{did}/update` swaps the key on the existing DID).
 //!
 //! Determinism note: the returned string is a function of the
 //! credential's COSE public key bytes only. Two enrolments of the same
@@ -30,11 +29,11 @@
 //! the device-side key-export contract stabilises (tracked separately).
 //!
 //! SDK-10 migration (2026-05-18): the multibase / multicodec envelope
-//! is now produced by `contrix::identity::binding::multicodec_ed25519_from_bytes`
-//! so coauth, yougen, and any other consumer reach the same bytes for
-//! the same 32-byte input. The COSE→32-byte digest step stays here
-//! because it's coupled to webauthn-rs's `Passkey` / `COSEKey` types
-//! (which are coauth-specific deps).
+//! is now produced by
+//! `contrix::identity::binding::multicodec_ed25519_from_bytes` so coauth,
+//! yougen, and any other consumer reach the same bytes for the same 32-byte
+//! input. The COSE→32-byte digest step stays here because it's coupled to
+//! webauthn-rs's `Passkey` / `COSEKey` types (which are coauth-specific deps).
 
 use contrix::identity::binding::multicodec_ed25519_from_bytes;
 use sha2::{Digest, Sha256};
@@ -82,8 +81,9 @@ mod tests {
     //! `services::onboarding_starid::tests` wire-up below + the admin
     //! `passkeys::register_finish` handler tests. Here we lock down the
     //! pure derivation contract on raw COSE-key bytes.
-    use super::*;
     use contrix::identity::binding::decode_multicodec_ed25519;
+
+    use super::*;
 
     /// Same input bytes → same multibase string; different inputs →
     /// different strings. This is the load-bearing property the starid

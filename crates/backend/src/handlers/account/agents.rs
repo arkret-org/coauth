@@ -93,8 +93,8 @@ pub struct AccountabilityGrantRequest {
 
     /// Capability actions covered by the grant. Each entry must be a
     /// registered `cx.agent.*` action from `capability-action-registry.json`;
-    /// the agent principal below references the union as a single accountability
-    /// grant.
+    /// the agent principal below references the union as a single
+    /// accountability grant.
     pub capabilities: Vec<String>,
 
     /// Optional human-readable reason recorded with the grant for the
@@ -118,7 +118,8 @@ pub struct AccountabilityGrantRequest {
 /// `contrix-spec` common-fields §4.2.
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantResponse {
-    /// Typed id of the issued grant. Wire form: `cx:accountability_grant:<uuid7>`.
+    /// Typed id of the issued grant. Wire form:
+    /// `cx:accountability_grant:<uuid7>`.
     pub accountability_grant_id: String,
 
     /// Agent principal DID this grant authorizes capability actions on.
@@ -478,15 +479,15 @@ pub async fn revoke_accountability_grant_by_id(
 // R3 spec-sync (2026-05-27, contrix-spec b47ff6ec) — agent auth error matrix.
 //
 // AUTH-1: `cx.account.agent_key_pair` error matrix. Before invoking the proof
-//         validator, fail-closed DID match → `verification_method_principal_mismatch`.
-//         Distinct codes for `pairing_request_expired`, `proof_invalid`,
-//         `agent_deactivated`.
+//         validator, fail-closed DID match →
+// `verification_method_principal_mismatch`.         Distinct codes for
+// `pairing_request_expired`, `proof_invalid`,         `agent_deactivated`.
 // AUTH-2: `cx.account.issue_session_grant` agent branch errors. Emit
 //         `agent_paused`, `agent_deactivated`, `proof_invalid`,
-//         `verification_method_principal_mismatch`, `accountability_grant_missing`.
-// AUTH-3: Revocation freshness window for paused agents — existing tokens must
-//         fail closed within the configured window even before reducer
-//         convergence catches up.
+//         `verification_method_principal_mismatch`,
+// `accountability_grant_missing`. AUTH-3: Revocation freshness window for
+// paused agents — existing tokens must         fail closed within the
+// configured window even before reducer         convergence catches up.
 //
 // Full reducer/persistence wiring of these deferred endpoints is in soland
 // (the principal server is the persistence authority). coauth keeps the
@@ -590,7 +591,6 @@ impl AgentAuthRejection {
 /// before the reducer fan-out catches up. Default 30 s per spec discussion
 /// (the full ceiling tunable lives on the deployment config and is
 /// surfaced under `cx.profile.agent_runtime.v1` in a follow-up).
-///
 // TODO(R3.1): plumb a deployment-config override
 // (`contrix.agent_runtime.revocation_freshness_window_seconds`) so SREs
 // can dial this in for tighter / looser windows.
@@ -665,6 +665,7 @@ pub fn enforce_paused_revocation_freshness(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
     use super::*;
 

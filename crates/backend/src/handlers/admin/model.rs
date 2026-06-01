@@ -6,6 +6,7 @@
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
+pub use coauth_admin_types::Resource;
 use coauth_data::personal::{
     PersonalAccessToken as DataModelPersonalAccessToken,
     session::{PersonalSession as DataModelPersonalSession, PersonalSessionOwner},
@@ -15,8 +16,6 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use thiserror::Error;
 use ulid::Ulid;
-
-pub use coauth_admin_types::Resource;
 
 /// A user
 #[derive(Serialize, JsonSchema, ToSchema)]

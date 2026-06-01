@@ -6,19 +6,18 @@
 pub mod oidc_bridge;
 pub mod passkey;
 
+use std::sync::LazyLock;
+
+use coauth_data::UrlBuilder;
 pub use oidc_bridge::{
     auth_bridge_describe, integration_describe, oidc_browser_bridge_session, oidc_code_exchange,
     oidc_exchange_describe,
 };
+use opentelemetry::{Key, KeyValue, metrics::Counter};
 pub use passkey::{
     auth_finish as passkey_auth_finish, auth_start as passkey_auth_start,
     register_finish as passkey_register_finish, register_start as passkey_register_start,
 };
-
-use std::sync::LazyLock;
-
-use coauth_data::UrlBuilder;
-use opentelemetry::{Key, KeyValue, metrics::Counter};
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
 
@@ -425,8 +424,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             // PRE-PROD CHECKLIST:
             //   - swap to passkey / OIDC exchange via
             //     `crate::handlers::account::auth::oidc_bridge`.
-            //   - bind the grant `cnf.jkt` to a DPoP proof carried on
-            //     the actual exchange request (not the kickoff one).
+            //   - bind the grant `cnf.jkt` to a DPoP proof carried on the actual exchange
+            //     request (not the kickoff one).
             //   - enforce policy on scopes the caller may request.
             // Tracked in `_improve_todos.md` C.4 (TODO scaffold).
             let session_grant = contrix::issue_session_grant_for_audience(

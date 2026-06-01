@@ -11,8 +11,7 @@ use coauth_admin_types::{
     AccountRiskActionHistoryResponse, AccountRiskActionProposalRequest,
     AccountRiskActionProposalResponse, AccountRiskActionTransitionRecord,
 };
-use coauth_data::audit::AdminOperation;
-use coauth_data::{AdminUserPatch, RepositoryAccess};
+use coauth_data::{AdminUserPatch, RepositoryAccess, audit::AdminOperation};
 use contrix_core::canonical::canonical_json_bytes;
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
@@ -44,7 +43,8 @@ use crate::{
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionExecuteResponse {
-    /// Stable persisted state-record identifier for this risk-action state machine.
+    /// Stable persisted state-record identifier for this risk-action state
+    /// machine.
     state_record_id: String,
 
     /// Proposal identifier being executed.

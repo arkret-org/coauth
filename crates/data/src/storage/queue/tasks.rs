@@ -332,7 +332,8 @@ impl DeactivateUserJob {
     /// # Parameters
     ///
     /// * `user` - The user to deactivate
-    /// * `principal_erase` - Whether to erase the user from the `PrincipalServer`
+    /// * `principal_erase` - Whether to erase the user from the
+    ///   `PrincipalServer`
     #[must_use]
     pub fn new(user: &User, principal_erase: bool) -> Self {
         Self {

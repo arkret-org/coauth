@@ -13,8 +13,7 @@ use std::{
 };
 
 use chrono::Duration;
-use coauth_config::ContrixConfig;
-use coauth_config::RateLimitingConfig;
+use coauth_config::{ContrixConfig, RateLimitingConfig};
 use coauth_data::{
     AppVersion, BoxRepository, PgRepositoryFactory, RepositoryAccess, RepositoryError,
     RepositoryFactory, SiteConfig, SystemClock, TokenType, UrlBuilder,
@@ -60,8 +59,7 @@ use crate::{
     handlers::{
         ActivityTracker, Limiter,
         passwords::{Hasher, PasswordManager},
-        upstream_oauth::cache::MetadataCache,
-        upstream_oauth::jwks_cache::JwksCache,
+        upstream_oauth::{cache::MetadataCache, jwks_cache::JwksCache},
     },
     salvo_utils::cookies::{CookieJar, CookieManager},
     services::{

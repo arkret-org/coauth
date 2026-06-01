@@ -42,7 +42,8 @@ pub struct AddRequest {
     /// The handle of the user to add.
     handle: String,
 
-    /// Skip checking with the `PrincipalServer` whether the username is available.
+    /// Skip checking with the `PrincipalServer` whether the username is
+    /// available.
     ///
     /// Use this with caution. It bypasses downstream username reservation and
     /// should only be used when the caller already knows the Principal Server
@@ -499,13 +500,14 @@ mod consent_gate_tests {
     //! `users::tests`; here we only need to confirm the gate logic
     //! routes the three outcomes correctly given the principal-server
     //! response.
-    use super::*;
-    use crate::handlers::test_utils::setup;
     use coauth_config::ContrixConfig;
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
         matchers::{method, path_regex},
     };
+
+    use super::*;
+    use crate::handlers::test_utils::setup;
 
     fn empty_config() -> ContrixConfig {
         ContrixConfig::default()

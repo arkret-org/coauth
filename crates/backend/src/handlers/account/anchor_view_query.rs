@@ -62,7 +62,8 @@ pub enum AnchorViewError {
     /// HTTP send failed (DNS, TLS, refused, etc.).
     #[error("anchor-view: server_name unreachable: {reason}")]
     PrincipalServerUnreachable { reason: String },
-    /// soland returned a non-2xx status that's not covered by an explicit branch.
+    /// soland returned a non-2xx status that's not covered by an explicit
+    /// branch.
     #[error("anchor-view: server_name returned status {status}")]
     PrincipalServerStatus { status: u16 },
     /// Response body could not be deserialized into the expected shape.
@@ -269,12 +270,13 @@ mod urlencoding {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::handlers::test_utils::setup;
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
         matchers::{method, path_regex},
     };
+
+    use super::*;
+    use crate::handlers::test_utils::setup;
 
     #[tokio::test]
     async fn anchor_view_returns_typed_error_when_url_missing() {

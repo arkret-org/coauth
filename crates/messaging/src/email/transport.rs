@@ -1525,7 +1525,10 @@ fn extract_provider_error_code(body: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-    use reqwest::{Client, header::HeaderMap};
+    use reqwest::{
+        Client,
+        header::{HeaderMap, HeaderValue},
+    };
     use rustls_platform_verifier::ConfigVerifierExt as _;
     use serde_json::json;
     use wiremock::{
@@ -1534,7 +1537,6 @@ mod tests {
     };
 
     use super::*;
-    use reqwest::header::HeaderValue;
 
     fn sample_email() -> OutboundEmail {
         OutboundEmail {

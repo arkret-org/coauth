@@ -743,10 +743,10 @@ impl Keystore {
         let cache_key: SignerCacheKey = (kid, alg.clone());
 
         // Fast path: return a cached signer if present.
-        if let Ok(cache) = self.signer_cache.read() {
-            if let Some(signer) = cache.get(&cache_key) {
-                return Ok(Arc::clone(signer));
-            }
+        if let Ok(cache) = self.signer_cache.read()
+            && let Some(signer) = cache.get(&cache_key)
+        {
+            return Ok(Arc::clone(signer));
         }
 
         // Cache miss: build the signer once via the existing builder path.

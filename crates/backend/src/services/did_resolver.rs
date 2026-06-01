@@ -566,15 +566,15 @@ async fn resolve_http_did(
 /// SSRF policy for outbound DID-document fetches.
 ///
 /// Rules:
-/// - Scheme MUST be `https` (the DID method document URLs for `did:web`
-///   and `did:plc` are always HTTPS; the delegated resolver URL is
+/// - Scheme MUST be `https` (the DID method document URLs for `did:web` and
+///   `did:plc` are always HTTPS; the delegated resolver URL is
 ///   operator-supplied and must opt into HTTPS too).
-/// - Host MUST be present and MUST NOT be a loopback / link-local /
-///   private / unspecified address. IP literals in those ranges are
-///   blocked outright; named hosts are resolved immediately before the
-///   request and rejected if any returned address is non-public. The request
-///   is then dispatched through a static-resolution outbound client pinned to
-///   that validated address set, closing the DNS rebinding window.
+/// - Host MUST be present and MUST NOT be a loopback / link-local / private /
+///   unspecified address. IP literals in those ranges are blocked outright;
+///   named hosts are resolved immediately before the request and rejected if
+///   any returned address is non-public. The request is then dispatched through
+///   a static-resolution outbound client pinned to that validated address set,
+///   closing the DNS rebinding window.
 ///
 /// Loopback is allowed when the `COAUTH_DID_RESOLVER_ALLOW_LOOPBACK`
 /// env var is set (the integration test harness uses this).
