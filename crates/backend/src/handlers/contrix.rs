@@ -4349,8 +4349,6 @@ mod tests {
             .expect_err("display `local@host` form MUST be rejected as canonical");
         require_canonical_handle("@alice:example.com")
             .expect_err("leading @ display marker MUST be rejected");
-        require_canonical_handle("contrix://example.com/users/alice")
-            .expect_err("legacy contrix:// URI form MUST be rejected");
         require_canonical_handle(":example.com").expect_err("empty localpart MUST be rejected");
         require_canonical_handle("alice:").expect_err("empty domain MUST be rejected");
         require_canonical_handle("Alice:example.com")

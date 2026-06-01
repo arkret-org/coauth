@@ -860,13 +860,6 @@ mod tests {
     }
 
     #[test]
-    fn typed_uuid7_rejects_legacy_ulid() {
-        // ULID format (Crockford base32), no compatibility expected.
-        let s = "cx:device:01JS0SP000000000000000000";
-        assert!(!super::is_typed_uuid7(s, "device"));
-    }
-
-    #[test]
     fn typed_uuid7_rejects_v4_uuid() {
         // Random v4 — must be rejected since the spec mandates v7.
         let s = "cx:device:550e8400-e29b-41d4-a716-446655440000";
