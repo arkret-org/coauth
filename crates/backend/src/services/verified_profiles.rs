@@ -66,7 +66,7 @@ struct RawVerifiedEntry {
     #[serde(default)]
     signature: Option<String>,
     #[serde(default)]
-    valid_until: Option<DateTime<Utc>>,
+    expires_at: Option<DateTime<Utc>>,
 }
 
 /// In-memory representation of a loaded verified-profile entry, consumed
@@ -85,7 +85,7 @@ pub struct VerifiedProfileDescriptor {
     pub cotest_issuer_did: String,
     pub signature: String,
     pub timestamp: DateTime<Utc>,
-    pub valid_until: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
     pub test_count: u64,
     pub spec_file: Option<String>,
 }
@@ -195,7 +195,7 @@ pub fn load_from_path(path: impl AsRef<Utf8Path>) -> Vec<VerifiedProfileDescript
             cotest_issuer_did,
             signature,
             timestamp: generated_at,
-            valid_until: entry.valid_until,
+            expires_at: entry.expires_at,
             test_count: entry.test_count.unwrap_or(0),
             spec_file: entry.spec_file,
         });
@@ -296,7 +296,7 @@ mod tests {
                     "artifact_ref": "file:///tmp/verified-profiles.json",
                     "cotest_issuer_did": "did:web:cotest.example",
                     "signature": "eddsa-jcs-b64url:test-auth-signature",
-                    "valid_until": "2026-06-20T00:00:00Z"
+                    "expires_at": "2026-06-20T00:00:00Z"
                 }
             ]
         }"#;
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(v[0].cotest_issuer_did, "did:web:cotest.example");
         assert_eq!(v[0].signature, "eddsa-jcs-b64url:test-auth-signature");
         assert_eq!(
-            v[0].valid_until.unwrap().to_rfc3339(),
+            v[0].expires_at.unwrap().to_rfc3339(),
             "2026-06-20T00:00:00+00:00"
         );
     }

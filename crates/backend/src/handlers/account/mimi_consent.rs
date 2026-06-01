@@ -52,7 +52,7 @@ use crate::outbound_http;
 #[non_exhaustive]
 pub struct RequestConsent {
     pub consent_id: String,
-    pub actor_did: String,
+    pub actor_id: String,
     pub holder_did: String,
     pub scope: String,
     #[serde(default)]
@@ -63,13 +63,13 @@ impl RequestConsent {
     #[must_use]
     pub fn new(
         consent_id: impl Into<String>,
-        actor_did: impl Into<String>,
+        actor_id: impl Into<String>,
         holder_did: impl Into<String>,
         scope: impl Into<String>,
     ) -> Self {
         Self {
             consent_id: consent_id.into(),
-            actor_did: actor_did.into(),
+            actor_id: actor_id.into(),
             holder_did: holder_did.into(),
             scope: scope.into(),
             reason: None,
@@ -88,7 +88,7 @@ impl RequestConsent {
 #[non_exhaustive]
 pub struct UpdateConsent {
     pub consent_id: String,
-    pub actor_did: String,
+    pub actor_id: String,
     pub holder_did: String,
     pub scope: String,
     pub granted: bool,
@@ -168,8 +168,8 @@ pub enum MimiConsentError {
 
     /// The actor on the MIMI envelope does not match the holder DID
     /// (and is not a registered controller). Spec §6.2 fail-closed.
-    #[error("mimi consent: actor {actor_did} is not the holder or an authorized controller")]
-    ActorNotAuthorized { actor_did: String },
+    #[error("mimi consent: actor {actor_id} is not the holder or an authorized controller")]
+    ActorNotAuthorized { actor_id: String },
 
     /// A required field on the MIMI envelope was empty.
     #[error("mimi consent: missing required field {field}")]
@@ -331,7 +331,7 @@ pub fn update_consent_to_pending_move(
         };
     }
     require!(update.consent_id, "consent_id");
-    require!(update.actor_did, "actor_did");
+    require!(update.actor_id, "actor_id");
     require!(update.holder_did, "holder_did");
     require!(update.scope, "scope");
     require!(update.space_id, "space_id");
@@ -346,7 +346,7 @@ pub fn update_consent_to_pending_move(
         } else {
             PendingMoveOp::OrSetRemove
         },
-        tag: build_consent_tag(&update.actor_did, &update.scope),
+        tag: build_consent_tag(&update.actor_id, &update.scope),
         anchor_ref: update.anchor_ref.clone(),
         hlc: update.hlc.clone(),
     })
@@ -622,18 +622,18 @@ pub(crate) fn build_and_sign_move(
 }
 
 /// Authorize a MIMI envelope's actor against the holder. Returns
-/// `Ok(())` when `actor_did == holder_did` (self-update) or when the
+/// `Ok(())` when `actor_id == holder_did` (self-update) or when the
 /// actor is in the controller allowlist supplied by the caller.
 pub fn authorize_actor(
-    actor_did: &str,
+    actor_id: &str,
     holder_did: &str,
     controllers: &[String],
 ) -> Result<(), MimiConsentError> {
-    if actor_did == holder_did || controllers.iter().any(|c| c == actor_did) {
+    if actor_id == holder_did || controllers.iter().any(|c| c == actor_id) {
         Ok(())
     } else {
         Err(MimiConsentError::ActorNotAuthorized {
-            actor_did: actor_did.to_owned(),
+            actor_id: actor_id.to_owned(),
         })
     }
 }
@@ -684,7 +684,7 @@ mod tests {
     fn sample_update(granted: bool) -> UpdateConsent {
         UpdateConsent {
             consent_id: "c-1".into(),
-            actor_did: "did:web:peer".into(),
+            actor_id: "did:web:peer".into(),
             holder_did: "did:web:holder".into(),
             scope: "invite".into(),
             granted,

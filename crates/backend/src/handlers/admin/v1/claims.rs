@@ -56,8 +56,8 @@ pub struct ClaimRecord {
     /// Bound local account, when the subject resolves to a coauth account.
     account_id: Option<String>,
 
-    /// Claim type, for example `verified_email_domain` or `org_role`.
-    claim_type: String,
+    /// Claim kind, for example `verified_email_domain` or `org_role`.
+    claim_kind: String,
 
     /// Subject account or DID.
     subject: String,
@@ -102,8 +102,8 @@ pub struct IssueClaimRequest {
     #[schemars(with = "Option<crate::handlers::admin::schema::Ulid>")]
     account_id: Option<Ulid>,
 
-    /// Claim type, for example `verified_email_domain` or `org_role`.
-    claim_type: String,
+    /// Claim kind, for example `verified_email_domain` or `org_role`.
+    claim_kind: String,
 
     /// Subject account, local DID, username, or external DID.
     subject: String,
@@ -141,9 +141,9 @@ pub struct ClaimStatusQuery {
     #[serde(rename = "filter[subject]")]
     subject: Option<String>,
 
-    /// Filter by claim type.
-    #[serde(rename = "filter[claim_type]")]
-    claim_type: Option<String>,
+    /// Filter by claim kind.
+    #[serde(rename = "filter[claim_kind]")]
+    claim_kind: Option<String>,
 
     /// Filter by lifecycle status.
     #[serde(rename = "filter[status]")]
@@ -167,7 +167,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
     let body: IssueClaimRequest = req.parse_json().await.map_err(AppError::internal)?;
 
     let now = clock.now();
-    let claim_type = require_non_empty(body.claim_type, "claim_type")?;
+    let claim_kind = require_non_empty(body.claim_kind, "claim_kind")?;
     let subject = require_non_empty(body.subject, "subject")?;
     let verifier_did = require_did(body.verifier_did, "verifier_did")?;
     let represented_org = require_non_empty(body.represented_org, "represented_org")?;
@@ -187,7 +187,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
     let record = claim_service
         .issue(IssueAccountClaim {
             account_id,
-            claim_type,
+            claim_kind,
             subject,
             issuer,
             verifier_did,
@@ -210,7 +210,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
         serde_json::json!({
             "account_id": record.account_id.as_ref().map(ToString::to_string),
             "subject": &record.subject,
-            "claim_type": &record.claim_type,
+            "claim_kind": &record.claim_kind,
             "issuer": &record.issuer,
             "verifier_did": &record.verifier_did,
             "represented_org": &record.represented_org,
@@ -238,7 +238,7 @@ pub async fn list_claim_status(req: &mut Request, depot: &Depot) -> JsonResult<C
             AccountClaimFilter {
                 account_id: query.account_id,
                 subject: normalize_optional_query(query.subject),
-                claim_type: normalize_optional_query(query.claim_type),
+                claim_kind: normalize_optional_query(query.claim_kind),
                 status: query.status.map(ClaimStatus::into_service),
                 limit: query.limit,
             },
@@ -287,7 +287,7 @@ pub async fn revoke_claim(req: &mut Request, depot: &Depot) -> JsonResult<ClaimR
         serde_json::json!({
             "account_id": record.account_id.as_ref().map(ToString::to_string),
             "subject": &record.subject,
-            "claim_type": &record.claim_type,
+            "claim_kind": &record.claim_kind,
             "reason": reason,
         }),
     )
@@ -301,7 +301,7 @@ pub(crate) fn claim_record_from_service(record: StoredClaimRecord) -> ClaimRecor
     ClaimRecord {
         id: record.id.to_string(),
         account_id: record.account_id.map(|id| id.to_string()),
-        claim_type: record.claim_type,
+        claim_kind: record.claim_kind,
         subject: record.subject,
         issuer: record.issuer,
         verifier_did: record.verifier_did,
@@ -437,7 +437,7 @@ mod tests {
                 .request(Request::post("/api/admin/v1/claims").bearer(&token).json(
                     serde_json::json!({
                         "account_id": user.id.to_string(),
-                        "claim_type": "org_role",
+                        "claim_kind": "org_role",
                         "subject": user.id.to_string(),
                         "verifier_did": "did:web:verifier.example",
                         "represented_org": "Example Org",

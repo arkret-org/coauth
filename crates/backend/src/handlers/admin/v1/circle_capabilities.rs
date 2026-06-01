@@ -104,7 +104,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
         None
     };
 
-    let actor_did = call_context
+    let actor_id = call_context
         .user
         .as_ref()
         .map_or_else(|| "service".to_owned(), |u| format!("user:{}", u.id));
@@ -122,7 +122,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
                 realm_id: body.realm_id,
                 action: body.action,
                 allowed_circle_ids: body.allowed_circle_ids,
-                granted_by: actor_did,
+                granted_by: actor_id,
             },
         )
         .await?;

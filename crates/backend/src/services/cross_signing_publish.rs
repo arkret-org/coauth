@@ -123,7 +123,7 @@ mod tests {
                 key_format: "raw_base64url".to_owned(),
             },
             binding: CrossSigningBinding {
-                signed_by: psk_kid.to_owned(),
+                verification_method: psk_kid.to_owned(),
                 alg: "Ed25519".to_owned(),
                 signature: "sig".to_owned(),
             },

@@ -189,7 +189,7 @@ fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError 
     }
 }
 
-async fn admin_actor_did(
+async fn admin_actor_id(
     admin_user: Option<&coauth_data::User>,
     contrix_config: &coauth_config::ContrixConfig,
     did_resolver: &dyn DidResolverService,
@@ -412,7 +412,7 @@ pub async fn propose(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let proposer_did =
-        admin_actor_did(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
+        admin_actor_id(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
     let proposal = risk_action_proposals
         .create(CreateProposal {
             account_id: account.id,
@@ -559,7 +559,7 @@ pub async fn approve(
         params.ticket.as_deref(),
     )?;
     let caller_admin_did =
-        admin_actor_did(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
+        admin_actor_id(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
     let approved_by = bind_approval_admin_did(caller_admin_did, params.approved_by.as_deref())?;
     let approval_note = params.approval_note.as_deref().unwrap_or_default();
     let verification_method = verify_approval_proof_jws(

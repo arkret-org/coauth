@@ -99,17 +99,17 @@ impl AccountRecord {
         } else {
             AccountStatus::Active
         };
-        let principal_did_bindings =
+        let principal_id_bindings =
             preview_bindings_for_user(&user, contrix_config, did_resolver).await;
-        let primary_principal_binding = principal_did_bindings
+        let primary_principal_binding = principal_id_bindings
             .iter()
             .find(|binding| binding.primary)
             .cloned();
-        let principal_dids = principal_did_bindings
+        let principal_ids = principal_id_bindings
             .iter()
             .map(|binding| binding.did.clone())
             .collect();
-        let primary_principal_did =
+        let primary_principal_id =
             Some(primary_did_for_user(&user, contrix_config, did_resolver).await);
 
         Self {
@@ -125,18 +125,18 @@ impl AccountRecord {
                 display_name: user.display_name,
                 avatar_url: user.avatar_url,
                 preferred_locale: user.preferred_locale,
-                primary_principal_did,
-                principal_dids,
+                primary_principal_id,
+                principal_ids,
                 primary_principal_binding,
-                principal_did_bindings,
+                principal_id_bindings,
             },
         }
     }
 
     /// Convenience accessor used by mutation paths that need to peek at
     /// the primary DID after rebuilding from a fresh `User`.
-    pub(crate) fn primary_principal_did(&self) -> Option<&str> {
-        self.attributes.primary_principal_did.as_deref()
+    pub(crate) fn primary_principal_id(&self) -> Option<&str> {
+        self.attributes.primary_principal_id.as_deref()
     }
 
     pub(crate) fn updated_at(&self) -> Option<DateTime<Utc>> {
@@ -594,7 +594,7 @@ fn account_claim_record_from_service(record: StoredAccountClaimRecord) -> Accoun
     AccountClaimRecord {
         id: record.id.to_string(),
         account_id: record.account_id.map(|id| id.to_string()),
-        claim_type: record.claim_type,
+        claim_kind: record.claim_kind,
         value,
         state,
         source: "coauth_claim_repository".to_owned(),
@@ -624,7 +624,7 @@ fn account_claim_value(payload: &serde_json::Value) -> Option<String> {
 fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGrantRecord> {
     vec![AccountSessionGrantRecord {
         grant_id: format!("sg-scaffold-{}", account.id),
-        subject: account.primary_principal_did().map(str::to_owned),
+        subject: account.primary_principal_id().map(str::to_owned),
         scope: Some("urn:contrix:principal-server:session.bind".to_owned()),
         state: Some("inventory_scaffold".to_owned()),
         issued_at: account.updated_at(),
@@ -678,11 +678,11 @@ mod tests {
         assert_eq!(body["data"][0]["attributes"]["username"], "alice");
         assert_eq!(body["data"][0]["attributes"]["status"], "active");
         assert_eq!(
-            body["data"][0]["attributes"]["primary_principal_did"],
+            body["data"][0]["attributes"]["primary_principal_id"],
             serde_json::Value::Null
         );
         assert_eq!(
-            body["data"][0]["attributes"]["principal_dids"],
+            body["data"][0]["attributes"]["principal_ids"],
             serde_json::json!([])
         );
 

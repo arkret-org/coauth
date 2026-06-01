@@ -19,7 +19,7 @@
 //! `is_locked = false` UI fallback.
 //!
 //! The sodmin shim was also missing `locked_at`, `disabled_at`,
-//! `principal_did_bindings`, and `primary_principal_binding` — fields
+//! `principal_id_bindings`, and `primary_principal_binding` — fields
 //! the backend has been emitting since the DID binding preview landed.
 //! The shared shape now carries them explicitly.
 
@@ -147,13 +147,13 @@ pub struct AdminAccountAttributes {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preferred_locale: Option<String>,
 
-    /// Primary principal DID once DID binding storage is available.
+    /// Primary principal identifier once DID binding storage is available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub primary_principal_did: Option<String>,
+    pub primary_principal_id: Option<String>,
 
-    /// Bound principal DIDs.
+    /// Bound principal identifiers.
     #[serde(default)]
-    pub principal_dids: Vec<String>,
+    pub principal_ids: Vec<String>,
 
     /// Richer placeholder contract for the primary DID binding.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -161,19 +161,19 @@ pub struct AdminAccountAttributes {
 
     /// Richer placeholder contract for downstream admin/OpenAPI integrations.
     #[serde(default)]
-    pub principal_did_bindings: Vec<AccountDidBindingPreview>,
+    pub principal_id_bindings: Vec<AccountDidBindingPreview>,
 }
 
 impl AdminAccountAttributes {
     /// Convenience: pick the best available primary DID. Prefers the
-    /// explicit `primary_principal_did` and falls back to the first
-    /// entry in `principal_dids` so callers do not have to repeat that
+    /// explicit `primary_principal_id` and falls back to the first
+    /// entry in `principal_ids` so callers do not have to repeat that
     /// fallback at every call site.
     #[must_use]
     pub fn effective_primary_did(&self) -> Option<&str> {
-        self.primary_principal_did
+        self.primary_principal_id
             .as_deref()
-            .or_else(|| self.principal_dids.first().map(String::as_str))
+            .or_else(|| self.principal_ids.first().map(String::as_str))
     }
 }
 
@@ -203,8 +203,8 @@ mod tests {
     fn admin_account_attributes_default_is_active() {
         let a = AdminAccountAttributes::default();
         assert_eq!(a.status, AdminAccountStatus::Active);
-        assert!(a.principal_dids.is_empty());
-        assert!(a.principal_did_bindings.is_empty());
+        assert!(a.principal_ids.is_empty());
+        assert!(a.principal_id_bindings.is_empty());
         assert!(a.primary_principal_binding.is_none());
     }
 
@@ -213,10 +213,10 @@ mod tests {
         let mut a = AdminAccountAttributes::default();
         assert_eq!(a.effective_primary_did(), None);
 
-        a.principal_dids.push("did:web:fallback.example".into());
+        a.principal_ids.push("did:web:fallback.example".into());
         assert_eq!(a.effective_primary_did(), Some("did:web:fallback.example"));
 
-        a.primary_principal_did = Some("did:web:explicit.example".into());
+        a.primary_principal_id = Some("did:web:explicit.example".into());
         assert_eq!(a.effective_primary_did(), Some("did:web:explicit.example"));
     }
 
@@ -251,10 +251,10 @@ mod tests {
             "display_name": null,
             "avatar_url": null,
             "preferred_locale": null,
-            "primary_principal_did": null,
-            "principal_dids": [],
+            "primary_principal_id": null,
+            "principal_ids": [],
             "primary_principal_binding": null,
-            "principal_did_bindings": []
+            "principal_id_bindings": []
         }"#;
         let a: AdminAccountAttributes = serde_json::from_str(wire).unwrap();
         assert_eq!(a.status, AdminAccountStatus::Locked);

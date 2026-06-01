@@ -298,7 +298,7 @@ pub struct InviteClaimBindingProof {
     /// round 4 (kid pattern `^did:[a-z0-9]+:[^\s]+#.+$`).
     pub verification_method: String,
     /// Claimant DID — the subject the proof binds to.
-    pub subject_did: Did,
+    pub subject_id: Did,
     /// Realm scope of the binding (round 4 — every binding is
     /// realm-scoped, no global bindings).
     pub realm_id: RealmId,
@@ -338,7 +338,7 @@ pub struct SubjectProofClaims {
     /// `sub` claim in the verification-service proof.
     #[serde(rename = "3pid_hash")]
     pub three_pid_hash: String,
-    /// DID the invitee promises to claim under. The wire `subject_did`
+    /// DID the invitee promises to claim under. The wire `subject_id`
     /// of the invite-claim event MUST match this value.
     pub invitee_promise_did: String,
     /// Unix-epoch (seconds) expiry. Past this point the proof MUST be
@@ -366,7 +366,7 @@ pub struct InviteRequest {
     /// The DID currently presenting this invite (typically extracted
     /// from the request bearer / DPoP signer). MUST match the inviter
     /// DID embedded in the subject proof; mismatch is
-    /// `subject_did_mismatch`.
+    /// `subject_id_mismatch`.
     pub presenter_did: String,
 }
 
@@ -441,8 +441,8 @@ pub enum InviteVerificationError {
     /// `inviter_did` in the subject proof doesn't match the actor
     /// presenting the invite (e.g. token theft + replay by a third
     /// party). Maps to HTTP `403 Forbidden`.
-    #[error("subject_did_mismatch: presenter={presenter} subject={subject}")]
-    SubjectDidMismatch { presenter: String, subject: String },
+    #[error("subject_id_mismatch: presenter={presenter} subject={subject}")]
+    SubjectIdMismatch { presenter: String, subject: String },
 }
 
 impl InviteVerificationError {
@@ -454,7 +454,7 @@ impl InviteVerificationError {
             Self::VerificationProofInvalid(_) => "verification_proof_invalid",
             Self::SubjectProofInvalid(_) => "subject_proof_invalid",
             Self::ProofExpired(_) => "proof_expired",
-            Self::SubjectDidMismatch { .. } => "subject_did_mismatch",
+            Self::SubjectIdMismatch { .. } => "subject_id_mismatch",
         }
     }
 
@@ -464,7 +464,7 @@ impl InviteVerificationError {
         match self {
             Self::VerificationProofInvalid(_) | Self::SubjectProofInvalid(_) => 401,
             Self::ProofExpired(_) => 410,
-            Self::SubjectDidMismatch { .. } => 403,
+            Self::SubjectIdMismatch { .. } => 403,
         }
     }
 }
@@ -596,7 +596,7 @@ pub async fn verify_invite(
 
     // Step 3: cross-checks.
     if subject_claims.inviter_did != req.presenter_did {
-        return Err(InviteVerificationError::SubjectDidMismatch {
+        return Err(InviteVerificationError::SubjectIdMismatch {
             presenter: req.presenter_did.clone(),
             subject: subject_claims.inviter_did.clone(),
         });
@@ -971,11 +971,11 @@ mod tests {
                 410,
             ),
             (
-                InviteVerificationError::SubjectDidMismatch {
+                InviteVerificationError::SubjectIdMismatch {
                     presenter: "did:web:a".into(),
                     subject: "did:web:b".into(),
                 },
-                "subject_did_mismatch",
+                "subject_id_mismatch",
                 403,
             ),
         ];

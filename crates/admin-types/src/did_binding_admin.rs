@@ -224,7 +224,7 @@ pub struct DidBindingResolverDescriptor {
 }
 
 /// Compact DID binding preview embedded in `AdminAccountAttributes`
-/// (`primary_principal_binding` / `principal_did_bindings`).
+/// (`primary_principal_binding` / `principal_id_bindings`).
 ///
 /// Carries just enough state for an account-list row to render a
 /// primary-DID badge without fetching the full per-binding inventory.

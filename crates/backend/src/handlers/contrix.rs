@@ -50,7 +50,7 @@ pub enum SessionGrantError {
     PemEncode(String),
 
     /// R3.2 (HC-COAUTH-1/2) — the handle-claim issuance request failed the
-    /// `claim_type` allow-list or subject (holder/principal DID)
+    /// `claim_kind` allow-list or subject (holder/principal DID)
     /// validation. Carries the SDK / shared wire reason code.
     #[error(transparent)]
     HandleClaimSubject(#[from] crate::services::handle_subject_validator::HandleClaimSubjectError),
@@ -620,7 +620,7 @@ struct VerifiedProfileDescriptor {
     signature: String,
     timestamp: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    valid_until: Option<String>,
+    expires_at: Option<String>,
 }
 
 /// T6.1 — compat / external-interop surface entry. `kind` ∈
@@ -955,7 +955,7 @@ pub struct HandleClaimProof {
 pub struct HandleClaimPayload {
     #[serde(rename = "type")]
     pub kind: String,
-    /// R3.2 — `cx.schema.handle_claim.v1` `claim_type`. coauth only emits
+    /// R3.2 — `cx.schema.handle_claim.v1` `claim_kind`. coauth only emits
     /// the allow-listed values (`handle_binding` / `organization_handle`);
     /// the removed `service_handle` value is rejected at issuance time by
     /// [`crate::services::handle_subject_validator::ensure_claim_type_supported`].
@@ -993,7 +993,7 @@ pub struct HandleClaimMaterial {
 /// be stored as long-lived bearer credentials.
 pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 
-/// R3.2 — the `claim_type` coauth's handle-claim issuer stamps on the
+/// R3.2 — the `claim_kind` coauth's handle-claim issuer stamps on the
 /// emitted `cx.handle.claim` payload.
 ///
 /// Modelled as an enum so the removed `service_handle` value can never be
@@ -1002,16 +1002,16 @@ pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 /// [`crate::services::handle_subject_validator::ensure_claim_type_supported`]
 /// allow-list check for defence in depth against future drift. Matches the
 /// SDK `HandleClass::{UserHandle, OrganizationHandle}` enum, serialised as
-/// the `cx.schema.handle_claim.v1` `claim_type` snake-case strings.
+/// the `cx.schema.handle_claim.v1` `claim_kind` snake-case strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HandleClaimType {
+pub(crate) enum HandleClaimKind {
     /// A holder-bound user handle (`HandleClass::UserHandle`).
     HandleBinding,
     /// An organization-assigned handle (`HandleClass::OrganizationHandle`).
     OrganizationHandle,
 }
 
-impl HandleClaimType {
+impl HandleClaimKind {
     pub(crate) const fn as_wire(self) -> &'static str {
         match self {
             Self::HandleBinding => "handle_binding",
@@ -1033,7 +1033,7 @@ pub(crate) fn issue_handle_claim(
     contrix_config: &ContrixConfig,
     key_store: &Keystore,
     user: &User,
-    claim_type: HandleClaimType,
+    claim_kind: HandleClaimKind,
     audience: String,
     member_delivery_binding: HandleClaimDeliveryBindingHint,
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
@@ -1045,11 +1045,11 @@ pub(crate) fn issue_handle_claim(
     let subject_id = user_did_for(url_builder, contrix_config, user);
 
     // HC-COAUTH-1 (business layer) — fail closed against the removed
-    // `service_handle` (and any other non-allow-listed) `claim_type`. The
-    // [`HandleClaimType`] enum already prevents an in-process caller from
+    // `service_handle` (and any other non-allow-listed) `claim_kind`. The
+    // [`HandleClaimKind`] enum already prevents an in-process caller from
     // naming `service_handle`; this re-checks the wire string so the deny
     // also covers any future code path that bypasses the enum.
-    ensure_claim_type_supported(claim_type.as_wire())?;
+    ensure_claim_type_supported(claim_kind.as_wire())?;
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
     // `cx:actor:` / `cx:account:` typed id or a service DID. coauth always
@@ -1075,7 +1075,7 @@ pub(crate) fn issue_handle_claim(
     // payload.
     let mut payload_no_proofs = HandleClaimPayload {
         kind: "cx.handle.claim".to_owned(),
-        claim_kind: claim_type.as_wire().to_owned(),
+        claim_kind: claim_kind.as_wire().to_owned(),
         subject_id: subject_id.clone(),
         handle,
         handle_aliases: aliases.clone(),
@@ -1415,7 +1415,7 @@ fn build_verified_profile_descriptors(
                 cotest_issuer_did: entry.cotest_issuer_did.clone(),
                 signature: entry.signature.clone(),
                 timestamp: entry.timestamp.to_rfc3339(),
-                valid_until: entry.valid_until.map(|ts| ts.to_rfc3339()),
+                expires_at: entry.expires_at.map(|ts| ts.to_rfc3339()),
             })
         })
         .collect()
@@ -3006,13 +3006,13 @@ pub async fn refresh_session_grant(
 
 /// Body for the cotest debug helper. `dpop_jwk` is the device's public
 /// JWK (RFC 7517 shape) — we recompute its thumbprint and bake it in as
-/// `cnf.jkt` on the issued grant. `actor_did` is the subject DID the
+/// `cnf.jkt` on the issued grant. `actor_id` is the subject DID the
 /// caller wants the grant bound to; we trust it because this endpoint
 /// is gated behind `debug_assertions` / a `COAUTH_ENABLE_TEST_ENDPOINTS`
 /// env var.
 #[derive(Debug, Deserialize)]
 pub struct DebugIssueDpopGrantRequest {
-    pub actor_did: String,
+    pub actor_id: String,
     pub device_id: String,
     pub dpop_jwk: serde_json::Value,
     #[serde(default)]
@@ -3067,10 +3067,8 @@ pub async fn debug_issue_dpop_grant(
         .await
         .map_err(|_| ContrixRouteError::BadRequest("invalid json body".to_owned()))?;
 
-    if body.actor_did.trim().is_empty() {
-        return Err(ContrixRouteError::BadRequest(
-            "missing actor_did".to_owned(),
-        ));
+    if body.actor_id.trim().is_empty() {
+        return Err(ContrixRouteError::BadRequest("missing actor_id".to_owned()));
     }
     if body.device_id.trim().is_empty() {
         return Err(ContrixRouteError::BadRequest(
@@ -3091,12 +3089,12 @@ pub async fn debug_issue_dpop_grant(
     let mut repo = depot.repo().await?;
 
     // We need a browser session for the underlying grant row. Pick the
-    // most recent one for the user identified by `actor_did`, or fail
+    // most recent one for the user identified by `actor_id`, or fail
     // closed when none exists. The cotest harness registers the user
     // first, so a session always exists in practice.
-    let user_id = parse_local_user_did_for(&url_builder, &contrix_config, &body.actor_did)
+    let user_id = parse_local_user_did_for(&url_builder, &contrix_config, &body.actor_id)
         .ok_or_else(|| {
-            ContrixRouteError::BadRequest("actor_did is not a local Contrix user DID".to_owned())
+            ContrixRouteError::BadRequest("actor_id is not a local Contrix user DID".to_owned())
         })?;
     let user = repo
         .user()
@@ -3132,7 +3130,7 @@ pub async fn debug_issue_dpop_grant(
         &browser_session,
         audience,
         scopes,
-        Some(&body.actor_did),
+        Some(&body.actor_id),
         Some(jkt.clone()),
     )
     .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
@@ -4392,7 +4390,7 @@ mod tests {
             &contrix_config,
             &key_store,
             &user,
-            HandleClaimType::HandleBinding,
+            HandleClaimKind::HandleBinding,
             "did:web:space.example".to_owned(),
             hint.clone(),
         )
@@ -4430,12 +4428,12 @@ mod tests {
         assert_eq!(material.payload.proofs.len(), 1);
         assert_eq!(material.payload.proofs[0].audience, "did:web:space.example");
         assert_eq!(material.payload.proofs[0].jws, material.claim_jwt);
-        // HC-COAUTH-1 — coauth only stamps allow-listed claim_type values.
+        // HC-COAUTH-1 — coauth only stamps allow-listed claim_kind values.
         assert_eq!(material.payload.claim_kind, "handle_binding");
     }
 
     #[test]
-    fn issue_handle_claim_accepts_organization_handle_claim_type() {
+    fn issue_handle_claim_accepts_organization_handle_claim_kind() {
         use coauth_data::clock::MockClock;
         let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
         let contrix_config = ContrixConfig::default();
@@ -4460,11 +4458,11 @@ mod tests {
             &contrix_config,
             &key_store,
             &user,
-            HandleClaimType::OrganizationHandle,
+            HandleClaimKind::OrganizationHandle,
             "did:web:space.example".to_owned(),
             hint,
         )
-        .expect("organization_handle claim_type must be accepted");
+        .expect("organization_handle claim_kind must be accepted");
         assert_eq!(material.payload.claim_kind, "organization_handle");
     }
 }

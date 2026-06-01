@@ -44,7 +44,7 @@
 //!
 //! - `401 Unauthorized` — `verification_proof_invalid` /
 //!   `subject_proof_invalid`
-//! - `403 Forbidden` — `subject_did_mismatch`
+//! - `403 Forbidden` — `subject_id_mismatch`
 //! - `410 Gone` — `proof_expired`
 //!
 //! ## Replay defence
@@ -269,12 +269,12 @@ mod tests {
                 "proof_expired",
             ),
             (
-                InviteVerificationError::SubjectDidMismatch {
+                InviteVerificationError::SubjectIdMismatch {
                     presenter: "did:web:a".into(),
                     subject: "did:web:b".into(),
                 },
                 StatusCode::FORBIDDEN,
-                "subject_did_mismatch",
+                "subject_id_mismatch",
             ),
         ];
         for (err, expected_status, expected_code) in cases {

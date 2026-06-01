@@ -20,7 +20,7 @@
 //! `AccountClaimsResponse` definitions on the backend and the
 //! divergent `CoauthAccountClaim` / `CoauthAccountClaimsEnvelope`
 //! decoder shims in `sodmin/src/api/coauth.rs`. The sodmin shim was
-//! decoding only `claim_type` / `value` / `state` / `source` and
+//! decoding only `claim_kind` / `value` / `state` / `source` and
 //! silently dropping every other field — including the `id` the UI
 //! needs to address a claim by record ULID, the `subject`/`issuer`
 //! pair the audit panel renders, the `verifier_did` and
@@ -54,10 +54,10 @@ pub struct AdminAccountClaimRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_id: Option<String>,
 
-    /// Claim type, for example `verified_email_domain`, `org_role`,
-    /// `handle`, `principal_did`.
+    /// Claim kind, for example `verified_email_domain`, `org_role`,
+    /// `handle`, `principal_id`.
     #[serde(default)]
-    pub claim_type: String,
+    pub claim_kind: String,
 
     /// Compact display value extracted from `payload` for the admin UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -95,7 +95,7 @@ pub struct AdminAccountClaimRecord {
     pub represented_org: String,
 
     /// Raw claim payload — kept untyped so the verifier-supplied JSON
-    /// schema can vary per claim type.
+    /// schema can vary per claim kind.
     #[serde(default)]
     pub payload: serde_json::Value,
 
@@ -155,7 +155,7 @@ mod tests {
     fn unset_optional_fields_omitted_on_serialize() {
         let r = AdminAccountClaimRecord {
             id: "01H...".into(),
-            claim_type: "handle".into(),
+            claim_kind: "handle".into(),
             value: Some("alice".into()),
             state: "active".into(),
             source: "coauth_claim_repository".into(),
@@ -183,7 +183,7 @@ mod tests {
             "data": [{
                 "id": "01HXYZ...",
                 "account_id": "01HACC...",
-                "claim_type": "org_role",
+                "claim_kind": "org_role",
                 "value": "admin",
                 "state": "active",
                 "source": "coauth_claim_repository",
@@ -201,7 +201,7 @@ mod tests {
         let resp: AdminAccountClaimsResponse = serde_json::from_str(wire).unwrap();
         assert_eq!(resp.data.len(), 1);
         let row = &resp.data[0];
-        assert_eq!(row.claim_type, "org_role");
+        assert_eq!(row.claim_kind, "org_role");
         assert_eq!(row.state, "active");
         assert_eq!(row.source, "coauth_claim_repository");
         assert_eq!(row.value.as_deref(), Some("admin"));

@@ -38,7 +38,7 @@ impl AccountClaimStatus {
 pub struct AccountClaimRecord {
     pub id: Ulid,
     pub account_id: Option<Ulid>,
-    pub claim_type: String,
+    pub claim_kind: String,
     pub subject: String,
     pub issuer: String,
     pub verifier_did: String,
@@ -54,7 +54,7 @@ pub struct AccountClaimRecord {
 #[derive(Clone, Debug)]
 pub struct IssueAccountClaim {
     pub account_id: Option<Ulid>,
-    pub claim_type: String,
+    pub claim_kind: String,
     pub subject: String,
     pub issuer: String,
     pub verifier_did: String,
@@ -68,7 +68,7 @@ pub struct IssueAccountClaim {
 pub struct AccountClaimFilter {
     pub account_id: Option<Ulid>,
     pub subject: Option<String>,
-    pub claim_type: Option<String>,
+    pub claim_kind: Option<String>,
     pub status: Option<AccountClaimStatus>,
     pub limit: Option<i64>,
 }
@@ -122,7 +122,7 @@ struct AccountClaimRow {
     #[diesel(sql_type = Nullable<DieselUuid>)]
     account_id: Option<Uuid>,
     #[diesel(sql_type = Text)]
-    claim_type: String,
+    claim_kind: String,
     #[diesel(sql_type = Text)]
     subject: String,
     #[diesel(sql_type = Text)]
@@ -156,7 +156,7 @@ impl AccountClaimRow {
         AccountClaimRecord {
             id: Ulid::from(self.id),
             account_id: self.account_id.map(Ulid::from),
-            claim_type: self.claim_type,
+            claim_kind: self.claim_kind,
             subject: self.subject,
             issuer: self.issuer,
             verifier_did: self.verifier_did,
@@ -233,7 +233,7 @@ impl PgAccountClaimsService {
             RETURNING
                 id,
                 account_id,
-                claim_type,
+                claim_type AS claim_kind,
                 subject,
                 issuer,
                 verifier_did,
@@ -247,7 +247,7 @@ impl PgAccountClaimsService {
         )
         .bind::<DieselUuid, _>(id)
         .bind::<Nullable<DieselUuid>, _>(account_id)
-        .bind::<Text, _>(input.claim_type)
+        .bind::<Text, _>(input.claim_kind)
         .bind::<Text, _>(input.subject)
         .bind::<Text, _>(input.issuer)
         .bind::<Text, _>(input.verifier_did)
@@ -278,7 +278,7 @@ impl PgAccountClaimsService {
             SELECT
                 id,
                 account_id,
-                claim_type,
+                claim_type AS claim_kind,
                 subject,
                 issuer,
                 verifier_did,
@@ -304,7 +304,7 @@ impl PgAccountClaimsService {
         )
         .bind::<Nullable<DieselUuid>, _>(account_id)
         .bind::<Nullable<Text>, _>(filter.subject)
-        .bind::<Nullable<Text>, _>(filter.claim_type)
+        .bind::<Nullable<Text>, _>(filter.claim_kind)
         .bind::<Nullable<Text>, _>(status)
         .bind::<Timestamptz, _>(now)
         .bind::<BigInt, _>(limit)
@@ -332,7 +332,7 @@ impl PgAccountClaimsService {
             RETURNING
                 id,
                 account_id,
-                claim_type,
+                claim_type AS claim_kind,
                 subject,
                 issuer,
                 verifier_did,
