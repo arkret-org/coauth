@@ -1714,54 +1714,6 @@ pub(crate) fn primary_device_id(scope: &Scope) -> Option<String> {
     primary_device_id_from_tokens(scope.iter().map(oauth_types::scope::ScopeToken::as_str))
 }
 
-pub(crate) fn service_did_document(
-    url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
-    key_store: &Keystore,
-) -> Result<DidDocument, SessionGrantError> {
-    let did = service_did_for(url_builder, contrix_config);
-    let mut verification_method = Vec::new();
-    let mut authentication = Vec::new();
-    let mut assertion_method = Vec::new();
-
-    if let Some(public_key) = preferred_public_signing_key(key_store) {
-        let key_id = format!("{did}#key-1");
-        verification_method.push(VerificationMethod {
-            id: key_id.clone(),
-            kind: "JsonWebKey2020".to_owned(),
-            controller: did.clone(),
-            public_key_jwk: public_key,
-        });
-        authentication.push(key_id.clone());
-        assertion_method.push(key_id);
-    }
-
-    Ok(DidDocument {
-        id: did.clone(),
-        also_known_as: Vec::new(),
-        verification_method,
-        authentication,
-        assertion_method,
-        service: vec![
-            DidService {
-                id: format!("{did}#auth-server"),
-                kind: "ContrixAuthServer".to_owned(),
-                service_endpoint: url_builder
-                    .absolute_url("/api/v1/server/describe")
-                    .to_string(),
-            },
-            DidService {
-                id: format!("{did}#openid-configuration"),
-                kind: "OpenIdConnectConfiguration".to_owned(),
-                service_endpoint: url_builder.oidc_discovery().to_string(),
-            },
-        ],
-        // A service DID is not a handle holder, so no `primary_handle`
-        // preference applies; omit the metadata block entirely.
-        metadata: None,
-    })
-}
-
 pub(crate) fn user_did_document(
     url_builder: &UrlBuilder,
     contrix_config: &ContrixConfig,
@@ -2075,11 +2027,6 @@ pub(crate) fn preferred_public_signing_key(key_store: &Keystore) -> Option<Publi
                 .find(|candidate| candidate.kid() == key.kid())
                 .cloned()
         })
-}
-
-pub(crate) fn parse_local_user_did(url_builder: &UrlBuilder, did: &str) -> Option<Ulid> {
-    let prefix = format!("{}:users:", service_did(url_builder));
-    did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
 }
 
 pub(crate) fn parse_local_user_did_for(

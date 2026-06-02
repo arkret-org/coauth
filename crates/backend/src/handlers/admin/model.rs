@@ -51,50 +51,6 @@ pub struct User {
     preferred_locale: Option<String>,
 }
 
-impl User {
-    /// Samples of users with different properties for examples in the schema
-    pub fn samples() -> [Self; 3] {
-        [
-            Self {
-                id: Ulid::from_bytes([0x01; 16]),
-                handle: "alice".to_owned(),
-                created_at: DateTime::default(),
-                updated_at: DateTime::default(),
-                locked_at: None,
-                deactivated_at: None,
-                admin: false,
-                display_name: Some("Alice".to_owned()),
-                avatar_url: None,
-                preferred_locale: Some("zh-CN".to_owned()),
-            },
-            Self {
-                id: Ulid::from_bytes([0x02; 16]),
-                handle: "bob".to_owned(),
-                created_at: DateTime::default(),
-                updated_at: DateTime::default(),
-                locked_at: None,
-                deactivated_at: None,
-                admin: true,
-                display_name: Some("Bob".to_owned()),
-                avatar_url: Some("mxc://example.org/avatar".to_owned()),
-                preferred_locale: Some("en".to_owned()),
-            },
-            Self {
-                id: Ulid::from_bytes([0x03; 16]),
-                handle: "charlie".to_owned(),
-                created_at: DateTime::default(),
-                updated_at: DateTime::default(),
-                locked_at: Some(DateTime::default()),
-                deactivated_at: None,
-                admin: false,
-                display_name: None,
-                avatar_url: None,
-                preferred_locale: None,
-            },
-        ]
-    }
-}
-
 impl From<coauth_data::User> for User {
     fn from(user: coauth_data::User) -> Self {
         Self {
@@ -170,20 +126,6 @@ impl From<coauth_data::UserEmail> for UserEmail {
     }
 }
 
-impl UserEmail {
-    pub fn samples() -> [Self; 1] {
-        [Self {
-            id: Ulid::from_bytes([0x01; 16]),
-            created_at: DateTime::default(),
-            updated_at: DateTime::default(),
-            user_id: Ulid::from_bytes([0x02; 16]),
-            email: "alice@example.com".to_owned(),
-            confirmed_at: Some(DateTime::default()),
-            is_primary: true,
-        }]
-    }
-}
-
 /// A OAuth session
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct OAuthSession {
@@ -242,53 +184,6 @@ impl From<coauth_data::Session> for OAuthSession {
     }
 }
 
-impl OAuthSession {
-    /// Samples of OAuth sessions
-    pub fn samples() -> [Self; 3] {
-        [
-            Self {
-                id: Ulid::from_bytes([0x01; 16]),
-                created_at: DateTime::default(),
-                finished_at: None,
-                user_id: Some(Ulid::from_bytes([0x02; 16])),
-                user_session_id: Some(Ulid::from_bytes([0x03; 16])),
-                client_id: Ulid::from_bytes([0x04; 16]),
-                scope: "openid".to_owned(),
-                user_agent: Some("Mozilla/5.0".to_owned()),
-                last_active_at: Some(DateTime::default()),
-                last_active_ip: Some("127.0.0.1".parse().unwrap()),
-                human_name: Some("Laptop".to_owned()),
-            },
-            Self {
-                id: Ulid::from_bytes([0x02; 16]),
-                created_at: DateTime::default(),
-                finished_at: None,
-                user_id: None,
-                user_session_id: None,
-                client_id: Ulid::from_bytes([0x05; 16]),
-                scope: "urn:coauth:admin".to_owned(),
-                user_agent: None,
-                last_active_at: None,
-                last_active_ip: None,
-                human_name: None,
-            },
-            Self {
-                id: Ulid::from_bytes([0x03; 16]),
-                created_at: DateTime::default(),
-                finished_at: Some(DateTime::default()),
-                user_id: Some(Ulid::from_bytes([0x04; 16])),
-                user_session_id: Some(Ulid::from_bytes([0x05; 16])),
-                client_id: Ulid::from_bytes([0x06; 16]),
-                scope: "urn:contrix:admin:session".to_owned(),
-                user_agent: Some("Mozilla/5.0".to_owned()),
-                last_active_at: Some(DateTime::default()),
-                last_active_ip: Some("127.0.0.1".parse().unwrap()),
-                human_name: None,
-            },
-        ]
-    }
-}
-
 impl Resource for OAuthSession {
     const KIND: &'static str = "oauth-session";
     const PATH: &'static str = "/api/admin/v1/oauth-sessions";
@@ -335,41 +230,6 @@ impl From<coauth_data::BrowserSession> for UserSession {
             last_active_at: value.last_active_at,
             last_active_ip: value.last_active_ip,
         }
-    }
-}
-
-impl UserSession {
-    /// Samples of user sessions
-    pub fn samples() -> [Self; 3] {
-        [
-            Self {
-                id: Ulid::from_bytes([0x01; 16]),
-                created_at: DateTime::default(),
-                finished_at: None,
-                user_id: Ulid::from_bytes([0x02; 16]),
-                user_agent: Some("Mozilla/5.0".to_owned()),
-                last_active_at: Some(DateTime::default()),
-                last_active_ip: Some("127.0.0.1".parse().unwrap()),
-            },
-            Self {
-                id: Ulid::from_bytes([0x02; 16]),
-                created_at: DateTime::default(),
-                finished_at: None,
-                user_id: Ulid::from_bytes([0x03; 16]),
-                user_agent: None,
-                last_active_at: None,
-                last_active_ip: None,
-            },
-            Self {
-                id: Ulid::from_bytes([0x03; 16]),
-                created_at: DateTime::default(),
-                finished_at: Some(DateTime::default()),
-                user_id: Ulid::from_bytes([0x04; 16]),
-                user_agent: Some("Mozilla/5.0".to_owned()),
-                last_active_at: Some(DateTime::default()),
-                last_active_ip: Some("127.0.0.1".parse().unwrap()),
-            },
-        ]
     }
 }
 
@@ -432,41 +292,6 @@ impl From<coauth_data::UpstreamOAuthLink> for UpstreamOAuthLink {
     }
 }
 
-impl UpstreamOAuthLink {
-    /// Samples of upstream OAuth links
-    pub fn samples() -> [Self; 3] {
-        [
-            Self {
-                id: Ulid::from_bytes([0x01; 16]),
-                created_at: DateTime::default(),
-                updated_at: DateTime::default(),
-                provider_id: Ulid::from_bytes([0x02; 16]),
-                subject: "john-42".to_owned(),
-                user_id: Some(Ulid::from_bytes([0x03; 16])),
-                human_account_name: Some("john.doe@example.com".to_owned()),
-            },
-            Self {
-                id: Ulid::from_bytes([0x02; 16]),
-                created_at: DateTime::default(),
-                updated_at: DateTime::default(),
-                provider_id: Ulid::from_bytes([0x03; 16]),
-                subject: "jane-123".to_owned(),
-                user_id: None,
-                human_account_name: None,
-            },
-            Self {
-                id: Ulid::from_bytes([0x03; 16]),
-                created_at: DateTime::default(),
-                updated_at: DateTime::default(),
-                provider_id: Ulid::from_bytes([0x04; 16]),
-                subject: "bob@social.example.com".to_owned(),
-                user_id: Some(Ulid::from_bytes([0x05; 16])),
-                human_account_name: Some("bob".to_owned()),
-            },
-        ]
-    }
-}
-
 /// The policy data
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct PolicyData {
@@ -496,21 +321,6 @@ impl Resource for PolicyData {
 
     fn id(&self) -> String {
         self.id.to_string()
-    }
-}
-
-impl PolicyData {
-    /// Samples of policy data
-    pub fn samples() -> [Self; 1] {
-        [Self {
-            id: Ulid::from_bytes([0x01; 16]),
-            created_at: DateTime::default(),
-            data: serde_json::json!({
-                "hello": "world",
-                "foo": 42,
-                "bar": true
-            }),
-        }]
     }
 }
 
@@ -653,41 +463,6 @@ impl Resource for UpstreamOAuthProvider {
     }
 }
 
-impl UpstreamOAuthProvider {
-    /// Samples of upstream OAuth providers
-    pub fn samples() -> [Self; 3] {
-        [
-            Self {
-                id: Ulid::from_bytes([0x01; 16]),
-                issuer: Some("https://accounts.google.com".to_owned()),
-                human_name: Some("Google".to_owned()),
-                brand_name: Some("google".to_owned()),
-                created_at: DateTime::default(),
-                disabled_at: None,
-                source: "config".to_owned(),
-            },
-            Self {
-                id: Ulid::from_bytes([0x02; 16]),
-                issuer: Some("https://appleid.apple.com".to_owned()),
-                human_name: Some("Apple ID".to_owned()),
-                brand_name: Some("apple".to_owned()),
-                created_at: DateTime::default(),
-                disabled_at: Some(DateTime::default()),
-                source: "config".to_owned(),
-            },
-            Self {
-                id: Ulid::from_bytes([0x03; 16]),
-                issuer: None,
-                human_name: Some("Custom OAuth Provider".to_owned()),
-                brand_name: None,
-                created_at: DateTime::default(),
-                disabled_at: None,
-                source: "manual".to_owned(),
-            },
-        ]
-    }
-}
-
 /// An error that shouldn't happen in practice, but suggests database
 /// inconsistency.
 #[derive(Debug, Error)]
@@ -806,57 +581,6 @@ impl Resource for PersonalSession {
 }
 
 impl PersonalSession {
-    /// Sample personal sessions for documentation/testing
-    pub fn samples() -> [Self; 3] {
-        [
-            Self {
-                id: Ulid::from_string("01FSHN9AG0AJ6AC5HQ9X6H4RP4").unwrap(),
-                created_at: DateTime::from_timestamp(1_642_338_000, 0).unwrap(), /* 2022-01-16T14:
-                                                                                  * 40:00Z */
-                revoked_at: None,
-                owner_user_id: Some(Ulid::from_string("01FSHN9AG0MZAA6S4AF7CTV32E").unwrap()),
-                owner_client_id: None,
-                actor_user_id: Ulid::from_string("01FSHN9AG0MZAA6S4AF7CTV32E").unwrap(),
-                human_name: "Alice's Development Token".to_owned(),
-                scope: "openid urn:coauth:admin".to_owned(),
-                last_active_at: Some(DateTime::from_timestamp(1_642_347_000, 0).unwrap()), /* 2022-01-16T17:10:00Z */
-                last_active_ip: Some("192.168.1.100".parse().unwrap()),
-                expires_at: None,
-                access_token: None,
-            },
-            Self {
-                id: Ulid::from_string("01FSHN9AG0BJ6AC5HQ9X6H4RP5").unwrap(),
-                created_at: DateTime::from_timestamp(1_642_338_060, 0).unwrap(), /* 2022-01-16T14:
-                                                                                  * 41:00Z */
-                revoked_at: Some(DateTime::from_timestamp(1_642_350_000, 0).unwrap()), /* 2022-01-16T18:00:00Z */
-                owner_user_id: Some(Ulid::from_string("01FSHN9AG0NZAA6S4AF7CTV32F").unwrap()),
-                owner_client_id: None,
-                actor_user_id: Ulid::from_string("01FSHN9AG0NZAA6S4AF7CTV32F").unwrap(),
-                human_name: "Bob's Mobile App".to_owned(),
-                scope: "openid".to_owned(),
-                last_active_at: Some(DateTime::from_timestamp(1_642_349_000, 0).unwrap()), /* 2022-01-16T17:43:20Z */
-                last_active_ip: Some("10.0.0.50".parse().unwrap()),
-                expires_at: None,
-                access_token: None,
-            },
-            Self {
-                id: Ulid::from_string("01FSHN9AG0CJ6AC5HQ9X6H4RP6").unwrap(),
-                created_at: DateTime::from_timestamp(1_642_338_120, 0).unwrap(), /* 2022-01-16T14:
-                                                                                  * 42:00Z */
-                revoked_at: None,
-                owner_user_id: None,
-                owner_client_id: Some(Ulid::from_string("01FSHN9AG0DJ6AC5HQ9X6H4RP7").unwrap()),
-                actor_user_id: Ulid::from_string("01FSHN9AG0MZAA6S4AF7CTV32E").unwrap(),
-                human_name: "CI/CD Pipeline Token".to_owned(),
-                scope: "openid urn:coauth:admin".to_owned(),
-                last_active_at: Some(DateTime::from_timestamp(1_642_348_000, 0).unwrap()), /* 2022-01-16T17:26:40Z */
-                last_active_ip: Some("203.0.113.10".parse().unwrap()),
-                expires_at: Some(DateTime::from_timestamp(1_642_999_000, 0).unwrap()),
-                access_token: None,
-            },
-        ]
-    }
-
     /// Add the actual token value (for use in creation responses)
     pub fn with_token(mut self, access_token: String) -> Self {
         self.access_token = Some(access_token);
