@@ -28,8 +28,8 @@ use signature::{RandomizedSigner as _, Verifier as _};
 use ulid::Ulid;
 use uuid::Uuid;
 
-const AUDIT_TRANSCRIPT_KIND: &str = "cx.coauth.audit.admin_operation.v2";
-const AUDIT_TRANSCRIPT_SCHEMA_VERSION: u32 = 2;
+const AUDIT_TRANSCRIPT_KIND: &str = "cx.coauth.audit.admin_operation.v1";
+const AUDIT_TRANSCRIPT_SCHEMA_VERSION: u32 = 1;
 
 /// Verification state returned on admin audit read/export surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema, ToSchema)]

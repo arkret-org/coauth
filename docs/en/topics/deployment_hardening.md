@@ -108,14 +108,15 @@ within the audit retention window (default 90 days; check your tenant
 SLA).
 
 Signed admin audit rows use transcript schema
-`cx.coauth.audit.admin_operation.v2`. The detached signature binds the
+`cx.coauth.audit.admin_operation.v1`. The detached signature binds the
 repository row id, `created_at`, `admin_user_id`, operation, resource type,
 resource id, details, IP address, user agent, and schema version. Admin audit
 read/export surfaces return `signature_status`:
 
 - `verified` — the row verifies against the current service JWKS.
-- `unsigned_legacy` — the row predates v2 signed writes, carries only the
-  pre-v2 weak transcript, or was allowed during rollout fail-open mode.
+- `unsigned_legacy` — the row predates the current signed-audit transcript,
+  carries only the earlier weak transcript, or was allowed during rollout
+  fail-open mode.
 - `invalid` — the signature is present but no longer matches the row.
 - `key_unavailable` — the row references a service DID/kid that this process
   cannot verify.

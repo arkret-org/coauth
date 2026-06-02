@@ -209,13 +209,13 @@ impl FrontierSource for SolandFrontierSource {
                 .map_err(|e| FrontierError::Http(format!("frontier body parse: {e}")))?;
 
             // soland's response envelope places the typed federation
-            // peer response under `events_frontier_v2`; the inner shape
+            // peer response under `events_frontier`; the inner shape
             // is `EventsFrontierFederationPeerResponse`. We probe
             // defensively so a soland that hasn't migrated yet (or a
             // mock that returns the legacy envelope) still produces a
             // signed sentinel rather than a 500.
             let frontier_root = body
-                .get("events_frontier_v2")
+                .get("events_frontier")
                 .and_then(|v| v.get("frontier_root"))
                 .and_then(|v| v.as_str())
                 .ok_or(FrontierError::MissingField("frontier_root"))?;
