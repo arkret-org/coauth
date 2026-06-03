@@ -7,7 +7,6 @@ use coauth_data::{
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use sha2::Digest as _;
 use ulid::Ulid;
 
 use crate::{
@@ -315,15 +314,15 @@ fn signed_decision_payload(
         "policy_data_revision": policy_data_revision,
         "issued_at": issued_at,
     });
-    let digest = hex::encode(sha2::Sha256::digest(
-        &serde_json::to_vec(&payload).map_err(AppError::internal)?,
-    ));
+    let digest = contrix_core::canonical::sha256_digest(
+        serde_json::to_vec(&payload).map_err(AppError::internal)?,
+    );
 
     Ok(serde_json::json!({
         "payload": payload,
         "signature": {
             "alg": "sha256-audit-v1",
-            "digest": format!("sha256:{digest}"),
+            "digest": digest,
         }
     }))
 }

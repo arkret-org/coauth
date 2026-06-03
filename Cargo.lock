@@ -1365,6 +1365,7 @@ dependencies = [
  "coauth-iana",
  "coauth-jose",
  "coauth-keystore",
+ "contrix-identifiers",
  "figment",
  "futures-util",
  "hex",

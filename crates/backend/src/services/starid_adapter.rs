@@ -586,7 +586,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(409).set_body_json(json!({
                 "ok": false,
                 "error": {
-                    "code": "cas_conflict",
+                    "code": contrix_core::error::ERROR_CODE_CAS_CONFLICT,
                     "message": "stale write"
                 },
                 "request_id": "cx:request:01964137-0000-7000-8000-000000000001"
@@ -602,7 +602,7 @@ mod tests {
         match err {
             StaridError::Api { status, code, .. } => {
                 assert_eq!(status, 409);
-                assert_eq!(code, "cas_conflict");
+                assert_eq!(code, contrix_core::error::ERROR_CODE_CAS_CONFLICT);
             }
             other => panic!("expected Api fault, got {other:?}"),
         }

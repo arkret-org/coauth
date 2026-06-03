@@ -50,6 +50,13 @@ use thiserror::Error;
 
 use crate::services::policy_frontier::Frontier;
 
+/// Local (non-registry) reason codes. `"ok"` and `"policy_review_required"`
+/// are evaluator-internal `reason_code` values that are NOT part of the
+/// canonical `contrix_core::error::ERROR_CODE_*` wire-error registry, so
+/// they are kept as local constants rather than aliased to SDK symbols.
+const REASON_CODE_OK: &str = "ok";
+const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
+
 /// CXP-0010 (R3 spec-sync 2026-05-27, contrix-spec b47ff6ec) — call /
 /// media capability actions registered in
 /// `capability-action-registry.json`. CAP-1: capability evaluator MUST
@@ -165,7 +172,7 @@ impl PolicyDecision {
     pub fn allow(policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::Allow,
-            reason_code: "ok".to_owned(),
+            reason_code: REASON_CODE_OK.to_owned(),
             obligations: Vec::new(),
             policy_version,
         }
@@ -200,7 +207,7 @@ impl PolicyDecision {
     pub fn strict_reject_accountable_principals(policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::Deny,
-            reason_code: "failed_precondition".to_owned(),
+            reason_code: contrix_core::error::ERROR_CODE_FAILED_PRECONDITION.to_owned(),
             obligations: vec![PolicyObligation {
                 kind: "accountability_grant_required".to_owned(),
                 expires_at: None,
@@ -347,7 +354,7 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
         if value_contains_str(scope.get("deny_actors"), actor_str) {
             return PolicyDecision {
                 decision: AuthzDecision::Deny,
-                reason_code: "policy_violation".to_owned(),
+                reason_code: contrix_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };
@@ -356,7 +363,7 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
         if value_contains_str(scope.get("deny_actions"), action_str) {
             return PolicyDecision {
                 decision: AuthzDecision::Deny,
-                reason_code: "policy_violation".to_owned(),
+                reason_code: contrix_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };
@@ -365,7 +372,7 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
         if value_contains_str(scope.get("require_review_actions"), action_str) {
             return PolicyDecision {
                 decision: AuthzDecision::RequireReview,
-                reason_code: "policy_review_required".to_owned(),
+                reason_code: REASON_CODE_POLICY_REVIEW_REQUIRED.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };

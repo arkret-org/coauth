@@ -125,6 +125,10 @@ console = "0.16.3"
 # `contrix-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
 contrix-core = { version = "1.0.0", path = "../contrix-rust-sdk/crates/core", default-features = false }
+# Lightweight typed-identifier validators (no heavy transitive deps beyond
+# what `contrix-core` already pulls in). Used by `coauth-config` for the
+# `cx:trust_domain:<scope>` wire-form check so config and SDK never drift.
+contrix-identifiers = { version = "1.0.0", path = "../contrix-rust-sdk/crates/identifiers", default-features = false }
 contrix-signatures = { version = "1.0.0", path = "../contrix-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
 # Umbrella `contrix` SDK pulled in for the pure-protocol modules that
 # don't have a smaller-crate home: today just `contrix::identity::binding`

@@ -44,6 +44,12 @@ rand_chacha.workspace = true
 rand_core.workspace = true
 tokio.workspace = true
 
+# Contrix v1 SDK — lightweight typed-identifier validators. Used for the
+# `cx:trust_domain:<scope>` wire-form check (`is_trust_domain`) so the
+# config-side validation never drifts from the SDK. `default-features =
+# false` keeps the optional `salvo` surface out of the config build.
+contrix-identifiers = { workspace = true }
+
 # coauth workspace crates
 coauth-iana.workspace = true
 coauth-jose.workspace = true

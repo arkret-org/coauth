@@ -262,11 +262,10 @@ impl ThirdPartyInviteRecord {
 /// `sha256:<hex>` to match the `cx.schema.invite.v1` pattern.
 #[must_use]
 pub fn offline_token_commitment(token: &[u8], salt: &[u8]) -> String {
-    let mut h = Sha256::new();
-    h.update(token);
-    h.update(salt);
-    let digest = h.finalize();
-    format!("sha256:{}", hex::encode(digest))
+    let mut buf = Vec::with_capacity(token.len() + salt.len());
+    buf.extend_from_slice(token);
+    buf.extend_from_slice(salt);
+    contrix_core::canonical::sha256_digest(buf)
 }
 
 /// Helper: schedule a zeroize task for a terminal record. Today this

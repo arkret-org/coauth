@@ -14,7 +14,6 @@ use super::ConfigurationSection;
 /// engine agree on the exact byte-form. Validate via
 /// [`validate_trust_domain`].
 const TRUST_DOMAIN_PREFIX: &str = "cx:trust_domain:";
-const TRUST_DOMAIN_MAX_SCOPE_LEN: usize = 128;
 const SESSION_GRANT_TTL_MICROS: i64 = 5 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
 const SESSION_GRANT_TTL_MAX_SECONDS: i64 = 86_400;
@@ -220,41 +219,26 @@ impl ContrixConfig {
     /// Validate the configured `trust_domain` (if any) against the SDK
     /// `cx:trust_domain:<scope>` wire format. Returns the borrowed
     /// scope half on success so call-sites can build the
-    /// `TypedTrustDomainId` directly. Mirrors
-    /// `contrix_core::TypedTrustDomainId::new`'s acceptance rules so
-    /// the two never drift.
+    /// `TypedTrustDomainId` directly. Delegates the acceptance check to
+    /// the SDK validator `contrix_identifiers::is_trust_domain` so the
+    /// config side and the SDK never drift; the prefix strip below only
+    /// recovers the `<scope>` slice for the success return.
     ///
     /// # Errors
     ///
-    /// Returns a static string when:
-    /// - the value lacks the `cx:trust_domain:` prefix
-    /// - the scope is empty or > 128 bytes
-    /// - the first character is not `[a-z0-9]`
-    /// - any byte is outside `[a-z0-9._:-]`
+    /// Returns a static string when the value is not a well-formed
+    /// `cx:trust_domain:<scope>` (missing prefix, empty/oversized scope,
+    /// bad leading byte, or any byte outside `[a-z0-9._:-]`).
     pub fn validate_trust_domain(value: &str) -> Result<&str, &'static str> {
-        let scope = value
+        if !contrix_identifiers::is_trust_domain(value) {
+            return Err(
+                "trust_domain MUST be `cx:trust_domain:<scope>` with scope `[a-z0-9][a-z0-9._:-]{0,127}`",
+            );
+        }
+        // `is_trust_domain` already guaranteed the prefix is present.
+        value
             .strip_prefix(TRUST_DOMAIN_PREFIX)
-            .ok_or("trust_domain MUST start with `cx:trust_domain:`")?;
-        if scope.is_empty() {
-            return Err("trust_domain scope MUST NOT be empty");
-        }
-        if scope.len() > TRUST_DOMAIN_MAX_SCOPE_LEN {
-            return Err("trust_domain scope MUST be ≤128 bytes");
-        }
-        let bytes = scope.as_bytes();
-        if !matches!(bytes[0], b'a'..=b'z' | b'0'..=b'9') {
-            return Err("trust_domain scope MUST start with [a-z0-9]");
-        }
-        let ok = scope.bytes().all(|b| {
-            matches!(
-                b,
-                b'a'..=b'z' | b'0'..=b'9' | b'.' | b'_' | b'-' | b':'
-            )
-        });
-        if !ok {
-            return Err("trust_domain scope contains characters outside [a-z0-9._:-]");
-        }
-        Ok(scope)
+            .ok_or("trust_domain MUST start with `cx:trust_domain:`")
     }
 }
 
