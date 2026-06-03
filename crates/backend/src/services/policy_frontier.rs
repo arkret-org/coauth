@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 — frontier source for `cx.policy.check`.
+//! Round 4 — frontier source for `ck.policy.check`.
 //!
 //! The spec ([`policy-server.md` §4]) requires every signed decision to
 //! carry three frontier digests:
@@ -12,9 +12,9 @@
 //! - `policy_frontier_digest` — policy-source frontier digest;
 //! - `membership_frontier_digest` — membership / role frontier digest.
 //!
-//! These come from soland's `/api/v1/events/frontier?peer_role=
+//! These come from soland's `/_cokret/self/events/frontier?peer_role=
 //! federation_peer` response, which returns
-//! [`contrix_core::EventsFrontierFederationPeerResponse`] including a
+//! [`cokret_core::EventsFrontierFederationPeerResponse`] including a
 //! single `frontier_root`. The federation-peer variant is the only one
 //! that exposes the root commitment; account-client and
 //! anonymous-health variants intentionally omit it.
@@ -35,7 +35,7 @@
 
 use std::{fmt, future::Future, pin::Pin, sync::Arc, time::Duration};
 
-use contrix_core::{Hash, RealmId};
+use cokret_core::{Hash, RealmId};
 use thiserror::Error;
 use url::Url;
 
@@ -129,7 +129,7 @@ pub struct SolandFrontierSource {
 }
 
 impl SolandFrontierSource {
-    /// `base_url` is `contrix_config.principal_server_url`; when `None`
+    /// `base_url` is `cokret_config.principal_server_url`; when `None`
     /// (single-host dev deployments) every fetch returns
     /// [`Frontier::empty`] so the policy-check pipeline still produces
     /// a signed response.

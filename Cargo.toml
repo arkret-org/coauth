@@ -11,7 +11,7 @@ version = "1.8.0"
 authors = ["Meldry Team"]
 edition = "2024"
 homepage = "https://cokret.dev/docs/"
-repository = "https://github.com/cokret-dev/coauth/"
+repository = "https://github.com/cokret/coauth/"
 license = "Apache-2.0"
 publish = false
 

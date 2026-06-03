@@ -10,14 +10,14 @@
 
 完整 API 文档以 OpenAPI 规范提供。启用 `adminapi` 后，运行时会暴露这些路径：
 
-- `GET /api/admin/v1/openapi.yaml`：Cokret-native 管理 API 合约。
+- `GET /_cokret/local/admin/openapi.yaml`：Cokret-native 管理 API 合约。
 - `GET /.well-known/cokret/openapi.yaml`：供 `sodmin` 和服务自动化发现。
 - `GET /api-doc/admin/openapi.json`：兼容 Swagger 工具的 JSON 版本。
 - `GET /admin-swagger-ui/`：服务内置 Swagger UI。
 
-Cokret-native 管理面现在包含 `GET /api/admin/v1/accounts`、
-`GET /api/admin/v1/accounts/{id}`、`POST /api/admin/v1/accounts/{id}/lock` 和
-`POST /api/admin/v1/accounts/{id}/disable`。DID binding、设备管理、claim
+Cokret-native 管理面现在包含 `GET /_cokret/local/admin/accounts`、
+`GET /_cokret/local/admin/accounts/{id}`、`POST /_cokret/local/admin/accounts/{id}/lock` 和
+`POST /_cokret/local/admin/accounts/{id}/disable`。DID binding、设备管理、claim
 签发/吊销、policy dry-run 和 signed policy decision audit 路由已经进入 OpenAPI，
 并作为受保护端点提供。设备清单从已持久化的 session grant 和设备吊销审计记录派生；
 policy dry-run 会持久化 signed decision audit record，随后可通过 decision-audit
@@ -72,10 +72,10 @@ curl -X POST https://auth.example.com/oauth/token \
 
 ```bash
 # 获取前 10 个用户
-curl "https://auth.example.com/api/admin/v1/users?page[first]=10"
+curl "https://auth.example.com/_cokret/local/admin/users?page[first]=10"
 
 # 使用游标获取下一页
-curl "https://auth.example.com/api/admin/v1/users?page[first]=10&page[after]=游标值"
+curl "https://auth.example.com/_cokret/local/admin/users?page[first]=10&page[after]=游标值"
 ```
 
 响应中包含分页信息：
@@ -86,8 +86,8 @@ curl "https://auth.example.com/api/admin/v1/users?page[first]=10&page[after]=游
     "count": 42
   },
   "links": {
-    "self": "/api/admin/v1/users?page[first]=10",
-    "next": "/api/admin/v1/users?page[first]=10&page[after]=01H..."
+    "self": "/_cokret/local/admin/users?page[first]=10",
+    "next": "/_cokret/local/admin/users?page[first]=10&page[after]=01H..."
   }
 }
 ```
@@ -102,26 +102,26 @@ private key 或 provider secret。Personal access token 只会在创建或重新
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  https://auth.example.com/api/admin/v1/accounts
+  https://auth.example.com/_cokret/local/admin/accounts
 ```
 
 ### 锁定账号
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/lock
+  https://auth.example.com/_cokret/local/admin/accounts/$ACCOUNT_ID/lock
 ```
 
 ### 终止会话
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  https://auth.example.com/api/admin/v1/user-sessions/$SESSION_ID/finish
+  https://auth.example.com/_cokret/local/admin/user-sessions/$SESSION_ID/finish
 ```
 
 ### 吊销 personal session
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  https://auth.example.com/api/admin/v1/personal-sessions/$SESSION_ID/revoke
+  https://auth.example.com/_cokret/local/admin/personal-sessions/$SESSION_ID/revoke
 ```

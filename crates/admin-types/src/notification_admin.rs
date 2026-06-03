@@ -1,11 +1,11 @@
 //! Admin DTOs for the coauth notification surfaces:
 //!
-//! - `GET  /api/admin/v1/notification-channels` — configured channel roster
+//! - `GET  /_cokret/local/admin/notification-channels` — configured channel roster
 //!   (currently `email` and `sms`) with a per-channel `configured` flag derived
 //!   from `SiteConfig`.
-//! - `GET  /api/admin/v1/notification-templates` — known template keys +
+//! - `GET  /_cokret/local/admin/notification-templates` — known template keys +
 //!   human-readable descriptions.
-//! - `POST /api/admin/v1/notification-templates/publish` — publish a new
+//! - `POST /_cokret/local/admin/notification-templates/publish` — publish a new
 //!   template version (request + response body).
 //!
 //! Round-32 (C32.7): lifted out of the inline definitions in
@@ -40,7 +40,7 @@ pub struct NotificationChannelStatus {
     pub configured: bool,
 }
 
-/// Top-level response for `GET /api/admin/v1/notification-channels`.
+/// Top-level response for `GET /_cokret/local/admin/notification-channels`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "schema",
@@ -69,7 +69,7 @@ pub struct NotificationTemplateEntry {
     pub description: String,
 }
 
-/// Top-level response for `GET /api/admin/v1/notification-templates`.
+/// Top-level response for `GET /_cokret/local/admin/notification-templates`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "schema",
@@ -83,7 +83,7 @@ pub struct NotificationTemplatesResponse {
 // ── publish-template request / response ──────────────────────────────
 
 /// Request body for
-/// `POST /api/admin/v1/notification-templates/publish`. The backend
+/// `POST /_cokret/local/admin/notification-templates/publish`. The backend
 /// accepts the body, persists a new template version row, and returns
 /// the persisted row as [`PublishedTemplateResponse`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

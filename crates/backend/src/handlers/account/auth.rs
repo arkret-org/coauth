@@ -57,7 +57,7 @@ pub(crate) async fn extract_dpop_jkt_for_kickoff(
     let now = chrono::Utc::now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();
-    let htu = dpop_htu(Some(&public_base), req);
+    let htu = dpop_htu(&public_base, req);
     let result = verifier.verify(&header, &htm, &htu, now, None).await?;
     Ok(Some(result.jkt))
 }
@@ -165,7 +165,7 @@ pub struct ProviderInfo {
     pub brand_name: Option<String>,
     pub authorize_url: String,
 }
-// ── POST /api/v1/auth/login ────────────────────────────────────
+// ── POST /_cokret/gate/account/auth/login ────────────────────────────────────
 
 /// Authenticate a user with username and password, returning viewer info,
 /// setting a session cookie on success, and minting a temporary scaffold
@@ -177,7 +177,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let password_manager = depot.password_manager()?;
     let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
     let limiter = depot.limiter()?;
     let principal_server = depot.principal_server()?;
@@ -263,7 +263,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         &limiter,
         principal_server.as_ref(),
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         &site_config,
         PasswordLoginRequest {
             username_or_email: input.handle,
@@ -349,7 +349,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
-            if !contrix_config.password_login_session_grants_enabled {
+            if !cokret_config.password_login_session_grants_enabled {
                 cookie_jar.finalize(
                     res,
                     Json(LoginResponse {
@@ -358,7 +358,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         viewer: Some(ViewerInfo {
                             id: NodeType::User.serialize(user.id),
                             handle: user.handle.clone(),
-                            did: cokret::user_did_for(&url_builder, &contrix_config, &user),
+                            did: cokret::user_did_for(&url_builder, &cokret_config, &user),
                             federated_handle: cokret::user_handle(&url_builder, &user),
                             principal_id: principal_server.principal_id(&user.handle),
                             display_name,
@@ -388,7 +388,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             }
             let grant_target = match cokret::password_login_session_grant_target(
                 &url_builder,
-                &contrix_config,
+                &cokret_config,
                 requested_audience.as_deref(),
             ) {
                 Ok(target) => target,
@@ -432,7 +432,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 &mut rng,
                 &clock,
                 &url_builder,
-                &contrix_config,
+                &cokret_config,
                 &key_store,
                 &user_session,
                 grant_target.audience.clone(),
@@ -461,7 +461,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
                         handle: user.handle.clone(),
-                        did: cokret::user_did_for(&url_builder, &contrix_config, &user),
+                        did: cokret::user_did_for(&url_builder, &cokret_config, &user),
                         federated_handle: cokret::user_handle(&url_builder, &user),
                         principal_id: principal_server.principal_id(&user.handle),
                         display_name,
@@ -491,7 +491,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     }
 }
 
-// ── POST /api/v1/auth/logout ───────────────────────────────────
+// ── POST /_cokret/gate/account/auth/logout ───────────────────────────────────
 
 /// End the current browser session and clear the session cookie.
 #[endpoint]
@@ -522,7 +522,7 @@ pub async fn logout(
     Ok(())
 }
 
-// ── GET /api/v1/auth/providers ─────────────────────────────────
+// ── GET /_cokret/gate/account/auth/providers ─────────────────────────────────
 
 /// List all enabled upstream OAuth providers and site configuration flags
 /// relevant to the login/registration UI.

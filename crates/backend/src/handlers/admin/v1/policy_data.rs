@@ -153,7 +153,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::get(format!("/api/admin/v1/policy-data/{}", policy_data.id))
+        let request = Request::get(format!("/_cokret/local/admin/policy-data/{}", policy_data.id))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -171,11 +171,11 @@ mod tests {
               }
             },
             "links": {
-              "self": "/api/admin/v1/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "###);
@@ -190,7 +190,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::get(format!("/api/admin/v1/policy-data/{}", Ulid::nil()))
+        let request = Request::get(format!("/_cokret/local/admin/policy-data/{}", Ulid::nil()))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -230,7 +230,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::get("/api/admin/v1/policy-data/latest")
+        let request = Request::get("/_cokret/local/admin/policy-data/latest")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -248,11 +248,11 @@ mod tests {
               }
             },
             "links": {
-              "self": "/api/admin/v1/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "###);
@@ -267,7 +267,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::get("/api/admin/v1/policy-data/latest")
+        let request = Request::get("/_cokret/local/admin/policy-data/latest")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -293,7 +293,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/api/admin/v1/policy-data")
+        let request = Request::post("/_cokret/local/admin/policy-data")
             .bearer(&token)
             .json(serde_json::json!({
                 "data": {
@@ -315,11 +315,11 @@ mod tests {
               }
             },
             "links": {
-              "self": "/api/admin/v1/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/policy-data/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "###);

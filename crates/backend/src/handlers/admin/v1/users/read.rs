@@ -32,7 +32,7 @@ pub async fn get_by_username(req: &mut Request, depot: &Depot) -> JsonResult<Sin
         .param::<String>("username")
         .ok_or_else(|| AppError::not_found(r#"User with username "unknown" not found"#))?;
 
-    let self_path = format!("/api/admin/v1/users/by-username/{username}");
+    let self_path = format!("/_cokret/local/admin/users/by-username/{username}");
     let user = repo
         .user()
         .find_by_handle(&username)

@@ -14,7 +14,7 @@
 //! ## Flow
 //!
 //! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
-//!    /api/v1/account/invites/relay` along with `(target_principal_url,
+//!    /_cokret/self/account/invites/relay` along with `(target_principal_url,
 //!    target_holder_did, consent_id, scope)`.
 //! 2. Coauth queries the target's consent cell via
 //!    `consent_cell_query::query_consent_cell`.
@@ -50,7 +50,7 @@ use crate::{
 
 // ── Request / response shapes ──────────────────────────────────
 
-/// Body of `POST /api/v1/account/invites/relay`.
+/// Body of `POST /_cokret/self/account/invites/relay`.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RelayRequest {
     /// DID of the actor issuing the invite. Recorded in audit but not
@@ -164,7 +164,7 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, RelayRe
 ///
 /// `forward_target_url` is the URL to POST the invite payload at when the
 /// gate allows. In production this is typically
-/// `{target_principal_url}/api/v1/invites/intake` or similar. The actual
+/// `{target_principal_url}/_cokret/self/invites/intake` or similar. The actual
 /// path is decided by the target principal's API surface; coauth only
 /// needs a fully-qualified URL to POST to.
 ///
@@ -239,7 +239,7 @@ pub async fn relay_invite_with(
 
 // ── Salvo handler ──────────────────────────────────────────────
 
-/// `POST /api/v1/account/invites/relay`
+/// `POST /_cokret/self/account/invites/relay`
 #[endpoint]
 #[tracing::instrument(name = "handlers.account.invite_relay.post", skip_all, err)]
 pub async fn post_invite_relay(
@@ -260,7 +260,7 @@ pub async fn post_invite_relay(
         return Err(RouteError::BadRequest("missing_required_fields".into()));
     }
 
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let http_client = depot.http_client()?;
 
     // Body-supplied URL takes precedence over the global config — admins
@@ -268,10 +268,10 @@ pub async fn post_invite_relay(
     let principal_url = params
         .target_principal_url
         .clone()
-        .or_else(|| contrix_config.principal_server_url.clone());
+        .or_else(|| cokret_config.principal_server_url.clone());
 
     // Forward target: in this scaffolding we use the same principal URL +
-    // a conservative `/api/v1/invites/intake` path. Real wiring with
+    // a conservative `/_cokret/self/invites/intake` path. Real wiring with
     // soland's invite-intake endpoint is tracked under
     // `TODO(c10e-invite-intake)`.
     let forward_target = principal_url.as_ref().and_then(|u| {
@@ -329,9 +329,9 @@ mod tests {
 
         // Cell-query mock: granted with matching peer/scope tag.
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-allow",
+                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-allow",
                 "tags": ["peer=did:web:inviter;scope=invite"],
             })))
             .expect(1)
@@ -340,7 +340,7 @@ mod tests {
 
         // Forward-target mock: 200 OK accepts the payload.
         Mock::given(method("POST"))
-            .and(path_regex(r"^/api/v1/invites/intake"))
+            .and(path_regex(r"^/_cokret/self/invites/intake"))
             .respond_with(ResponseTemplate::new(200))
             .expect(1)
             .mount(&server)
@@ -380,7 +380,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
             .expect(1)
             .mount(&server)
@@ -422,7 +422,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
@@ -489,16 +489,16 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-allow",
+                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-allow",
                 "tags": ["peer=did:web:inviter;scope=any"],
             })))
             .mount(&server)
             .await;
 
         Mock::given(method("POST"))
-            .and(path_regex(r"^/api/v1/invites/intake"))
+            .and(path_regex(r"^/_cokret/self/invites/intake"))
             .respond_with(ResponseTemplate::new(503))
             .mount(&server)
             .await;
@@ -541,9 +541,9 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-allow",
+                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-allow",
                 "tags": ["peer=did:web:inviter;scope=invite"],
             })))
             .expect(1)

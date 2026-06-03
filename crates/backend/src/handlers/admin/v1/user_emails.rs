@@ -28,7 +28,7 @@ use crate::{
     },
 };
 
-/// JSON body accepted by `POST /api/admin/v1/user-emails`.
+/// JSON body accepted by `POST /_cokret/local/admin/user-emails`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUserEmailRequest")]
 pub struct AddRequest {
@@ -409,7 +409,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::post("/api/admin/v1/user-emails")
+        let request = Request::post("/_cokret/local/admin/user-emails")
             .bearer(&token)
             .json(serde_json::json!({
                 "email": "alice@example.com",
@@ -429,11 +429,11 @@ mod tests {
               "email": "alice@example.com"
             },
             "links": {
-              "self": "/api/admin/v1/user-emails/01FSHN9AG07HNEZXNQM2KNBNF6"
+              "self": "/_cokret/local/admin/user-emails/01FSHN9AG07HNEZXNQM2KNBNF6"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-emails/01FSHN9AG07HNEZXNQM2KNBNF6"
+            "self": "/_cokret/local/admin/user-emails/01FSHN9AG07HNEZXNQM2KNBNF6"
           }
         }
         "###);
@@ -448,7 +448,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/api/admin/v1/user-emails")
+        let request = Request::post("/_cokret/local/admin/user-emails")
             .bearer(&token)
             .json(serde_json::json!({
                 "email": "alice@example.com",
@@ -495,7 +495,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::post("/api/admin/v1/user-emails")
+        let request = Request::post("/_cokret/local/admin/user-emails")
             .bearer(&token)
             .json(serde_json::json!({
                 "email": "alice@example.com",
@@ -533,7 +533,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::post("/api/admin/v1/user-emails")
+        let request = Request::post("/_cokret/local/admin/user-emails")
             .bearer(&token)
             .json(serde_json::json!({
                 "email": "invalid-email",
@@ -586,14 +586,14 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::delete(format!("/api/admin/v1/user-emails/{id}"))
+        let request = Request::delete(format!("/_cokret/local/admin/user-emails/{id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NO_CONTENT);
 
         // Verify that the email was deleted
-        let request = Request::get(format!("/api/admin/v1/user-emails/{id}"))
+        let request = Request::get(format!("/_cokret/local/admin/user-emails/{id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -610,7 +610,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let email_id = Ulid::nil();
-        let request = Request::delete(format!("/api/admin/v1/user-emails/{email_id}"))
+        let request = Request::delete(format!("/_cokret/local/admin/user-emails/{email_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -647,7 +647,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::get(format!("/api/admin/v1/user-emails/{id}"))
+        let request = Request::get(format!("/_cokret/local/admin/user-emails/{id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -665,11 +665,11 @@ mod tests {
               "email": "alice@example.com"
             },
             "links": {
-              "self": "/api/admin/v1/user-emails/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+              "self": "/_cokret/local/admin/user-emails/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-emails/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+            "self": "/_cokret/local/admin/user-emails/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
           }
         }
         "###);
@@ -685,7 +685,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let email_id = Ulid::nil();
-        let request = Request::get(format!("/api/admin/v1/user-emails/{email_id}"))
+        let request = Request::get(format!("/_cokret/local/admin/user-emails/{email_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -730,7 +730,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::get("/api/admin/v1/user-emails")
+        let request = Request::get("/_cokret/local/admin/user-emails")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -751,7 +751,7 @@ mod tests {
                 "email": "alice@example.com"
               },
               "links": {
-                "self": "/api/admin/v1/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_cokret/local/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -768,7 +768,7 @@ mod tests {
                 "email": "bob@example.com"
               },
               "links": {
-                "self": "/api/admin/v1/user-emails/01FSHN9AG0KEPHYQQXW9XPTX6Z"
+                "self": "/_cokret/local/admin/user-emails/01FSHN9AG0KEPHYQQXW9XPTX6Z"
               },
               "meta": {
                 "page": {
@@ -778,16 +778,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-emails?page[first]=10",
-            "first": "/api/admin/v1/user-emails?page[first]=10",
-            "last": "/api/admin/v1/user-emails?page[last]=10"
+            "self": "/_cokret/local/admin/user-emails?page[first]=10",
+            "first": "/_cokret/local/admin/user-emails?page[first]=10",
+            "last": "/_cokret/local/admin/user-emails?page[last]=10"
           }
         }
         "#);
 
         // Filter by user
         let request = Request::get(format!(
-            "/api/admin/v1/user-emails?filter[user]={}",
+            "/_cokret/local/admin/user-emails?filter[user]={}",
             alice.id
         ))
         .bearer(&token)
@@ -810,7 +810,7 @@ mod tests {
                 "email": "alice@example.com"
               },
               "links": {
-                "self": "/api/admin/v1/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_cokret/local/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -820,15 +820,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "first": "/api/admin/v1/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "last": "/api/admin/v1/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[last]=10"
+            "self": "/_cokret/local/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
+            "first": "/_cokret/local/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
+            "last": "/_cokret/local/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[last]=10"
           }
         }
         "#);
 
         // Filter by email
-        let request = Request::get("/api/admin/v1/user-emails?filter[email]=alice@example.com")
+        let request = Request::get("/_cokret/local/admin/user-emails?filter[email]=alice@example.com")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -849,7 +849,7 @@ mod tests {
                 "email": "alice@example.com"
               },
               "links": {
-                "self": "/api/admin/v1/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_cokret/local/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -859,15 +859,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-emails?filter[email]=alice@example.com&page[first]=10",
-            "first": "/api/admin/v1/user-emails?filter[email]=alice@example.com&page[first]=10",
-            "last": "/api/admin/v1/user-emails?filter[email]=alice@example.com&page[last]=10"
+            "self": "/_cokret/local/admin/user-emails?filter[email]=alice@example.com&page[first]=10",
+            "first": "/_cokret/local/admin/user-emails?filter[email]=alice@example.com&page[first]=10",
+            "last": "/_cokret/local/admin/user-emails?filter[email]=alice@example.com&page[last]=10"
           }
         }
         "#);
 
         // Test count=false
-        let request = Request::get("/api/admin/v1/user-emails?count=false")
+        let request = Request::get("/_cokret/local/admin/user-emails?count=false")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -885,7 +885,7 @@ mod tests {
                 "email": "alice@example.com"
               },
               "links": {
-                "self": "/api/admin/v1/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_cokret/local/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -902,7 +902,7 @@ mod tests {
                 "email": "bob@example.com"
               },
               "links": {
-                "self": "/api/admin/v1/user-emails/01FSHN9AG0KEPHYQQXW9XPTX6Z"
+                "self": "/_cokret/local/admin/user-emails/01FSHN9AG0KEPHYQQXW9XPTX6Z"
               },
               "meta": {
                 "page": {
@@ -912,15 +912,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-emails?count=false&page[first]=10",
-            "first": "/api/admin/v1/user-emails?count=false&page[first]=10",
-            "last": "/api/admin/v1/user-emails?count=false&page[last]=10"
+            "self": "/_cokret/local/admin/user-emails?count=false&page[first]=10",
+            "first": "/_cokret/local/admin/user-emails?count=false&page[first]=10",
+            "last": "/_cokret/local/admin/user-emails?count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only
-        let request = Request::get("/api/admin/v1/user-emails?count=only")
+        let request = Request::get("/_cokret/local/admin/user-emails?count=only")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -932,14 +932,14 @@ mod tests {
             "count": 2
           },
           "links": {
-            "self": "/api/admin/v1/user-emails?count=only"
+            "self": "/_cokret/local/admin/user-emails?count=only"
           }
         }
         "###);
 
         // Test count=false with filtering
         let request = Request::get(format!(
-            "/api/admin/v1/user-emails?count=false&filter[user]={}",
+            "/_cokret/local/admin/user-emails?count=false&filter[user]={}",
             alice.id
         ))
         .bearer(&token)
@@ -959,7 +959,7 @@ mod tests {
                 "email": "alice@example.com"
               },
               "links": {
-                "self": "/api/admin/v1/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
+                "self": "/_cokret/local/admin/user-emails/01FSHN9AG09NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -969,16 +969,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "first": "/api/admin/v1/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "last": "/api/admin/v1/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[last]=10"
+            "self": "/_cokret/local/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
+            "first": "/_cokret/local/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
+            "last": "/_cokret/local/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only with filtering
         let request = Request::get(format!(
-            "/api/admin/v1/user-emails?count=only&filter[user]={}",
+            "/_cokret/local/admin/user-emails?count=only&filter[user]={}",
             alice.id
         ))
         .bearer(&token)
@@ -992,7 +992,7 @@ mod tests {
             "count": 1
           },
           "links": {
-            "self": "/api/admin/v1/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=only"
+            "self": "/_cokret/local/admin/user-emails?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=only"
           }
         }
         "#);
@@ -1033,7 +1033,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::patch(format!("/api/admin/v1/user-emails/{}", secondary.id))
+        let request = Request::patch(format!("/_cokret/local/admin/user-emails/{}", secondary.id))
             .bearer(&token)
             .json(serde_json::json!({
                 "email": updated_email.clone(),

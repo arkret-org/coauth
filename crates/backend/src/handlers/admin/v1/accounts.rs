@@ -89,7 +89,7 @@ impl AccountRecord {
     /// configured registry without blocking the runtime.
     pub(crate) async fn from_user(
         user: coauth_data::User,
-        contrix_config: &coauth_config::CokretConfig,
+        cokret_config: &coauth_config::CokretConfig,
         did_resolver: &dyn DidResolverService,
     ) -> Self {
         let status = if user.deactivated_at.is_some() {
@@ -100,7 +100,7 @@ impl AccountRecord {
             AccountStatus::Active
         };
         let principal_id_bindings =
-            preview_bindings_for_user(&user, contrix_config, did_resolver).await;
+            preview_bindings_for_user(&user, cokret_config, did_resolver).await;
         let primary_principal_binding = principal_id_bindings
             .iter()
             .find(|binding| binding.primary)
@@ -110,7 +110,7 @@ impl AccountRecord {
             .map(|binding| binding.did.clone())
             .collect();
         let primary_principal_id =
-            Some(primary_did_for_user(&user, contrix_config, did_resolver).await);
+            Some(primary_did_for_user(&user, cokret_config, did_resolver).await);
 
         Self {
             id: user.id,
@@ -146,7 +146,7 @@ impl AccountRecord {
 
 impl Resource for AccountRecord {
     const KIND: &'static str = "account";
-    const PATH: &'static str = "/api/admin/v1/accounts";
+    const PATH: &'static str = "/_cokret/local/admin/accounts";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -215,7 +215,7 @@ pub async fn list_accounts(
 ) -> JsonResult<PaginatedResponse<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let (pagination, include_count) = extract_pagination(req)?;
     let params: AccountFilterParams = req.parse_queries().unwrap_or_default();
@@ -244,12 +244,12 @@ pub async fn list_accounts(
         IncludeCount::True => {
             let page = repo.user().list(filter, pagination).await?;
             let count = repo.user().count(filter).await?;
-            let page = map_page_async(page, &contrix_config, did_resolver.as_ref()).await;
+            let page = map_page_async(page, &cokret_config, did_resolver.as_ref()).await;
             paginated_response_for_page(page, pagination, Some(count), &base)
         }
         IncludeCount::False => {
             let page = repo.user().list(filter, pagination).await?;
-            let page = map_page_async(page, &contrix_config, did_resolver.as_ref()).await;
+            let page = map_page_async(page, &cokret_config, did_resolver.as_ref()).await;
             paginated_response_for_page(page, pagination, None, &base)
         }
         IncludeCount::Only => {
@@ -279,7 +279,7 @@ pub async fn get_account(
 ) -> JsonResult<SingleResponse<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
 
@@ -290,7 +290,7 @@ pub async fn get_account(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     Ok(Json(SingleResponse::new_canonical(
-        AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref()).await,
+        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await,
     )))
 }
 
@@ -332,7 +332,7 @@ pub async fn list_account_session_grants(
 ) -> JsonResult<AccountSessionGrantsResponse> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
     let account = repo
@@ -340,7 +340,7 @@ pub async fn list_account_session_grants(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let record = AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref()).await;
+    let record = AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await;
     Ok(Json(AccountSessionGrantsResponse {
         data: admin_session_grant_records(&record),
     }))
@@ -436,17 +436,17 @@ async fn patch_account(
         user: admin_user,
         ..
     } = call_context;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_did: &service_did,
-        fail_closed: contrix_config.audit_signature_fail_closed,
+        fail_closed: cokret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();
 
@@ -539,7 +539,7 @@ async fn patch_account(
     repo.save().await?;
 
     Ok(Json(SingleResponse::new_canonical(
-        AccountRecord::from_user(account, &contrix_config, did_resolver.as_ref()).await,
+        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await,
     )))
 }
 
@@ -548,7 +548,7 @@ async fn patch_account(
 /// drive an async closure, so we walk the edges by hand.
 async fn map_page_async(
     page: coauth_data::Page<coauth_data::User>,
-    contrix_config: &coauth_config::CokretConfig,
+    cokret_config: &coauth_config::CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> coauth_data::Page<AccountRecord> {
     let coauth_data::Page {
@@ -559,7 +559,7 @@ async fn map_page_async(
     let mut mapped_edges = Vec::with_capacity(edges.len());
     for edge in edges {
         let cursor = edge.cursor;
-        let node = AccountRecord::from_user(edge.node, contrix_config, did_resolver).await;
+        let node = AccountRecord::from_user(edge.node, cokret_config, did_resolver).await;
         mapped_edges.push(coauth_data::pagination::Edge { cursor, node });
     }
     coauth_data::Page {
@@ -667,7 +667,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get("/api/admin/v1/accounts")
+                Request::get("/_cokret/local/admin/accounts")
                     .bearer(&token)
                     .empty(),
             )
@@ -690,7 +690,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/api/admin/v1/accounts/{}", user.id))
+                Request::get(format!("/_cokret/local/admin/accounts/{}", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -723,7 +723,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/api/admin/v1/accounts/{}/lock", user.id))
+                Request::post(format!("/_cokret/local/admin/accounts/{}/lock", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -739,7 +739,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/api/admin/v1/accounts/{}/disable", user.id))
+                Request::post(format!("/_cokret/local/admin/accounts/{}/disable", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -771,7 +771,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/api/admin/v1/accounts/{}/risk-action", user.id))
+                Request::post(format!("/_cokret/local/admin/accounts/{}/risk-action", user.id))
                     .bearer(&token)
                     .json(serde_json::json!({
                         "action": "lock",
@@ -807,7 +807,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/api/admin/v1/accounts/{}/risk-action/{}/execute",
+                    "/_cokret/local/admin/accounts/{}/risk-action/{}/execute",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -823,7 +823,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/api/admin/v1/accounts/{}/risk-action/{}/approve",
+                    "/_cokret/local/admin/accounts/{}/risk-action/{}/approve",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -850,7 +850,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/api/admin/v1/accounts/{}/risk-action/{}/execute",
+                    "/_cokret/local/admin/accounts/{}/risk-action/{}/execute",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -875,7 +875,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/api/admin/v1/accounts/{}/risk-action/{}/execute",
+                    "/_cokret/local/admin/accounts/{}/risk-action/{}/execute",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -891,7 +891,7 @@ mod tests {
         let response = state
             .request(
                 Request::get(format!(
-                    "/api/admin/v1/accounts/{}/risk-action/current",
+                    "/_cokret/local/admin/accounts/{}/risk-action/current",
                     user.id
                 ))
                 .bearer(&token)
@@ -931,7 +931,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/api/admin/v1/accounts/{}/risk-action", user.id))
+                Request::post(format!("/_cokret/local/admin/accounts/{}/risk-action", user.id))
                     .bearer(&token)
                     .json(serde_json::json!({
                         "action": "disable",
@@ -961,7 +961,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/api/admin/v1/accounts/{}/risk-action/{}/approve",
+                    "/_cokret/local/admin/accounts/{}/risk-action/{}/approve",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -994,7 +994,7 @@ mod tests {
             let response = state
                 .request(
                     Request::post(format!(
-                        "/api/admin/v1/accounts/{}/risk-action/{}/approve",
+                        "/_cokret/local/admin/accounts/{}/risk-action/{}/approve",
                         user.id, proposal_id
                     ))
                     .bearer(&token)
@@ -1021,7 +1021,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/api/admin/v1/accounts/{}/risk-action/{}/execute",
+                    "/_cokret/local/admin/accounts/{}/risk-action/{}/execute",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -1055,7 +1055,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/api/admin/v1/accounts/{}/dids", user.id))
+                Request::get(format!("/_cokret/local/admin/accounts/{}/dids", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -1068,12 +1068,12 @@ mod tests {
         assert_eq!(body["meta"]["supports_write_operations"], true);
 
         let recovery_did =
-            crate::handlers::cokret::service_did_for(&state.url_builder, &state.contrix_config);
+            crate::handlers::cokret::service_did_for(&state.url_builder, &state.cokret_config);
         let nonce = "did-binding-add-nonce";
         let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
         let response = state
             .request(
-                Request::post(format!("/api/admin/v1/accounts/{}/dids", user.id))
+                Request::post(format!("/_cokret/local/admin/accounts/{}/dids", user.id))
                     .bearer(&token)
                     .json(serde_json::json!({
                         "did": recovery_did,
@@ -1100,7 +1100,7 @@ mod tests {
             sign_did_binding_control_proof(&state, &recovery_did, user.id, "duplicate-nonce");
         let response = state
             .request(
-                Request::post(format!("/api/admin/v1/accounts/{}/dids", user.id))
+                Request::post(format!("/_cokret/local/admin/accounts/{}/dids", user.id))
                     .bearer(&token)
                     .json(serde_json::json!({
                         "did": recovery_did,
@@ -1117,7 +1117,7 @@ mod tests {
         let response = state
             .request(
                 Request::delete(format!(
-                    "/api/admin/v1/accounts/{}/dids/{}",
+                    "/_cokret/local/admin/accounts/{}/dids/{}",
                     user.id, recovery_did
                 ))
                 .bearer(&token)
@@ -1137,7 +1137,7 @@ mod tests {
         let response = state
             .request(
                 Request::delete(format!(
-                    "/api/admin/v1/accounts/{}/dids/{}",
+                    "/_cokret/local/admin/accounts/{}/dids/{}",
                     user.id, recovery_did
                 ))
                 .bearer(&token)
@@ -1150,7 +1150,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/api/admin/v1/accounts/{}/dids", user.id))
+                Request::get(format!("/_cokret/local/admin/accounts/{}/dids", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -1207,7 +1207,7 @@ mod tests {
             iat: state.clock.now(),
         };
         let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
-        let payload = contrix_core::canonical::canonical_json_bytes(&claims).unwrap();
+        let payload = cokret_core::canonical::canonical_json_bytes(&claims).unwrap();
         let payload_b64 = Base64UrlUnpadded::encode_string(&payload);
         let signing_input = format!("{header_b64}.{payload_b64}");
         let mut rng = state.rng();

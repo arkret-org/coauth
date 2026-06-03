@@ -15,7 +15,7 @@ Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
   （`lookup_table_ref`、`pepper_id`）。
 - **邀请领取** 使用双证明链：验证 3PID 的验证服务证明，加
   上由邀请人 actor key 签名的主体证明。
-- **`cx.cross_signing.publish`** 现已转为 compare-and-swap。
+- **`ck.cross_signing.publish`** 现已转为 compare-and-swap。
   发布者必须读取当前 generation 并提交
   `expected_previous_generation`；被接受的 generation 仅前
   进一格。
@@ -32,13 +32,13 @@ Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
 
 ## Trust domain 轮换
 
-`cokret.trust_domain` 是每一条 `cx.cross_signing.reset` 证明
+`cokret.trust_domain` 是每一条 `ck.cross_signing.reset` 证明
 的规范 transcript 的一部分。变更该值会令使用旧 trust domain
 签发的 reset 证明失效。
 
 轮换前：
 
-1. 记录当前配置值，并确认其与 `/api/v1/server/describe`
+1. 记录当前配置值，并确认其与 `/_cokret/describe`
    返回的一致。
 2. 暂停或拒绝以旧值签发、尚未完成的 cross-signing reset
    批准请求。
@@ -50,7 +50,7 @@ Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
 
 1. 在 `cokret.trust_domain` 中写入新值。
 2. 重启一个 `coauth` 副本，确认
-   `/api/v1/server/describe` 公布了新值。
+   `/_cokret/describe` 公布了新值。
 3. 滚动重启其余副本。
 4. 通过设备恢复流程重新签发 reset 证明。受影响的证明族
    包括 `principal_signing`、`recovery_unlock`、

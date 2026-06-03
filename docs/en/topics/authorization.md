@@ -22,7 +22,7 @@ bind together:
 
 ### Cokret session grants
 
-Principal Servers should validate `cx.session.grant` records for downstream
+Principal Servers should validate `ck.session.grant` records for downstream
 account and device access. The grant payload includes issuer service DID,
 subject principal DID, service account ID, optional device ID, audience,
 scopes, expiry, revocation reference, and a proof block.
@@ -30,7 +30,7 @@ scopes, expiry, revocation reference, and a proof block.
 Session-grant JWTs default to a 300-second lifetime and can be tuned with
 `cokret.session_grant_ttl` in the configuration file.
 
-`POST /api/v1/session-grants/introspect` accepts either a grant ID or signed
+`POST /_cokret/gate/account/session-grants/introspect` accepts either a grant ID or signed
 grant JWT plus an optional audience. It returns `active`, a standard status
 (`active`, `revoked`, `expired`, `locked`, `suspended`,
 `audience_mismatch`, or `not_found`), and non-secret grant metadata. It never

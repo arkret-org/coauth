@@ -1,7 +1,7 @@
 //! Self-serve passkey ceremony endpoints for the account auth API.
 //!
 //! These routes expose the same WebAuthn service used by the admin passkey
-//! handlers under `/api/v1/auth/passkey/*`, so browser clients can probe and
+//! handlers under `/_cokret/gate/account/auth/passkey/*`, so browser clients can probe and
 //! drive the ceremony without depending on the admin account URL shape.
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};

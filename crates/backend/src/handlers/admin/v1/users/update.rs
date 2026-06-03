@@ -44,13 +44,13 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleR
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_did: &service_did,
-        fail_closed: contrix_config.audit_signature_fail_closed,
+        fail_closed: cokret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();
     let body: UpdateRequest = req

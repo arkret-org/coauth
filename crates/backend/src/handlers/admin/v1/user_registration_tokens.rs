@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-/// Payload for `POST /api/admin/v1/user-registration-tokens`.
+/// Payload for `POST /_cokret/local/admin/user-registration-tokens`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUserRegistrationTokenRequest")]
 pub struct AddRequest {
@@ -284,7 +284,7 @@ pub async fn revoke_token(
 
     Ok(Json(SingleResponse::new(
         UserRegistrationToken::new(revoked, clock.now()),
-        format!("/api/admin/v1/user-registration-tokens/{target_id}/revoke"),
+        format!("/_cokret/local/admin/user-registration-tokens/{target_id}/revoke"),
     )))
 }
 
@@ -321,7 +321,7 @@ pub async fn unrevoke_token(
 
     Ok(Json(SingleResponse::new(
         UserRegistrationToken::new(restored, clock.now()),
-        format!("/api/admin/v1/user-registration-tokens/{target_id}/unrevoke"),
+        format!("/_cokret/local/admin/user-registration-tokens/{target_id}/unrevoke"),
     )))
 }
 
@@ -334,7 +334,7 @@ where
     Deserialize::deserialize(deserializer).map(Some)
 }
 
-/// Payload for `PUT /api/admin/v1/user-registration-tokens/{id}`.
+/// Payload for `PUT /_cokret/local/admin/user-registration-tokens/{id}`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "EditUserRegistrationTokenRequest")]
 pub struct UpdateRequest {
@@ -399,7 +399,7 @@ pub async fn update_token(
 
     Ok(Json(SingleResponse::new(
         UserRegistrationToken::new(entry, clock.now()),
-        format!("/api/admin/v1/user-registration-tokens/{target_id}"),
+        format!("/_cokret/local/admin/user-registration-tokens/{target_id}"),
     )))
 }
 
@@ -423,7 +423,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/api/admin/v1/user-registration-tokens")
+        let request = Request::post("/_cokret/local/admin/user-registration-tokens")
             .bearer(&token)
             .json(serde_json::json!({
                 "token": "test_token_123",
@@ -449,11 +449,11 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
@@ -468,7 +468,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/api/admin/v1/user-registration-tokens")
+        let request = Request::post("/_cokret/local/admin/user-registration-tokens")
             .bearer(&token)
             .json(serde_json::json!({
                 "usage_limit": 1
@@ -494,11 +494,11 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0QMGC989M0XSFVF2X"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0QMGC989M0XSFVF2X"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0QMGC989M0XSFVF2X"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0QMGC989M0XSFVF2X"
           }
         }
         "#);
@@ -513,7 +513,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/api/admin/v1/user-registration-tokens")
+        let request = Request::post("/_cokret/local/admin/user-registration-tokens")
             .bearer(&token)
             .json(serde_json::json!({
                 "token": "test_token_123",
@@ -540,16 +540,16 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
 
-        let request = Request::post("/api/admin/v1/user-registration-tokens")
+        let request = Request::post("/_cokret/local/admin/user-registration-tokens")
             .bearer(&token)
             .json(serde_json::json!({
                 "token": "test_token_123",
@@ -583,7 +583,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let request = Request::get(format!(
-            "/api/admin/v1/user-registration-tokens/{}",
+            "/_cokret/local/admin/user-registration-tokens/{}",
             reg_token.id
         ))
         .bearer(&token)
@@ -608,11 +608,11 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
@@ -629,7 +629,7 @@ mod tests {
 
         let missing_id = Ulid::from_string("00000000000000000000000000").unwrap();
         let request = Request::get(format!(
-            "/api/admin/v1/user-registration-tokens/{missing_id}"
+            "/_cokret/local/admin/user-registration-tokens/{missing_id}"
         ))
         .bearer(&token)
         .empty();
@@ -748,7 +748,7 @@ mod tests {
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
         seed_tokens(&mut state).await;
 
-        let request = Request::get("/api/admin/v1/user-registration-tokens")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -775,7 +775,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
               },
               "meta": {
                 "page": {
@@ -797,7 +797,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -819,7 +819,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -841,7 +841,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -863,7 +863,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
               },
               "meta": {
                 "page": {
@@ -873,9 +873,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?page[last]=10"
           }
         }
         "#);
@@ -892,7 +892,7 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // used=true
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[used]=true")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=true")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -919,7 +919,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -941,7 +941,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
               },
               "meta": {
                 "page": {
@@ -951,15 +951,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[used]=true&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[used]=true&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[used]=true&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[used]=true&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[used]=true&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[used]=true&page[last]=10"
           }
         }
         "#);
 
         // used=false
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[used]=false")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=false")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -986,7 +986,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
               },
               "meta": {
                 "page": {
@@ -1008,7 +1008,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1030,7 +1030,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1040,9 +1040,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[used]=false&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[used]=false&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[used]=false&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[used]=false&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[used]=false&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[used]=false&page[last]=10"
           }
         }
         "#);
@@ -1059,7 +1059,7 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // revoked=true
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[revoked]=true")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[revoked]=true")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1086,7 +1086,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1108,7 +1108,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
               },
               "meta": {
                 "page": {
@@ -1118,15 +1118,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[revoked]=true&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[revoked]=true&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[revoked]=true&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[revoked]=true&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[revoked]=true&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[revoked]=true&page[last]=10"
           }
         }
         "#);
 
         // revoked=false
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[revoked]=false")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[revoked]=false")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1153,7 +1153,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
               },
               "meta": {
                 "page": {
@@ -1175,7 +1175,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -1197,7 +1197,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1207,9 +1207,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[revoked]=false&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[revoked]=false&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[revoked]=false&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[revoked]=false&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[revoked]=false&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[revoked]=false&page[last]=10"
           }
         }
         "#);
@@ -1226,7 +1226,7 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // expired=true
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[expired]=true")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[expired]=true")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1253,7 +1253,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
               },
               "meta": {
                 "page": {
@@ -1263,15 +1263,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[expired]=true&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[expired]=true&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[expired]=true&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[expired]=true&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[expired]=true&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[expired]=true&page[last]=10"
           }
         }
         "#);
 
         // expired=false
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[expired]=false")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[expired]=false")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1298,7 +1298,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -1320,7 +1320,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1342,7 +1342,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1364,7 +1364,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
               },
               "meta": {
                 "page": {
@@ -1374,9 +1374,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[expired]=false&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[expired]=false&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[expired]=false&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[expired]=false&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[expired]=false&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[expired]=false&page[last]=10"
           }
         }
         "#);
@@ -1393,7 +1393,7 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // valid=true
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[valid]=true")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[valid]=true")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1420,7 +1420,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -1442,7 +1442,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1452,15 +1452,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[valid]=true&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[valid]=true&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[valid]=true&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[valid]=true&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[valid]=true&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[valid]=true&page[last]=10"
           }
         }
         "#);
 
         // valid=false
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[valid]=false")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[valid]=false")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1487,7 +1487,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
               },
               "meta": {
                 "page": {
@@ -1509,7 +1509,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1531,7 +1531,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
               },
               "meta": {
                 "page": {
@@ -1541,9 +1541,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[valid]=false&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[valid]=false&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[valid]=false&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[valid]=false&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[valid]=false&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[valid]=false&page[last]=10"
           }
         }
         "#);
@@ -1561,7 +1561,7 @@ mod tests {
 
         // used AND revoked
         let request = Request::get(
-            "/api/admin/v1/user-registration-tokens?filter[used]=true&filter[revoked]=true",
+            "/_cokret/local/admin/user-registration-tokens?filter[used]=true&filter[revoked]=true",
         )
         .bearer(&admin_token)
         .empty();
@@ -1589,7 +1589,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
               },
               "meta": {
                 "page": {
@@ -1599,9 +1599,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[used]=true&filter[revoked]=true&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[used]=true&filter[revoked]=true&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[used]=true&filter[revoked]=true&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[used]=true&filter[revoked]=true&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[used]=true&filter[revoked]=true&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[used]=true&filter[revoked]=true&page[last]=10"
           }
         }
         "#);
@@ -1618,7 +1618,7 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // First page of 2
-        let request = Request::get("/api/admin/v1/user-registration-tokens?page[first]=2")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?page[first]=2")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1645,7 +1645,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
               },
               "meta": {
                 "page": {
@@ -1667,7 +1667,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -1677,16 +1677,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?page[first]=2",
-            "first": "/api/admin/v1/user-registration-tokens?page[first]=2",
-            "last": "/api/admin/v1/user-registration-tokens?page[last]=2",
-            "next": "/api/admin/v1/user-registration-tokens?page[after]=01FSHN9AG07HNEZXNQM2KNBNF6&page[first]=2"
+            "self": "/_cokret/local/admin/user-registration-tokens?page[first]=2",
+            "first": "/_cokret/local/admin/user-registration-tokens?page[first]=2",
+            "last": "/_cokret/local/admin/user-registration-tokens?page[last]=2",
+            "next": "/_cokret/local/admin/user-registration-tokens?page[after]=01FSHN9AG07HNEZXNQM2KNBNF6&page[first]=2"
           }
         }
         "#);
 
         // Second page
-        let request = Request::get("/api/admin/v1/user-registration-tokens?page[after]=01FSHN9AG07HNEZXNQM2KNBNF6&page[first]=2")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?page[after]=01FSHN9AG07HNEZXNQM2KNBNF6&page[first]=2")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1713,7 +1713,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1735,7 +1735,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1745,16 +1745,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?page[after]=01FSHN9AG07HNEZXNQM2KNBNF6&page[first]=2",
-            "first": "/api/admin/v1/user-registration-tokens?page[first]=2",
-            "last": "/api/admin/v1/user-registration-tokens?page[last]=2",
-            "next": "/api/admin/v1/user-registration-tokens?page[after]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=2"
+            "self": "/_cokret/local/admin/user-registration-tokens?page[after]=01FSHN9AG07HNEZXNQM2KNBNF6&page[first]=2",
+            "first": "/_cokret/local/admin/user-registration-tokens?page[first]=2",
+            "last": "/_cokret/local/admin/user-registration-tokens?page[last]=2",
+            "next": "/_cokret/local/admin/user-registration-tokens?page[after]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=2"
           }
         }
         "#);
 
         // Last item via page[last]=1
-        let request = Request::get("/api/admin/v1/user-registration-tokens?page[last]=1")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?page[last]=1")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1781,7 +1781,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
               },
               "meta": {
                 "page": {
@@ -1791,10 +1791,10 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?page[last]=1",
-            "first": "/api/admin/v1/user-registration-tokens?page[first]=1",
-            "last": "/api/admin/v1/user-registration-tokens?page[last]=1",
-            "prev": "/api/admin/v1/user-registration-tokens?page[before]=01FSHN9AG0S3ZJD8CXQ7F11KXN&page[last]=1"
+            "self": "/_cokret/local/admin/user-registration-tokens?page[last]=1",
+            "first": "/_cokret/local/admin/user-registration-tokens?page[first]=1",
+            "last": "/_cokret/local/admin/user-registration-tokens?page[last]=1",
+            "prev": "/_cokret/local/admin/user-registration-tokens?page[before]=01FSHN9AG0S3ZJD8CXQ7F11KXN&page[last]=1"
           }
         }
         "#);
@@ -1809,7 +1809,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::get("/api/admin/v1/user-registration-tokens?filter[used]=invalid")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=invalid")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1835,7 +1835,7 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // count=false -- no meta.count in the response
-        let request = Request::get("/api/admin/v1/user-registration-tokens?count=false")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?count=false")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1858,7 +1858,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG064K8BYZXSY5G511Z"
               },
               "meta": {
                 "page": {
@@ -1880,7 +1880,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -1902,7 +1902,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1924,7 +1924,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1946,7 +1946,7 @@ mod tests {
                 "revoked_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0S3ZJD8CXQ7F11KXN"
               },
               "meta": {
                 "page": {
@@ -1956,15 +1956,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?count=false&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?count=false&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?count=false&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?count=false&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?count=false&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?count=false&page[last]=10"
           }
         }
         "#);
 
         // count=only -- just the total
-        let request = Request::get("/api/admin/v1/user-registration-tokens?count=only")
+        let request = Request::get("/_cokret/local/admin/user-registration-tokens?count=only")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1976,14 +1976,14 @@ mod tests {
             "count": 5
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?count=only"
+            "self": "/_cokret/local/admin/user-registration-tokens?count=only"
           }
         }
         "#);
 
         // count=false combined with a filter
         let request =
-            Request::get("/api/admin/v1/user-registration-tokens?count=false&filter[valid]=true")
+            Request::get("/_cokret/local/admin/user-registration-tokens?count=false&filter[valid]=true")
                 .bearer(&admin_token)
                 .empty();
         let response = state.request(request).await;
@@ -2006,7 +2006,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -2028,7 +2028,7 @@ mod tests {
                 "revoked_at": null
               },
               "links": {
-                "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -2038,16 +2038,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[valid]=true&count=false&page[first]=10",
-            "first": "/api/admin/v1/user-registration-tokens?filter[valid]=true&count=false&page[first]=10",
-            "last": "/api/admin/v1/user-registration-tokens?filter[valid]=true&count=false&page[last]=10"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[valid]=true&count=false&page[first]=10",
+            "first": "/_cokret/local/admin/user-registration-tokens?filter[valid]=true&count=false&page[first]=10",
+            "last": "/_cokret/local/admin/user-registration-tokens?filter[valid]=true&count=false&page[last]=10"
           }
         }
         "#);
 
         // count=only combined with a filter
         let request =
-            Request::get("/api/admin/v1/user-registration-tokens?count=only&filter[revoked]=true")
+            Request::get("/_cokret/local/admin/user-registration-tokens?count=only&filter[revoked]=true")
                 .bearer(&admin_token)
                 .empty();
         let response = state.request(request).await;
@@ -2059,7 +2059,7 @@ mod tests {
             "count": 2
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens?filter[revoked]=true&count=only"
+            "self": "/_cokret/local/admin/user-registration-tokens?filter[revoked]=true&count=only"
           }
         }
         "#);
@@ -2089,7 +2089,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let request = Request::post(format!(
-            "/api/admin/v1/user-registration-tokens/{}/revoke",
+            "/_cokret/local/admin/user-registration-tokens/{}/revoke",
             reg_token.id
         ))
         .bearer(&token)
@@ -2137,7 +2137,7 @@ mod tests {
         state.clock.advance(Duration::try_minutes(1).unwrap());
 
         let request = Request::post(format!(
-            "/api/admin/v1/user-registration-tokens/{}/revoke",
+            "/_cokret/local/admin/user-registration-tokens/{}/revoke",
             revoked_entry.id
         ))
         .bearer(&token)
@@ -2164,7 +2164,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let request = Request::post(
-            "/api/admin/v1/user-registration-tokens/01040G2081040G2081040G2081/revoke",
+            "/_cokret/local/admin/user-registration-tokens/01040G2081040G2081040G2081/revoke",
         )
         .bearer(&token)
         .empty();
@@ -2209,7 +2209,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let request = Request::post(format!(
-            "/api/admin/v1/user-registration-tokens/{}/unrevoke",
+            "/_cokret/local/admin/user-registration-tokens/{}/unrevoke",
             revoked_entry.id
         ))
         .bearer(&token)
@@ -2234,11 +2234,11 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E/unrevoke"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E/unrevoke"
           }
         }
         "#);
@@ -2269,7 +2269,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let request = Request::post(format!(
-            "/api/admin/v1/user-registration-tokens/{}/unrevoke",
+            "/_cokret/local/admin/user-registration-tokens/{}/unrevoke",
             reg_token.id
         ))
         .bearer(&token)
@@ -2293,7 +2293,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let request = Request::post(
-            "/api/admin/v1/user-registration-tokens/01040G2081040G2081040G2081/unrevoke",
+            "/_cokret/local/admin/user-registration-tokens/01040G2081040G2081040G2081/unrevoke",
         )
         .bearer(&token)
         .empty();
@@ -2334,7 +2334,7 @@ mod tests {
         // Set an expiry date
         let new_expiry = state.clock.now() + Duration::days(30);
         let request = Request::put(format!(
-            "/api/admin/v1/user-registration-tokens/{}",
+            "/_cokret/local/admin/user-registration-tokens/{}",
             reg_token.id
         ))
         .bearer(&token)
@@ -2362,18 +2362,18 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
 
         // Clear the expiry
         let request = Request::put(format!(
-            "/api/admin/v1/user-registration-tokens/{}",
+            "/_cokret/local/admin/user-registration-tokens/{}",
             reg_token.id
         ))
         .bearer(&token)
@@ -2401,11 +2401,11 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
@@ -2438,7 +2438,7 @@ mod tests {
 
         // Increase the limit
         let request = Request::put(format!(
-            "/api/admin/v1/user-registration-tokens/{}",
+            "/_cokret/local/admin/user-registration-tokens/{}",
             reg_token.id
         ))
         .bearer(&token)
@@ -2466,18 +2466,18 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
 
         // Remove the limit entirely
         let request = Request::put(format!(
-            "/api/admin/v1/user-registration-tokens/{}",
+            "/_cokret/local/admin/user-registration-tokens/{}",
             reg_token.id
         ))
         .bearer(&token)
@@ -2505,11 +2505,11 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
@@ -2542,7 +2542,7 @@ mod tests {
 
         let new_expiry = state.clock.now() + Duration::days(30);
         let request = Request::put(format!(
-            "/api/admin/v1/user-registration-tokens/{}",
+            "/_cokret/local/admin/user-registration-tokens/{}",
             reg_token.id
         ))
         .bearer(&token)
@@ -2571,11 +2571,11 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
@@ -2608,7 +2608,7 @@ mod tests {
 
         // Empty body -- nothing changes
         let request = Request::put(format!(
-            "/api/admin/v1/user-registration-tokens/{}",
+            "/_cokret/local/admin/user-registration-tokens/{}",
             reg_token.id
         ))
         .bearer(&token)
@@ -2634,11 +2634,11 @@ mod tests {
               "revoked_at": null
             },
             "links": {
-              "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/api/admin/v1/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_cokret/local/admin/user-registration-tokens/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "#);
@@ -2654,7 +2654,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let request =
-            Request::put("/api/admin/v1/user-registration-tokens/01040G2081040G2081040G2081")
+            Request::put("/_cokret/local/admin/user-registration-tokens/01040G2081040G2081040G2081")
                 .bearer(&token)
                 .json(json!({
                     "usage_limit": 5

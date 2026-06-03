@@ -64,7 +64,7 @@ pub async fn introspect_token(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     activity_tracker: &ActivityTracker,
     token_str: &str,
     token_type_hint: Option<OAuthTokenTypeHint>,
@@ -125,7 +125,7 @@ pub async fn introspect_token(
                 }
 
                 (
-                    Some(cokret::user_did_for(url_builder, contrix_config, &user)),
+                    Some(cokret::user_did_for(url_builder, cokret_config, &user)),
                     Some(user.handle),
                 )
             } else {
@@ -156,9 +156,9 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(access_token.jti()),
                 device_id: device_id.clone(),
-                contrix_principal_did: sub,
-                contrix_device_id: device_id,
-                contrix_session_id: Some(session.id.to_string()),
+                cokret_principal_did: sub,
+                cokret_device_id: device_id,
+                cokret_session_id: Some(session.id.to_string()),
             }
         }
 
@@ -199,7 +199,7 @@ pub async fn introspect_token(
                 }
 
                 (
-                    Some(cokret::user_did_for(url_builder, contrix_config, &user)),
+                    Some(cokret::user_did_for(url_builder, cokret_config, &user)),
                     Some(user.handle),
                 )
             } else {
@@ -228,9 +228,9 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(refresh_token.jti()),
                 device_id: device_id.clone(),
-                contrix_principal_did: sub,
-                contrix_device_id: device_id,
-                contrix_session_id: Some(session.id.to_string()),
+                cokret_principal_did: sub,
+                cokret_device_id: device_id,
+                cokret_session_id: Some(session.id.to_string()),
             }
         }
 
@@ -298,7 +298,7 @@ pub async fn introspect_token(
 
             let device_id = cokret::primary_device_id(&session.scope);
             let scope = session.scope;
-            let actor_user_sub = cokret::user_did_for(url_builder, contrix_config, &actor_user);
+            let actor_user_sub = cokret::user_did_for(url_builder, cokret_config, &actor_user);
 
             IntrospectionResponse {
                 active: true,
@@ -317,9 +317,9 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
                 device_id: device_id.clone(),
-                contrix_principal_did: Some(actor_user_sub),
-                contrix_device_id: device_id,
-                contrix_session_id: Some(session.id.to_string()),
+                cokret_principal_did: Some(actor_user_sub),
+                cokret_device_id: device_id,
+                cokret_session_id: Some(session.id.to_string()),
             }
         }
     };

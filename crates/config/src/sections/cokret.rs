@@ -10,7 +10,7 @@ use super::ConfigurationSection;
 ///
 /// A `trust_domain` value MUST match `ck:trust_domain:<scope>` where
 /// `<scope>` is `[a-z0-9._:-]{1,128}`. This mirrors the SDK validator
-/// `contrix_core::TypedTrustDomainId` so coauth and the Realm policy
+/// `cokret_core::TypedTrustDomainId` so coauth and the Realm policy
 /// engine agree on the exact byte-form. Validate via
 /// [`validate_trust_domain`].
 const TRUST_DOMAIN_PREFIX: &str = "ck:trust_domain:";
@@ -64,7 +64,7 @@ pub struct CokretConfig {
     ///
     /// These are the DPoP-bound JWT grants returned by the REST auth bridge
     /// login/exchange paths and refreshed through
-    /// `/api/v1/session-grants/refresh`. Default: 300 (5 min).
+    /// `/_cokret/gate/account/session-grants/refresh`. Default: 300 (5 min).
     #[schemars(with = "u64", range(min = 60, max = 86400))]
     #[serde(
         default = "default_session_grant_ttl",
@@ -75,7 +75,7 @@ pub struct CokretConfig {
 
     /// Audience string expected by Cokret admin integrations.
     ///
-    /// When omitted, the backend falls back to the local `/api/v1` endpoint.
+    /// When omitted, the backend falls back to the local `/_cokret` endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_audience: Option<String>,
 
@@ -102,7 +102,7 @@ pub struct CokretConfig {
     ///
     /// Wire form: `ck:trust_domain:<scope>` where `<scope>` matches
     /// `[a-z0-9._:-]{1,128}`. This value enters the canonical transcript
-    /// of every `cx.cross_signing.reset` proof; **changing
+    /// of every `ck.cross_signing.reset` proof; **changing
     /// `trust_domain` invalidates existing cross-signing reset proofs**
     /// — see the README "Trust domain rotation" note.
     ///
@@ -129,7 +129,7 @@ pub struct CokretConfig {
 
     /// Fail-closed gate for the temporary password-login bridge that returns a
     /// Cokret principal-server session grant directly from
-    /// `POST /api/v1/auth/login`.
+    /// `POST /_cokret/gate/account/auth/login`.
     ///
     /// Defaults to `false`: production callers must use the OIDC/passkey bridge
     /// and proof-bound grant exchange. When enabled for development, the login
@@ -148,7 +148,7 @@ pub struct CokretConfig {
 
     /// Round 4 — DID of the trusted 3PID verification service whose
     /// `binding_proof` JWTs this coauth deployment will accept on
-    /// `POST /api/v1/invites/3pid/verify`. When omitted, the invite
+    /// `POST /_cokret/self/invites/3pid/verify`. When omitted, the invite
     /// verifier endpoint returns `503 verifier_not_configured` because
     /// it has no trusted `iss` to compare against.
     ///
@@ -220,7 +220,7 @@ impl CokretConfig {
     /// `ck:trust_domain:<scope>` wire format. Returns the borrowed
     /// scope half on success so call-sites can build the
     /// `TypedTrustDomainId` directly. Delegates the acceptance check to
-    /// the SDK validator `contrix_identifiers::is_trust_domain` so the
+    /// the SDK validator `cokret_identifiers::is_trust_domain` so the
     /// config side and the SDK never drift; the prefix strip below only
     /// recovers the `<scope>` slice for the success return.
     ///
@@ -230,7 +230,7 @@ impl CokretConfig {
     /// `ck:trust_domain:<scope>` (missing prefix, empty/oversized scope,
     /// bad leading byte, or any byte outside `[a-z0-9._:-]`).
     pub fn validate_trust_domain(value: &str) -> Result<&str, &'static str> {
-        if !contrix_identifiers::is_trust_domain(value) {
+        if !cokret_identifiers::is_trust_domain(value) {
             return Err(
                 "trust_domain MUST be `ck:trust_domain:<scope>` with scope `[a-z0-9][a-z0-9._:-]{0,127}`",
             );
@@ -319,7 +319,7 @@ pub struct PrincipalServerConfig {
 
     /// Optional static bearer token accepted when this Principal Server calls
     /// coauth's session-grant introspection endpoint
-    /// (`/api/v1/cokret/session-grants/introspect`). Mirrors
+    /// (`/_cokret/gate/account/session-grants/introspect`). Mirrors
     /// `oauth_introspection_bearer` for the session-grant exchange path:
     /// avoids requiring a DB-backed PAT/OAuth-session for the
     /// server-to-server hop, which is awkward in dev when the coauth DB
@@ -371,10 +371,10 @@ pub enum IdentityRegistryKind {
 pub struct StaridConfig {
     /// Base URL of the starid deployment, for example
     /// `https://starid.example.com`. Path segments are ignored — the
-    /// adapter joins `/api/v1/webvh/...` itself.
+    /// adapter joins `/_cokret/root/webvh/...` itself.
     pub base_url: Url,
 
-    /// `host` value passed to starid's `POST /api/v1/webvh/dids`. Defaults
+    /// `host` value passed to starid's `POST /_cokret/root/webvh/dids`. Defaults
     /// to the host of `base_url` when omitted. Override when starid is
     /// fronted by a different public-facing hostname than the URL coauth
     /// reaches it on.
@@ -388,8 +388,8 @@ pub struct StaridConfig {
     pub path_prefix: String,
 
     /// Optional bearer token for starid's admin endpoints. When set,
-    /// the adapter prefers `POST /admin/api/v1/dids` over the public
-    /// `POST /api/v1/webvh/dids` — both produce the same DID but the
+    /// the adapter prefers `POST /_cokret/local/admin/dids` over the public
+    /// `POST /_cokret/root/webvh/dids` — both produce the same DID but the
     /// admin route bypasses public-rate-limits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_token: Option<String>,

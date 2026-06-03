@@ -16,7 +16,7 @@ coauth doctor -c config.yaml
 - **Issuer 检查** — 当配置的 issuer 不是 HTTPS 时给出警告
 - **Principal Server 配置** — 输出 `cokret.principal_servers` 中配置的条目
 - **OpenID discovery** — 请求 `/.well-known/openid-configuration` 并校验 issuer
-- **Cokret discovery** — 请求 `/api/v1/server/describe`
+- **Cokret discovery** — 请求 `/_cokret/describe`
 
 ## 输出说明
 

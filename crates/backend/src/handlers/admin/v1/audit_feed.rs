@@ -136,9 +136,9 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedRe
 
     let query: AuditFeedQuery = req.parse_queries().unwrap_or_default();
     let key_store = depot.key_store()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
 
     let mut filter = AdminOperationFilter::new().with_limit(query.limit.unwrap_or(50));
 

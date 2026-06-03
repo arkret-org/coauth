@@ -78,9 +78,9 @@ const INACTIVE: IntrospectionResponse = IntrospectionResponse {
     iss: None,
     jti: None,
     device_id: None,
-    contrix_principal_did: None,
-    contrix_device_id: None,
-    contrix_session_id: None,
+    cokret_principal_did: None,
+    cokret_device_id: None,
+    cokret_session_id: None,
 };
 
 impl Scribe for RouteError {
@@ -191,8 +191,8 @@ async fn handle_post(
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
-    let contrix_config = depot
-        .get::<CokretConfig>("contrix_config")
+    let cokret_config = depot
+        .get::<CokretConfig>("cokret_config")
         .cloned()
         .unwrap_or_default();
 
@@ -204,7 +204,7 @@ async fn handle_post(
     if let Some(token) = credentials.bearer_token() {
         // If the client presented a bearer token, we check with the PrincipalServer
         // configuration if it is allowed to use the introspection endpoint
-        if !principal_server_static_oauth_bearer_matches(&contrix_config, token)
+        if !principal_server_static_oauth_bearer_matches(&cokret_config, token)
             && !principal_server
                 .verify_token(token)
                 .await
@@ -241,7 +241,7 @@ async fn handle_post(
         &mut repo,
         &*clock,
         url_builder,
-        &contrix_config,
+        &cokret_config,
         activity_tracker,
         &form.token,
         form.token_type_hint,
@@ -275,11 +275,11 @@ async fn handle_post(
 }
 
 fn principal_server_static_oauth_bearer_matches(
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     token: &str,
 ) -> bool {
     !token.trim().is_empty()
-        && contrix_config
+        && cokret_config
             .principal_servers
             .iter()
             .filter_map(|server| server.oauth_introspection_bearer.as_deref())

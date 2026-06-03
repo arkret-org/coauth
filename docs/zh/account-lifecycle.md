@@ -18,7 +18,7 @@ UI 门禁使用。
 
 ## 第三方邀请领取流程
 
-Round R4 邀请领取使用 `cx.schema.invite.v1` 的
+Round R4 邀请领取使用 `ck.schema.invite.v1` 的
 `third_party_invite` 形态。邮箱、手机号等明文 3PID 值不再在
 网络中传输。
 
@@ -54,7 +54,7 @@ pending
 
 ## 领取证明链
 
-一次成功的 `cx.invite.claim` 需要两个相互关联的证明：
+一次成功的 `ck.invite.claim` 需要两个相互关联的证明：
 
 1. **验证服务证明**：由受信任的 3PID 验证服务签名的 JWT。
    `coauth` 会校验 issuer、audience、subject、过期时间、

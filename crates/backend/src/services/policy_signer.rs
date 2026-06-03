@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 `cx.policy.check` decision signer.
+//! Round 4 `ck.policy.check` decision signer.
 //!
 //! Pulls the preferred service signing key out of the keystore, signs a
-//! canonical-JSON transcript (RFC 8785 / `contrix_core::canonical`), and
+//! canonical-JSON transcript (RFC 8785 / `cokret_core::canonical`), and
 //! returns the wire-form `{kid, sig}` payload that
 //! [`crate::handlers::policy_check`] embeds in
-//! [`contrix_core::PolicyCheckResponse`].
+//! [`cokret_core::PolicyCheckResponse`].
 //!
 //! ## Why a dedicated module
 //!
@@ -32,7 +32,7 @@
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
-use contrix_core::{
+use cokret_core::{
     AuthzDecision, Hash, PolicyCheckBoundTo, PolicyCheckSignature, canonical::canonical_json_bytes,
 };
 use rand_chacha::ChaChaRng;
@@ -53,7 +53,7 @@ pub enum PolicySignerError {
     Sign,
 }
 
-/// Detached signer for `cx.policy.check` decisions.
+/// Detached signer for `ck.policy.check` decisions.
 ///
 /// Constructed once per request from the shared [`Keystore`] +
 /// `policy_server_did` (the coauth service DID). The signer is stateless
@@ -131,9 +131,9 @@ impl<'a> PolicySigner<'a> {
     }
 }
 
-/// Canonical-JSON transcript bound to a single `cx.policy.check`
+/// Canonical-JSON transcript bound to a single `ck.policy.check`
 /// decision. Field order is fixed by the struct, but the canonical
-/// serializer in `contrix_core::canonical` sorts object keys
+/// serializer in `cokret_core::canonical` sorts object keys
 /// lexicographically before emitting bytes — so reordering fields here
 /// does not change the wire bytes. Every field is either present on the
 /// request or the response so verifiers can rebuild the same transcript
@@ -195,7 +195,7 @@ fn preferred_service_signing_key(
 
 #[cfg(test)]
 mod tests {
-    use contrix_core::{Did, RealmId};
+    use cokret_core::{Did, RealmId};
 
     use super::*;
 
@@ -211,7 +211,7 @@ mod tests {
         PolicyCheckBoundTo {
             realm_id: RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap(),
             actor: Did::new("did:web:alice.example").unwrap(),
-            action: "cx.message.create".into(),
+            action: "ck.message.create".into(),
             request_canonical_digest: empty_sha256(),
             policy_server_id: Did::new("did:web:coauth.example").unwrap(),
         }

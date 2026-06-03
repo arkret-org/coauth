@@ -259,7 +259,7 @@ pub enum Resource {
         #[schemars(with = "String")]
         path: Utf8PathBuf,
     },
-    /// Administrative REST API (`/api/admin/v1`)
+    /// Administrative REST API (`/_cokret/local/admin`)
     AdminApi,
     /// Debug handler exposing upstream connection metadata
     #[serde(rename = "connection-info")]

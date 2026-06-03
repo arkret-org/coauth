@@ -2,7 +2,7 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /api/admin/v1/bridge/describe` — `AdminBridgeDescribeResponse` from
+//! - `GET /_cokret/local/admin/bridge/describe` — `AdminBridgeDescribeResponse` from
 //!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`, bundled with
 //!   the `AdminBridgeRiskAction*Example` request examples.
 //!
@@ -27,25 +27,25 @@ use serde::{Deserialize, Serialize};
 
 pub const ADMIN_BRIDGE_CONTRACT: &str = "cx.contract.coauth_admin_bridge.v1";
 pub const ADMIN_BRIDGE_VERSION: &str = "0.2.0-durable-proposals";
-pub const ADMIN_BRIDGE_API_BASE_PATH: &str = "/api/admin/v1";
-pub const ADMIN_BRIDGE_ACCOUNTS_PATH: &str = "/api/admin/v1/accounts";
-pub const ADMIN_BRIDGE_ACCOUNT_DETAIL_PATH_TEMPLATE: &str = "/api/admin/v1/accounts/{account_id}";
+pub const ADMIN_BRIDGE_API_BASE_PATH: &str = "/_cokret/local/admin";
+pub const ADMIN_BRIDGE_ACCOUNTS_PATH: &str = "/_cokret/local/admin/accounts";
+pub const ADMIN_BRIDGE_ACCOUNT_DETAIL_PATH_TEMPLATE: &str = "/_cokret/local/admin/accounts/{account_id}";
 pub const ADMIN_BRIDGE_ACCOUNT_DIDS_PATH_TEMPLATE: &str =
-    "/api/admin/v1/accounts/{account_id}/dids";
+    "/_cokret/local/admin/accounts/{account_id}/dids";
 pub const ADMIN_BRIDGE_ACCOUNT_CLAIMS_PATH_TEMPLATE: &str =
-    "/api/admin/v1/accounts/{account_id}/claims";
+    "/_cokret/local/admin/accounts/{account_id}/claims";
 pub const ADMIN_BRIDGE_ACCOUNT_SESSION_GRANTS_PATH_TEMPLATE: &str =
-    "/api/admin/v1/accounts/{account_id}/session-grants";
+    "/_cokret/local/admin/accounts/{account_id}/session-grants";
 pub const ADMIN_BRIDGE_RISK_ACTION_PATH_TEMPLATE: &str =
-    "/api/admin/v1/accounts/{account_id}/risk-action";
+    "/_cokret/local/admin/accounts/{account_id}/risk-action";
 pub const ADMIN_BRIDGE_RISK_ACTION_CURRENT_PATH_TEMPLATE: &str =
-    "/api/admin/v1/accounts/{account_id}/risk-action/current";
+    "/_cokret/local/admin/accounts/{account_id}/risk-action/current";
 pub const ADMIN_BRIDGE_RISK_ACTION_HISTORY_PATH_TEMPLATE: &str =
-    "/api/admin/v1/accounts/{account_id}/risk-action/history";
+    "/_cokret/local/admin/accounts/{account_id}/risk-action/history";
 pub const ADMIN_BRIDGE_RISK_ACTION_APPROVE_PATH_TEMPLATE: &str =
-    "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve";
+    "/_cokret/local/admin/accounts/{account_id}/risk-action/{proposal_id}/approve";
 pub const ADMIN_BRIDGE_RISK_ACTION_EXECUTE_PATH_TEMPLATE: &str =
-    "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute";
+    "/_cokret/local/admin/accounts/{account_id}/risk-action/{proposal_id}/execute";
 pub const ADMIN_BRIDGE_RISK_ACTION_APPROVAL_MODE: &str = "durable_proposal_required";
 
 /// Discovery response for the coauth admin bridge contract surface.
@@ -333,17 +333,17 @@ mod tests {
         let wire = r#"{
             "contract": "cx.contract.coauth_admin_bridge.v1",
             "version": "0.2.0-durable-proposals",
-            "api_base_path": "/api/admin/v1",
-            "accounts_path": "/api/admin/v1/accounts",
-            "account_detail_path_template": "/api/admin/v1/accounts/{account_id}",
-            "account_dids_path_template": "/api/admin/v1/accounts/{account_id}/dids",
-            "account_claims_path_template": "/api/admin/v1/accounts/{account_id}/claims",
-            "account_session_grants_path_template": "/api/admin/v1/accounts/{account_id}/session-grants",
-            "risk_action_path_template": "/api/admin/v1/accounts/{account_id}/risk-action",
-            "risk_action_current_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/current",
-            "risk_action_history_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/history",
-            "risk_action_approve_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve",
-            "risk_action_execute_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute",
+            "api_base_path": "/_cokret/local/admin",
+            "accounts_path": "/_cokret/local/admin/accounts",
+            "account_detail_path_template": "/_cokret/local/admin/accounts/{account_id}",
+            "account_dids_path_template": "/_cokret/local/admin/accounts/{account_id}/dids",
+            "account_claims_path_template": "/_cokret/local/admin/accounts/{account_id}/claims",
+            "account_session_grants_path_template": "/_cokret/local/admin/accounts/{account_id}/session-grants",
+            "risk_action_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action",
+            "risk_action_current_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action/current",
+            "risk_action_history_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action/history",
+            "risk_action_approve_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action/{proposal_id}/approve",
+            "risk_action_execute_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action/{proposal_id}/execute",
             "risk_action_state_store_kind": "pg_risk_action_proposals_with_admin_audit_trail",
             "risk_action_approval_mode": "durable_proposal_required",
             "risk_action_examples": {

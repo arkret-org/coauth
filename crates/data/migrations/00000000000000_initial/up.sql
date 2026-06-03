@@ -964,7 +964,7 @@ ALTER TABLE users
 -- Consolidated from 20260515000001_add_principal_did_update_keys/up.sql
 -- Per-user ed25519 update-key material for `did:webvh` DIDs minted by a
 -- principal server's *embedded* webvh provider (e.g. soland's
--- `POST /api/v1/identity/webvh/register`). Distinct from the starid
+-- `POST /_cokret/root/identity/webvh/register`). Distinct from the starid
 -- adapter path — starid mints the DID and stores the update key on its
 -- side; the embedded path requires the *client* (coauth) to construct
 -- and sign the inception entry and to retain the update key for future

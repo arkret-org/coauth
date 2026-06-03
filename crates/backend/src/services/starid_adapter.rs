@@ -3,8 +3,8 @@
 //! Onboarding and recovery flows in coauth call into this adapter to mint
 //! and re-mint a managed `did:webvh` for the principal account, and to
 //! verify control-proofs supplied by the device on subsequent privileged
-//! operations. It is a thin wrapper over `POST /api/v1/webvh/dids` and
-//! `POST /api/v1/webvh/dids/{did}/verify` exposed by starid.
+//! operations. It is a thin wrapper over `POST /_cokret/root/webvh/dids` and
+//! `POST /_cokret/root/webvh/dids/{did}/verify` exposed by starid.
 //!
 //! The architectural intent is that **coauth never holds the principal's
 //! signing key** — it only ferries the device's update-key (multibase
@@ -21,7 +21,7 @@
 
 use async_trait::async_trait;
 use coauth_config::StaridConfig;
-use contrix_core::ErrorEnvelope;
+use cokret_core::ErrorEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -63,7 +63,7 @@ pub enum StaridError {
     MissingField(&'static str),
 }
 
-/// Wire-shape of starid's `POST /api/v1/webvh/dids` request body. Mirrors
+/// Wire-shape of starid's `POST /_cokret/root/webvh/dids` request body. Mirrors
 /// `starid::wire::CreateWebvhDidRequest`. Only the fields the adapter
 /// actually exercises are serialised.
 #[derive(Debug, Serialize)]
@@ -74,7 +74,7 @@ struct CreateWebvhDidRequest<'a> {
     document_patch: Value,
 }
 
-/// Wire-shape of starid's `POST /api/v1/webvh/dids` response body.
+/// Wire-shape of starid's `POST /_cokret/root/webvh/dids` response body.
 #[derive(Debug, Deserialize)]
 struct CreateWebvhDidResponse {
     did: String,
@@ -83,7 +83,7 @@ struct CreateWebvhDidResponse {
     version_id: String,
 }
 
-/// Wire-shape of starid's `POST /api/v1/webvh/dids/{did}/verify`
+/// Wire-shape of starid's `POST /_cokret/root/webvh/dids/{did}/verify`
 /// response body.
 #[derive(Debug, Deserialize)]
 struct WebvhVerifyResponse {
@@ -92,7 +92,7 @@ struct WebvhVerifyResponse {
     head_version_id: Option<String>,
 }
 
-/// Wire-shape of starid's `POST /api/v1/webvh/dids/{did}/update`
+/// Wire-shape of starid's `POST /_cokret/root/webvh/dids/{did}/update`
 /// request body. Mirrors `starid::wire::UpdateWebvhDidRequest`.
 #[derive(Debug, Serialize)]
 struct UpdateWebvhDidRequest<'a> {
@@ -101,7 +101,7 @@ struct UpdateWebvhDidRequest<'a> {
     document_patch: Value,
 }
 
-/// Wire-shape of starid's `POST /api/v1/webvh/dids/{did}/update`
+/// Wire-shape of starid's `POST /_cokret/root/webvh/dids/{did}/update`
 /// response body. Same envelope as `CreateWebvhDidResponse`.
 #[derive(Debug, Deserialize)]
 struct UpdateWebvhDidResponse {
@@ -174,7 +174,7 @@ pub trait StaridRegistry: Send + Sync {
     ) -> Result<StaridVerifyResult, StaridError>;
 
     /// Rotate the DID's `update_keys` slot to a new device-bound key.
-    /// Posts to `POST /api/v1/webvh/dids/{did}/update` with the next
+    /// Posts to `POST /_cokret/root/webvh/dids/{did}/update` with the next
     /// `version_id` (computed from the supplied `prev_version_id`) and a
     /// document patch that replaces `verificationMethod.key-1` with
     /// `new_update_key`.
@@ -257,9 +257,9 @@ impl StaridResolver {
 
     fn create_url(&self) -> Result<Url, StaridError> {
         let path = if self.admin_token.is_some() {
-            "admin/api/v1/dids"
+            "_cokret/local/admin/dids"
         } else {
-            "api/v1/webvh/dids"
+            "_cokret/root/webvh/dids"
         };
         Ok(self.base_url.join(path)?)
     }
@@ -271,7 +271,7 @@ impl StaridResolver {
                 .path_segments_mut()
                 .map_err(|()| url::ParseError::SetHostOnCannotBeABaseUrl)?;
             segments.pop_if_empty();
-            segments.extend(["api", "v1", "webvh", "dids", did, "update"]);
+            segments.extend(["_cokret", "root", "webvh", "dids", did, "update"]);
         }
         Ok(url)
     }
@@ -288,7 +288,7 @@ impl StaridResolver {
             // Strip any trailing empty segment from the base path so we
             // don't end up with `…//api/v1/…`.
             segments.pop_if_empty();
-            segments.extend(["api", "v1", "webvh", "dids", did, "verify"]);
+            segments.extend(["_cokret", "root", "webvh", "dids", did, "verify"]);
         }
         Ok(url)
     }
@@ -348,7 +348,7 @@ impl StaridRegistry for StaridResolver {
     ) -> Result<StaridMintResult, StaridError> {
         // Recovery currently mints a fresh inception. The prior DID is
         // deactivated by the recovery flow's caller via
-        // `POST /api/v1/webvh/dids/{did}/deactivate` (out of scope for
+        // `POST /_cokret/root/webvh/dids/{did}/deactivate` (out of scope for
         // this adapter — recovery owns the prior-DID lookup).
         //
         // Path is suffixed with `/recovered/<n>` so a recovered account
@@ -521,7 +521,7 @@ mod tests {
         let server = MockServer::start().await;
         let config = config_for(&server);
         Mock::given(method("POST"))
-            .and(path("/api/v1/webvh/dids"))
+            .and(path("/_cokret/root/webvh/dids"))
             .and(body_partial_json(json!({
                 "host": "starid.local",
                 "path": "accounts/01aryz",
@@ -554,7 +554,7 @@ mod tests {
         let server = MockServer::start().await;
         let config = admin_config_for(&server, "super-secret");
         Mock::given(method("POST"))
-            .and(path("/admin/api/v1/dids"))
+            .and(path("/_cokret/local/admin/dids"))
             .and(header("Authorization", "Bearer super-secret"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "did": "did:webvh:zadmin:starid.local:accounts:01aryz",
@@ -582,11 +582,11 @@ mod tests {
         let server = MockServer::start().await;
         let config = config_for(&server);
         Mock::given(method("POST"))
-            .and(path("/api/v1/webvh/dids"))
+            .and(path("/_cokret/root/webvh/dids"))
             .respond_with(ResponseTemplate::new(409).set_body_json(json!({
                 "ok": false,
                 "error": {
-                    "code": contrix_core::error::ERROR_CODE_CAS_CONFLICT,
+                    "code": cokret_core::error::ERROR_CODE_CAS_CONFLICT,
                     "message": "stale write"
                 },
                 "request_id": "ck:request:01964137-0000-7000-8000-000000000001"
@@ -602,7 +602,7 @@ mod tests {
         match err {
             StaridError::Api { status, code, .. } => {
                 assert_eq!(status, 409);
-                assert_eq!(code, contrix_core::error::ERROR_CODE_CAS_CONFLICT);
+                assert_eq!(code, cokret_core::error::ERROR_CODE_CAS_CONFLICT);
             }
             other => panic!("expected Api fault, got {other:?}"),
         }
@@ -614,7 +614,7 @@ mod tests {
         let server = MockServer::start().await;
         let config = config_for(&server);
         Mock::given(method("POST"))
-            .and(path("/api/v1/webvh/dids"))
+            .and(path("/_cokret/root/webvh/dids"))
             .and(body_partial_json(json!({
                 "document_patch": {"recovered": true},
             })))
@@ -644,7 +644,7 @@ mod tests {
         let server = MockServer::start().await;
         let config = config_for(&server);
         Mock::given(method("POST"))
-            .and(path_regex(r"^/api/v1/webvh/dids/.+/update$"))
+            .and(path_regex(r"^/_cokret/root/webvh/dids/.+/update$"))
             .and(body_partial_json(json!({
                 "prev_version_id": "1-zhead",
                 "update_keys": ["z6Mknewdevicekey"],
@@ -681,7 +681,7 @@ mod tests {
         let server = MockServer::start().await;
         let config = config_for(&server);
         Mock::given(method("POST"))
-            .and(path_regex(r"^/api/v1/webvh/dids/.+/update$"))
+            .and(path_regex(r"^/_cokret/root/webvh/dids/.+/update$"))
             .respond_with(ResponseTemplate::new(409).set_body_json(json!({
                 "ok": false,
                 "error": {
@@ -717,7 +717,7 @@ mod tests {
         let server = MockServer::start().await;
         let config = config_for(&server);
         Mock::given(method("POST"))
-            .and(path_regex(r"^/api/v1/webvh/dids/.+/verify$"))
+            .and(path_regex(r"^/_cokret/root/webvh/dids/.+/verify$"))
             .and(body_partial_json(json!({
                 "entry": {"proof": [{"type": "DataIntegrityProof"}]},
             })))
@@ -753,7 +753,7 @@ mod tests {
         let server = MockServer::start().await;
         let config = config_for(&server);
         Mock::given(method("POST"))
-            .and(path_regex(r"^/api/v1/webvh/dids/.+/verify$"))
+            .and(path_regex(r"^/_cokret/root/webvh/dids/.+/verify$"))
             .respond_with(ResponseTemplate::new(401).set_body_json(json!({
                 "ok": false,
                 "error": {

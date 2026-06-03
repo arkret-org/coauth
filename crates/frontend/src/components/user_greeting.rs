@@ -105,7 +105,7 @@ pub fn EditProfileDialog(
                     }
                     // Hidden file input — clicked programmatically by the
                     // "Upload avatar" button. The change handler reads the
-                    // selected file and posts it to /api/v1/viewer/avatar.
+                    // selected file and posts it to /_cokret/self/viewer/avatar.
                     input {
                         id: "user-greeting-avatar-input",
                         r#type: "file",
@@ -176,7 +176,7 @@ pub fn EditProfileDialog(
                         error.set(None);
                         spawn(async move {
                             let response = crate::api::api_patch::<PatchViewerProfileResponse>(
-                                "/viewer/profile",
+                                "/self/viewer/profile",
                                 serde_json::json!({
                                     "display_name": if display_name.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(display_name) },
                                     "avatar_url": match avatar_url {
@@ -298,7 +298,7 @@ async fn upload_selected_avatar() -> Result<Option<String>, String> {
     init.set_credentials(RequestCredentials::SameOrigin);
     init.set_body(&JsValue::from(form_data));
 
-    let request = Request::new_with_str_and_init("/api/v1/viewer/avatar", &init)
+    let request = Request::new_with_str_and_init("/_cokret/self/viewer/avatar", &init)
         .map_err(|e| format!("failed to build request: {e:?}"))?;
 
     let response_value = JsFuture::from(window.fetch_with_request(&request))

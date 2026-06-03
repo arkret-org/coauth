@@ -192,7 +192,7 @@ jobs:
           python-version: "3.13"
 
       - name: Check Cokret artifact and coauth surface drift
-        run: python .ci/check_contrix_contract_drift.py --spec-dir cokret-spec
+        run: python .ci/check_cokret_contract_drift.py --spec-dir cokret-spec
 
   # -- Test execution --
 

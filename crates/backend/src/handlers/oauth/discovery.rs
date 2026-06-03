@@ -26,29 +26,29 @@ struct DiscoveryResponse {
     account_management_actions_supported: Vec<String>,
 
     #[serde(rename = "org.cokret.api_endpoint")]
-    contrix_api_endpoint: String,
+    cokret_api_endpoint: String,
 
     #[serde(rename = "org.cokret.server_describe")]
-    contrix_server_describe: String,
+    cokret_server_describe: String,
 
     #[serde(rename = "org.cokret.service_did")]
-    contrix_service_did: String,
+    cokret_service_did: String,
 
     #[serde(rename = "org.cokret.did_binding_methods")]
-    contrix_did_binding_methods: Vec<String>,
+    cokret_did_binding_methods: Vec<String>,
 
     #[serde(rename = "org.cokret.supported_scopes")]
-    contrix_supported_scopes: Vec<String>,
+    cokret_supported_scopes: Vec<String>,
 
     #[serde(rename = "org.cokret.admin_audience")]
-    contrix_admin_audience: String,
+    cokret_admin_audience: String,
 
     #[serde(rename = "org.cokret.principal_servers")]
-    contrix_principal_servers: Vec<PrincipalServerMetadata>,
+    cokret_principal_servers: Vec<PrincipalServerMetadata>,
 
     #[serde(rename = "org.cokret.identity_registry")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    contrix_identity_registry: Option<IdentityRegistryMetadata>,
+    cokret_identity_registry: Option<IdentityRegistryMetadata>,
 }
 
 #[derive(Debug, Serialize)]
@@ -109,8 +109,8 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
     let site_config = depot
         .get::<SiteConfig>("site_config")
         .expect("SiteConfig not found in depot");
-    let contrix_config = depot
-        .get::<CokretConfig>("contrix_config")
+    let cokret_config = depot
+        .get::<CokretConfig>("cokret_config")
         .cloned()
         .unwrap_or_default();
 
@@ -150,10 +150,10 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
         scope::OPENID.to_string(),
         scope::PROFILE.to_string(),
         scope::COAUTH_ADMIN.to_string(),
-        scope::CONTRIX_ADMIN.to_string(),
-        scope::CONTRIX_CLIENT.to_string(),
-        scope::CONTRIX_PRINCIPAL_SERVER.to_string(),
-        scope::CONTRIX_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
+        scope::COKRET_ADMIN.to_string(),
+        scope::COKRET_CLIENT.to_string(),
+        scope::COKRET_PRINCIPAL_SERVER.to_string(),
+        scope::COKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
     ]);
 
     let response_types_supported = Some(vec![
@@ -277,7 +277,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
         ..ProviderMetadata::default()
     };
 
-    let contrix_principal_servers = contrix_config
+    let cokret_principal_servers = cokret_config
         .principal_servers
         .iter()
         .map(|server| PrincipalServerMetadata {
@@ -287,8 +287,8 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
             did: server.did.clone(),
         })
         .collect();
-    let contrix_identity_registry =
-        contrix_config
+    let cokret_identity_registry =
+        cokret_config
             .identity_registry
             .as_ref()
             .map(|registry| IdentityRegistryMetadata {
@@ -309,22 +309,22 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
             "session_view".to_owned(),
             "session_end".to_owned(),
         ],
-        contrix_api_endpoint: url_builder.absolute_url("/api/v1").to_string(),
-        contrix_server_describe: url_builder
-            .absolute_url("/api/v1/server/describe")
+        cokret_api_endpoint: url_builder.absolute_url("/_cokret").to_string(),
+        cokret_server_describe: url_builder
+            .absolute_url("/_cokret/describe")
             .to_string(),
-        contrix_service_did: cokret::service_did_for(url_builder, &contrix_config),
-        contrix_did_binding_methods: vec!["session_grant".to_owned()],
-        contrix_supported_scopes: vec![
+        cokret_service_did: cokret::service_did_for(url_builder, &cokret_config),
+        cokret_did_binding_methods: vec!["session_grant".to_owned()],
+        cokret_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),
-            scope::CONTRIX_ADMIN.to_string(),
-            scope::CONTRIX_CLIENT.to_string(),
-            scope::CONTRIX_PRINCIPAL_SERVER.to_string(),
-            scope::CONTRIX_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
+            scope::COKRET_ADMIN.to_string(),
+            scope::COKRET_CLIENT.to_string(),
+            scope::COKRET_PRINCIPAL_SERVER.to_string(),
+            scope::COKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
         ],
-        contrix_admin_audience: cokret::required_audience_for(url_builder, &contrix_config),
-        contrix_principal_servers,
-        contrix_identity_registry,
+        cokret_admin_audience: cokret::required_audience_for(url_builder, &cokret_config),
+        cokret_principal_servers,
+        cokret_identity_registry,
     })
 }
 
@@ -355,7 +355,7 @@ mod tests {
             "site_config",
             crate::handlers::test_utils::test_site_config(),
         );
-        depot.insert("contrix_config", CokretConfig::default());
+        depot.insert("cokret_config", CokretConfig::default());
         depot
     }
 
@@ -388,7 +388,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn discovery_advertises_contrix_scopes_and_claims() {
+    async fn discovery_advertises_cokret_scopes_and_claims() {
         crate::handlers::test_utils::setup();
 
         let Json(response) = build_response(&test_depot());
@@ -409,9 +409,9 @@ mod tests {
                 .any(|scope| scope == "urn:cokret:principal-server:session.bind")
         );
 
-        let contrix_scopes = body["org.cokret.supported_scopes"].as_array().unwrap();
+        let cokret_scopes = body["org.cokret.supported_scopes"].as_array().unwrap();
         assert!(
-            contrix_scopes
+            cokret_scopes
                 .iter()
                 .any(|scope| scope == "urn:cokret:principal-server:session.bind")
         );

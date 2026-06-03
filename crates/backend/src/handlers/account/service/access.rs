@@ -66,7 +66,7 @@ pub async fn login_with_password(
     limiter: &Limiter,
     principal_server: &dyn PrincipalServerAdmin,
     url_builder: &UrlBuilder,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     site_config: &SiteConfig,
     request: PasswordLoginRequest,
 ) -> Result<PasswordLoginOutcome, PasswordLoginError> {
@@ -86,7 +86,7 @@ pub async fn login_with_password(
         site_config,
         principal_server,
         url_builder,
-        contrix_config,
+        cokret_config,
         &mut repo,
         &request.username_or_email,
     )
@@ -222,12 +222,12 @@ async fn find_user_by_login_identifier(
     site_config: &SiteConfig,
     principal_server: &dyn PrincipalServerAdmin,
     url_builder: &UrlBuilder,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     repo: &mut BoxRepository,
     identifier: &str,
 ) -> Result<Option<User>, RepositoryError> {
     if let Some(user_id) =
-        cokret::parse_local_user_did_for(url_builder, contrix_config, identifier)
+        cokret::parse_local_user_did_for(url_builder, cokret_config, identifier)
     {
         return repo.user().lookup(user_id).await;
     }

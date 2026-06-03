@@ -238,7 +238,7 @@ struct SolandAccountRegisterRequest<'a> {
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
-    base.join("/api/v1/account/register")
+    base.join("/_cokret/self/account/register")
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
@@ -262,7 +262,7 @@ fn soland_account_handle_for_did(did: &str) -> String {
 /// server. The audience must correspond to a `PrincipalServerConfig` with
 /// an embedded webvh provider; this mints (or re-uses) a
 /// `did:webvh:<scid>:<principal_host>:webvh:<user_ulid>` against soland's
-/// `POST /api/v1/identity/webvh/register` so the DID's authority matches
+/// `POST /_cokret/root/identity/webvh/register` so the DID's authority matches
 /// the host that actually serves its document.
 async fn ensure_principal_did_for_user(
     repo: &mut coauth_data::BoxRepository,
@@ -271,11 +271,11 @@ async fn ensure_principal_did_for_user(
     encrypter: &coauth_keystore::Encrypter,
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    contrix_config: &coauth_config::CokretConfig,
+    cokret_config: &coauth_config::CokretConfig,
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
-    let Some(principal_server) = contrix_config
+    let Some(principal_server) = cokret_config
         .principal_servers
         .iter()
         .find(|server| server.audience == audience)
@@ -342,13 +342,13 @@ async fn ensure_soland_account_registered(
 
 fn login_hint_matches_user(
     url_builder: &coauth_data::UrlBuilder,
-    contrix_config: &coauth_config::CokretConfig,
+    cokret_config: &coauth_config::CokretConfig,
     user: &User,
     login_hint: &str,
 ) -> bool {
     let login_hint = login_hint.trim();
     login_hint == user.handle
-        || login_hint == cokret::user_did_for(url_builder, contrix_config, user)
+        || login_hint == cokret::user_did_for(url_builder, cokret_config, user)
         || login_hint == cokret::user_handle(url_builder, user)
         // Spec 7157ee8 retired the `local@host` display form as canonical,
         // but legacy OIDC clients still send it as a login_hint — accept
@@ -368,7 +368,7 @@ pub async fn oidc_code_exchange(
     let mut rng = make_rng();
     let clock = make_clock();
     let url_builder = depot.url_builder()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
     let encrypter = depot.encrypter()?;
     let upstream_oidc = depot.upstream_oidc_service()?;
@@ -781,7 +781,7 @@ pub async fn oidc_code_exchange(
         if !input.login_hint.trim().is_empty()
             && !login_hint_matches_user(
                 &url_builder,
-                &contrix_config,
+                &cokret_config,
                 &user,
                 input.login_hint.trim(),
             )
@@ -811,7 +811,7 @@ pub async fn oidc_code_exchange(
             .await?;
         let grant_target = match upstream_oidc.session_grant_target_for_requested_audience(
             &url_builder,
-            &contrix_config,
+            &cokret_config,
             input.principal_audience.as_deref(),
         ) {
             Ok(target) => target,
@@ -833,7 +833,7 @@ pub async fn oidc_code_exchange(
             &encrypter,
             &http_client,
             &url_builder,
-            &contrix_config,
+            &cokret_config,
             &user,
             &grant_target.audience,
         )
@@ -873,7 +873,7 @@ pub async fn oidc_code_exchange(
             &mut rng,
             &*clock,
             &url_builder,
-            &contrix_config,
+            &cokret_config,
             &key_store,
             &browser_session,
             grant_target.audience.clone(),
@@ -1275,12 +1275,12 @@ pub async fn oidc_code_exchange(
         return Ok(());
     };
     let expected_subject =
-        cokret::user_did_for(&url_builder, &contrix_config, &browser_session.user);
+        cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user);
     let oauth_introspection = match crate::handlers::oauth::introspection_service::introspect_token(
         &mut repo,
         &clock,
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         &service_activity_tracker,
         &oauth_token_reply.access_token,
         Some(coauth_iana::oauth::OAuthTokenTypeHint::AccessToken),
@@ -1369,7 +1369,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
     let expected_oauth_session_id = oauth_session_id.to_string();
-    if oauth_introspection.contrix_session_id.as_deref() != Some(expected_oauth_session_id.as_str())
+    if oauth_introspection.cokret_session_id.as_deref() != Some(expected_oauth_session_id.as_str())
     {
         res.render(Json(LoginResponse {
             status: "error",
@@ -1380,7 +1380,7 @@ pub async fn oidc_code_exchange(
                 "fresh OAuth access token session mismatch: expected {} but introspection returned {}",
                 expected_oauth_session_id,
                 oauth_introspection
-                    .contrix_session_id
+                    .cokret_session_id
                     .as_deref()
                     .unwrap_or("missing")
             )],
@@ -1461,7 +1461,7 @@ pub async fn oidc_code_exchange(
 
     let grant_target = match upstream_oidc.session_grant_target_for_requested_audience(
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         input.principal_audience.as_deref(),
     ) {
         Ok(target) => target,
@@ -1484,7 +1484,7 @@ pub async fn oidc_code_exchange(
         &encrypter,
         &http_client,
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         user,
         &grant_target.audience,
     )
@@ -1524,7 +1524,7 @@ pub async fn oidc_code_exchange(
         &mut rng,
         &clock,
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         &key_store,
         &browser_session,
         grant_target.audience.clone(),
@@ -1626,7 +1626,7 @@ pub async fn oidc_browser_bridge_session(
     depot: &Depot,
 ) -> Result<Json<OidcBrowserBridgeSessionResponse>, RouteError> {
     let url_builder = depot.url_builder()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let input: OidcBrowserBridgeSessionRequest = req
         .parse_json()
         .await
@@ -1647,7 +1647,7 @@ pub async fn oidc_browser_bridge_session(
         .principal_audience
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| cokret::required_audience_for(&url_builder, &contrix_config));
+        .unwrap_or_else(|| cokret::required_audience_for(&url_builder, &cokret_config));
     let client_id = if let Some(hint) = input
         .client_id_hint
         .clone()
@@ -1732,7 +1732,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
     Ok(Json(OidcExchangeDescribeResponse {
         contract: "cokret.rest.oidc_exchange.v1",
         version: "2026-05-17-validated",
-        exchange_path: "/api/v1/auth/oidc/exchange",
+        exchange_path: "/_cokret/gate/account/auth/oidc/exchange",
         upstream_boundary_mode: "local_coauth_or_federated_oidc_token_plus_userinfo_validation",
         upstream_modes_supported: vec![
             "local_coauth",
@@ -1770,7 +1770,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "federated_upstream_link_to_local_account",
             "login_hint_to_linked_local_account_if_supplied",
             "configured_principal_audience_match",
-            "contrix_session_grant_issuance",
+            "cokret_session_grant_issuance",
         ],
         failure_codes: vec![
             "invalid_redirect_uri",
@@ -1817,39 +1817,39 @@ pub async fn auth_bridge_describe(
     Ok(Json(AuthBridgeDescribeResponse {
         contract: "cokret.rest.auth_bridge.v1",
         version: "2026-05-17-validated",
-        api_base_path: "/api/v1",
+        api_base_path: "/_cokret",
         oauth: AuthBridgeOAuthDescriptor {
             discovery_path: "/.well-known/openid-configuration",
-            browser_bridge_session_path: "/api/v1/auth/oidc/browser-bridge/session",
-            exchange_describe_path: "/api/v1/auth/oidc/exchange/describe",
-            exchange_path: "/api/v1/auth/oidc/exchange",
+            browser_bridge_session_path: "/_cokret/gate/account/auth/oidc/browser-bridge/session",
+            exchange_describe_path: "/_cokret/gate/account/auth/oidc/exchange/describe",
+            exchange_path: "/_cokret/gate/account/auth/oidc/exchange",
             supported_flows: vec!["authorization_code_pkce_browser"],
             redirect_uri_modes: vec!["browser_origin_callback", "native_urn_callback"],
             client_selection_mode: "public_authorization_code_client_with_exact_redirect_match",
         },
         passkey: AuthBridgePasskeyDescriptor {
-            register_start_path: "/api/v1/auth/passkey/register/start",
-            register_finish_path: "/api/v1/auth/passkey/register/finish",
-            auth_start_path: "/api/v1/auth/passkey/auth/start",
-            auth_finish_path: "/api/v1/auth/passkey/auth/finish",
+            register_start_path: "/_cokret/gate/account/auth/passkey/register/start",
+            register_finish_path: "/_cokret/gate/account/auth/passkey/register/finish",
+            auth_start_path: "/_cokret/gate/account/auth/passkey/auth/start",
+            auth_finish_path: "/_cokret/gate/account/auth/passkey/auth/finish",
             account_hint_fields: vec!["account_id", "handle", "login_hint", "display_name"],
             finish_response: "credential_id_only_session_grant_followup",
         },
         cokret: AuthBridgeCokretDescriptor {
-            login_path: "/api/v1/auth/login",
-            logout_path: "/api/v1/auth/logout",
-            providers_path: "/api/v1/auth/providers",
-            session_grants_path: "/api/v1/session-grants",
-            session_grants_introspect_path: "/api/v1/session-grants/introspect",
+            login_path: "/_cokret/gate/account/auth/login",
+            logout_path: "/_cokret/gate/account/auth/logout",
+            providers_path: "/_cokret/gate/account/auth/providers",
+            session_grants_path: "/_cokret/gate/account/session-grants",
+            session_grants_introspect_path: "/_cokret/gate/account/session-grants/introspect",
             session_grant_scope: cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
         },
         admin: AuthBridgeAdminDescriptor {
-            accounts_path: "/api/admin/v1/accounts",
-            account_detail_path_template: "/api/admin/v1/accounts/{account_id}",
-            account_dids_path_template: "/api/admin/v1/accounts/{account_id}/dids",
-            risk_action_path_template: "/api/admin/v1/accounts/{account_id}/risk-action",
-            risk_action_current_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/current",
-            risk_action_history_path_template: "/api/admin/v1/accounts/{account_id}/risk-action/history",
+            accounts_path: "/_cokret/local/admin/accounts",
+            account_detail_path_template: "/_cokret/local/admin/accounts/{account_id}",
+            account_dids_path_template: "/_cokret/local/admin/accounts/{account_id}/dids",
+            risk_action_path_template: "/_cokret/local/admin/accounts/{account_id}/risk-action",
+            risk_action_current_path_template: "/_cokret/local/admin/accounts/{account_id}/risk-action/current",
+            risk_action_history_path_template: "/_cokret/local/admin/accounts/{account_id}/risk-action/history",
         },
         todos: vec![],
     }))
@@ -1862,14 +1862,14 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
         version: "2026-05-17-validated".to_owned(),
         service: "coauth".to_owned(),
         service_kind: "account_authority".to_owned(),
-        api_base_path: "/api/v1".to_owned(),
-        describe_path: "/api/v1/integration/describe".to_owned(),
+        api_base_path: "/_cokret".to_owned(),
+        describe_path: "/_cokret/gate/account/integration/describe".to_owned(),
         dependencies: vec![
             IntegrationManifestDependency {
                 service: "soland".to_owned(),
                 purpose: "principal_server_session_exchange".to_owned(),
                 required_contract: "cokret.rest.principal_bridge.v1".to_owned(),
-                discovery_path: "/api/v1/auth/bridge/describe".to_owned(),
+                discovery_path: "/_cokret/gate/account/auth/bridge/describe".to_owned(),
                 mode: "remote_service_contract".to_owned(),
             },
             IntegrationManifestDependency {
@@ -1884,7 +1884,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "auth_bridge".to_owned(),
                 method: "GET".to_owned(),
-                path: "/api/v1/auth/bridge/describe".to_owned(),
+                path: "/_cokret/gate/account/auth/bridge/describe".to_owned(),
                 contract: "cokret.rest.auth_bridge.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "covers browser bridge discovery, local/federated exchange, and principal session-grant handoff.".to_owned(),
@@ -1892,7 +1892,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "oidc_browser_bridge_session".to_owned(),
                 method: "POST".to_owned(),
-                path: "/api/v1/auth/oidc/browser-bridge/session".to_owned(),
+                path: "/_cokret/gate/account/auth/oidc/browser-bridge/session".to_owned(),
                 contract: "cokret.rest.oidc_browser_bridge_session.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "stateless preflight returns state, nonce, and S256 PKCE material for exchange validation.".to_owned(),
@@ -1900,7 +1900,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "oidc_exchange_describe".to_owned(),
                 method: "GET".to_owned(),
-                path: "/api/v1/auth/oidc/exchange/describe".to_owned(),
+                path: "/_cokret/gate/account/auth/oidc/exchange/describe".to_owned(),
                 contract: "cokret.rest.oidc_exchange.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "publishes validation layers and failure taxonomy for local and federated exchange.".to_owned(),
@@ -1908,7 +1908,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "oidc_exchange".to_owned(),
                 method: "POST".to_owned(),
-                path: "/api/v1/auth/oidc/exchange".to_owned(),
+                path: "/_cokret/gate/account/auth/oidc/exchange".to_owned(),
                 contract: "cokret.rest.oidc_exchange.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "validates state, PKCE, nonce, discovery binding, code exchange, userinfo, and session-grant audience.".to_owned(),
@@ -1916,7 +1916,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "passkey_auth".to_owned(),
                 method: "POST".to_owned(),
-                path: "/api/v1/auth/passkey/{register,auth}/{start,finish}".to_owned(),
+                path: "/_cokret/gate/account/auth/passkey/{register,auth}/{start,finish}".to_owned(),
                 contract: "cokret.rest.passkey_auth.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "WebAuthn challenge and finish use the production passkey service; finish currently returns credential identity and still relies on the session-grant follow-up path.".to_owned(),
@@ -1924,7 +1924,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "admin_bridge".to_owned(),
                 method: "GET".to_owned(),
-                path: "/api/admin/v1/bridge/describe".to_owned(),
+                path: "/_cokret/local/admin/bridge/describe".to_owned(),
                 contract: "cokret.rest.coauth_admin_bridge.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "risk-action proposals and approvals are persisted with admin audit trail.".to_owned(),
@@ -1932,7 +1932,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "account_claims".to_owned(),
                 method: "GET".to_owned(),
-                path: "/api/admin/v1/accounts/{account_id}/claims".to_owned(),
+                path: "/_cokret/local/admin/accounts/{account_id}/claims".to_owned(),
                 contract: "cokret.rest.coauth_account_claims.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "claim inventory is backed by account-claims service and subject to PG isolation coverage.".to_owned(),
@@ -1940,7 +1940,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "account_session_grants".to_owned(),
                 method: "GET".to_owned(),
-                path: "/api/admin/v1/accounts/{account_id}/session-grants".to_owned(),
+                path: "/_cokret/local/admin/accounts/{account_id}/session-grants".to_owned(),
                 contract: "cokret.rest.coauth_account_session_grants.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "session-grant inventory exposes persisted grant metadata and will gain broader PG isolation coverage.".to_owned(),
@@ -1950,22 +1950,22 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             "compose_flow": {
                 "step_1": {
                     "service": "coauth",
-                    "path": "/api/v1/auth/oidc/browser-bridge/session",
+                    "path": "/_cokret/gate/account/auth/oidc/browser-bridge/session",
                     "method": "POST"
                 },
                 "step_2": {
                     "service": "coauth",
-                    "path": "/api/v1/auth/oidc/exchange",
+                    "path": "/_cokret/gate/account/auth/oidc/exchange",
                     "method": "POST"
                 },
                 "step_3": {
                     "service": "soland",
-                    "path": "/api/v1/auth/session-grant/exchange",
+                    "path": "/_cokret/gate/account/auth/session-grant/exchange",
                     "method": "POST"
                 },
                 "step_4": {
                     "service": "soland",
-                    "path": "/api/v1/push/register-device",
+                    "path": "/_cokret/edge/push/register-device",
                     "method": "POST"
                 }
             }
@@ -2027,7 +2027,7 @@ mod tests {
 
         assert_eq!(
             endpoint.as_str(),
-            "https://local.host/api/v1/account/register"
+            "https://local.host/_cokret/self/account/register"
         );
     }
 
@@ -2054,7 +2054,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/api/v1/auth/oidc/exchange").json(serde_json::json!({
+                Request::post("/_cokret/gate/account/auth/oidc/exchange").json(serde_json::json!({
                     "authorization_code": "stale-code",
                     "code_verifier": "verifier",
                     "redirect_uri": "http://localhost:8080/auth/callback",
@@ -2089,11 +2089,11 @@ mod tests {
         };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let expected_audience =
-            cokret::required_audience_for(&state.url_builder, &state.contrix_config);
+            cokret::required_audience_for(&state.url_builder, &state.cokret_config);
 
         let response = state
             .request(
-                Request::post("/api/v1/auth/oidc/browser-bridge/session").json(serde_json::json!({
+                Request::post("/_cokret/gate/account/auth/oidc/browser-bridge/session").json(serde_json::json!({
                     "redirect_uri": "http://localhost:8080/auth/callback",
                     "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
                     "client_id_hint": "yougen"

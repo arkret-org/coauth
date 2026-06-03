@@ -22,7 +22,7 @@ pub fn Consent(grant_id: String) -> Element {
     let gid = grant_id.clone();
     let data = use_resource(move || {
         let id = gid.clone();
-        async move { crate::api::api_get::<ConsentDataResponse>(&format!("/oauth/consent/{id}")).await }
+        async move { crate::api::api_get::<ConsentDataResponse>(&format!("/self/oauth/consent/{id}")).await }
     });
     let binding = data.read();
 

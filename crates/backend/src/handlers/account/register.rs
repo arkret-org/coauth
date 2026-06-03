@@ -43,7 +43,7 @@ use crate::{
     salvo_utils::SessionInfoExt,
 };
 
-// ── POST /api/v1/auth/register ─────────────────────────────────
+// ── POST /_cokret/gate/account/auth/register ─────────────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct RegisterInput {
@@ -200,7 +200,7 @@ pub async fn post_register(
     }))
 }
 
-// ── POST /api/v1/auth/register/webvh/start ────────────────────
+// ── POST /_cokret/gate/account/auth/register/webvh/start ────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationStartInput {
@@ -262,7 +262,7 @@ pub async fn post_webvh_start(
     // wire-level handle normalize / homograph check via the SDK helper.
     // MUST run before any storage lookup so confusable handles never
     // hit `repo.user().exists(...)` or the principal server.
-    if contrix_core::normalize_handle_localpart(&username).is_err() {
+    if cokret_core::normalize_handle_localpart(&username).is_err() {
         return Ok(Json(WebvhRegistrationStartResponse {
             status: "error",
             registration_id: None,
@@ -349,7 +349,7 @@ pub async fn post_webvh_start(
     }))
 }
 
-// ── POST /api/v1/auth/register/webvh/:id/email ────────────────
+// ── POST /_cokret/gate/account/auth/register/webvh/:id/email ────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationEmailInput {
@@ -483,7 +483,7 @@ pub async fn post_webvh_email(
     }))
 }
 
-// ── POST /api/v1/auth/register/webvh/:id/verify-email ─────────
+// ── POST /_cokret/gate/account/auth/register/webvh/:id/verify-email ─────────
 
 #[endpoint]
 pub async fn post_webvh_verify_email(
@@ -543,7 +543,7 @@ pub async fn post_webvh_verify_email(
     }))
 }
 
-// ── POST /api/v1/auth/register/webvh/:id/finish ───────────────
+// ── POST /_cokret/gate/account/auth/register/webvh/:id/finish ───────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationFinishInput {
@@ -645,7 +645,7 @@ pub async fn post_webvh_finish(
 
     let repo_factory = depot.repo_factory()?;
     let principal_server = depot.principal_server()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let http_client = depot.http_client()?;
     let clock = make_clock();
     let mut rng = make_rng();
@@ -660,7 +660,7 @@ pub async fn post_webvh_finish(
         return Err(RouteError::NotFound);
     };
     let principal_url = registration_webvh_principal_url(&registration.post_auth_action);
-    let target = resolve_webvh_target(&contrix_config, principal_url.as_deref())
+    let target = resolve_webvh_target(&cokret_config, principal_url.as_deref())
         .map_err(RouteError::BadRequest)?;
     let (version, password_hash) = password_manager
         .hash(&mut *rng, Zeroizing::new(input.password))
@@ -732,7 +732,7 @@ pub async fn post_webvh_finish(
     }))
 }
 
-// ── POST /api/v1/auth/register/did/start ──────────────────────
+// ── POST /_cokret/gate/account/auth/register/did/start ──────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct ExistingDidRegistrationInput {
@@ -944,7 +944,7 @@ fn normalize_webvh_local_id(value: &str) -> Option<String> {
     valid.then_some(normalized)
 }
 
-// ── GET /api/v1/auth/register/:id ──────────────────────────────
+// ── GET /_cokret/gate/account/auth/register/:id ──────────────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct RegistrationStatusResponse {
@@ -992,7 +992,7 @@ pub async fn get_registration(
     }))
 }
 
-// ── POST /api/v1/auth/register/:id/verify-email ────────────────
+// ── POST /_cokret/gate/account/auth/register/:id/verify-email ────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct VerifyEmailInput {
@@ -1066,7 +1066,7 @@ pub async fn post_verify_email(
     }))
 }
 
-// ── POST /api/v1/auth/register/:id/resend-verification ────────
+// ── POST /_cokret/gate/account/auth/register/:id/resend-verification ────────
 
 #[derive(Serialize, ToSchema)]
 pub struct ResendVerificationResponse {
@@ -1131,7 +1131,7 @@ pub async fn post_resend_verification(
     Ok(Json(ResendVerificationResponse { status, error }))
 }
 
-// ── POST /api/v1/auth/register/:id/change-email ──────────────
+// ── POST /_cokret/gate/account/auth/register/:id/change-email ──────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct ChangeRegistrationEmailInput {
@@ -1212,7 +1212,7 @@ pub async fn post_change_email(
     Ok(Json(ChangeRegistrationEmailResponse { status, error }))
 }
 
-// ── POST /api/v1/auth/register/:id/verify-phone ────────────────
+// ── POST /_cokret/gate/account/auth/register/:id/verify-phone ────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct VerifyPhoneInput {
@@ -1286,7 +1286,7 @@ pub async fn post_verify_phone(
     }))
 }
 
-// ── POST /api/v1/auth/register/:id/display-name ────────────────
+// ── POST /_cokret/gate/account/auth/register/:id/display-name ────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct DisplayNameInput {
@@ -1356,7 +1356,7 @@ pub async fn post_display_name(
     }))
 }
 
-// ── POST /api/v1/auth/register/:id/finish ──────────────────────
+// ── POST /_cokret/gate/account/auth/register/:id/finish ──────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct FinishRegistrationResponse {

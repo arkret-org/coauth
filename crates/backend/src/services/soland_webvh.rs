@@ -1,6 +1,6 @@
 //! Embedded `did:webvh` minting against soland's principal-server.
 //!
-//! Soland exposes `POST /api/v1/identity/webvh/register`
+//! Soland exposes `POST /_cokret/root/identity/webvh/register`
 //! ([`soland/src/routing/identity/did.rs`]) to mint a `did:webvh:<scid>:<host>:
 //! webvh:<local_id>` DID under its own authority. Unlike the external starid
 //! adapter — which accepts an opaque `update_key` string and signs the
@@ -86,7 +86,7 @@ pub struct PreparedInception {
     /// Final inception webvh log entry, with SCID substituted and proof
     /// attached.
     pub log_entry: Value,
-    /// JSON body for `POST /api/v1/identity/webvh/register` on soland.
+    /// JSON body for `POST /_cokret/root/identity/webvh/register` on soland.
     pub registration_body: Value,
     /// Multibase ed25519 **public** key for the DID's verification method.
     pub did_public_key_multibase: String,
@@ -222,7 +222,7 @@ fn random_seed<R: RngCore + ?Sized>(rng: &mut R) -> [u8; SECRET_KEY_LENGTH] {
 }
 
 /// POST `prepared.registration_body` to the principal server's
-/// `/api/v1/identity/webvh/register` endpoint and surface any non-2xx as
+/// `/_cokret/root/identity/webvh/register` endpoint and surface any non-2xx as
 /// [`SolandWebvhError::RegisterRejected`]. Soland treats `409 Conflict` as
 /// "already registered" — we map that back to `Ok(())` so an idempotent
 /// caller can recover (the row will already exist in our DB too).
@@ -338,7 +338,7 @@ pub async fn ensure_principal_did_minted(
 }
 
 fn canonical_bytes(value: &Value) -> Result<Vec<u8>, SolandWebvhError> {
-    contrix_core::canonical::canonical_json_bytes(value)
+    cokret_core::canonical::canonical_json_bytes(value)
         .map_err(|err| SolandWebvhError::Canonical(err.to_string()))
 }
 
@@ -580,7 +580,7 @@ mod tests {
             map.remove("proof");
         }
         let payload =
-            contrix_core::canonical::canonical_json_bytes(&canonical).map_err(|e| e.to_string())?;
+            cokret_core::canonical::canonical_json_bytes(&canonical).map_err(|e| e.to_string())?;
         public_key
             .verify(&payload, &signature)
             .map_err(|_| "signature invalid".to_owned())

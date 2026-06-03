@@ -10,7 +10,7 @@
 //! `server_name`. It is an `OrSet` cell:
 //!
 //! ```text
-//! ck:cell:cx.component.consent.grant.v1:<consent_id>
+//! ck:cell:ck.component.consent.grant.v1:<consent_id>
 //! ```
 //!
 //! `grant` adds a tag, `revoke` removes a tag. Whether an invite is allowed
@@ -99,7 +99,7 @@ pub async fn query_consent_cell(
 
     // TODO(soland-cell-query): soland does not yet expose a public admin
     // endpoint for reading OrSet cell state. The path below is a forward
-    // compatible guess that mirrors the existing `/api/v1/moves` POST
+    // compatible guess that mirrors the existing `/_cokret/peer/moves` POST
     // surface. Once soland adds the read endpoint, update this path and
     // align the response struct with the official schema.
     //
@@ -109,7 +109,10 @@ pub async fn query_consent_cell(
     //   the consent gate is documented to treat as fail-open (see
     //   module comment). Tracked in `_improve_todos.md` C.4.
     let cell_id = build_cell_id(consent_id);
-    let path = format!("api/v1/admin/cells/{}", urlencoding::encode_path(&cell_id));
+    let path = format!(
+        "_soland/admin/cells/{}",
+        urlencoding::encode_path(&cell_id)
+    );
     let url = match base.join(&path) {
         Ok(u) => u,
         Err(error) => {
@@ -185,7 +188,7 @@ pub async fn query_consent_cell(
 
 /// Build the canonical cell id used in storage and on the wire.
 fn build_cell_id(consent_id: &str) -> String {
-    format!("ck:cell:cx.component.consent.grant.v1:{consent_id}")
+    format!("ck:cell:ck.component.consent.grant.v1:{consent_id}")
 }
 
 /// Decide whether an invite should pass the consent gate, given a cell
@@ -306,9 +309,9 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-123",
+                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-123",
                 "tags": ["peer=did:web:peer;scope=invite"],
             })))
             .expect(1)
@@ -335,9 +338,9 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-123",
+                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-123",
                 "tags": [],
             })))
             .mount(&server)
@@ -362,7 +365,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
@@ -385,7 +388,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
             .mount(&server)
             .await;

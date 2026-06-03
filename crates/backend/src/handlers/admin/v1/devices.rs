@@ -378,7 +378,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let response = state
-            .request(Request::get("/api/admin/v1/devices").bearer(&token).empty())
+            .request(Request::get("/_cokret/local/admin/devices").bearer(&token).empty())
             .await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -389,7 +389,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/api/admin/v1/devices/device-1/revoke")
+                Request::post("/_cokret/local/admin/devices/device-1/revoke")
                     .bearer(&token)
                     .json(serde_json::json!({ "reason": "lost device" })),
             )

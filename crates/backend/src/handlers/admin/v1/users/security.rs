@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-/// # JSON payload for the `POST /api/admin/v1/users/:id/risk-action` endpoint
+/// # JSON payload for the `POST /_cokret/local/admin/users/:id/risk-action` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "RiskActionRequest")]
 pub struct RiskActionRequest {
@@ -59,13 +59,13 @@ fn audit_signing_context(
     depot: &Depot,
 ) -> Result<(coauth_keystore::Keystore, String, bool), AppError> {
     let key_store = depot.key_store()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
     Ok((
         key_store,
         service_did,
-        contrix_config.audit_signature_fail_closed,
+        cokret_config.audit_signature_fail_closed,
     ))
 }
 
@@ -144,7 +144,7 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
 
     let user_response = SingleResponse::new(
         User::from(user),
-        format!("/api/admin/v1/users/{id}/risk-action"),
+        format!("/_cokret/local/admin/users/{id}/risk-action"),
     );
 
     Ok(Json(RiskActionResponse {
@@ -155,7 +155,7 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
     }))
 }
 
-/// # JSON payload for the `POST /api/admin/v1/users/:id/set-password` endpoint
+/// # JSON payload for the `POST /_cokret/local/admin/users/:id/set-password` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[schemars(rename = "SetUserPasswordRequest")]
 pub struct SetPasswordRequest {

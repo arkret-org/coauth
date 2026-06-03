@@ -99,7 +99,7 @@ fn store_post_auth_continuation(kind: &str, id: &str) {
 #[component]
 pub fn Login() -> Element {
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersResponse>("/auth/providers").await
+        crate::api::api_get::<ProvidersResponse>("/gate/account/auth/providers").await
     });
     let binding = providers_data.read();
 

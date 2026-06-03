@@ -11,7 +11,7 @@
 //! described in `spec/v1/artifacts/schemas/recovery-policy.schema.json`.
 //!
 //! When (and only when) coauth is configured to issue OIDC-backed recovery
-//! evidence as part of a `cx.schema.recovery_policy.v1` body (e.g. a
+//! evidence as part of a `ck.schema.recovery_policy.v1` body (e.g. a
 //! `trusted_recovery_service` provider in a sovereign deployment), this
 //! module provides the wire-level guard that rejects any `proof_kind`
 //! outside the registered enum:
@@ -21,7 +21,7 @@
 //! - `trusted_recovery_service`
 //! - `principal_signing`
 //!
-//! The SDK source-of-truth is [`contrix_core::RecoveryProofKind`]; this
+//! The SDK source-of-truth is [`cokret_core::RecoveryProofKind`]; this
 //! module is a thin coauth-side adapter so handlers and reducer-feeding
 //! code paths can call into a single function regardless of whether the
 //! deployment actually enables the OIDC-backed binding.
@@ -33,7 +33,7 @@
 // principal-signing) is also a R3.1 deliverable — this round only
 // pins the enum surface.
 
-use contrix_core::RecoveryProofKind;
+use cokret_core::RecoveryProofKind;
 use thiserror::Error;
 
 /// Outcome of the wire-level `proof_kind` validator.

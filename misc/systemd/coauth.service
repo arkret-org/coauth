@@ -1,6 +1,6 @@
 [Unit]
 Description=coauth (Cokret Auth/Account Server)
-Documentation=https://github.com/cokret-dev/coauth
+Documentation=https://github.com/cokret/coauth
 After=network-online.target postgresql.service
 Wants=network-online.target
 

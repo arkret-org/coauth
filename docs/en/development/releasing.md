@@ -129,7 +129,7 @@ jq -n \
     "predicateType": "https://slsa.dev/provenance/v1",
     "predicate": {
       "buildDefinition": {
-        "buildType": "https://github.com/cokret-dev/coauth/local-container-build/v1",
+        "buildType": "https://github.com/cokret/coauth/local-container-build/v1",
         "externalParameters": {
           "gitCommit": $git_sha,
           "gitRemote": $source_uri,
@@ -183,8 +183,8 @@ cosign verify-blob \
 4. Do not undraft releases, publish releases, create tags, push images,
    or upload remote attestations.
 
-[`release-branch` workflow]: https://github.com/cokret-dev/coauth/actions/workflows/release-branch.yaml
-[`release-bump` workflow]: https://github.com/cokret-dev/coauth/actions/workflows/release-bump.yaml
-[`release` workflow]: https://github.com/cokret-dev/coauth/actions/workflows/release.yaml
-[CI to churn]: https://github.com/cokret-dev/coauth/actions/workflows/release.yaml?query=event%3Apush
-[draft release to appear]: https://github.com/cokret-dev/coauth/releases
+[`release-branch` workflow]: https://github.com/cokret/coauth/actions/workflows/release-branch.yaml
+[`release-bump` workflow]: https://github.com/cokret/coauth/actions/workflows/release-bump.yaml
+[`release` workflow]: https://github.com/cokret/coauth/actions/workflows/release.yaml
+[CI to churn]: https://github.com/cokret/coauth/actions/workflows/release.yaml?query=event%3Apush
+[draft release to appear]: https://github.com/cokret/coauth/releases

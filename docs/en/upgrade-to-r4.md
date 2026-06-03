@@ -17,7 +17,7 @@ Read this page before enabling a build that includes the R4 changes.
 - **Invite claims** use a two-proof chain: a verification-service
   proof for the verified 3PID and a subject proof signed by the
   inviter actor key.
-- **`cx.cross_signing.publish`** is now compare-and-swap. Publishers
+- **`ck.cross_signing.publish`** is now compare-and-swap. Publishers
   must read the current generation and submit
   `expected_previous_generation`; accepted generations advance by
   exactly one.
@@ -35,13 +35,13 @@ entry.
 ## Trust domain rotation
 
 `cokret.trust_domain` is part of the canonical transcript for every
-`cx.cross_signing.reset` proof. Changing it invalidates reset proofs
+`ck.cross_signing.reset` proof. Changing it invalidates reset proofs
 that were issued under the previous trust domain.
 
 Before rotating:
 
 1. Record the current configured value and confirm it matches
-   `/api/v1/server/describe`.
+   `/_cokret/describe`.
 2. Pause or reject in-flight cross-signing reset approvals minted under
    the old value.
 3. Snapshot the database and keep the previous config alongside the
@@ -52,7 +52,7 @@ Before rotating:
 During rotation:
 
 1. Set the new value in `cokret.trust_domain`.
-2. Restart one `coauth` replica and verify `/api/v1/server/describe`
+2. Restart one `coauth` replica and verify `/_cokret/describe`
    advertises the new value.
 3. Roll the remaining replicas.
 4. Reissue reset proofs through the device recovery flow. The affected

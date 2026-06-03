@@ -1,6 +1,6 @@
 //! Admin DTOs for the soland federation status surface.
 //!
-//! Mirrors `GET /api/admin/v1/federation/status` — per-Space federation
+//! Mirrors `GET /_cokret/local/admin/federation/status` — per-Space federation
 //! peers + last-anchor-pulled-at + outbound queue depth. The endpoint is
 //! 404-tolerant on the client side; soland may not have the route wired
 //! yet for every deployment.

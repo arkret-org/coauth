@@ -19,7 +19,7 @@
 //!
 //! ## Soland endpoint contract
 //!
-//! `GET /api/admin/v1/spaces/{space_id}/anchor-dag` returns the
+//! `GET /_soland/admin/spaces/{space_id}/anchor-dag` returns the
 //! `AnchorDagSnapshot` shape from `sodmin::types::anchor`:
 //!
 //! ```json
@@ -107,7 +107,7 @@ pub async fn query_latest_anchor(
     };
 
     let path = format!(
-        "api/admin/v1/spaces/{}/anchor-dag",
+        "_soland/admin/spaces/{}/anchor-dag",
         urlencoding::encode_path(space_id)
     );
     let url = base
@@ -189,7 +189,7 @@ fn pick_latest_leaf(leaves: &[AnchorLeafWire]) -> Option<&AnchorLeafWire> {
 }
 
 /// Generate a fresh HLC `<unix-ms-hex>-<logical-hex>-<node-hex>` that
-/// passes `contrix_core::Hlc::new` validation:
+/// passes `cokret_core::Hlc::new` validation:
 /// - `unix-ms` must be 12 lowercase hex chars,
 /// - `logical` must be 8 lowercase hex chars,
 /// - `node` must be 8 lowercase hex chars,
@@ -295,7 +295,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/admin/v1/spaces/.*/anchor-dag"))
+            .and(path_regex(r"^/_soland/admin/spaces/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "space_id": "ck:space:test",
                 "leaves": [
@@ -335,7 +335,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/admin/v1/spaces/.*/anchor-dag"))
+            .and(path_regex(r"^/_soland/admin/spaces/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "space_id": "ck:space:test",
                 "leaves": [
@@ -365,7 +365,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/admin/v1/spaces/.*/anchor-dag"))
+            .and(path_regex(r"^/_soland/admin/spaces/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "space_id": "ck:space:test",
                 "leaves": [],
@@ -388,7 +388,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/admin/v1/spaces/.*/anchor-dag"))
+            .and(path_regex(r"^/_soland/admin/spaces/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(503))
             .mount(&server)
             .await;
@@ -404,11 +404,11 @@ mod tests {
     }
 
     #[test]
-    fn fresh_hlc_passes_contrix_core_validation() {
+    fn fresh_hlc_passes_cokret_core_validation() {
         let s = fresh_hlc();
-        // Round-trip through `contrix_core::Hlc` so we know the format
+        // Round-trip through `cokret_core::Hlc` so we know the format
         // matches what `UnsignedMove.hlc` will accept.
-        let parsed = contrix_core::Hlc::new(s.clone()).unwrap();
+        let parsed = cokret_core::Hlc::new(s.clone()).unwrap();
         assert_eq!(parsed.as_str(), s);
     }
 
@@ -421,7 +421,7 @@ mod tests {
         assert_ne!(a, c, "different DIDs must map to different spaces");
         // SDK validates `ck:space:` IDs as strict UUIDv7 — let it round-trip
         // so we know the convention is accepted by the wire layer.
-        contrix_core::SpaceId::new(a).unwrap();
-        contrix_core::SpaceId::new(c).unwrap();
+        cokret_core::SpaceId::new(a).unwrap();
+        cokret_core::SpaceId::new(c).unwrap();
     }
 }

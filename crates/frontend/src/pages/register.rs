@@ -24,7 +24,7 @@ const REGISTER_PHONE_VERIFY_STATUS_ID: &str = "register-phone-verify-status";
 #[component]
 pub fn Register() -> Element {
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersResponse>("/auth/providers").await
+        crate::api::api_get::<ProvidersResponse>("/gate/account/auth/providers").await
     });
     let binding = providers_data.read();
 
@@ -248,7 +248,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
     let mut status = use_resource(move || {
         let rid = status_id.clone();
         async move {
-            crate::api::api_get::<RegisterStatusResponse>(&format!("/auth/register/{rid}")).await
+            crate::api::api_get::<RegisterStatusResponse>(&format!("/gate/account/auth/register/{rid}")).await
         }
     });
 
@@ -796,7 +796,7 @@ pub fn RegisterFinish(id: String) -> Element {
     let mut auto_submit_started = use_signal(|| false);
 
     let bootstrap_status = use_resource(|| async {
-        crate::api::api_get::<BootstrapAdminStatus>("/bootstrap-admin-status").await
+        crate::api::api_get::<BootstrapAdminStatus>("/self/bootstrap-admin-status").await
     });
     let bootstrap_status_binding = bootstrap_status.read();
     let bootstrap_admin_setup_required = matches!(

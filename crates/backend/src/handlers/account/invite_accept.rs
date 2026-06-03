@@ -11,13 +11,13 @@
 //!
 //! ## Route
 //!
-//! `POST /api/v1/invites/3pid/verify`
+//! `POST /_cokret/self/invites/3pid/verify`
 //!
 //! This is the **pure verifier** form: the handler takes the two JWS
 //! proofs + the presenter DID, runs `verify_invite`, and on success
 //! returns a JSON summary of the verified invite. It does NOT forward
 //! to soland — that's the consumer's job (typically yougen), which
-//! then submits a separate `cx.invite.claim` via soland's existing
+//! then submits a separate `ck.invite.claim` via soland's existing
 //! invite-acceptance reducer per the contract in
 //! `cotest/e2e/scenarios/invites/third-party.md` Phase C.
 //!
@@ -69,7 +69,7 @@ use crate::services::third_party_invite::{InviteRequest, NonceStore, VerifierCtx
 
 // ── Request / response shapes ──────────────────────────────────
 
-/// Body of `POST /api/v1/invites/3pid/verify`.
+/// Body of `POST /_cokret/self/invites/3pid/verify`.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct VerifyInviteRequest {
     /// Verification-service proof JWS (compact serialization). Signed
@@ -132,7 +132,7 @@ fn shared_nonce_store() -> &'static Arc<NonceStore> {
 
 // ── Salvo handler ──────────────────────────────────────────────
 
-/// `POST /api/v1/invites/3pid/verify`
+/// `POST /_cokret/self/invites/3pid/verify`
 ///
 /// Runs the two-step `verify_invite` proof chain (verification-service
 /// proof + subject proof + cross-checks). On success returns a JSON
@@ -162,7 +162,7 @@ pub async fn post_verify_invite(
         return Err(RouteError::BadRequest("missing_required_fields".into()));
     }
 
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let http_client = depot.http_client()?;
     let url_builder = depot.url_builder()?;
     let key_store = depot.key_store()?;
@@ -173,9 +173,9 @@ pub async fn post_verify_invite(
     // deployment's own service DID). The latter is derived from the
     // resolver so it tracks any deployment override; the former MUST
     // come from configuration.
-    let Some(expected_iss) = contrix_config.verification_service_did.clone() else {
+    let Some(expected_iss) = cokret_config.verification_service_did.clone() else {
         warn!(
-            "POST /api/v1/invites/3pid/verify called but cokret.verification_service_did is unset; \
+            "POST /_cokret/self/invites/3pid/verify called but cokret.verification_service_did is unset; \
              returning 503 verifier_not_configured"
         );
         res.status_code(StatusCode::SERVICE_UNAVAILABLE);
@@ -185,7 +185,7 @@ pub async fn post_verify_invite(
         }));
         return Ok(());
     };
-    let expected_aud = did_resolver.service_did(&url_builder, &contrix_config);
+    let expected_aud = did_resolver.service_did(&url_builder, &cokret_config);
 
     let mut repo = depot.repo().await?;
     let nonce_store = shared_nonce_store();
@@ -205,7 +205,7 @@ pub async fn post_verify_invite(
         did_resolver: did_resolver.as_ref(),
         http_client: &http_client,
         url_builder: &url_builder,
-        contrix_config: &contrix_config,
+        cokret_config: &cokret_config,
         key_store: &key_store,
         repo: &mut repo,
     };

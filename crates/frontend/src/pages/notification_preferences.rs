@@ -10,14 +10,14 @@ use crate::{
 
 /// Notification preferences page.
 ///
-/// Fetches `GET /api/v1/viewer/preferences` to obtain channel
+/// Fetches `GET /_cokret/self/viewer/preferences` to obtain channel
 /// availability and the user's current per-channel preferences. The user can
 /// toggle channels on/off and save via
-/// `PATCH /api/v1/viewer/preferences`.
+/// `PATCH /_cokret/self/viewer/preferences`.
 #[component]
 pub fn NotificationPreferences() -> Element {
     let data = use_resource(|| async {
-        crate::api::api_get::<NotificationPreferencesResponse>("/viewer/preferences").await
+        crate::api::api_get::<NotificationPreferencesResponse>("/self/viewer/preferences").await
     });
     let binding = data.read();
 
@@ -170,7 +170,7 @@ fn NotificationPreferencesForm(
                         });
                         let result = crate::api::api_patch::<
                             crate::api::types::UpdateNotificationPreferencesResponse,
-                        >("/viewer/preferences", body)
+                        >("/self/viewer/preferences", body)
                         .await;
                         saving.set(false);
                         match result {

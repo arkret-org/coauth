@@ -28,6 +28,6 @@ coauth 通过标准 OpenID discovery 和 Cokret server describe 接口发布 Pri
 Server 元数据：
 
 - `/.well-known/openid-configuration`
-- `/api/v1/server/describe`
+- `/_cokret/describe`
 
 服务启动后可以运行 `coauth doctor` 检查这些 discovery surface。

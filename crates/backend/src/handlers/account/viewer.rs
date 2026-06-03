@@ -102,7 +102,7 @@ struct EmailData {
     is_primary: bool,
 }
 
-// ── GET /api/v1/viewer ─────────────────────────────────────────
+// ── GET /_cokret/self/viewer ─────────────────────────────────────────
 
 /// Returns the current viewer (user or anonymous), viewer session, and site
 /// config in a single response.
@@ -114,7 +114,7 @@ pub async fn get_viewer(
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let principal_server = depot.principal_server()?;
     let clock = make_clock();
 
@@ -174,7 +174,7 @@ pub async fn get_viewer(
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
                 username: user.handle.clone(),
-                did: cokret::user_did_for(&url_builder, &contrix_config, user),
+                did: cokret::user_did_for(&url_builder, &cokret_config, user),
                 handle: cokret::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,
@@ -243,7 +243,7 @@ fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
     }
 }
 
-// ── GET /api/v1/viewer/security ───────────────────────────────
+// ── GET /_cokret/self/viewer/security ───────────────────────────────
 
 /// Returns a lightweight security summary for the current user, including
 /// password status, active session count, linked provider count, and
@@ -289,14 +289,14 @@ pub struct WorkflowInboxItem {
     pub started_at: String,
 }
 
-/// Response for `GET /api/v1/viewer/workflow-inbox`.
+/// Response for `GET /_cokret/self/viewer/workflow-inbox`.
 #[derive(Serialize, ToSchema)]
 pub struct WorkflowInboxResponse {
     pub pending: Vec<WorkflowInboxItem>,
     pub total: usize,
 }
 
-// ── GET /api/v1/viewer/workflow-inbox ────────────────────────
+// ── GET /_cokret/self/viewer/workflow-inbox ────────────────────────
 
 /// Returns the list of pending flow sessions for the current user.
 ///
@@ -394,7 +394,7 @@ impl From<&AccountSecuritySummary> for SecuritySummaryData {
     }
 }
 
-// ── GET /api/v1/viewer/overview ────────────────────────────
+// ── GET /_cokret/self/viewer/overview ────────────────────────────
 
 /// Returns a unified account overview for the dashboard, combining the
 /// security summary, contact-point counts, identity-binding counts, and

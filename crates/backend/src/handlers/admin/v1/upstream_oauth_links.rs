@@ -63,7 +63,7 @@ mod test_utils {
     }
 }
 
-/// JSON body accepted by `POST /api/admin/v1/upstream-oauth-links`.
+/// JSON body accepted by `POST /_cokret/local/admin/upstream-oauth-links`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUpstreamOauthLinkRequest")]
 pub struct AddRequest {
@@ -538,7 +538,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::post("/api/admin/v1/upstream-oauth-links")
+        let request = Request::post("/_cokret/local/admin/upstream-oauth-links")
             .bearer(&token)
             .json(serde_json::json!({
                 "user_id": alice.id,
@@ -561,11 +561,11 @@ mod tests {
               "human_account_name": null
             },
             "links": {
-              "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG07HNEZXNQM2KNBNF6"
+              "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG07HNEZXNQM2KNBNF6"
             }
           },
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG07HNEZXNQM2KNBNF6"
+            "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG07HNEZXNQM2KNBNF6"
           }
         }
         "###);
@@ -612,7 +612,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::post("/api/admin/v1/upstream-oauth-links")
+        let request = Request::post("/_cokret/local/admin/upstream-oauth-links")
             .bearer(&token)
             .json(serde_json::json!({
                 "user_id": alice.id,
@@ -635,11 +635,11 @@ mod tests {
               "human_account_name": null
             },
             "links": {
-              "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
+              "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
             }
           },
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
+            "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
           }
         }
         "###);
@@ -697,7 +697,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::post("/api/admin/v1/upstream-oauth-links")
+        let request = Request::post("/_cokret/local/admin/upstream-oauth-links")
             .bearer(&token)
             .json(serde_json::json!({
                 "user_id": bob.id,
@@ -741,7 +741,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::post("/api/admin/v1/upstream-oauth-links")
+        let request = Request::post("/_cokret/local/admin/upstream-oauth-links")
             .bearer(&token)
             .json(serde_json::json!({
                 "user_id": Ulid::nil(),
@@ -781,7 +781,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::post("/api/admin/v1/upstream-oauth-links")
+        let request = Request::post("/_cokret/local/admin/upstream-oauth-links")
             .bearer(&token)
             .json(serde_json::json!({
                 "user_id": alice.id,
@@ -861,14 +861,14 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::delete(format!("/api/admin/v1/upstream-oauth-links/{}", link.id))
+        let request = Request::delete(format!("/_cokret/local/admin/upstream-oauth-links/{}", link.id))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NO_CONTENT);
 
         // Verify that the link was deleted
-        let request = Request::get(format!("/api/admin/v1/upstream-oauth-links/{}", link.id))
+        let request = Request::get(format!("/_cokret/local/admin/upstream-oauth-links/{}", link.id))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -898,7 +898,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let link_id = Ulid::nil();
-        let request = Request::delete(format!("/api/admin/v1/upstream-oauth-links/{link_id}"))
+        let request = Request::delete(format!("/_cokret/local/admin/upstream-oauth-links/{link_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -949,7 +949,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let link_id = link.id;
-        let request = Request::get(format!("/api/admin/v1/upstream-oauth-links/{link_id}"))
+        let request = Request::get(format!("/_cokret/local/admin/upstream-oauth-links/{link_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -968,11 +968,11 @@ mod tests {
               "human_account_name": null
             },
             "links": {
-              "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
+              "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
             }
           },
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
+            "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG09NMZYX8MFYH578R9"
           }
         }
         "###);
@@ -988,7 +988,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let link_id = Ulid::nil();
-        let request = Request::get(format!("/api/admin/v1/upstream-oauth-links/{link_id}"))
+        let request = Request::get(format!("/_cokret/local/admin/upstream-oauth-links/{link_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -1085,7 +1085,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::get("/api/admin/v1/upstream-oauth-links")
+        let request = Request::get("/_cokret/local/admin/upstream-oauth-links")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -1108,7 +1108,7 @@ mod tests {
                 "human_account_name": "alice@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
               },
               "meta": {
                 "page": {
@@ -1127,7 +1127,7 @@ mod tests {
                 "human_account_name": "bob@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0PJZ6DZNTAA1XKPT4"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0PJZ6DZNTAA1XKPT4"
               },
               "meta": {
                 "page": {
@@ -1146,7 +1146,7 @@ mod tests {
                 "human_account_name": "alice@example"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0QHEHKX2JNQ2A2D07"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0QHEHKX2JNQ2A2D07"
               },
               "meta": {
                 "page": {
@@ -1156,16 +1156,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links?page[first]=10",
-            "first": "/api/admin/v1/upstream-oauth-links?page[first]=10",
-            "last": "/api/admin/v1/upstream-oauth-links?page[last]=10"
+            "self": "/_cokret/local/admin/upstream-oauth-links?page[first]=10",
+            "first": "/_cokret/local/admin/upstream-oauth-links?page[first]=10",
+            "last": "/_cokret/local/admin/upstream-oauth-links?page[last]=10"
           }
         }
         "#);
 
         // Filter by user ID
         let request = Request::get(format!(
-            "/api/admin/v1/upstream-oauth-links?filter[user]={}",
+            "/_cokret/local/admin/upstream-oauth-links?filter[user]={}",
             alice.id
         ))
         .bearer(&token)
@@ -1191,7 +1191,7 @@ mod tests {
                 "human_account_name": "alice@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
               },
               "meta": {
                 "page": {
@@ -1210,7 +1210,7 @@ mod tests {
                 "human_account_name": "alice@example"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0QHEHKX2JNQ2A2D07"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0QHEHKX2JNQ2A2D07"
               },
               "meta": {
                 "page": {
@@ -1220,16 +1220,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "first": "/api/admin/v1/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "last": "/api/admin/v1/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[last]=10"
+            "self": "/_cokret/local/admin/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
+            "first": "/_cokret/local/admin/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
+            "last": "/_cokret/local/admin/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[last]=10"
           }
         }
         "#);
 
         // Filter by provider
         let request = Request::get(format!(
-            "/api/admin/v1/upstream-oauth-links?filter[provider]={}",
+            "/_cokret/local/admin/upstream-oauth-links?filter[provider]={}",
             provider1.id
         ))
         .bearer(&token)
@@ -1255,7 +1255,7 @@ mod tests {
                 "human_account_name": "alice@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
               },
               "meta": {
                 "page": {
@@ -1274,7 +1274,7 @@ mod tests {
                 "human_account_name": "bob@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0PJZ6DZNTAA1XKPT4"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0PJZ6DZNTAA1XKPT4"
               },
               "meta": {
                 "page": {
@@ -1284,16 +1284,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links?filter[provider]=01FSHN9AG09NMZYX8MFYH578R9&page[first]=10",
-            "first": "/api/admin/v1/upstream-oauth-links?filter[provider]=01FSHN9AG09NMZYX8MFYH578R9&page[first]=10",
-            "last": "/api/admin/v1/upstream-oauth-links?filter[provider]=01FSHN9AG09NMZYX8MFYH578R9&page[last]=10"
+            "self": "/_cokret/local/admin/upstream-oauth-links?filter[provider]=01FSHN9AG09NMZYX8MFYH578R9&page[first]=10",
+            "first": "/_cokret/local/admin/upstream-oauth-links?filter[provider]=01FSHN9AG09NMZYX8MFYH578R9&page[first]=10",
+            "last": "/_cokret/local/admin/upstream-oauth-links?filter[provider]=01FSHN9AG09NMZYX8MFYH578R9&page[last]=10"
           }
         }
         "#);
 
         // Filter by subject
         let request = Request::get(format!(
-            "/api/admin/v1/upstream-oauth-links?filter[subject]={}",
+            "/_cokret/local/admin/upstream-oauth-links?filter[subject]={}",
             "subject1"
         ))
         .bearer(&token)
@@ -1319,7 +1319,7 @@ mod tests {
                 "human_account_name": "alice@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
               },
               "meta": {
                 "page": {
@@ -1329,15 +1329,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links?filter[subject]=subject1&page[first]=10",
-            "first": "/api/admin/v1/upstream-oauth-links?filter[subject]=subject1&page[first]=10",
-            "last": "/api/admin/v1/upstream-oauth-links?filter[subject]=subject1&page[last]=10"
+            "self": "/_cokret/local/admin/upstream-oauth-links?filter[subject]=subject1&page[first]=10",
+            "first": "/_cokret/local/admin/upstream-oauth-links?filter[subject]=subject1&page[first]=10",
+            "last": "/_cokret/local/admin/upstream-oauth-links?filter[subject]=subject1&page[last]=10"
           }
         }
         "#);
 
         // Test count=false
-        let request = Request::get("/api/admin/v1/upstream-oauth-links?count=false")
+        let request = Request::get("/_cokret/local/admin/upstream-oauth-links?count=false")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -1357,7 +1357,7 @@ mod tests {
                 "human_account_name": "alice@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
               },
               "meta": {
                 "page": {
@@ -1376,7 +1376,7 @@ mod tests {
                 "human_account_name": "bob@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0PJZ6DZNTAA1XKPT4"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0PJZ6DZNTAA1XKPT4"
               },
               "meta": {
                 "page": {
@@ -1395,7 +1395,7 @@ mod tests {
                 "human_account_name": "alice@example"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0QHEHKX2JNQ2A2D07"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0QHEHKX2JNQ2A2D07"
               },
               "meta": {
                 "page": {
@@ -1405,15 +1405,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links?count=false&page[first]=10",
-            "first": "/api/admin/v1/upstream-oauth-links?count=false&page[first]=10",
-            "last": "/api/admin/v1/upstream-oauth-links?count=false&page[last]=10"
+            "self": "/_cokret/local/admin/upstream-oauth-links?count=false&page[first]=10",
+            "first": "/_cokret/local/admin/upstream-oauth-links?count=false&page[first]=10",
+            "last": "/_cokret/local/admin/upstream-oauth-links?count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only
-        let request = Request::get("/api/admin/v1/upstream-oauth-links?count=only")
+        let request = Request::get("/_cokret/local/admin/upstream-oauth-links?count=only")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -1425,14 +1425,14 @@ mod tests {
             "count": 3
           },
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links?count=only"
+            "self": "/_cokret/local/admin/upstream-oauth-links?count=only"
           }
         }
         "###);
 
         // Test count=false with filtering
         let request = Request::get(format!(
-            "/api/admin/v1/upstream-oauth-links?count=false&filter[user]={}",
+            "/_cokret/local/admin/upstream-oauth-links?count=false&filter[user]={}",
             alice.id
         ))
         .bearer(&token)
@@ -1454,7 +1454,7 @@ mod tests {
                 "human_account_name": "alice@acme"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0AQZQP8DX40GD59PW"
               },
               "meta": {
                 "page": {
@@ -1473,7 +1473,7 @@ mod tests {
                 "human_account_name": "alice@example"
               },
               "links": {
-                "self": "/api/admin/v1/upstream-oauth-links/01FSHN9AG0QHEHKX2JNQ2A2D07"
+                "self": "/_cokret/local/admin/upstream-oauth-links/01FSHN9AG0QHEHKX2JNQ2A2D07"
               },
               "meta": {
                 "page": {
@@ -1483,16 +1483,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "first": "/api/admin/v1/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "last": "/api/admin/v1/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[last]=10"
+            "self": "/_cokret/local/admin/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
+            "first": "/_cokret/local/admin/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
+            "last": "/_cokret/local/admin/upstream-oauth-links?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only with filtering
         let request = Request::get(format!(
-            "/api/admin/v1/upstream-oauth-links?count=only&filter[provider]={}",
+            "/_cokret/local/admin/upstream-oauth-links?count=only&filter[provider]={}",
             provider1.id
         ))
         .bearer(&token)
@@ -1506,7 +1506,7 @@ mod tests {
             "count": 2
           },
           "links": {
-            "self": "/api/admin/v1/upstream-oauth-links?filter[provider]=01FSHN9AG09NMZYX8MFYH578R9&count=only"
+            "self": "/_cokret/local/admin/upstream-oauth-links?filter[provider]=01FSHN9AG09NMZYX8MFYH578R9&count=only"
           }
         }
         "#);
@@ -1558,7 +1558,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::patch(format!("/api/admin/v1/upstream-oauth-links/{}", link.id))
+        let request = Request::patch(format!("/_cokret/local/admin/upstream-oauth-links/{}", link.id))
             .bearer(&token)
             .json(serde_json::json!({
                 "user_id": bob.id,
@@ -1655,7 +1655,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::patch(format!("/api/admin/v1/upstream-oauth-links/{}", second.id))
+        let request = Request::patch(format!("/_cokret/local/admin/upstream-oauth-links/{}", second.id))
             .bearer(&token)
             .json(serde_json::json!({
                 "subject": format!("subject-{suffix}-1")

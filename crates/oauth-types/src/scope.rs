@@ -73,18 +73,18 @@ pub const OFFLINE_ACCESS: ScopeToken = ScopeToken::from_static("offline_access")
 pub const COAUTH_ADMIN: ScopeToken = ScopeToken::from_static("urn:coauth:admin");
 
 /// `urn:cokret:client:*` — Cokret client capability family.
-pub const CONTRIX_CLIENT: ScopeToken = ScopeToken::from_static("urn:cokret:client:*");
+pub const COKRET_CLIENT: ScopeToken = ScopeToken::from_static("urn:cokret:client:*");
 
 /// `urn:cokret:principal-server:*` — Principal Server capability family.
-pub const CONTRIX_PRINCIPAL_SERVER: ScopeToken =
+pub const COKRET_PRINCIPAL_SERVER: ScopeToken =
     ScopeToken::from_static("urn:cokret:principal-server:*");
 
 /// `urn:cokret:principal-server:session.bind` — session-grant binding scope.
-pub const CONTRIX_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
+pub const COKRET_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
     ScopeToken::from_static("urn:cokret:principal-server:session.bind");
 
 /// `urn:cokret:admin:*` — Cokret admin capability family.
-pub const CONTRIX_ADMIN: ScopeToken = ScopeToken::from_static("urn:cokret:admin:*");
+pub const COKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:cokret:admin:*");
 
 /// `cx.agent.manage` — CXP-0008 controller-approval scope. Covers the
 /// admin subset of the 14 personal-agent capability actions

@@ -44,7 +44,7 @@ pub struct RemoveEmailResponse {
     pub status: &'static str,
 }
 
-// ── GET /api/v1/email-auth/:id ─────────────────────────────────
+// ── GET /_cokret/gate/account/email-auth/:id ─────────────────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct EmailAuthStatusResponse {
@@ -82,7 +82,7 @@ pub async fn get_email_auth(
     }))
 }
 
-// ── POST /api/v1/email-auth/start ──────────────────────────────
+// ── POST /_cokret/gate/account/email-auth/start ──────────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct StartEmailAuthInput {
@@ -170,7 +170,7 @@ pub async fn start_email_auth(
     }
 }
 
-// ── POST /api/v1/email-auth/:id/complete ───────────────────────
+// ── POST /_cokret/gate/account/email-auth/:id/complete ───────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct CompleteEmailAuthInput {
@@ -238,7 +238,7 @@ pub async fn complete_email_auth(
     }
 }
 
-// ── POST /api/v1/email-auth/:id/resend ─────────────────────────
+// ── POST /_cokret/gate/account/email-auth/:id/resend ─────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct ResendEmailAuthInput {
@@ -302,7 +302,7 @@ pub async fn resend_email_auth_code(
     }
 }
 
-// ── DELETE /api/v1/user-emails/:id ─────────────────────────────
+// ── DELETE /_cokret/self/user-emails/:id ─────────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct RemoveEmailInput {

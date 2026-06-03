@@ -17,10 +17,10 @@ use crate::{
 #[component]
 pub fn AccountOverview() -> Element {
     let security = use_resource(|| async {
-        crate::api::api_get::<SecuritySummaryResponse>("/viewer/security").await
+        crate::api::api_get::<SecuritySummaryResponse>("/self/viewer/security").await
     });
     let workflows = use_resource(|| async {
-        crate::api::api_get::<WorkflowInboxResponse>("/viewer/workflow-inbox").await
+        crate::api::api_get::<WorkflowInboxResponse>("/self/viewer/workflow-inbox").await
     });
 
     let sec_binding = security.read();

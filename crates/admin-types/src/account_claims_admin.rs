@@ -2,7 +2,7 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /api/admin/v1/accounts/{account_id}/claims` — `AccountClaimsResponse
+//! - `GET /_cokret/local/admin/accounts/{account_id}/claims` — `AccountClaimsResponse
 //!   { data: [AccountClaimRecord, ...] }` from
 //!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`.
 //!

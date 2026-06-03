@@ -127,7 +127,7 @@ pub(crate) async fn policy_factory(
 pub(crate) struct TestState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
-    pub contrix_config: CokretConfig,
+    pub cokret_config: CokretConfig,
     pub key_store: Keystore,
     pub cookie_manager: CookieManager,
     pub metadata_cache: MetadataCache,
@@ -207,7 +207,7 @@ impl Handler for InjectTestState {
         );
         depot.insert("templates", state.templates.clone());
         depot.insert("translator", state.templates.translator());
-        depot.insert("contrix_config", state.contrix_config.clone());
+        depot.insert("cokret_config", state.cokret_config.clone());
         depot.insert("keystore", state.key_store.clone());
         depot.insert("encrypter", state.encrypter.clone());
         depot.insert("url_builder", state.url_builder.clone());
@@ -349,7 +349,7 @@ impl TestState {
         Ok(Self {
             repository_factory: PgRepositoryFactory::new(pool),
             templates,
-            contrix_config: CokretConfig::default(),
+            cokret_config: CokretConfig::default(),
             key_store,
             cookie_manager,
             metadata_cache,
@@ -468,34 +468,34 @@ impl TestState {
             )
             // REST API
             .push(
-                Router::with_path("/api/v1/integration/describe")
+                Router::with_path("/_cokret/gate/account/integration/describe")
                     .get(crate::handlers::account::auth::integration_describe),
             )
             .push(
-                Router::with_path("/api/v1/auth/bridge/describe")
+                Router::with_path("/_cokret/gate/account/auth/bridge/describe")
                     .get(crate::handlers::account::auth::auth_bridge_describe),
             )
             .push(
-                Router::with_path("/api/v1/auth/oidc/browser-bridge/session")
+                Router::with_path("/_cokret/gate/account/auth/oidc/browser-bridge/session")
                     .post(crate::handlers::account::auth::oidc_browser_bridge_session),
             )
             .push(
-                Router::with_path("/api/v1/auth/oidc/exchange/describe")
+                Router::with_path("/_cokret/gate/account/auth/oidc/exchange/describe")
                     .get(crate::handlers::account::auth::oidc_exchange_describe),
             )
             .push(
-                Router::with_path("/api/v1/auth/oidc/exchange")
+                Router::with_path("/_cokret/gate/account/auth/oidc/exchange")
                     .post(crate::handlers::account::auth::oidc_code_exchange),
             )
-            .push(Router::with_path("/api/v1/server/describe").get(crate::handlers::cokret::server_describe))
-            .push(Router::with_path("/api/v1/identity/describe").get(crate::handlers::cokret::identity_describe))
-            .push(Router::with_path("/api/v1/identity/resolve").post(crate::handlers::cokret::identity_resolve))
-            .push(Router::with_path("/api/v1/identity/document").get(crate::handlers::cokret::identity_document))
-            .push(Router::with_path("/api/v1/identity/primary-handle").patch(crate::handlers::cokret::patch_primary_handle_preference))
-            .push(Router::with_path("/api/v1/directory/describe").get(crate::handlers::cokret::directory_describe))
-            .push(Router::with_path("/api/v1/directory/resolve-handle").post(crate::handlers::cokret::directory_resolve_handle))
+            .push(Router::with_path("/_cokret/describe").get(crate::handlers::cokret::server_describe))
+            .push(Router::with_path("/_cokret/root/identity/describe").get(crate::handlers::cokret::identity_describe))
+            .push(Router::with_path("/_cokret/root/identity/resolve").post(crate::handlers::cokret::identity_resolve))
+            .push(Router::with_path("/_cokret/root/identity/document").get(crate::handlers::cokret::identity_document))
+            .push(Router::with_path("/_cokret/root/identity/primary-handle").patch(crate::handlers::cokret::patch_primary_handle_preference))
+            .push(Router::with_path("/_cokret/find/directory/describe").get(crate::handlers::cokret::directory_describe))
+            .push(Router::with_path("/_cokret/find/directory/resolve-handle").post(crate::handlers::cokret::directory_resolve_handle))
             .push(
-                Router::with_path("/api/v1/session-grants")
+                Router::with_path("/_cokret/gate/account/session-grants")
                     .get(crate::handlers::cokret::list_session_grants)
                     .push(
                         Router::with_path("introspect")
@@ -506,74 +506,74 @@ impl TestState {
                             .post(crate::handlers::cokret::revoke_session_grant),
                     ),
             )
-            .push(Router::with_path("/api/v1/viewer").get(crate::handlers::account::viewer::get_viewer))
-            .push(Router::with_path("/api/v1/site-config").get(crate::handlers::account::site_config::get))
+            .push(Router::with_path("/_cokret/self/viewer").get(crate::handlers::account::viewer::get_viewer))
+            .push(Router::with_path("/_cokret/self/site-config").get(crate::handlers::account::site_config::get))
             .push(
-                Router::with_path("/api/v1/sessions/{id}").get(crate::handlers::account::sessions::get_session),
+                Router::with_path("/_cokret/self/sessions/{id}").get(crate::handlers::account::sessions::get_session),
             )
             .push(
-                Router::with_path("/api/v1/browser-sessions/{id}")
+                Router::with_path("/_cokret/self/browser-sessions/{id}")
                     .delete(crate::handlers::account::sessions::end_browser_session),
             )
             .push(
-                Router::with_path("/api/v1/oauth-sessions/{id}")
+                Router::with_path("/_cokret/self/oauth-sessions/{id}")
                     .delete(crate::handlers::account::sessions::end_oauth_session),
             )
             .push(
-                Router::with_path("/api/v1/oauth-sessions/{id}/name")
+                Router::with_path("/_cokret/self/oauth-sessions/{id}/name")
                     .put(crate::handlers::account::sessions::set_oauth_session_name),
             )
             .push(
-                Router::with_path("/api/v1/oauth-clients/{id}")
+                Router::with_path("/_cokret/self/oauth-clients/{id}")
                     .get(crate::handlers::account::oauth_clients::get_client),
             )
             .push(
-                Router::with_path("/api/v1/viewer/password")
+                Router::with_path("/_cokret/self/viewer/password")
                     .post(crate::handlers::account::password::set_password),
             )
             .push(
-                Router::with_path("/api/v1/password-recovery/{ticket}")
+                Router::with_path("/_cokret/gate/account/password-recovery/{ticket}")
                     .get(crate::handlers::account::password::get_recovery_ticket_status),
             )
             .push(
-                Router::with_path("/api/v1/password-recovery/set")
+                Router::with_path("/_cokret/gate/account/password-recovery/set")
                     .post(crate::handlers::account::password::set_password_by_recovery),
             )
             .push(
-                Router::with_path("/api/v1/password-recovery/resend")
+                Router::with_path("/_cokret/gate/account/password-recovery/resend")
                     .post(crate::handlers::account::password::resend_recovery_email),
             )
             .push(
-                Router::with_path("/api/v1/viewer/profile")
+                Router::with_path("/_cokret/self/viewer/profile")
                     .patch(crate::handlers::account::users::patch_profile),
             )
             .push(
-                Router::with_path("/api/v1/viewer/deactivate")
+                Router::with_path("/_cokret/self/viewer/deactivate")
                     .post(crate::handlers::account::users::deactivate_user),
             )
             .push(
-                Router::with_path("/api/v1/viewer/preferences")
+                Router::with_path("/_cokret/self/viewer/preferences")
                     .get(crate::handlers::account::notification_prefs::get_notification_preferences)
                     .patch(crate::handlers::account::notification_prefs::patch_notification_preferences),
             )
             .push(
-                Router::with_path("/api/v1/email-auth/start")
+                Router::with_path("/_cokret/gate/account/email-auth/start")
                     .post(crate::handlers::account::emails::start_email_auth),
             )
             .push(
-                Router::with_path("/api/v1/email-auth/{id}")
+                Router::with_path("/_cokret/gate/account/email-auth/{id}")
                     .get(crate::handlers::account::emails::get_email_auth),
             )
             .push(
-                Router::with_path("/api/v1/email-auth/{id}/complete")
+                Router::with_path("/_cokret/gate/account/email-auth/{id}/complete")
                     .post(crate::handlers::account::emails::complete_email_auth),
             )
             .push(
-                Router::with_path("/api/v1/email-auth/{id}/resend")
+                Router::with_path("/_cokret/gate/account/email-auth/{id}/resend")
                     .post(crate::handlers::account::emails::resend_email_auth_code),
             )
             .push(
-                Router::with_path("/api/v1/user-emails/{id}")
+                Router::with_path("/_cokret/self/user-emails/{id}")
                     .delete(crate::handlers::account::emails::remove_email),
             )
             // OAuth authorization
@@ -597,7 +597,7 @@ impl TestState {
             )
             // Admin API
             .push(
-                Router::with_path("/api/admin/v1")
+                Router::with_path("/_cokret/local/admin")
                     .push(Router::with_path("version").get(version::handler))
                     .push(Router::with_path("site-config").get(site_config::handler))
                     .push(Router::with_path("connector-health").get(connector_health::handler))

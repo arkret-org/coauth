@@ -10,16 +10,16 @@ use crate::{
 
 /// Identity bindings page.
 ///
-/// Fetches `GET /api/v1/linked-accounts` and displays each linked upstream
+/// Fetches `GET /_cokret/self/linked-accounts` and displays each linked upstream
 /// account with provider name and subject. The "Unlink" button calls
-/// `DELETE /api/v1/linked-accounts/{id}` to remove the link.
+/// `DELETE /_cokret/self/linked-accounts/{id}` to remove the link.
 #[component]
 pub fn IdentityBindings() -> Element {
     let mut data = use_resource(|| async {
-        crate::api::api_get::<LinkedAccountsResponse>("/linked-accounts").await
+        crate::api::api_get::<LinkedAccountsResponse>("/self/linked-accounts").await
     });
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersResponse>("/auth/providers").await
+        crate::api::api_get::<ProvidersResponse>("/gate/account/auth/providers").await
     });
     let mut feedback: Signal<Option<Result<String, String>>> = use_signal(|| None);
     let mut unlinking_id: Signal<Option<String>> = use_signal(|| None);

@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 — pluggable evaluator for `cx.policy.check`.
+//! Round 4 — pluggable evaluator for `ck.policy.check`.
 //!
 //! The spec [`policy-server.md` §4] defines the decision lattice as
 //! `allow | soft_deny | hard_deny | quarantine | require_review`; the
-//! SDK type [`contrix_core::AuthzDecision`] exposes these as
+//! SDK type [`cokret_core::AuthzDecision`] exposes these as
 //! `Allow | Deny | Quarantine | RequireReview | SoftFail`. This module
 //! is responsible for picking one of those values, plus the
 //! `reason_code` and the optional `obligations` array, for every
@@ -16,7 +16,7 @@
 //!
 //! The legacy `coauth_policy::PolicyFactory` evaluator only understands
 //! `register` / `email` / `client_registration` / `authorization_grant`
-//! shapes — it predates the round-4 `cx.policy.check` request and does
+//! shapes — it predates the round-4 `ck.policy.check` request and does
 //! not know about realm scoping or frontier digests. Bolting a new
 //! method onto it would force every existing handler to re-test. We
 //! ship a dedicated [`PolicyEvaluator`] trait here and leave the
@@ -41,7 +41,7 @@ use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use chrono::{DateTime, Utc};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
-use contrix_core::{
+use cokret_core::{
     AuthzDecision, CAP_ACTION_CALL_JOIN, CAP_ACTION_CALL_MODERATE, CAP_ACTION_CALL_RECORD,
     CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, PolicyCheckRequest,
 };
@@ -52,7 +52,7 @@ use crate::services::policy_frontier::Frontier;
 
 /// Local (non-registry) reason codes. `"ok"` and `"policy_review_required"`
 /// are evaluator-internal `reason_code` values that are NOT part of the
-/// canonical `contrix_core::error::ERROR_CODE_*` wire-error registry, so
+/// canonical `cokret_core::error::ERROR_CODE_*` wire-error registry, so
 /// they are kept as local constants rather than aliased to SDK symbols.
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
@@ -61,7 +61,7 @@ const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
 /// media capability actions registered in
 /// `capability-action-registry.json`. CAP-1: capability evaluator MUST
 /// recognise these five actions so deny/review/allow rules can target
-/// them by name. Mirrors `contrix_core::CALL_CAPABILITY_ACTIONS`.
+/// them by name. Mirrors `cokret_core::CALL_CAPABILITY_ACTIONS`.
 pub const RECOGNISED_CALL_CAPABILITY_ACTIONS: &[&str] = &[
     CAP_ACTION_CALL_JOIN,
     CAP_ACTION_CALL_SCREEN_SHARE,
@@ -85,12 +85,12 @@ pub fn is_recognised_call_capability_action(action: &str) -> bool {
 /// per `resource-selector-grammar.md` §6 (R3).
 #[must_use]
 pub fn is_circle_selector(selector: &str) -> bool {
-    contrix_core::CircleId::new(selector.to_owned()).is_ok()
+    cokret_core::CircleId::new(selector.to_owned()).is_ok()
 }
 
 /// POLICY-1: deployment-level "strict reject" mode for unverified
 /// `accountable_principal_ids[]` entries. When the
-/// `cx.profile.accountable_principals.strict_reject.v1` profile is
+/// `ck.profile.accountable_principals.strict_reject.v1` profile is
 /// declared by the deployment, Actor Profile create/update events that
 /// carry unverified `accountable_principal_ids[]` entries
 /// MUST be rejected wholesale with `failed_precondition /
@@ -104,7 +104,7 @@ pub fn is_circle_selector(selector: &str) -> bool {
 /// strip.
 #[must_use]
 pub fn strict_reject_profile_active(profile_ids: &[&str]) -> bool {
-    profile_ids.contains(&"cx.profile.accountable_principals.strict_reject.v1")
+    profile_ids.contains(&"ck.profile.accountable_principals.strict_reject.v1")
 }
 
 #[derive(Debug, Error)]
@@ -130,7 +130,7 @@ pub struct PolicyObligation {
 
 impl PolicyObligation {
     /// Render to the wire form embedded in
-    /// [`contrix_core::PolicyCheckResponse::obligations`].
+    /// [`cokret_core::PolicyCheckResponse::obligations`].
     pub fn to_wire(&self) -> Value {
         let mut obj = serde_json::Map::new();
         obj.insert("kind".to_owned(), Value::String(self.kind.clone()));
@@ -148,7 +148,7 @@ impl PolicyObligation {
 }
 
 /// What the evaluator produces. The handler turns this into the wire
-/// [`contrix_core::PolicyCheckResponse`].
+/// [`cokret_core::PolicyCheckResponse`].
 #[derive(Debug, Clone)]
 pub struct PolicyDecision {
     pub decision: AuthzDecision,
@@ -191,7 +191,7 @@ impl PolicyDecision {
     }
 
     /// POLICY-1: signal "strict reject" mode for the
-    /// `cx.profile.accountable_principals.strict_reject.v1` deployment profile.
+    /// `ck.profile.accountable_principals.strict_reject.v1` deployment profile.
     /// When the profile is declared, Actor Profile create/update events
     /// containing unverified `accountable_principal_ids[]` entries MUST be
     /// rejected with `failed_precondition / accountability_grant_missing`
@@ -200,20 +200,20 @@ impl PolicyDecision {
     ///
     /// The reason code on the wire is `failed_precondition`; the
     /// obligation carries the canonical
-    /// [`contrix_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING`]
+    /// [`cokret_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING`]
     /// string so downstream consumers can render the exact registry
     /// rejection.
     #[must_use]
     pub fn strict_reject_accountable_principals(policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::Deny,
-            reason_code: contrix_core::error::ERROR_CODE_FAILED_PRECONDITION.to_owned(),
+            reason_code: cokret_core::error::ERROR_CODE_FAILED_PRECONDITION.to_owned(),
             obligations: vec![PolicyObligation {
                 kind: "accountability_grant_required".to_owned(),
                 expires_at: None,
                 payload: serde_json::json!({
-                    "reason": contrix_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING,
-                    "profile": "cx.profile.accountable_principals.strict_reject.v1",
+                    "reason": cokret_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING,
+                    "profile": "ck.profile.accountable_principals.strict_reject.v1",
                 }),
             }],
             policy_version,
@@ -221,7 +221,7 @@ impl PolicyDecision {
     }
 }
 
-/// Evaluate a `cx.policy.check` request against the configured rules.
+/// Evaluate a `ck.policy.check` request against the configured rules.
 /// Object-safe: handlers carry an `Arc<dyn PolicyEvaluator>`.
 pub trait PolicyEvaluator: Send + Sync {
     fn evaluate<'a>(
@@ -304,7 +304,7 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
 
     // POLICY-1 (R3 spec-sync) — if the loose JSON declares the
     // `strict_reject_profile` flag (deployment has enabled
-    // `cx.profile.accountable_principals.strict_reject.v1`), AND the request
+    // `ck.profile.accountable_principals.strict_reject.v1`), AND the request
     // carries an Actor Profile create/update with an unverified
     // `accountable_principal_ids[]` entry, short-circuit with
     // `failed_precondition / accountability_grant_missing`. Only the
@@ -354,7 +354,7 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
         if value_contains_str(scope.get("deny_actors"), actor_str) {
             return PolicyDecision {
                 decision: AuthzDecision::Deny,
-                reason_code: contrix_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
+                reason_code: cokret_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };
@@ -363,7 +363,7 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
         if value_contains_str(scope.get("deny_actions"), action_str) {
             return PolicyDecision {
                 decision: AuthzDecision::Deny,
-                reason_code: contrix_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
+                reason_code: cokret_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };
@@ -402,7 +402,7 @@ pub type PolicyEvaluatorHandle = Arc<dyn PolicyEvaluator>;
 
 #[cfg(test)]
 mod tests {
-    use contrix_core::{Did, Hash, PolicyCheckSource, RealmId};
+    use cokret_core::{Did, Hash, PolicyCheckSource, RealmId};
 
     use super::*;
 
@@ -427,7 +427,7 @@ mod tests {
     #[test]
     fn empty_rules_yield_allow() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "cx.message.create");
+        let r = req("did:web:alice.example", "ck.message.create");
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
         assert_eq!(d.reason_code, "ok");
@@ -438,7 +438,7 @@ mod tests {
         let data = serde_json::json!({
             "deny_actors": ["did:web:mallory.example"]
         });
-        let r = req("did:web:mallory.example", "cx.message.create");
+        let r = req("did:web:mallory.example", "ck.message.create");
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Deny));
         assert_eq!(d.reason_code, "policy_violation");
@@ -447,9 +447,9 @@ mod tests {
     #[test]
     fn deny_action_matches() {
         let data = serde_json::json!({
-            "deny_actions": ["cx.invite.create"]
+            "deny_actions": ["ck.invite.create"]
         });
-        let r = req("did:web:alice.example", "cx.invite.create");
+        let r = req("did:web:alice.example", "ck.invite.create");
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Deny));
     }
@@ -478,27 +478,27 @@ mod tests {
                 }
             }
         });
-        let r = req("did:web:alice.example", "cx.message.create");
+        let r = req("did:web:alice.example", "ck.message.create");
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
     }
 
     #[test]
     fn cap1_recognises_call_actions() {
-        assert!(is_recognised_call_capability_action("cx.call.join"));
-        assert!(is_recognised_call_capability_action("cx.call.screen_share"));
-        assert!(is_recognised_call_capability_action("cx.call.record"));
-        assert!(is_recognised_call_capability_action("cx.call.transcribe"));
-        assert!(is_recognised_call_capability_action("cx.call.moderate"));
-        assert!(!is_recognised_call_capability_action("cx.message.create"));
+        assert!(is_recognised_call_capability_action("ck.call.join"));
+        assert!(is_recognised_call_capability_action("ck.call.screen_share"));
+        assert!(is_recognised_call_capability_action("ck.call.record"));
+        assert!(is_recognised_call_capability_action("ck.call.transcribe"));
+        assert!(is_recognised_call_capability_action("ck.call.moderate"));
+        assert!(!is_recognised_call_capability_action("ck.message.create"));
     }
 
     #[test]
     fn cap1_deny_action_on_cx_call_join_matches() {
         let data = serde_json::json!({
-            "deny_actions": ["cx.call.join"]
+            "deny_actions": ["ck.call.join"]
         });
-        let r = req("did:web:alice.example", "cx.call.join");
+        let r = req("did:web:alice.example", "ck.call.join");
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Deny));
         assert_eq!(d.reason_code, "policy_violation");
@@ -521,11 +521,11 @@ mod tests {
         let data = serde_json::json!({
             "circles": {
                 circle_id: {
-                    "deny_actions": ["cx.call.record"],
+                    "deny_actions": ["ck.call.record"],
                 }
             }
         });
-        let mut r = req("did:web:alice.example", "cx.call.record");
+        let mut r = req("did:web:alice.example", "ck.call.record");
         r.auth_context = serde_json::json!({ "circle_id": circle_id });
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Deny));

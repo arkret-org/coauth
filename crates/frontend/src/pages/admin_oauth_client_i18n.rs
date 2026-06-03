@@ -5,7 +5,7 @@
 //! OAuth client.
 //!
 //! This is the round-26 i18n editor backed by `POST
-//! /api/admin/v1/oauth/clients/{id}/i18n`. The page renders the existing
+//! /_cokret/local/admin/oauth/clients/{id}/i18n`. The page renders the existing
 //! locale rows (loaded via `GET .../i18n`) and a small form for adding /
 //! updating one locale at a time. Submitting an empty `display_name`
 //! clears the entry for that locale (matches the backend semantics).
@@ -208,7 +208,7 @@ pub fn AdminOAuthClientI18n(id: String) -> Element {
 
 async fn fetch_entries(client_id: &str) -> Result<BTreeMap<String, I18nEntry>, String> {
     let url = format!(
-        "{}/admin/v1/oauth/clients/{}/i18n",
+        "{}/local/admin/oauth/clients/{}/i18n",
         api_base_url(),
         client_id
     );
@@ -229,7 +229,7 @@ async fn upsert_entry(
     body: &UpsertBody<'_>,
 ) -> Result<BTreeMap<String, I18nEntry>, String> {
     let url = format!(
-        "{}/admin/v1/oauth/clients/{}/i18n",
+        "{}/local/admin/oauth/clients/{}/i18n",
         api_base_url(),
         client_id
     );

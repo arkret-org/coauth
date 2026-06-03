@@ -31,7 +31,7 @@ pub fn EmailVerify(id: String) -> Element {
     let auth_data = use_resource(move || {
         let qid = id_for_query.clone();
         async move {
-            crate::api::api_get::<UserEmailAuthentication>(&format!("/email-auth/{qid}")).await
+            crate::api::api_get::<UserEmailAuthentication>(&format!("/gate/account/email-auth/{qid}")).await
         }
     });
 

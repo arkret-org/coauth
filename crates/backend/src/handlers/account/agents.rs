@@ -31,7 +31,7 @@ use coauth_data::{
     },
     audit::AdminOperation,
 };
-use contrix_core::{
+use cokret_core::{
     canonical::canonical_sha256,
     error::{
         ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_PAIRING_REQUEST_EXPIRED,
@@ -57,33 +57,33 @@ use crate::{
 const ACCOUNTABILITY_GRANT_FANOUT_QUEUE: &str = "soland-accountability-grant-fanout";
 
 const AGENT_CAPABILITY_ACTIONS: &[&str] = &[
-    "cx.agent.key.authorize",
-    "cx.agent.key.revoke",
-    "cx.agent.key.rotate",
-    "cx.agent.provision",
-    "cx.agent.pause",
-    "cx.agent.resume",
-    "cx.agent.deactivate",
-    "cx.agent.draft.propose",
-    "cx.agent.action_request",
-    "cx.agent.action_approve",
-    "cx.agent.action_reject",
-    "cx.agent.sidecar_thread.ensure",
-    "cx.agent.sidecar_thread.write",
-    "cx.agent.sidecar_thread.publish",
-    "cx.agent.protocol.discover",
-    "cx.agent.session.start",
-    "cx.agent.session.cancel",
-    "cx.agent.session.stream_status",
-    "cx.agent.session.attach_artifact",
-    "cx.agent.session.read_transcript",
+    "ck.agent.key.authorize",
+    "ck.agent.key.revoke",
+    "ck.agent.key.rotate",
+    "ck.agent.provision",
+    "ck.agent.pause",
+    "ck.agent.resume",
+    "ck.agent.deactivate",
+    "ck.agent.draft.propose",
+    "ck.agent.action_request",
+    "ck.agent.action_approve",
+    "ck.agent.action_reject",
+    "ck.agent.sidecar_thread.ensure",
+    "ck.agent.sidecar_thread.write",
+    "ck.agent.sidecar_thread.publish",
+    "ck.agent.protocol.discover",
+    "ck.agent.session.start",
+    "ck.agent.session.cancel",
+    "ck.agent.session.stream_status",
+    "ck.agent.session.attach_artifact",
+    "ck.agent.session.read_transcript",
 ];
 
 fn is_registered_agent_capability(action: &str) -> bool {
     AGENT_CAPABILITY_ACTIONS.contains(&action)
 }
 
-/// Request body for `POST /api/v1/agents/{id}/accountability-grant`.
+/// Request body for `POST /_cokret/self/agents/{id}/accountability-grant`.
 #[derive(Deserialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantRequest {
     /// DID of the controller (account holder) issuing the grant. MUST
@@ -103,7 +103,7 @@ pub struct AccountabilityGrantRequest {
     pub reason: Option<String>,
 }
 
-/// Response payload for `POST /api/v1/agents/{id}/accountability-grant`.
+/// Response payload for `POST /_cokret/self/agents/{id}/accountability-grant`.
 ///
 /// CXP-0008 (`id-kind-registry.json`): the wire shape carries the
 /// freshly minted `ck:accountability_grant:<uuid7>` typed id, the
@@ -141,7 +141,7 @@ pub struct AccountabilityGrantResponse {
     pub issued_at: DateTime<Utc>,
 }
 
-/// `POST /api/v1/agents/{id}/accountability-grant`
+/// `POST /_cokret/self/agents/{id}/accountability-grant`
 ///
 /// Internal CXP-0008 grant-issuance endpoint. Accepts only the soland /
 /// sodmin static bearer token (matched against any
@@ -166,8 +166,8 @@ pub async fn post_accountability_grant(
         .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
 
     // soland / sodmin only — reject browser sessions and end-user bearers.
-    let contrix_config = depot.contrix_config()?;
-    authn_internal_caller(req, &contrix_config)?;
+    let cokret_config = depot.cokret_config()?;
+    authn_internal_caller(req, &cokret_config)?;
 
     let body: AccountabilityGrantRequest = req
         .parse_json()
@@ -200,12 +200,12 @@ pub async fn post_accountability_grant(
         accountability_capabilities_digest(&agent_principal_id, &controller_did, &capabilities)?;
     let idempotency_key = accountability_grant_idempotency_key(&accountability_grant_id);
     let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
     let fanout_payload = build_soland_fanout_payload(
         &response,
         &raw_payload_digest,
         &service_did,
-        &contrix_config,
+        &cokret_config,
     )?;
 
     let mut repo = depot.repo().await?;
@@ -292,7 +292,7 @@ pub async fn post_accountability_grant(
         &*clock,
         &key_store,
         &service_did,
-        contrix_config.audit_signature_fail_closed,
+        cokret_config.audit_signature_fail_closed,
         AdminOperation::Other("accountability_grant_issued".to_owned()),
         "agent",
         None,
@@ -383,9 +383,9 @@ fn build_soland_fanout_payload(
     response: &AccountabilityGrantResponse,
     raw_payload_digest: &str,
     service_did: &str,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
 ) -> Result<serde_json::Value, AppError> {
-    let principal_servers: Vec<_> = contrix_config
+    let principal_servers: Vec<_> = cokret_config
         .principal_servers
         .iter()
         .map(|server| {
@@ -478,11 +478,11 @@ pub async fn revoke_accountability_grant_by_id(
 // ─────────────────────────────────────────────────────────────────────────
 // R3 spec-sync (2026-05-27, cokret-spec b47ff6ec) — agent auth error matrix.
 //
-// AUTH-1: `cx.account.agent_key_pair` error matrix. Before invoking the proof
+// AUTH-1: `ck.account.agent_key_pair` error matrix. Before invoking the proof
 //         validator, fail-closed DID match →
 // `verification_method_principal_mismatch`.         Distinct codes for
 // `pairing_request_expired`, `proof_invalid`,         `agent_deactivated`.
-// AUTH-2: `cx.account.issue_session_grant` agent branch errors. Emit
+// AUTH-2: `ck.account.issue_session_grant` agent branch errors. Emit
 //         `agent_paused`, `agent_deactivated`, `proof_invalid`,
 //         `verification_method_principal_mismatch`,
 // `accountability_grant_missing`. AUTH-3: Revocation freshness window for
@@ -496,14 +496,14 @@ pub async fn revoke_accountability_grant_by_id(
 // Do not expose these operations in discovery, docs, or sodmin before routed
 // handlers land.
 //
-// TODO(R3.1): wire up the actual `POST /api/v1/account/agent-key-pair` and
+// TODO(R3.1): wire up the actual `POST /_cokret/gate/account/agent-key-pair` and
 // agent-branch session-grant handlers. The error matrix below is the bound
 // surface; the internal lookups (pairing request lifetime, agent state,
 // accountability grant existence) are implemented in soland.
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Wire-level rejection reasons for the `cx.account.agent_key_pair` operation
-/// and the agent branch of `cx.account.issue_session_grant`. Each variant
+/// Wire-level rejection reasons for the `ck.account.agent_key_pair` operation
+/// and the agent branch of `ck.account.issue_session_grant`. Each variant
 /// renders to a canonical error code from
 /// `cokret-spec/v1/artifacts/error-code-registry.json` v2026-05-27.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -522,7 +522,7 @@ pub enum AgentAuthRejection {
     /// principal mismatch apart from a crypto failure.
     ProofInvalid,
     /// `agent_deactivated` — the target agent has been deactivated; the
-    /// `cx.agent.deactivate` FSM transition is terminal so this rejection
+    /// `ck.agent.deactivate` FSM transition is terminal so this rejection
     /// is permanent. Renders 403.
     AgentDeactivated,
     /// `agent_paused` — the agent is in the `paused` FSM state. Renders 403.
@@ -532,8 +532,8 @@ pub enum AgentAuthRejection {
     AgentPaused,
     /// `accountability_grant_missing` — the controller's accountability
     /// grant covering the requested capability set is absent or expired.
-    /// Used on `cx.account.issue_session_grant` (agent branch) and
-    /// `cx.agent.provision` / `cx.agent.resume` per
+    /// Used on `ck.account.issue_session_grant` (agent branch) and
+    /// `ck.agent.provision` / `ck.agent.resume` per
     /// `operations↔error mapping` §0.8.
     AccountabilityGrantMissing,
 }
@@ -590,7 +590,7 @@ impl AgentAuthRejection {
 /// outstanding session tokens MUST fail closed within this window even
 /// before the reducer fan-out catches up. Default 30 s per spec discussion
 /// (the full ceiling tunable lives on the deployment config and is
-/// surfaced under `cx.profile.agent_runtime.v1` in a follow-up).
+/// surfaced under `ck.profile.agent_runtime.v1` in a follow-up).
 // TODO(R3.1): plumb a deployment-config override
 // (`cokret.agent_runtime.revocation_freshness_window_seconds`) so SREs
 // can dial this in for tighter / looser windows.
@@ -740,16 +740,16 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn capability_set_is_trimmed_sorted_and_deduplicated() {
         let normalized = normalize_capabilities(vec![
-            " cx.agent.resume ".to_owned(),
-            "cx.agent.provision".to_owned(),
-            "cx.agent.resume".to_owned(),
+            " ck.agent.resume ".to_owned(),
+            "ck.agent.provision".to_owned(),
+            "ck.agent.resume".to_owned(),
         ])
         .expect("registered actions normalize");
         assert_eq!(
             normalized,
             vec![
-                "cx.agent.provision".to_owned(),
-                "cx.agent.resume".to_owned()
+                "ck.agent.provision".to_owned(),
+                "ck.agent.resume".to_owned()
             ]
         );
     }
@@ -757,14 +757,14 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn capability_digest_is_stable_after_normalization() {
         let left = normalize_capabilities(vec![
-            "cx.agent.resume".to_owned(),
-            "cx.agent.provision".to_owned(),
+            "ck.agent.resume".to_owned(),
+            "ck.agent.provision".to_owned(),
         ])
         .unwrap();
         let right = normalize_capabilities(vec![
-            " cx.agent.provision ".to_owned(),
-            "cx.agent.resume".to_owned(),
-            "cx.agent.resume".to_owned(),
+            " ck.agent.provision ".to_owned(),
+            "ck.agent.resume".to_owned(),
+            "ck.agent.resume".to_owned(),
         ])
         .unwrap();
         assert_eq!(left, right);
@@ -797,7 +797,7 @@ mod agent_auth_error_matrix_tests {
 /// bearer configured under
 /// `cokret.principal_servers[].session_grant_introspection_bearer` —
 /// shared with the existing session-grant introspection path.
-fn authn_internal_caller(req: &Request, contrix_config: &CokretConfig) -> Result<(), AppError> {
+fn authn_internal_caller(req: &Request, cokret_config: &CokretConfig) -> Result<(), AppError> {
     let authorization = req
         .headers()
         .get(http::header::AUTHORIZATION)
@@ -813,7 +813,7 @@ fn authn_internal_caller(req: &Request, contrix_config: &CokretConfig) -> Result
             )
         })?;
 
-    let accepted = contrix_config.principal_servers.iter().any(|server| {
+    let accepted = cokret_config.principal_servers.iter().any(|server| {
         server
             .session_grant_introspection_bearer
             .as_deref()

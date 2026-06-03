@@ -80,7 +80,7 @@ pub(crate) fn generate_id_token(
     rng: &mut (impl rand_core::RngCore + rand_core::CryptoRng),
     clock: &impl Clock,
     url_builder: &UrlBuilder,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     key_store: &Keystore,
     client: &Client,
     grant: Option<&AuthorizationGrant>,
@@ -94,13 +94,13 @@ pub(crate) fn generate_id_token(
     claims::ISS.insert(&mut claims, url_builder.oidc_issuer().to_string())?;
     claims::SUB.insert(
         &mut claims,
-        cokret::user_did_for(url_builder, contrix_config, &browser_session.user),
+        cokret::user_did_for(url_builder, cokret_config, &browser_session.user),
     )?;
     claims.insert(
         cokret::CLAIM_PRINCIPAL_DID.to_owned(),
         serde_json::Value::String(cokret::user_did_for(
             url_builder,
-            contrix_config,
+            cokret_config,
             &browser_session.user,
         )),
     );
@@ -211,7 +211,7 @@ mod tests {
         let clock = MockClock::default();
         let now = clock.now();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-        let contrix_config = CokretConfig::default();
+        let cokret_config = CokretConfig::default();
         let mut fixture_rng = ChaChaRng::seed_from_u64(7);
 
         let mut client = Client::samples(now, &mut fixture_rng)
@@ -246,7 +246,7 @@ mod tests {
             &mut signing_rng,
             &clock,
             &url_builder,
-            &contrix_config,
+            &cokret_config,
             &key_store,
             &client,
             Some(&grant),
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(
             payload.get("sub").and_then(Value::as_str),
             Some(
-                cokret::user_did_for(&url_builder, &contrix_config, &browser_session.user)
+                cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user)
                     .as_str()
             )
         );
@@ -280,7 +280,7 @@ mod tests {
                 .get(cokret::CLAIM_PRINCIPAL_DID)
                 .and_then(Value::as_str),
             Some(
-                cokret::user_did_for(&url_builder, &contrix_config, &browser_session.user)
+                cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user)
                     .as_str()
             )
         );

@@ -877,7 +877,7 @@ mod tests {
     fn typed_uuid7_rejects_extra_segments() {
         // Cell-family ids have more colons; the basic helper rejects them.
         let id = Uuid::now_v7();
-        let s = format!("ck:cell:cx.component.consent.grant.v1:{id}");
+        let s = format!("ck:cell:ck.component.consent.grant.v1:{id}");
         assert!(!super::is_typed_uuid7(&s, "cell"));
     }
 

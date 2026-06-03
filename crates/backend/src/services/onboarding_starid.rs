@@ -6,7 +6,7 @@
 //!   `register_finish` admin handler the **first** time an account enrols a
 //!   credential. Derives an `update_key` from the passkey's COSE public key
 //!   ([`crate::services::passkey_derive::derive_update_key_from_credential`]),
-//!   posts `POST /api/v1/webvh/dids` to starid, persists `(account → did,
+//!   posts `POST /_cokret/root/webvh/dids` to starid, persists `(account → did,
 //!   update_key, version_id)`, and flips `user.starid_backend = true` so
 //!   subsequent reads of `primary_did_for_user` route to the starid form.
 //!
@@ -14,7 +14,7 @@
 //!   **subsequent** passkey enrolments (account already has a starid-minted
 //!   DID). Derives the new device's `update_key`, looks up the prior
 //!   `version_id` from the binding row, posts `POST
-//!   /api/v1/webvh/dids/{did}/update` to starid, and persists the bumped
+//!   /_cokret/root/webvh/dids/{did}/update` to starid, and persists the bumped
 //!   version.
 //!
 //! Round 37.4 contract change (rip-and-replace): the old
@@ -180,7 +180,7 @@ mod tests {
         let server = MockServer::start().await;
         let derived = derive_update_key_from_cose_bytes(b"fake-cose-key-bytes-for-test");
         Mock::given(method("POST"))
-            .and(path("/api/v1/webvh/dids"))
+            .and(path("/_cokret/root/webvh/dids"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "did": "did:webvh:ztest:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
                 "scid": "ztest",
@@ -219,7 +219,7 @@ mod tests {
         let server = MockServer::start().await;
         let new_key = derive_update_key_from_cose_bytes(b"second-passkey-cose-bytes");
         Mock::given(method("POST"))
-            .and(path_regex(r"^/api/v1/webvh/dids/.+/update$"))
+            .and(path_regex(r"^/_cokret/root/webvh/dids/.+/update$"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "did": "did:webvh:ztest:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
                 "scid": "ztest",
@@ -254,7 +254,7 @@ mod tests {
     async fn primary_did_for_user_routes_to_starid_form_when_flag_set() {
         install_crypto_provider();
         let resolver = DefaultDidResolverService;
-        let contrix_config = CokretConfig {
+        let cokret_config = CokretConfig {
             starid: Some(StaridConfig {
                 base_url: Url::parse("https://starid.example").unwrap(),
                 did_host: Some("starid.local".to_owned()),
@@ -267,7 +267,7 @@ mod tests {
         let user_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
         let mut user = sample_user(user_id);
         user.starid_backend = true;
-        let did = resolver.primary_did_for_user(&contrix_config, &user).await;
+        let did = resolver.primary_did_for_user(&cokret_config, &user).await;
         assert_eq!(
             did, "did:web:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
             "starid_backend=true must produce the starid alias form, not the local derivation",
@@ -275,7 +275,7 @@ mod tests {
 
         // Sanity: same user without the flag stays on the local form.
         user.starid_backend = false;
-        let local = resolver.primary_did_for_user(&contrix_config, &user).await;
+        let local = resolver.primary_did_for_user(&cokret_config, &user).await;
         assert_eq!(
             local, "did:web:coauth.invalid:accounts:01arz3ndektsv4rrffq69g5fav",
             "starid_backend=false uses the local derivation",

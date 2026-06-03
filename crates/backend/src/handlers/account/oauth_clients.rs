@@ -15,7 +15,7 @@ pub struct OauthClientResponse {
     pub logo_uri: Option<String>,
 }
 
-/// GET /api/v1/oauth-clients/:id
+/// GET /_cokret/self/oauth-clients/:id
 #[endpoint]
 pub async fn get_client(
     req: &mut Request,

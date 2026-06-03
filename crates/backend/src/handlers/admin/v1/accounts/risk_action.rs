@@ -12,7 +12,7 @@ use coauth_admin_types::{
     AccountRiskActionProposalResponse, AccountRiskActionTransitionRecord,
 };
 use coauth_data::{AdminUserPatch, RepositoryAccess, audit::AdminOperation};
-use contrix_core::canonical::canonical_json_bytes;
+use cokret_core::canonical::canonical_json_bytes;
 use salvo::{oapi::ToSchema, prelude::*};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -191,14 +191,14 @@ fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError 
 
 async fn admin_actor_id(
     admin_user: Option<&coauth_data::User>,
-    contrix_config: &coauth_config::CokretConfig,
+    cokret_config: &coauth_config::CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<String, AppError> {
     let admin_user = admin_user.ok_or_else(|| {
         AppError::forbidden("risk action workflow requires a user-bound admin token")
     })?;
     Ok(did_resolver
-        .primary_did_for_user(contrix_config, admin_user)
+        .primary_did_for_user(cokret_config, admin_user)
         .await)
 }
 
@@ -302,7 +302,7 @@ pub(crate) fn risk_action_approval_transcript_bytes(
 async fn verify_approval_proof_jws(
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    contrix_config: &coauth_config::CokretConfig,
+    cokret_config: &coauth_config::CokretConfig,
     key_store: &coauth_keystore::Keystore,
     repo: &mut coauth_data::BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -331,7 +331,7 @@ async fn verify_approval_proof_jws(
         .resolve_did_document(
             http_client,
             url_builder,
-            contrix_config,
+            cokret_config,
             key_store,
             repo,
             approved_by,
@@ -391,11 +391,11 @@ pub async fn propose(
     let _mutation = account_risk_action_mutation(&params.action)?;
     let risk_action_state = depot.risk_action_state_service()?;
     let risk_action_proposals = depot.risk_action_proposals_service()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -412,7 +412,7 @@ pub async fn propose(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let proposer_did =
-        admin_actor_id(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
+        admin_actor_id(admin_user.as_ref(), &cokret_config, did_resolver.as_ref()).await?;
     let proposal = risk_action_proposals
         .create(CreateProposal {
             account_id: account.id,
@@ -422,7 +422,7 @@ pub async fn propose(
             ticket: params.ticket.clone(),
             required_approvals: required_approvals_for(
                 &params.action,
-                contrix_config.high_risk_threshold,
+                cokret_config.high_risk_threshold,
             ),
             now: requested_at,
         })
@@ -443,7 +443,7 @@ pub async fn propose(
             &*clock,
             &key_store,
             &service_did,
-            contrix_config.audit_signature_fail_closed,
+            cokret_config.audit_signature_fail_closed,
             admin_user.as_ref(),
             AdminOperation::Other(format!("account_{}_proposal", params.action)),
             "account",
@@ -524,12 +524,12 @@ pub async fn approve(
 
     let risk_action_state = depot.risk_action_state_service()?;
     let risk_action_proposals = depot.risk_action_proposals_service()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -559,13 +559,13 @@ pub async fn approve(
         params.ticket.as_deref(),
     )?;
     let caller_admin_did =
-        admin_actor_id(admin_user.as_ref(), &contrix_config, did_resolver.as_ref()).await?;
+        admin_actor_id(admin_user.as_ref(), &cokret_config, did_resolver.as_ref()).await?;
     let approved_by = bind_approval_admin_did(caller_admin_did, params.approved_by.as_deref())?;
     let approval_note = params.approval_note.as_deref().unwrap_or_default();
     let verification_method = verify_approval_proof_jws(
         &http_client,
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         &key_store,
         &mut repo,
         did_resolver.as_ref(),
@@ -611,7 +611,7 @@ pub async fn approve(
             &*clock,
             &key_store,
             &service_did,
-            contrix_config.audit_signature_fail_closed,
+            cokret_config.audit_signature_fail_closed,
             admin_user.as_ref(),
             AdminOperation::Other(format!("account_{}_proposal_approved", params.action)),
             "account",
@@ -742,16 +742,16 @@ pub async fn execute(
         user: admin_user,
         ..
     } = extract_call_context(req, depot).await?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_did: &service_did,
-        fail_closed: contrix_config.audit_signature_fail_closed,
+        fail_closed: cokret_config.audit_signature_fail_closed,
     };
     let executed_at = clock.now();
     let id = extract_ulid_param(req)?;
@@ -806,7 +806,7 @@ pub async fn execute(
         &*clock,
         &key_store,
         &service_did,
-        contrix_config.audit_signature_fail_closed,
+        cokret_config.audit_signature_fail_closed,
         admin_user.as_ref(),
         AdminOperation::Other(format!("account_{}_proposal_executed", params.action)),
         "account",
@@ -836,7 +836,7 @@ pub async fn execute(
     repo.save().await?;
 
     let account_response = SingleResponse::new_canonical(
-        super::AccountRecord::from_user(updated_account, &contrix_config, did_resolver.as_ref())
+        super::AccountRecord::from_user(updated_account, &cokret_config, did_resolver.as_ref())
             .await,
     );
 

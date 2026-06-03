@@ -93,7 +93,7 @@ pub trait UpstreamOidcService: Send + Sync {
     fn session_grant_target_for_requested_audience(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &CokretConfig,
+        cokret_config: &CokretConfig,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -248,14 +248,14 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
     fn session_grant_target_for_requested_audience(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &CokretConfig,
+        cokret_config: &CokretConfig,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
         if let Some(requested_audience) = requested_audience
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            if let Some(server) = contrix_config.principal_servers.iter().find(|server| {
+            if let Some(server) = cokret_config.principal_servers.iter().find(|server| {
                 server.audience == requested_audience
                     || principal_endpoint_matches_audience(&server.endpoint, requested_audience)
             }) {
@@ -268,10 +268,10 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
 
             if cokret::is_allowed_session_grant_audience(
                 url_builder,
-                contrix_config,
+                cokret_config,
                 requested_audience,
             ) {
-                let local_audience = cokret::required_audience_for(url_builder, contrix_config);
+                let local_audience = cokret::required_audience_for(url_builder, cokret_config);
                 return Ok(UpstreamOidcSessionGrantTarget {
                     audience: local_audience,
                     principal_server_name: None,
@@ -286,7 +286,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
 
         let grant_target = cokret::password_login_session_grant_target(
             url_builder,
-            contrix_config,
+            cokret_config,
             None,
         )
         .map_err(|error| {

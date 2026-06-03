@@ -2,7 +2,7 @@
 
 This chapter covers the deployment-time posture decisions that affect how
 **strictly** coauth enforces accountability and revocation. The single most
-important toggle is the `cx.profile.accountable_principals.strict_reject.v1`
+important toggle is the `ck.profile.accountable_principals.strict_reject.v1`
 profile, which converts soft warnings into hard rejects across the
 `accountable_principal_ids` chain.
 
@@ -70,7 +70,7 @@ Once you flip the profile on:
 3. Pre-silence the 4xx-ratio alert for a 60-minute window centered on the
    flip.
 4. Flip the profile via the realm operator's admin path (the operator
-   issues a `cx.realm.profile.update` with the strict-reject profile
+   issues a `ck.realm.profile.update` with the strict-reject profile
    declared).
 5. Watch for 30 minutes:
    - `coauth_accountable_principals_reject_total{profile="strict"}` — should rise
@@ -100,7 +100,7 @@ under `accountable_principals.strict_reject.reject`:
 - `realm_id`
 - `chain_anchor` (the offending principal)
 - `reason` (one of: `stale`, `unknown`, `mismatch`, `chain_break`)
-- `requested_operation` (e.g. `cx.account.issue_session_grant`)
+- `requested_operation` (e.g. `ck.account.issue_session_grant`)
 - `timestamp`
 
 These rows are consumed by the compliance pipeline. Do NOT prune them
@@ -140,8 +140,8 @@ verification.
 
 To rollback strict-reject:
 
-1. Operator issues another `cx.realm.profile.update` removing the
-   `cx.profile.accountable_principals.strict_reject.v1` profile from the realm's
+1. Operator issues another `ck.realm.profile.update` removing the
+   `ck.profile.accountable_principals.strict_reject.v1` profile from the realm's
    declared profile set.
 2. In-flight rejects already audited remain audited; no further reject
    decisions fire.

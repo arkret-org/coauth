@@ -790,6 +790,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bs58"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
+dependencies = [
+ "tinyvec",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1666,6 +1675,131 @@ dependencies = [
 ]
 
 [[package]]
+name = "cokret"
+version = "1.0.0"
+dependencies = [
+ "argon2",
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "chrono",
+ "chrono-tz",
+ "cokret-contracts",
+ "cokret-core",
+ "cokret-crypto",
+ "cokret-ffi",
+ "cokret-html",
+ "cokret-keystore",
+ "cokret-signatures",
+ "ed25519-dalek",
+ "getrandom 0.3.4",
+ "hkdf",
+ "parking_lot",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "thiserror 2.0.18",
+ "uuid",
+ "x25519-dalek",
+]
+
+[[package]]
+name = "cokret-contracts"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "cokret-core",
+ "cokret-crypto",
+ "cokret-html",
+ "cokret-signatures",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "cokret-core"
+version = "1.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "bs58",
+ "chrono",
+ "cokret-identifiers",
+ "getrandom 0.3.4",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "cokret-crypto"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "cokret-core",
+ "cokret-signatures",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "cokret-ffi"
+version = "1.0.0"
+dependencies = [
+ "cokret-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cokret-html"
+version = "1.0.0"
+dependencies = [
+ "cokret-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cokret-identifiers"
+version = "1.0.0"
+dependencies = [
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "serde",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "cokret-keystore"
+version = "1.0.0"
+dependencies = [
+ "cokret-core",
+]
+
+[[package]]
+name = "cokret-signatures"
+version = "1.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "cokret-core",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1833,121 +1967,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7bda66e858c683005a53a9a60c69a4aca7eeaa45d124526e389f7aec8e62f38"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "cokret"
-version = "1.0.0"
-dependencies = [
- "argon2",
- "base64 0.22.1",
- "chacha20poly1305",
- "chrono",
- "chrono-tz",
- "cokret-contracts",
- "cokret-core",
- "cokret-crypto",
- "cokret-ffi",
- "cokret-html",
- "cokret-signatures",
- "ed25519-dalek",
- "getrandom 0.3.4",
- "hkdf",
- "parking_lot",
- "regex",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "subtle",
- "thiserror 2.0.18",
- "uuid",
- "x25519-dalek",
-]
-
-[[package]]
-name = "cokret-contracts"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "cokret-core",
- "cokret-crypto",
- "cokret-html",
- "cokret-signatures",
- "serde",
- "serde_json",
- "tracing",
-]
-
-[[package]]
-name = "cokret-core"
-version = "1.0.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "cokret-identifiers",
- "getrandom 0.3.4",
- "regex",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "cokret-crypto"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "cokret-core",
- "cokret-signatures",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "cokret-ffi"
-version = "1.0.0"
-dependencies = [
- "cokret-core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "cokret-html"
-version = "1.0.0"
-dependencies = [
- "cokret-core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "cokret-identifiers"
-version = "1.0.0"
-dependencies = [
- "getrandom 0.2.17",
- "getrandom 0.3.4",
- "serde",
- "sha2 0.10.9",
- "thiserror 2.0.18",
- "uuid",
-]
-
-[[package]]
-name = "cokret-signatures"
-version = "1.0.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "cokret-core",
- "ed25519-dalek",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.18",
 ]
 
 [[package]]

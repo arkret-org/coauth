@@ -38,7 +38,7 @@ impl RiskActionStateService for AuditLogRiskActionStateService {
             }
         };
 
-        Ok(format!("/api/admin/v1/accounts/{account_id}/{action_path}"))
+        Ok(format!("/_cokret/local/admin/accounts/{account_id}/{action_path}"))
     }
 
     fn allowed_next_transitions(&self, state: &str) -> Vec<String> {

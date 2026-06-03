@@ -5,7 +5,7 @@
 //! Round 4 (2026-05-20, spec a77b995) — 3PID invite engine.
 //!
 //! Replaces the previous plaintext email / SMS invite pathway with the
-//! `cx.schema.invite.v1` `third_party_invite` shape. Two wire modes are
+//! `ck.schema.invite.v1` `third_party_invite` shape. Two wire modes are
 //! supported:
 //!
 //! - `offline_token`: the OOB code is a high-entropy (`≥128 bits`) opaque
@@ -29,7 +29,7 @@
 //!
 //! ## State machine
 //!
-//! Wire states (`cx.schema.invite.v1` §state enum):
+//! Wire states (`ck.schema.invite.v1` §state enum):
 //!
 //! ```text
 //!                ┌─────────┐
@@ -50,7 +50,7 @@
 //! ## Invite verifier
 //!
 //! [`verify_invite`] performs the two-step proof chain that gates an
-//! incoming `cx.invite.claim`:
+//! incoming `ck.invite.claim`:
 //!
 //! 1. **Verification-service proof** — a signed JWT issued by the trusted 3PID
 //!    verification service. Claims `iss` / `aud` / `sub` / `exp` / `nbf` /
@@ -79,7 +79,7 @@ use coauth_config::CokretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
 use coauth_keystore::Keystore;
-use contrix_core::{
+use cokret_core::{
     Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
 };
 use serde::{Deserialize, Serialize};
@@ -92,7 +92,7 @@ use crate::services::{
 };
 
 /// Minimum entropy (in bits) required for offline_token mode invites.
-/// Mirrors `cx.schema.invite.v1` `third_party_invite.token_entropy_bits`
+/// Mirrors `ck.schema.invite.v1` `third_party_invite.token_entropy_bits`
 /// minimum.
 pub const OFFLINE_TOKEN_MIN_ENTROPY_BITS: u32 = 128;
 
@@ -259,13 +259,13 @@ impl ThirdPartyInviteRecord {
 
 /// Helper: build a `token_commitment` for the offline_token mode wire
 /// shape. The commitment is `sha256(token | salt)` rendered as
-/// `sha256:<hex>` to match the `cx.schema.invite.v1` pattern.
+/// `sha256:<hex>` to match the `ck.schema.invite.v1` pattern.
 #[must_use]
 pub fn offline_token_commitment(token: &[u8], salt: &[u8]) -> String {
     let mut buf = Vec::with_capacity(token.len() + salt.len());
     buf.extend_from_slice(token);
     buf.extend_from_slice(salt);
-    contrix_core::canonical::sha256_digest(buf)
+    cokret_core::canonical::sha256_digest(buf)
 }
 
 /// Helper: schedule a zeroize task for a terminal record. Today this
@@ -391,14 +391,14 @@ pub struct VerifierCtx<'a> {
     /// Shared services the resolver needs.
     pub http_client: &'a reqwest::Client,
     pub url_builder: &'a UrlBuilder,
-    pub contrix_config: &'a CokretConfig,
+    pub cokret_config: &'a CokretConfig,
     pub key_store: &'a Keystore,
     pub repo: &'a mut BoxRepository,
 }
 
 /// Successful verification output. Returned to the caller (typically an
 /// invite-acceptance handler) so it can map onto the downstream
-/// `cx.invite.create` / accept Move.
+/// `ck.invite.create` / accept Move.
 #[derive(Debug, Clone)]
 pub struct VerifiedInvite {
     /// SHA-256 hex of the normalized 3PID, as carried in both proofs.
@@ -546,7 +546,7 @@ pub async fn verify_invite(
     let verification = verify_verification_service_proof(
         ctx.http_client,
         ctx.url_builder,
-        ctx.contrix_config,
+        ctx.cokret_config,
         ctx.key_store,
         ctx.repo,
         ctx.did_resolver,
@@ -585,7 +585,7 @@ pub async fn verify_invite(
     let subject_claims = verify_subject_proof(
         ctx.http_client,
         ctx.url_builder,
-        ctx.contrix_config,
+        ctx.cokret_config,
         ctx.key_store,
         ctx.repo,
         ctx.did_resolver,
@@ -637,7 +637,7 @@ pub async fn verify_invite(
 async fn verify_subject_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -671,7 +671,7 @@ async fn verify_subject_proof(
         .resolve_did_document(
             http_client,
             url_builder,
-            contrix_config,
+            cokret_config,
             key_store,
             repo,
             &claims.inviter_did,
@@ -738,7 +738,7 @@ pub use crate::services::did_binding_proof::VerificationServiceProofClaims as Ve
 
 #[cfg(test)]
 mod tests {
-    use contrix_core::Hash;
+    use cokret_core::Hash;
 
     use super::*;
 

@@ -38,7 +38,7 @@ fn SidebarExternalLink(href: String, children: Element) -> Element {
 
 #[component]
 pub fn AccountPage() -> Element {
-    let data = use_resource(|| async { crate::api::api_get::<ViewerResponse>("/viewer").await });
+    let data = use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
     let binding = data.read();
 
     match &*binding {

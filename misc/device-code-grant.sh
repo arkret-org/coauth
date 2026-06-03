@@ -49,7 +49,7 @@ reg=$(http POST "$registration_ep" \
   -H "Content-Type: application/json" \
   -d '{
     "client_name": "coauth-device-grant-test",
-    "client_uri": "https://github.com/cokret-dev/coauth",
+    "client_uri": "https://github.com/cokret/coauth",
     "grant_types": ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
     "application_type": "native",
     "token_endpoint_auth_method": "none"

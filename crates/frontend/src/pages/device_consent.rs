@@ -13,7 +13,7 @@ pub fn DeviceConsent(id: String) -> Element {
     let data = use_resource(move || {
         let gid = grant_id.clone();
         async move {
-            crate::api::api_get::<ConsentDataResponse>(&format!("/device-consent/{gid}")).await
+            crate::api::api_get::<ConsentDataResponse>(&format!("/self/device-consent/{gid}")).await
         }
     });
     let binding = data.read();
@@ -104,7 +104,7 @@ fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
 
                                     spawn(async move {
                                         let result = crate::api::api_post::<DeviceConsentResponse>(
-                                            &format!("/device-consent/{gid}"),
+                                            &format!("/self/device-consent/{gid}"),
                                             serde_json::json!({ "action": "consent" }),
                                         ).await;
                                         submitting.set(false);
@@ -135,7 +135,7 @@ fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
 
                                     spawn(async move {
                                         let result = crate::api::api_post::<DeviceConsentResponse>(
-                                            &format!("/device-consent/{gid}"),
+                                            &format!("/self/device-consent/{gid}"),
                                             serde_json::json!({ "action": "reject" }),
                                         ).await;
                                         submitting.set(false);

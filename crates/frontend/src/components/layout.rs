@@ -47,5 +47,5 @@ fn FooterSection() -> Element {
 }
 
 async fn fetch_footer_config() -> Result<SiteConfig, String> {
-    crate::api::api_get::<SiteConfig>("/site-config").await
+    crate::api::api_get::<SiteConfig>("/self/site-config").await
 }

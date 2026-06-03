@@ -13,7 +13,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on a
 branch, copy it from
-[`cokret-rust-sdk`](https://github.com/cokret-dev/cokret-rust-sdk) and
+[`cokret-rust-sdk`](https://github.com/cokret/cokret-rust-sdk) and
 adapt the package list to coauth's workspace.
 
 > **DO NOT commit secrets.** Files like `config.dev.yaml`, `config.local.*`,
@@ -55,12 +55,12 @@ The value MUST match `ck:trust_domain:<scope>` where `<scope>` is
 `[a-z0-9._:-]{1,128}` and starts with `[a-z0-9]`. coauth validates it
 on load via `CokretConfig::validate_trust_domain` (mirrors the SDK's
 `TypedTrustDomainId` acceptance rules) and injects it into the Realm
-policy + `/api/v1/server/describe` document via soland's config API.
+policy + `/_cokret/describe` document via soland's config API.
 
 **Rotation is wire-breaking for existing cross-signing reset proofs.**
 The `trust_domain` value enters the canonical transcript of every
-`cx.cross_signing.reset` proof (see
-`contrix_core::round23::CrossSigningResetPayload`). Changing it
+`ck.cross_signing.reset` proof (see
+`cokret_core::round23::CrossSigningResetPayload`). Changing it
 invalidates all previously-issued `principal_signing` /
 `recovery_unlock` / `device_quorum` / `trusted_recovery_service`
 proofs. Operators MUST roll fresh proofs through the device-lifecycle
@@ -99,7 +99,7 @@ on top of the R2/R3 trust-domain and OOB-invite work. See
   modes share the 5-terminal-state machine (`claimed` / `send_failed` /
   `revoked_by_capability_loss` / `revoked_by_inviter_left` /
   `invalidated_by_rate_limit`); salt / pepper are zeroized within 24h.
-- **`cx.cross_signing.publish` CAS** — publisher reads the current
+- **`ck.cross_signing.publish` CAS** — publisher reads the current
   generation and submits `expected_previous_generation`; new generation
   is strictly `current + 1`.
 - **`/policy/check` v2** — request switches to `PolicyCheckRequest`
@@ -132,9 +132,9 @@ The primary Cokret paths include:
 
 - `/.well-known/openid-configuration`
 - `/.well-known/did.json`
-- `/api/v1/server/describe`
-- `/api/v1/identity/describe`
-- `/api/v1/directory/resolve-handle`
+- `/_cokret/describe`
+- `/_cokret/root/identity/describe`
+- `/_cokret/find/directory/resolve-handle`
 
 ## Features
 
@@ -178,7 +178,7 @@ cokret:
     proof_required_for_pairwise: true
   service_did: did:web:auth.example.com
   issuer_did: did:web:auth.example.com
-  admin_audience: https://auth.example.com/api/v1
+  admin_audience: https://auth.example.com/_cokret
 
 secrets:
   encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
@@ -203,7 +203,7 @@ launches the background worker unless disabled with flags.
 `coauth` is a Rust workspace. The frontend is a Dioxus app.
 
 ```bash
-git clone https://github.com/cokret-dev/coauth.git
+git clone https://github.com/cokret/coauth.git
 cd coauth
 
 # Backend binary only
@@ -219,12 +219,12 @@ just build-all
 |----------|---------|
 | `/.well-known/openid-configuration` | OIDC discovery |
 | `/.well-known/did.json` | Service DID document |
-| `/api/v1/server/describe` | Cokret service metadata |
-| `/api/v1/identity/describe` | Identity-registry contract |
-| `/api/v1/directory/resolve-handle` | Handle -> DID resolution |
-| `/api/v1/session-grants/introspect` | Principal Server session grant validation |
-| `/api/admin/v1/*` | Admin API for `sodmin` and service automation |
-| `/api/admin/v1/openapi.yaml` | Cokret admin API OpenAPI document |
+| `/_cokret/describe` | Cokret service metadata |
+| `/_cokret/root/identity/describe` | Identity-registry contract |
+| `/_cokret/find/directory/resolve-handle` | Handle -> DID resolution |
+| `/_cokret/gate/account/session-grants/introspect` | Principal Server session grant validation |
+| `/_cokret/local/admin/*` | Admin API for `sodmin` and service automation |
+| `/_cokret/local/admin/openapi.yaml` | Cokret admin API OpenAPI document |
 | `/.well-known/cokret/openapi.yaml` | Admin API discovery document for `sodmin` |
 
 ## Documentation
@@ -259,5 +259,5 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_coauth_todos.md` in the parent `cokret-dev/` directory for the
+> `_coauth_todos.md` in the parent `cokret/` directory for the
 > circle-rollout (CXP-0007) work item list and per-stage checkpoints.

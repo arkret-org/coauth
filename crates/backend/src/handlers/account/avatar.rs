@@ -7,7 +7,7 @@ use super::{
 };
 use crate::storage;
 
-// ── POST /api/v1/viewer/avatar ────────────────────────────────
+// ── POST /_cokret/self/viewer/avatar ────────────────────────────────
 
 const MAX_AVATAR_SIZE: usize = 5 * 1024 * 1024; // 5 MB
 
@@ -124,7 +124,7 @@ pub async fn upload_avatar(
     Ok(Json(UploadAvatarResponse { avatar_url }))
 }
 
-// ── GET /api/v1/viewer/avatar/:user_id ────────────────────────
+// ── GET /_cokret/self/viewer/avatar/:user_id ────────────────────────
 
 #[endpoint]
 pub async fn get_avatar(req: &mut Request, res: &mut Response) {

@@ -24,14 +24,14 @@ pub fn Sessions() -> Element {
     });
 
     let overview =
-        use_resource(|| async { crate::api::api_get::<ViewerResponse>("/viewer").await });
+        use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
 
     let sessions = use_resource(move || {
         let _inactive = show_inactive();
         let _pag = pagination.read().clone();
         async move {
             // REST /viewer returns all session data combined
-            crate::api::api_get::<ViewerResponse>("/viewer").await
+            crate::api::api_get::<ViewerResponse>("/self/viewer").await
         }
     });
 

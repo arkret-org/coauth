@@ -306,7 +306,7 @@ fn parse_policy_effect(value: &str) -> Option<PolicyEffect> {
 /// This is a plaintext SHA-256 *integrity digest*, NOT a cryptographic
 /// signature: it carries no key material and anyone can recompute it. It is
 /// deliberately named `integrity` (and the digest is taken over the spec
-/// canonical-JSON byte form via [`contrix_core::canonical::canonical_sha256`])
+/// canonical-JSON byte form via [`cokret_core::canonical::canonical_sha256`])
 /// to avoid being confused with the keyed admin-audit signatures produced by
 /// `audit_helper`, which are unforgeable and verifiable against the service
 /// public key.
@@ -323,7 +323,7 @@ fn decision_digest_payload(
         "policy_data_revision": policy_data_revision,
         "issued_at": issued_at,
     });
-    let digest = contrix_core::canonical::canonical_sha256(&payload).map_err(AppError::internal)?;
+    let digest = cokret_core::canonical::canonical_sha256(&payload).map_err(AppError::internal)?;
 
     Ok(serde_json::json!({
         "payload": payload,
@@ -432,7 +432,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/api/admin/v1/policy-checks/dry-run")
+                Request::post("/_cokret/local/admin/policy-checks/dry-run")
                     .bearer(&token)
                     .json(serde_json::json!({
                         "subject": "did:cokret:alice",
@@ -449,7 +449,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/api/admin/v1/policy-decision-audits/{audit_id}"))
+                Request::get(format!("/_cokret/local/admin/policy-decision-audits/{audit_id}"))
                     .bearer(&token)
                     .empty(),
             )

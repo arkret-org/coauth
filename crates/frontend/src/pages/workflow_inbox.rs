@@ -10,12 +10,12 @@ use crate::{
 
 /// Workflow inbox page.
 ///
-/// Fetches `GET /api/v1/viewer/workflow-inbox` and displays a list of
+/// Fetches `GET /_cokret/self/viewer/workflow-inbox` and displays a list of
 /// pending flow sessions the user needs to act on.
 #[component]
 pub fn WorkflowInbox() -> Element {
     let data = use_resource(|| async {
-        crate::api::api_get::<WorkflowInboxResponse>("/viewer/workflow-inbox").await
+        crate::api::api_get::<WorkflowInboxResponse>("/self/viewer/workflow-inbox").await
     });
     let binding = data.read();
 

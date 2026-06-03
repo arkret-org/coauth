@@ -1,6 +1,6 @@
 //! Repository for `did:webvh` update-key material that coauth mints against
 //! an embedded principal-server provider (soland's
-//! `POST /api/v1/identity/webvh/register`).
+//! `POST /_cokret/root/identity/webvh/register`).
 //!
 //! Distinct from `crate::services::starid_adapter` — starid mints and retains
 //! the update key server-side; soland's embedded path requires coauth to

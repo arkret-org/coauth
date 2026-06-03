@@ -15,7 +15,7 @@ pub fn DeviceRedirect(route: Vec<String>) -> Element {
         let _device_id = device_id.clone();
         async move {
             // Get the combined viewer data (includes app sessions)
-            crate::api::api_get::<ViewerResponse>("/viewer").await
+            crate::api::api_get::<ViewerResponse>("/self/viewer").await
         }
     });
 

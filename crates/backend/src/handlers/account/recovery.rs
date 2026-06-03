@@ -21,7 +21,7 @@ use crate::handlers::{
     },
 };
 
-// ── POST /api/v1/auth/recovery/start ───────────────────────────
+// ── POST /_cokret/gate/account/auth/recovery/start ───────────────────────────
 
 #[endpoint]
 pub async fn post_recovery_start(
@@ -124,7 +124,7 @@ pub async fn post_recovery_start(
     }))
 }
 
-// ── GET /api/v1/auth/recovery/:id ──────────────────────────────
+// ── GET /_cokret/gate/account/auth/recovery/:id ──────────────────────────────
 
 #[endpoint]
 pub async fn get_recovery(
@@ -162,7 +162,7 @@ pub async fn get_recovery(
     }))
 }
 
-// ── POST /api/v1/auth/recovery/:id/resend ──────────────────────
+// ── POST /_cokret/gate/account/auth/recovery/:id/resend ──────────────────────
 
 #[endpoint]
 pub async fn post_recovery_resend(

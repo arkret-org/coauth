@@ -12,8 +12,8 @@
 //!
 //! Endpoints:
 //!
-//! - `GET  /api/admin/v1/invite-quarantine` — list pending entries.
-//! - `POST /api/admin/v1/invite-quarantine/{id}/resolve` — body `{ "decision":
+//! - `GET  /_cokret/local/admin/invite-quarantine` — list pending entries.
+//! - `POST /_cokret/local/admin/invite-quarantine/{id}/resolve` — body `{ "decision":
 //!   "approve"|"reject", "note"?: "..." }`. Approve marks the row resolved (the
 //!   actual re-run of the original invite is the caller's responsibility —
 //!   sodmin re-issues `batch-invite` once it has verified consent out of band).
@@ -147,7 +147,7 @@ pub struct ResolveResponse {
 
     /// Empty when `decision = reject` or when the original payload had
     /// no mintable parameters. Each element matches the shape returned
-    /// by `POST /api/admin/v1/users/batch-invite`.
+    /// by `POST /_cokret/local/admin/users/batch-invite`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub minted_tokens: Vec<SingleResponse<UserRegistrationToken>>,
 }
@@ -173,7 +173,7 @@ fn extract_uuid_param(req: &Request) -> Result<Uuid, AppError> {
 
 // ── Handlers ───────────────────────────────────────────────────
 
-/// `GET /api/admin/v1/invite-quarantine`
+/// `GET /_cokret/local/admin/invite-quarantine`
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.invite_quarantine.list", skip_all)]
 pub async fn list_invite_quarantine(
@@ -198,7 +198,7 @@ pub async fn list_invite_quarantine(
     Ok(Json(InviteQuarantineListResponse { data }))
 }
 
-/// `POST /api/admin/v1/invite-quarantine/{id}/resolve`
+/// `POST /_cokret/local/admin/invite-quarantine/{id}/resolve`
 ///
 /// Round-21 update: `approve` now actually re-runs the original
 /// `batch_invite` using the parameters captured in `payload` at enqueue

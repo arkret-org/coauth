@@ -6,12 +6,12 @@
 //!
 //! | action                       | risk   | required_constraints     |
 //! |------------------------------|--------|--------------------------|
-//! | `cx.circle.create`           | medium | (none)                   |
-//! | `cx.circle.manage`           | medium | `allowed_circle_ids`     |
-//! | `cx.circle.member.add`       | low    | (none)                   |
-//! | `cx.circle.member.manage`    | medium | `allowed_circle_ids`     |
-//! | `cx.circle.member.add.others`| high   | `allowed_circle_ids`     |
-//! | `cx.circle.audit`            | high   | (none, requires pairing) |
+//! | `ck.circle.create`           | medium | (none)                   |
+//! | `ck.circle.manage`           | medium | `allowed_circle_ids`     |
+//! | `ck.circle.member.add`       | low    | (none)                   |
+//! | `ck.circle.member.manage`    | medium | `allowed_circle_ids`     |
+//! | `ck.circle.member.add.others`| high   | `allowed_circle_ids`     |
+//! | `ck.circle.audit`            | high   | (none, requires pairing) |
 //!
 //! Source: cokret-spec
 //! `spec/v1/artifacts/registry/capability-action-registry.json`.
@@ -33,28 +33,28 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(rename_all = "snake_case")]
 pub enum CircleCapabilityAction {
-    /// `cx.circle.create` — create new Circles in the target realm.
-    #[serde(rename = "cx.circle.create")]
+    /// `ck.circle.create` — create new Circles in the target realm.
+    #[serde(rename = "ck.circle.create")]
     Create,
-    /// `cx.circle.manage` — update / archive / restore / tombstone an
+    /// `ck.circle.manage` — update / archive / restore / tombstone an
     /// existing Circle. Requires `allowed_circle_ids` constraint.
-    #[serde(rename = "cx.circle.manage")]
+    #[serde(rename = "ck.circle.manage")]
     Manage,
-    /// `cx.circle.member.add` — add the *authenticated principal* to a
+    /// `ck.circle.member.add` — add the *authenticated principal* to a
     /// Circle (i.e. join with a capability).
-    #[serde(rename = "cx.circle.member.add")]
+    #[serde(rename = "ck.circle.member.add")]
     MemberAdd,
-    /// `cx.circle.member.manage` — change member state (role, leave,
+    /// `ck.circle.member.manage` — change member state (role, leave,
     /// kick) for members of a constrained Circle set.
-    #[serde(rename = "cx.circle.member.manage")]
+    #[serde(rename = "ck.circle.member.manage")]
     MemberManage,
-    /// `cx.circle.member.add.others` — invite/add other principals into a
+    /// `ck.circle.member.add.others` — invite/add other principals into a
     /// Circle. High-risk; always requires `allowed_circle_ids`.
-    #[serde(rename = "cx.circle.member.add.others")]
+    #[serde(rename = "ck.circle.member.add.others")]
     MemberAddOthers,
-    /// `cx.circle.audit` — read audit events for the Circle. Paired with
+    /// `ck.circle.audit` — read audit events for the Circle. Paired with
     /// the `audit_pair_required` evaluator check.
-    #[serde(rename = "cx.circle.audit")]
+    #[serde(rename = "ck.circle.audit")]
     Audit,
 }
 
@@ -77,12 +77,12 @@ impl CircleCapabilityAction {
     #[must_use]
     pub fn as_action_str(&self) -> &'static str {
         match self {
-            Self::Create => "cx.circle.create",
-            Self::Manage => "cx.circle.manage",
-            Self::MemberAdd => "cx.circle.member.add",
-            Self::MemberManage => "cx.circle.member.manage",
-            Self::MemberAddOthers => "cx.circle.member.add.others",
-            Self::Audit => "cx.circle.audit",
+            Self::Create => "ck.circle.create",
+            Self::Manage => "ck.circle.manage",
+            Self::MemberAdd => "ck.circle.member.add",
+            Self::MemberManage => "ck.circle.member.manage",
+            Self::MemberAddOthers => "ck.circle.member.add.others",
+            Self::Audit => "ck.circle.audit",
         }
     }
 
@@ -109,12 +109,12 @@ impl std::str::FromStr for CircleCapabilityAction {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "cx.circle.create" => Ok(Self::Create),
-            "cx.circle.manage" => Ok(Self::Manage),
-            "cx.circle.member.add" => Ok(Self::MemberAdd),
-            "cx.circle.member.manage" => Ok(Self::MemberManage),
-            "cx.circle.member.add.others" => Ok(Self::MemberAddOthers),
-            "cx.circle.audit" => Ok(Self::Audit),
+            "ck.circle.create" => Ok(Self::Create),
+            "ck.circle.manage" => Ok(Self::Manage),
+            "ck.circle.member.add" => Ok(Self::MemberAdd),
+            "ck.circle.member.manage" => Ok(Self::MemberManage),
+            "ck.circle.member.add.others" => Ok(Self::MemberAddOthers),
+            "ck.circle.audit" => Ok(Self::Audit),
             _ => Err(ParseCircleCapabilityActionError),
         }
     }
@@ -151,7 +151,7 @@ impl CircleCapabilityAction {
     }
 }
 
-/// A capability grant as returned by `GET /api/admin/v1/circles/capabilities`.
+/// A capability grant as returned by `GET /_cokret/local/admin/circles/capabilities`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
@@ -180,7 +180,7 @@ pub struct CircleCapabilityGrant {
     pub revoked_at: Option<DateTime<Utc>>,
 }
 
-/// Request body for `POST /api/admin/v1/circles/capabilities`.
+/// Request body for `POST /_cokret/local/admin/circles/capabilities`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
@@ -219,7 +219,7 @@ impl CreateCircleCapabilityGrant {
     }
 }
 
-/// Response body for `GET /api/admin/v1/circles/capabilities`.
+/// Response body for `GET /_cokret/local/admin/circles/capabilities`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
@@ -240,27 +240,27 @@ mod tests {
         // and MUST NOT drift.
         assert_eq!(
             CircleCapabilityAction::Create.as_action_str(),
-            "cx.circle.create"
+            "ck.circle.create"
         );
         assert_eq!(
             CircleCapabilityAction::Manage.as_action_str(),
-            "cx.circle.manage"
+            "ck.circle.manage"
         );
         assert_eq!(
             CircleCapabilityAction::MemberAdd.as_action_str(),
-            "cx.circle.member.add"
+            "ck.circle.member.add"
         );
         assert_eq!(
             CircleCapabilityAction::MemberManage.as_action_str(),
-            "cx.circle.member.manage"
+            "ck.circle.member.manage"
         );
         assert_eq!(
             CircleCapabilityAction::MemberAddOthers.as_action_str(),
-            "cx.circle.member.add.others"
+            "ck.circle.member.add.others"
         );
         assert_eq!(
             CircleCapabilityAction::Audit.as_action_str(),
-            "cx.circle.audit"
+            "ck.circle.audit"
         );
     }
 

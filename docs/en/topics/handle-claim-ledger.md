@@ -2,17 +2,17 @@
 
 coauth is a **handle-claim issuer**, not a handle **directory**. This page
 records the R3.2 (cokret-spec @ `b56cab1`) scope decision for the
-`cx.directory.list_handles_for_subject` directory operation.
+`ck.directory.list_handles_for_subject` directory operation.
 
-## Decision: coauth does NOT implement `cx.directory.list_handles_for_subject`
+## Decision: coauth does NOT implement `ck.directory.list_handles_for_subject`
 
 R3.2 of the Cokret spec introduced
-[`cx.directory.list_handles_for_subject`][op] — given a known
+[`ck.directory.list_handles_for_subject`][op] — given a known
 holder/principal DID, return the current context-visible set of signed
-`cx.schema.handle_claim.v1` evidence (the inverse of `resolve_handle`,
+`ck.schema.handle_claim.v1` evidence (the inverse of `resolve_handle`,
 which maps a handle string to a subject).
 
-**`cx.directory.list_handles_for_subject` is a directory-service
+**`ck.directory.list_handles_for_subject` is a directory-service
 operation.** In a standard Cokret deployment that role is carried by the
 directory service (teabay), which applies disclosure policy, issuer-trust
 filtering, audience scoping, and `as_of` historical replay across all
@@ -33,7 +33,7 @@ service (teabay), not coauth.
 ## What coauth provides instead
 
 coauth retains an **issuer-internal ledger** of the handle claims it has
-minted. The signed `cx.schema.handle_claim.v1` artefacts coauth produces
+minted. The signed `ck.schema.handle_claim.v1` artefacts coauth produces
 (see [`issue_handle_claim`][src] in `crates/backend/src/handlers/cokret.rs`)
 are the only authoritative wire form for a handle; everything else
 (roster hints, mention `handle_at_time`, etc.) is a derived projection or
@@ -53,10 +53,10 @@ Per the R3.2 issuer hardening:
 > **Status: not implemented (deferred).**
 >
 > An optional issuer-internal admin endpoint
-> `GET /api/v1/admin/handles?subject=<did>` could let org operators audit
+> `GET /_cokret/local/admin/handles?subject=<did>` could let org operators audit
 > which handles coauth currently holds for a subject **within this
 > organization**. This is an issuer-side ledger view, explicitly **not**
-> an implementation of `cx.directory.list_handles_for_subject` and **not**
+> an implementation of `ck.directory.list_handles_for_subject` and **not**
 > a directory surface — it would carry no cross-issuer disclosure
 > semantics. It is left as a `TODO(R3.2.1)` because the existing admin
 > claims surface already covers operator audit needs; add it only if a

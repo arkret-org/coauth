@@ -681,24 +681,27 @@ fn build_account_api_router(router: Router) -> Router {
         cokret, policy_check,
     };
 
-    let api_router = Router::with_path("/api/v1")
+    let api_router = Router::with_path("/_cokret")
         .hoop(public_oidc_browser_cors())
         // Cokret service surface
-        .push(Router::with_path("server/describe").get(cokret::server_describe))
-        .push(Router::with_path("identity/describe").get(cokret::identity_describe))
-        .push(Router::with_path("identity/resolve").post(cokret::identity_resolve))
-        .push(Router::with_path("identity/document").get(cokret::identity_document))
+        .push(Router::with_path("describe").get(cokret::server_describe))
+        .push(Router::with_path("root/identity/describe").get(cokret::identity_describe))
+        .push(Router::with_path("root/identity/resolve").post(cokret::identity_resolve))
+        .push(Router::with_path("root/identity/document").get(cokret::identity_document))
         .push(
-            Router::with_path("identity/primary-handle")
+            Router::with_path("root/identity/primary-handle")
                 .patch(cokret::patch_primary_handle_preference),
         )
-        .push(Router::with_path("directory/describe").get(cokret::directory_describe))
-        .push(Router::with_path("directory/resolve-handle").post(cokret::directory_resolve_handle))
+        .push(Router::with_path("find/directory/describe").get(cokret::directory_describe))
+        .push(
+            Router::with_path("find/directory/resolve-handle")
+                .post(cokret::directory_resolve_handle),
+        )
         // Round 4 (spec a77b995) — `/policy/check` v2 returns a signed
         // PolicyCheckResponse with full `bound_to` binding.
-        .push(Router::with_path("policy/check").post(policy_check::post_policy_check))
+        .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check))
         .push(
-            Router::with_path("session-grants")
+            Router::with_path("gate/account/session-grants")
                 .get(cokret::list_session_grants)
                 .push(Router::with_path("introspect").post(cokret::introspect_session_grant))
                 .push(Router::with_path("refresh").post(cokret::refresh_session_grant))
@@ -710,11 +713,12 @@ fn build_account_api_router(router: Router) -> Router {
         // gate are both off, so this route is safe to mount
         // unconditionally.
         .push(
-            Router::with_path("test/debug/issue-dpop-grant").post(cokret::debug_issue_dpop_grant),
+            Router::with_path("gate/account/test/debug/issue-dpop-grant")
+                .post(cokret::debug_issue_dpop_grant),
         )
         // Viewer
         .push(
-            Router::with_path("viewer")
+            Router::with_path("self/viewer")
                 .get(viewer::get_viewer)
                 .push(Router::with_path("overview").get(viewer::get_viewer_overview))
                 .push(Router::with_path("security").get(viewer::get_security_summary))
@@ -730,29 +734,29 @@ fn build_account_api_router(router: Router) -> Router {
                 )
                 .push(Router::with_path("workflow-inbox").get(viewer::get_workflow_inbox)),
         )
-        .push(Router::with_path("bootstrap-admin-status").get(bootstrap_admin_status::get))
+        .push(Router::with_path("self/bootstrap-admin-status").get(bootstrap_admin_status::get))
         // Site config
-        .push(Router::with_path("site-config").get(site_config::get))
+        .push(Router::with_path("self/site-config").get(site_config::get))
         // Sessions
-        .push(Router::with_path("sessions/{id}").get(sessions::get_session))
-        .push(Router::with_path("browser-sessions/{id}").delete(sessions::end_browser_session))
+        .push(Router::with_path("self/sessions/{id}").get(sessions::get_session))
+        .push(Router::with_path("self/browser-sessions/{id}").delete(sessions::end_browser_session))
         .push(
-            Router::with_path("oauth-sessions/{id}")
+            Router::with_path("self/oauth-sessions/{id}")
                 .delete(sessions::end_oauth_session)
                 .push(Router::with_path("name").put(sessions::set_oauth_session_name)),
         )
         // OAuth clients
-        .push(Router::with_path("oauth-clients/{id}").get(oauth_clients::get_client))
+        .push(Router::with_path("self/oauth-clients/{id}").get(oauth_clients::get_client))
         // Password recovery
         .push(
-            Router::with_path("password-recovery")
+            Router::with_path("gate/account/password-recovery")
                 .push(Router::with_path("{ticket}").get(password::get_recovery_ticket_status))
                 .push(Router::with_path("set").post(password::set_password_by_recovery))
                 .push(Router::with_path("resend").post(password::resend_recovery_email)),
         )
         // Email authentication
         .push(
-            Router::with_path("email-auth")
+            Router::with_path("gate/account/email-auth")
                 .push(Router::with_path("start").post(emails::start_email_auth))
                 .push(
                     Router::with_path("{id}")
@@ -762,11 +766,14 @@ fn build_account_api_router(router: Router) -> Router {
                 ),
         )
         // User emails
-        .push(Router::with_path("user-emails/{id}").delete(emails::remove_email))
-        .push(Router::with_path("integration/describe").get(auth::integration_describe))
+        .push(Router::with_path("self/user-emails/{id}").delete(emails::remove_email))
+        .push(
+            Router::with_path("gate/account/integration/describe")
+                .get(auth::integration_describe),
+        )
         // Auth (login, logout, providers, registration, recovery)
         .push(
-            Router::with_path("auth")
+            Router::with_path("gate/account/auth")
                 .push(Router::with_path("bridge/describe").get(auth::auth_bridge_describe))
                 .push(Router::with_path("login").post(auth::login))
                 .push(
@@ -853,41 +860,43 @@ fn build_account_api_router(router: Router) -> Router {
         )
         // OAuth consent
         .push(
-            Router::with_path("oauth/consent/{grant_id}")
+            Router::with_path("self/oauth/consent/{grant_id}")
                 .get(consent::oauth_consent_get)
                 .post(consent::oauth_consent_post),
         )
         // Invite relay (consent-gated forward to target principal)
-        .push(Router::with_path("account/invites/relay").post(invite_relay::post_invite_relay))
+        .push(Router::with_path("self/account/invites/relay").post(invite_relay::post_invite_relay))
         // G3.C3: 3PID invite verifier — runs the binding-proof +
         // subject-proof chain in `services::third_party_invite` and
         // returns the verified summary. The actual invite-claim
         // reducer lives on soland; this endpoint is the trusted
         // pre-flight check the claimant runs before submitting
-        // `cx.invite.claim`.
-        .push(Router::with_path("invites/3pid/verify").post(invite_accept::post_verify_invite))
-        // Device code link & consent
-        .push(Router::with_path("device-link").get(consent::device_link_get))
+        // `ck.invite.claim`.
         .push(
-            Router::with_path("device-consent/{id}")
+            Router::with_path("self/invites/3pid/verify").post(invite_accept::post_verify_invite),
+        )
+        // Device code link & consent
+        .push(Router::with_path("self/device-link").get(consent::device_link_get))
+        .push(
+            Router::with_path("self/device-consent/{id}")
                 .get(consent::device_consent_get)
                 .post(consent::device_consent_post),
         )
         // Linked accounts
         .push(
-            Router::with_path("linked-accounts")
+            Router::with_path("self/linked-accounts")
                 .get(linked_accounts::list_linked_accounts)
                 .push(Router::with_path("{id}").delete(linked_accounts::unlink_account)),
         )
         // Upstream OAuth link
         .push(
-            Router::with_path("upstream-oauth/link/{id}")
+            Router::with_path("self/upstream-oauth/link/{id}")
                 .get(upstream_oauth::get_link)
                 .post(upstream_oauth::post_link),
         )
         // Flow engine
         .push(
-            Router::with_path("flow")
+            Router::with_path("self/flow")
                 .push(Router::with_path("{slug}/start").post(flow::start_flow))
                 .push(
                     Router::with_path("session/{id}")
@@ -900,7 +909,7 @@ fn build_account_api_router(router: Router) -> Router {
         // static bearers. Issues a `accountability_grant` payload
         // referencing the agent principal + capability set.
         .push(
-            Router::with_path("agents/{id}/accountability-grant")
+            Router::with_path("self/agents/{id}/accountability-grant")
                 .post(agents::post_accountability_grant),
         );
     let docs_router = openapi::build_openapi_router(&api_router);
@@ -917,7 +926,7 @@ fn build_admin_router(router: Router) -> Router {
         user_emails, user_registration_tokens, user_sessions, users, version,
     };
 
-    let admin_router = Router::with_path("/api/admin/v1")
+    let admin_router = Router::with_path("/_cokret/local/admin")
         // Version
         .push(Router::with_path("version").get(version::handler))
         // Site config
@@ -1176,7 +1185,7 @@ fn build_admin_router(router: Router) -> Router {
     router
         .push(admin_router)
         .push(admin_doc.clone().into_router("/api-doc/admin/openapi.json"))
-        .push(Router::with_path("/api/admin/v1/openapi.yaml").get(admin_doc_yaml.clone()))
+        .push(Router::with_path("/_cokret/local/admin/openapi.yaml").get(admin_doc_yaml.clone()))
         .push(Router::with_path("/.well-known/cokret/openapi.yaml").get(admin_doc_yaml))
         .push(
             salvo::oapi::swagger_ui::SwaggerUi::new("/api-doc/admin/openapi.json")
@@ -1406,25 +1415,25 @@ mod tests {
         let json: serde_json::Value = serde_json::from_str(&body).unwrap();
 
         assert_eq!(json["info"]["title"], "coauth Admin API");
-        assert!(json["paths"]["/api/admin/v1/user-sessions"].is_object());
-        assert!(json["paths"]["/api/admin/v1/user-sessions/{id}"].is_object());
-        assert!(json["paths"]["/api/admin/v1/user-sessions/{id}/finish"].is_object());
-        assert!(json["paths"]["/api/admin/v1/oauth-sessions"].is_object());
-        assert!(json["paths"]["/api/admin/v1/oauth-sessions/{id}"].is_object());
-        assert!(json["paths"]["/api/admin/v1/oauth-sessions/{id}/finish"].is_object());
-        assert!(json["paths"]["/api/admin/v1/personal-sessions"].is_object());
-        assert!(json["paths"]["/api/admin/v1/personal-sessions/{id}"].is_object());
-        assert!(json["paths"]["/api/admin/v1/personal-sessions/{id}/revoke"].is_object());
-        assert!(json["paths"]["/api/admin/v1/accounts"].is_object());
-        assert!(json["paths"]["/api/admin/v1/accounts/{id}"].is_object());
-        assert!(json["paths"]["/api/admin/v1/accounts/{id}/lock"].is_object());
-        assert!(json["paths"]["/api/admin/v1/accounts/{id}/disable"].is_object());
-        assert!(json["paths"]["/api/admin/v1/accounts/{id}/dids"].is_object());
-        assert!(json["paths"]["/api/admin/v1/devices"].is_object());
-        assert!(json["paths"]["/api/admin/v1/devices/{id}/revoke"].is_object());
-        assert!(json["paths"]["/api/admin/v1/claims"].is_object());
-        assert!(json["paths"]["/api/admin/v1/claims/status"].is_object());
-        assert!(json["paths"]["/api/admin/v1/policy-checks/dry-run"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/user-sessions"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/user-sessions/{id}"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/user-sessions/{id}/finish"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/oauth-sessions"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/oauth-sessions/{id}"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/oauth-sessions/{id}/finish"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/personal-sessions"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/personal-sessions/{id}"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/personal-sessions/{id}/revoke"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/accounts"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/accounts/{id}"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/accounts/{id}/lock"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/accounts/{id}/disable"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/accounts/{id}/dids"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/devices"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/devices/{id}/revoke"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/claims"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/claims/status"].is_object());
+        assert!(json["paths"]["/_cokret/local/admin/policy-checks/dry-run"].is_object());
         assert!(!body.contains("coauth Admin API"));
     }
 
@@ -1433,7 +1442,7 @@ mod tests {
         let service = salvo::Service::new(build_admin_router(Router::new()));
 
         for path in [
-            "/api/admin/v1/openapi.yaml",
+            "/_cokret/local/admin/openapi.yaml",
             "/.well-known/cokret/openapi.yaml",
         ] {
             let mut response = TestClient::get(format!("http://127.0.0.1:8698{path}"))
@@ -1451,7 +1460,7 @@ mod tests {
 
             let body = response.take_string().await.unwrap();
             assert!(body.contains("title: coauth Admin API"), "{body}");
-            assert!(body.contains("/api/admin/v1/user-sessions:"), "{body}");
+            assert!(body.contains("/_cokret/local/admin/user-sessions:"), "{body}");
             assert!(!body.contains("coauth Admin API"), "{body}");
         }
     }

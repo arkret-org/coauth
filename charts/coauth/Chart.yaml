@@ -12,9 +12,9 @@ keywords:
   - oidc
   - authentication
   - cokret
-home: https://github.com/cokret-dev/coauth
+home: https://github.com/cokret/coauth
 sources:
-  - https://github.com/cokret-dev/coauth
+  - https://github.com/cokret/coauth
 maintainers:
   - name: Cokret Authors
 icon: https://cokret.dev/icon.png

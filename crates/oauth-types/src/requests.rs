@@ -809,16 +809,16 @@ pub struct IntrospectionResponse {
 
     /// Cokret extension: principal DID associated with the token subject.
     #[serde(rename = "org.cokret.principal_did")]
-    pub contrix_principal_did: Option<String>,
+    pub cokret_principal_did: Option<String>,
 
     /// Cokret extension: normalized device identifier associated with the
     /// session, when present.
     #[serde(rename = "org.cokret.device_id")]
-    pub contrix_device_id: Option<String>,
+    pub cokret_device_id: Option<String>,
 
     /// Cokret extension: session identifier associated with the token.
     #[serde(rename = "org.cokret.session_id")]
-    pub contrix_session_id: Option<String>,
+    pub cokret_session_id: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

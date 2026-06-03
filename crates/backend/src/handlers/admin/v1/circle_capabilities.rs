@@ -2,9 +2,9 @@
 //!
 //! Surfaces three routes consumed by sodmin and any other admin client:
 //!
-//! - `GET    /api/admin/v1/circles/capabilities` — list grants
-//! - `POST   /api/admin/v1/circles/capabilities` — create a grant
-//! - `DELETE /api/admin/v1/circles/capabilities/{id}` — revoke a grant
+//! - `GET    /_cokret/local/admin/circles/capabilities` — list grants
+//! - `POST   /_cokret/local/admin/circles/capabilities` — create a grant
+//! - `DELETE /_cokret/local/admin/circles/capabilities/{id}` — revoke a grant
 //!
 //! Wire shape lives in
 //! [`coauth_admin_types::circle_capability_admin`]. Grants are durable:
@@ -57,7 +57,7 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
     }
 
     // CXP-0007 P2B.5: High-risk Circle capability grants
-    // (cx.circle.member.add.others, cx.circle.audit) MUST be preceded by
+    // (ck.circle.member.add.others, ck.circle.audit) MUST be preceded by
     // an N-of-M approved RiskActionProposal. The propose / approve
     // workflow lives in `admin/v1/accounts/risk_action.rs` and persists
     // each approval as an `ApprovalProof` row inside the proposal's

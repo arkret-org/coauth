@@ -437,7 +437,7 @@ pub enum DeactivateUserStatus {
     IncorrectPassword,
 }
 
-// ── Combined viewer response from REST /api/v1/viewer ──────────
+// ── Combined viewer response from REST /_cokret/self/viewer ──────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ViewerResponse {
@@ -714,7 +714,7 @@ pub struct DeviceConsentResponse {
     pub status: String,
 }
 
-// ── Security summary (GET /api/v1/viewer/security) ───────────
+// ── Security summary (GET /_cokret/self/viewer/security) ───────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SecuritySummaryResponse {
@@ -725,14 +725,14 @@ pub struct SecuritySummaryResponse {
     pub verified_phones_count: usize,
 }
 
-// ── Linked accounts list (GET /api/v1/linked-accounts) ───────
+// ── Linked accounts list (GET /_cokret/self/linked-accounts) ───────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct LinkedAccountsResponse {
     pub accounts: Vec<LinkedAccount>,
 }
 
-// ── Workflow inbox (GET /api/v1/viewer/workflow-inbox) ───────
+// ── Workflow inbox (GET /_cokret/self/viewer/workflow-inbox) ───────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct WorkflowInboxItem {
@@ -749,7 +749,7 @@ pub struct WorkflowInboxResponse {
     pub total: usize,
 }
 
-// ── Notification preferences (GET/PATCH /api/v1/viewer/preferences)
+// ── Notification preferences (GET/PATCH /_cokret/self/viewer/preferences)
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ChannelAvailability {

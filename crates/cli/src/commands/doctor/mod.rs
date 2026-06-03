@@ -55,7 +55,7 @@ impl Options {
         }
 
         check_openid_discovery(&http, public_base, resolved_issuer).await;
-        check_contrix_server_describe(&http, public_base).await;
+        check_cokret_server_describe(&http, public_base).await;
 
         Ok(ExitCode::SUCCESS)
     }
@@ -113,8 +113,8 @@ async fn check_openid_discovery(http: &reqwest::Client, public_base: &Url, issue
     }
 }
 
-async fn check_contrix_server_describe(http: &reqwest::Client, public_base: &Url) {
-    let url = match public_base.join("/api/v1/server/describe") {
+async fn check_cokret_server_describe(http: &reqwest::Client, public_base: &Url) {
+    let url = match public_base.join("/_cokret/describe") {
         Ok(url) => url,
         Err(error) => {
             error!(%error, "Unable to construct Cokret server description URL");

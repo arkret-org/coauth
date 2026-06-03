@@ -142,13 +142,13 @@ Handler 层负责 HTTP 协议的适配——解析请求、校验参数、映射
 
 ## API 分层
 
-### 用户门户 API（/api/v1/viewer/*, /api/v1/auth/*, /api/v1/email-auth/*, etc.）
+### 用户门户 API（/_cokret/self/viewer/*, /_cokret/gate/account/auth/*, /_cokret/gate/account/email-auth/*, etc.）
 用户自服务端点，由 Dioxus 前端消费。
 
-### 工作流 API（/api/v1/flow/*）
+### 工作流 API（/_cokret/self/flow/*）
 流程引擎端点，支持多步交互流程（注册、恢复、MFA 等）。
 
-### 管理运营 API（/api/admin/v1/*）
+### 管理运营 API（/_cokret/local/admin/*）
 管理操作端点，由 Padmin 管理界面消费。
 
 ### OAuth 协议 API（/oauth/*, /.well-known/*）

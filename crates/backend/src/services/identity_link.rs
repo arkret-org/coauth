@@ -29,7 +29,7 @@
 //! transport bindings" — the same dual-scoping rule applies here.
 
 use chrono::{DateTime, Utc};
-use contrix_core::{RealmId, TypedTrustDomainId};
+use cokret_core::{RealmId, TypedTrustDomainId};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

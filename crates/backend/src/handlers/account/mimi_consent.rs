@@ -9,7 +9,7 @@
 //! translated into Moves on the holder's consent cell:
 //!
 //! ```text
-//! ck:cell:cx.component.consent.grant.v1:<consent_id>
+//! ck:cell:ck.component.consent.grant.v1:<consent_id>
 //! ```
 //!
 //! - `request_consent` → no Move yet (the holder hasn't decided); coauth
@@ -37,13 +37,13 @@
 //! 3. `anchor_pending_move(...)` builds the `UnsignedMove`, calls
 //!    `Move::sign(&unsigned, signer)` against the deployment's `AnchorerSigner`
 //!    (an `Ed25519MoveSigner` wrapper), and POSTs the resulting `Move` envelope
-//!    to soland's `/api/v1/moves` endpoint.
+//!    to soland's `/_cokret/peer/moves` endpoint.
 
-use contrix_core::{
+use cokret_core::{
     AnchorId, CellRef, Did, Hlc, Move, SpaceId, UnsignedMove,
     move_event::{Effect, LatticeOp, LatticeOpType},
 };
-use contrix_signatures::Ed25519MoveSigner;
+use cokret_signatures::Ed25519MoveSigner;
 use serde::{Deserialize, Serialize};
 
 use crate::outbound_http;
@@ -116,7 +116,7 @@ pub struct UpdateConsent {
 pub struct PendingMove {
     /// `ck:space:<uuidv7>` — holder's principal control Space.
     pub space_id: String,
-    /// `ck:cell:cx.component.consent.grant.v1:<consent_id>`.
+    /// `ck:cell:ck.component.consent.grant.v1:<consent_id>`.
     pub cell_id: String,
     /// Either `or_set_add` or `or_set_remove` per spec §6.1.
     pub op: PendingMoveOp,
@@ -145,7 +145,7 @@ pub enum MimiConsentError {
     #[error("mimi consent → move: server_name url not configured")]
     PrincipalServerNotConfigured,
 
-    /// `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` was set but malformed.
+    /// `COAUTH_COKRET__ANCHORER_SIGNING_KEY` was set but malformed.
     #[error("mimi consent: anchorer signing key invalid: {reason}")]
     InvalidAnchorerKey { reason: String },
 
@@ -180,7 +180,7 @@ pub enum MimiConsentError {
 /// Build the canonical consent cell id from a MIMI `consent_id`.
 #[must_use]
 pub fn consent_cell_id(consent_id: &str) -> String {
-    format!("ck:cell:cx.component.consent.grant.v1:{consent_id}")
+    format!("ck:cell:ck.component.consent.grant.v1:{consent_id}")
 }
 
 /// Build the `OrSet` tag for a `(peer, scope)` consent grant. Pure helper.
@@ -356,7 +356,7 @@ pub fn update_consent_to_pending_move(
 /// How the anchorer signing key was obtained at process start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnchorerSigningKeyOrigin {
-    /// Loaded from `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte
+    /// Loaded from `COAUTH_COKRET__ANCHORER_SIGNING_KEY` (base64 32-byte
     /// seed).
     Configured,
     /// No env var present — generated at process start. Anything signed
@@ -371,7 +371,7 @@ pub enum AnchorerSigningKeyOrigin {
 /// `Ed25519MoveSigner` so this is no longer a placeholder — `from_seed`
 /// constructs the production signer directly. `from_env` is the
 /// ergonomic variant that loads the seed from
-/// `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` and falls back to an ephemeral
+/// `COAUTH_COKRET__ANCHORER_SIGNING_KEY` and falls back to an ephemeral
 /// key with a warn log.
 pub struct AnchorerSigner {
     inner: Ed25519MoveSigner,
@@ -439,7 +439,7 @@ impl AnchorerSigner {
     }
 
     /// Load the configured anchorer signing key from
-    /// `COAUTH_CONTRIX__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
+    /// `COAUTH_COKRET__ANCHORER_SIGNING_KEY` (base64 32-byte seed).
     /// Falls back to an ephemeral key with a warn log when the env var
     /// is absent.
     ///
@@ -453,7 +453,7 @@ impl AnchorerSigner {
         use base64ct::{Base64, Encoding as _};
         let issuer_did = issuer_did.into();
         let kid = verification_method_id.into();
-        if let Ok(raw) = std::env::var("COAUTH_CONTRIX__ANCHORER_SIGNING_KEY") {
+        if let Ok(raw) = std::env::var("COAUTH_COKRET__ANCHORER_SIGNING_KEY") {
             let trimmed = raw.trim();
             let mut buf = [0u8; 48];
             let decoded = Base64::decode(trimmed, &mut buf).map_err(|error| {
@@ -477,7 +477,7 @@ impl AnchorerSigner {
             use rand::RngExt as _;
             rand::rng().fill(&mut seed[..]);
             tracing::warn!(
-                "COAUTH_CONTRIX__ANCHORER_SIGNING_KEY not set; using ephemeral \
+                "COAUTH_COKRET__ANCHORER_SIGNING_KEY not set; using ephemeral \
                  anchorer key (anything signed will be unverifiable across \
                  restarts — configure a real key for production anchoring)"
             );
@@ -508,7 +508,7 @@ impl AnchorerSigner {
 /// Build, sign, and POST a `PendingMove` to the holder's `server_name`.
 ///
 /// On success the `SignedMove` envelope returned by `Move::sign` has been
-/// `POSTed` to soland's `/api/v1/moves` endpoint and accepted with 2xx.
+/// `POSTed` to soland's `/_cokret/peer/moves` endpoint and accepted with 2xx.
 ///
 /// ### Wire shape
 ///
@@ -529,7 +529,7 @@ pub async fn anchor_pending_move(
 
     let signed_move = build_and_sign_move(pending, signer)?;
 
-    let url = base.join("api/v1/moves").map_err(|error| {
+    let url = base.join("_cokret/peer/moves").map_err(|error| {
         MimiConsentError::PrincipalServerForwardFailed {
             reason: format!("invalid server_name url: {error}"),
         }
@@ -671,7 +671,7 @@ mod tests {
     fn cell_id_uses_grant_family() {
         assert_eq!(
             consent_cell_id("c-123"),
-            "ck:cell:cx.component.consent.grant.v1:c-123"
+            "ck:cell:ck.component.consent.grant.v1:c-123"
         );
     }
 
@@ -701,7 +701,7 @@ mod tests {
     #[test]
     fn update_consent_grant_maps_to_or_set_add() {
         let pending = update_consent_to_pending_move(&sample_update(true)).unwrap();
-        assert_eq!(pending.cell_id, "ck:cell:cx.component.consent.grant.v1:c-1");
+        assert_eq!(pending.cell_id, "ck:cell:ck.component.consent.grant.v1:c-1");
         assert_eq!(pending.op, PendingMoveOp::OrSetAdd);
         assert_eq!(pending.tag, "peer=did:web:peer;scope=invite");
         assert_eq!(
@@ -920,7 +920,7 @@ mod tests {
         assert_eq!(effect.cell.as_str(), pending.cell_id);
         assert!(matches!(
             effect.op.op_type,
-            contrix_core::move_event::LatticeOpType::Add
+            cokret_core::move_event::LatticeOpType::Add
         ));
         assert_eq!(effect.op.tag.as_deref(), Some(pending.tag.as_str()));
     }
@@ -960,7 +960,7 @@ mod tests {
         let signed = build_and_sign_move(&pending, &signer).unwrap();
         assert!(matches!(
             signed.effects[0].op.op_type,
-            contrix_core::move_event::LatticeOpType::Remove
+            cokret_core::move_event::LatticeOpType::Remove
         ));
     }
 
@@ -977,18 +977,18 @@ mod tests {
         let signer = sample_signer();
 
         Mock::given(method("POST"))
-            .and(path("/api/v1/moves"))
+            .and(path("/_cokret/peer/moves"))
             .and(header("x-cokret-holder-did", "did:web:holder.example"))
             .respond_with(move |req: &Request| {
                 let body: serde_json::Value =
                     serde_json::from_slice(&req.body).expect("valid JSON body");
-                let m: contrix_core::Move =
+                let m: cokret_core::Move =
                     serde_json::from_value(body.clone()).expect("body deserializes as Move");
                 assert_eq!(m.issuer.as_str(), "did:web:anchorer.example");
                 assert_eq!(m.effects.len(), 1);
                 assert_eq!(
                     m.effects[0].cell.as_str(),
-                    "ck:cell:cx.component.consent.grant.v1:c-1"
+                    "ck:cell:ck.component.consent.grant.v1:c-1"
                 );
                 ResponseTemplate::new(202)
             })
@@ -1022,7 +1022,7 @@ mod tests {
         let signer = sample_signer();
 
         Mock::given(method("POST"))
-            .and(path("/api/v1/moves"))
+            .and(path("/_cokret/peer/moves"))
             .respond_with(ResponseTemplate::new(503))
             .mount(&server)
             .await;

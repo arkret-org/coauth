@@ -29,6 +29,6 @@ coauth publishes Principal Server metadata through the standard OpenID
 discovery document and the Cokret server description endpoint:
 
 - `/.well-known/openid-configuration`
-- `/api/v1/server/describe`
+- `/_cokret/describe`
 
 Run `coauth doctor` after the server is up to verify these discovery surfaces.

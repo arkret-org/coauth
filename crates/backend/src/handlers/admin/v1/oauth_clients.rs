@@ -126,7 +126,7 @@ pub struct LocalizedMetadataResponse {
     pub data: LocalizedMetadataPayload,
 }
 
-/// `GET /api/admin/v1/oauth-clients/{id}/localized-metadata`
+/// `GET /_cokret/local/admin/oauth-clients/{id}/localized-metadata`
 ///
 /// Returns the full set of localised metadata for the given client. The
 /// response is the same shape accepted by `PUT`, so admin UIs can
@@ -163,7 +163,7 @@ pub async fn get_localized_metadata(
     }))
 }
 
-/// `PUT /api/admin/v1/oauth-clients/{id}/localized-metadata`
+/// `PUT /_cokret/local/admin/oauth-clients/{id}/localized-metadata`
 ///
 /// Replaces the entire set of localised metadata for the given client. An
 /// empty payload clears all locales. URL-typed values are parsed

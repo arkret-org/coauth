@@ -42,7 +42,7 @@ The API is documented using the [OpenAPI specification](https://spec.openapis.or
 When the admin API resource is enabled, `coauth` serves the same generated
 specification at these runtime paths:
 
-- `GET /api/admin/v1/openapi.yaml` for the Cokret-native admin API contract.
+- `GET /_cokret/local/admin/openapi.yaml` for the Cokret-native admin API contract.
 - `GET /.well-known/cokret/openapi.yaml` for discovery by `sodmin` and
   service automation.
 - `GET /api-doc/admin/openapi.json` for legacy Swagger tooling.
@@ -50,7 +50,7 @@ specification at these runtime paths:
 
 ## Admin bridge discovery examples
 
-`GET /api/admin/v1/bridge/describe` publishes the typed admin bridge contract
+`GET /_cokret/local/admin/bridge/describe` publishes the typed admin bridge contract
 used by `sodmin` and by local automation. The response shape and request body
 examples are generated from `coauth-admin-types::bridge_admin`, so the OpenAPI
 schema, backend response, and Rust consumers share one source of truth.
@@ -59,17 +59,17 @@ schema, backend response, and Rust consumers share one source of truth.
 {
   "contract": "cx.contract.coauth_admin_bridge.v1",
   "version": "0.2.0-durable-proposals",
-  "api_base_path": "/api/admin/v1",
-  "accounts_path": "/api/admin/v1/accounts",
-  "account_detail_path_template": "/api/admin/v1/accounts/{account_id}",
-  "account_dids_path_template": "/api/admin/v1/accounts/{account_id}/dids",
-  "account_claims_path_template": "/api/admin/v1/accounts/{account_id}/claims",
-  "account_session_grants_path_template": "/api/admin/v1/accounts/{account_id}/session-grants",
-  "risk_action_path_template": "/api/admin/v1/accounts/{account_id}/risk-action",
-  "risk_action_current_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/current",
-  "risk_action_history_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/history",
-  "risk_action_approve_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/approve",
-  "risk_action_execute_path_template": "/api/admin/v1/accounts/{account_id}/risk-action/{proposal_id}/execute",
+  "api_base_path": "/_cokret/local/admin",
+  "accounts_path": "/_cokret/local/admin/accounts",
+  "account_detail_path_template": "/_cokret/local/admin/accounts/{account_id}",
+  "account_dids_path_template": "/_cokret/local/admin/accounts/{account_id}/dids",
+  "account_claims_path_template": "/_cokret/local/admin/accounts/{account_id}/claims",
+  "account_session_grants_path_template": "/_cokret/local/admin/accounts/{account_id}/session-grants",
+  "risk_action_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action",
+  "risk_action_current_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action/current",
+  "risk_action_history_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action/history",
+  "risk_action_approve_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action/{proposal_id}/approve",
+  "risk_action_execute_path_template": "/_cokret/local/admin/accounts/{account_id}/risk-action/{proposal_id}/execute",
   "risk_action_state_store_kind": "pg_risk_action_proposals_with_admin_audit_trail",
   "risk_action_approval_mode": "durable_proposal_required",
   "risk_action_examples": {
@@ -102,19 +102,19 @@ curl -X POST \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action":"lock","reason":"suspicious session recovery detected","ticket":"INC-2026-0504"}' \
-  "https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/risk-action"
+  "https://auth.example.com/_cokret/local/admin/accounts/$ACCOUNT_ID/risk-action"
 
 curl -X POST \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action":"lock","ticket":"INC-2026-0504","approved_by":"did:web:admin.example","approval_note":"approved for controlled execution","approval_proof_jws":"protected..signature"}' \
-  "https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/approve"
+  "https://auth.example.com/_cokret/local/admin/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/approve"
 
 curl -X POST \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action":"lock","ticket":"INC-2026-0504","execution_note":"execute via controlled mutation worker"}' \
-  "https://auth.example.com/api/admin/v1/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/execute"
+  "https://auth.example.com/_cokret/local/admin/accounts/$ACCOUNT_ID/risk-action/$PROPOSAL_ID/execute"
 ```
 
 `approval_proof_jws` is a detached EdDSA JWS (`protected..signature`) by
@@ -122,9 +122,9 @@ curl -X POST \
 `proposal_id`, `account_id`, `action`, `ticket`, `approval_note`, and
 `approved_by`.
 
-The Cokret-native admin surface now includes `GET /api/admin/v1/accounts`,
-`GET /api/admin/v1/accounts/{id}`, `POST /api/admin/v1/accounts/{id}/lock`,
-and `POST /api/admin/v1/accounts/{id}/disable`. DID bindings, device
+The Cokret-native admin surface now includes `GET /_cokret/local/admin/accounts`,
+`GET /_cokret/local/admin/accounts/{id}`, `POST /_cokret/local/admin/accounts/{id}/lock`,
+and `POST /_cokret/local/admin/accounts/{id}/disable`. DID bindings, device
 administration, claim issuance/revocation, policy dry-run, and signed policy
 decision audit routes are present in OpenAPI as guarded endpoints. Device
 inventory is derived from persisted session grants and device revoke audit
@@ -204,11 +204,11 @@ When querying a single resource, the response is generally shaped like this:
       "some-attribute": "some-value"
     },
     "links": {
-      "self": "/api/admin/v1/type-of-the-resource/unique-id-for-the-resource"
+      "self": "/_cokret/local/admin/type-of-the-resource/unique-id-for-the-resource"
     }
   },
   "links": {
-    "self": "/api/admin/v1/type-of-the-resource/unique-id-for-the-resource"
+    "self": "/_cokret/local/admin/type-of-the-resource/unique-id-for-the-resource"
   }
 }
 ```
@@ -230,18 +230,18 @@ When querying a list of resources, the response is generally shaped like this:
         "some-attribute": "some-value"
       },
       "links": {
-        "self": "/api/admin/v1/type-of-the-resource/unique-id-for-the-resource"
+        "self": "/_cokret/local/admin/type-of-the-resource/unique-id-for-the-resource"
       }
     },
     { "...": "..." },
     { "...": "..." }
   ],
   "links": {
-    "self": "/api/admin/v1/type-of-the-resource?page[first]=10&page[after]=some-id",
-    "first": "/api/admin/v1/type-of-the-resource?page[first]=10",
-    "last": "/api/admin/v1/type-of-the-resource?page[last]=10",
-    "next": "/api/admin/v1/type-of-the-resource?page[first]=10&page[after]=some-id",
-    "prev": "/api/admin/v1/type-of-the-resource?page[last]=10&page[before]=some-id"
+    "self": "/_cokret/local/admin/type-of-the-resource?page[first]=10&page[after]=some-id",
+    "first": "/_cokret/local/admin/type-of-the-resource?page[first]=10",
+    "last": "/_cokret/local/admin/type-of-the-resource?page[last]=10",
+    "next": "/_cokret/local/admin/type-of-the-resource?page[first]=10&page[after]=some-id",
+    "prev": "/_cokret/local/admin/type-of-the-resource?page[last]=10&page[before]=some-id"
   }
 }
 ```
@@ -307,7 +307,7 @@ curl \
 curl \
   -g \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
-  'https://auth.example.com/api/admin/v1/users?filter[can_request_admin]=true&filter[status]=active&page[first]=100' \
+  'https://auth.example.com/_cokret/local/admin/users?filter[can_request_admin]=true&filter[status]=active&page[first]=100' \
   | jq
 ```
 
@@ -332,7 +332,7 @@ Sample output
         "can_request_admin": true
       },
       "links": {
-        "self": "/api/admin/v1/users/01J2KDPHTZYW3TAT1SKVAD63SQ"
+        "self": "/_cokret/local/admin/users/01J2KDPHTZYW3TAT1SKVAD63SQ"
       }
     },
     {
@@ -345,14 +345,14 @@ Sample output
         "can_request_admin": true
       },
       "links": {
-        "self": "/api/admin/v1/users/01J3G5W8MRMBJ93ZYEGX2BN6NK"
+        "self": "/_cokret/local/admin/users/01J3G5W8MRMBJ93ZYEGX2BN6NK"
       }
     }
   ],
   "links": {
-    "self": "/api/admin/v1/users?filter[can_request_admin]=true&filter[status]=active&page[first]=100",
-    "first": "/api/admin/v1/users?filter[can_request_admin]=true&filter[status]=active&page[first]=100",
-    "last": "/api/admin/v1/users?filter[can_request_admin]=true&filter[status]=active&page[last]=100"
+    "self": "/_cokret/local/admin/users?filter[can_request_admin]=true&filter[status]=active&page[first]=100",
+    "first": "/_cokret/local/admin/users?filter[can_request_admin]=true&filter[status]=active&page[first]=100",
+    "last": "/_cokret/local/admin/users?filter[can_request_admin]=true&filter[status]=active&page[last]=100"
   }
 }
 ```
@@ -375,25 +375,25 @@ realm classes explicit. Every admin route belongs to one of them:
 
 | Route prefix                                              | Class                  |
 |-----------------------------------------------------------|------------------------|
-| `/api/admin/v1/accounts/*`                                | Principal Control      |
-| `/api/admin/v1/users/*`                                   | Principal Control      |
-| `/api/admin/v1/accounts/{id}/dids`                        | Principal Control      |
-| `/api/admin/v1/accounts/{id}/claims`                      | Principal Control      |
-| `/api/admin/v1/accounts/{id}/session-grants`              | Principal Control      |
-| `/api/admin/v1/accounts/{id}/risk-action*`                | Principal Control      |
-| `/api/admin/v1/oauth-clients*`                            | Principal Control      |
-| `/api/admin/v1/upstream-oauth-*`                          | Principal Control      |
-| `/api/admin/v1/user-registration-tokens*`                 | Principal Control      |
-| `/api/admin/v1/devices`                                   | Principal Control      |
-| `/api/admin/v1/passkeys`                                  | Principal Control      |
-| `/api/admin/v1/personal-sessions`                         | Principal Control      |
-| `/api/admin/v1/user-sessions`                             | Principal Control      |
-| `/api/admin/v1/oauth-sessions`                            | Principal Control      |
-| `/api/admin/v1/circles/capabilities*`                     | **Collaboration**      |
-| `/api/admin/v1/notification-*`                            | Cross-cutting (audit)  |
-| `/api/admin/v1/audit-feed`                                | Cross-cutting (audit)  |
-| `/api/admin/v1/invite-quarantine*`                        | Cross-cutting (audit)  |
-| `/api/admin/v1/site-config`                               | Cross-cutting (config) |
+| `/_cokret/local/admin/accounts/*`                                | Principal Control      |
+| `/_cokret/local/admin/users/*`                                   | Principal Control      |
+| `/_cokret/local/admin/accounts/{id}/dids`                        | Principal Control      |
+| `/_cokret/local/admin/accounts/{id}/claims`                      | Principal Control      |
+| `/_cokret/local/admin/accounts/{id}/session-grants`              | Principal Control      |
+| `/_cokret/local/admin/accounts/{id}/risk-action*`                | Principal Control      |
+| `/_cokret/local/admin/oauth-clients*`                            | Principal Control      |
+| `/_cokret/local/admin/upstream-oauth-*`                          | Principal Control      |
+| `/_cokret/local/admin/user-registration-tokens*`                 | Principal Control      |
+| `/_cokret/local/admin/devices`                                   | Principal Control      |
+| `/_cokret/local/admin/passkeys`                                  | Principal Control      |
+| `/_cokret/local/admin/personal-sessions`                         | Principal Control      |
+| `/_cokret/local/admin/user-sessions`                             | Principal Control      |
+| `/_cokret/local/admin/oauth-sessions`                            | Principal Control      |
+| `/_cokret/local/admin/circles/capabilities*`                     | **Collaboration**      |
+| `/_cokret/local/admin/notification-*`                            | Cross-cutting (audit)  |
+| `/_cokret/local/admin/audit-feed`                                | Cross-cutting (audit)  |
+| `/_cokret/local/admin/invite-quarantine*`                        | Cross-cutting (audit)  |
+| `/_cokret/local/admin/site-config`                               | Cross-cutting (config) |
 
 This classification is informational today — gating is still done by the
 single `urn:coauth:admin` / `urn:cokret:admin:*` scope. The next round
@@ -408,23 +408,23 @@ CXP-0007 capability actions:
 
 | action                        | risk   | required constraint        |
 |-------------------------------|--------|----------------------------|
-| `cx.circle.create`            | medium | (none)                     |
-| `cx.circle.manage`            | medium | `allowed_circle_ids`       |
-| `cx.circle.member.add`        | low    | (none)                     |
-| `cx.circle.member.manage`     | medium | `allowed_circle_ids`       |
-| `cx.circle.member.add.others` | high   | `allowed_circle_ids`       |
-| `cx.circle.audit`             | high   | (paired with audit check)  |
+| `ck.circle.create`            | medium | (none)                     |
+| `ck.circle.manage`            | medium | `allowed_circle_ids`       |
+| `ck.circle.member.add`        | low    | (none)                     |
+| `ck.circle.member.manage`     | medium | `allowed_circle_ids`       |
+| `ck.circle.member.add.others` | high   | `allowed_circle_ids`       |
+| `ck.circle.audit`             | high   | (paired with audit check)  |
 
 Endpoints:
 
 ```text
-GET    /api/admin/v1/circles/capabilities
-POST   /api/admin/v1/circles/capabilities
-DELETE /api/admin/v1/circles/capabilities/{grant_id}
+GET    /_cokret/local/admin/circles/capabilities
+POST   /_cokret/local/admin/circles/capabilities
+DELETE /_cokret/local/admin/circles/capabilities/{grant_id}
 ```
 
 Request / response shapes are defined in
-[`coauth_admin_types::circle_capability_admin`](https://github.com/cokret-dev/coauth/blob/main/crates/admin-types/src/circle_capability_admin.rs).
+[`coauth_admin_types::circle_capability_admin`](https://github.com/cokret/coauth/blob/main/crates/admin-types/src/circle_capability_admin.rs).
 See `_todos_all.md` (P2B.2) for the persistence backlog.
 
 [authorization code]: ../topics/authorization.md#authorization-code-grant

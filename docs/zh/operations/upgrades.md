@@ -32,8 +32,8 @@
 - `/.well-known/openid-configuration`
 - `/.well-known/did.json`
 - `/.well-known/cokret/openapi.yaml`
-- `/api/admin/v1/openapi.yaml`
-- `/api/v1/server/describe` 与 `/api/v1/*` 其余路径
+- `/_cokret/local/admin/openapi.yaml`
+- `/_cokret/describe` 与 `/_cokret/*` 其余路径
 - CLI 子命令（`server`、`worker`、`manage`、`database`、`config`、
   `templates`、`doctor`）
 

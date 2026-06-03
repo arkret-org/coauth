@@ -149,7 +149,7 @@ async fn require_authenticated_session(
     Ok(Some(session))
 }
 
-// ── GET /api/v1/oauth/consent/:grant_id ───────────────────────
+// ── GET /_cokret/self/oauth/consent/:grant_id ───────────────────────
 
 /// Return the data needed to render a consent page for an OAuth authorization
 /// grant.
@@ -195,7 +195,7 @@ pub async fn oauth_consent_get(
     Ok(())
 }
 
-// ── POST /api/v1/oauth/consent/:grant_id ──────────────────────
+// ── POST /_cokret/self/oauth/consent/:grant_id ──────────────────────
 
 /// Accept the OAuth authorization consent: create an OAuth session, fulfill
 /// the grant, and return the callback redirect URL.
@@ -210,7 +210,7 @@ pub async fn oauth_consent_post(
     let clock = make_clock();
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let policy_factory = depot.policy_factory()?;
     let mut repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -242,7 +242,7 @@ pub async fn oauth_consent_post(
         &clock,
         &key_store,
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         policy_factory.as_ref(),
         &browser_session,
         grant_id,
@@ -265,7 +265,7 @@ pub async fn oauth_consent_post(
     Ok(())
 }
 
-// ── GET /api/v1/device-link ────────────────────────────────────
+// ── GET /_cokret/self/device-link ────────────────────────────────────
 
 /// Validate a device user code and return the grant ID if valid.
 #[endpoint]
@@ -308,7 +308,7 @@ pub async fn device_link_get(
     Ok(())
 }
 
-// ── GET /api/v1/device-consent/:id ─────────────────────────────
+// ── GET /_cokret/self/device-consent/:id ─────────────────────────────
 
 /// Return the data needed to render a consent page for a device code grant.
 #[endpoint]
@@ -353,7 +353,7 @@ pub async fn device_consent_get(
     Ok(())
 }
 
-// ── POST /api/v1/device-consent/:id ────────────────────────────
+// ── POST /_cokret/self/device-consent/:id ────────────────────────────
 
 /// Accept or reject a device code grant.
 #[endpoint]

@@ -40,7 +40,7 @@ Common resource names:
 - `oauth` for OAuth / OIDC endpoints
 - `restapi` for the SPA/API backend
 - `assets` for frontend assets
-- `adminapi` for `/api/admin/v1/*`
+- `adminapi` for `/_cokret/local/admin/*`
 - `health` for `/health`, `/healthz`, and `/readyz` probes
 - `prometheus` for `/metrics`
 
@@ -89,7 +89,7 @@ cokret:
 
   service_did: did:web:auth.example.com
   issuer_did: did:web:auth.example.com
-  admin_audience: https://auth.example.com/api/v1
+  admin_audience: https://auth.example.com/_cokret
   session_grant_ttl: 300
 ```
 
@@ -99,7 +99,7 @@ cokret:
 - `service_did`: explicit service DID, otherwise derived from `http.public_base`
 - `issuer_did`: DID emitted in session grants, defaults to `service_did`
 - `admin_audience`: audience expected by Cokret admin integrations, defaults
-  to the local `/api/v1` endpoint
+  to the local `/_cokret` endpoint
 - `session_grant_ttl`: lifetime in seconds for Cokret session-grant JWTs
   returned by the REST auth bridge login/exchange paths and refresh endpoint.
   Default: `300` (5 minutes).

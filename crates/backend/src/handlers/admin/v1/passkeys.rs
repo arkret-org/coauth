@@ -3,10 +3,10 @@
 //! These endpoints drive the four ceremonies the
 //! [`crate::services::webauthn`] service exposes:
 //!
-//!   * `POST /api/admin/v1/accounts/{id}/passkeys/register/start`
-//!   * `POST /api/admin/v1/accounts/{id}/passkeys/register/finish`
-//!   * `POST /api/admin/v1/accounts/{id}/passkeys/auth/start`
-//!   * `POST /api/admin/v1/accounts/{id}/passkeys/auth/finish`
+//!   * `POST /_cokret/local/admin/accounts/{id}/passkeys/register/start`
+//!   * `POST /_cokret/local/admin/accounts/{id}/passkeys/register/finish`
+//!   * `POST /_cokret/local/admin/accounts/{id}/passkeys/auth/start`
+//!   * `POST /_cokret/local/admin/accounts/{id}/passkeys/auth/finish`
 //!
 //! The handlers are intentionally thin — they extract the account
 //! ULID, marshal the payload into / out of `webauthn-rs` types, audit
@@ -144,13 +144,13 @@ fn audit_signing_context(
     depot: &Depot,
 ) -> Result<(coauth_keystore::Keystore, String, bool), AppError> {
     let key_store = depot.key_store()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &contrix_config);
+    let service_did = service_did_for(&url_builder, &cokret_config);
     Ok((
         key_store,
         service_did,
-        contrix_config.audit_signature_fail_closed,
+        cokret_config.audit_signature_fail_closed,
     ))
 }
 

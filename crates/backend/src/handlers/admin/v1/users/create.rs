@@ -35,7 +35,7 @@ use crate::{
     util::handle_valid,
 };
 
-/// # JSON payload for the `POST /api/admin/v1/users` endpoint
+/// # JSON payload for the `POST /_cokret/local/admin/users` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUserRequest")]
 pub struct AddRequest {
@@ -128,7 +128,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     ))
 }
 
-/// # JSON payload for the `POST /api/admin/v1/users/batch-invite` endpoint
+/// # JSON payload for the `POST /_cokret/local/admin/users/batch-invite` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "BatchInviteRequest")]
 pub struct BatchInviteRequest {
@@ -263,7 +263,7 @@ pub enum BatchInviteGateOutcome {
 /// optional infrastructure.
 pub async fn evaluate_batch_invite_gate(
     gate: Option<&BatchInviteConsentGate>,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     http_client: &reqwest::Client,
 ) -> BatchInviteGateOutcome {
     let Some(gate) = gate else {
@@ -273,7 +273,7 @@ pub async fn evaluate_batch_invite_gate(
     let principal_url = gate
         .target_principal_url
         .as_ref()
-        .or(contrix_config.principal_server_url.as_ref());
+        .or(cokret_config.principal_server_url.as_ref());
 
     let Some(principal_url) = principal_url else {
         // Gate metadata supplied, but no server to query. Mirror the
@@ -398,10 +398,10 @@ pub async fn batch_invite(
     // payload), see `account::invite_relay::post_invite_relay`. This
     // handler only mints registration tokens, so we don't forward a
     // payload — we simply gate the mint.
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let http_client = depot.http_client()?;
     let gate_outcome =
-        evaluate_batch_invite_gate(params.consent_gate.as_ref(), &contrix_config, &http_client)
+        evaluate_batch_invite_gate(params.consent_gate.as_ref(), &cokret_config, &http_client)
             .await;
     let consent_id_for_log = params
         .consent_gate
@@ -430,7 +430,7 @@ pub async fn batch_invite(
             // soft-reject pending admin review. The queue id is
             // surfaced via the `quarantine_id` slot in the audit log
             // and admin-list endpoint at
-            // `GET /api/admin/v1/invite-quarantine`.
+            // `GET /_cokret/local/admin/invite-quarantine`.
             let quarantine_id = if let Some(gate) = params.consent_gate.as_ref() {
                 let queue = depot.invite_quarantine_service()?;
                 let payload = serde_json::json!({
@@ -541,9 +541,9 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-allow",
+                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-allow",
                 "tags": ["peer=did:web:peer;scope=invite"],
             })))
             .expect(1)
@@ -566,7 +566,7 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
             .expect(1)
             .mount(&server)
@@ -589,7 +589,7 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
@@ -611,9 +611,9 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/api/v1/admin/cells/.*"))
+            .and(path_regex(r"^/_soland/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-other",
+                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-other",
                 "tags": ["peer=did:web:other;scope=invite"],
             })))
             .mount(&server)

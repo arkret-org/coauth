@@ -1,7 +1,7 @@
 # 部署强化（Deployment Hardening）
 
 本章讨论影响 coauth 对可问责性（accountability）和撤销链路严格程度的
-部署级开关。最重要的单个开关是 `cx.profile.accountable_principals.strict_reject.v1`
+部署级开关。最重要的单个开关是 `ck.profile.accountable_principals.strict_reject.v1`
 profile，它将默认的“软警告”姿态切换为“硬拒绝”。
 
 ## `accountable_principals.strict_reject` profile
@@ -56,7 +56,7 @@ session grant 签发。这是多租户部署下的安全默认值——某些对
    陈旧比应 < 2%；如果 > 5%，flip 会产生过多噪声而无法被有效审计。
 2. 决定切换时点；提前以书面形式通知联邦伙伴。
 3. 提前静音覆盖 flip 时点前后 60 分钟的 4xx 比率告警。
-4. 由 realm 运营者发出 `cx.realm.profile.update`，将
+4. 由 realm 运营者发出 `ck.realm.profile.update`，将
    strict-reject profile 加入 realm 已声明的 profile 集合。
 5. 持续观察 30 分钟：
    - `coauth_accountable_principals_reject_total{profile="strict"}` —— 从 0 起跳
@@ -85,7 +85,7 @@ Strict-reject 是一项可审计的姿态变化。flip-on / flip-off 都 **必�
 - `realm_id`
 - `chain_anchor`（被拒绝的链锚 Principal）
 - `reason`（`stale` / `unknown` / `mismatch` / `chain_break` 其一）
-- `requested_operation`（例如 `cx.account.issue_session_grant`）
+- `requested_operation`（例如 `ck.account.issue_session_grant`）
 - `timestamp`
 
 这些行会被合规管线消费。审计保留期内（默认 90 天，以租户 SLA 为准）
@@ -95,8 +95,8 @@ Strict-reject 是一项可审计的姿态变化。flip-on / flip-off 都 **必�
 
 回滚 strict-reject：
 
-1. 运营者再发一次 `cx.realm.profile.update`，将
-   `cx.profile.accountable_principals.strict_reject.v1` 从 realm 已声明的
+1. 运营者再发一次 `ck.realm.profile.update`，将
+   `ck.profile.accountable_principals.strict_reject.v1` 从 realm 已声明的
    profile 集合中移除。
 2. 已审计的在途拒绝保持已审计状态；不再触发新的拒绝判断。
 3. coauth 在下一次镜像刷新内（`revocation_freshness_window` 内）恢复默

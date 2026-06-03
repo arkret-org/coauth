@@ -11,7 +11,7 @@ use crate::{
 
 /// Security center page.
 ///
-/// Fetches `GET /api/v1/viewer/security` and displays:
+/// Fetches `GET /_cokret/self/viewer/security` and displays:
 /// - Password status (set / not set)
 /// - Active sessions count
 /// - Verified emails count
@@ -19,7 +19,7 @@ use crate::{
 #[component]
 pub fn SecurityCenter() -> Element {
     let data = use_resource(|| async {
-        crate::api::api_get::<SecuritySummaryResponse>("/viewer/security").await
+        crate::api::api_get::<SecuritySummaryResponse>("/self/viewer/security").await
     });
     let binding = data.read();
 

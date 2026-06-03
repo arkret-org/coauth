@@ -4,7 +4,7 @@
 
 //! RFC 7591 dynamic-client-registration admin handler.
 //!
-//! `POST /api/admin/v1/oauth/clients/register`
+//! `POST /_cokret/local/admin/oauth/clients/register`
 //!
 //! Accepts the standard RFC 7591 request payload (`client_name`,
 //! `redirect_uris`, `grant_types`, `token_endpoint_auth_method`, scope) and
@@ -14,7 +14,7 @@
 //! `registration_access_token` so the operator can re-edit the
 //! registration via the admin SPA.
 //!
-//! This is the *admin* surface (mounted under `/api/admin/v1`). The
+//! This is the *admin* surface (mounted under `/_cokret/local/admin`). The
 //! public, abuse-gated RFC 7591 endpoint at `/oauth/registration` is
 //! still served by [`crate::handlers::oauth::registration`].
 
@@ -38,7 +38,7 @@ use crate::{
     },
 };
 
-/// Request body for `POST /api/admin/v1/oauth/clients/register`.
+/// Request body for `POST /_cokret/local/admin/oauth/clients/register`.
 ///
 /// Mirrors RFC 7591 §3.1 with a curated subset of fields. Unknown fields
 /// are accepted and ignored (per RFC 7591 §2) — they would normally come
@@ -84,7 +84,7 @@ pub struct AdminClientRegistrationRequest {
 /// endpoint with the `registration_access_token`:
 ///
 /// ```text
-/// POST /api/admin/v1/oauth/clients/{client_id}/rotate-secret
+/// POST /_cokret/local/admin/oauth/clients/{client_id}/rotate-secret
 /// Authorization: Bearer <registration_access_token>
 /// ```
 ///

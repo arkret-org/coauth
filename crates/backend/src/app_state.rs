@@ -53,7 +53,7 @@ static JWKS_CACHE: std::sync::LazyLock<JwksCache> = std::sync::LazyLock::new(Jwk
 pub struct AppState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
-    pub contrix_config: CokretConfig,
+    pub cokret_config: CokretConfig,
     pub key_store: Keystore,
     pub cookie_manager: CookieManager,
     pub encrypter: Encrypter,
@@ -198,7 +198,7 @@ pub async fn inject_app_state(
     );
     depot.insert("templates", state.templates.clone());
     depot.insert("translator", state.templates.translator());
-    depot.insert("contrix_config", state.contrix_config.clone());
+    depot.insert("cokret_config", state.cokret_config.clone());
     depot.insert("keystore", state.key_store.clone());
     depot.insert("encrypter", state.encrypter.clone());
     depot.insert("url_builder", state.url_builder.clone());
@@ -242,7 +242,7 @@ pub async fn inject_app_state(
     );
     depot.insert("upstream_oidc_service", default_upstream_oidc_service());
     // Trusted-issuer mapping policy set; default-empty until config wires
-    // entries from `contrix_config.trusted_issuers`. Round 25 introduces
+    // entries from `cokret_config.trusted_issuers`. Round 25 introduces
     // the registry in-process; production wiring follows later.
     depot.insert(
         "upstream_oidc_trusted_issuers",
@@ -257,7 +257,7 @@ pub async fn inject_app_state(
     // returns `None`. The async did_resolver still works without a
     // handle: it falls back to the local `did:web:coauth.invalid:…`
     // form for accounts whose `starid_backend` flag is `false`.
-    if let Some(starid_config) = state.contrix_config.starid.as_ref() {
+    if let Some(starid_config) = state.cokret_config.starid.as_ref() {
         match StaridResolver::with_http_client(starid_config, state.http_client.clone()) {
             Ok(resolver) => {
                 let handle: StaridRegistryHandle = Arc::new(resolver);
@@ -311,7 +311,7 @@ pub trait DepotExt {
     fn get_box_repository_factory(&self) -> Option<&BoxRepositoryFactory>;
     fn get_templates(&self) -> Option<&Templates>;
     fn get_translator(&self) -> Option<&Arc<Translator>>;
-    fn get_contrix_config(&self) -> Option<&CokretConfig>;
+    fn get_cokret_config(&self) -> Option<&CokretConfig>;
     fn get_keystore(&self) -> Option<&Keystore>;
     fn get_encrypter(&self) -> Option<&Encrypter>;
     fn get_url_builder(&self) -> Option<&UrlBuilder>;
@@ -347,8 +347,8 @@ impl DepotExt for Depot {
         self.get::<Arc<Translator>>("translator").ok()
     }
 
-    fn get_contrix_config(&self) -> Option<&CokretConfig> {
-        self.get::<CokretConfig>("contrix_config").ok()
+    fn get_cokret_config(&self) -> Option<&CokretConfig> {
+        self.get::<CokretConfig>("cokret_config").ok()
     }
 
     fn get_keystore(&self) -> Option<&Keystore> {

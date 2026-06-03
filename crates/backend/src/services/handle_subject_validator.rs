@@ -4,7 +4,7 @@
 //! that mints a `cx.handle.claim` artefact:
 //!
 //!   1. **`claim_kind` deny check** — the draft-era `service_handle`
-//!      `claim_kind` was removed from `cx.schema.handle_claim.v1`
+//!      `claim_kind` was removed from `ck.schema.handle_claim.v1`
 //!      (`HandleClass::ServiceHandle` no longer exists in the SDK). v1 only
 //!      allows `handle_binding` / `organization_handle`. coauth never emits
 //!      `service_handle` today, but to fail closed against future drift we keep
@@ -16,11 +16,11 @@
 //!      principal DID. It is NOT a Realm `actor_id` (`ck:actor:`), a
 //!      server-local `account_id` (`ck:account:`), a service DID, or a generic
 //!      resource id. We delegate to the SDK's
-//!      [`contrix_core::validate_handle_claim_subject`] so the wire code
+//!      [`cokret_core::validate_handle_claim_subject`] so the wire code
 //!      (`handle_claim_subject_not_principal_did`) stays in lockstep with
 //!      soland / cotest / the spec.
 
-use contrix_core::Did;
+use cokret_core::Did;
 use thiserror::Error;
 
 /// Wire-level reason code returned when an issuance request asks for a
@@ -30,13 +30,13 @@ pub const CLAIM_KIND_UNSUPPORTED_CODE: &str = "claim_kind_unsupported";
 
 /// Wire-level reason code returned when the handle-claim subject is not a
 /// holder / principal DID. Kept in sync with the SDK validator's
-/// [`contrix_core::validate_handle_claim_subject`] error-message prefix.
+/// [`cokret_core::validate_handle_claim_subject`] error-message prefix.
 pub const HANDLE_CLAIM_SUBJECT_NOT_PRINCIPAL_DID_CODE: &str =
     "handle_claim_subject_not_principal_did";
 
 /// The only `claim_kind` values coauth's handle-claim issuer accepts.
 ///
-/// Matches the post-R3.2 `cx.schema.handle_claim.v1` `claim_kind` enum
+/// Matches the post-R3.2 `ck.schema.handle_claim.v1` `claim_kind` enum
 /// (`HandleClass::{UserHandle, OrganizationHandle}` in the SDK). The SDK
 /// serialises those variants as the snake-case strings below.
 pub const ALLOWED_CLAIM_KINDS: &[&str] = &["handle_binding", "organization_handle"];
@@ -69,10 +69,10 @@ pub fn ensure_claim_kind_supported(claim_kind: &str) -> Result<(), HandleClaimSu
 
 /// HC-COAUTH-2 — reject `ck:actor:` / `ck:account:` / non-DID subjects.
 ///
-/// Delegates to the SDK's [`contrix_core::validate_handle_claim_subject`]
+/// Delegates to the SDK's [`cokret_core::validate_handle_claim_subject`]
 /// so the rejection logic (and thus the wire code) matches the spec and
 /// the other Cokret services. The input is parsed through
-/// [`contrix_core::Did::new`] first; a value that is not even a structural
+/// [`cokret_core::Did::new`] first; a value that is not even a structural
 /// DID is rejected with the same `handle_claim_subject_not_principal_did`
 /// code (a `ck:actor:`/`ck:account:` typed id is not a `did:` and would be
 /// rejected by `Did::new` anyway, but we keep the message explicit).
@@ -86,7 +86,7 @@ pub fn ensure_subject_is_principal_did(subject: &str) -> Result<(), HandleClaimS
             "subject must be a holder/principal DID ({subject}): {error}"
         ))
     })?;
-    contrix_core::validate_handle_claim_subject(&did)
+    cokret_core::validate_handle_claim_subject(&did)
         .map_err(|error| HandleClaimSubjectError::SubjectNotPrincipalDid(error.to_string()))
 }
 

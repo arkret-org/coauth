@@ -116,7 +116,7 @@ pub async fn list_account_dids(
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let id = extract_ulid_param(req)?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let user = repo
         .user()
@@ -124,17 +124,17 @@ pub async fn list_account_dids(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let events = did_binding_event_logs(&mut repo, id).await?;
-    let data = binding_records_for_user(&user, &contrix_config, did_resolver.as_ref()).await;
+    let data = binding_records_for_user(&user, &cokret_config, did_resolver.as_ref()).await;
     let data = apply_did_binding_events(
         data,
         &events,
-        &resolver_descriptor(&contrix_config, did_resolver.as_ref()),
+        &resolver_descriptor(&cokret_config, did_resolver.as_ref()),
     );
     repo.cancel().await?;
 
     Ok(Json(AccountDidBindingsResponse {
         data,
-        meta: did_bindings_meta(&contrix_config, did_resolver.as_ref()),
+        meta: did_bindings_meta(&cokret_config, did_resolver.as_ref()),
     }))
 }
 
@@ -183,15 +183,15 @@ pub async fn add_account_did(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     let url_builder = depot.url_builder()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
     let now = clock.now();
-    let resolver = resolver_descriptor(&contrix_config, did_resolver.as_ref());
+    let resolver = resolver_descriptor(&cokret_config, did_resolver.as_ref());
     let events = did_binding_event_logs(&mut repo, id).await?;
     let current_bindings = apply_did_binding_events(
-        binding_records_for_user(&account, &contrix_config, did_resolver.as_ref()).await,
+        binding_records_for_user(&account, &cokret_config, did_resolver.as_ref()).await,
         &events,
         &resolver,
     );
@@ -206,7 +206,7 @@ pub async fn add_account_did(
     validate_control_proof(
         &http_client,
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         &key_store,
         &mut repo,
         did_resolver.as_ref(),
@@ -253,14 +253,14 @@ pub async fn add_account_did(
     let mut events = events;
     events.push(audit_log);
     let data = apply_did_binding_events(
-        binding_records_for_user(&account, &contrix_config, did_resolver.as_ref()).await,
+        binding_records_for_user(&account, &cokret_config, did_resolver.as_ref()).await,
         &events,
         &resolver,
     );
 
     Ok(CreatedJson(AccountDidBindingsResponse {
         data,
-        meta: did_bindings_meta(&contrix_config, did_resolver.as_ref()),
+        meta: did_bindings_meta(&cokret_config, did_resolver.as_ref()),
     }))
 }
 
@@ -309,7 +309,7 @@ pub async fn remove_account_did(
         user: admin_user,
         ..
     } = ctx;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let user = repo
         .user()
@@ -317,8 +317,8 @@ pub async fn remove_account_did(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let events = did_binding_event_logs(&mut repo, id).await?;
-    let resolver = resolver_descriptor(&contrix_config, did_resolver.as_ref());
-    let data = binding_records_for_user(&user, &contrix_config, did_resolver.as_ref()).await;
+    let resolver = resolver_descriptor(&cokret_config, did_resolver.as_ref());
+    let data = binding_records_for_user(&user, &cokret_config, did_resolver.as_ref()).await;
     let mut data = apply_did_binding_events(data, &events, &resolver);
     let Some(binding) = data.iter_mut().find(|binding| binding.did == did) else {
         repo.cancel().await?;
@@ -370,7 +370,7 @@ pub async fn remove_account_did(
 
     Ok(Json(AccountDidBindingsResponse {
         data,
-        meta: did_bindings_meta(&contrix_config, did_resolver.as_ref()),
+        meta: did_bindings_meta(&cokret_config, did_resolver.as_ref()),
     }))
 }
 
@@ -433,10 +433,10 @@ async fn enforce_did_binding_rate_limit(
 
 pub(crate) async fn preview_bindings_for_user(
     user: &User,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBindingPreview> {
-    binding_records_for_user(user, contrix_config, did_resolver)
+    binding_records_for_user(user, cokret_config, did_resolver)
         .await
         .into_iter()
         .map(|binding| AccountDidBindingPreview {
@@ -451,20 +451,20 @@ pub(crate) async fn preview_bindings_for_user(
 
 pub(crate) async fn primary_did_for_user(
     user: &User,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> String {
     did_resolver
-        .primary_did_for_user(contrix_config, user)
+        .primary_did_for_user(cokret_config, user)
         .await
 }
 
 async fn binding_records_for_user(
     user: &User,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBinding> {
-    let primary_did = primary_did_for_user(user, contrix_config, did_resolver).await;
+    let primary_did = primary_did_for_user(user, cokret_config, did_resolver).await;
     let created_at = Some(user.created_at);
     let last_verified_at = Some(user.updated_at);
     let revoked_at = user.deactivated_at;
@@ -479,7 +479,7 @@ async fn binding_records_for_user(
     } else {
         DidBindingVerificationStatus::Rejected
     };
-    let resolver = resolver_descriptor(contrix_config, did_resolver);
+    let resolver = resolver_descriptor(cokret_config, did_resolver);
 
     vec![AccountDidBinding {
         id: format!("acctdid-{}", binding_slug(&user.id.to_string())),
@@ -641,11 +641,11 @@ fn did_binding_state_wire(state: DidBindingState) -> &'static str {
 }
 
 fn did_bindings_meta(
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> AccountDidBindingsMeta {
     AccountDidBindingsMeta {
-        resolver: resolver_descriptor(contrix_config, did_resolver),
+        resolver: resolver_descriptor(cokret_config, did_resolver),
         supported_verification_methods: vec![
             "did_controller_key".to_owned(),
             "passkey".to_owned(),
@@ -656,14 +656,14 @@ fn did_bindings_meta(
 }
 
 fn resolver_descriptor(
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> DidBindingResolverDescriptor {
-    match did_resolver.delegated_resolver(contrix_config) {
+    match did_resolver.delegated_resolver(cokret_config) {
         Some(resolver) => DidBindingResolverDescriptor {
             mode: DidBindingResolverMode::DelegatedResolver,
             resolver: Some(resolver),
-            proof_required_for_pairwise: did_resolver.proof_required_for_pairwise(contrix_config),
+            proof_required_for_pairwise: did_resolver.proof_required_for_pairwise(cokret_config),
         },
         None => DidBindingResolverDescriptor {
             mode: DidBindingResolverMode::LocalBindings,

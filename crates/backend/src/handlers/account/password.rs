@@ -15,7 +15,7 @@ use crate::handlers::account::service::{
     },
 };
 
-// ── POST /api/v1/viewer/password ───────────────────────────────
+// ── POST /_cokret/self/viewer/password ───────────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct SetPasswordInput {
@@ -97,7 +97,7 @@ pub async fn set_password(
     }
 }
 
-// ── GET /api/v1/password-recovery/:ticket ─────────────────────
+// ── GET /_cokret/gate/account/password-recovery/:ticket ─────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct RecoveryTicketStatusResponse {
@@ -159,7 +159,7 @@ pub async fn get_recovery_ticket_status(
     Ok(Json(RecoveryTicketStatusResponse { status, email }))
 }
 
-// ── POST /api/v1/password-recovery/set ─────────────────────────
+// ── POST /_cokret/gate/account/password-recovery/set ─────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct SetPasswordByRecoveryInput {
@@ -231,7 +231,7 @@ pub async fn set_password_by_recovery(
     }
 }
 
-// ── POST /api/v1/password-recovery/resend ──────────────────────
+// ── POST /_cokret/gate/account/password-recovery/resend ──────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct ResendRecoveryInput {
@@ -384,7 +384,7 @@ mod tests {
             create_recovery_ticket(&state, "alice@example.com".to_owned()).await;
 
         let response = state
-            .request(Request::get(format!("/api/v1/password-recovery/{ticket}")).empty())
+            .request(Request::get(format!("/_cokret/gate/account/password-recovery/{ticket}")).empty())
             .await;
 
         response.assert_status(StatusCode::OK);
@@ -410,7 +410,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/api/v1/password-recovery/resend")
+                Request::post("/_cokret/gate/account/password-recovery/resend")
                     .json(serde_json::json!({ "ticket": ticket })),
             )
             .await;

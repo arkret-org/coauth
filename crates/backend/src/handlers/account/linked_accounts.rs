@@ -38,7 +38,7 @@ pub struct UnlinkResponse {
     pub status: &'static str,
 }
 
-// ── GET /api/v1/linked-accounts ─────────────────────────────────
+// ── GET /_cokret/self/linked-accounts ─────────────────────────────────
 
 /// Returns the list of upstream OAuth providers linked to the current user.
 #[endpoint]
@@ -72,7 +72,7 @@ pub async fn list_linked_accounts(
     Ok(Json(LinkedAccountsResponse { accounts }))
 }
 
-// ── DELETE /api/v1/linked-accounts/{id} ─────────────────────────
+// ── DELETE /_cokret/self/linked-accounts/{id} ─────────────────────────
 
 /// Unlink an upstream OAuth provider from the current user.
 #[endpoint]

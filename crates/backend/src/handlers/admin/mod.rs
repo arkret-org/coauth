@@ -45,13 +45,13 @@ pub struct AdminErrorResponse {
 pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 
 /// Cokret admin scope family.
-pub const CONTRIX_ADMIN_SCOPE: &str = "urn:cokret:admin:*";
+pub const COKRET_ADMIN_SCOPE: &str = "urn:cokret:admin:*";
 
 /// Returns `true` if the given scope string contains an admin scope.
 #[must_use]
 pub fn has_admin_scope(scope: &oauth_types::scope::Scope) -> bool {
     scope.contains(ADMIN_SCOPE)
-        || scope.contains(CONTRIX_ADMIN_SCOPE)
+        || scope.contains(COKRET_ADMIN_SCOPE)
         || scope
             .iter()
             .any(|token| token.as_str().starts_with("urn:cokret:admin:"))

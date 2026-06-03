@@ -44,7 +44,7 @@ for the full release process.
 ### CXP-0007 circle rollout — coauth P2B closeout (2026-05-26)
 
 - **Added** (P2B.3.1) `did_binding_proof.rs` now verifies compact JWS
-  binding proofs through the SDK's pure-Rust `contrix_signatures::proof::
+  binding proofs through the SDK's pure-Rust `cokret_signatures::proof::
   PublicKeyMaterial` JWK → raw-Ed25519-bytes helper plus
   `ed25519_dalek::Verifier::verify` directly. The previous embedded
   `coauth_jose::jwt::Jwt::verify_with_jwks(...)` envelope path is removed
@@ -54,7 +54,7 @@ for the full release process.
   is reconstructed from the wire bytes themselves so no JWS-library
   state intervenes between the resolved DID-document JWK and the final
   signature check. The cokret-spec Ed25519 detached-JWS fixture test
-  (`contrix_spec_binding_proof_fixture_verifies`) still passes against
+  (`cokret_spec_binding_proof_fixture_verifies`) still passes against
   the new path. New private `verify_compact_jws_with_sdk` helper plus
   `SdkJwsVerifyError` enum consolidate the verify pipeline.
 - **Added** (P2B.5) High-risk admin account mutations (`disable`,
@@ -170,7 +170,7 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
   the byte-identical wire body `{"error":"not_found"}` with constant-
   time padding to ≤50 ms. The `Expired` trigger's internal reason code
   joins the SDK error catalog as `expired_invite_token` (re-exported
-  from `contrix_core::error::ERROR_CODE_EXPIRED_INVITE_TOKEN`).
+  from `cokret_core::error::ERROR_CODE_EXPIRED_INVITE_TOKEN`).
 - **Deployment `trust_domain` config** (`CokretConfig::trust_domain`,
   T08). Optional `ck:trust_domain:<scope>` value validated against the
   SDK `TypedTrustDomainId` rules (scope `[a-z0-9._:-]{1,128}`,
@@ -316,8 +316,8 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
 - `.github/workflows/ci.yaml` clippy job now pins
   `dtolnay/rust-toolchain@1.93.0` to match the `Dockerfile` builder.
 - Repository URLs / container registry references unified under
-  `github.com/cokret-dev/coauth` and `ghcr.io/cokret-dev/coauth`.
+  `github.com/cokret/coauth` and `ghcr.io/cokret/coauth`.
 - User-visible legacy product strings in CLI help, library doc-comments, and
   contributor / architecture docs replaced with `coauth`.
 
-[Unreleased]: https://github.com/cokret-dev/coauth/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/cokret/coauth/compare/v1.8.0...HEAD

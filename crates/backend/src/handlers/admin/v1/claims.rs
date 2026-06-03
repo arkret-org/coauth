@@ -179,9 +179,9 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
         require_non_empty(value, "issuer")?
     } else {
         let url_builder = depot.url_builder()?;
-        let contrix_config = depot.contrix_config()?;
+        let cokret_config = depot.cokret_config()?;
         let did_resolver = depot.did_resolver_service()?;
-        did_resolver.issuer_did(&url_builder, &contrix_config)
+        did_resolver.issuer_did(&url_builder, &cokret_config)
     };
 
     let claim_service = depot.account_claims_service()?;
@@ -354,9 +354,9 @@ async fn derive_account_id_from_subject(
     }
 
     let url_builder = depot.url_builder()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    if let Some(id) = did_resolver.parse_local_user_did(&url_builder, &contrix_config, subject) {
+    if let Some(id) = did_resolver.parse_local_user_did(&url_builder, &cokret_config, subject) {
         return ensure_subject_account_exists(repo, id).await;
     }
 
@@ -435,7 +435,7 @@ mod tests {
 
         let response =
             state
-                .request(Request::post("/api/admin/v1/claims").bearer(&token).json(
+                .request(Request::post("/_cokret/local/admin/claims").bearer(&token).json(
                     serde_json::json!({
                         "account_id": user.id.to_string(),
                         "claim_kind": "org_role",
@@ -459,7 +459,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/api/admin/v1/accounts/{}/claims", user.id))
+                Request::get(format!("/_cokret/local/admin/accounts/{}/claims", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -473,7 +473,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/api/admin/v1/claims/{claim_id}/revoke"))
+                Request::post(format!("/_cokret/local/admin/claims/{claim_id}/revoke"))
                     .bearer(&token)
                     .json(serde_json::json!({
                         "reason": "attestation superseded"
@@ -488,7 +488,7 @@ mod tests {
         let response = state
             .request(
                 Request::get(format!(
-                    "/api/admin/v1/claims/status?filter[account_id]={}&filter[status]=revoked",
+                    "/_cokret/local/admin/claims/status?filter[account_id]={}&filter[status]=revoked",
                     user.id
                 ))
                 .bearer(&token)

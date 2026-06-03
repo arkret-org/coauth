@@ -59,7 +59,7 @@ pub fn UpstreamLink(id: String) -> Element {
         let id = id.clone();
         move || {
             let id = id.clone();
-            async move { api_get::<LinkState>(&format!("/upstream-oauth/link/{id}")).await }
+            async move { api_get::<LinkState>(&format!("/self/upstream-oauth/link/{id}")).await }
         }
     });
 
@@ -210,7 +210,7 @@ fn SuggestLinkView(
                             spawn(async move {
                                 let body = serde_json::json!({ "action": "link" });
                                 match api_post::<LinkActionResponse>(
-                                    &format!("/upstream-oauth/link/{id}"),
+                                    &format!("/self/upstream-oauth/link/{id}"),
                                     body,
                                 )
                                 .await
@@ -321,7 +321,7 @@ fn RegisterView(
                                     "accept_terms": at,
                                 });
                                 match api_post::<LinkActionResponse>(
-                                    &format!("/upstream-oauth/link/{id}"),
+                                    &format!("/self/upstream-oauth/link/{id}"),
                                     body,
                                 )
                                 .await

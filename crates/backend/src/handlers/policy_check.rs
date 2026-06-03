@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 (2026-05-20, spec a77b995) — `/api/v1/policy/check` handler.
+//! Round 4 (2026-05-20, spec a77b995) — `/_cokret/self/policy/check` handler.
 //!
 //! Wire-breaking: replaces the pre-round-4 dry-run-only policy surface
-//! exposed under `/api/admin/v1/policy-checks/dry-run`. The round-4
+//! exposed under `/_cokret/local/admin/policy-checks/dry-run`. The round-4
 //! endpoint is the production policy-decision API: principal servers,
 //! events submitters, and federation peers MUST consume this surface
 //! to obtain a signed [`PolicyCheckResponse`] they can attach to their
@@ -40,7 +40,7 @@ use chrono::Utc;
 use coauth_config::CokretConfig;
 use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory, UrlBuilder};
 use coauth_keystore::Keystore;
-use contrix_core::{
+use cokret_core::{
     Did, PolicyCheckBoundTo, PolicyCheckRequest, PolicyCheckResponse, PolicyCheckSignature,
 };
 use salvo::prelude::*;
@@ -69,13 +69,13 @@ const EVALUATOR_DEADLINE: Duration = Duration::from_secs(2);
 
 /// Default decision expiry when the evaluator does not pin one. Spec §3
 /// (`cache_ttl_seconds: 300`) lets the realm declare a longer TTL via
-/// `cx.realm.policy_server`; until we plumb that through we default to
+/// `ck.realm.policy_server`; until we plumb that through we default to
 /// 30 s on allow paths.
 const DEFAULT_ALLOW_TTL_SECONDS: i64 = 30;
 
-/// `POST /api/v1/policy/check`
+/// `POST /_cokret/self/policy/check`
 ///
-/// Round 4 `cx.policy.check` endpoint. Consumes
+/// Round 4 `ck.policy.check` endpoint. Consumes
 /// [`PolicyCheckRequest`], emits a signed [`PolicyCheckResponse`].
 #[handler]
 pub async fn post_policy_check(
@@ -83,7 +83,7 @@ pub async fn post_policy_check(
     depot: &Depot,
 ) -> Result<Json<PolicyCheckResponse>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
-    let contrix_config = depot.contrix_config()?;
+    let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     // Rebuild a fresh `PgRepositoryFactory` from the depot-injected pool;
@@ -123,7 +123,7 @@ pub async fn post_policy_check(
     // stable means parallel agents working on other handlers don't have
     // to rebase.
     let frontier_source = SolandFrontierSource::new(
-        contrix_config.principal_server_url.clone(),
+        cokret_config.principal_server_url.clone(),
         http_client.clone(),
     );
     let evaluator = RuleEvaluator::new(repo_factory);
@@ -131,7 +131,7 @@ pub async fn post_policy_check(
     let response = build_policy_check_response(
         &body,
         &url_builder,
-        &contrix_config,
+        &cokret_config,
         &key_store,
         &frontier_source,
         &evaluator,
@@ -147,14 +147,14 @@ pub async fn post_policy_check(
 pub(crate) async fn build_policy_check_response(
     request: &PolicyCheckRequest,
     url_builder: &UrlBuilder,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     key_store: &Keystore,
     frontier_source: &dyn FrontierSource,
     evaluator: &dyn PolicyEvaluator,
 ) -> Result<PolicyCheckResponse, CokretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
-    let policy_server_did = cokret::service_did_for(url_builder, contrix_config);
+    let policy_server_did = cokret::service_did_for(url_builder, cokret_config);
     let policy_server_id = Did::new(policy_server_did.clone()).map_err(|e| {
         CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
             "policy server DID failed SDK validation: {e}"
@@ -302,20 +302,20 @@ pub(crate) async fn build_policy_check_response(
 pub(crate) async fn build_policy_check_response_with_defaults(
     request: &PolicyCheckRequest,
     url_builder: &UrlBuilder,
-    contrix_config: &CokretConfig,
+    cokret_config: &CokretConfig,
     key_store: &Keystore,
     http_client: &reqwest::Client,
     repository_factory: BoxRepositoryFactory,
 ) -> Result<PolicyCheckResponse, CokretRouteError> {
     let frontier_source = SolandFrontierSource::new(
-        contrix_config.principal_server_url.clone(),
+        cokret_config.principal_server_url.clone(),
         http_client.clone(),
     );
     let evaluator = RuleEvaluator::new(repository_factory);
     build_policy_check_response(
         request,
         url_builder,
-        contrix_config,
+        cokret_config,
         key_store,
         &frontier_source,
         &evaluator,
@@ -324,7 +324,7 @@ pub(crate) async fn build_policy_check_response_with_defaults(
 }
 
 fn format_canonical_rfc3339(ts: chrono::DateTime<Utc>) -> String {
-    // Canonical form per `contrix_core::canonical::validate_timestamp_canonical`:
+    // Canonical form per `cokret_core::canonical::validate_timestamp_canonical`:
     // `YYYY-MM-DDTHH:MM:SSZ` — no fractional seconds, uppercase `T` / `Z`.
     ts.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
@@ -347,7 +347,7 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
     let canonical_str = String::from_utf8(canonical_bytes).unwrap_or_default();
     tracing::info!(
         target: "policy_audit",
-        kind = "cx.policy.check",
+        kind = "ck.policy.check",
         request_id = transcript.request_id,
         decision = ?transcript.decision,
         realm_id = transcript.bound_to.realm_id.as_str(),
@@ -371,7 +371,7 @@ mod tests {
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable as _;
     use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
-    use contrix_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
+    use cokret_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
     use rand_core::SeedableRng as _;
     use signature::Verifier as _;
 
@@ -387,7 +387,7 @@ mod tests {
             request_id: "req-1".into(),
             realm_id: realm(),
             actor: Did::new("did:web:alice.example").unwrap(),
-            action: "cx.message.create".into(),
+            action: "ck.message.create".into(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
                 service_did: Did::new("did:web:soland.example").unwrap(),
@@ -434,7 +434,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         assert_eq!(format_canonical_rfc3339(ts), "2026-05-21T10:11:12Z");
-        contrix_core::canonical::validate_timestamp_canonical(&format_canonical_rfc3339(ts))
+        cokret_core::canonical::validate_timestamp_canonical(&format_canonical_rfc3339(ts))
             .expect("formatted timestamp is canonical");
     }
 
@@ -478,14 +478,14 @@ mod tests {
             None,
             None,
         );
-        let contrix_config = CokretConfig::default();
+        let cokret_config = CokretConfig::default();
         let frontier_source = StaticFrontierSource::new(Frontier::empty());
         let evaluator = FixedEvaluator(PolicyDecision::allow("policy-v1".into()));
 
         let response = build_policy_check_response(
             &request,
             &url_builder,
-            &contrix_config,
+            &cokret_config,
             &key_store,
             &frontier_source,
             &evaluator,

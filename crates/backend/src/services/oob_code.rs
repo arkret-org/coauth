@@ -37,14 +37,14 @@
 //! as an indistinguishable `{ "error": "not_found" }` body, padded to a
 //! constant ≤50 ms response time. The internal reason code is logged
 //! (and stored on the invite row) but never returned. Constants are
-//! re-exported from `contrix_core::error` to keep parity with the SDK.
+//! re-exported from `cokret_core::error` to keep parity with the SDK.
 //!
 //! See `cokret-spec` 2026-05-20 §T15 ("OOB token state machine") for
 //! the wire contract this module implements.
 
 use std::time::Duration;
 
-use contrix_core::error::ERROR_CODE_EXPIRED_INVITE_TOKEN;
+use cokret_core::error::ERROR_CODE_EXPIRED_INVITE_TOKEN;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
