@@ -15,7 +15,7 @@
 //! service-surface.md §3.0).
 //!
 //! Cross-check: the consumer (currently
-//! `handlers::contrix::service_describe_response`) MUST additionally drop
+//! `handlers::cokret::service_describe_response`) MUST additionally drop
 //! any loaded entry whose `profile_id` is absent from coauth's local
 //! `claimed_profiles[]` set. The check is intentionally external — this
 //! module just parses + role-filters and leaves the claim invariant to the
@@ -32,9 +32,9 @@ use serde::Deserialize;
 pub const VERIFIED_PROFILES_ARTIFACT_ENV: &str = "COAUTH_VERIFIED_PROFILES_ARTIFACT";
 
 /// coauth's role string. Mirrors `service_roles[]` in
-/// `handlers::contrix::service_describe_response` and the canonical role
+/// `handlers::cokret::service_describe_response` and the canonical role
 /// names in
-/// `contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json#/
+/// `cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json#/
 /// profile_role_map`.
 pub const COAUTH_SERVICE_ROLE: &str = "auth_server";
 
@@ -72,9 +72,9 @@ struct RawVerifiedEntry {
 }
 
 /// In-memory representation of a loaded verified-profile entry, consumed
-/// by `handlers::contrix::service_describe_response`. The handler converts
+/// by `handlers::cokret::service_describe_response`. The handler converts
 /// each entry into the wire-shaped `VerifiedProfileDescriptor` on the way
-/// out (different struct because contrix.rs uses `&'static str` for the
+/// out (different struct because cokret.rs uses `&'static str` for the
 /// `claim_kind` discriminant — coauth's describe builder pre-dates the SDK
 /// switch).
 #[derive(Debug, Clone)]

@@ -489,7 +489,7 @@ pub fn build_router(
 
     // Build sub-routers for each resource
     use crate::handlers::{
-        contrix, health,
+        cokret, health,
         oauth::{discovery, webfinger},
     };
 
@@ -516,17 +516,17 @@ pub fn build_router(
                 .push(
                     Router::with_path("/.well-known/did.json")
                         .hoop(public_oidc_browser_cors())
-                        .get(contrix::service_did_json),
+                        .get(cokret::service_did_json),
                 )
                 .push(
                     Router::with_path("/did.json")
                         .hoop(public_oidc_browser_cors())
-                        .get(contrix::service_did_json),
+                        .get(cokret::service_did_json),
                 )
                 .push(
                     Router::with_path("/users/{id}/did.json")
                         .hoop(public_oidc_browser_cors())
-                        .get(contrix::user_did_json),
+                        .get(cokret::user_did_json),
                 ),
             coauth_config::HttpResource::Human => build_human_router(router, templates.clone()),
             coauth_config::HttpResource::RestApi => build_account_api_router(router),
@@ -678,31 +678,31 @@ fn build_account_api_router(router: Router) -> Router {
             invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
             recovery, register, sessions, site_config, upstream_oauth, users, viewer,
         },
-        contrix, policy_check,
+        cokret, policy_check,
     };
 
     let api_router = Router::with_path("/api/v1")
         .hoop(public_oidc_browser_cors())
-        // Contrix service surface
-        .push(Router::with_path("server/describe").get(contrix::server_describe))
-        .push(Router::with_path("identity/describe").get(contrix::identity_describe))
-        .push(Router::with_path("identity/resolve").post(contrix::identity_resolve))
-        .push(Router::with_path("identity/document").get(contrix::identity_document))
+        // Cokret service surface
+        .push(Router::with_path("server/describe").get(cokret::server_describe))
+        .push(Router::with_path("identity/describe").get(cokret::identity_describe))
+        .push(Router::with_path("identity/resolve").post(cokret::identity_resolve))
+        .push(Router::with_path("identity/document").get(cokret::identity_document))
         .push(
             Router::with_path("identity/primary-handle")
-                .patch(contrix::patch_primary_handle_preference),
+                .patch(cokret::patch_primary_handle_preference),
         )
-        .push(Router::with_path("directory/describe").get(contrix::directory_describe))
-        .push(Router::with_path("directory/resolve-handle").post(contrix::directory_resolve_handle))
+        .push(Router::with_path("directory/describe").get(cokret::directory_describe))
+        .push(Router::with_path("directory/resolve-handle").post(cokret::directory_resolve_handle))
         // Round 4 (spec a77b995) — `/policy/check` v2 returns a signed
         // PolicyCheckResponse with full `bound_to` binding.
         .push(Router::with_path("policy/check").post(policy_check::post_policy_check))
         .push(
             Router::with_path("session-grants")
-                .get(contrix::list_session_grants)
-                .push(Router::with_path("introspect").post(contrix::introspect_session_grant))
-                .push(Router::with_path("refresh").post(contrix::refresh_session_grant))
-                .push(Router::with_path("{id}/revoke").post(contrix::revoke_session_grant)),
+                .get(cokret::list_session_grants)
+                .push(Router::with_path("introspect").post(cokret::introspect_session_grant))
+                .push(Router::with_path("refresh").post(cokret::refresh_session_grant))
+                .push(Router::with_path("{id}/revoke").post(cokret::revoke_session_grant)),
         )
         // G3.C1: debug-only DPoP-bound grant seeding for the cotest
         // harness. The handler itself short-circuits to 404 when the
@@ -710,7 +710,7 @@ fn build_account_api_router(router: Router) -> Router {
         // gate are both off, so this route is safe to mount
         // unconditionally.
         .push(
-            Router::with_path("test/debug/issue-dpop-grant").post(contrix::debug_issue_dpop_grant),
+            Router::with_path("test/debug/issue-dpop-grant").post(cokret::debug_issue_dpop_grant),
         )
         // Viewer
         .push(
@@ -951,7 +951,7 @@ fn build_admin_router(router: Router) -> Router {
                         .post(invite_quarantine::resolve_invite_quarantine),
                 ),
         )
-        // Contrix accounts
+        // Cokret accounts
         .push(Router::with_path("bridge/describe").get(accounts::admin_bridge_describe))
         .push(
             Router::with_path("accounts")
@@ -1089,7 +1089,7 @@ fn build_admin_router(router: Router) -> Router {
                         .push(Router::with_path("revoke").post(personal_sessions::revoke_session)),
                 ),
         )
-        // Contrix devices
+        // Cokret devices
         .push(
             Router::with_path("devices")
                 .get(devices::list_devices)
@@ -1153,7 +1153,7 @@ fn build_admin_router(router: Router) -> Router {
                 .push(Router::with_path("{id}").get(policy_data::get_by_id))
                 .put(policy_data::set_data),
         )
-        // Contrix claims and policy checks
+        // Cokret claims and policy checks
         .push(
             Router::with_path("claims")
                 .post(claims::issue_claim)
@@ -1177,7 +1177,7 @@ fn build_admin_router(router: Router) -> Router {
         .push(admin_router)
         .push(admin_doc.clone().into_router("/api-doc/admin/openapi.json"))
         .push(Router::with_path("/api/admin/v1/openapi.yaml").get(admin_doc_yaml.clone()))
-        .push(Router::with_path("/.well-known/contrix/openapi.yaml").get(admin_doc_yaml))
+        .push(Router::with_path("/.well-known/cokret/openapi.yaml").get(admin_doc_yaml))
         .push(
             salvo::oapi::swagger_ui::SwaggerUi::new("/api-doc/admin/openapi.json")
                 .into_router("admin-swagger-ui"),
@@ -1434,7 +1434,7 @@ mod tests {
 
         for path in [
             "/api/admin/v1/openapi.yaml",
-            "/.well-known/contrix/openapi.yaml",
+            "/.well-known/cokret/openapi.yaml",
         ] {
             let mut response = TestClient::get(format!("http://127.0.0.1:8698{path}"))
                 .send(&service)

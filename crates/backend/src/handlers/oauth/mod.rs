@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use chrono::Duration;
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     AccessToken, Authentication, AuthorizationGrant, BrowserSession, Client, Clock, RefreshToken,
     RepositoryAccess, Session, TokenType, UrlBuilder,
@@ -37,7 +37,7 @@ use coauth_jose::{
 use coauth_keystore::Keystore;
 use thiserror::Error;
 
-use crate::handlers::contrix;
+use crate::handlers::cokret;
 
 /// Authorization endpoint (user consent and code issuance).
 pub mod authorization;
@@ -80,7 +80,7 @@ pub(crate) fn generate_id_token(
     rng: &mut (impl rand_core::RngCore + rand_core::CryptoRng),
     clock: &impl Clock,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     key_store: &Keystore,
     client: &Client,
     grant: Option<&AuthorizationGrant>,
@@ -94,11 +94,11 @@ pub(crate) fn generate_id_token(
     claims::ISS.insert(&mut claims, url_builder.oidc_issuer().to_string())?;
     claims::SUB.insert(
         &mut claims,
-        contrix::user_did_for(url_builder, contrix_config, &browser_session.user),
+        cokret::user_did_for(url_builder, contrix_config, &browser_session.user),
     )?;
     claims.insert(
-        contrix::CLAIM_PRINCIPAL_DID.to_owned(),
-        serde_json::Value::String(contrix::user_did_for(
+        cokret::CLAIM_PRINCIPAL_DID.to_owned(),
+        serde_json::Value::String(cokret::user_did_for(
             url_builder,
             contrix_config,
             &browser_session.user,
@@ -110,13 +110,13 @@ pub(crate) fn generate_id_token(
 
     if let Some(session) = session {
         claims.insert(
-            contrix::CLAIM_SESSION_ID.to_owned(),
+            cokret::CLAIM_SESSION_ID.to_owned(),
             serde_json::Value::String(session.id.to_string()),
         );
 
-        if let Some(device_id) = contrix::primary_device_id(&session.scope) {
+        if let Some(device_id) = cokret::primary_device_id(&session.scope) {
             claims.insert(
-                contrix::CLAIM_DEVICE_ID.to_owned(),
+                cokret::CLAIM_DEVICE_ID.to_owned(),
                 serde_json::Value::String(device_id),
             );
         }
@@ -184,7 +184,7 @@ mod tests {
     use std::collections::HashMap;
 
     use chrono::Duration;
-    use coauth_config::ContrixConfig;
+    use coauth_config::CokretConfig;
     use coauth_data::{AccessTokenState, AuthenticationMethod, clock::MockClock};
     use coauth_jose::{claims::hash_token, jwt::Jwt};
     use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
@@ -211,7 +211,7 @@ mod tests {
         let clock = MockClock::default();
         let now = clock.now();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-        let contrix_config = ContrixConfig::default();
+        let contrix_config = CokretConfig::default();
         let mut fixture_rng = ChaChaRng::seed_from_u64(7);
 
         let mut client = Client::samples(now, &mut fixture_rng)
@@ -271,16 +271,16 @@ mod tests {
         assert_eq!(
             payload.get("sub").and_then(Value::as_str),
             Some(
-                contrix::user_did_for(&url_builder, &contrix_config, &browser_session.user)
+                cokret::user_did_for(&url_builder, &contrix_config, &browser_session.user)
                     .as_str()
             )
         );
         assert_eq!(
             payload
-                .get(contrix::CLAIM_PRINCIPAL_DID)
+                .get(cokret::CLAIM_PRINCIPAL_DID)
                 .and_then(Value::as_str),
             Some(
-                contrix::user_did_for(&url_builder, &contrix_config, &browser_session.user)
+                cokret::user_did_for(&url_builder, &contrix_config, &browser_session.user)
                     .as_str()
             )
         );

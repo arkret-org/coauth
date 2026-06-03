@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{UpstreamOAuthProvider, UrlBuilder};
 use coauth_jose::claims::{self, TokenHash};
 use coauth_keystore::{Encrypter, Keystore};
@@ -14,7 +14,7 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::{
-    handlers::contrix,
+    handlers::cokret,
     oidc_client::requests::{
         jose::{JwtVerificationData, fetch_jwks, verify_id_token, verify_signed_jwt},
         token::request_access_token,
@@ -31,10 +31,10 @@ pub struct OidcUserinfoClaims {
     pub email: Option<String>,
     #[serde(default)]
     pub preferred_username: Option<String>,
-    #[serde(rename = "org.contrix.principal_did")]
+    #[serde(rename = "org.cokret.principal_did")]
     #[serde(default)]
     pub principal_did: Option<String>,
-    #[serde(rename = "org.contrix.session_id")]
+    #[serde(rename = "org.cokret.session_id")]
     #[serde(default)]
     pub session_id: Option<String>,
 }
@@ -93,7 +93,7 @@ pub trait UpstreamOidcService: Send + Sync {
     fn session_grant_target_for_requested_audience(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -248,7 +248,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
     fn session_grant_target_for_requested_audience(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
         if let Some(requested_audience) = requested_audience
@@ -266,12 +266,12 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                 });
             }
 
-            if contrix::is_allowed_session_grant_audience(
+            if cokret::is_allowed_session_grant_audience(
                 url_builder,
                 contrix_config,
                 requested_audience,
             ) {
-                let local_audience = contrix::required_audience_for(url_builder, contrix_config);
+                let local_audience = cokret::required_audience_for(url_builder, contrix_config);
                 return Ok(UpstreamOidcSessionGrantTarget {
                     audience: local_audience,
                     principal_server_name: None,
@@ -284,7 +284,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             ));
         }
 
-        let grant_target = contrix::password_login_session_grant_target(
+        let grant_target = cokret::password_login_session_grant_target(
             url_builder,
             contrix_config,
             None,

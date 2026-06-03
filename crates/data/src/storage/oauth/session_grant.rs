@@ -7,7 +7,7 @@ use ulid::Ulid;
 use crate::{Clock, SessionGrant, pagination::Page, repository_impl, storage::Pagination};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-/// Filters used when listing persisted Contrix session grants.
+/// Filters used when listing persisted Cokret session grants.
 pub struct SessionGrantFilter<'a> {
     browser_session_id: Option<Ulid>,
     subject: Option<&'a str>,
@@ -49,7 +49,7 @@ impl<'a> SessionGrantFilter<'a> {
         self.subject
     }
 
-    /// Restrict results to a Contrix client device id.
+    /// Restrict results to a Cokret client device id.
     #[must_use]
     pub fn for_device(mut self, device_id: &'a str) -> Self {
         self.device_id = Some(device_id);
@@ -90,7 +90,7 @@ impl<'a> SessionGrantFilter<'a> {
 }
 
 #[derive(Debug)]
-/// Parameters for creating a persisted Contrix session grant.
+/// Parameters for creating a persisted Cokret session grant.
 pub struct NewSessionGrant<'a> {
     /// Browser session that the grant is bound to.
     pub browser_session_id: Ulid,
@@ -98,7 +98,7 @@ pub struct NewSessionGrant<'a> {
     pub issuer: &'a str,
     /// DID subject authorized by the grant.
     pub subject: &'a str,
-    /// Optional Contrix client device id.
+    /// Optional Cokret client device id.
     pub device_id: Option<&'a str>,
     /// Intended grant audience.
     pub audience: &'a str,
@@ -113,7 +113,7 @@ pub struct NewSessionGrant<'a> {
 }
 
 #[async_trait]
-/// Repository for persisted Contrix session grants.
+/// Repository for persisted Cokret session grants.
 pub trait SessionGrantRepository: Send + Sync {
     /// Repository-specific error type.
     type Error;

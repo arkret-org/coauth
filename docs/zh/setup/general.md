@@ -2,7 +2,7 @@
 
 ## 生成初始配置
 
-服务启动前需要准备签名密钥、加密密钥、数据库配置，以及 Contrix 部署元数据。
+服务启动前需要准备签名密钥、加密密钥、数据库配置，以及 Cokret 部署元数据。
 
 用生成器输出一份带默认值的完整配置：
 
@@ -16,11 +16,11 @@ coauth config generate > config.yaml
 
 - `http.public_base`
 - `database`
-- `contrix.principal_servers`
-- `contrix.identity_registry`
-- `contrix.service_did`
-- `contrix.issuer_did`
-- `contrix.admin_audience`
+- `cokret.principal_servers`
+- `cokret.identity_registry`
+- `cokret.service_did`
+- `cokret.issuer_did`
+- `cokret.admin_audience`
 - `secrets`
 - `passwords`
 

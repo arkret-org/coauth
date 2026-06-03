@@ -1,7 +1,7 @@
 # Authorization and sessions
 
 `coauth` authenticates users and clients, then issues OAuth/OIDC tokens or
-Contrix session grants that downstream services can validate.
+Cokret session grants that downstream services can validate.
 
 ## Session Types
 
@@ -20,7 +20,7 @@ bind together:
 - the granted scopes
 - access and refresh tokens
 
-### Contrix session grants
+### Cokret session grants
 
 Principal Servers should validate `cx.session.grant` records for downstream
 account and device access. The grant payload includes issuer service DID,
@@ -28,7 +28,7 @@ subject principal DID, service account ID, optional device ID, audience,
 scopes, expiry, revocation reference, and a proof block.
 
 Session-grant JWTs default to a 300-second lifetime and can be tuned with
-`contrix.session_grant_ttl` in the configuration file.
+`cokret.session_grant_ttl` in the configuration file.
 
 `POST /api/v1/session-grants/introspect` accepts either a grant ID or signed
 grant JWT plus an optional audience. It returns `active`, a standard status

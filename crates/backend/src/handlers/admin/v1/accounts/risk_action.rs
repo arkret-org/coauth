@@ -28,7 +28,7 @@ use crate::{
             response::SingleResponse,
         },
         common::DepotExt,
-        contrix::service_did_for,
+        cokret::service_did_for,
     },
     services::{
         did_binding_proof::verify_detached_jws_with_sdk,
@@ -191,7 +191,7 @@ fn map_risk_action_proposals_error(error: RiskActionProposalsError) -> AppError 
 
 async fn admin_actor_id(
     admin_user: Option<&coauth_data::User>,
-    contrix_config: &coauth_config::ContrixConfig,
+    contrix_config: &coauth_config::CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<String, AppError> {
     let admin_user = admin_user.ok_or_else(|| {
@@ -302,7 +302,7 @@ pub(crate) fn risk_action_approval_transcript_bytes(
 async fn verify_approval_proof_jws(
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    contrix_config: &coauth_config::ContrixConfig,
+    contrix_config: &coauth_config::CokretConfig,
     key_store: &coauth_keystore::Keystore,
     repo: &mut coauth_data::BoxRepository,
     did_resolver: &dyn DidResolverService,

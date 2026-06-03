@@ -2,7 +2,7 @@
 --
 -- Two changes:
 --   1. `users.handle_aliases` — interop aliases such as `acct:<local>@<host>`
---      kept alongside the canonical contrix:// handle URI. Canonical form is
+--      kept alongside the canonical cokret:// handle URI. Canonical form is
 --      derived at read time from `users.handle` (localpart) + the public
 --      host name, never persisted directly.
 --   2. `handle_audit_log` — append-only history of handle reassignments,

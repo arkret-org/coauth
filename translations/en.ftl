@@ -203,8 +203,8 @@ coauth-registration-token-description = Enter a registration token provided by y
 coauth-registration-token-field = Registration token
 coauth-registration-token-headline = Registration token
 coauth-scope-coauth-admin = Manage coauth accounts (urn:coauth:admin)
-coauth-scope-send-messages = Send Contrix messages on your behalf
-coauth-scope-view-messages = Read Contrix message metadata
+coauth-scope-send-messages = Send Cokret messages on your behalf
+coauth-scope-view-messages = Read Cokret message metadata
 # Displayed when the 'openid' scope is requested
 coauth-scope-view-profile = See your coauth profile info and contact details
 # Page shown when the user tries to link an upstream account that is already linked to another account

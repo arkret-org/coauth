@@ -6,11 +6,11 @@
 //! Anchor DAG snapshot from soland so coauth can populate `anchor_ref` +
 //! `hlc` on a freshly-built `UnsignedMove`.
 //!
-//! Per the Move/Anchor/Lattice spec (`contrix-spec` 2026-05-08, §3 + §6),
+//! Per the Move/Anchor/Lattice spec (`cokret-spec` 2026-05-08, §3 + §6),
 //! every issued Move must reference an Anchor that the issuer was working
 //! from. coauth's anchorer flow therefore needs:
 //!
-//! - the *latest leaf* `anchor_id` (cx:anchor:sha256:<hex>) — used for
+//! - the *latest leaf* `anchor_id` (ck:anchor:sha256:<hex>) — used for
 //!   `UnsignedMove.anchor_ref`,
 //! - a fresh `hlc` (`<unix-ms>-<logical>-<node>`) — used for
 //!   `UnsignedMove.hlc`,
@@ -24,9 +24,9 @@
 //!
 //! ```json
 //! {
-//!   "space_id": "cx:space:...",
-//!   "leaves": [{ "anchor_id": "cx:anchor:sha256:...", "created_at": ..., "is_compaction": false }, ...],
-//!   "frontier": ["cx:move:sha256:...", ...],
+//!   "space_id": "ck:space:...",
+//!   "leaves": [{ "anchor_id": "ck:anchor:sha256:...", "created_at": ..., "is_compaction": false }, ...],
+//!   "frontier": ["ck:move:sha256:...", ...],
 //!   "state_root": "sha256:...",
 //!   "last_compaction_at": "..."
 //! }
@@ -45,7 +45,7 @@ use crate::outbound_http;
 /// Result of consulting a space's anchor-dag snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LatestAnchorView {
-    /// `cx:anchor:sha256:<hex>` of the latest leaf anchor.
+    /// `ck:anchor:sha256:<hex>` of the latest leaf anchor.
     pub leaf_anchor_id: String,
     /// HLC string suitable for `UnsignedMove.hlc`. coauth generates a
     /// fresh HLC locally because soland's snapshot does not surface a
@@ -95,7 +95,7 @@ struct AnchorLeafWire {
 
 /// Fetch the latest leaf anchor + a fresh HLC for the given Space. Mirrors
 /// the `consent_cell_query::query_consent_cell` shape (caller-supplied
-/// `reqwest::Client`, 5 s timeout, no `X-Contrix-Holder-Did` echo because
+/// `reqwest::Client`, 5 s timeout, no `X-Cokret-Holder-Did` echo because
 /// the resource is space-scoped not holder-scoped).
 pub async fn query_latest_anchor(
     principal_server_url: Option<&Url>,
@@ -213,7 +213,7 @@ fn fresh_hlc() -> String {
 ///
 /// **Convention** (until soland exposes a canonical
 /// `account/{did}/principal-space` endpoint): map a DID to a deterministic
-/// `cx:space:` `UUIDv7` by `sha256(did)` → take the first 16 bytes, then
+/// `ck:space:` `UUIDv7` by `sha256(did)` → take the first 16 bytes, then
 /// rewrite the version + variant nibbles so the result is a valid RFC 9562
 /// `UUIDv7`. This keeps the convention reproducible across coauth /
 /// soland / sodmin without any cross-service round-trip.
@@ -224,7 +224,7 @@ fn fresh_hlc() -> String {
 pub fn holder_principal_space_for_did(holder_did: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
-    hasher.update(b"cx:space:principal-control:v1:");
+    hasher.update(b"ck:space:principal-control:v1:");
     hasher.update(holder_did.as_bytes());
     let digest = hasher.finalize();
     let mut bytes = [0u8; 16];
@@ -236,7 +236,7 @@ pub fn holder_principal_space_for_did(holder_did: &str) -> String {
     let h = |b: u8| -> String { format!("{b:02x}") };
     let group = |slice: &[u8]| -> String { slice.iter().copied().map(h).collect::<String>() };
     format!(
-        "cx:space:{}-{}-{}-{}-{}",
+        "ck:space:{}-{}-{}-{}-{}",
         group(&bytes[0..4]),
         group(&bytes[4..6]),
         group(&bytes[6..8]),
@@ -282,7 +282,7 @@ mod tests {
     async fn anchor_view_returns_typed_error_when_url_missing() {
         setup();
         let client = reqwest::Client::new();
-        let err = query_latest_anchor(None, "cx:space:abc", &client)
+        let err = query_latest_anchor(None, "ck:space:abc", &client)
             .await
             .unwrap_err();
         assert_eq!(err, AnchorViewError::PrincipalServerNotConfigured);
@@ -297,14 +297,14 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/admin/v1/spaces/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "space_id": "cx:space:test",
+                "space_id": "ck:space:test",
                 "leaves": [
                     {
-                        "anchor_id": "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                        "anchor_id": "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
                         "created_at": "2026-05-09T10:00:00Z",
                     },
                     {
-                        "anchor_id": "cx:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                        "anchor_id": "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
                         "created_at": "2026-05-09T11:00:00Z",
                     }
                 ],
@@ -315,12 +315,12 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let view = query_latest_anchor(Some(&base), "cx:space:test", &client)
+        let view = query_latest_anchor(Some(&base), "ck:space:test", &client)
             .await
             .unwrap();
         assert_eq!(
             view.leaf_anchor_id,
-            "cx:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+            "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222"
         );
         // HLC shape: 12-hex + - + 8-hex + - + 8-hex.
         assert_eq!(view.hlc.len(), 30);
@@ -337,10 +337,10 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/admin/v1/spaces/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "space_id": "cx:space:test",
+                "space_id": "ck:space:test",
                 "leaves": [
-                    { "anchor_id": "cx:anchor:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-                    { "anchor_id": "cx:anchor:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+                    { "anchor_id": "ck:anchor:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+                    { "anchor_id": "ck:anchor:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
                 ],
                 "frontier": [],
             })))
@@ -348,13 +348,13 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let view = query_latest_anchor(Some(&base), "cx:space:test", &client)
+        let view = query_latest_anchor(Some(&base), "ck:space:test", &client)
             .await
             .unwrap();
         // First non-empty leaf wins when no `created_at` is present.
         assert_eq!(
             view.leaf_anchor_id,
-            "cx:anchor:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            "ck:anchor:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         );
     }
 
@@ -367,7 +367,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/admin/v1/spaces/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "space_id": "cx:space:test",
+                "space_id": "ck:space:test",
                 "leaves": [],
                 "frontier": [],
             })))
@@ -375,7 +375,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let err = query_latest_anchor(Some(&base), "cx:space:test", &client)
+        let err = query_latest_anchor(Some(&base), "ck:space:test", &client)
             .await
             .unwrap_err();
         assert_eq!(err, AnchorViewError::EmptyLeaves);
@@ -394,7 +394,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let err = query_latest_anchor(Some(&base), "cx:space:test", &client)
+        let err = query_latest_anchor(Some(&base), "ck:space:test", &client)
             .await
             .unwrap_err();
         assert!(matches!(
@@ -419,7 +419,7 @@ mod tests {
         assert_eq!(a, b, "mapping must be deterministic for stable replay");
         let c = holder_principal_space_for_did("did:web:bob.example");
         assert_ne!(a, c, "different DIDs must map to different spaces");
-        // SDK validates `cx:space:` IDs as strict UUIDv7 — let it round-trip
+        // SDK validates `ck:space:` IDs as strict UUIDv7 — let it round-trip
         // so we know the convention is accepted by the wire layer.
         contrix_core::SpaceId::new(a).unwrap();
         contrix_core::SpaceId::new(c).unwrap();

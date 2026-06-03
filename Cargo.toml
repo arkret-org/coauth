@@ -10,8 +10,8 @@ resolver = "3"
 version = "1.8.0"
 authors = ["Meldry Team"]
 edition = "2024"
-homepage = "https://contrix.dev/docs/"
-repository = "https://github.com/contrix-dev/coauth/"
+homepage = "https://cokret.dev/docs/"
+repository = "https://github.com/cokret-dev/coauth/"
 license = "Apache-2.0"
 publish = false
 
@@ -120,22 +120,22 @@ data-encoding = "2.10"
 chacha20poly1305 = { version = "0.10.1", features = ["std"] }
 compact_str = "0.9.0"
 console = "0.16.3"
-# Contrix v1 protocol SDK pieces — `contrix-core` exposes the typed
+# Cokret v1 protocol SDK pieces — `cokret-core` exposes the typed
 # identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
-# `contrix-signatures` (with the `signer` feature) provides the production
+# `cokret-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
-contrix-core = { version = "1.0.0", path = "../contrix-rust-sdk/crates/core", default-features = false }
+cokret-core = { version = "1.0.0", path = "../cokret-rust-sdk/crates/core", default-features = false }
 # Lightweight typed-identifier validators (no heavy transitive deps beyond
-# what `contrix-core` already pulls in). Used by `coauth-config` for the
-# `cx:trust_domain:<scope>` wire-form check so config and SDK never drift.
-contrix-identifiers = { version = "1.0.0", path = "../contrix-rust-sdk/crates/identifiers", default-features = false }
-contrix-signatures = { version = "1.0.0", path = "../contrix-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
-# Umbrella `contrix` SDK pulled in for the pure-protocol modules that
-# don't have a smaller-crate home: today just `contrix::identity::binding`
+# what `cokret-core` already pulls in). Used by `coauth-config` for the
+# `ck:trust_domain:<scope>` wire-form check so config and SDK never drift.
+cokret-identifiers = { version = "1.0.0", path = "../cokret-rust-sdk/crates/identifiers", default-features = false }
+cokret-signatures = { version = "1.0.0", path = "../cokret-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
+# Umbrella `cokret` SDK pulled in for the pure-protocol modules that
+# don't have a smaller-crate home: today just `cokret::identity::binding`
 # (consumed by `services::passkey_derive`). Default features pull in the
 # heavy client / openmls / sync surface, so opt into only `full-surface`
 # (gates the identity tree).
-contrix = { version = "1.0.0", path = "../contrix-rust-sdk/crates/sdk", default-features = false, features = ["full-surface"] }
+cokret = { version = "1.0.0", path = "../cokret-rust-sdk/crates/sdk", default-features = false, features = ["full-surface"] }
 cookie_store = { version = "0.22.1", default-features = false, features = [
     "serde_json",
 ] }

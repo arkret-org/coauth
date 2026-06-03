@@ -22,7 +22,7 @@ use crate::{
             call_context::extract_call_context,
         },
         common::DepotExt,
-        contrix::service_did_for,
+        cokret::service_did_for,
     },
 };
 

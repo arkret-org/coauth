@@ -1,6 +1,6 @@
 # OAuth scopes
 
-`coauth` treats coauth and Contrix scopes as the supported scope surface.
+`coauth` treats coauth and Cokret scopes as the supported scope surface.
 
 ## `openid`
 
@@ -18,42 +18,42 @@ The scope is typically paired with `openid`.
 Canonical coauth admin scope. This grants access to the coauth admin API and is
 the preferred scope for stable admin tooling.
 
-## `urn:contrix:admin:*`
+## `urn:cokret:admin:*`
 
-Contrix admin capability family. `coauth` accepts the wildcard family and
-`urn:contrix:admin:<capability>` prefixes as administrative access.
+Cokret admin capability family. `coauth` accepts the wildcard family and
+`urn:cokret:admin:<capability>` prefixes as administrative access.
 
-Use this family for Contrix-native admin integrations such as `sodmin` or
-internal automation that wants a Contrix namespace instead of the coauth one.
+Use this family for Cokret-native admin integrations such as `sodmin` or
+internal automation that wants a Cokret namespace instead of the coauth one.
 
-## `urn:contrix:client:*`
+## `urn:cokret:client:*`
 
-Contrix client capability family for first-party or trusted Contrix clients.
+Cokret client capability family for first-party or trusted Cokret clients.
 
-## `urn:contrix:client:device:[device id]`
+## `urn:cokret:client:device:[device id]`
 
-Contrix device-binding scope. It associates the OAuth session with the client
+Cokret device-binding scope. It associates the OAuth session with the client
 device identifier used by downstream Principal Servers.
 
-## `urn:contrix:principal-server:*`
+## `urn:cokret:principal-server:*`
 
 Principal Server capability family. This namespace is intended for trusted
 Principal Server integrations that need scoped access beyond a generic OIDC
 login.
 
-## `urn:contrix:principal-server:session.bind`
+## `urn:cokret:principal-server:session.bind`
 
-Requests or describes the ability to mint a short-lived Contrix session grant
+Requests or describes the ability to mint a short-lived Cokret session grant
 for the authenticated browser session. This is the scope `coauth` uses when it
 issues a session grant for a trusted Principal Server.
 
-## Contrix Claims
+## Cokret Claims
 
 When applicable, ID tokens, userinfo responses, and introspection responses can
-expose these Contrix claims:
+expose these Cokret claims:
 
-- `org.contrix.principal_did`
-- `org.contrix.device_id`
-- `org.contrix.session_id`
+- `org.cokret.principal_did`
+- `org.cokret.device_id`
+- `org.cokret.session_id`
 
 `device_id` is only present when the session is bound to a device identifier.

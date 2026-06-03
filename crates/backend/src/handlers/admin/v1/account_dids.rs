@@ -7,7 +7,7 @@ use coauth_admin_types::{
     DidBindingResolverDescriptor, DidBindingResolverMode, DidBindingState,
     DidBindingVerificationStatus,
 };
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     BoxRepository, RepositoryAccess, User,
     audit::{AdminOperation, AdminOperationFilter, AdminOperationLog, NewAdminOperationLog},
@@ -433,7 +433,7 @@ async fn enforce_did_binding_rate_limit(
 
 pub(crate) async fn preview_bindings_for_user(
     user: &User,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBindingPreview> {
     binding_records_for_user(user, contrix_config, did_resolver)
@@ -451,7 +451,7 @@ pub(crate) async fn preview_bindings_for_user(
 
 pub(crate) async fn primary_did_for_user(
     user: &User,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> String {
     did_resolver
@@ -461,7 +461,7 @@ pub(crate) async fn primary_did_for_user(
 
 async fn binding_records_for_user(
     user: &User,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Vec<AccountDidBinding> {
     let primary_did = primary_did_for_user(user, contrix_config, did_resolver).await;
@@ -641,7 +641,7 @@ fn did_binding_state_wire(state: DidBindingState) -> &'static str {
 }
 
 fn did_bindings_meta(
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> AccountDidBindingsMeta {
     AccountDidBindingsMeta {
@@ -656,7 +656,7 @@ fn did_bindings_meta(
 }
 
 fn resolver_descriptor(
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> DidBindingResolverDescriptor {
     match did_resolver.delegated_resolver(contrix_config) {

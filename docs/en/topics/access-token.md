@@ -31,10 +31,10 @@ Use `urn:coauth:admin` for the stable coauth admin API:
 sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
 ```
 
-Use Contrix scopes for Contrix-native integrations:
+Use Cokret scopes for Cokret-native integrations:
 
 ```sh
-sh ./misc/device-code-grant.sh https://auth.example.com/ urn:contrix:admin:* urn:contrix:principal-server:session.bind
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:cokret:admin:* urn:cokret:principal-server:session.bind
 ```
 
 ## Automation

@@ -73,9 +73,9 @@ pub mod account;
 pub mod admin;
 /// Shared infrastructure types (DepotExt, RouteError, etc.).
 pub mod common;
-/// Contrix-facing identity, directory, DID document, and session grant
+/// Cokret-facing identity, directory, DID document, and session grant
 /// handlers.
-pub mod contrix;
+pub mod cokret;
 /// Public inbound webhooks for email delivery providers.
 pub mod email_webhooks;
 /// Flow execution engine for multi-step user interaction flows.

@@ -56,7 +56,7 @@ pub struct PrincipalDidUpdate {
 /// `user.starid_backend = true` in the same repository transaction.
 ///
 /// Returns `Ok(None)` when no `StaridRegistryHandle` is wired into the
-/// request (i.e., `[contrix.starid]` unset). The caller should treat
+/// request (i.e., `[cokret.starid]` unset). The caller should treat
 /// `None` as "starid integration disabled" and continue without a
 /// managed DID — the account stays on the local derivation.
 pub async fn mint_principal_did_for_first_credential(
@@ -136,7 +136,7 @@ mod tests {
 
     use std::sync::{Arc, Once};
 
-    use coauth_config::{ContrixConfig, StaridConfig};
+    use coauth_config::{CokretConfig, StaridConfig};
     use serde_json::json;
     use ulid::Ulid;
     use url::Url;
@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(result.version_id, "2-zrotated");
     }
 
-    /// When `starid_backend = true` and `[contrix.starid]` is configured,
+    /// When `starid_backend = true` and `[cokret.starid]` is configured,
     /// `DefaultDidResolverService::primary_did_for_user` returns the
     /// deterministic `did:web:<host>:<path_prefix>:<slug>` form (the
     /// alias of what starid minted), not the legacy
@@ -254,14 +254,14 @@ mod tests {
     async fn primary_did_for_user_routes_to_starid_form_when_flag_set() {
         install_crypto_provider();
         let resolver = DefaultDidResolverService;
-        let contrix_config = ContrixConfig {
+        let contrix_config = CokretConfig {
             starid: Some(StaridConfig {
                 base_url: Url::parse("https://starid.example").unwrap(),
                 did_host: Some("starid.local".to_owned()),
                 path_prefix: "accounts".to_owned(),
                 admin_token: None,
             }),
-            ..ContrixConfig::default()
+            ..CokretConfig::default()
         };
 
         let user_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();

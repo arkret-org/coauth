@@ -19,13 +19,13 @@
 //! ## Why both realm_id and trust_domain?
 //!
 //! - `realm_id` scopes the link to a single Realm policy graph: a link valid
-//!   for `cx:realm:r1` MUST NOT enable joining `cx:realm:r2`.
+//!   for `ck:realm:r1` MUST NOT enable joining `ck:realm:r2`.
 //! - `trust_domain` scopes the link to a deployment: a link minted in
-//!   `cx:trust_domain:tenant-a` MUST NOT be replayable into
-//!   `cx:trust_domain:tenant-b` even when the realm UUID happens to collide
+//!   `ck:trust_domain:tenant-a` MUST NOT be replayable into
+//!   `ck:trust_domain:tenant-b` even when the realm UUID happens to collide
 //!   (e.g. dev / staging / prod sharing a fixture realm).
 //!
-//! See `contrix-spec` round-4 §7fae9ba "Enhance third-party invites +
+//! See `cokret-spec` round-4 §7fae9ba "Enhance third-party invites +
 //! transport bindings" — the same dual-scoping rule applies here.
 
 use chrono::{DateTime, Utc};
@@ -119,8 +119,8 @@ mod tests {
     }
     fn envelope() -> IdentityLinkEnvelope {
         IdentityLinkEnvelope {
-            realm_id: realm("cx:realm:01904100-0000-7000-8000-000000000001"),
-            trust_domain: td("cx:trust_domain:example.net"),
+            realm_id: realm("ck:realm:01904100-0000-7000-8000-000000000001"),
+            trust_domain: td("ck:trust_domain:example.net"),
             encrypted_payload: "ct-bytes".to_owned(),
             expires_at: Utc::now() + Duration::hours(1),
         }
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn rejects_cross_realm_replay() {
         let env = envelope();
-        let other = realm("cx:realm:01904100-0000-7000-8000-000000000002");
+        let other = realm("ck:realm:01904100-0000-7000-8000-000000000002");
         let now = Utc::now();
         let err = env
             .validate_for_recipient(&other, &env.trust_domain.clone(), now)
@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn rejects_cross_trust_domain_replay() {
         let env = envelope();
-        let other = td("cx:trust_domain:other.example");
+        let other = td("ck:trust_domain:other.example");
         let now = Utc::now();
         let err = env
             .validate_for_recipient(&env.realm_id.clone(), &other, now)

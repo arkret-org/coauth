@@ -48,10 +48,10 @@ Expected sodmin follow-up:
 
 ## Acceptance For Closing The Cross-Repo Pairing
 
-- Coauth tests pass with the local `contrix` SDK version aligned.
+- Coauth tests pass with the local `cokret` SDK version aligned.
 - Sodmin compiles with `coauth-admin-types` and no local duplicate DTOs for the
   surfaces listed above.
-- A sodmin smoke run can fetch `/.well-known/contrix/openapi.yaml` and
+- A sodmin smoke run can fetch `/.well-known/cokret/openapi.yaml` and
   `GET /api/admin/v1/bridge/describe`.
 - No release tag, GitHub release, crate publication, or image push is required
   for this local status record.

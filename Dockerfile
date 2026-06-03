@@ -51,7 +51,7 @@ FROM frontend-toolchain AS frontend-planner
 
 WORKDIR /app
 COPY ./coauth/ /app
-COPY ./contrix-rust-sdk/ /contrix-rust-sdk
+COPY ./cokret-rust-sdk/ /cokret-rust-sdk
 
 # cargo-chef computes a recipe keyed by workspace manifests so frontend
 # dependency compilation can be reused when Rust sources change.
@@ -62,9 +62,9 @@ FROM frontend-toolchain AS frontend-build
 WORKDIR /app
 COPY --from=frontend-planner /app/frontend-recipe.json frontend-recipe.json
 # Same path-dep wiring as the backend builder: chef cook resolves
-# `path = "../contrix-rust-sdk/..."` so the sibling tree must exist
+# `path = "../cokret-rust-sdk/..."` so the sibling tree must exist
 # at the layer where chef cook runs.
-COPY ./contrix-rust-sdk/ /contrix-rust-sdk
+COPY ./cokret-rust-sdk/ /cokret-rust-sdk
 
 RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
@@ -137,7 +137,7 @@ FROM builder-base AS builder-planner
 
 WORKDIR /app
 COPY ./coauth/ /app
-COPY ./contrix-rust-sdk/ /contrix-rust-sdk
+COPY ./cokret-rust-sdk/ /cokret-rust-sdk
 
 # cargo-chef keeps the dependency build layer keyed to Cargo manifests so
 # source-only changes can reuse compiled dependencies and downloaded crates.
@@ -150,10 +150,10 @@ ARG TARGETARCH
 WORKDIR /app
 COPY --from=builder-planner /app/backend-recipe.json backend-recipe.json
 # `cargo chef cook` resolves path-deps even though it only compiles the
-# recipe — so the sibling `contrix-rust-sdk` checkout must be present
+# recipe — so the sibling `cokret-rust-sdk` checkout must be present
 # at the same layer. Without this COPY, the cook step fails with
-# `failed to read /contrix-rust-sdk/crates/core/Cargo.toml`.
-COPY ./contrix-rust-sdk/ /contrix-rust-sdk
+# `failed to read /cokret-rust-sdk/crates/core/Cargo.toml`.
+COPY ./cokret-rust-sdk/ /cokret-rust-sdk
 
 RUN --network=default \
   --mount=type=cache,id=builder-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry,sharing=locked \

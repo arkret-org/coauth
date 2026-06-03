@@ -104,7 +104,7 @@ out_path = pathlib.Path(sys.argv[2])
 # 1. database.uri → compose internal postgres
 src = re.sub(
     r'^(\s*uri:).*$',
-    r'\1 postgresql://contrix:contrix@postgres:5432/contrix',
+    r'\1 postgresql://cokret:cokret@postgres:5432/cokret',
     src, count=1, flags=re.MULTILINE,
 )
 

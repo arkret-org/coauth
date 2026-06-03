@@ -5,7 +5,7 @@
 //! 3PID Out-Of-Band (OOB) code generation + verification — Round R2/R3 T15.
 //!
 //! Two legal code forms are supported, configurable per deployment via
-//! `ContrixConfig::oob_code_kind` (default `OobCodeKind::OfflineVerifiable`):
+//! `CokretConfig::oob_code_kind` (default `OobCodeKind::OfflineVerifiable`):
 //!
 //! ## Form 1 — `OobCodeKind::OfflineVerifiable`
 //!
@@ -39,7 +39,7 @@
 //! (and stored on the invite row) but never returned. Constants are
 //! re-exported from `contrix_core::error` to keep parity with the SDK.
 //!
-//! See `contrix-spec` 2026-05-20 §T15 ("OOB token state machine") for
+//! See `cokret-spec` 2026-05-20 §T15 ("OOB token state machine") for
 //! the wire contract this module implements.
 
 use std::time::Duration;
@@ -101,7 +101,7 @@ pub enum OobCodeKind {
     /// know to apply the 3-strike rule.
     ///
     /// FEATURE-GATED OFF: config rejects `oob_code_kind=lookup` (see
-    /// `coauth-config` `ContrixConfig::validate`, the
+    /// `coauth-config` `CokretConfig::validate`, the
     /// "oob_code_kind=lookup is disabled until lookup-mode strike counters
     /// are durable" guard). Every Form-2 code path below
     /// (`LOOKUP_CODE_LEN`, `LOOKUP_STRIKE_LIMIT`,
@@ -130,7 +130,7 @@ impl OobCodeKind {
 /// caller logs the variant via `internal_reason_code` and feeds the
 /// outcome into the response-pad delay.
 ///
-/// See `contrix-spec` 2026-05-20 §T15.
+/// See `cokret-spec` 2026-05-20 §T15.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OobInviteFailure {
     /// The token's `expires_at` is in the past.

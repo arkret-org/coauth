@@ -1,5 +1,5 @@
 use anyhow::Error as AnyhowError;
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError, SiteConfig,
     UpstreamOAuthProvider, UrlBuilder, User,
@@ -13,7 +13,7 @@ use ulid::Ulid;
 use zeroize::Zeroizing;
 
 use crate::handlers::{
-    Limiter, RequesterFingerprint, contrix,
+    Limiter, RequesterFingerprint, cokret,
     passwords::{PasswordManager, PasswordVerificationResult},
 };
 
@@ -66,7 +66,7 @@ pub async fn login_with_password(
     limiter: &Limiter,
     principal_server: &dyn PrincipalServerAdmin,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     site_config: &SiteConfig,
     request: PasswordLoginRequest,
 ) -> Result<PasswordLoginOutcome, PasswordLoginError> {
@@ -222,17 +222,17 @@ async fn find_user_by_login_identifier(
     site_config: &SiteConfig,
     principal_server: &dyn PrincipalServerAdmin,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     repo: &mut BoxRepository,
     identifier: &str,
 ) -> Result<Option<User>, RepositoryError> {
     if let Some(user_id) =
-        contrix::parse_local_user_did_for(url_builder, contrix_config, identifier)
+        cokret::parse_local_user_did_for(url_builder, contrix_config, identifier)
     {
         return repo.user().lookup(user_id).await;
     }
 
-    if let Some(username) = contrix::parse_local_handle(url_builder, identifier)
+    if let Some(username) = cokret::parse_local_handle(url_builder, identifier)
         && let Some(user) = repo.user().find_by_handle(&username).await?
     {
         return Ok(Some(user));

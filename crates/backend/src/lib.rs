@@ -1,6 +1,6 @@
 //! coauth backend — HTTP server, state management, lifecycle, and telemetry.
 //!
-//! This crate provides the runtime infrastructure for the Contrix Auth /
+//! This crate provides the runtime infrastructure for the Cokret Auth /
 //! Account Server. It is consumed by the CLI binary (`coauth`) and can
 //! also be embedded as a library.
 

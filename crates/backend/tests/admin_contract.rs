@@ -602,7 +602,7 @@ fn policy_dry_run_contract() {
     check_pair::<PolicyDryRun>(
         "POST /policy-checks/dry-run",
         json!({
-            "subject": "did:contrix:alice",
+            "subject": "did:cokret:alice",
             "action": "read",
             "resource": "space:demo",
         }),

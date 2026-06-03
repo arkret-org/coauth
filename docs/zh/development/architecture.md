@@ -1,10 +1,10 @@
 # 架构设计
 
-coauth 是 Contrix 的 Auth Server，负责账号认证、OAuth/OIDC、会话授权与 Principal Server（例如 soland）集成。它以 PostgreSQL 为主要外部存储依赖，支持水平扩展部署。
+coauth 是 Cokret 的 Auth Server，负责账号认证、OAuth/OIDC、会话授权与 Principal Server（例如 soland）集成。它以 PostgreSQL 为主要外部存储依赖，支持水平扩展部署。
 
 ## 设计目标
 
-- 面向 Contrix / Soland 的账号认证与 session grant 签发
+- 面向 Cokret / Soland 的账号认证与 session grant 签发
 - 支持标准 OAuth / OIDC，同时提供独立的用户运营能力
 - 工作流驱动的业务流程管理
 - 统一通知中心
@@ -137,7 +137,7 @@ PostgreSQL       Session grants Email / SMS
 Handler 层负责 HTTP 协议的适配——解析请求、校验参数、映射响应格式。业务逻辑集中在 Workflow / Service 层，每个工作流封装一个完整的业务流程（如注册、恢复、登录等）。工作流通过三类基础设施完成实际操作：
 
 - **Repository**（`coauth-storage-pg`）：持久化读写，对接 PostgreSQL。
-- **Principal**（`coauth-principal`）：保留账号/设备同步抽象；生产路径通过 Contrix session grants 与 soland 集成。
+- **Principal**（`coauth-principal`）：保留账号/设备同步抽象；生产路径通过 Cokret session grants 与 soland 集成。
 - **Notification**（`coauth-messaging`）：统一通知中心，将邮件和短信通过对应通道发送。
 
 ## API 分层

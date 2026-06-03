@@ -95,11 +95,11 @@
         }
       ]
     },
-    "contrix": {
-      "description": "Contrix-specific audiences, DIDs, and downstream integration metadata",
+    "cokret": {
+      "description": "Cokret-specific audiences, DIDs, and downstream integration metadata",
       "allOf": [
         {
-          "$ref": "#/definitions/ContrixConfig"
+          "$ref": "#/definitions/CokretConfig"
         }
       ]
     },
@@ -719,7 +719,7 @@
           "format": "uri"
         },
         "max_body_bytes": {
-          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Contrix\n`cx.server.describe.limits.max_body_bytes` advertisement.",
+          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Cokret\n`cx.server.describe.limits.max_body_bytes` advertisement.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0,
@@ -1305,8 +1305,8 @@
         }
       ]
     },
-    "ContrixConfig": {
-      "description": "Contrix-specific deployment settings layered on top of the generic OIDC\nand account-management configuration.",
+    "CokretConfig": {
+      "description": "Cokret-specific deployment settings layered on top of the generic OIDC\nand account-management configuration.",
       "type": "object",
       "properties": {
         "principal_servers": {
@@ -1317,7 +1317,7 @@
           }
         },
         "identity_registry": {
-          "description": "External DID / identity registry resolver used for Contrix identity\nbinding workflows.",
+          "description": "External DID / identity registry resolver used for Cokret identity\nbinding workflows.",
           "anyOf": [
             {
               "$ref": "#/definitions/IdentityRegistryConfig"
@@ -1346,21 +1346,21 @@
           ]
         },
         "issuer_did": {
-          "description": "Optional issuer DID to embed in Contrix session grants and discovery\ndocuments. Defaults to `service_did`.",
+          "description": "Optional issuer DID to embed in Cokret session grants and discovery\ndocuments. Defaults to `service_did`.",
           "type": [
             "string",
             "null"
           ]
         },
         "session_grant_ttl": {
-          "description": "Lifetime of Contrix session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and refreshed through\n`/api/v1/session-grants/refresh`. Default: 300 (5 min).",
+          "description": "Lifetime of Cokret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and refreshed through\n`/api/v1/session-grants/refresh`. Default: 300 (5 min).",
           "type": "integer",
           "format": "uint64",
           "minimum": 60,
           "maximum": 86400
         },
         "admin_audience": {
-          "description": "Audience string expected by Contrix admin integrations.\n\nWhen omitted, the backend falls back to the local `/api/v1` endpoint.",
+          "description": "Audience string expected by Cokret admin integrations.\n\nWhen omitted, the backend falls back to the local `/api/v1` endpoint.",
           "type": [
             "string",
             "null"
@@ -1382,7 +1382,7 @@
           "default": 2
         },
         "trust_domain": {
-          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `cx:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `cx.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically injected into `soland` via its config API on first\nboot; see `services::onboarding_starid` for the call site.",
+          "description": "Round R2/R3 (2026-05-20) — deployment trust-domain identifier\ninjected into Realm policy and the server-describe document.\n\nWire form: `ck:trust_domain:<scope>` where `<scope>` matches\n`[a-z0-9._:-]{1,128}`. This value enters the canonical transcript\nof every `cx.cross_signing.reset` proof; **changing\n`trust_domain` invalidates existing cross-signing reset proofs**\n— see the README \"Trust domain rotation\" note.\n\nWhen omitted, callers expected to honour cross-deployment replay\nprotection (`Realm` policy, principal-server describe) MUST be\ntold the trust domain is unset and fail closed.\n\nTypically injected into `soland` via its config API on first\nboot; see `services::onboarding_starid` for the call site.",
           "type": [
             "string",
             "null"
@@ -1398,7 +1398,7 @@
           ]
         },
         "password_login_session_grants_enabled": {
-          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nContrix principal-server session grant directly from\n`POST /api/v1/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
+          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nCokret principal-server session grant directly from\n`POST /api/v1/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
           "type": "boolean"
         },
         "admin_org_id": {
@@ -1422,7 +1422,7 @@
       }
     },
     "PrincipalServerConfig": {
-      "description": "Trusted Principal Server metadata published through Contrix discovery.",
+      "description": "Trusted Principal Server metadata published through Cokret discovery.",
       "type": "object",
       "properties": {
         "name": {
@@ -1453,7 +1453,7 @@
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint\n(`/api/v1/contrix/session-grants/introspect`). Mirrors\n`oauth_introspection_bearer` for the session-grant exchange path:\navoids requiring a DB-backed PAT/OAuth-session for the\nserver-to-server hop, which is awkward in dev when the coauth DB\nis reset frequently.",
+          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint\n(`/api/v1/cokret/session-grants/introspect`). Mirrors\n`oauth_introspection_bearer` for the session-grant exchange path:\navoids requiring a DB-backed PAT/OAuth-session for the\nserver-to-server hop, which is awkward in dev when the coauth DB\nis reset frequently.",
           "type": [
             "string",
             "null"

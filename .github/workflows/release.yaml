@@ -17,8 +17,8 @@ env:
   CARGO_TERM_COLOR: always
   RUSTC_WRAPPER: "sccache"
   SCCACHE_GHA_ENABLED: "true"
-  IMAGE: ghcr.io/contrix-dev/coauth
-  BUILDCACHE: ghcr.io/contrix-dev/coauth/buildcache
+  IMAGE: ghcr.io/cokret-dev/coauth
+  BUILDCACHE: ghcr.io/cokret-dev/coauth/buildcache
 
 concurrency:
   group: build-${{ github.ref }}
@@ -146,10 +146,10 @@ jobs:
         with:
           path: coauth
 
-      - name: Fetch Contrix Rust SDK
+      - name: Fetch Cokret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash coauth/.ci/checkout-sibling.sh contrix-rust-sdk contrix-rust-sdk
+        run: bash coauth/.ci/checkout-sibling.sh cokret-rust-sdk cokret-rust-sdk
 
       - name: Configure Docker Buildx
         uses: docker/setup-buildx-action@v3.11.1

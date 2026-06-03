@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License,
+// Copyright (c) 2026 Cokret Authors. Licensed under the Apache License,
 // Version 2.0; see LICENSE-APACHE for details.
 
 //! Admin-curated OAuth client display name + description, indexed by

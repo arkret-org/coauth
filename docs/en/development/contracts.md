@@ -13,14 +13,14 @@ contract is versioned via a request header:
 
 ```http
 POST /webhooks/soland
-x-contrix-contract-version: 2026-05-01
+x-cokret-contract-version: 2026-05-01
 content-type: application/json
 …
 ```
 
 Rules:
 
-- coauth accepts any `x-contrix-contract-version` it recognises and
+- coauth accepts any `x-cokret-contract-version` it recognises and
   rejects unknown values with `400 unsupported-contract-version`.
 - The header is **required** — missing means soland is too old and
   must be upgraded, not silently treated as the oldest supported
@@ -35,7 +35,7 @@ Rules:
 When evolving the contract:
 
 1. Add a new module `crates/backend/src/handlers/webhooks/v<date>.rs`.
-2. Route on `x-contrix-contract-version` in the dispatch layer.
+2. Route on `x-cokret-contract-version` in the dispatch layer.
 3. Update soland (separate repo) to advertise the new version.
 4. Mark the previous version "deprecated" in this doc and in the
    handler module's top-of-file comment; remove it in a later release.
@@ -83,7 +83,7 @@ OIDC / FAPI specs define.
 The split is intentional:
 
 - This document (and the soland / starid sections above) defines
-  contracts **outgoing** from coauth toward sibling Contrix projects.
+  contracts **outgoing** from coauth toward sibling Cokret projects.
 - `conformance/` exercises contracts coauth must implement to be a
   conforming OpenID Provider — i.e. contracts coming **in** from the
   spec ecosystem.

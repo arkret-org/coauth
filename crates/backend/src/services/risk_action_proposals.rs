@@ -4,7 +4,7 @@
 //! proofs (admin DID + detached JWS approval proof + recorded-at timestamp)
 //! are stored as a JSON array in the `approval_proofs` column. The HTTP
 //! handler verifies each JWS against the approver DID before calling this
-//! service. High-risk actions require `ContrixConfig::high_risk_threshold`
+//! service. High-risk actions require `CokretConfig::high_risk_threshold`
 //! distinct admin DIDs to approve before the proposal transitions to
 //! `approved`.
 

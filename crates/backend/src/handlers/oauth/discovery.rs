@@ -1,4 +1,4 @@
-use coauth_config::{ContrixConfig, IdentityRegistryKind};
+use coauth_config::{CokretConfig, IdentityRegistryKind};
 use coauth_data::{SiteConfig, UrlBuilder};
 use coauth_iana::oauth::{
     OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod,
@@ -14,7 +14,7 @@ use oauth_types::{
 use salvo::prelude::*;
 use serde::Serialize;
 
-use crate::handlers::contrix;
+use crate::handlers::cokret;
 
 #[derive(Debug, Serialize)]
 struct DiscoveryResponse {
@@ -25,28 +25,28 @@ struct DiscoveryResponse {
     account_management_uri: url::Url,
     account_management_actions_supported: Vec<String>,
 
-    #[serde(rename = "org.contrix.api_endpoint")]
+    #[serde(rename = "org.cokret.api_endpoint")]
     contrix_api_endpoint: String,
 
-    #[serde(rename = "org.contrix.server_describe")]
+    #[serde(rename = "org.cokret.server_describe")]
     contrix_server_describe: String,
 
-    #[serde(rename = "org.contrix.service_did")]
+    #[serde(rename = "org.cokret.service_did")]
     contrix_service_did: String,
 
-    #[serde(rename = "org.contrix.did_binding_methods")]
+    #[serde(rename = "org.cokret.did_binding_methods")]
     contrix_did_binding_methods: Vec<String>,
 
-    #[serde(rename = "org.contrix.supported_scopes")]
+    #[serde(rename = "org.cokret.supported_scopes")]
     contrix_supported_scopes: Vec<String>,
 
-    #[serde(rename = "org.contrix.admin_audience")]
+    #[serde(rename = "org.cokret.admin_audience")]
     contrix_admin_audience: String,
 
-    #[serde(rename = "org.contrix.principal_servers")]
+    #[serde(rename = "org.cokret.principal_servers")]
     contrix_principal_servers: Vec<PrincipalServerMetadata>,
 
-    #[serde(rename = "org.contrix.identity_registry")]
+    #[serde(rename = "org.cokret.identity_registry")]
     #[serde(skip_serializing_if = "Option::is_none")]
     contrix_identity_registry: Option<IdentityRegistryMetadata>,
 }
@@ -69,7 +69,7 @@ struct IdentityRegistryMetadata {
 /// Process-wide cache of the serialized OIDC discovery document.
 ///
 /// Every input to the discovery document — the URL builder, site config,
-/// contrix config and the keystore's available signing algorithms — is fixed
+/// cokret config and the keystore's available signing algorithms — is fixed
 /// for the lifetime of the process (a single config per process). So the
 /// document only needs to be built once; subsequent requests clone the cached
 /// JSON value instead of rebuilding the whole `DiscoveryResponse` and
@@ -110,7 +110,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
         .get::<SiteConfig>("site_config")
         .expect("SiteConfig not found in depot");
     let contrix_config = depot
-        .get::<ContrixConfig>("contrix_config")
+        .get::<CokretConfig>("contrix_config")
         .cloned()
         .unwrap_or_default();
 
@@ -223,9 +223,9 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
         "name".to_owned(),
         "picture".to_owned(),
         "locale".to_owned(),
-        contrix::CLAIM_PRINCIPAL_DID.to_owned(),
-        contrix::CLAIM_DEVICE_ID.to_owned(),
-        contrix::CLAIM_SESSION_ID.to_owned(),
+        cokret::CLAIM_PRINCIPAL_DID.to_owned(),
+        cokret::CLAIM_DEVICE_ID.to_owned(),
+        cokret::CLAIM_SESSION_ID.to_owned(),
     ]);
 
     let claims_parameter_supported = Some(false);
@@ -313,7 +313,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
         contrix_server_describe: url_builder
             .absolute_url("/api/v1/server/describe")
             .to_string(),
-        contrix_service_did: contrix::service_did_for(url_builder, &contrix_config),
+        contrix_service_did: cokret::service_did_for(url_builder, &contrix_config),
         contrix_did_binding_methods: vec!["session_grant".to_owned()],
         contrix_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),
@@ -322,7 +322,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
             scope::CONTRIX_PRINCIPAL_SERVER.to_string(),
             scope::CONTRIX_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
         ],
-        contrix_admin_audience: contrix::required_audience_for(url_builder, &contrix_config),
+        contrix_admin_audience: cokret::required_audience_for(url_builder, &contrix_config),
         contrix_principal_servers,
         contrix_identity_registry,
     })
@@ -355,7 +355,7 @@ mod tests {
             "site_config",
             crate::handlers::test_utils::test_site_config(),
         );
-        depot.insert("contrix_config", ContrixConfig::default());
+        depot.insert("contrix_config", CokretConfig::default());
         depot
     }
 
@@ -396,37 +396,37 @@ mod tests {
 
         let scopes = body["scopes_supported"].as_array().unwrap();
         assert!(scopes.iter().any(|scope| scope == "urn:coauth:admin"));
-        assert!(scopes.iter().any(|scope| scope == "urn:contrix:admin:*"));
-        assert!(scopes.iter().any(|scope| scope == "urn:contrix:client:*"));
+        assert!(scopes.iter().any(|scope| scope == "urn:cokret:admin:*"));
+        assert!(scopes.iter().any(|scope| scope == "urn:cokret:client:*"));
         assert!(
             scopes
                 .iter()
-                .any(|scope| scope == "urn:contrix:principal-server:*")
+                .any(|scope| scope == "urn:cokret:principal-server:*")
         );
         assert!(
             scopes
                 .iter()
-                .any(|scope| scope == "urn:contrix:principal-server:session.bind")
+                .any(|scope| scope == "urn:cokret:principal-server:session.bind")
         );
 
-        let contrix_scopes = body["org.contrix.supported_scopes"].as_array().unwrap();
+        let contrix_scopes = body["org.cokret.supported_scopes"].as_array().unwrap();
         assert!(
             contrix_scopes
                 .iter()
-                .any(|scope| scope == "urn:contrix:principal-server:session.bind")
+                .any(|scope| scope == "urn:cokret:principal-server:session.bind")
         );
 
         let claims = body["claims_supported"].as_array().unwrap();
         assert!(
             claims
                 .iter()
-                .any(|claim| claim == contrix::CLAIM_PRINCIPAL_DID)
+                .any(|claim| claim == cokret::CLAIM_PRINCIPAL_DID)
         );
-        assert!(claims.iter().any(|claim| claim == contrix::CLAIM_DEVICE_ID));
+        assert!(claims.iter().any(|claim| claim == cokret::CLAIM_DEVICE_ID));
         assert!(
             claims
                 .iter()
-                .any(|claim| claim == contrix::CLAIM_SESSION_ID)
+                .any(|claim| claim == cokret::CLAIM_SESSION_ID)
         );
     }
 

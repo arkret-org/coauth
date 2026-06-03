@@ -57,7 +57,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: coauth
-          image: ghcr.io/contrix-dev/coauth:1.0.0
+          image: ghcr.io/cokret-dev/coauth:1.0.0
           imagePullPolicy: IfNotPresent
           args: ["server", "--config", "/etc/coauth/config.yaml"]
           ports:

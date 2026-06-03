@@ -29,7 +29,7 @@ use crate::{
             PasswordLoginOutcome, PasswordLoginRequest, load_enabled_upstream_providers,
             login_with_password, logout_browser_session,
         },
-        contrix,
+        cokret,
     },
     salvo_utils::session::SessionInfoExt,
     services::dpop::{DpopError, DpopVerifier, dpop_header_from_request, dpop_htu},
@@ -358,8 +358,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         viewer: Some(ViewerInfo {
                             id: NodeType::User.serialize(user.id),
                             handle: user.handle.clone(),
-                            did: contrix::user_did_for(&url_builder, &contrix_config, &user),
-                            federated_handle: contrix::user_handle(&url_builder, &user),
+                            did: cokret::user_did_for(&url_builder, &contrix_config, &user),
+                            federated_handle: cokret::user_handle(&url_builder, &user),
                             principal_id: principal_server.principal_id(&user.handle),
                             display_name,
                         }),
@@ -386,7 +386,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 }));
                 return Ok(());
             }
-            let grant_target = match contrix::password_login_session_grant_target(
+            let grant_target = match cokret::password_login_session_grant_target(
                 &url_builder,
                 &contrix_config,
                 requested_audience.as_deref(),
@@ -405,7 +405,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     return Ok(());
                 }
             };
-            // TODO(contrix): replace password bootstrap minting with the real
+            // TODO(cokret): replace password bootstrap minting with the real
             // coauth-owned OIDC/passkey exchange and proof-bound grant issuance.
             //
             // STATUS: scaffold — disabled by default; NOT for production.
@@ -419,7 +419,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             //   keeps the development loop short, but MUST be replaced
             //   before any external relying party trusts these grants. The
             //   handler now requires
-            //   `contrix.password_login_session_grants_enabled=true` and a
+            //   `cokret.password_login_session_grants_enabled=true` and a
             //   valid DPoP proof before this branch can run.
             // PRE-PROD CHECKLIST:
             //   - swap to passkey / OIDC exchange via
@@ -428,7 +428,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             //     request (not the kickoff one).
             //   - enforce policy on scopes the caller may request.
             // Tracked in `_improve_todos.md` C.4 (TODO scaffold).
-            let session_grant = contrix::issue_session_grant_for_audience(
+            let session_grant = cokret::issue_session_grant_for_audience(
                 &mut rng,
                 &clock,
                 &url_builder,
@@ -436,14 +436,14 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 &key_store,
                 &user_session,
                 grant_target.audience.clone(),
-                vec![contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+                vec![cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
                 None,
                 dpop_jkt.clone(),
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
             let mut grant_repo = depot.repo().await?;
-            let persisted_session_grant = contrix::persist_session_grant(
+            let persisted_session_grant = cokret::persist_session_grant(
                 &mut grant_repo,
                 &mut rng,
                 &clock,
@@ -461,8 +461,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
                         handle: user.handle.clone(),
-                        did: contrix::user_did_for(&url_builder, &contrix_config, &user),
-                        federated_handle: contrix::user_handle(&url_builder, &user),
+                        did: cokret::user_did_for(&url_builder, &contrix_config, &user),
+                        federated_handle: cokret::user_handle(&url_builder, &user),
                         principal_id: principal_server.principal_id(&user.handle),
                         display_name,
                     }),

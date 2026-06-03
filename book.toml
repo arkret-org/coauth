@@ -10,10 +10,10 @@ build-dir = "target/book"
 
 [output.html]
 # The URL visitors will be directed to when they try to edit a page
-edit-url-template = "https://github.com/contrix-dev/coauth/edit/main/{path}"
+edit-url-template = "https://github.com/cokret-dev/coauth/edit/main/{path}"
 
 # The source code URL of the repository
-git-repository-url = "https://github.com/contrix-dev/coauth"
+git-repository-url = "https://github.com/cokret-dev/coauth"
 
 # The path that the docs are hosted on
 site-url = "/coauth/"

@@ -1,4 +1,4 @@
-//! R3.2 (contrix-spec @ b56cab1) handle-claim issuer guards.
+//! R3.2 (cokret-spec @ b56cab1) handle-claim issuer guards.
 //!
 //! Two normative tightenings land here, shared by every coauth code path
 //! that mints a `cx.handle.claim` artefact:
@@ -13,8 +13,8 @@
 //!      `claim_kind`, per `common-fields.md` §`kind`/`type` naming rules.)
 //!
 //!   2. **`subject` validator** — a handle claim subject MUST be a holder /
-//!      principal DID. It is NOT a Realm `actor_id` (`cx:actor:`), a
-//!      server-local `account_id` (`cx:account:`), a service DID, or a generic
+//!      principal DID. It is NOT a Realm `actor_id` (`ck:actor:`), a
+//!      server-local `account_id` (`ck:account:`), a service DID, or a generic
 //!      resource id. We delegate to the SDK's
 //!      [`contrix_core::validate_handle_claim_subject`] so the wire code
 //!      (`handle_claim_subject_not_principal_did`) stays in lockstep with
@@ -67,18 +67,18 @@ pub fn ensure_claim_kind_supported(claim_kind: &str) -> Result<(), HandleClaimSu
     }
 }
 
-/// HC-COAUTH-2 — reject `cx:actor:` / `cx:account:` / non-DID subjects.
+/// HC-COAUTH-2 — reject `ck:actor:` / `ck:account:` / non-DID subjects.
 ///
 /// Delegates to the SDK's [`contrix_core::validate_handle_claim_subject`]
 /// so the rejection logic (and thus the wire code) matches the spec and
-/// the other Contrix services. The input is parsed through
+/// the other Cokret services. The input is parsed through
 /// [`contrix_core::Did::new`] first; a value that is not even a structural
 /// DID is rejected with the same `handle_claim_subject_not_principal_did`
-/// code (a `cx:actor:`/`cx:account:` typed id is not a `did:` and would be
+/// code (a `ck:actor:`/`ck:account:` typed id is not a `did:` and would be
 /// rejected by `Did::new` anyway, but we keep the message explicit).
 pub fn ensure_subject_is_principal_did(subject: &str) -> Result<(), HandleClaimSubjectError> {
-    // The SDK validator wants an already-parsed `Did`. A `cx:actor:` /
-    // `cx:account:` typed id will fail `Did::new`, so we surface the
+    // The SDK validator wants an already-parsed `Did`. A `ck:actor:` /
+    // `ck:account:` typed id will fail `Did::new`, so we surface the
     // principal-DID reason directly rather than the generic DID parse
     // error to keep the wire code stable.
     let did = Did::new(subject.to_owned()).map_err(|error| {
@@ -123,13 +123,13 @@ mod tests {
 
     #[test]
     fn rejects_actor_and_account_typed_ids() {
-        let actor = ensure_subject_is_principal_did("cx:actor:01ABCDEF").unwrap_err();
+        let actor = ensure_subject_is_principal_did("ck:actor:01ABCDEF").unwrap_err();
         assert!(
             actor
                 .to_string()
                 .starts_with(HANDLE_CLAIM_SUBJECT_NOT_PRINCIPAL_DID_CODE)
         );
-        let account = ensure_subject_is_principal_did("cx:account:01ABCDEF").unwrap_err();
+        let account = ensure_subject_is_principal_did("ck:account:01ABCDEF").unwrap_err();
         assert!(
             account
                 .to_string()

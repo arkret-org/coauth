@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use chrono::Duration;
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     AuthorizationGrantStage, BoxRepository, Client, Clock, DeviceCodeGrantState, RefreshToken,
     RefreshTokenState, RepositoryAccess, RepositoryError, SiteConfig, TokenType, UrlBuilder,
@@ -264,7 +264,7 @@ fn client_device_ids(scope: &scope::Scope) -> Vec<String> {
         .filter_map(|token| {
             let token = token.as_str();
             token
-                .strip_prefix("urn:contrix:client:device:")
+                .strip_prefix("urn:cokret:client:device:")
                 .map(str::to_owned)
         })
         .collect()
@@ -291,7 +291,7 @@ pub async fn exchange_authorization_code(
     client: &Client,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
     principal_server: &Arc<dyn PrincipalServerAdmin>,
@@ -1443,7 +1443,7 @@ pub async fn exchange_device_code(
     client: &Client,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
     principal_server: &Arc<dyn PrincipalServerAdmin>,

@@ -38,7 +38,7 @@ services:
 #
 # services:
 #   coauth:
-#     image: ghcr.io/contrix-dev/coauth:1.0.0  # pin a real release tag
+#     image: ghcr.io/cokret-dev/coauth:1.0.0  # pin a real release tag
 #     restart: unless-stopped
 #     environment:
 #       # Pull every secret from a secret manager. Inline values below

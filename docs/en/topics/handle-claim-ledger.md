@@ -1,19 +1,19 @@
 # Handle-claim ledger (issuer-internal)
 
 coauth is a **handle-claim issuer**, not a handle **directory**. This page
-records the R3.2 (contrix-spec @ `b56cab1`) scope decision for the
+records the R3.2 (cokret-spec @ `b56cab1`) scope decision for the
 `cx.directory.list_handles_for_subject` directory operation.
 
 ## Decision: coauth does NOT implement `cx.directory.list_handles_for_subject`
 
-R3.2 of the Contrix spec introduced
+R3.2 of the Cokret spec introduced
 [`cx.directory.list_handles_for_subject`][op] — given a known
 holder/principal DID, return the current context-visible set of signed
 `cx.schema.handle_claim.v1` evidence (the inverse of `resolve_handle`,
 which maps a handle string to a subject).
 
 **`cx.directory.list_handles_for_subject` is a directory-service
-operation.** In a standard Contrix deployment that role is carried by the
+operation.** In a standard Cokret deployment that role is carried by the
 directory service (teabay), which applies disclosure policy, issuer-trust
 filtering, audience scoping, and `as_of` historical replay across all
 issuers visible in a Realm. coauth deliberately does **not** expose this
@@ -34,7 +34,7 @@ service (teabay), not coauth.
 
 coauth retains an **issuer-internal ledger** of the handle claims it has
 minted. The signed `cx.schema.handle_claim.v1` artefacts coauth produces
-(see [`issue_handle_claim`][src] in `crates/backend/src/handlers/contrix.rs`)
+(see [`issue_handle_claim`][src] in `crates/backend/src/handlers/cokret.rs`)
 are the only authoritative wire form for a handle; everything else
 (roster hints, mention `handle_at_time`, etc.) is a derived projection or
 audit metadata.
@@ -45,7 +45,7 @@ Per the R3.2 issuer hardening:
   (reason `claim_type_unsupported`); only `handle_binding` /
   `organization_handle` are minted.
 - coauth rejects any handle-claim subject that is not a holder/principal
-  DID — `cx:actor:` / `cx:account:` typed ids and service DIDs are
+  DID — `ck:actor:` / `ck:account:` typed ids and service DIDs are
   refused (reason `handle_claim_subject_not_principal_did`).
 
 ### Optional org-operator audit API
@@ -62,5 +62,5 @@ Per the R3.2 issuer hardening:
 > claims surface already covers operator audit needs; add it only if a
 > concrete operator workflow requires it.
 
-[op]: https://github.com/contrix/contrix-spec
-[src]: ../../../crates/backend/src/handlers/contrix.rs
+[op]: https://github.com/cokret/cokret-spec
+[src]: ../../../crates/backend/src/handlers/cokret.rs

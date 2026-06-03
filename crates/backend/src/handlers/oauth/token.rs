@@ -1,6 +1,6 @@
 use std::sync::{Arc, LazyLock};
 
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SiteConfig, SystemClock, UrlBuilder,
 };
@@ -370,7 +370,7 @@ async fn handle_post(
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
     let contrix_config = depot
-        .get::<ContrixConfig>("contrix_config")
+        .get::<CokretConfig>("contrix_config")
         .cloned()
         .unwrap_or_default();
     let principal_server = depot

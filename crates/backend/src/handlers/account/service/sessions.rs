@@ -171,7 +171,7 @@ pub async fn set_oauth_session_human_name(
 
     if let (Some(name), Some(user)) = (&human_name, session_user.as_ref()) {
         for token in session.scope.iter() {
-            if let Some(device_id) = token.strip_prefix("urn:contrix:client:device:") {
+            if let Some(device_id) = token.strip_prefix("urn:cokret:client:device:") {
                 let _ = principal_server
                     .update_device_display_name(&user.handle, device_id, name)
                     .await;

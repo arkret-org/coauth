@@ -113,7 +113,7 @@ macro_rules! apply_app_session_filter {
         }
 
         if let Some(device) = filter.device() {
-            let device_scope = format!("urn:contrix:client:device:{device}");
+            let device_scope = format!("urn:cokret:client:device:{device}");
             query = query.filter(
                 diesel::dsl::sql::<diesel::sql_types::Bool>("")
                     .bind::<diesel::sql_types::Text, _>(device_scope)
@@ -212,7 +212,7 @@ impl AppSessionRepository for PgAppSessionRepository<'_> {
         device: &str,
     ) -> Result<bool, Self::Error> {
         let finished_at = clock.now();
-        let device_scope = format!("urn:contrix:client:device:{device}");
+        let device_scope = format!("urn:cokret:client:device:{device}");
 
         let oauth_affected = diesel::sql_query(
             "UPDATE oauth_sessions
@@ -312,7 +312,7 @@ mod tests {
             .unwrap();
 
         let device_id = "AABBCCDDEE";
-        let stable_scope = format!("urn:contrix:client:device:{device_id}");
+        let stable_scope = format!("urn:cokret:client:device:{device_id}");
         let scope: Scope = [OPENID]
             .into_iter()
             .chain([stable_scope.parse().unwrap()])

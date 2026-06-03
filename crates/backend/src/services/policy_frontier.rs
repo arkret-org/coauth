@@ -273,7 +273,7 @@ mod tests {
     }
 
     fn realm() -> RealmId {
-        RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001").unwrap()
+        RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap()
     }
 
     #[tokio::test]

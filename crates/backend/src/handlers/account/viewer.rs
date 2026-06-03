@@ -10,7 +10,7 @@ use super::{
     site_config::{SiteConfigResponse, from_site_config},
 };
 use crate::{
-    handlers::{account::service::connections::load_linked_accounts, contrix},
+    handlers::{account::service::connections::load_linked_accounts, cokret},
     services::user_profile::{UserProfileServiceError, load_viewer_profile},
 };
 
@@ -174,8 +174,8 @@ pub async fn get_viewer(
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
                 username: user.handle.clone(),
-                did: contrix::user_did_for(&url_builder, &contrix_config, user),
-                handle: contrix::user_handle(&url_builder, user),
+                did: cokret::user_did_for(&url_builder, &contrix_config, user),
+                handle: cokret::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,
                 profile: UserProfileData {

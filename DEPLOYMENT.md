@@ -1,6 +1,6 @@
 # coauth — Deployment Guide
 
-> Spec target: contrix-spec @ b47ff6ec (R3 sync 2026-05-27)
+> Spec target: cokret-spec @ b47ff6ec (R3 sync 2026-05-27)
 
 ## Overview
 
@@ -67,11 +67,11 @@ A reference chart lives at `charts/coauth/` with values defaults at `charts/coau
 
 ```sh
 kubectl create secret generic coauth-db \
-  --namespace contrix-system \
+  --namespace cokret-system \
   --from-literal=url="postgres://coauth:$(vault read -field=password secret/coauth/db)@pg.acme.example/coauth"
 
 helm upgrade --install coauth charts/coauth \
-  --namespace contrix-system --create-namespace \
+  --namespace cokret-system --create-namespace \
   --set database.urlSecret=coauth-db \
   --set image.tag=$(git rev-parse --short HEAD)
 ```
@@ -105,7 +105,7 @@ Scrape config example:
 scrape_configs:
   - job_name: coauth
     static_configs:
-      - targets: ['coauth.contrix-system.svc.cluster.local:8080']
+      - targets: ['coauth.cokret-system.svc.cluster.local:8080']
     metrics_path: /metrics
 ```
 

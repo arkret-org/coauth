@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License,
+// Copyright (c) 2026 Cokret Authors. Licensed under the Apache License,
 // Version 2.0; see LICENSE-APACHE for details.
 
 //! Admin endpoint for editing per-locale OAuth client display strings.

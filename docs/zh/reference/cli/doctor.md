@@ -14,9 +14,9 @@ coauth doctor -c config.yaml
 
 - **配置有效性** — 检查配置文件的语法和语义
 - **Issuer 检查** — 当配置的 issuer 不是 HTTPS 时给出警告
-- **Principal Server 配置** — 输出 `contrix.principal_servers` 中配置的条目
+- **Principal Server 配置** — 输出 `cokret.principal_servers` 中配置的条目
 - **OpenID discovery** — 请求 `/.well-known/openid-configuration` 并校验 issuer
-- **Contrix discovery** — 请求 `/api/v1/server/describe`
+- **Cokret discovery** — 请求 `/api/v1/server/describe`
 
 ## 输出说明
 

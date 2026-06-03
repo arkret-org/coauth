@@ -5,7 +5,7 @@
 //! Creation endpoints: `POST /users` and `POST /users/batch-invite`.
 
 use chrono::Duration;
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     BoxClock, BoxRepository,
     audit::{AdminOperation, NewAdminOperationLog},
@@ -143,7 +143,7 @@ pub struct BatchInviteRequest {
     /// never expire.
     expires_in_hours: Option<u64>,
 
-    /// Optional Contrix consent-gate metadata (Move/Anchor/Lattice spec
+    /// Optional Cokret consent-gate metadata (Move/Anchor/Lattice spec
     /// `consent-model.md` §6.1). When `peer_did` is supplied **and** a
     /// `server_name` URL is configured, coauth queries the holder's
     /// consent-grant cell on `soland` before minting registration tokens
@@ -179,7 +179,7 @@ pub struct BatchInviteConsentGate {
     #[serde(default = "default_invite_scope")]
     pub scope: String,
 
-    /// Override `ContrixConfig::principal_server_url` per request. Useful
+    /// Override `CokretConfig::principal_server_url` per request. Useful
     /// when a deployment fans out across multiple `server_names` and
     /// the global config points at a different one.
     #[serde(default)]
@@ -256,14 +256,14 @@ pub enum BatchInviteGateOutcome {
 /// I/O so unit tests can inject a wiremock-backed `reqwest::Client`.
 ///
 /// `gate_url_override` lets the caller supply a per-request URL that wins
-/// over the global `ContrixConfig::principal_server_url`. Both `None` →
+/// over the global `CokretConfig::principal_server_url`. Both `None` →
 /// gate is skipped (returns `Allow`) — same behaviour as omitting
 /// `peer_did` entirely. This keeps the no-config / no-peer paths
 /// indistinguishable, which matches the spec note that the gate is
 /// optional infrastructure.
 pub async fn evaluate_batch_invite_gate(
     gate: Option<&BatchInviteConsentGate>,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     http_client: &reqwest::Client,
 ) -> BatchInviteGateOutcome {
     let Some(gate) = gate else {
@@ -387,7 +387,7 @@ pub async fn batch_invite(
 
     // ── C10.E consent gate (Move/Anchor/Lattice) ─────────────────
     //
-    // Per `contrix-spec` 2026-05-08 `consent-model.md` §6.1, when an
+    // Per `cokret-spec` 2026-05-08 `consent-model.md` §6.1, when an
     // invite addresses a specific holder DID we must query the holder's
     // consent-grant cell on their server_name (`soland`) before
     // proceeding. The gate is opt-in via `BatchInviteConsentGate` —
@@ -500,7 +500,7 @@ mod consent_gate_tests {
     //! `users::tests`; here we only need to confirm the gate logic
     //! routes the three outcomes correctly given the principal-server
     //! response.
-    use coauth_config::ContrixConfig;
+    use coauth_config::CokretConfig;
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
         matchers::{method, path_regex},
@@ -509,8 +509,8 @@ mod consent_gate_tests {
     use super::*;
     use crate::handlers::test_utils::setup;
 
-    fn empty_config() -> ContrixConfig {
-        ContrixConfig::default()
+    fn empty_config() -> CokretConfig {
+        CokretConfig::default()
     }
 
     fn gate_for(consent_id: &str, peer: &str, holder: &str) -> BatchInviteConsentGate {
@@ -543,7 +543,7 @@ mod consent_gate_tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/v1/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-allow",
+                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-allow",
                 "tags": ["peer=did:web:peer;scope=invite"],
             })))
             .expect(1)
@@ -613,7 +613,7 @@ mod consent_gate_tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/v1/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-other",
+                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-other",
                 "tags": ["peer=did:web:other;scope=invite"],
             })))
             .mount(&server)

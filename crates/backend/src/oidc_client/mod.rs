@@ -3,7 +3,7 @@
 //! # Scope
 //!
 //! The scope of this crate is to support the OIDC and OAuth features
-//! needed by the Contrix/Soland auth flows.
+//! needed by the Cokret/Soland auth flows.
 //!
 //! # OpenID Connect and OAuth Features
 //!

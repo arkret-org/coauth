@@ -13,7 +13,7 @@ use std::{
 };
 
 use chrono::Duration;
-use coauth_config::{ContrixConfig, RateLimitingConfig};
+use coauth_config::{CokretConfig, RateLimitingConfig};
 use coauth_data::{
     AppVersion, BoxRepository, PgRepositoryFactory, RepositoryAccess, RepositoryError,
     RepositoryFactory, SiteConfig, SystemClock, TokenType, UrlBuilder,
@@ -127,7 +127,7 @@ pub(crate) async fn policy_factory(
 pub(crate) struct TestState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
-    pub contrix_config: ContrixConfig,
+    pub contrix_config: CokretConfig,
     pub key_store: Keystore,
     pub cookie_manager: CookieManager,
     pub metadata_cache: MetadataCache,
@@ -349,7 +349,7 @@ impl TestState {
         Ok(Self {
             repository_factory: PgRepositoryFactory::new(pool),
             templates,
-            contrix_config: ContrixConfig::default(),
+            contrix_config: CokretConfig::default(),
             key_store,
             cookie_manager,
             metadata_cache,
@@ -427,15 +427,15 @@ impl TestState {
             )
             .push(
                 Router::with_path("/.well-known/did.json")
-                    .get(crate::handlers::contrix::service_did_json),
+                    .get(crate::handlers::cokret::service_did_json),
             )
             .push(
                 Router::with_path("/did.json")
-                    .get(crate::handlers::contrix::service_did_json),
+                    .get(crate::handlers::cokret::service_did_json),
             )
             .push(
                 Router::with_path("/users/{id}/did.json")
-                    .get(crate::handlers::contrix::user_did_json),
+                    .get(crate::handlers::cokret::user_did_json),
             )
             // OAuth endpoints
             .push(
@@ -487,23 +487,23 @@ impl TestState {
                 Router::with_path("/api/v1/auth/oidc/exchange")
                     .post(crate::handlers::account::auth::oidc_code_exchange),
             )
-            .push(Router::with_path("/api/v1/server/describe").get(crate::handlers::contrix::server_describe))
-            .push(Router::with_path("/api/v1/identity/describe").get(crate::handlers::contrix::identity_describe))
-            .push(Router::with_path("/api/v1/identity/resolve").post(crate::handlers::contrix::identity_resolve))
-            .push(Router::with_path("/api/v1/identity/document").get(crate::handlers::contrix::identity_document))
-            .push(Router::with_path("/api/v1/identity/primary-handle").patch(crate::handlers::contrix::patch_primary_handle_preference))
-            .push(Router::with_path("/api/v1/directory/describe").get(crate::handlers::contrix::directory_describe))
-            .push(Router::with_path("/api/v1/directory/resolve-handle").post(crate::handlers::contrix::directory_resolve_handle))
+            .push(Router::with_path("/api/v1/server/describe").get(crate::handlers::cokret::server_describe))
+            .push(Router::with_path("/api/v1/identity/describe").get(crate::handlers::cokret::identity_describe))
+            .push(Router::with_path("/api/v1/identity/resolve").post(crate::handlers::cokret::identity_resolve))
+            .push(Router::with_path("/api/v1/identity/document").get(crate::handlers::cokret::identity_document))
+            .push(Router::with_path("/api/v1/identity/primary-handle").patch(crate::handlers::cokret::patch_primary_handle_preference))
+            .push(Router::with_path("/api/v1/directory/describe").get(crate::handlers::cokret::directory_describe))
+            .push(Router::with_path("/api/v1/directory/resolve-handle").post(crate::handlers::cokret::directory_resolve_handle))
             .push(
                 Router::with_path("/api/v1/session-grants")
-                    .get(crate::handlers::contrix::list_session_grants)
+                    .get(crate::handlers::cokret::list_session_grants)
                     .push(
                         Router::with_path("introspect")
-                            .post(crate::handlers::contrix::introspect_session_grant),
+                            .post(crate::handlers::cokret::introspect_session_grant),
                     )
                     .push(
                         Router::with_path("{id}/revoke")
-                            .post(crate::handlers::contrix::revoke_session_grant),
+                            .post(crate::handlers::cokret::revoke_session_grant),
                     ),
             )
             .push(Router::with_path("/api/v1/viewer").get(crate::handlers::account::viewer::get_viewer))

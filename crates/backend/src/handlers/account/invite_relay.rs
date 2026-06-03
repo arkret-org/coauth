@@ -4,7 +4,7 @@
 
 //! Per-recipient invite-relay handler (consent-gated forward).
 //!
-//! Per the Move/Anchor/Lattice spec (`contrix-spec` 2026-05-08,
+//! Per the Move/Anchor/Lattice spec (`cokret-spec` 2026-05-08,
 //! `consent-model.md` §3-§9), before an actor (coauth admin / yougen UI /
 //! sodmin operator) can deliver an invite to a target principal, coauth
 //! must consult the holder's consent-grant cell on the target's principal
@@ -61,14 +61,14 @@ pub struct RelayRequest {
     /// Base URL of the target's `server_name` (`soland`).
     ///
     /// Optional in the body; when omitted, falls back to
-    /// `ContrixConfig::principal_server_url`. If neither is present the
+    /// `CokretConfig::principal_server_url`. If neither is present the
     /// handler returns 400 `config_required` because there's nowhere to
     /// query the consent cell.
     #[serde(default)]
     pub target_principal_url: Option<Url>,
 
     /// DID of the holder whose cell we're consulting. Embedded in the
-    /// `X-Contrix-Holder-Did` header on the soland query.
+    /// `X-Cokret-Holder-Did` header on the soland query.
     pub target_holder_did: String,
 
     /// Consent-cell identifier per spec §6.
@@ -331,7 +331,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/v1/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-allow",
+                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-allow",
                 "tags": ["peer=did:web:inviter;scope=invite"],
             })))
             .expect(1)
@@ -491,7 +491,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/v1/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-allow",
+                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-allow",
                 "tags": ["peer=did:web:inviter;scope=any"],
             })))
             .mount(&server)
@@ -543,7 +543,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/v1/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-allow",
+                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-allow",
                 "tags": ["peer=did:web:inviter;scope=invite"],
             })))
             .expect(1)

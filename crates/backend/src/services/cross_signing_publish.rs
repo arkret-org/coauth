@@ -28,7 +28,7 @@
 //! [`CrossSigningPublishError::GenerationUnknown`] rather than guess.
 
 use chrono::{DateTime, Utc};
-use contrix::crypto_protocol::{
+use cokret::crypto_protocol::{
     CrossSigningKeyRecord, CrossSigningPublishContent, SignedCrossSigningKey,
     cross_signing_publish_cell_subject,
 };
@@ -40,7 +40,7 @@ use thiserror::Error;
 pub enum CrossSigningPublishError {
     #[error("current cross-signing generation is unknown; fetch from principal server first")]
     GenerationUnknown,
-    #[error("trust_domain is unset; configure ContrixConfig::trust_domain before publishing")]
+    #[error("trust_domain is unset; configure CokretConfig::trust_domain before publishing")]
     TrustDomainMissing,
     #[error("invalid principal_id: {0}")]
     InvalidPrincipal(String),
@@ -94,7 +94,7 @@ pub fn publish_cell_subject(principal_id: &Did, expected_previous_generation: u6
 
 #[cfg(test)]
 mod tests {
-    use contrix::crypto_protocol::CrossSigningBinding;
+    use cokret::crypto_protocol::CrossSigningBinding;
 
     use super::*;
 
@@ -103,7 +103,7 @@ mod tests {
     }
 
     fn td() -> TypedTrustDomainId {
-        TypedTrustDomainId::new("cx:trust_domain:example.net").unwrap()
+        TypedTrustDomainId::new("ck:trust_domain:example.net").unwrap()
     }
 
     fn psk(kid: &str) -> CrossSigningKeyRecord {

@@ -8,12 +8,12 @@ use super::ConfigurationSection;
 
 /// Round R2/R3 (2026-05-20) — deployment-scope trust-domain prefix.
 ///
-/// A `trust_domain` value MUST match `cx:trust_domain:<scope>` where
+/// A `trust_domain` value MUST match `ck:trust_domain:<scope>` where
 /// `<scope>` is `[a-z0-9._:-]{1,128}`. This mirrors the SDK validator
 /// `contrix_core::TypedTrustDomainId` so coauth and the Realm policy
 /// engine agree on the exact byte-form. Validate via
 /// [`validate_trust_domain`].
-const TRUST_DOMAIN_PREFIX: &str = "cx:trust_domain:";
+const TRUST_DOMAIN_PREFIX: &str = "ck:trust_domain:";
 const SESSION_GRANT_TTL_MICROS: i64 = 5 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
 const SESSION_GRANT_TTL_MAX_SECONDS: i64 = 86_400;
@@ -26,17 +26,17 @@ fn session_grant_ttl_is_default(ttl: &Duration) -> bool {
     *ttl == default_session_grant_ttl()
 }
 
-/// Contrix-specific deployment settings layered on top of the generic OIDC
+/// Cokret-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ContrixConfig {
+pub struct CokretConfig {
     /// Principal Server audiences trusted to consume session grants and admin
     /// tokens emitted by coauth.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub principal_servers: Vec<PrincipalServerConfig>,
 
-    /// External DID / identity registry resolver used for Contrix identity
+    /// External DID / identity registry resolver used for Cokret identity
     /// binding workflows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_registry: Option<IdentityRegistryConfig>,
@@ -55,12 +55,12 @@ pub struct ContrixConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_did: Option<String>,
 
-    /// Optional issuer DID to embed in Contrix session grants and discovery
+    /// Optional issuer DID to embed in Cokret session grants and discovery
     /// documents. Defaults to `service_did`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer_did: Option<String>,
 
-    /// Lifetime of Contrix session grants, in seconds.
+    /// Lifetime of Cokret session grants, in seconds.
     ///
     /// These are the DPoP-bound JWT grants returned by the REST auth bridge
     /// login/exchange paths and refreshed through
@@ -73,7 +73,7 @@ pub struct ContrixConfig {
     #[serde_as(as = "serde_with::DurationSeconds<i64>")]
     pub session_grant_ttl: Duration,
 
-    /// Audience string expected by Contrix admin integrations.
+    /// Audience string expected by Cokret admin integrations.
     ///
     /// When omitted, the backend falls back to the local `/api/v1` endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -100,7 +100,7 @@ pub struct ContrixConfig {
     /// Round R2/R3 (2026-05-20) — deployment trust-domain identifier
     /// injected into Realm policy and the server-describe document.
     ///
-    /// Wire form: `cx:trust_domain:<scope>` where `<scope>` matches
+    /// Wire form: `ck:trust_domain:<scope>` where `<scope>` matches
     /// `[a-z0-9._:-]{1,128}`. This value enters the canonical transcript
     /// of every `cx.cross_signing.reset` proof; **changing
     /// `trust_domain` invalidates existing cross-signing reset proofs**
@@ -128,7 +128,7 @@ pub struct ContrixConfig {
     pub oob_code_kind: OobCodeKindConfig,
 
     /// Fail-closed gate for the temporary password-login bridge that returns a
-    /// Contrix principal-server session grant directly from
+    /// Cokret principal-server session grant directly from
     /// `POST /api/v1/auth/login`.
     ///
     /// Defaults to `false`: production callers must use the OIDC/passkey bridge
@@ -173,7 +173,7 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
-impl Default for ContrixConfig {
+impl Default for CokretConfig {
     fn default() -> Self {
         Self {
             principal_servers: Vec::new(),
@@ -195,8 +195,8 @@ impl Default for ContrixConfig {
     }
 }
 
-impl ContrixConfig {
-    /// Returns `true` when the Contrix section carries no explicit overrides.
+impl CokretConfig {
+    /// Returns `true` when the Cokret section carries no explicit overrides.
     #[must_use]
     pub fn is_default(&self) -> bool {
         self.principal_servers.is_empty()
@@ -217,7 +217,7 @@ impl ContrixConfig {
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
-    /// `cx:trust_domain:<scope>` wire format. Returns the borrowed
+    /// `ck:trust_domain:<scope>` wire format. Returns the borrowed
     /// scope half on success so call-sites can build the
     /// `TypedTrustDomainId` directly. Delegates the acceptance check to
     /// the SDK validator `contrix_identifiers::is_trust_domain` so the
@@ -227,18 +227,18 @@ impl ContrixConfig {
     /// # Errors
     ///
     /// Returns a static string when the value is not a well-formed
-    /// `cx:trust_domain:<scope>` (missing prefix, empty/oversized scope,
+    /// `ck:trust_domain:<scope>` (missing prefix, empty/oversized scope,
     /// bad leading byte, or any byte outside `[a-z0-9._:-]`).
     pub fn validate_trust_domain(value: &str) -> Result<&str, &'static str> {
         if !contrix_identifiers::is_trust_domain(value) {
             return Err(
-                "trust_domain MUST be `cx:trust_domain:<scope>` with scope `[a-z0-9][a-z0-9._:-]{0,127}`",
+                "trust_domain MUST be `ck:trust_domain:<scope>` with scope `[a-z0-9][a-z0-9._:-]{0,127}`",
             );
         }
         // `is_trust_domain` already guaranteed the prefix is present.
         value
             .strip_prefix(TRUST_DOMAIN_PREFIX)
-            .ok_or("trust_domain MUST start with `cx:trust_domain:`")
+            .ok_or("trust_domain MUST start with `ck:trust_domain:`")
     }
 }
 
@@ -256,8 +256,8 @@ pub enum OobCodeKindConfig {
     Lookup,
 }
 
-impl ConfigurationSection for ContrixConfig {
-    const PATH: &'static str = "contrix";
+impl ConfigurationSection for CokretConfig {
+    const PATH: &'static str = "cokret";
 
     fn validate(
         &self,
@@ -267,7 +267,7 @@ impl ConfigurationSection for ContrixConfig {
         let max_ttl = Duration::try_seconds(SESSION_GRANT_TTL_MAX_SECONDS).unwrap();
         if self.session_grant_ttl < min_ttl || self.session_grant_ttl > max_ttl {
             return Err(std::io::Error::other(
-                "contrix.session_grant_ttl must be between 60 and 86400 seconds",
+                "cokret.session_grant_ttl must be between 60 and 86400 seconds",
             )
             .into());
         }
@@ -278,7 +278,7 @@ impl ConfigurationSection for ContrixConfig {
 
         if matches!(self.oob_code_kind, OobCodeKindConfig::Lookup) {
             return Err(std::io::Error::other(
-                "contrix.oob_code_kind=lookup is disabled until lookup-mode strike counters are durable",
+                "cokret.oob_code_kind=lookup is disabled until lookup-mode strike counters are durable",
             )
             .into());
         }
@@ -286,14 +286,14 @@ impl ConfigurationSection for ContrixConfig {
         if let Some(org_id) = self.admin_org_id.as_deref()
             && org_id.trim().is_empty()
         {
-            return Err(std::io::Error::other("contrix.admin_org_id must not be empty").into());
+            return Err(std::io::Error::other("cokret.admin_org_id must not be empty").into());
         }
 
         Ok(())
     }
 }
 
-/// Trusted Principal Server metadata published through Contrix discovery.
+/// Trusted Principal Server metadata published through Cokret discovery.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PrincipalServerConfig {
     /// Human-readable identifier for the consumer, such as `soland-prod`.
@@ -319,7 +319,7 @@ pub struct PrincipalServerConfig {
 
     /// Optional static bearer token accepted when this Principal Server calls
     /// coauth's session-grant introspection endpoint
-    /// (`/api/v1/contrix/session-grants/introspect`). Mirrors
+    /// (`/api/v1/cokret/session-grants/introspect`). Mirrors
     /// `oauth_introspection_bearer` for the session-grant exchange path:
     /// avoids requiring a DB-backed PAT/OAuth-session for the
     /// server-to-server hop, which is awkward in dev when the coauth DB
@@ -405,39 +405,39 @@ mod tests {
 
     #[test]
     fn trust_domain_accepts_well_formed_scope() {
-        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:example.net").is_ok());
-        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:soland-prod.eu").is_ok());
-        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:tenant_a.shard_1").is_ok());
+        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:example.net").is_ok());
+        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:soland-prod.eu").is_ok());
+        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:tenant_a.shard_1").is_ok());
     }
 
     #[test]
     fn trust_domain_rejects_uppercase_and_empty() {
-        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:Example").is_err());
-        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:").is_err());
-        assert!(ContrixConfig::validate_trust_domain("example.net").is_err());
+        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:Example").is_err());
+        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:").is_err());
+        assert!(CokretConfig::validate_trust_domain("example.net").is_err());
     }
 
     #[test]
     fn trust_domain_rejects_overlong_scope() {
-        let too_long = format!("cx:trust_domain:{}", "a".repeat(129));
-        assert!(ContrixConfig::validate_trust_domain(&too_long).is_err());
-        let just_right = format!("cx:trust_domain:{}", "a".repeat(128));
-        assert!(ContrixConfig::validate_trust_domain(&just_right).is_ok());
+        let too_long = format!("ck:trust_domain:{}", "a".repeat(129));
+        assert!(CokretConfig::validate_trust_domain(&too_long).is_err());
+        let just_right = format!("ck:trust_domain:{}", "a".repeat(128));
+        assert!(CokretConfig::validate_trust_domain(&just_right).is_ok());
     }
 
     #[test]
     fn trust_domain_rejects_disallowed_chars() {
-        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:bad space").is_err());
-        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:bad/slash").is_err());
+        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:bad space").is_err());
+        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:bad/slash").is_err());
         // Scope MUST start with [a-z0-9], not a separator.
-        assert!(ContrixConfig::validate_trust_domain("cx:trust_domain:.dotleader").is_err());
+        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:.dotleader").is_err());
     }
 
     #[test]
     fn lookup_oob_kind_is_fail_closed_until_strikes_are_durable() {
-        let config = ContrixConfig {
+        let config = CokretConfig {
             oob_code_kind: OobCodeKindConfig::Lookup,
-            ..ContrixConfig::default()
+            ..CokretConfig::default()
         };
         let figment = figment::Figment::new();
         assert!(config.validate(&figment).is_err());
@@ -446,14 +446,14 @@ mod tests {
     #[test]
     fn session_grant_ttl_defaults_to_five_minutes() {
         assert_eq!(
-            ContrixConfig::default().session_grant_ttl,
+            CokretConfig::default().session_grant_ttl,
             Duration::try_minutes(5).unwrap()
         );
     }
 
     #[test]
     fn session_grant_ttl_deserializes_seconds() {
-        let config: ContrixConfig =
+        let config: CokretConfig =
             serde_json::from_value(serde_json::json!({ "session_grant_ttl": 900 })).unwrap();
 
         assert_eq!(config.session_grant_ttl, Duration::try_minutes(15).unwrap());
@@ -462,9 +462,9 @@ mod tests {
     #[test]
     fn session_grant_ttl_rejects_out_of_range_values() {
         let figment = figment::Figment::new();
-        let config = ContrixConfig {
+        let config = CokretConfig {
             session_grant_ttl: Duration::try_seconds(30).unwrap(),
-            ..ContrixConfig::default()
+            ..CokretConfig::default()
         };
         assert!(config.validate(&figment).is_err());
     }

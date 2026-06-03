@@ -61,18 +61,18 @@ sentry-tracing.workspace = true
 
 coauth-admin-types = { workspace = true, features = ["schema"] }
 coauth-config.workspace = true
-# Contrix v1 SDK: typed Move builder + Ed25519 signer used by
+# Cokret v1 SDK: typed Move builder + Ed25519 signer used by
 # `handlers::account::mimi_consent::anchor_pending_move`. `signer` feature
-# pulls in the production Ed25519MoveSigner; `contrix-core` carries the
+# pulls in the production Ed25519MoveSigner; `cokret-core` carries the
 # trait + UnsignedMove + identifier types.
-contrix-core.workspace = true
-contrix-signatures = { workspace = true, features = ["signer"] }
-# Umbrella `contrix` SDK — currently consumed only for
-# `contrix::identity::binding::*` (multicodec helpers used by
+cokret-core.workspace = true
+cokret-signatures = { workspace = true, features = ["signer"] }
+# Umbrella `cokret` SDK — currently consumed only for
+# `cokret::identity::binding::*` (multicodec helpers used by
 # `services::passkey_derive`). Opted in via workspace declaration with
 # default features off + `full-surface` on, so the heavier client /
 # openmls / sync surface stays out of the backend build.
-contrix.workspace = true
+cokret.workspace = true
 coauth-data.workspace = true
 coauth-messaging.workspace = true
 coauth-i18n.workspace = true

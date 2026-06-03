@@ -94,14 +94,14 @@ else
 fi
 
 # Sibling-repo path-deps. The workspace `Cargo.toml` references
-# `../contrix-rust-sdk/...` so the docker build context (now the
+# `../cokret-rust-sdk/...` so the docker build context (now the
 # parent dir per docker-compose.integration.yaml) needs to find it.
 heading "sibling repos"
-SDK_DIR="$(cd "${REPO_ROOT}/.." && pwd)/contrix-rust-sdk"
+SDK_DIR="$(cd "${REPO_ROOT}/.." && pwd)/cokret-rust-sdk"
 if [[ -f "${SDK_DIR}/Cargo.toml" ]]; then
-    ok "contrix-rust-sdk present at ${SDK_DIR}"
+    ok "cokret-rust-sdk present at ${SDK_DIR}"
 else
-    err "contrix-rust-sdk missing at ${SDK_DIR}; docker build will fail at chef cook"
+    err "cokret-rust-sdk missing at ${SDK_DIR}; docker build will fail at chef cook"
 fi
 
 # ─────────────────────────────────────────────────────────────────────

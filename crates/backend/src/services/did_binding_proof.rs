@@ -56,7 +56,7 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
@@ -183,7 +183,7 @@ pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofErr
 pub async fn validate_control_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -326,7 +326,7 @@ pub(crate) enum SdkJwsVerifyError {
 /// [`contrix_signatures::proof::PublicKeyMaterial::ed25519_bytes`].
 pub(crate) fn verify_compact_jws_with_sdk(
     proof_jws: &str,
-    verification_methods: &[crate::handlers::contrix::VerificationMethod],
+    verification_methods: &[crate::handlers::cokret::VerificationMethod],
     verification_method_id: &str,
 ) -> Result<(), SdkJwsVerifyError> {
     let mut parts = proof_jws.split('.');
@@ -399,7 +399,7 @@ pub(crate) fn verify_compact_jws_with_sdk(
 pub(crate) fn verify_detached_jws_with_sdk(
     detached_jws: &str,
     payload_bytes: &[u8],
-    verification_methods: &[crate::handlers::contrix::VerificationMethod],
+    verification_methods: &[crate::handlers::cokret::VerificationMethod],
 ) -> Result<String, SdkJwsVerifyError> {
     let mut parts = detached_jws.split('.');
     let header_b64u = parts
@@ -552,7 +552,7 @@ pub enum VerificationProofError {
 pub async fn verify_verification_service_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -836,7 +836,7 @@ mod tests {
             .join("..")
             .join("..")
             .join("..")
-            .join("contrix-spec")
+            .join("cokret-spec")
             .join("spec")
             .join("v1")
             .join("artifacts")
@@ -846,13 +846,13 @@ mod tests {
             Ok(raw) => raw,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 eprintln!(
-                    "skipping contrix-spec fixture test; missing {}",
+                    "skipping cokret-spec fixture test; missing {}",
                     fixture_path.as_str()
                 );
                 return;
             }
             Err(error) => panic!(
-                "failed reading contrix-spec fixture {}: {error}",
+                "failed reading cokret-spec fixture {}: {error}",
                 fixture_path.as_str()
             ),
         };
@@ -887,7 +887,7 @@ mod tests {
             Some(kid)
         );
 
-        let method = crate::handlers::contrix::VerificationMethod {
+        let method = crate::handlers::cokret::VerificationMethod {
             id: vector.did_document_fragment.id.clone(),
             kind: vector.did_document_fragment.kind.clone(),
             controller: vector.did_document_fragment.controller.clone(),

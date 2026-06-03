@@ -10,18 +10,18 @@ releases) are produced by `.github/workflows/release.yaml`. See
 [`docs/en/development/releasing.md`](docs/en/development/releasing.md)
 for the full release process.
 
-## R3.4 — Spec sync 2026-05-31 (contrix-spec @ c2848a4)
+## R3.4 — Spec sync 2026-05-31 (cokret-spec @ c2848a4)
 
-- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `cx:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
-
-> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
-
-## R3.3 — Spec sync 2026-05-28 (contrix-spec @ cced4b8)
-
-- R3.3 spec sync — pin to contrix-spec @ cced4b8 (CXP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `ck:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
-## R3.2 — Spec sync 2026-05-28 (contrix-spec @ b56cab1)
+
+## R3.3 — Spec sync 2026-05-28 (cokret-spec @ cced4b8)
+
+- R3.3 spec sync — pin to cokret-spec @ cced4b8 (CXP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
+## R3.2 — Spec sync 2026-05-28 (cokret-spec @ b56cab1)
 
 - Handle-claim issuance rejects `claim_type=service_handle` (type-level + wire check, `claim_type_unsupported`) and non-principal-DID subjects (`handle_claim_subject_not_principal_did`).
 - DID Documents for holders emit optional `metadata.primary_handle` (preference pointer, default null; NOT a handle declaration channel).
@@ -29,11 +29,11 @@ for the full release process.
 - `did:webvh` as_of metadata + self-service preference PATCH deferred `TODO(R3.2.1)`.
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
-## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
+## R3 — Spec sync 2026-05-27 (cokret-spec @ b47ff6ec)
 
 - AUTH-1 / AUTH-2: `cx.account.agent_key_pair` and `cx.account.issue_session_grant` agent branches now emit distinct error codes — `verification_method_principal_mismatch`, `pairing_request_expired`, `proof_invalid`, `agent_paused`, `agent_deactivated`, `accountability_grant_missing` — with fail-closed DID-match check before proof validation.
 - AUTH-3: fail-closed revocation freshness window so paused-agent tokens fail closed within the propagation window.
-- CAP-1 / CAP-2: capability evaluator accepts the five new call actions (`cx.call.{join,screen_share,record,transcribe,moderate}`) and the `circle` selector kind (`cx:circle:<uuid>`).
+- CAP-1 / CAP-2: capability evaluator accepts the five new call actions (`cx.call.{join,screen_share,record,transcribe,moderate}`) and the `circle` selector kind (`ck:circle:<uuid>`).
 - POLICY-1: shared policy decision signals `cx.profile.accountable_principals.strict_reject.v1` mode to reducer / submit endpoint when declared by deployment.
 - REC-1 / HDL-1: wire-level recovery-policy `proof_kind` enum guard helper added in `crates/backend/src/services/recovery_policy_proof.rs`; organization handle claims gate through NFC + UTS#39 confusable + script-mixed reject before signing.
 
@@ -53,7 +53,7 @@ for the full release process.
   and the RFC 7515 signing input (`b64url(header) "." b64url(payload)`)
   is reconstructed from the wire bytes themselves so no JWS-library
   state intervenes between the resolved DID-document JWK and the final
-  signature check. The contrix-spec Ed25519 detached-JWS fixture test
+  signature check. The cokret-spec Ed25519 detached-JWS fixture test
   (`contrix_spec_binding_proof_fixture_verifies`) still passes against
   the new path. New private `verify_compact_jws_with_sdk` helper plus
   `SdkJwsVerifyError` enum consolidate the verify pipeline.
@@ -89,7 +89,7 @@ for the full release process.
   reference in the original P2B.5 brief did not match a live stub; no
   change made there.
 
-### CXP-0007 circle rollout — coauth P2B (2026-05-26, contrix-spec `9cb47c1..2b0d70d`)
+### CXP-0007 circle rollout — coauth P2B (2026-05-26, cokret-spec `9cb47c1..2b0d70d`)
 
 - **Security** (P1.5) `config.dev.yaml` (real Gmail SMTP password + RSA/EC
   private keys + DB credentials) and `coauth-dev.log` were never committed
@@ -118,7 +118,7 @@ for the full release process.
   surfaced on admin DTOs and documented in admin-api topic.
 - **Notes** Version stays at 1.8.0; this is not a release.
 
-### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
+### Round R4 — protocol review closures (2026-05-20, cokret-spec `2a4d39b..a77b995`)
 
 Closes 8 protocol-review commits on the auth / identity / policy surfaces.
 See [`../_todos.md`](../_todos.md) for the workstream context.
@@ -171,8 +171,8 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
   time padding to ≤50 ms. The `Expired` trigger's internal reason code
   joins the SDK error catalog as `expired_invite_token` (re-exported
   from `contrix_core::error::ERROR_CODE_EXPIRED_INVITE_TOKEN`).
-- **Deployment `trust_domain` config** (`ContrixConfig::trust_domain`,
-  T08). Optional `cx:trust_domain:<scope>` value validated against the
+- **Deployment `trust_domain` config** (`CokretConfig::trust_domain`,
+  T08). Optional `ck:trust_domain:<scope>` value validated against the
   SDK `TypedTrustDomainId` rules (scope `[a-z0-9._:-]{1,128}`,
   lowercase-leading). The value is propagated into Realm policy and
   server-describe via soland's config API. **Changing `trust_domain`
@@ -234,7 +234,7 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
 
 ### Added
 
-- `_todos.md` consolidates the remaining Contrix migration work and
+- `_todos.md` consolidates the remaining Cokret migration work and
   hygiene items.
 - `Dockerfile` `HEALTHCHECK` smoke-tests the binary on each pull; real
   liveness probes should target `/health` on the internal listener.
@@ -284,13 +284,13 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
   `docs/en/development/releasing.md` (Cosign signs `v*` tags and
   `main` only) with a `cosign verify` snippet for operators.
 - Postgres advisory-lock label renamed to `"coauth config sync"`.
-- Bearer-token authentication enforced on the Contrix session-grant
+- Bearer-token authentication enforced on the Cokret session-grant
   admin surface (`/api/v1/session-grants`,
   `/api/v1/session-grants/introspect`,
   `/api/v1/session-grants/{id}/revoke`). Read paths accept admin
-  scopes or `urn:contrix:principal-server:session.bind`; revocation
+  scopes or `urn:cokret:principal-server:session.bind`; revocation
   requires an admin scope. Implemented in
-  `crates/backend/src/handlers/contrix.rs::require_session_grant_caller`.
+  `crates/backend/src/handlers/cokret.rs::require_session_grant_caller`.
 
 ### Audited
 
@@ -309,15 +309,15 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
   - `Depot::get(...).cloned().ok_or_else(...)` in `auth.rs` (the call
     returns `Result`, not `Option`); switched to `.map_err(...)`.
   - Missing `Resource` impl on `AccountRiskActionCurrentResponse`.
-  - Missing `From<RepositoryError>` for `ContrixRouteError`.
+  - Missing `From<RepositoryError>` for `CokretRouteError`.
   - Missing `derive(ToSchema)` on `AuthBridge*` and
     `IntegrationManifest*` response types.
   - Partially-moved `user` borrow in `AccountRecord::from_user`.
 - `.github/workflows/ci.yaml` clippy job now pins
   `dtolnay/rust-toolchain@1.93.0` to match the `Dockerfile` builder.
 - Repository URLs / container registry references unified under
-  `github.com/contrix-dev/coauth` and `ghcr.io/contrix-dev/coauth`.
+  `github.com/cokret-dev/coauth` and `ghcr.io/cokret-dev/coauth`.
 - User-visible legacy product strings in CLI help, library doc-comments, and
   contributor / architecture docs replaced with `coauth`.
 
-[Unreleased]: https://github.com/contrix-dev/coauth/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/cokret-dev/coauth/compare/v1.8.0...HEAD

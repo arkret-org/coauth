@@ -1,7 +1,7 @@
 # 升级
 
 `coauth` 在 HTTP 契约上遵循 [SemVer](https://semver.org/)。Patch / minor
-升级永远不会破坏 OIDC / OAuth / Contrix 已有 surface；major 升级会在至少
+升级永远不会破坏 OIDC / OAuth / Cokret 已有 surface；major 升级会在至少
 一个 minor 版本之前预先标记 deprecation。
 
 ## 常规升级流程
@@ -31,7 +31,7 @@
 
 - `/.well-known/openid-configuration`
 - `/.well-known/did.json`
-- `/.well-known/contrix/openapi.yaml`
+- `/.well-known/cokret/openapi.yaml`
 - `/api/admin/v1/openapi.yaml`
 - `/api/v1/server/describe` 与 `/api/v1/*` 其余路径
 - CLI 子命令（`server`、`worker`、`manage`、`database`、`config`、

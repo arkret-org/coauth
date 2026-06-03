@@ -10,8 +10,8 @@
 //!
 //! NOTE: the "Flow" in this module is coauth's **internal authentication-flow
 //! engine** (registration / recovery / MFA / OAuth consent). It is unrelated
-//! to the Contrix protocol `cx:flow:` collaboration object — these types never
-//! touch the Contrix wire, and the protocol's `stage`/`state`/`status` axis
+//! to the Cokret protocol `ck:flow:` collaboration object — these types never
+//! touch the Cokret wire, and the protocol's `stage`/`state`/`status` axis
 //! rules do not govern them. The name collision is purely nominal; do not
 //! conflate `FlowSession` here with a protocol Flow durable object.
 

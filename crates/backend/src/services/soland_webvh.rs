@@ -363,7 +363,7 @@ fn embedded_webvh_document_value(
         "alsoKnownAs": also_known_as,
         "service": [{
             "id": format!("{did}#soland"),
-            "type": "ContrixPrincipalServer",
+            "type": "CokretPrincipalServer",
             "serviceEndpoint": service_endpoint,
         }],
     })

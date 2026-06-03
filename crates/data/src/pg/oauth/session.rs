@@ -142,7 +142,7 @@ macro_rules! apply_session_filter {
         }
 
         if let Some(device) = $filter.device() {
-            let device_scope = format!("urn:contrix:client:device:{device}");
+            let device_scope = format!("urn:cokret:client:device:{device}");
             q = q.filter(oauth_sessions::scope_list.contains(vec![device_scope]));
         }
 

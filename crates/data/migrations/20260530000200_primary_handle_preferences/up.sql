@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS user_primary_handle_preferences (
             position(':' in handle) > 1
             AND handle = lower(handle)
             AND handle NOT LIKE 'acct:%'
-            AND handle NOT LIKE 'contrix://%'
+            AND handle NOT LIKE 'cokret://%'
         )
     ),
     CHECK (

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Contrix Authors. Licensed under the Apache License,
+// Copyright (c) 2026 Cokret Authors. Licensed under the Apache License,
 // Version 2.0; see LICENSE-APACHE for details. Originally developed for the
 // legacy delegated-auth connector.
 
@@ -209,10 +209,10 @@ impl PrincipalProvisionRequest {
 }
 
 /// Trait defining account and device synchronization hooks for a downstream
-/// Contrix principal system.
+/// Cokret principal system.
 ///
 /// This trait keeps account-lifecycle call sites testable while
-/// Contrix/Soland integrations use session grants and Principal Server
+/// Cokret/Soland integrations use session grants and Principal Server
 /// discovery.
 #[async_trait::async_trait]
 pub trait PrincipalServerAdmin: Send + Sync {
@@ -509,7 +509,7 @@ where
 /// provision users into, query state from, and synchronize with.
 ///
 /// [`PrincipalServerAdmin`] is the primary implementation of this trait
-/// for Contrix/Soland-facing principal connectors.
+/// for Cokret/Soland-facing principal connectors.
 pub trait ConnectorProvider: PrincipalServerAdmin {
     /// A human-readable name for this connector (e.g. "soland").
     fn provider_name(&self) -> &str;

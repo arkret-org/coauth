@@ -4,7 +4,7 @@
 
 //! Admin review surface for the invite-quarantine outbox queue.
 //!
-//! Spec context: `contrix-spec` `consent-model.md` §6.1 default-profile
+//! Spec context: `cokret-spec` `consent-model.md` §6.1 default-profile
 //! path. When the consent gate in `batch_invite` returns `Quarantined`,
 //! the invite intent is persisted to `invite_quarantine_queue` (see
 //! `crates/backend/src/services/invite_quarantine.rs`). Operators

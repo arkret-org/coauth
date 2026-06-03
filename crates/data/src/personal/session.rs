@@ -113,11 +113,11 @@ impl PersonalSession {
         Ok(self)
     }
 
-    /// Whether the session's scope includes a Contrix device scope, indicating
+    /// Whether the session's scope includes a Cokret device scope, indicating
     /// that a device is attached.
     #[must_use]
     pub fn has_device(&self) -> bool {
-        const DEVICE_URN: &str = "urn:contrix:client:device:";
+        const DEVICE_URN: &str = "urn:cokret:client:device:";
 
         self.scope.iter().any(|tok| {
             let s = tok.as_str();

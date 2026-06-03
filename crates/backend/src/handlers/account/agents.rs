@@ -9,7 +9,7 @@
 //!
 //! Authentication: this endpoint accepts the soland / sodmin static
 //! bearer token configured under
-//! `contrix.principal_servers[].session_grant_introspection_bearer` —
+//! `cokret.principal_servers[].session_grant_introspection_bearer` —
 //! the same trust anchor used elsewhere for server-to-server flows.
 //! Browser sessions and end-user OAuth tokens are NOT accepted.
 //!
@@ -23,7 +23,7 @@
 use std::collections::BTreeSet;
 
 use chrono::{DateTime, Utc};
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     RepositoryAccess,
     accountability::{
@@ -49,7 +49,7 @@ use crate::{
     AppError, CreatedJsonResult,
     handlers::{
         admin::{CreatedJson, audit_helper::record_service_admin_operation_signed},
-        contrix::service_did_for,
+        cokret::service_did_for,
     },
     services::did_binding_proof::normalize_did_for_binding,
 };
@@ -106,7 +106,7 @@ pub struct AccountabilityGrantRequest {
 /// Response payload for `POST /api/v1/agents/{id}/accountability-grant`.
 ///
 /// CXP-0008 (`id-kind-registry.json`): the wire shape carries the
-/// freshly minted `cx:accountability_grant:<uuid7>` typed id, the
+/// freshly minted `ck:accountability_grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
 /// `cx.agent.*` set before issuing the response; soland still verifies
@@ -115,11 +115,11 @@ pub struct AccountabilityGrantRequest {
 /// `accountability_grant_id` and `agent_principal_id` are emitted as
 /// raw strings in the OpenAPI surface — the grant id is construction-validated
 /// by the SDK typed id helper, while `agent_principal_id` is a DID-as-id per
-/// `contrix-spec` common-fields §4.2.
+/// `cokret-spec` common-fields §4.2.
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantResponse {
     /// Typed id of the issued grant. Wire form:
-    /// `cx:accountability_grant:<uuid7>`.
+    /// `ck:accountability_grant:<uuid7>`.
     pub accountability_grant_id: String,
 
     /// Agent principal DID this grant authorizes capability actions on.
@@ -145,7 +145,7 @@ pub struct AccountabilityGrantResponse {
 ///
 /// Internal CXP-0008 grant-issuance endpoint. Accepts only the soland /
 /// sodmin static bearer token (matched against any
-/// `contrix.principal_servers[].session_grant_introspection_bearer`
+/// `cokret.principal_servers[].session_grant_introspection_bearer`
 /// configured for the deployment); browser sessions and end-user
 /// bearers are rejected with 401.
 ///
@@ -183,7 +183,7 @@ pub async fn post_accountability_grant(
     let mut rng = make_rng();
     let issued_at = clock.now();
     let accountability_grant_id =
-        AccountabilityGrantId::new(new_prefixed_uuid7("cx:accountability_grant:"))
+        AccountabilityGrantId::new(new_prefixed_uuid7("ck:accountability_grant:"))
             .map_err(|err| AppError::internal_box(Box::new(err)))?;
     let accountability_grant_id = accountability_grant_id.into_string();
     let response = AccountabilityGrantResponse {
@@ -383,7 +383,7 @@ fn build_soland_fanout_payload(
     response: &AccountabilityGrantResponse,
     raw_payload_digest: &str,
     service_did: &str,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
 ) -> Result<serde_json::Value, AppError> {
     let principal_servers: Vec<_> = contrix_config
         .principal_servers
@@ -476,7 +476,7 @@ pub async fn revoke_accountability_grant_by_id(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// R3 spec-sync (2026-05-27, contrix-spec b47ff6ec) — agent auth error matrix.
+// R3 spec-sync (2026-05-27, cokret-spec b47ff6ec) — agent auth error matrix.
 //
 // AUTH-1: `cx.account.agent_key_pair` error matrix. Before invoking the proof
 //         validator, fail-closed DID match →
@@ -505,7 +505,7 @@ pub async fn revoke_accountability_grant_by_id(
 /// Wire-level rejection reasons for the `cx.account.agent_key_pair` operation
 /// and the agent branch of `cx.account.issue_session_grant`. Each variant
 /// renders to a canonical error code from
-/// `contrix-spec/v1/artifacts/error-code-registry.json` v2026-05-27.
+/// `cokret-spec/v1/artifacts/error-code-registry.json` v2026-05-27.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentAuthRejection {
     /// `verification_method_principal_mismatch` — the proof's
@@ -592,7 +592,7 @@ impl AgentAuthRejection {
 /// (the full ceiling tunable lives on the deployment config and is
 /// surfaced under `cx.profile.agent_runtime.v1` in a follow-up).
 // TODO(R3.1): plumb a deployment-config override
-// (`contrix.agent_runtime.revocation_freshness_window_seconds`) so SREs
+// (`cokret.agent_runtime.revocation_freshness_window_seconds`) so SREs
 // can dial this in for tighter / looser windows.
 pub const PAUSED_REVOCATION_FRESHNESS_WINDOW: chrono::Duration = chrono::Duration::seconds(30);
 
@@ -795,9 +795,9 @@ mod agent_auth_error_matrix_tests {
 /// Reject any caller that isn't soland / sodmin (no browser session, no
 /// end-user bearer). The single accepted credential is the static
 /// bearer configured under
-/// `contrix.principal_servers[].session_grant_introspection_bearer` —
+/// `cokret.principal_servers[].session_grant_introspection_bearer` —
 /// shared with the existing session-grant introspection path.
-fn authn_internal_caller(req: &Request, contrix_config: &ContrixConfig) -> Result<(), AppError> {
+fn authn_internal_caller(req: &Request, contrix_config: &CokretConfig) -> Result<(), AppError> {
     let authorization = req
         .headers()
         .get(http::header::AUTHORIZATION)

@@ -4,18 +4,18 @@
 会话、设备、claim、OAuth 客户端、通知渠道、连接器和策略数据。
 
 管理 API 默认不暴露。需要在 `http.listeners` 的 `resources` 中启用 `adminapi`。所有请求
-都必须携带具备 `urn:coauth:admin` 或 `urn:contrix:admin:*` 的访问令牌。
+都必须携带具备 `urn:coauth:admin` 或 `urn:cokret:admin:*` 的访问令牌。
 
 ## API 文档
 
 完整 API 文档以 OpenAPI 规范提供。启用 `adminapi` 后，运行时会暴露这些路径：
 
-- `GET /api/admin/v1/openapi.yaml`：Contrix-native 管理 API 合约。
-- `GET /.well-known/contrix/openapi.yaml`：供 `sodmin` 和服务自动化发现。
+- `GET /api/admin/v1/openapi.yaml`：Cokret-native 管理 API 合约。
+- `GET /.well-known/cokret/openapi.yaml`：供 `sodmin` 和服务自动化发现。
 - `GET /api-doc/admin/openapi.json`：兼容 Swagger 工具的 JSON 版本。
 - `GET /admin-swagger-ui/`：服务内置 Swagger UI。
 
-Contrix-native 管理面现在包含 `GET /api/admin/v1/accounts`、
+Cokret-native 管理面现在包含 `GET /api/admin/v1/accounts`、
 `GET /api/admin/v1/accounts/{id}`、`POST /api/admin/v1/accounts/{id}/lock` 和
 `POST /api/admin/v1/accounts/{id}/disable`。DID binding、设备管理、claim
 签发/吊销、policy dry-run 和 signed policy decision audit 路由已经进入 OpenAPI，

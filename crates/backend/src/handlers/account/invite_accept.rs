@@ -139,7 +139,7 @@ fn shared_nonce_store() -> &'static Arc<NonceStore> {
 /// summary; on failure returns the status code dictated by
 /// `InviteVerificationError::http_status()`.
 ///
-/// When the deployment has no `contrix.verification_service_did`
+/// When the deployment has no `cokret.verification_service_did`
 /// configured the route returns `503 verifier_not_configured` —
 /// there's no trusted `iss` to compare the binding proof against, so
 /// we cannot safely run the verifier.
@@ -175,13 +175,13 @@ pub async fn post_verify_invite(
     // come from configuration.
     let Some(expected_iss) = contrix_config.verification_service_did.clone() else {
         warn!(
-            "POST /api/v1/invites/3pid/verify called but contrix.verification_service_did is unset; \
+            "POST /api/v1/invites/3pid/verify called but cokret.verification_service_did is unset; \
              returning 503 verifier_not_configured"
         );
         res.status_code(StatusCode::SERVICE_UNAVAILABLE);
         res.render(Json(VerifyErrorBody {
             error: "verifier_not_configured",
-            message: "contrix.verification_service_did is not set in this deployment".into(),
+            message: "cokret.verification_service_did is not set in this deployment".into(),
         }));
         return Ok(());
     };

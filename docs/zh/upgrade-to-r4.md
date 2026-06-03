@@ -1,7 +1,7 @@
 # 升级到 Round R4
 
-Round R4 收尾了 `coauth` 与 Contrix 协议在 2026-05-20 协议评
-审中确定的工作。它对直接消费 Contrix 账户、身份、邀请或策
+Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
+审中确定的工作。它对直接消费 Cokret 账户、身份、邀请或策
 略接口的客户端与下游服务而言是破坏性更新。OIDC/OAuth 端点
 仍保持原有的兼容性策略。
 
@@ -32,7 +32,7 @@ Round R4 收尾了 `coauth` 与 Contrix 协议在 2026-05-20 协议评
 
 ## Trust domain 轮换
 
-`contrix.trust_domain` 是每一条 `cx.cross_signing.reset` 证明
+`cokret.trust_domain` 是每一条 `cx.cross_signing.reset` 证明
 的规范 transcript 的一部分。变更该值会令使用旧 trust domain
 签发的 reset 证明失效。
 
@@ -48,7 +48,7 @@ Round R4 收尾了 `coauth` 与 Contrix 协议在 2026-05-20 协议评
 
 轮换过程中：
 
-1. 在 `contrix.trust_domain` 中写入新值。
+1. 在 `cokret.trust_domain` 中写入新值。
 2. 重启一个 `coauth` 副本，确认
    `/api/v1/server/describe` 公布了新值。
 3. 滚动重启其余副本。

@@ -1,8 +1,8 @@
--- R3.1 Handle wire rename (HDLREN-1) — contrix-spec @ 7157ee8 (2026-05-27).
+-- R3.1 Handle wire rename (HDLREN-1) — cokret-spec @ 7157ee8 (2026-05-27).
 --
--- Spec change: the canonical Contrix handle form is now
+-- Spec change: the canonical Cokret handle form is now
 -- `<localpart>:<domain>` (e.g. `alice:acme.example`), replacing the
--- legacy URI form `contrix://<domain>/users/<localpart>` that was used
+-- legacy URI form `cokret://<domain>/users/<localpart>` that was used
 -- when the `handle_audit_log` table was introduced in migration
 -- `20260520000100_handle_claims_and_audit`.
 --

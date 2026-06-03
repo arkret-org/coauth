@@ -192,7 +192,7 @@ fn PasswordVisibilityToggle(visible: Signal<bool>) -> Element {
                     path { d: "M1 1L23 23" }
                 } else {
                     path { d: "M1 12S5 4 12 4S23 12 23 12S19 20 12 20S1 12 1 12Z" }
-                    circle { cx: "12", cy: "12", r: "3" }
+                    circle { ck: "12", cy: "12", r: "3" }
                 }
             }
         }

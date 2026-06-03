@@ -5,10 +5,10 @@ pub fn get_ninety_days_ago() -> String {
     ninety_days_ago.format("%Y-%m-%dT00:00:00Z").to_string()
 }
 
-/// Extract device ID from a Contrix OAuth scope string.
+/// Extract device ID from a Cokret OAuth scope string.
 pub fn device_id_from_scope(scope: &str) -> Option<String> {
     for part in scope.split_whitespace() {
-        if let Some(device_id) = part.strip_prefix("urn:contrix:client:device:")
+        if let Some(device_id) = part.strip_prefix("urn:cokret:client:device:")
             && !device_id.is_empty()
         {
             return Some(device_id.to_owned());

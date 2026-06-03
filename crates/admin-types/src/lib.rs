@@ -10,7 +10,7 @@
 //! compile together.
 //!
 //! Scope: **operator-facing** admin API only. Protocol-level event /
-//! grant types live in `contrix-rust-sdk` and are not duplicated here.
+//! grant types live in `cokret-rust-sdk` and are not duplicated here.
 //!
 //! Schema derives (`schemars::JsonSchema`, `salvo::oapi::ToSchema`) are
 //! gated behind the `schema` feature so that pure clients like `sodmin`

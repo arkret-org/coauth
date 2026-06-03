@@ -807,17 +807,17 @@ pub struct IntrospectionResponse {
     /// Only used for compatibility access and refresh tokens.
     pub device_id: Option<String>,
 
-    /// Contrix extension: principal DID associated with the token subject.
-    #[serde(rename = "org.contrix.principal_did")]
+    /// Cokret extension: principal DID associated with the token subject.
+    #[serde(rename = "org.cokret.principal_did")]
     pub contrix_principal_did: Option<String>,
 
-    /// Contrix extension: normalized device identifier associated with the
+    /// Cokret extension: normalized device identifier associated with the
     /// session, when present.
-    #[serde(rename = "org.contrix.device_id")]
+    #[serde(rename = "org.cokret.device_id")]
     pub contrix_device_id: Option<String>,
 
-    /// Contrix extension: session identifier associated with the token.
-    #[serde(rename = "org.contrix.session_id")]
+    /// Cokret extension: session identifier associated with the token.
+    #[serde(rename = "org.cokret.session_id")]
     pub contrix_session_id: Option<String>,
 }
 

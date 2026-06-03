@@ -35,7 +35,7 @@ The worker uses the same configuration file as the server. It requires access to
 
 - The PostgreSQL database (for the task queue)
 - SMTP credentials (if email sending is configured)
-- Contrix Principal Server configuration, when downstream session grants are enabled
+- Cokret Principal Server configuration, when downstream session grants are enabled
 
 ### Example: systemd service
 

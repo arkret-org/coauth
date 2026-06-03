@@ -37,10 +37,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Contrix Rust SDK
+      - name: Fetch Cokret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh contrix-rust-sdk ../contrix-rust-sdk
+        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
 
       - name: Set up nightly Rust for rustfmt
         uses: dtolnay/rust-toolchain@nightly
@@ -62,10 +62,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Contrix Rust SDK
+      - name: Fetch Cokret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh contrix-rust-sdk ../contrix-rust-sdk
+        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
 
       - name: Set up Rust 1.93.0 with Clippy
         uses: dtolnay/rust-toolchain@1.93.0
@@ -113,10 +113,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Contrix Rust SDK
+      - name: Fetch Cokret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh contrix-rust-sdk ../contrix-rust-sdk
+        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
 
       - name: Audit with cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2.0.14
@@ -136,10 +136,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Contrix Rust SDK
+      - name: Fetch Cokret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh contrix-rust-sdk ../contrix-rust-sdk
+        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
 
       - name: Set up stable Rust
         run: |
@@ -168,8 +168,8 @@ jobs:
             exit 1
           fi
 
-  contrix-contract-drift:
-    name: Check Contrix contract drift
+  cokret-contract-drift:
+    name: Check Cokret contract drift
     runs-on: ubuntu-24.04
 
     permissions:
@@ -179,11 +179,11 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Contrix spec
+      - name: Fetch Cokret spec
         uses: actions/checkout@v6
         with:
-          repository: ${{ github.repository_owner }}/contrix-spec
-          path: contrix-spec
+          repository: ${{ github.repository_owner }}/cokret-spec
+          path: cokret-spec
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - name: Set up Python
@@ -191,8 +191,8 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Check Contrix artifact and coauth surface drift
-        run: python .ci/check_contrix_contract_drift.py --spec-dir contrix-spec
+      - name: Check Cokret artifact and coauth surface drift
+        run: python .ci/check_contrix_contract_drift.py --spec-dir cokret-spec
 
   # -- Test execution --
 
@@ -207,10 +207,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Contrix Rust SDK
+      - name: Fetch Cokret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh contrix-rust-sdk ../contrix-rust-sdk
+        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@stable
@@ -296,7 +296,7 @@ jobs:
       - typos
       - cargo-deny
       - check-schema
-      - contrix-contract-drift
+      - cokret-contract-drift
       - test
 
     steps:

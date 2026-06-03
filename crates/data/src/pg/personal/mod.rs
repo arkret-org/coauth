@@ -75,7 +75,7 @@ mod tests {
         assert!(finished_list.edges.is_empty());
 
         // Start a personal session for that user
-        let stable_scope = "urn:contrix:client:device:AABBCCDDEE".parse().unwrap();
+        let stable_scope = "urn:cokret:client:device:AABBCCDDEE".parse().unwrap();
         let scope: Scope = [OPENID, PROFILE]
             .into_iter()
             .chain([stable_scope])
@@ -311,7 +311,7 @@ mod tests {
             .unwrap();
 
         // Start a personal session for that user
-        let stable_scope = "urn:contrix:client:device:FFEEDDCCBB".parse().unwrap();
+        let stable_scope = "urn:cokret:client:device:FFEEDDCCBB".parse().unwrap();
         let scope: Scope = [OPENID, PROFILE]
             .into_iter()
             .chain([stable_scope])

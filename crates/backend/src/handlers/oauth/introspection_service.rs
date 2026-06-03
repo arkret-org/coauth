@@ -1,4 +1,4 @@
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, TokenFormatError, TokenType,
     UrlBuilder,
@@ -13,7 +13,7 @@ use oauth_types::requests::IntrospectionResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::{ActivityTracker, contrix};
+use crate::handlers::{ActivityTracker, cokret};
 
 /// Errors that can occur during token introspection business logic.
 #[derive(Debug, Error)]
@@ -64,7 +64,7 @@ pub async fn introspect_token(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     activity_tracker: &ActivityTracker,
     token_str: &str,
     token_type_hint: Option<OAuthTokenTypeHint>,
@@ -125,7 +125,7 @@ pub async fn introspect_token(
                 }
 
                 (
-                    Some(contrix::user_did_for(url_builder, contrix_config, &user)),
+                    Some(cokret::user_did_for(url_builder, contrix_config, &user)),
                     Some(user.handle),
                 )
             } else {
@@ -136,7 +136,7 @@ pub async fn introspect_token(
                 .record_oauth_session(clock, &session, ip)
                 .await;
 
-            let device_id = contrix::primary_device_id(&session.scope);
+            let device_id = cokret::primary_device_id(&session.scope);
             let scope = session.scope;
 
             IntrospectionResponse {
@@ -199,7 +199,7 @@ pub async fn introspect_token(
                 }
 
                 (
-                    Some(contrix::user_did_for(url_builder, contrix_config, &user)),
+                    Some(cokret::user_did_for(url_builder, contrix_config, &user)),
                     Some(user.handle),
                 )
             } else {
@@ -210,7 +210,7 @@ pub async fn introspect_token(
                 .record_oauth_session(clock, &session, ip)
                 .await;
 
-            let device_id = contrix::primary_device_id(&session.scope);
+            let device_id = cokret::primary_device_id(&session.scope);
             let scope = session.scope;
 
             IntrospectionResponse {
@@ -296,9 +296,9 @@ pub async fn introspect_token(
                 .record_personal_session(clock, &session, ip)
                 .await;
 
-            let device_id = contrix::primary_device_id(&session.scope);
+            let device_id = cokret::primary_device_id(&session.scope);
             let scope = session.scope;
-            let actor_user_sub = contrix::user_did_for(url_builder, contrix_config, &actor_user);
+            let actor_user_sub = cokret::user_did_for(url_builder, contrix_config, &actor_user);
 
             IntrospectionResponse {
                 active: true,

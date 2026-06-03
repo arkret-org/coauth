@@ -14,7 +14,7 @@
 ### 克隆和构建
 
 ```bash
-git clone https://github.com/contrix-dev/coauth.git
+git clone https://github.com/cokret-dev/coauth.git
 cd coauth
 
 # 编译前端资源

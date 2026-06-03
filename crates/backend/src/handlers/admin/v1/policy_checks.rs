@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn dry_run_matches_persisted_rule() {
         let request = PolicyDryRunRequest {
-            subject: "did:contrix:alice".to_owned(),
+            subject: "did:cokret:alice".to_owned(),
             action: "read".to_owned(),
             resource: "space:demo".to_owned(),
             object_facets: None,
@@ -355,7 +355,7 @@ mod tests {
         .unwrap();
         let data = serde_json::json!({
             "dry_run_rules": [{
-                "subject": "did:contrix:alice",
+                "subject": "did:cokret:alice",
                 "action": "read",
                 "resource": "space:demo",
                 "effect": "deny",
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn signed_decision_contains_stable_digest_shape() {
         let request = PolicyDryRunRequest {
-            subject: "did:contrix:alice".to_owned(),
+            subject: "did:cokret:alice".to_owned(),
             action: "read".to_owned(),
             resource: "space:demo".to_owned(),
             object_facets: None,
@@ -416,7 +416,7 @@ mod tests {
                 &*state.clock,
                 serde_json::json!({
                     "dry_run_rules": [{
-                        "subject": "did:contrix:alice",
+                        "subject": "did:cokret:alice",
                         "action": "read",
                         "resource": "space:demo",
                         "effect": "deny",
@@ -435,7 +435,7 @@ mod tests {
                 Request::post("/api/admin/v1/policy-checks/dry-run")
                     .bearer(&token)
                     .json(serde_json::json!({
-                        "subject": "did:contrix:alice",
+                        "subject": "did:cokret:alice",
                         "action": "read",
                         "resource": "space:demo"
                     })),

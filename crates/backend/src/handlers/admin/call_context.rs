@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     BoxClock, BoxRepository, RepositoryError, Session, TokenFormatError, TokenType, User,
     personal::session::{PersonalSession, PersonalSessionOwner},
@@ -62,7 +62,7 @@ pub enum Rejection {
     LoadUser(Ulid),
 
     /// The session does not have the required admin scope
-    #[error("Missing admin scope (expected urn:coauth:admin or urn:contrix:admin:*)")]
+    #[error("Missing admin scope (expected urn:coauth:admin or urn:cokret:admin:*)")]
     MissingScope,
 
     /// The request was scoped to an organization this deployment does not
@@ -122,7 +122,7 @@ impl Scribe for Rejection {
 /// multi-tenant: first-class entities do not carry per-row `org_id`.
 /// To avoid pretending cross-tenant isolation exists, Admin API calls
 /// support only a configured deployment org. If
-/// `contrix.admin_org_id` is set, every admin request MUST carry the
+/// `cokret.admin_org_id` is set, every admin request MUST carry the
 /// matching `x-coauth-org-id`; a different value or missing header is
 /// rejected before any resource lookup. Requests that carry an org
 /// header when the deployment has no configured org are also rejected.
@@ -287,7 +287,7 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
     }
 
     let configured_org_id = depot
-        .get::<ContrixConfig>("contrix_config")
+        .get::<CokretConfig>("contrix_config")
         .ok()
         .and_then(|config| config.admin_org_id.clone());
     let presented_org_id = req
@@ -333,12 +333,12 @@ mod tests {
     #[test]
     fn admin_org_guard_requires_exact_configured_org() {
         assert_eq!(
-            validate_admin_org(Some("cx:org:alpha"), Some("cx:org:alpha")).unwrap(),
-            Some("cx:org:alpha".to_owned())
+            validate_admin_org(Some("ck:org:alpha"), Some("ck:org:alpha")).unwrap(),
+            Some("ck:org:alpha".to_owned())
         );
-        assert!(validate_admin_org(Some("cx:org:alpha"), None).is_err());
-        assert!(validate_admin_org(Some("cx:org:alpha"), Some("cx:org:beta")).is_err());
-        assert!(validate_admin_org(None, Some("cx:org:alpha")).is_err());
+        assert!(validate_admin_org(Some("ck:org:alpha"), None).is_err());
+        assert!(validate_admin_org(Some("ck:org:alpha"), Some("ck:org:beta")).is_err());
+        assert!(validate_admin_org(None, Some("ck:org:alpha")).is_err());
         assert_eq!(validate_admin_org(None, None).unwrap(), None);
     }
 }

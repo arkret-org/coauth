@@ -32,7 +32,7 @@ services:
     restart: unless-stopped
 
   coauth:
-    image: ghcr.io/contrix-dev/coauth:latest
+    image: ghcr.io/cokret-dev/coauth:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,7 +72,7 @@ http:
 database:
   uri: postgresql://coauth:change-me@postgres/coauth
 
-contrix:
+cokret:
   service_did: did:web:auth.example.com
   issuer_did: did:web:auth.example.com
   admin_audience: http://localhost:7080/api/v1
@@ -124,9 +124,9 @@ This adds a metrics-only listener at `/metrics`; see
 
 ```sh
 cosign verify \
-  --certificate-identity-regexp 'https://github\.com/contrix-dev/coauth/' \
+  --certificate-identity-regexp 'https://github\.com/cokret-dev/coauth/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/contrix-dev/coauth:latest
+  ghcr.io/cokret-dev/coauth:latest
 ```
 
 ## See also

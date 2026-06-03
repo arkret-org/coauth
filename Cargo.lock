@@ -1258,9 +1258,9 @@ dependencies = [
  "coauth-principal",
  "coauth-tasks",
  "coauth-templates",
- "contrix",
- "contrix-core",
- "contrix-signatures",
+ "cokret",
+ "cokret-core",
+ "cokret-signatures",
  "cookie",
  "cookie_store",
  "data-encoding",
@@ -1365,7 +1365,7 @@ dependencies = [
  "coauth-iana",
  "coauth-jose",
  "coauth-keystore",
- "contrix-identifiers",
+ "cokret-identifiers",
  "figment",
  "futures-util",
  "hex",
@@ -1836,53 +1836,55 @@ dependencies = [
 ]
 
 [[package]]
-name = "contrix"
+name = "cokret"
 version = "1.0.0"
 dependencies = [
+ "argon2",
  "base64 0.22.1",
  "chacha20poly1305",
  "chrono",
  "chrono-tz",
- "contrix-contracts",
- "contrix-core",
- "contrix-crypto",
- "contrix-ffi",
- "contrix-html",
- "contrix-signatures",
- "contrix-testing",
+ "cokret-contracts",
+ "cokret-core",
+ "cokret-crypto",
+ "cokret-ffi",
+ "cokret-html",
+ "cokret-signatures",
  "ed25519-dalek",
  "getrandom 0.3.4",
+ "hkdf",
+ "parking_lot",
  "regex",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "subtle",
  "thiserror 2.0.18",
- "ulid",
  "uuid",
  "x25519-dalek",
 ]
 
 [[package]]
-name = "contrix-contracts"
+name = "cokret-contracts"
 version = "1.0.0"
 dependencies = [
  "chrono",
- "contrix-core",
- "contrix-crypto",
- "contrix-html",
- "contrix-signatures",
+ "cokret-core",
+ "cokret-crypto",
+ "cokret-html",
+ "cokret-signatures",
  "serde",
  "serde_json",
  "tracing",
 ]
 
 [[package]]
-name = "contrix-core"
+name = "cokret-core"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
- "contrix-identifiers",
+ "cokret-identifiers",
  "getrandom 0.3.4",
  "regex",
  "serde",
@@ -1892,12 +1894,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "contrix-crypto"
+name = "cokret-crypto"
 version = "1.0.0"
 dependencies = [
  "chrono",
- "contrix-core",
- "contrix-signatures",
+ "cokret-core",
+ "cokret-signatures",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1905,25 +1907,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "contrix-ffi"
+name = "cokret-ffi"
 version = "1.0.0"
 dependencies = [
- "contrix-core",
+ "cokret-core",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "contrix-html"
+name = "cokret-html"
 version = "1.0.0"
 dependencies = [
- "contrix-core",
+ "cokret-core",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "contrix-identifiers"
+name = "cokret-identifiers"
 version = "1.0.0"
 dependencies = [
  "getrandom 0.2.17",
@@ -1935,33 +1937,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "contrix-signatures"
+name = "cokret-signatures"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
- "contrix-core",
+ "cokret-core",
  "ed25519-dalek",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "contrix-testing"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "contrix-contracts",
- "contrix-core",
- "contrix-crypto",
- "contrix-ffi",
- "contrix-html",
- "contrix-signatures",
- "serde",
- "serde_json",
- "sha2 0.10.9",
 ]
 
 [[package]]

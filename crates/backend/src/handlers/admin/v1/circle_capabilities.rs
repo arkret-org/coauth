@@ -187,19 +187,19 @@ mod tests {
     #[test]
     fn canonicalize_circle_ids_sorts_and_deduplicates() {
         let mut ids = vec![
-            "cx:circle:c".to_owned(),
-            "cx:circle:a".to_owned(),
-            "cx:circle:c".to_owned(),
+            "ck:circle:c".to_owned(),
+            "ck:circle:a".to_owned(),
+            "ck:circle:c".to_owned(),
         ];
         canonicalize_circle_ids(&mut ids);
-        assert_eq!(ids, vec!["cx:circle:a", "cx:circle:c"]);
+        assert_eq!(ids, vec!["ck:circle:a", "ck:circle:c"]);
     }
 
     #[test]
     fn create_request_validation_still_mirrors_registry_constraints() {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
-            realm_id: "cx:realm:demo".into(),
+            realm_id: "ck:realm:demo".into(),
             action: CircleCapabilityAction::Manage,
             allowed_circle_ids: vec![],
         };

@@ -258,7 +258,7 @@ pub async fn post_webvh_start(
             error: Some("username_required".into()),
         }));
     }
-    // HDL-1 (R3 spec-sync 2026-05-27, contrix-spec b47ff6ec) —
+    // HDL-1 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) —
     // wire-level handle normalize / homograph check via the SDK helper.
     // MUST run before any storage lookup so confusable handles never
     // hit `repo.user().exists(...)` or the principal server.
@@ -824,7 +824,7 @@ struct WebvhTarget {
 }
 
 fn resolve_webvh_target(
-    config: &coauth_config::ContrixConfig,
+    config: &coauth_config::CokretConfig,
     requested: Option<&str>,
 ) -> Result<WebvhTarget, String> {
     let requested = requested.and_then(|value| Url::parse(value).ok());

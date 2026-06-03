@@ -1,4 +1,4 @@
-//! Contrix claim and attestation administration endpoints.
+//! Cokret claim and attestation administration endpoints.
 
 use chrono::{DateTime, Utc};
 use coauth_data::{RepositoryAccess, audit::AdminOperation};

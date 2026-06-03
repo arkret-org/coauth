@@ -47,7 +47,7 @@ http:
 
 | 键 | 默认值 | 说明 |
 | --- | --- | --- |
-| `http.max_body_bytes` | `1048576` (1 MiB) | 请求体最大字节数；与 Contrix `cx.server.describe.limits.max_body_bytes` 对齐。 |
+| `http.max_body_bytes` | `1048576` (1 MiB) | 请求体最大字节数；与 Cokret `cx.server.describe.limits.max_body_bytes` 对齐。 |
 | `http.request_timeout_seconds` | `30` | 每请求处理超时；填 `0` 表示关闭。 |
 | `http.shutdown_grace_seconds` | `30` | 收到 SIGTERM/SIGINT 后给在途请求的完成时间。 |
 | `http.trusted_proxies` | RFC1918 + 回环 | 允许设置 `X-Forwarded-For` 的 CIDR 段，详见 [反向代理](../setup/reverse-proxy.md)。 |
@@ -67,12 +67,12 @@ database:
 `coauth` 不应直接连接到 transaction pooling 模式的 pgBouncer / pgCat，因为服务依赖
 需要 session 语义的 PostgreSQL 特性。
 
-## `contrix`
+## `cokret`
 
-Contrix 部署元数据，叠加在通用 OIDC server 之上。
+Cokret 部署元数据，叠加在通用 OIDC server 之上。
 
 ```yaml
-contrix:
+cokret:
   principal_servers:
     - name: soland
       audience: https://soland.example.com/api
@@ -90,13 +90,13 @@ contrix:
   session_grant_ttl: 300
 ```
 
-- `principal_servers`：通过 Contrix discovery 发布的受信任 Principal Server 描述
+- `principal_servers`：通过 Cokret discovery 发布的受信任 Principal Server 描述
 - `identity_registry`：委托的 DID / identity resolver，通常是 public DID resolver 服务
 - `service_did`：显式 service DID；未配置时从 `http.public_base` 推导
 - `issuer_did`：session grant 中写入的 DID；默认继承 `service_did`
-- `admin_audience`：Contrix admin 集成期望的 audience；默认回退到本地 `/api/v1`
+- `admin_audience`：Cokret admin 集成期望的 audience；默认回退到本地 `/api/v1`
 - `session_grant_ttl`：REST auth bridge 登录/交换路径以及 refresh endpoint
-  返回的 Contrix session-grant JWT 生命周期，单位秒；默认 `300`（5 分钟）。
+  返回的 Cokret session-grant JWT 生命周期，单位秒；默认 `300`（5 分钟）。
 
 ## `templates`
 
@@ -134,7 +134,7 @@ secrets:
 ```
 
 至少应配置一把签名密钥。`coauth` 会用这些密钥签发 ID token、signed userinfo、JWKS，以及
-Contrix session grant。
+Cokret session grant。
 
 ## `passwords`
 

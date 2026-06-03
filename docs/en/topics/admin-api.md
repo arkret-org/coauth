@@ -8,7 +8,7 @@ trusted automation.
 ## Enabling the API
 
 The API isn't exposed by default, and must be added to either a public or a private HTTP listener.
-It is considered safe to expose the API to the public, as access to it is gated by `urn:coauth:admin` or `urn:contrix:admin:*`.
+It is considered safe to expose the API to the public, as access to it is gated by `urn:coauth:admin` or `urn:cokret:admin:*`.
 
 To enable the API, tweak the [`http.listeners`](../reference/configuration.md#httplisteners) configuration section to add the `adminapi` resource:
 
@@ -42,8 +42,8 @@ The API is documented using the [OpenAPI specification](https://spec.openapis.or
 When the admin API resource is enabled, `coauth` serves the same generated
 specification at these runtime paths:
 
-- `GET /api/admin/v1/openapi.yaml` for the Contrix-native admin API contract.
-- `GET /.well-known/contrix/openapi.yaml` for discovery by `sodmin` and
+- `GET /api/admin/v1/openapi.yaml` for the Cokret-native admin API contract.
+- `GET /.well-known/cokret/openapi.yaml` for discovery by `sodmin` and
   service automation.
 - `GET /api-doc/admin/openapi.json` for legacy Swagger tooling.
 - `GET /admin-swagger-ui/` for the hosted Swagger UI.
@@ -122,7 +122,7 @@ curl -X POST \
 `proposal_id`, `account_id`, `action`, `ticket`, `approval_note`, and
 `approved_by`.
 
-The Contrix-native admin surface now includes `GET /api/admin/v1/accounts`,
+The Cokret-native admin surface now includes `GET /api/admin/v1/accounts`,
 `GET /api/admin/v1/accounts/{id}`, `POST /api/admin/v1/accounts/{id}/lock`,
 and `POST /api/admin/v1/accounts/{id}/disable`. DID bindings, device
 administration, claim issuance/revocation, policy dry-run, and signed policy
@@ -136,7 +136,7 @@ looked up through the decision-audit route.
 All requests to the admin API are gated either using access tokens obtained using OAuth grants,
 or using personal access tokens (which must currently be issued through the Admin API).
 
-They must have the [`urn:coauth:admin`](../reference/scopes.md#urncoauthadmin) scope or a Contrix admin scope.
+They must have the [`urn:coauth:admin`](../reference/scopes.md#urncoauthadmin) scope or a Cokret admin scope.
 
 ### User-interactive tools
 
@@ -361,7 +361,7 @@ Sample output
 
 ## Realm classification — Principal Control vs Collaboration
 
-CXP-0007 (contrix-spec commit `44abbd6`) made the distinction between two
+CXP-0007 (cokret-spec commit `44abbd6`) made the distinction between two
 realm classes explicit. Every admin route belongs to one of them:
 
 - **Principal Control Realm** — identity, device, handle, claim, DID
@@ -396,7 +396,7 @@ realm classes explicit. Every admin route belongs to one of them:
 | `/api/admin/v1/site-config`                               | Cross-cutting (config) |
 
 This classification is informational today — gating is still done by the
-single `urn:coauth:admin` / `urn:contrix:admin:*` scope. The next round
+single `urn:coauth:admin` / `urn:cokret:admin:*` scope. The next round
 of the rollout will split these into per-class scopes so that an
 operator can be granted Collaboration-only access without being able to
 mutate identity state.
@@ -424,7 +424,7 @@ DELETE /api/admin/v1/circles/capabilities/{grant_id}
 ```
 
 Request / response shapes are defined in
-[`coauth_admin_types::circle_capability_admin`](https://github.com/contrix-dev/coauth/blob/main/crates/admin-types/src/circle_capability_admin.rs).
+[`coauth_admin_types::circle_capability_admin`](https://github.com/cokret-dev/coauth/blob/main/crates/admin-types/src/circle_capability_admin.rs).
 See `_todos_all.md` (P2B.2) for the persistence backlog.
 
 [authorization code]: ../topics/authorization.md#authorization-code-grant

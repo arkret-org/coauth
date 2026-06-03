@@ -252,7 +252,7 @@ impl Options {
         let email_webhook_service =
             EmailWebhookService::from_email_config(&config.email, http_client.clone())
                 .context("invalid email webhook configuration")?;
-        let contrix_config = config.contrix.clone();
+        let contrix_config = config.cokret.clone();
 
         // Explicitly the config to properly zeroize secret keys
         drop(config);

@@ -1,4 +1,4 @@
-//! Contrix device administration endpoints.
+//! Cokret device administration endpoints.
 
 use std::collections::{BTreeMap, btree_map::Entry};
 
@@ -355,7 +355,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let scope: Scope = "urn:contrix:principal-server:session.bind".parse().unwrap();
+        let scope: Scope = "urn:cokret:principal-server:session.bind".parse().unwrap();
         let grant = repo
             .oauth_session_grant()
             .add(

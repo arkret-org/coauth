@@ -75,7 +75,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
 use coauth_keystore::Keystore;
@@ -391,7 +391,7 @@ pub struct VerifierCtx<'a> {
     /// Shared services the resolver needs.
     pub http_client: &'a reqwest::Client,
     pub url_builder: &'a UrlBuilder,
-    pub contrix_config: &'a ContrixConfig,
+    pub contrix_config: &'a CokretConfig,
     pub key_store: &'a Keystore,
     pub repo: &'a mut BoxRepository,
 }
@@ -637,7 +637,7 @@ pub async fn verify_invite(
 async fn verify_subject_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -993,8 +993,8 @@ mod tests {
 }
 
 // Inline reference: spec doc anchors for reviewers.
-//   `contrix-spec/spec/v1/artifacts/schemas/invite.schema.json`
-// $defs.third_party_invite   `contrix-spec/spec/v1/zh/identity/
-// 3pid-invite-engine.md` (round-4 SP3.4)   `contrix-spec/spec/v1/zh/sync/
+//   `cokret-spec/spec/v1/artifacts/schemas/invite.schema.json`
+// $defs.third_party_invite   `cokret-spec/spec/v1/zh/identity/
+// 3pid-invite-engine.md` (round-4 SP3.4)   `cokret-spec/spec/v1/zh/sync/
 // third-party-invites.md` §3-§4 (binding /     subject proof chain — invite
 // verifier)

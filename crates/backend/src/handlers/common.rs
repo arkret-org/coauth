@@ -10,7 +10,7 @@
 
 use std::{net::IpAddr, ops::Deref, sync::Arc};
 
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, BrowserSession, RepositoryError,
     Session, SiteConfig, SystemClock, UrlBuilder, User,
@@ -239,7 +239,7 @@ pub trait DepotExt {
     fn templates(&self) -> Result<coauth_templates::Templates, RouteError>;
     fn frontend_script_src(&self) -> Result<String, RouteError>;
     fn translator(&self) -> Result<Arc<coauth_i18n::Translator>, RouteError>;
-    fn contrix_config(&self) -> Result<ContrixConfig, RouteError>;
+    fn contrix_config(&self) -> Result<CokretConfig, RouteError>;
     fn cookie_manager(&self) -> Result<crate::handlers::CookieManager, RouteError>;
     fn metadata_cache(&self) -> Result<crate::handlers::MetadataCache, RouteError>;
     fn jwks_cache(&self) -> Result<crate::handlers::JwksCache, RouteError>;
@@ -265,7 +265,7 @@ pub trait DepotExt {
     fn did_resolver_service(
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError>;
-    /// `Some(handle)` when `[contrix.starid]` is configured and the
+    /// `Some(handle)` when `[cokret.starid]` is configured and the
     /// adapter constructed cleanly during `inject_app_state`. `None`
     /// otherwise — handlers should treat the absence as "starid
     /// integration disabled" rather than an error, so onboarding can
@@ -339,7 +339,7 @@ impl DepotExt for Depot {
         depot_get(self, "translator")
     }
 
-    fn contrix_config(&self) -> Result<ContrixConfig, RouteError> {
+    fn contrix_config(&self) -> Result<CokretConfig, RouteError> {
         depot_get(self, "contrix_config")
     }
 

@@ -22,7 +22,7 @@ use super::{
     SessionGrantPrincipalServerInfo, ViewerInfo, make_clock, make_rng,
 };
 use crate::{
-    handlers::contrix,
+    handlers::cokret,
     oidc_client::{requests::discovery, types::client_credentials::ClientCredentials},
     outbound_http::{self, RequestBuilderExt as _},
     services::{
@@ -73,7 +73,7 @@ pub struct AuthBridgeDescribeResponse {
     pub api_base_path: &'static str,
     pub oauth: AuthBridgeOAuthDescriptor,
     pub passkey: AuthBridgePasskeyDescriptor,
-    pub contrix: AuthBridgeContrixDescriptor,
+    pub cokret: AuthBridgeCokretDescriptor,
     pub admin: AuthBridgeAdminDescriptor,
     pub todos: Vec<&'static str>,
 }
@@ -100,7 +100,7 @@ pub struct AuthBridgePasskeyDescriptor {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct AuthBridgeContrixDescriptor {
+pub struct AuthBridgeCokretDescriptor {
     pub login_path: &'static str,
     pub logout_path: &'static str,
     pub providers_path: &'static str,
@@ -195,7 +195,7 @@ fn validate_expected_nonce(
 }
 
 fn is_protocol_device_id(value: &str) -> bool {
-    let Some(uuid) = value.strip_prefix("cx:device:") else {
+    let Some(uuid) = value.strip_prefix("ck:device:") else {
         return false;
     };
     is_lowercase_uuidv7(uuid)
@@ -222,8 +222,8 @@ fn is_lowercase_uuidv7(value: &str) -> bool {
 
 fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
     vec![
-        contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
-        format!("urn:contrix:client:device:{device_id}"),
+        cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+        format!("urn:cokret:client:device:{device_id}"),
     ]
 }
 
@@ -271,7 +271,7 @@ async fn ensure_principal_did_for_user(
     encrypter: &coauth_keystore::Encrypter,
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    contrix_config: &coauth_config::ContrixConfig,
+    contrix_config: &coauth_config::CokretConfig,
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
@@ -289,7 +289,7 @@ async fn ensure_principal_did_for_user(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let also_known_as = vec![contrix::user_handle(url_builder, user)];
+    let also_known_as = vec![cokret::user_handle(url_builder, user)];
     soland_webvh::ensure_principal_did_minted(
         repo,
         &mut **rng,
@@ -342,23 +342,23 @@ async fn ensure_soland_account_registered(
 
 fn login_hint_matches_user(
     url_builder: &coauth_data::UrlBuilder,
-    contrix_config: &coauth_config::ContrixConfig,
+    contrix_config: &coauth_config::CokretConfig,
     user: &User,
     login_hint: &str,
 ) -> bool {
     let login_hint = login_hint.trim();
     login_hint == user.handle
-        || login_hint == contrix::user_did_for(url_builder, contrix_config, user)
-        || login_hint == contrix::user_handle(url_builder, user)
+        || login_hint == cokret::user_did_for(url_builder, contrix_config, user)
+        || login_hint == cokret::user_handle(url_builder, user)
         // Spec 7157ee8 retired the `local@host` display form as canonical,
         // but legacy OIDC clients still send it as a login_hint — accept
         // for backward compatibility.
-        || login_hint == contrix::user_handle_display(url_builder, user)
+        || login_hint == cokret::user_handle_display(url_builder, user)
 }
 
 /// OIDC authorization-code exchange bridge that now validates the incoming
 /// authorization code against coauth's local OAuth authorization-grant store
-/// before minting a temporary audience-bound Contrix session grant.
+/// before minting a temporary audience-bound Cokret session grant.
 #[endpoint]
 pub async fn oidc_code_exchange(
     req: &mut Request,
@@ -456,7 +456,7 @@ pub async fn oidc_code_exchange(
             error: Some("invalid_device_id"),
             viewer: None,
             session_grant: None,
-            warnings: vec!["device_id must be a cx:device:<uuidv7> protocol identifier".to_owned()],
+            warnings: vec!["device_id must be a ck:device:<uuidv7> protocol identifier".to_owned()],
         }));
         return Ok(());
     }
@@ -869,7 +869,7 @@ pub async fn oidc_code_exchange(
             }));
             return Ok(());
         }
-        let session_grant = contrix::issue_session_grant_for_audience(
+        let session_grant = cokret::issue_session_grant_for_audience(
             &mut rng,
             &*clock,
             &url_builder,
@@ -883,7 +883,7 @@ pub async fn oidc_code_exchange(
         )
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
-        let persisted_session_grant = contrix::persist_session_grant(
+        let persisted_session_grant = cokret::persist_session_grant(
             &mut repo,
             &mut rng,
             &*clock,
@@ -905,7 +905,7 @@ pub async fn oidc_code_exchange(
                 id: NodeType::User.serialize(user.id),
                 handle: user.handle.clone(),
                 did: principal_did,
-                federated_handle: contrix::user_handle(&url_builder, &user),
+                federated_handle: cokret::user_handle(&url_builder, &user),
                 principal_id: principal_server.principal_id(&user.handle),
                 display_name,
             }),
@@ -1275,7 +1275,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     };
     let expected_subject =
-        contrix::user_did_for(&url_builder, &contrix_config, &browser_session.user);
+        cokret::user_did_for(&url_builder, &contrix_config, &browser_session.user);
     let oauth_introspection = match crate::handlers::oauth::introspection_service::introspect_token(
         &mut repo,
         &clock,
@@ -1520,7 +1520,7 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
-    let session_grant = contrix::issue_session_grant_for_audience(
+    let session_grant = cokret::issue_session_grant_for_audience(
         &mut rng,
         &clock,
         &url_builder,
@@ -1534,7 +1534,7 @@ pub async fn oidc_code_exchange(
     )
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
-    let persisted_session_grant = contrix::persist_session_grant(
+    let persisted_session_grant = cokret::persist_session_grant(
         &mut repo,
         &mut rng,
         &clock,
@@ -1556,7 +1556,7 @@ pub async fn oidc_code_exchange(
             id: NodeType::User.serialize(user.id),
             handle: user.handle.clone(),
             did: principal_did,
-            federated_handle: contrix::user_handle(&url_builder, user),
+            federated_handle: cokret::user_handle(&url_builder, user),
             principal_id: principal_server.principal_id(&user.handle),
             display_name,
         }),
@@ -1639,7 +1639,7 @@ pub async fn oidc_browser_bridge_session(
     }
     if !is_protocol_device_id(input.device_id.trim()) {
         return Err(RouteError::BadRequest(
-            "device_id must be a cx:device:<uuidv7> protocol identifier".to_owned(),
+            "device_id must be a ck:device:<uuidv7> protocol identifier".to_owned(),
         ));
     }
 
@@ -1647,7 +1647,7 @@ pub async fn oidc_browser_bridge_session(
         .principal_audience
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| contrix::required_audience_for(&url_builder, &contrix_config));
+        .unwrap_or_else(|| cokret::required_audience_for(&url_builder, &contrix_config));
     let client_id = if let Some(hint) = input
         .client_id_hint
         .clone()
@@ -1708,7 +1708,7 @@ pub async fn oidc_browser_bridge_session(
     }
 
     Ok(Json(OidcBrowserBridgeSessionResponse {
-        contract: "contrix.rest.oidc_browser_bridge_session.v1",
+        contract: "cokret.rest.oidc_browser_bridge_session.v1",
         version: "2026-05-17-validated",
         authorize_url: authorize_url.to_string(),
         callback_uri: input.redirect_uri.trim().to_owned(),
@@ -1730,7 +1730,7 @@ pub async fn oidc_browser_bridge_session(
 #[endpoint]
 pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeResponse>, RouteError> {
     Ok(Json(OidcExchangeDescribeResponse {
-        contract: "contrix.rest.oidc_exchange.v1",
+        contract: "cokret.rest.oidc_exchange.v1",
         version: "2026-05-17-validated",
         exchange_path: "/api/v1/auth/oidc/exchange",
         upstream_boundary_mode: "local_coauth_or_federated_oidc_token_plus_userinfo_validation",
@@ -1798,7 +1798,7 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "userinfo_endpoint": "https://coauth.example/oauth/userinfo",
             "client_id": "yougen",
             "login_hint": "did:web:alice.example",
-            "device_id": "cx:device:01964137-0000-7000-8000-000000000001",
+            "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
             "principal_audience": "https://soland.example",
             "state": "cx-state-01k...",
             "expected_state": "cx-state-01k...",
@@ -1815,7 +1815,7 @@ pub async fn auth_bridge_describe(
     let _ = depot.url_builder()?;
 
     Ok(Json(AuthBridgeDescribeResponse {
-        contract: "contrix.rest.auth_bridge.v1",
+        contract: "cokret.rest.auth_bridge.v1",
         version: "2026-05-17-validated",
         api_base_path: "/api/v1",
         oauth: AuthBridgeOAuthDescriptor {
@@ -1835,13 +1835,13 @@ pub async fn auth_bridge_describe(
             account_hint_fields: vec!["account_id", "handle", "login_hint", "display_name"],
             finish_response: "credential_id_only_session_grant_followup",
         },
-        contrix: AuthBridgeContrixDescriptor {
+        cokret: AuthBridgeCokretDescriptor {
             login_path: "/api/v1/auth/login",
             logout_path: "/api/v1/auth/logout",
             providers_path: "/api/v1/auth/providers",
             session_grants_path: "/api/v1/session-grants",
             session_grants_introspect_path: "/api/v1/session-grants/introspect",
-            session_grant_scope: contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
+            session_grant_scope: cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
         },
         admin: AuthBridgeAdminDescriptor {
             accounts_path: "/api/admin/v1/accounts",
@@ -1858,7 +1858,7 @@ pub async fn auth_bridge_describe(
 #[endpoint]
 pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteError> {
     Ok(Json(IntegrationManifest {
-        contract: "contrix.rest.integration_manifest.v1".to_owned(),
+        contract: "cokret.rest.integration_manifest.v1".to_owned(),
         version: "2026-05-17-validated".to_owned(),
         service: "coauth".to_owned(),
         service_kind: "account_authority".to_owned(),
@@ -1868,7 +1868,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestDependency {
                 service: "soland".to_owned(),
                 purpose: "principal_server_session_exchange".to_owned(),
-                required_contract: "contrix.rest.principal_bridge.v1".to_owned(),
+                required_contract: "cokret.rest.principal_bridge.v1".to_owned(),
                 discovery_path: "/api/v1/auth/bridge/describe".to_owned(),
                 mode: "remote_service_contract".to_owned(),
             },
@@ -1885,7 +1885,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "auth_bridge".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/v1/auth/bridge/describe".to_owned(),
-                contract: "contrix.rest.auth_bridge.v1".to_owned(),
+                contract: "cokret.rest.auth_bridge.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "covers browser bridge discovery, local/federated exchange, and principal session-grant handoff.".to_owned(),
             },
@@ -1893,7 +1893,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "oidc_browser_bridge_session".to_owned(),
                 method: "POST".to_owned(),
                 path: "/api/v1/auth/oidc/browser-bridge/session".to_owned(),
-                contract: "contrix.rest.oidc_browser_bridge_session.v1".to_owned(),
+                contract: "cokret.rest.oidc_browser_bridge_session.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "stateless preflight returns state, nonce, and S256 PKCE material for exchange validation.".to_owned(),
             },
@@ -1901,7 +1901,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "oidc_exchange_describe".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/v1/auth/oidc/exchange/describe".to_owned(),
-                contract: "contrix.rest.oidc_exchange.v1".to_owned(),
+                contract: "cokret.rest.oidc_exchange.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "publishes validation layers and failure taxonomy for local and federated exchange.".to_owned(),
             },
@@ -1909,7 +1909,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "oidc_exchange".to_owned(),
                 method: "POST".to_owned(),
                 path: "/api/v1/auth/oidc/exchange".to_owned(),
-                contract: "contrix.rest.oidc_exchange.v1".to_owned(),
+                contract: "cokret.rest.oidc_exchange.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "validates state, PKCE, nonce, discovery binding, code exchange, userinfo, and session-grant audience.".to_owned(),
             },
@@ -1917,7 +1917,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "passkey_auth".to_owned(),
                 method: "POST".to_owned(),
                 path: "/api/v1/auth/passkey/{register,auth}/{start,finish}".to_owned(),
-                contract: "contrix.rest.passkey_auth.v1".to_owned(),
+                contract: "cokret.rest.passkey_auth.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "WebAuthn challenge and finish use the production passkey service; finish currently returns credential identity and still relies on the session-grant follow-up path.".to_owned(),
             },
@@ -1925,7 +1925,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "admin_bridge".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/admin/v1/bridge/describe".to_owned(),
-                contract: "contrix.rest.coauth_admin_bridge.v1".to_owned(),
+                contract: "cokret.rest.coauth_admin_bridge.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "risk-action proposals and approvals are persisted with admin audit trail.".to_owned(),
             },
@@ -1933,7 +1933,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "account_claims".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/admin/v1/accounts/{account_id}/claims".to_owned(),
-                contract: "contrix.rest.coauth_account_claims.v1".to_owned(),
+                contract: "cokret.rest.coauth_account_claims.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "claim inventory is backed by account-claims service and subject to PG isolation coverage.".to_owned(),
             },
@@ -1941,7 +1941,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "account_session_grants".to_owned(),
                 method: "GET".to_owned(),
                 path: "/api/admin/v1/accounts/{account_id}/session-grants".to_owned(),
-                contract: "contrix.rest.coauth_account_session_grants.v1".to_owned(),
+                contract: "cokret.rest.coauth_account_session_grants.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "session-grant inventory exposes persisted grant metadata and will gain broader PG isolation coverage.".to_owned(),
             },
@@ -1984,22 +1984,22 @@ mod tests {
     #[test]
     fn protocol_device_id_validation_matches_soland_boundary() {
         assert!(is_protocol_device_id(
-            "cx:device:01964137-0000-7000-8000-000000000001"
+            "ck:device:01964137-0000-7000-8000-000000000001"
         ));
         assert!(!is_protocol_device_id("dev_yougen"));
         assert!(!is_protocol_device_id(
-            "cx:device:01964137-0000-6000-8000-000000000001"
+            "ck:device:01964137-0000-6000-8000-000000000001"
         ));
     }
 
     #[test]
     fn principal_session_grant_scopes_include_device_binding() {
         let scopes =
-            principal_session_grant_scopes("cx:device:01964137-0000-7000-8000-000000000001");
+            principal_session_grant_scopes("ck:device:01964137-0000-7000-8000-000000000001");
 
-        assert!(scopes.contains(&contrix::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()));
+        assert!(scopes.contains(&cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()));
         assert!(scopes.contains(
-            &"urn:contrix:client:device:cx:device:01964137-0000-7000-8000-000000000001".to_owned()
+            &"urn:cokret:client:device:ck:device:01964137-0000-7000-8000-000000000001".to_owned()
         ));
     }
 
@@ -2062,7 +2062,7 @@ mod tests {
                     "token_endpoint": "https://offline.invalid/oauth/token",
                     "userinfo_endpoint": "https://offline.invalid/oauth/userinfo",
                     "client_id": "yougen",
-                    "device_id": "cx:device:01964137-0000-7000-8000-000000000001",
+                    "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
                     "state": "returned-state",
                     "expected_state": "expected-state"
                 })),
@@ -2089,13 +2089,13 @@ mod tests {
         };
         let state = TestState::from_pool(pool.clone()).await.unwrap();
         let expected_audience =
-            contrix::required_audience_for(&state.url_builder, &state.contrix_config);
+            cokret::required_audience_for(&state.url_builder, &state.contrix_config);
 
         let response = state
             .request(
                 Request::post("/api/v1/auth/oidc/browser-bridge/session").json(serde_json::json!({
                     "redirect_uri": "http://localhost:8080/auth/callback",
-                    "device_id": "cx:device:01964137-0000-7000-8000-000000000001",
+                    "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
                     "client_id_hint": "yougen"
                 })),
             )

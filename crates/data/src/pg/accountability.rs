@@ -62,7 +62,7 @@ mod tests {
 
     fn grant_id(rng: &mut impl RngCore, clock: &dyn Clock) -> String {
         format!(
-            "cx:accountability_grant:{}",
+            "ck:accountability_grant:{}",
             uuid::Uuid::from(new_id(clock.now(), rng))
         )
     }

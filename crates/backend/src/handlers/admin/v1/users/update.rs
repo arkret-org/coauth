@@ -16,7 +16,7 @@ use crate::{
             params::extract_ulid_param, response::SingleResponse,
         },
         common::DepotExt,
-        contrix::service_did_for,
+        cokret::service_did_for,
     },
 };
 

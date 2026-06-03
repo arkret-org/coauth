@@ -58,7 +58,7 @@ pub struct IntegrationManifest {
     pub todos: Vec<String>,
 }
 
-/// One declared dependency on another contrix service or external
+/// One declared dependency on another cokret service or external
 /// resolver.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[cfg_attr(
@@ -117,7 +117,7 @@ mod tests {
         // — including the multi-step compose-flow `examples` block that
         // the prior sodmin shim was silently dropping on the floor.
         let wire = r#"{
-            "contract": "contrix.rest.integration_manifest.v1",
+            "contract": "cokret.rest.integration_manifest.v1",
             "version": "2026-05-04-scaffold",
             "service": "coauth",
             "service_kind": "account_authority",
@@ -127,7 +127,7 @@ mod tests {
                 {
                     "service": "soland",
                     "purpose": "principal_server_session_exchange",
-                    "required_contract": "contrix.rest.principal_bridge.v1",
+                    "required_contract": "cokret.rest.principal_bridge.v1",
                     "discovery_path": "/api/v1/auth/bridge/describe",
                     "mode": "remote_service_contract"
                 }
@@ -137,7 +137,7 @@ mod tests {
                     "name": "auth_bridge",
                     "method": "GET",
                     "path": "/api/v1/auth/bridge/describe",
-                    "contract": "contrix.rest.auth_bridge.v1",
+                    "contract": "cokret.rest.auth_bridge.v1",
                     "stability": "scaffold",
                     "todo": "TODO: keep aligned"
                 }
@@ -168,7 +168,7 @@ mod tests {
         let d = IntegrationManifestDependency {
             service: "soland".into(),
             purpose: "session-exchange".into(),
-            required_contract: "contrix.rest.principal_bridge.v1".into(),
+            required_contract: "cokret.rest.principal_bridge.v1".into(),
             discovery_path: "/api/v1/auth/bridge/describe".into(),
             mode: "remote_service_contract".into(),
         };
@@ -183,7 +183,7 @@ mod tests {
             name: "admin_bridge".into(),
             method: "GET".into(),
             path: "/api/admin/v1/bridge/describe".into(),
-            contract: "contrix.rest.coauth_admin_bridge.v1".into(),
+            contract: "cokret.rest.coauth_admin_bridge.v1".into(),
             stability: "scaffold".into(),
             todo: "TODO".into(),
         };

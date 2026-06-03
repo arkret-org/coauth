@@ -131,13 +131,13 @@ pub async fn add_session(
         )
         .await?;
 
-    // Provision any Contrix devices declared through scope entries.
+    // Provision any Cokret devices declared through scope entries.
     if new_session.has_device() {
         repo.user().acquire_lock_for_sync(&target_user).await?;
 
         for scope_token in &*new_session.scope {
             let raw = scope_token.as_str();
-            if let Some(device_id) = raw.strip_prefix("urn:contrix:client:device:") {
+            if let Some(device_id) = raw.strip_prefix("urn:cokret:client:device:") {
                 principal_server
                     .upsert_device(&target_user.handle, device_id, None)
                     .await

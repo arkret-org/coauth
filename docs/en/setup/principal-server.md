@@ -1,16 +1,16 @@
 # Principal Server configuration
 
-coauth now runs as the Contrix Auth Server. Downstream Principal Servers such as
-Soland consume OAuth/OIDC tokens and Contrix session grants; coauth no longer
+coauth now runs as the Cokret Auth Server. Downstream Principal Servers such as
+Soland consume OAuth/OIDC tokens and Cokret session grants; coauth no longer
 connects to the retired delegated-auth adapter.
 
 ## Configure Soland as a Principal Server
 
-Declare each trusted Principal Server in the `contrix.principal_servers`
+Declare each trusted Principal Server in the `cokret.principal_servers`
 section:
 
 ```yaml
-contrix:
+cokret:
   principal_servers:
     - name: soland
       audience: https://soland.example.com/api
@@ -20,13 +20,13 @@ contrix:
 
 - `name`: operator-facing identifier for the Principal Server.
 - `audience`: token/session-grant audience expected by that server.
-- `endpoint`: base URL advertised through Contrix/OIDC discovery.
+- `endpoint`: base URL advertised through Cokret/OIDC discovery.
 - `did`: optional DID advertised for the Principal Server.
 
 ## Discovery
 
 coauth publishes Principal Server metadata through the standard OpenID
-discovery document and the Contrix server description endpoint:
+discovery document and the Cokret server description endpoint:
 
 - `/.well-known/openid-configuration`
 - `/api/v1/server/describe`

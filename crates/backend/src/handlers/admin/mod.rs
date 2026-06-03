@@ -2,7 +2,7 @@
 //!
 //! Provides a JSON:API-style REST interface for managing users, sessions,
 //! OAuth clients, upstream providers, and policy data. All endpoints
-//! require the `urn:coauth:admin` scope or a Contrix admin scope.
+//! require the `urn:coauth:admin` scope or a Cokret admin scope.
 //!
 //! The API specification is available as an OpenAPI document served by the
 //! [`swagger`] handler.
@@ -44,8 +44,8 @@ pub struct AdminErrorResponse {
 /// The canonical admin scope for the coauth Admin API.
 pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 
-/// Contrix admin scope family.
-pub const CONTRIX_ADMIN_SCOPE: &str = "urn:contrix:admin:*";
+/// Cokret admin scope family.
+pub const CONTRIX_ADMIN_SCOPE: &str = "urn:cokret:admin:*";
 
 /// Returns `true` if the given scope string contains an admin scope.
 #[must_use]
@@ -54,7 +54,7 @@ pub fn has_admin_scope(scope: &oauth_types::scope::Scope) -> bool {
         || scope.contains(CONTRIX_ADMIN_SCOPE)
         || scope
             .iter()
-            .any(|token| token.as_str().starts_with("urn:contrix:admin:"))
+            .any(|token| token.as_str().starts_with("urn:cokret:admin:"))
 }
 
 /// JSON response wrapper that sets HTTP 201 Created status code.

@@ -5,12 +5,12 @@
 //! Cross-service helper that consults the holder's consent cell on the
 //! `server_name` (`soland`) before coauth admits or relays an invite.
 //!
-//! Per the Move/Anchor/Lattice spec (`contrix-spec` 2026-05-08,
+//! Per the Move/Anchor/Lattice spec (`cokret-spec` 2026-05-08,
 //! `consent-model.md` §3–§9), consent is no longer reducer state on the
 //! `server_name`. It is an `OrSet` cell:
 //!
 //! ```text
-//! cx:cell:cx.component.consent.grant.v1:<consent_id>
+//! ck:cell:cx.component.consent.grant.v1:<consent_id>
 //! ```
 //!
 //! `grant` adds a tag, `revoke` removes a tag. Whether an invite is allowed
@@ -126,7 +126,7 @@ pub async fn query_consent_cell(
         || {
             http_client
                 .get(url.clone())
-                .header("X-Contrix-Holder-Did", holder_did)
+                .header("X-Cokret-Holder-Did", holder_did)
         },
     )
     .await
@@ -185,7 +185,7 @@ pub async fn query_consent_cell(
 
 /// Build the canonical cell id used in storage and on the wire.
 fn build_cell_id(consent_id: &str) -> String {
-    format!("cx:cell:cx.component.consent.grant.v1:{consent_id}")
+    format!("ck:cell:cx.component.consent.grant.v1:{consent_id}")
 }
 
 /// Decide whether an invite should pass the consent gate, given a cell
@@ -308,7 +308,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/v1/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-123",
+                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-123",
                 "tags": ["peer=did:web:peer;scope=invite"],
             })))
             .expect(1)
@@ -337,7 +337,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/v1/admin/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "cx:cell:cx.component.consent.grant.v1:c-123",
+                "cell_id": "ck:cell:cx.component.consent.grant.v1:c-123",
                 "tags": [],
             })))
             .mount(&server)

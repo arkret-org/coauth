@@ -80,14 +80,14 @@ pub fn handle_valid(handle: &str) -> bool {
     true
 }
 
-/// Validate that a string is a Contrix typed wire id of shape
-/// `cx:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
+/// Validate that a string is a Cokret typed wire id of shape
+/// `ck:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
 ///
 /// This is the Move/Anchor/Lattice typed-id surface (spec `wire-ids.md` —
 /// rebased onto `UUIDv7` in 2026-05). coauth's internal admin tokens and
 /// personal session ids stay ULID; this helper is for the few admin /
-/// session-grant handler call-sites that consume Contrix wire ids
-/// (`cx:device:<uuid7>`, `cx:space:<uuid7>`, `cx:cell:<family>:<id>`,
+/// session-grant handler call-sites that consume Cokret wire ids
+/// (`ck:device:<uuid7>`, `ck:space:<uuid7>`, `ck:cell:<family>:<id>`,
 /// etc.) from external requests.
 ///
 /// Wire-rejection of legacy ULID is intentional — v1 is unreleased so
@@ -99,23 +99,23 @@ pub fn handle_valid(handle: &str) -> bool {
 /// use coauth_backend::util::is_typed_uuid7;
 /// // valid v7 uuid (timestamp + version bits)
 /// assert!(is_typed_uuid7(
-///     "cx:device:0190a3c0-0000-7000-8000-000000000000",
+///     "ck:device:0190a3c0-0000-7000-8000-000000000000",
 ///     "device"
 /// ));
 /// // wrong prefix → false
 /// assert!(!is_typed_uuid7(
-///     "cx:space:0190a3c0-0000-7000-8000-000000000000",
+///     "ck:space:0190a3c0-0000-7000-8000-000000000000",
 ///     "device"
 /// ));
 /// // ULID body → false (legacy rejected)
 /// assert!(!is_typed_uuid7(
-///     "cx:device:01JS0SP000000000000000000",
+///     "ck:device:01JS0SP000000000000000000",
 ///     "device"
 /// ));
 /// ```
 #[must_use]
 pub fn is_typed_uuid7(s: &str, prefix: &str) -> bool {
-    let Some(rest) = s.strip_prefix("cx:") else {
+    let Some(rest) = s.strip_prefix("ck:") else {
         return false;
     };
     let Some(rest) = rest.strip_prefix(prefix) else {
@@ -125,7 +125,7 @@ pub fn is_typed_uuid7(s: &str, prefix: &str) -> bool {
         return false;
     };
 
-    // Cell-family ids (`cx:cell:<family>:<uuid>`) are intentionally
+    // Cell-family ids (`ck:cell:<family>:<uuid>`) are intentionally
     // rejected here — pass `prefix = "cell:<family>"` if you need a
     // cell-family-specific check, or use a dedicated parser.
     if body.contains(':') {
@@ -848,21 +848,21 @@ mod tests {
     #[test]
     fn typed_uuid7_accepts_valid_v7_with_matching_prefix() {
         let id = Uuid::now_v7();
-        let s = format!("cx:device:{id}");
+        let s = format!("ck:device:{id}");
         assert!(super::is_typed_uuid7(&s, "device"));
     }
 
     #[test]
     fn typed_uuid7_rejects_wrong_prefix() {
         let id = Uuid::now_v7();
-        let s = format!("cx:space:{id}");
+        let s = format!("ck:space:{id}");
         assert!(!super::is_typed_uuid7(&s, "device"));
     }
 
     #[test]
     fn typed_uuid7_rejects_v4_uuid() {
         // Random v4 — must be rejected since the spec mandates v7.
-        let s = "cx:device:550e8400-e29b-41d4-a716-446655440000";
+        let s = "ck:device:550e8400-e29b-41d4-a716-446655440000";
         assert!(!super::is_typed_uuid7(s, "device"));
     }
 
@@ -877,12 +877,12 @@ mod tests {
     fn typed_uuid7_rejects_extra_segments() {
         // Cell-family ids have more colons; the basic helper rejects them.
         let id = Uuid::now_v7();
-        let s = format!("cx:cell:cx.component.consent.grant.v1:{id}");
+        let s = format!("ck:cell:cx.component.consent.grant.v1:{id}");
         assert!(!super::is_typed_uuid7(&s, "cell"));
     }
 
     #[test]
     fn typed_uuid7_rejects_empty_body() {
-        assert!(!super::is_typed_uuid7("cx:device:", "device"));
+        assert!(!super::is_typed_uuid7("ck:device:", "device"));
     }
 }

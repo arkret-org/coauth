@@ -4,12 +4,12 @@
 
 //! MIMI `request_consent` / `update_consent` → consent-cell **Move** mapping.
 //!
-//! Per the Move/Anchor/Lattice spec (`contrix-spec` 2026-05-08,
+//! Per the Move/Anchor/Lattice spec (`cokret-spec` 2026-05-08,
 //! `consent-model.md` §3-§9), incoming MIMI consent operations are
 //! translated into Moves on the holder's consent cell:
 //!
 //! ```text
-//! cx:cell:cx.component.consent.grant.v1:<consent_id>
+//! ck:cell:cx.component.consent.grant.v1:<consent_id>
 //! ```
 //!
 //! - `request_consent` → no Move yet (the holder hasn't decided); coauth
@@ -23,7 +23,7 @@
 //!
 //! ## Round 22 (2026-05-09)
 //!
-//! `contrix-rust-sdk` 0.5.0 now exposes the public `MoveSigner` trait,
+//! `cokret-rust-sdk` 0.5.0 now exposes the public `MoveSigner` trait,
 //! `UnsignedMove` builder, ergonomic `Move::sign(&unsigned, signer)` entry
 //! point and `Ed25519MoveSigner` impl (behind the `signer` feature). This
 //! module wires the full MIMI → `SignedMove` → soland POST path:
@@ -93,12 +93,12 @@ pub struct UpdateConsent {
     pub holder_did: String,
     pub scope: String,
     pub granted: bool,
-    /// `cx:space:<uuidv7>` — holder's principal control Space (per spec
+    /// `ck:space:<uuidv7>` — holder's principal control Space (per spec
     /// §6 the consent cell lives here). Resolve from `holder_did` via
     /// `anchor_view_query::holder_principal_space_for_did` if the wire
     /// envelope does not carry it.
     pub space_id: String,
-    /// `cx:anchor:sha256:<hex>` — latest anchor leaf the issuer was
+    /// `ck:anchor:sha256:<hex>` — latest anchor leaf the issuer was
     /// working from. Fetch via
     /// `anchor_view_query::query_latest_anchor`.
     pub anchor_ref: String,
@@ -114,15 +114,15 @@ pub struct UpdateConsent {
 /// each field through the SDK's `*::new` constructors.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingMove {
-    /// `cx:space:<uuidv7>` — holder's principal control Space.
+    /// `ck:space:<uuidv7>` — holder's principal control Space.
     pub space_id: String,
-    /// `cx:cell:cx.component.consent.grant.v1:<consent_id>`.
+    /// `ck:cell:cx.component.consent.grant.v1:<consent_id>`.
     pub cell_id: String,
     /// Either `or_set_add` or `or_set_remove` per spec §6.1.
     pub op: PendingMoveOp,
     /// The `OrSet` tag to add or remove.
     pub tag: String,
-    /// Latest anchor leaf the issuer references (`cx:anchor:sha256:<hex>`).
+    /// Latest anchor leaf the issuer references (`ck:anchor:sha256:<hex>`).
     pub anchor_ref: String,
     /// HLC `<unix-ms-hex>-<logical-hex>-<node-hex>`.
     pub hlc: String,
@@ -180,7 +180,7 @@ pub enum MimiConsentError {
 /// Build the canonical consent cell id from a MIMI `consent_id`.
 #[must_use]
 pub fn consent_cell_id(consent_id: &str) -> String {
-    format!("cx:cell:cx.component.consent.grant.v1:{consent_id}")
+    format!("ck:cell:cx.component.consent.grant.v1:{consent_id}")
 }
 
 /// Build the `OrSet` tag for a `(peer, scope)` consent grant. Pure helper.
@@ -513,8 +513,8 @@ impl AnchorerSigner {
 /// ### Wire shape
 ///
 /// The body is `serde_json::to_value(&signed_move)` directly — i.e.
-/// the canonical `Move` envelope from `contrix-core::move_event::Move`.
-/// `X-Contrix-Holder-Did` echoes the holder DID for soland's per-Space
+/// the canonical `Move` envelope from `cokret-core::move_event::Move`.
+/// `X-Cokret-Holder-Did` echoes the holder DID for soland's per-Space
 /// routing.
 pub async fn anchor_pending_move(
     pending: &PendingMove,
@@ -547,7 +547,7 @@ pub async fn anchor_pending_move(
         || {
             http_client
                 .post(url.clone())
-                .header("X-Contrix-Holder-Did", anchorer_holder_did)
+                .header("X-Cokret-Holder-Did", anchorer_holder_did)
                 .json(&body)
         },
     )
@@ -646,12 +646,12 @@ mod tests {
 
     fn sample_pending() -> PendingMove {
         PendingMove {
-            space_id: "cx:space:0196419b-0000-7000-8000-00000000014a".to_owned(),
+            space_id: "ck:space:0196419b-0000-7000-8000-00000000014a".to_owned(),
             cell_id: consent_cell_id("c-1"),
             op: PendingMoveOp::OrSetAdd,
             tag: build_consent_tag("did:web:peer", "invite"),
             anchor_ref:
-                "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
                     .to_owned(),
             hlc: "0189c4d2af00-0000-aabbccdd".to_owned(),
         }
@@ -671,7 +671,7 @@ mod tests {
     fn cell_id_uses_grant_family() {
         assert_eq!(
             consent_cell_id("c-123"),
-            "cx:cell:cx.component.consent.grant.v1:c-123"
+            "ck:cell:cx.component.consent.grant.v1:c-123"
         );
     }
 
@@ -690,9 +690,9 @@ mod tests {
             holder_did: "did:web:holder".into(),
             scope: "invite".into(),
             granted,
-            space_id: "cx:space:0196419b-0000-7000-8000-00000000014a".into(),
+            space_id: "ck:space:0196419b-0000-7000-8000-00000000014a".into(),
             anchor_ref:
-                "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
                     .into(),
             hlc: "0189c4d2af00-0000-aabbccdd".into(),
         }
@@ -701,12 +701,12 @@ mod tests {
     #[test]
     fn update_consent_grant_maps_to_or_set_add() {
         let pending = update_consent_to_pending_move(&sample_update(true)).unwrap();
-        assert_eq!(pending.cell_id, "cx:cell:cx.component.consent.grant.v1:c-1");
+        assert_eq!(pending.cell_id, "ck:cell:cx.component.consent.grant.v1:c-1");
         assert_eq!(pending.op, PendingMoveOp::OrSetAdd);
         assert_eq!(pending.tag, "peer=did:web:peer;scope=invite");
         assert_eq!(
             pending.space_id,
-            "cx:space:0196419b-0000-7000-8000-00000000014a"
+            "ck:space:0196419b-0000-7000-8000-00000000014a"
         );
         assert_eq!(pending.hlc, "0189c4d2af00-0000-aabbccdd");
     }
@@ -978,7 +978,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/api/v1/moves"))
-            .and(header("x-contrix-holder-did", "did:web:holder.example"))
+            .and(header("x-cokret-holder-did", "did:web:holder.example"))
             .respond_with(move |req: &Request| {
                 let body: serde_json::Value =
                     serde_json::from_slice(&req.body).expect("valid JSON body");
@@ -988,7 +988,7 @@ mod tests {
                 assert_eq!(m.effects.len(), 1);
                 assert_eq!(
                     m.effects[0].cell.as_str(),
-                    "cx:cell:cx.component.consent.grant.v1:c-1"
+                    "ck:cell:cx.component.consent.grant.v1:c-1"
                 );
                 ResponseTemplate::new(202)
             })

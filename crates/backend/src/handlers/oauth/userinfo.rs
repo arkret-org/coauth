@@ -1,4 +1,4 @@
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{BoxClock, BoxRepository, BoxRng, SystemClock, oauth::OAuthClientRepository};
 use coauth_jose::{
     constraints::Constrainable,
@@ -14,7 +14,7 @@ use thiserror::Error;
 use ulid::Ulid;
 
 use crate::{
-    handlers::contrix,
+    handlers::cokret,
     salvo_utils::user_authorization::{AuthorizationVerificationError, UserAuthorization},
 };
 
@@ -24,12 +24,12 @@ struct UserInfo {
     sub: String,
     username: String,
     preferred_username: String,
-    #[serde(rename = "org.contrix.principal_did")]
+    #[serde(rename = "org.cokret.principal_did")]
     principal_did: String,
-    #[serde(rename = "org.contrix.device_id")]
+    #[serde(rename = "org.cokret.device_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     device_id: Option<String>,
-    #[serde(rename = "org.contrix.session_id")]
+    #[serde(rename = "org.cokret.session_id")]
     session_id: String,
     name: Option<String>,
     picture: Option<String>,
@@ -141,7 +141,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
     // request. The `?` operator funnels the common `RouteError` into
     // `RouteError::Internal` via the `From` impl above.
     let url_builder = depot.url_builder()?;
-    let contrix_config: ContrixConfig = depot.contrix_config()?;
+    let contrix_config: CokretConfig = depot.contrix_config()?;
     let key_store = depot.key_store()?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
 
@@ -173,14 +173,14 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
         .ok_or(RouteError::NoSuchUser(user_id))?;
 
     let user_info = UserInfo {
-        sub: contrix::user_did_for(&url_builder, &contrix_config, &user),
+        sub: cokret::user_did_for(&url_builder, &contrix_config, &user),
         username: user.handle.clone(),
         // OIDC `preferred_username` keeps the human-readable `local@host`
         // display form (spec 7157ee8 retires the URI form but the display
         // shape stays for OIDC client compatibility).
-        preferred_username: contrix::user_handle_display(&url_builder, &user),
-        principal_did: contrix::user_did_for(&url_builder, &contrix_config, &user),
-        device_id: contrix::primary_device_id(&session.scope),
+        preferred_username: cokret::user_handle_display(&url_builder, &user),
+        principal_did: cokret::user_did_for(&url_builder, &contrix_config, &user),
+        device_id: cokret::primary_device_id(&session.scope),
         session_id: session.id.to_string(),
         name: user.display_name.clone(),
         picture: user.avatar_url.clone(),

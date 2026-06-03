@@ -13,7 +13,7 @@
 //! | `cx.circle.member.add.others`| high   | `allowed_circle_ids`     |
 //! | `cx.circle.audit`            | high   | (none, requires pairing) |
 //!
-//! Source: contrix-spec
+//! Source: cokret-spec
 //! `spec/v1/artifacts/registry/capability-action-registry.json`.
 //!
 //! Wire shape goal: the admin SPA (sodmin) needs to (a) enumerate the
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn registry_action_strings_match_spec() {
         // These six strings come directly from
-        // contrix-spec/spec/v1/artifacts/registry/capability-action-registry.json
+        // cokret-spec/spec/v1/artifacts/registry/capability-action-registry.json
         // and MUST NOT drift.
         assert_eq!(
             CircleCapabilityAction::Create.as_action_str(),
@@ -282,7 +282,7 @@ mod tests {
     fn validate_rejects_missing_constraint() {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
-            realm_id: "cx:realm:1".into(),
+            realm_id: "ck:realm:1".into(),
             action: CircleCapabilityAction::Manage,
             allowed_circle_ids: vec![],
         };
@@ -293,9 +293,9 @@ mod tests {
     fn validate_accepts_scoped_grant() {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
-            realm_id: "cx:realm:1".into(),
+            realm_id: "ck:realm:1".into(),
             action: CircleCapabilityAction::Manage,
-            allowed_circle_ids: vec!["cx:circle:abc".into()],
+            allowed_circle_ids: vec!["ck:circle:abc".into()],
         };
         assert!(req.validate().is_ok());
     }

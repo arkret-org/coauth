@@ -110,7 +110,7 @@ where
 {
     fn poll_read(
         self: Pin<&mut Self>,
-        cx: &mut Context,
+        ck: &mut Context,
         buf: &mut ReadBuf,
     ) -> Poll<std::io::Result<()>> {
         match self.project() {
@@ -126,7 +126,7 @@ where
 {
     fn poll_write(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<std::io::Result<usize>> {
         match self.project() {
@@ -137,7 +137,7 @@ where
 
     fn poll_write_vectored(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
         bufs: &[std::io::IoSlice<'_>],
     ) -> Poll<Result<usize, std::io::Error>> {
         match self.project() {
@@ -153,14 +153,14 @@ where
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, ck: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.project() {
             MaybeTlsStreamProj::Secure { stream } => stream.poll_flush(cx),
             MaybeTlsStreamProj::Insecure { stream } => stream.poll_flush(cx),
         }
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(self: Pin<&mut Self>, ck: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.project() {
             MaybeTlsStreamProj::Secure { stream } => stream.poll_shutdown(cx),
             MaybeTlsStreamProj::Insecure { stream } => stream.poll_shutdown(cx),

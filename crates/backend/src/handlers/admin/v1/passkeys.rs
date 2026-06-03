@@ -33,7 +33,7 @@ use crate::{
             params::extract_ulid_param,
         },
         common::DepotExt,
-        contrix::service_did_for,
+        cokret::service_did_for,
     },
     services::{
         onboarding_starid::{OnboardingStaridError, mint_principal_did_for_first_credential},

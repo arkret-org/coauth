@@ -4,7 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder, User};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwk::PublicJsonWebKey;
@@ -15,7 +15,7 @@ use ulid::Ulid;
 use url::Url;
 
 use crate::{
-    handlers::contrix::{
+    handlers::cokret::{
         DidDocument, DidService, SessionGrantError, VerificationMethod, issuer_did_for,
         service_did_for, user_did_for,
     },
@@ -110,18 +110,18 @@ pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
-    fn service_did(&self, url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String;
-    fn issuer_did(&self, url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String;
+    fn service_did(&self, url_builder: &UrlBuilder, contrix_config: &CokretConfig) -> String;
+    fn issuer_did(&self, url_builder: &UrlBuilder, contrix_config: &CokretConfig) -> String;
     fn user_did(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         user: &User,
     ) -> String;
     fn parse_local_user_did(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         did: &str,
     ) -> Option<Ulid>;
     /// Resolve the primary principal DID for a user.
@@ -133,25 +133,25 @@ pub trait DidResolverService: Send + Sync {
     /// `did:web:<host>:<path_prefix>:<slug>` form for starid accounts —
     /// a bare network round-trip happens at *onboarding* time
     /// (`StaridRegistry::create_principal_did`), not on every read.
-    async fn primary_did_for_user(&self, contrix_config: &ContrixConfig, user: &User) -> String;
-    fn delegated_resolver(&self, contrix_config: &ContrixConfig) -> Option<String>;
-    fn proof_required_for_pairwise(&self, contrix_config: &ContrixConfig) -> bool;
+    async fn primary_did_for_user(&self, contrix_config: &CokretConfig, user: &User) -> String;
+    fn delegated_resolver(&self, contrix_config: &CokretConfig) -> Option<String>;
+    fn proof_required_for_pairwise(&self, contrix_config: &CokretConfig) -> bool;
     fn service_did_document(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         key_store: &Keystore,
     ) -> Result<DidDocument, SessionGrantError>;
     fn user_did_document(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         user: &User,
     ) -> DidDocument;
     fn verify_user_binding(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         user: &User,
         did: &str,
     ) -> DidBindingVerification;
@@ -160,7 +160,7 @@ pub trait DidResolverService: Send + Sync {
         &self,
         http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,
@@ -172,18 +172,18 @@ pub struct DefaultDidResolverService;
 
 #[async_trait]
 impl DidResolverService for DefaultDidResolverService {
-    fn service_did(&self, url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String {
+    fn service_did(&self, url_builder: &UrlBuilder, contrix_config: &CokretConfig) -> String {
         service_did_for(url_builder, contrix_config)
     }
 
-    fn issuer_did(&self, url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String {
+    fn issuer_did(&self, url_builder: &UrlBuilder, contrix_config: &CokretConfig) -> String {
         issuer_did_for(url_builder, contrix_config)
     }
 
     fn user_did(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         user: &User,
     ) -> String {
         user_did_for(url_builder, contrix_config, user)
@@ -192,16 +192,16 @@ impl DidResolverService for DefaultDidResolverService {
     fn parse_local_user_did(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         did: &str,
     ) -> Option<Ulid> {
         let prefix = format!("{}:users:", self.service_did(url_builder, contrix_config));
         did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
     }
 
-    async fn primary_did_for_user(&self, contrix_config: &ContrixConfig, user: &User) -> String {
+    async fn primary_did_for_user(&self, contrix_config: &CokretConfig, user: &User) -> String {
         // C35.0: when this account was onboarded against a configured
-        // `[contrix.starid]` deployment, return the deterministic
+        // `[cokret.starid]` deployment, return the deterministic
         // `did:web:<host>:<path_prefix>:<slug>` form that the webvh DID
         // minted at onboarding aliases via its `alsoKnownAs` set. The
         // SCID-bearing `did:webvh:zXXXX:…` form is what `starid` returns
@@ -215,7 +215,7 @@ impl DidResolverService for DefaultDidResolverService {
         //
         // For accounts without `starid_backend` (everything created
         // before the C35.0 backfill, or any account created while
-        // `[contrix.starid]` was unset), fall back to the historical
+        // `[cokret.starid]` was unset), fall back to the historical
         // local `did:web:coauth.invalid:…` derivation. The boolean acts
         // as the toggle so a deployment that turns starid on later
         // doesn't accidentally retroactively rewrite DIDs for
@@ -242,14 +242,14 @@ impl DidResolverService for DefaultDidResolverService {
         )
     }
 
-    fn delegated_resolver(&self, contrix_config: &ContrixConfig) -> Option<String> {
+    fn delegated_resolver(&self, contrix_config: &CokretConfig) -> Option<String> {
         contrix_config
             .identity_registry
             .as_ref()
             .map(|registry| registry.resolver.to_string())
     }
 
-    fn proof_required_for_pairwise(&self, contrix_config: &ContrixConfig) -> bool {
+    fn proof_required_for_pairwise(&self, contrix_config: &CokretConfig) -> bool {
         contrix_config
             .identity_registry
             .as_ref()
@@ -259,7 +259,7 @@ impl DidResolverService for DefaultDidResolverService {
     fn service_did_document(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         key_store: &Keystore,
     ) -> Result<DidDocument, SessionGrantError> {
         let did = self.service_did(url_builder, contrix_config);
@@ -267,7 +267,7 @@ impl DidResolverService for DefaultDidResolverService {
         let mut authentication = Vec::new();
         let mut assertion_method = Vec::new();
 
-        if let Some(public_key) = crate::handlers::contrix::preferred_public_signing_key(key_store)
+        if let Some(public_key) = crate::handlers::cokret::preferred_public_signing_key(key_store)
         {
             let key_id = format!("{did}#key-1");
             verification_method.push(VerificationMethod {
@@ -289,7 +289,7 @@ impl DidResolverService for DefaultDidResolverService {
             service: vec![
                 DidService {
                     id: format!("{did}#auth-server"),
-                    kind: "ContrixAuthServer".to_owned(),
+                    kind: "CokretAuthServer".to_owned(),
                     service_endpoint: url_builder
                         .absolute_url("/api/v1/server/describe")
                         .to_string(),
@@ -308,19 +308,19 @@ impl DidResolverService for DefaultDidResolverService {
     fn user_did_document(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         user: &User,
     ) -> DidDocument {
-        // Delegate to the canonical builder in `handlers::contrix` so the
+        // Delegate to the canonical builder in `handlers::cokret` so the
         // R3.2 `metadata.primary_handle` holder-preference logic
         // (DID-COAUTH-1) lives in exactly one place.
-        crate::handlers::contrix::user_did_document(url_builder, contrix_config, user)
+        crate::handlers::cokret::user_did_document(url_builder, contrix_config, user)
     }
 
     fn verify_user_binding(
         &self,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         user: &User,
         did: &str,
     ) -> DidBindingVerification {
@@ -335,7 +335,7 @@ impl DidResolverService for DefaultDidResolverService {
         &self,
         http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
-        contrix_config: &ContrixConfig,
+        contrix_config: &CokretConfig,
         key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,
@@ -449,12 +449,12 @@ fn local_primary_account_did_document(
 
     DidDocument {
         id: did.to_owned(),
-        also_known_as: vec![crate::handlers::contrix::user_handle(url_builder, user)],
+        also_known_as: vec![crate::handlers::cokret::user_handle(url_builder, user)],
         verification_method,
         authentication,
         assertion_method,
         service: Vec::new(),
-        metadata: Some(crate::handlers::contrix::DidDocumentMetadata::current_for_holder(None)),
+        metadata: Some(crate::handlers::cokret::DidDocumentMetadata::current_for_holder(None)),
     }
 }
 

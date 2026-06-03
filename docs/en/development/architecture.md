@@ -1,16 +1,16 @@
 # Architecture
 
-coauth is the Contrix Auth Server. It handles account authentication,
+coauth is the Cokret Auth Server. It handles account authentication,
 OAuth/OIDC, session grants, and Principal Server integration for downstream
 systems such as Soland. It is meant to stay lightweight in terms of resource
 usage and easily scalable horizontally.
 
 ## Scope and goals
 
-coauth focuses on Contrix authentication and authorization workflows rather
+coauth focuses on Cokret authentication and authorization workflows rather
 than acting as a general purpose Identity Provider (IdP).
 
-It speaks OAuth / OIDC for authentication and exposes Contrix session grant
+It speaks OAuth / OIDC for authentication and exposes Cokret session grant
 surfaces for Principal Servers. If you want to connect to an upstream SAML, CAS
 or LDAP backend then you need to pair coauth with a separate service (such as
 [Dex](https://dexidp.io) or [Keycloak](https://www.keycloak.org)) which does that

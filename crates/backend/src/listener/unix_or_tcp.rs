@@ -205,7 +205,7 @@ impl UnixOrTcpListener {
     /// Returns an error if the underlying socket couldn't accept the connection
     pub fn poll_accept(
         &self,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
     ) -> Poll<Result<(SocketAddr, UnixOrTcpConnection), std::io::Error>> {
         match self {
             #[cfg(unix)]
@@ -297,7 +297,7 @@ impl UnixOrTcpConnection {
 impl AsyncRead for UnixOrTcpConnection {
     fn poll_read(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         // SAFETY: we only project to inner fields which are Unpin (TcpStream,
@@ -314,7 +314,7 @@ impl AsyncRead for UnixOrTcpConnection {
 impl AsyncWrite for UnixOrTcpConnection {
     fn poll_write(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, std::io::Error>> {
         let inner = &mut self.get_mut().inner;
@@ -327,7 +327,7 @@ impl AsyncWrite for UnixOrTcpConnection {
 
     fn poll_write_vectored(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
         bufs: &[std::io::IoSlice<'_>],
     ) -> Poll<Result<usize, std::io::Error>> {
         let inner = &mut self.get_mut().inner;
@@ -346,7 +346,7 @@ impl AsyncWrite for UnixOrTcpConnection {
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, ck: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
         let inner = &mut self.get_mut().inner;
         match inner {
             #[cfg(unix)]
@@ -357,7 +357,7 @@ impl AsyncWrite for UnixOrTcpConnection {
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
         let inner = &mut self.get_mut().inner;
         match inner {

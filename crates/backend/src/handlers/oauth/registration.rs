@@ -463,9 +463,9 @@ mod tests {
         assert!(!url_is_public_suffix("https://example.com."));
         assert!(!url_is_public_suffix("https://x.com"));
         assert!(!url_is_public_suffix("https://x.com."));
-        assert!(!url_is_public_suffix("https://contrix-dev.github.io"));
+        assert!(!url_is_public_suffix("https://cokret-dev.github.io"));
         assert!(!url_is_public_suffix("http://localhost"));
-        assert!(!url_is_public_suffix("contrix:/callback"));
+        assert!(!url_is_public_suffix("cokret:/callback"));
         assert!(!url_is_public_suffix("http://somerandominternaldomain"));
     }
 

@@ -57,7 +57,7 @@ use crate::services::policy_frontier::Frontier;
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
 
-/// CXP-0010 (R3 spec-sync 2026-05-27, contrix-spec b47ff6ec) — call /
+/// CXP-0010 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — call /
 /// media capability actions registered in
 /// `capability-action-registry.json`. CAP-1: capability evaluator MUST
 /// recognise these five actions so deny/review/allow rules can target
@@ -80,7 +80,7 @@ pub fn is_recognised_call_capability_action(action: &str) -> bool {
 }
 
 /// CAP-2: returns true when the candidate resource selector wire string
-/// is a `cx:circle:<uuid>` typed id. The evaluator accepts `circle`
+/// is a `ck:circle:<uuid>` typed id. The evaluator accepts `circle`
 /// selectors verbatim as `deny_actors` / `deny_actions` / target lists
 /// per `resource-selector-grammar.md` §6 (R3).
 #[must_use]
@@ -409,7 +409,7 @@ mod tests {
     fn req(actor: &str, action: &str) -> PolicyCheckRequest {
         PolicyCheckRequest {
             request_id: "req-1".into(),
-            realm_id: RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001").unwrap(),
+            realm_id: RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap(),
             actor: Did::new(actor.to_owned()).unwrap(),
             action: action.to_owned(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
@@ -470,7 +470,7 @@ mod tests {
         let data = serde_json::json!({
             "deny_actors": ["did:web:alice.example"],
             "realms": {
-                "cx:realm:01904100-0000-7000-8000-000000000001": {
+                "ck:realm:01904100-0000-7000-8000-000000000001": {
                     // Realm-specific scope: NO deny_actors, so alice is
                     // allowed in this realm even though the default
                     // scope would deny her.
@@ -507,17 +507,17 @@ mod tests {
     #[test]
     fn cap2_circle_selector_accepts_valid_typed_id() {
         assert!(is_circle_selector(
-            "cx:circle:01904100-0000-7000-8000-000000000001"
+            "ck:circle:01904100-0000-7000-8000-000000000001"
         ));
         assert!(!is_circle_selector("not-a-circle"));
         assert!(!is_circle_selector(
-            "cx:space:01904100-0000-7000-8000-000000000001"
+            "ck:space:01904100-0000-7000-8000-000000000001"
         ));
     }
 
     #[test]
     fn cap2_circle_scoped_deny_overrides_realm_default() {
-        let circle_id = "cx:circle:01904100-0000-7000-8000-000000000002";
+        let circle_id = "ck:circle:01904100-0000-7000-8000-000000000002";
         let data = serde_json::json!({
             "circles": {
                 circle_id: {

@@ -2,7 +2,7 @@
 
 `coauth` follows [Semantic Versioning](https://semver.org/) for the HTTP
 contracts. Patch and minor releases never break compatibility with the
-existing OIDC / OAuth / Contrix surfaces. Major releases may remove
+existing OIDC / OAuth / Cokret surfaces. Major releases may remove
 deprecated paths after at least one minor release of warning.
 
 ## Routine upgrades
@@ -39,7 +39,7 @@ The following surfaces are tracked compatibility contracts:
 
 - `/.well-known/openid-configuration`
 - `/.well-known/did.json`
-- `/.well-known/contrix/openapi.yaml`
+- `/.well-known/cokret/openapi.yaml`
 - `/api/admin/v1/openapi.yaml` (the canonical `sodmin` integration
   contract)
 - `/api/v1/server/describe` and the rest of `/api/v1/*`

@@ -41,12 +41,12 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v4
 
-      - name: Check out Contrix Rust SDK
+      - name: Check out Cokret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN }}
           GITHUB_REPOSITORY_OWNER: ${{ gitea.repository_owner }}
           GITHUB_SERVER_URL: ${{ gitea.server_url }}
-        run: bash .ci/checkout-sibling.sh contrix-rust-sdk ../contrix-rust-sdk
+        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
 
       - name: Set up Rust with llvm-tools
         uses: dtolnay/rust-toolchain@stable

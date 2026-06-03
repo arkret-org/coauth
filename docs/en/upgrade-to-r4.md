@@ -1,8 +1,8 @@
 # Upgrade to Round R4
 
 Round R4 closes the 2026-05-20 protocol review work in `coauth` and
-the Contrix protocol. It is wire-breaking for clients or downstream
-services that consume Contrix account, identity, invite, or policy
+the Cokret protocol. It is wire-breaking for clients or downstream
+services that consume Cokret account, identity, invite, or policy
 surfaces directly. OIDC/OAuth endpoints remain on their normal
 compatibility track.
 
@@ -34,7 +34,7 @@ entry.
 
 ## Trust domain rotation
 
-`contrix.trust_domain` is part of the canonical transcript for every
+`cokret.trust_domain` is part of the canonical transcript for every
 `cx.cross_signing.reset` proof. Changing it invalidates reset proofs
 that were issued under the previous trust domain.
 
@@ -51,7 +51,7 @@ Before rotating:
 
 During rotation:
 
-1. Set the new value in `contrix.trust_domain`.
+1. Set the new value in `cokret.trust_domain`.
 2. Restart one `coauth` replica and verify `/api/v1/server/describe`
    advertises the new value.
 3. Roll the remaining replicas.

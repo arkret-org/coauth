@@ -50,7 +50,7 @@ impl<T> BufferedStream<T> {
 impl<T: AsyncRead + Unpin> AsyncRead for BufferedStream<T> {
     fn poll_read(
         mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
         if let Some(mut prefix) = self.prefix.take()
@@ -71,23 +71,23 @@ impl<T: AsyncRead + Unpin> AsyncRead for BufferedStream<T> {
 impl<T: AsyncWrite + Unpin> AsyncWrite for BufferedStream<T> {
     fn poll_write(
         mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         Pin::new(&mut self.inner).poll_write(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, ck: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.inner).poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, ck: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 
     fn poll_write_vectored(
         mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        ck: &mut Context<'_>,
         bufs: &[io::IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
         Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)

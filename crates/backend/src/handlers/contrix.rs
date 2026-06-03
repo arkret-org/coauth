@@ -1,6 +1,6 @@
 use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Duration, Utc};
-use coauth_config::{ContrixConfig, IdentityRegistryKind};
+use coauth_config::{CokretConfig, IdentityRegistryKind};
 use coauth_data::{
     BrowserSession, Clock, NewUserPrimaryHandlePreference, Pagination, RepositoryAccess,
     SessionGrant, UrlBuilder, User,
@@ -27,14 +27,14 @@ use crate::handlers::common::{DepotExt, RouteError};
 
 const CONTRIX_PROTOCOL_VERSION: &str = "1.0";
 const CONTRIX_HTTP_BINDING: &str = "http_json";
-pub const CLAIM_PRINCIPAL_DID: &str = "org.contrix.principal_did";
-pub const CLAIM_DEVICE_ID: &str = "org.contrix.device_id";
-pub const CLAIM_SESSION_ID: &str = "org.contrix.session_id";
-pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:contrix:principal-server:session.bind";
+pub const CLAIM_PRINCIPAL_DID: &str = "org.cokret.principal_did";
+pub const CLAIM_DEVICE_ID: &str = "org.cokret.device_id";
+pub const CLAIM_SESSION_ID: &str = "org.cokret.session_id";
+pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:cokret:principal-server:session.bind";
 
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
-    #[error("no signing key is configured for Contrix session grants")]
+    #[error("no signing key is configured for Cokret session grants")]
     NoSigningKey,
 
     #[error(transparent)]
@@ -60,7 +60,7 @@ pub enum SessionGrantError {
 }
 
 #[derive(Debug, Error)]
-pub enum ContrixRouteError {
+pub enum CokretRouteError {
     #[error(transparent)]
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
 
@@ -80,7 +80,7 @@ pub enum ContrixRouteError {
     Forbidden(String),
 }
 
-impl From<RouteError> for ContrixRouteError {
+impl From<RouteError> for CokretRouteError {
     fn from(value: RouteError) -> Self {
         match value {
             RouteError::BadRequest(message) => Self::BadRequest(message),
@@ -90,7 +90,7 @@ impl From<RouteError> for ContrixRouteError {
     }
 }
 
-impl From<coauth_data::RepositoryError> for ContrixRouteError {
+impl From<coauth_data::RepositoryError> for CokretRouteError {
     fn from(value: coauth_data::RepositoryError) -> Self {
         Self::Internal(Box::new(value))
     }
@@ -113,27 +113,27 @@ enum SessionGrantAuthz {
 async fn require_session_grant_caller(
     req: &Request,
     depot: &Depot,
-) -> Result<SessionGrantAuthz, ContrixRouteError> {
+) -> Result<SessionGrantAuthz, CokretRouteError> {
     use coauth_data::{RepositoryAccess, TokenType};
 
     let auth_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
         .ok_or_else(|| {
-            ContrixRouteError::Unauthorized("missing authorization header".to_owned())
+            CokretRouteError::Unauthorized("missing authorization header".to_owned())
         })?;
     let auth_str = auth_header
         .to_str()
-        .map_err(|_| ContrixRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
     let token = auth_str
         .strip_prefix("Bearer ")
         .or_else(|| auth_str.strip_prefix("bearer "))
         .ok_or_else(|| {
-            ContrixRouteError::Unauthorized("invalid authorization header".to_owned())
+            CokretRouteError::Unauthorized("invalid authorization header".to_owned())
         })?;
 
     // Static bearer fallback: a Principal Server may authenticate with a
-    // token configured in `contrix.principal_servers[].
+    // token configured in `cokret.principal_servers[].
     // session_grant_introspection_bearer`. Mirrors the
     // `oauth_introspection_bearer` fallback on the OAuth introspection
     // endpoint and lets a server-to-server caller skip the DB-backed
@@ -145,7 +145,7 @@ async fn require_session_grant_caller(
     }
 
     let token_type = TokenType::check(token)
-        .map_err(|_| ContrixRouteError::Unauthorized("invalid bearer token".to_owned()))?;
+        .map_err(|_| CokretRouteError::Unauthorized("invalid bearer token".to_owned()))?;
 
     let mut repo = depot.repo().await?;
     let scope = match token_type {
@@ -154,17 +154,17 @@ async fn require_session_grant_caller(
                 .oauth_access_token()
                 .find_by_token(token)
                 .await
-                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| {
-                    ContrixRouteError::Unauthorized("unknown access token".to_owned())
+                    CokretRouteError::Unauthorized("unknown access token".to_owned())
                 })?;
             let session = repo
                 .oauth_session()
                 .lookup(access.session_id)
                 .await
-                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| {
-                    ContrixRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         "access token references missing session",
                     ))
                 })?;
@@ -175,24 +175,24 @@ async fn require_session_grant_caller(
                 .personal_access_token()
                 .find_by_token(token)
                 .await
-                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| {
-                    ContrixRouteError::Unauthorized("unknown access token".to_owned())
+                    CokretRouteError::Unauthorized("unknown access token".to_owned())
                 })?;
             let session = repo
                 .personal_session()
                 .lookup(access.session_id)
                 .await
-                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| {
-                    ContrixRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         "access token references missing session",
                     ))
                 })?;
             session.scope.clone()
         }
         _ => {
-            return Err(ContrixRouteError::Unauthorized(
+            return Err(CokretRouteError::Unauthorized(
                 "unsupported access token type".to_owned(),
             ));
         }
@@ -204,14 +204,14 @@ async fn require_session_grant_caller(
     } else if scope.contains(PRINCIPAL_SERVER_SESSION_BIND_SCOPE) {
         Ok(SessionGrantAuthz::PrincipalServer)
     } else {
-        Err(ContrixRouteError::Forbidden(
+        Err(CokretRouteError::Forbidden(
             "missing admin or principal-server scope".to_owned(),
         ))
     }
 }
 
 fn principal_server_static_session_grant_bearer_matches(
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     token: &str,
 ) -> bool {
     !token.trim().is_empty()
@@ -222,7 +222,7 @@ fn principal_server_static_session_grant_bearer_matches(
             .any(|configured| configured == token)
 }
 
-impl Scribe for ContrixRouteError {
+impl Scribe for CokretRouteError {
     fn render(self, res: &mut Response) {
         let (status, code, message) = match self {
             Self::Internal(_) => (
@@ -241,7 +241,7 @@ impl Scribe for ContrixRouteError {
             // challenge so the caller can negotiate.
             res.headers_mut().insert(
                 http::header::WWW_AUTHENTICATE,
-                http::HeaderValue::from_static("Bearer realm=\"contrix\", error=\"invalid_token\""),
+                http::HeaderValue::from_static("Bearer realm=\"cokret\", error=\"invalid_token\""),
             );
         }
 
@@ -252,16 +252,16 @@ impl Scribe for ContrixRouteError {
 
 fn map_did_resolve_error(
     error: crate::services::did_resolver::DidResolveError,
-) -> ContrixRouteError {
+) -> CokretRouteError {
     match error {
         crate::services::did_resolver::DidResolveError::NotFound
         | crate::services::did_resolver::DidResolveError::UnsupportedMethod => {
-            ContrixRouteError::NotFound
+            CokretRouteError::NotFound
         }
         crate::services::did_resolver::DidResolveError::InvalidDid(message) => {
-            ContrixRouteError::BadRequest(format!("invalid did: {message}"))
+            CokretRouteError::BadRequest(format!("invalid did: {message}"))
         }
-        other => ContrixRouteError::Internal(Box::new(other)),
+        other => CokretRouteError::Internal(Box::new(other)),
     }
 }
 
@@ -556,7 +556,7 @@ struct ServiceDescribeResponse {
     //     property order (see service-describe.schema.json). ---
     service_did: String,
     /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
-    /// form `cx:trust_domain:<scope>`). Explicit configuration wins;
+    /// form `ck:trust_domain:<scope>`). Explicit configuration wins;
     /// otherwise coauth derives a stable deployment-local value from the
     /// public host so the service-describe schema can require it.
     trust_domain: String,
@@ -584,7 +584,7 @@ struct ServiceDescribeResponse {
     /// interop for.
     experimental_features: Vec<&'static str>,
     /// T6.1 — legacy / external-interop surfaces exposed for compatibility,
-    /// not as part of Contrix v1 conformance.
+    /// not as part of Cokret v1 conformance.
     compat_surfaces: Vec<CompatSurfaceDescriptor>,
     /// Mirror of the service's development-mode flag. coauth has no
     /// dedicated dev toggle today, so this is always `false`; if a toggle
@@ -598,7 +598,7 @@ struct ServiceDescribeResponse {
     //     adopted into the schema or moved under the `x_*` extension
     //     namespace. Kept here as the service's richer self-description;
     //     promoting them is a spec-maintainer decision. ---
-    /// T6.3 — explicit Contrix v1 role declaration. A coauth instance can
+    /// T6.3 — explicit Cokret v1 role declaration. A coauth instance can
     /// simultaneously act as `auth_server` (OIDC token issuer),
     /// `identity_resolver` (DID / handle resolution proxy), and
     /// `account_registry` (internal service-account management).
@@ -840,14 +840,14 @@ pub(crate) fn service_did(url_builder: &UrlBuilder) -> String {
     format!("did:web:{}", segments.join(":"))
 }
 
-pub(crate) fn service_did_for(url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String {
+pub(crate) fn service_did_for(url_builder: &UrlBuilder, contrix_config: &CokretConfig) -> String {
     contrix_config
         .service_did
         .clone()
         .unwrap_or_else(|| service_did(url_builder))
 }
 
-pub(crate) fn issuer_did_for(url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String {
+pub(crate) fn issuer_did_for(url_builder: &UrlBuilder, contrix_config: &CokretConfig) -> String {
     contrix_config
         .issuer_did
         .clone()
@@ -860,7 +860,7 @@ pub(crate) fn user_did(url_builder: &UrlBuilder, user: &User) -> String {
 
 pub(crate) fn user_did_for(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     user: &User,
 ) -> String {
     format!(
@@ -881,7 +881,7 @@ pub(crate) fn user_handle_display(url_builder: &UrlBuilder, user: &User) -> Stri
     )
 }
 
-/// Canonical Contrix handle for a user per spec 7157ee8 §3.1:
+/// Canonical Cokret handle for a user per spec 7157ee8 §3.1:
 /// `<lowercase-localpart>:<lowercase-domain>`. This is the form that MUST
 /// appear in `alsoKnownAs`, on any handle claim `handle` field, and as
 /// directory cache key. `acct:<local>@<host>` is interop-only and lives in
@@ -905,7 +905,7 @@ pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> S
 }
 
 /// Stable wire-level error code returned when a caller passes a non-
-/// canonical handle string (legacy `contrix://` URI, `acct:` alias, or
+/// canonical handle string (legacy `cokret://` URI, `acct:` alias, or
 /// other malformed input).
 ///
 /// Mirrored by [`coauth_data::user::HANDLE_NOT_CANONICAL_CODE`] — kept in
@@ -915,13 +915,13 @@ pub const HANDLE_NOT_CANONICAL_CODE: &str = "handle_not_canonical";
 
 /// Reject any inbound `handle` that is not in the canonical
 /// `<localpart>:<domain>` shape (spec 7157ee8 §3.1). Returns a
-/// [`ContrixRouteError::BadRequest`] wrapping the standard error envelope
+/// [`CokretRouteError::BadRequest`] wrapping the standard error envelope
 /// `code = "handle_not_canonical"`.
-pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, ContrixRouteError> {
+pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, CokretRouteError> {
     coauth_data::user::validate_canonical_handle(input).map_err(|(_code, message)| {
         // The error envelope sets `code` from the variant; we embed the
         // reason text so callers see why their input was rejected.
-        ContrixRouteError::BadRequest(format!("{HANDLE_NOT_CANONICAL_CODE}: {message}"))
+        CokretRouteError::BadRequest(format!("{HANDLE_NOT_CANONICAL_CODE}: {message}"))
     })
 }
 
@@ -976,7 +976,7 @@ pub struct HandleClaimPayload {
     /// [`crate::services::handle_subject_validator::ensure_claim_kind_supported`].
     pub claim_kind: String,
     pub subject_id: String,
-    /// Canonical Contrix handle of the form `<localpart>:<domain>` per
+    /// Canonical Cokret handle of the form `<localpart>:<domain>` per
     /// spec 7157ee8 §3.1 (replaces the legacy `handle_uri` URI form).
     pub handle: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1045,7 +1045,7 @@ impl HandleClaimKind {
 pub(crate) fn issue_handle_claim(
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     key_store: &Keystore,
     user: &User,
     claim_kind: HandleClaimKind,
@@ -1067,14 +1067,14 @@ pub(crate) fn issue_handle_claim(
     ensure_claim_kind_supported(claim_kind.as_wire())?;
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
-    // `cx:actor:` / `cx:account:` typed id or a service DID. coauth always
+    // `ck:actor:` / `ck:account:` typed id or a service DID. coauth always
     // derives `subject_id` from `user_did_for`, but validating here keeps
     // the issuer honest if that derivation ever changes and lets the same
     // reason code surface as soland / the SDK.
     ensure_subject_is_principal_did(&subject_id)?;
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
-    // `<localpart>:<domain>`; the legacy `contrix://…` URI is retired.
+    // `<localpart>:<domain>`; the legacy `cokret://…` URI is retired.
     let handle = user_handle(url_builder, user);
     let mut aliases = vec![user_handle_acct_alias(url_builder, user)];
     aliases.extend(user.handle_aliases.iter().cloned());
@@ -1195,11 +1195,11 @@ pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
     url_builder.absolute_url("/api/v1").to_string()
 }
 
-fn trust_domain_for(url_builder: &UrlBuilder, contrix_config: &ContrixConfig) -> String {
+fn trust_domain_for(url_builder: &UrlBuilder, contrix_config: &CokretConfig) -> String {
     contrix_config.trust_domain.clone().unwrap_or_else(|| {
         let scope = derived_trust_domain_scope(url_builder.public_hostname());
-        let trust_domain = format!("cx:trust_domain:{scope}");
-        debug_assert!(ContrixConfig::validate_trust_domain(&trust_domain).is_ok());
+        let trust_domain = format!("ck:trust_domain:{scope}");
+        debug_assert!(CokretConfig::validate_trust_domain(&trust_domain).is_ok());
         trust_domain
     })
 }
@@ -1232,7 +1232,7 @@ fn derived_trust_domain_scope(host: &str) -> String {
 
 pub(crate) fn required_audience_for(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
 ) -> String {
     contrix_config
         .admin_audience
@@ -1242,7 +1242,7 @@ pub(crate) fn required_audience_for(
 
 pub(crate) fn is_allowed_session_grant_audience(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     audience: &str,
 ) -> bool {
     let audience = audience.trim();
@@ -1284,7 +1284,7 @@ pub(crate) enum SessionGrantTargetError {
 /// must disambiguate.
 pub(crate) fn password_login_session_grant_target(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     requested_audience: Option<&str>,
 ) -> Result<SessionGrantTarget, SessionGrantTargetError> {
     if let Some(audience) = requested_audience.map(str::trim).filter(|a| !a.is_empty()) {
@@ -1329,7 +1329,7 @@ fn identity_registry_kind(kind: &IdentityRegistryKind) -> &'static str {
 }
 
 fn delegated_identity_registry_descriptor(
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
 ) -> Option<IdentityRegistryDescriptor> {
     contrix_config
         .identity_registry
@@ -1343,7 +1343,7 @@ fn delegated_identity_registry_descriptor(
 
 fn identity_registry_resolver_descriptor(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
 ) -> IdentityRegistryResolverDescriptor {
     let delegated_resolver = delegated_identity_registry_descriptor(contrix_config);
     IdentityRegistryResolverDescriptor {
@@ -1389,7 +1389,7 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
                 code: "machine_readable_code",
                 message: "human-readable message",
             },
-            request_id: "cx:request:01964137-0000-7000-8000-000000000000",
+            request_id: "ck:request:01964137-0000-7000-8000-000000000000",
         },
         codes: vec!["bad_json", "not_found", "internal_error"],
     }
@@ -1438,7 +1438,7 @@ fn build_verified_profile_descriptors(
 
 fn service_describe_response(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
 ) -> ServiceDescribeResponse {
     let principal_servers: Vec<PrincipalServerDescriptor> = contrix_config
@@ -1457,7 +1457,7 @@ fn service_describe_response(
         service_did: service_did_for(url_builder, contrix_config),
         // Round 4 — surface the deployment trust domain so federation
         // peers can verify cross-deployment replay protection (see
-        // `contrix-spec` round-4 §f9bd7eb).
+        // `cokret-spec` round-4 §f9bd7eb).
         trust_domain: trust_domain_for(url_builder, contrix_config),
         // service_type is the SDK-side `ServiceType` discriminant. coauth's
         // primary role is OIDC issuance, so this is kept as "auth_server".
@@ -1543,7 +1543,7 @@ fn service_describe_response(
         // coauth wears three roles (see `service_roles` above). The only
         // canonical v1 profile whose role + required surface coauth
         // actually serves is `cx.profile.auth_server.v1` (added under
-        // G3.C3 to `contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json`).
+        // G3.C3 to `cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json`).
         // The other directory-role profiles that would superficially
         // apply are NOT claimed and the reason is documented inline:
         //
@@ -1673,7 +1673,7 @@ fn service_describe_response(
 // canonical-JSON implementation. They are now a thin shim over
 // `contrix_core::canonical::canonical_sha256`, which is the single canonical
 // JSON pipeline shared by soland / starid / yougen / floria. This keeps
-// the handle-claim payload hash byte-identical to every other Contrix
+// the handle-claim payload hash byte-identical to every other Cokret
 // service computing `sha256(canonical_json(payload))`.
 //
 // The SDK encoder is *stricter* than the original (it rejects float
@@ -1727,7 +1727,7 @@ fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGr
 fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) -> Option<String> {
     tokens.into_iter().find_map(|token| {
         token
-            .strip_prefix("urn:contrix:client:device:")
+            .strip_prefix("urn:cokret:client:device:")
             .map(ToOwned::to_owned)
     })
 }
@@ -1738,7 +1738,7 @@ pub(crate) fn primary_device_id(scope: &Scope) -> Option<String> {
 
 pub(crate) fn user_did_document(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     user: &User,
 ) -> DidDocument {
     user_did_document_with_primary_handle(
@@ -1751,7 +1751,7 @@ pub(crate) fn user_did_document(
 
 pub(crate) fn user_did_document_with_primary_handle(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     user: &User,
     primary_handle: Option<String>,
 ) -> DidDocument {
@@ -1768,7 +1768,7 @@ pub(crate) fn user_did_document_with_primary_handle(
         assertion_method: Vec::new(),
         service: vec![DidService {
             id: format!("{did}#auth-server"),
-            kind: "ContrixAuthServer".to_owned(),
+            kind: "CokretAuthServer".to_owned(),
             service_endpoint: url_builder
                 .absolute_url("/api/v1/server/describe")
                 .to_string(),
@@ -1792,7 +1792,7 @@ fn user_primary_handle_preference(_user: &User) -> Option<String> {
     None
 }
 
-fn did_document_as_of_query(req: &Request) -> Result<Option<DateTime<Utc>>, ContrixRouteError> {
+fn did_document_as_of_query(req: &Request) -> Result<Option<DateTime<Utc>>, CokretRouteError> {
     let Some(raw) = req
         .query::<String>("as_of")
         .or_else(|| req.query::<String>("asOf"))
@@ -1802,16 +1802,16 @@ fn did_document_as_of_query(req: &Request) -> Result<Option<DateTime<Utc>>, Cont
 
     DateTime::parse_from_rfc3339(&raw)
         .map(|dt| Some(dt.with_timezone(&Utc)))
-        .map_err(|_| ContrixRouteError::BadRequest("invalid as_of query parameter".to_owned()))
+        .map_err(|_| CokretRouteError::BadRequest("invalid as_of query parameter".to_owned()))
 }
 
 async fn local_user_did_document_if_owned(
     repo: &mut coauth_data::BoxRepository,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     did: &str,
     as_of: Option<DateTime<Utc>>,
-) -> Result<Option<DidDocument>, ContrixRouteError> {
+) -> Result<Option<DidDocument>, CokretRouteError> {
     let Some(user_id) = parse_local_user_did_for(url_builder, contrix_config, did) else {
         return Ok(None);
     };
@@ -1820,9 +1820,9 @@ async fn local_user_did_document_if_owned(
         .user()
         .lookup(user_id)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     else {
-        return Err(ContrixRouteError::NotFound);
+        return Err(CokretRouteError::NotFound);
     };
 
     let primary_handle = match as_of {
@@ -1833,7 +1833,7 @@ async fn local_user_did_document_if_owned(
         }
         None => repo.user_primary_handle_preference().current(user.id).await,
     }
-    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+    .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     .and_then(|preference| preference.handle);
 
     Ok(Some(user_did_document_with_primary_handle(
@@ -1848,7 +1848,7 @@ pub(crate) fn issue_session_grant(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     scopes: Vec<String>,
@@ -1877,7 +1877,7 @@ pub(crate) fn issue_session_grant_for_audience(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     audience: String,
@@ -1918,7 +1918,7 @@ pub(crate) fn issue_session_grant_for_audience(
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
-        revocation_ref: format!("cx:session:{}", browser_session.id),
+        revocation_ref: format!("ck:session:{}", browser_session.id),
         device_id: device_id.clone(),
         session_id: browser_session.id.to_string(),
         browser_session_id: browser_session.id.to_string(),
@@ -2053,7 +2053,7 @@ pub(crate) fn preferred_public_signing_key(key_store: &Keystore) -> Option<Publi
 
 pub(crate) fn parse_local_user_did_for(
     url_builder: &UrlBuilder,
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     did: &str,
 ) -> Option<Ulid> {
     let prefix = format!("{}:users:", service_did_for(url_builder, contrix_config));
@@ -2079,7 +2079,7 @@ pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Opti
 #[handler]
 pub async fn server_describe(
     depot: &Depot,
-) -> Result<Json<ServiceDescribeResponse>, ContrixRouteError> {
+) -> Result<Json<ServiceDescribeResponse>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let mut repo = depot.repo().await?;
@@ -2136,7 +2136,7 @@ pub async fn server_describe(
 #[handler]
 pub async fn identity_describe(
     depot: &Depot,
-) -> Result<Json<IdentityDescribeResBody>, ContrixRouteError> {
+) -> Result<Json<IdentityDescribeResBody>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let identity_registry = delegated_identity_registry_descriptor(&contrix_config);
@@ -2159,11 +2159,11 @@ pub async fn identity_describe(
 pub async fn identity_resolve(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityResolveResBody>, ContrixRouteError> {
+) -> Result<Json<IdentityResolveResBody>, CokretRouteError> {
     let body: ResolveIdentityRequest = req
         .parse_json()
         .await
-        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
@@ -2178,7 +2178,7 @@ pub async fn identity_resolve(
     {
         repo.cancel()
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
         return Ok(Json(IdentityResolveResBody {
             did_document,
             key_log_head: None,
@@ -2204,7 +2204,7 @@ pub async fn identity_resolve(
         .map_err(map_did_resolve_error)?;
     repo.cancel()
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityResolveResBody {
         did_document: resolution.document,
@@ -2219,10 +2219,10 @@ pub async fn identity_resolve(
 pub async fn identity_document(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityDocumentResBody>, ContrixRouteError> {
+) -> Result<Json<IdentityDocumentResBody>, CokretRouteError> {
     let did = req
         .query::<String>("did")
-        .ok_or_else(|| ContrixRouteError::BadRequest("missing did query parameter".into()))?;
+        .ok_or_else(|| CokretRouteError::BadRequest("missing did query parameter".into()))?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
@@ -2237,7 +2237,7 @@ pub async fn identity_document(
     {
         repo.cancel()
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
         return Ok(Json(IdentityDocumentResBody {
             did_document,
             head_event_digest: None,
@@ -2259,7 +2259,7 @@ pub async fn identity_document(
         .map_err(map_did_resolve_error)?;
     repo.cancel()
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityDocumentResBody {
         did_document: resolution.document,
@@ -2272,7 +2272,7 @@ pub async fn identity_document(
 #[handler]
 pub async fn directory_describe(
     depot: &Depot,
-) -> Result<Json<DirectoryDescribeResBody>, ContrixRouteError> {
+) -> Result<Json<DirectoryDescribeResBody>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
 
@@ -2288,16 +2288,16 @@ pub async fn directory_describe(
 pub async fn directory_resolve_handle(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ResolveHandleResponse>, ContrixRouteError> {
+) -> Result<Json<ResolveHandleResponse>, CokretRouteError> {
     let body: ResolveHandleRequest = req
         .parse_json()
         .await
-        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let Some(handle) = parse_local_handle(&url_builder, &body.handle) else {
-        return Err(ContrixRouteError::NotFound);
+        return Err(CokretRouteError::NotFound);
     };
 
     let mut repo = depot.repo().await?;
@@ -2305,9 +2305,9 @@ pub async fn directory_resolve_handle(
         .user()
         .find_by_handle(&handle)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     else {
-        return Err(ContrixRouteError::NotFound);
+        return Err(CokretRouteError::NotFound);
     };
 
     let did = did_resolver.user_did(&url_builder, &contrix_config, &user);
@@ -2328,7 +2328,7 @@ pub async fn directory_resolve_handle(
 pub async fn list_session_grants(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantListResponse>, ContrixRouteError> {
+) -> Result<Json<SessionGrantListResponse>, CokretRouteError> {
     let clock = crate::handlers::make_clock();
     let subject = req.query::<String>("subject");
     let device_id = req.query::<String>("device_id");
@@ -2349,7 +2349,7 @@ pub async fn list_session_grants(
 
     if let Some(browser_session_id) = req.query::<String>("browser_session_id") {
         let browser_session_id = Ulid::from_string(&browser_session_id)
-            .map_err(|_| ContrixRouteError::BadRequest("invalid browser_session_id".into()))?;
+            .map_err(|_| CokretRouteError::BadRequest("invalid browser_session_id".into()))?;
         filter = filter.for_browser_session(browser_session_id);
     }
 
@@ -2363,10 +2363,10 @@ pub async fn list_session_grants(
         .oauth_session_grant()
         .list(filter, Pagination::first(100))
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     repo.cancel()
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(SessionGrantListResponse {
         grants: page
@@ -2381,19 +2381,19 @@ pub async fn list_session_grants(
 pub async fn revoke_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantRevokeResponse>, ContrixRouteError> {
+) -> Result<Json<SessionGrantRevokeResponse>, CokretRouteError> {
     let clock = crate::handlers::make_clock();
     let raw_id = req
         .param::<String>("id")
-        .ok_or_else(|| ContrixRouteError::BadRequest("missing session grant id".into()))?;
+        .ok_or_else(|| CokretRouteError::BadRequest("missing session grant id".into()))?;
     let id = Ulid::from_string(&raw_id)
-        .map_err(|_| ContrixRouteError::BadRequest("invalid session grant id".into()))?;
+        .map_err(|_| CokretRouteError::BadRequest("invalid session grant id".into()))?;
 
     // Revocation is destructive — server_name scope is not enough.
     match require_session_grant_caller(req, depot).await? {
         SessionGrantAuthz::Admin => {}
         SessionGrantAuthz::PrincipalServer => {
-            return Err(ContrixRouteError::Forbidden(
+            return Err(CokretRouteError::Forbidden(
                 "session-grant revocation requires admin scope".to_owned(),
             ));
         }
@@ -2404,17 +2404,17 @@ pub async fn revoke_session_grant(
         .oauth_session_grant()
         .lookup(id)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
-        .ok_or(ContrixRouteError::NotFound)?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .ok_or(CokretRouteError::NotFound)?;
 
     let grant = repo
         .oauth_session_grant()
         .revoke(&clock, grant)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     repo.save()
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(SessionGrantRevokeResponse {
         grant: grant.into(),
@@ -2439,7 +2439,7 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospection
             .collect(),
         expires_at: grant.expires_at,
         revoked_at: grant.revoked_at,
-        revocation_ref: format!("cx:session:{}", grant.browser_session_id),
+        revocation_ref: format!("ck:session:{}", grant.browser_session_id),
     }
 }
 
@@ -2525,14 +2525,14 @@ fn verify_session_grant_introspection_proof(
 pub async fn introspect_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantIntrospectionResponse>, ContrixRouteError> {
+) -> Result<Json<SessionGrantIntrospectionResponse>, CokretRouteError> {
     let body: SessionGrantIntrospectionRequest = req
         .parse_json()
         .await
-        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
 
     if body.id.is_none() && body.grant_jwt.is_none() {
-        return Err(ContrixRouteError::BadRequest(
+        return Err(CokretRouteError::BadRequest(
             "missing id or grant_jwt".to_owned(),
         ));
     }
@@ -2545,16 +2545,16 @@ pub async fn introspect_session_grant(
 
     let grant = if let Some(id) = body.id.as_deref() {
         let id = Ulid::from_string(id)
-            .map_err(|_| ContrixRouteError::BadRequest("invalid session grant id".into()))?;
+            .map_err(|_| CokretRouteError::BadRequest("invalid session grant id".into()))?;
         repo.oauth_session_grant()
             .lookup(id)
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     } else if let Some(grant_jwt) = body.grant_jwt.as_deref() {
         repo.oauth_session_grant()
             .lookup_by_grant_jwt(grant_jwt)
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     } else {
         None
     };
@@ -2562,7 +2562,7 @@ pub async fn introspect_session_grant(
     let Some(grant) = grant else {
         repo.cancel()
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
         return Ok(Json(SessionGrantIntrospectionResponse {
             active: false,
             status: SessionGrantIntrospectionStatus::NotFound,
@@ -2578,7 +2578,7 @@ pub async fn introspect_session_grant(
         repo.user()
             .lookup(user_id)
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     } else {
         None
     };
@@ -2598,14 +2598,14 @@ pub async fn introspect_session_grant(
         repo.oauth_session_grant()
             .revoke(&*clock, grant.clone())
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
         repo.save()
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     } else {
         repo.cancel()
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     }
 
     Ok(Json(SessionGrantIntrospectionResponse {
@@ -2618,7 +2618,7 @@ pub async fn introspect_session_grant(
 }
 
 #[handler]
-pub async fn service_did_json(depot: &Depot) -> Result<Json<DidDocument>, ContrixRouteError> {
+pub async fn service_did_json(depot: &Depot) -> Result<Json<DidDocument>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let key_store = depot.key_store()?;
@@ -2627,19 +2627,19 @@ pub async fn service_did_json(depot: &Depot) -> Result<Json<DidDocument>, Contri
     did_resolver
         .service_did_document(&url_builder, &contrix_config, &key_store)
         .map(Json)
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))
 }
 
 #[handler]
 pub async fn user_did_json(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<DidDocument>, ContrixRouteError> {
+) -> Result<Json<DidDocument>, CokretRouteError> {
     let raw_id = req
         .param::<String>("id")
-        .ok_or_else(|| ContrixRouteError::BadRequest("missing user id".into()))?;
+        .ok_or_else(|| CokretRouteError::BadRequest("missing user id".into()))?;
     let user_id = Ulid::from_string(&raw_id)
-        .map_err(|_| ContrixRouteError::BadRequest("invalid user id".into()))?;
+        .map_err(|_| CokretRouteError::BadRequest("invalid user id".into()))?;
     let url_builder = depot.url_builder()?;
     let contrix_config = depot.contrix_config()?;
     let mut repo = depot.repo().await?;
@@ -2648,9 +2648,9 @@ pub async fn user_did_json(
         .user()
         .lookup(user_id)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     else {
-        return Err(ContrixRouteError::NotFound);
+        return Err(CokretRouteError::NotFound);
     };
 
     let primary_handle = match as_of {
@@ -2661,7 +2661,7 @@ pub async fn user_did_json(
         }
         None => repo.user_primary_handle_preference().current(user.id).await,
     }
-    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+    .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     .and_then(|preference| preference.handle);
 
     Ok(Json(user_did_document_with_primary_handle(
@@ -2699,14 +2699,14 @@ pub struct PrimaryHandlePreferenceResponse {
 pub async fn patch_primary_handle_preference(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PrimaryHandlePreferenceResponse>, ContrixRouteError> {
+) -> Result<Json<PrimaryHandlePreferenceResponse>, CokretRouteError> {
     let body: PatchPrimaryHandlePreferenceRequest = req
         .parse_json()
         .await
-        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".into()))?;
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let requested = body
         .primary_handle
-        .ok_or_else(|| ContrixRouteError::BadRequest("missing primary_handle".to_owned()))?;
+        .ok_or_else(|| CokretRouteError::BadRequest("missing primary_handle".to_owned()))?;
 
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
@@ -2721,7 +2721,7 @@ pub async fn patch_primary_handle_preference(
         .entity
         .browser_session()
         .map(|session| session.user.clone())
-        .ok_or_else(|| ContrixRouteError::Unauthorized("browser session required".to_owned()))?;
+        .ok_or_else(|| CokretRouteError::Unauthorized("browser session required".to_owned()))?;
 
     let claim = if let Some(handle) = requested.as_deref() {
         require_canonical_handle(handle)?;
@@ -2729,9 +2729,9 @@ pub async fn patch_primary_handle_preference(
             repo.user_primary_handle_preference()
                 .verified_handle_claim(user.id, handle, clock.now())
                 .await
-                .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| {
-                    ContrixRouteError::BadRequest(
+                    CokretRouteError::BadRequest(
                         "primary_handle_not_verified_for_holder".to_owned(),
                     )
                 })?,
@@ -2753,11 +2753,11 @@ pub async fn patch_primary_handle_preference(
             ),
         )
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     repo.save()
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(PrimaryHandlePreferenceResponse {
         primary_handle: preference.handle,
@@ -2812,7 +2812,7 @@ pub struct RefreshSessionGrantResponse {
 pub async fn refresh_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RefreshSessionGrantResponse>, ContrixRouteError> {
+) -> Result<Json<RefreshSessionGrantResponse>, CokretRouteError> {
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
@@ -2824,15 +2824,15 @@ pub async fn refresh_session_grant(
     // 1. DPoP proof must be present — the refresh endpoint is the canonical
     //    proof-of-possession check.
     let dpop_header = dpop_header_from_request(req)
-        .ok_or_else(|| ContrixRouteError::BadRequest("device_proof_required".to_owned()))?;
+        .ok_or_else(|| CokretRouteError::BadRequest("device_proof_required".to_owned()))?;
 
     let body: RefreshSessionGrantRequest = req
         .parse_json()
         .await
-        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".to_owned()))?;
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
 
     if body.grant_jwt.trim().is_empty() {
-        return Err(ContrixRouteError::BadRequest(
+        return Err(CokretRouteError::BadRequest(
             "missing grant_jwt".to_owned(),
         ));
     }
@@ -2841,14 +2841,14 @@ pub async fn refresh_session_grant(
     //    the persisted row IS the source of truth — but we DO read the `cnf.jkt`
     //    claim out of the JWT payload to bind the proof.
     let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(body.grant_jwt.as_str())
-        .map_err(|_| ContrixRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
+        .map_err(|_| CokretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let prior_payload = jwt.payload().clone();
     let expected_jkt = prior_payload
         .cnf
         .as_ref()
         .map(|cnf| cnf.jkt.clone())
         .ok_or_else(|| {
-            ContrixRouteError::BadRequest(
+            CokretRouteError::BadRequest(
                 "grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned(),
             )
         })?;
@@ -2858,16 +2858,16 @@ pub async fn refresh_session_grant(
         .oauth_session_grant()
         .lookup_by_grant_jwt(&body.grant_jwt)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
-        .ok_or_else(|| ContrixRouteError::NotFound)?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| CokretRouteError::NotFound)?;
 
     // Single-use enforcement: a previously consumed grant can never be
     // refreshed again.
     if prior_grant.revoked_at.is_some() {
         repo.cancel()
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
-        return Err(ContrixRouteError::BadRequest(
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        return Err(CokretRouteError::BadRequest(
             "refresh_token_already_consumed".to_owned(),
         ));
     }
@@ -2882,10 +2882,10 @@ pub async fn refresh_session_grant(
     let verification = verifier
         .verify(&dpop_header, &htm, &htu, now, Some(&body.grant_jwt))
         .await
-        .map_err(|error| ContrixRouteError::BadRequest(error.to_string()))?;
+        .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
 
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt)
-        .map_err(|error| ContrixRouteError::BadRequest(error.to_string()))?;
+        .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
 
     // 4. Resolve the underlying browser session so the new grant lives under the
     //    same authentication context.
@@ -2893,9 +2893,9 @@ pub async fn refresh_session_grant(
         .browser_session()
         .lookup(prior_grant.browser_session_id)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| {
-            ContrixRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+            CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                 "session grant references missing browser session",
             ))
         })?;
@@ -2922,7 +2922,7 @@ pub async fn refresh_session_grant(
         Some(&prior_grant.subject),
         Some(verification.jkt.clone()),
     )
-    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     let persisted = persist_session_grant(
         &mut repo,
@@ -2932,7 +2932,7 @@ pub async fn refresh_session_grant(
         &new_material,
     )
     .await
-    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     // 6. Single-use semantics: revoke the prior grant only AFTER the new one is
     //    persisted.
@@ -2940,11 +2940,11 @@ pub async fn refresh_session_grant(
         .oauth_session_grant()
         .revoke(&*clock, prior_grant.clone())
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     repo.save()
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(RefreshSessionGrantResponse {
         grant_id: persisted.id.to_string(),
@@ -3012,29 +3012,29 @@ pub fn test_endpoints_enabled() -> bool {
 pub async fn debug_issue_dpop_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<DebugIssueDpopGrantResponse>, ContrixRouteError> {
+) -> Result<Json<DebugIssueDpopGrantResponse>, CokretRouteError> {
     use coauth_jose::jwk::{PublicJsonWebKey, Thumbprint};
 
     if !test_endpoints_enabled() {
-        return Err(ContrixRouteError::NotFound);
+        return Err(CokretRouteError::NotFound);
     }
 
     let body: DebugIssueDpopGrantRequest = req
         .parse_json()
         .await
-        .map_err(|_| ContrixRouteError::BadRequest("invalid json body".to_owned()))?;
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
 
     if body.actor_id.trim().is_empty() {
-        return Err(ContrixRouteError::BadRequest("missing actor_id".to_owned()));
+        return Err(CokretRouteError::BadRequest("missing actor_id".to_owned()));
     }
     if body.device_id.trim().is_empty() {
-        return Err(ContrixRouteError::BadRequest(
+        return Err(CokretRouteError::BadRequest(
             "missing device_id".to_owned(),
         ));
     }
 
     let public_jwk: PublicJsonWebKey = serde_json::from_value(body.dpop_jwk.clone())
-        .map_err(|error| ContrixRouteError::BadRequest(format!("invalid dpop_jwk: {error}")))?;
+        .map_err(|error| CokretRouteError::BadRequest(format!("invalid dpop_jwk: {error}")))?;
     let jkt = public_jwk.params().thumbprint_sha256_base64();
 
     let url_builder = depot.url_builder()?;
@@ -3051,21 +3051,21 @@ pub async fn debug_issue_dpop_grant(
     // first, so a session always exists in practice.
     let user_id = parse_local_user_did_for(&url_builder, &contrix_config, &body.actor_id)
         .ok_or_else(|| {
-            ContrixRouteError::BadRequest("actor_id is not a local Contrix user DID".to_owned())
+            CokretRouteError::BadRequest("actor_id is not a local Cokret user DID".to_owned())
         })?;
     let user = repo
         .user()
         .lookup(user_id)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?
-        .ok_or_else(|| ContrixRouteError::NotFound)?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| CokretRouteError::NotFound)?;
 
     let user_agent = Some(format!("coauth-test-harness/device:{}", body.device_id));
     let browser_session = repo
         .browser_session()
         .add(&mut rng, &*clock, &user, user_agent)
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     let audience = body
         .audience
@@ -3073,7 +3073,7 @@ pub async fn debug_issue_dpop_grant(
         .unwrap_or_else(|| required_audience_for(&url_builder, &contrix_config));
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
-            format!("urn:contrix:client:device:{}", body.device_id),
+            format!("urn:cokret:client:device:{}", body.device_id),
             PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
         ]
     });
@@ -3090,16 +3090,16 @@ pub async fn debug_issue_dpop_grant(
         Some(&body.actor_id),
         Some(jkt.clone()),
     )
-    .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+    .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     let persisted =
         persist_session_grant(&mut repo, &mut rng, &*clock, &browser_session, &material)
             .await
-            .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     repo.save()
         .await
-        .map_err(|error| ContrixRouteError::Internal(Box::new(error)))?;
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(DebugIssueDpopGrantResponse {
         grant_id: persisted.id.to_string(),
@@ -3114,7 +3114,7 @@ pub async fn debug_issue_dpop_grant(
 #[cfg(test)]
 mod tests {
     use coauth_config::{
-        ContrixConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
+        CokretConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
     };
     use coauth_data::{Clock, RepositoryAccess, SystemClock, User};
     use coauth_keystore::{JsonWebKeySet, PrivateKey};
@@ -3169,14 +3169,14 @@ mod tests {
     #[test]
     fn service_describe_exposes_auth_account_boundary_profile() {
         let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-        let contrix_config = ContrixConfig {
+        let contrix_config = CokretConfig {
             service_did: Some("did:web:auth.example.com".to_owned()),
             issuer_did: Some("did:web:issuer.example.com".to_owned()),
             admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-prod".to_owned(),
                 audience: "https://soland.example.com/api".to_owned(),
-                endpoint: "https://soland.example.com/contrix".parse().unwrap(),
+                endpoint: "https://soland.example.com/cokret".parse().unwrap(),
                 did: Some("did:web:soland.example.com".to_owned()),
                 oauth_introspection_bearer: None,
                 session_grant_introspection_bearer: None,
@@ -3192,7 +3192,7 @@ mod tests {
             principal_server_url: None,
             high_risk_threshold: 2,
             trust_domain: None,
-            oob_code_kind: ContrixConfig::default().oob_code_kind,
+            oob_code_kind: CokretConfig::default().oob_code_kind,
             password_login_session_grants_enabled: false,
             admin_org_id: None,
             verification_service_did: None,
@@ -3207,7 +3207,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(body["service_did"], "did:web:auth.example.com");
-        assert_eq!(body["trust_domain"], "cx:trust_domain:auth.example.com");
+        assert_eq!(body["trust_domain"], "ck:trust_domain:auth.example.com");
         assert_eq!(body["service_type"], "auth_server");
         assert_eq!(body["admin_audience"], "https://auth.example.com/api/admin");
         assert_eq!(
@@ -3246,7 +3246,7 @@ mod tests {
                     "code": "machine_readable_code",
                     "message": "human-readable message"
                 },
-                "request_id": "cx:request:01964137-0000-7000-8000-000000000000"
+                "request_id": "ck:request:01964137-0000-7000-8000-000000000000"
             })
         );
 
@@ -3320,8 +3320,8 @@ mod tests {
         }
     }
 
-    fn config_with_static_session_grant_bearer(bearer: &str) -> ContrixConfig {
-        ContrixConfig {
+    fn config_with_static_session_grant_bearer(bearer: &str) -> CokretConfig {
+        CokretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-dev".to_owned(),
                 audience: "did:web:local.host".to_owned(),
@@ -3331,7 +3331,7 @@ mod tests {
                 session_grant_introspection_bearer: Some(bearer.to_owned()),
                 embedded_webvh_registration_bearer: None,
             }],
-            ..ContrixConfig::default()
+            ..CokretConfig::default()
         }
     }
 
@@ -3381,7 +3381,7 @@ mod tests {
         let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
         let body = serde_json::to_value(service_describe_response(
             &url_builder,
-            &ContrixConfig::default(),
+            &CokretConfig::default(),
             &[],
         ))
         .unwrap();
@@ -3481,14 +3481,14 @@ mod tests {
             None,
             None,
         );
-        let config = ContrixConfig {
-            trust_domain: Some("cx:trust_domain:example.net".to_owned()),
+        let config = CokretConfig {
+            trust_domain: Some("ck:trust_domain:example.net".to_owned()),
             ..Default::default()
         };
 
         let body =
             serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
-        assert_eq!(body["trust_domain"], "cx:trust_domain:example.net");
+        assert_eq!(body["trust_domain"], "ck:trust_domain:example.net");
     }
 
     #[test]
@@ -3500,11 +3500,11 @@ mod tests {
         );
         let body = serde_json::to_value(service_describe_response(
             &url_builder,
-            &ContrixConfig::default(),
+            &CokretConfig::default(),
             &[],
         ))
         .unwrap();
-        assert_eq!(body["trust_domain"], "cx:trust_domain:auth.example.com");
+        assert_eq!(body["trust_domain"], "ck:trust_domain:auth.example.com");
     }
 
     #[test]
@@ -3512,12 +3512,12 @@ mod tests {
         let url_builder = UrlBuilder::new("https://[::1]/coauth/".parse().unwrap(), None, None);
         let body = serde_json::to_value(service_describe_response(
             &url_builder,
-            &ContrixConfig::default(),
+            &CokretConfig::default(),
             &[],
         ))
         .unwrap();
-        assert_eq!(body["trust_domain"], "cx:trust_domain:host-::1");
-        ContrixConfig::validate_trust_domain(body["trust_domain"].as_str().unwrap()).unwrap();
+        assert_eq!(body["trust_domain"], "ck:trust_domain:host-::1");
+        CokretConfig::validate_trust_domain(body["trust_domain"].as_str().unwrap()).unwrap();
     }
 
     #[test]
@@ -3530,7 +3530,7 @@ mod tests {
 
         let body = serde_json::to_value(service_describe_response(
             &url_builder,
-            &ContrixConfig::default(),
+            &CokretConfig::default(),
             &[],
         ))
         .unwrap();
@@ -3550,9 +3550,9 @@ mod tests {
             None,
             None,
         );
-        let config = ContrixConfig {
+        let config = CokretConfig {
             session_grant_ttl: Duration::try_minutes(15).unwrap(),
-            ..ContrixConfig::default()
+            ..CokretConfig::default()
         };
 
         let body =
@@ -3565,7 +3565,7 @@ mod tests {
     fn session_grant_is_signed_for_the_user_did() {
         let clock = SystemClock::default();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-        let contrix_config = ContrixConfig::default();
+        let contrix_config = CokretConfig::default();
         let key_store = test_keystore();
         let now = clock.now();
         let mut fixture_rng = ChaChaRng::seed_from_u64(9);
@@ -3630,9 +3630,9 @@ mod tests {
     fn session_grant_uses_configured_ttl() {
         let clock = SystemClock::default();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-        let contrix_config = ContrixConfig {
+        let contrix_config = CokretConfig {
             session_grant_ttl: Duration::try_minutes(15).unwrap(),
-            ..ContrixConfig::default()
+            ..CokretConfig::default()
         };
         let key_store = test_keystore();
         let now = clock.now();
@@ -4245,7 +4245,7 @@ mod tests {
     #[test]
     fn identity_document_exposes_user_handle_binding() {
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-        let contrix_config = ContrixConfig::default();
+        let contrix_config = CokretConfig::default();
         let now = Utc::now();
         let mut rng = ChaChaRng::seed_from_u64(13);
         let user = User::samples(now, &mut rng).into_iter().next().unwrap();
@@ -4269,14 +4269,14 @@ mod tests {
             document.also_known_as[0]
         );
         assert!(
-            !document.also_known_as[0].starts_with("contrix://"),
-            "alsoKnownAs MUST NOT carry the retired contrix:// URI form"
+            !document.also_known_as[0].starts_with("cokret://"),
+            "alsoKnownAs MUST NOT carry the retired cokret:// URI form"
         );
         assert!(
             !document.also_known_as[0].starts_with("acct:"),
             "alsoKnownAs MUST NOT carry an acct: alias as the canonical form"
         );
-        assert_eq!(document.service[0].kind, "ContrixAuthServer");
+        assert_eq!(document.service[0].kind, "CokretAuthServer");
         assert_eq!(
             document.service[0].service_endpoint,
             url_builder
@@ -4289,7 +4289,7 @@ mod tests {
     fn require_canonical_handle_rejects_acct_aliases() {
         let err = require_canonical_handle("acct:alice@example.com").unwrap_err();
         match err {
-            ContrixRouteError::BadRequest(message) => {
+            CokretRouteError::BadRequest(message) => {
                 assert!(
                     message.starts_with(HANDLE_NOT_CANONICAL_CODE),
                     "expected code prefix, got {message}"
@@ -4326,7 +4326,7 @@ mod tests {
     fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         use coauth_data::clock::MockClock;
         let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-        let contrix_config = ContrixConfig::default();
+        let contrix_config = CokretConfig::default();
         let mut rng = ChaChaRng::seed_from_u64(0xc15a);
         let clock = MockClock::default();
         let now = clock.now();
@@ -4364,8 +4364,8 @@ mod tests {
             "handle MUST be the canonical `<localpart>:<domain>` form"
         );
         assert!(
-            !material.payload.handle.starts_with("contrix://"),
-            "handle MUST NOT carry the retired contrix:// URI form"
+            !material.payload.handle.starts_with("cokret://"),
+            "handle MUST NOT carry the retired cokret:// URI form"
         );
         assert!(
             !material.payload.handle.starts_with("acct:"),
@@ -4394,7 +4394,7 @@ mod tests {
     fn issue_handle_claim_accepts_organization_handle_claim_kind() {
         use coauth_data::clock::MockClock;
         let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-        let contrix_config = ContrixConfig::default();
+        let contrix_config = CokretConfig::default();
         let mut rng = ChaChaRng::seed_from_u64(0xc15b);
         let clock = MockClock::default();
         let now = clock.now();

@@ -1,4 +1,4 @@
-//! Contrix account administration endpoints.
+//! Cokret account administration endpoints.
 
 pub mod risk_action;
 
@@ -29,7 +29,7 @@ use crate::{
             v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
         },
         common::DepotExt,
-        contrix::service_did_for,
+        cokret::service_did_for,
     },
     services::{
         account_claims::{AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord},
@@ -89,7 +89,7 @@ impl AccountRecord {
     /// configured registry without blocking the runtime.
     pub(crate) async fn from_user(
         user: coauth_data::User,
-        contrix_config: &coauth_config::ContrixConfig,
+        contrix_config: &coauth_config::CokretConfig,
         did_resolver: &dyn DidResolverService,
     ) -> Self {
         let status = if user.deactivated_at.is_some() {
@@ -548,7 +548,7 @@ async fn patch_account(
 /// drive an async closure, so we walk the edges by hand.
 async fn map_page_async(
     page: coauth_data::Page<coauth_data::User>,
-    contrix_config: &coauth_config::ContrixConfig,
+    contrix_config: &coauth_config::CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> coauth_data::Page<AccountRecord> {
     let coauth_data::Page {
@@ -625,7 +625,7 @@ fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGra
     vec![AccountSessionGrantRecord {
         grant_id: format!("sg-scaffold-{}", account.id),
         subject: account.primary_principal_id().map(str::to_owned),
-        scope: Some("urn:contrix:principal-server:session.bind".to_owned()),
+        scope: Some("urn:cokret:principal-server:session.bind".to_owned()),
         state: Some("inventory_scaffold".to_owned()),
         issued_at: account.updated_at(),
     }]
@@ -1068,7 +1068,7 @@ mod tests {
         assert_eq!(body["meta"]["supports_write_operations"], true);
 
         let recovery_did =
-            crate::handlers::contrix::service_did_for(&state.url_builder, &state.contrix_config);
+            crate::handlers::cokret::service_did_for(&state.url_builder, &state.contrix_config);
         let nonce = "did-binding-add-nonce";
         let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
         let response = state

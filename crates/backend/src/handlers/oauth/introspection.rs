@@ -1,6 +1,6 @@
 use std::sync::{Arc, LazyLock};
 
-use coauth_config::ContrixConfig;
+use coauth_config::CokretConfig;
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock, UrlBuilder};
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
 use coauth_keystore::Encrypter;
@@ -192,7 +192,7 @@ async fn handle_post(
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
     let contrix_config = depot
-        .get::<ContrixConfig>("contrix_config")
+        .get::<CokretConfig>("contrix_config")
         .cloned()
         .unwrap_or_default();
 
@@ -275,7 +275,7 @@ async fn handle_post(
 }
 
 fn principal_server_static_oauth_bearer_matches(
-    contrix_config: &ContrixConfig,
+    contrix_config: &CokretConfig,
     token: &str,
 ) -> bool {
     !token.trim().is_empty()

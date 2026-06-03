@@ -7,10 +7,10 @@ expression: snapshot
     "openid",
     "profile",
     "urn:coauth:admin",
-    "urn:contrix:admin:*",
-    "urn:contrix:client:*",
-    "urn:contrix:principal-server:*",
-    "urn:contrix:principal-server:session.bind"
+    "urn:cokret:admin:*",
+    "urn:cokret:client:*",
+    "urn:cokret:principal-server:*",
+    "urn:cokret:principal-server:session.bind"
   ],
   "claims_supported": [
     "at_hash",
@@ -23,9 +23,9 @@ expression: snapshot
     "locale",
     "name",
     "nonce",
-    "org.contrix.device_id",
-    "org.contrix.principal_did",
-    "org.contrix.session_id",
+    "org.cokret.device_id",
+    "org.cokret.principal_did",
+    "org.cokret.session_id",
     "picture",
     "preferred_username",
     "sub"

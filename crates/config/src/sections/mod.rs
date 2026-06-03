@@ -15,7 +15,7 @@ mod account;
 mod branding;
 mod captcha;
 mod clients;
-mod contrix;
+mod cokret;
 mod database;
 mod email;
 mod experimental;
@@ -37,8 +37,8 @@ pub use self::{
     branding::BrandingConfig,
     captcha::{CaptchaConfig, CaptchaServiceKind},
     clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig},
-    contrix::{
-        ContrixConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
+    cokret::{
+        CokretConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
         StaridConfig,
     },
     database::{DatabaseConfig, PgSslMode},
@@ -180,9 +180,9 @@ pub struct RootConfig {
     #[serde(default)]
     pub database: DatabaseConfig,
 
-    /// Contrix-specific audiences, DIDs, and downstream integration metadata
-    #[serde(default, skip_serializing_if = "ContrixConfig::is_default")]
-    pub contrix: ContrixConfig,
+    /// Cokret-specific audiences, DIDs, and downstream integration metadata
+    #[serde(default, skip_serializing_if = "CokretConfig::is_default")]
+    pub cokret: CokretConfig,
 
     /// Configuration related to sending monitoring data
     #[serde(default, skip_serializing_if = "TelemetryConfig::is_default")]
@@ -259,7 +259,7 @@ impl ConfigurationSection for RootConfig {
             &|f| self.clients.validate(f),
             &|f| self.http.validate(f),
             &|f| self.database.validate(f),
-            &|f| self.contrix.validate(f),
+            &|f| self.cokret.validate(f),
             &|f| self.telemetry.validate(f),
             &|f| self.templates.validate(f),
             &|f| self.email.validate(f),
@@ -300,7 +300,7 @@ impl RootConfig {
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
-            contrix: ContrixConfig::default(),
+            cokret: CokretConfig::default(),
             telemetry: TelemetryConfig::default(),
             templates: TemplatesConfig::default(),
             email: EmailConfig::default(),
@@ -325,7 +325,7 @@ impl RootConfig {
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
-            contrix: ContrixConfig::default(),
+            cokret: CokretConfig::default(),
             telemetry: TelemetryConfig::default(),
             templates: TemplatesConfig::default(),
             passwords: PasswordsConfig::default(),
@@ -356,7 +356,7 @@ pub struct AppConfig {
     pub database: DatabaseConfig,
 
     #[serde(default)]
-    pub contrix: ContrixConfig,
+    pub cokret: CokretConfig,
 
     #[serde(default)]
     pub templates: TemplatesConfig,
@@ -403,7 +403,7 @@ impl ConfigurationSection for AppConfig {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         self.http.validate(figment)?;
         self.database.validate(figment)?;
-        self.contrix.validate(figment)?;
+        self.cokret.validate(figment)?;
         self.templates.validate(figment)?;
         self.email.validate(figment)?;
         self.sms.validate(figment)?;

@@ -1,6 +1,6 @@
 //! Deployment health-check diagnostics
 //!
-//! Validates Contrix/OIDC discovery surfaces exposed by the coauth server.
+//! Validates Cokret/OIDC discovery surfaces exposed by the coauth server.
 //
 // CLI diagnostic checks use raw `reqwest` so they don't pull in the
 // outbound-http tracing layer required by the server runtime.
@@ -20,7 +20,7 @@ pub(super) struct Options {}
 impl Options {
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
         let _span = info_span!("cli.doctor").entered();
-        info!("Running Contrix auth server diagnostics.");
+        info!("Running Cokret auth server diagnostics.");
 
         let config = RootConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
 
@@ -39,17 +39,17 @@ impl Options {
             );
         }
 
-        if config.contrix.principal_servers.is_empty() {
+        if config.cokret.principal_servers.is_empty() {
             warn!(
-                "No Contrix principal servers are configured (`contrix.principal_servers` is empty)."
+                "No Cokret principal servers are configured (`cokret.principal_servers` is empty)."
             );
         } else {
-            for server in &config.contrix.principal_servers {
+            for server in &config.cokret.principal_servers {
                 info!(
                     name = %server.name,
                     audience = %server.audience,
                     endpoint = %server.endpoint,
-                    "Configured Contrix principal server"
+                    "Configured Cokret principal server"
                 );
             }
         }
@@ -117,24 +117,24 @@ async fn check_contrix_server_describe(http: &reqwest::Client, public_base: &Url
     let url = match public_base.join("/api/v1/server/describe") {
         Ok(url) => url,
         Err(error) => {
-            error!(%error, "Unable to construct Contrix server description URL");
+            error!(%error, "Unable to construct Cokret server description URL");
             return;
         }
     };
 
     match http.get(url.as_str()).send().await {
         Ok(response) if response.status().is_success() => {
-            info!(%url, "Contrix server description endpoint is reachable");
+            info!(%url, "Cokret server description endpoint is reachable");
         }
         Ok(response) => {
             warn!(
                 %url,
                 status = %response.status(),
-                "Contrix server description endpoint did not return success"
+                "Cokret server description endpoint did not return success"
             );
         }
         Err(error) => {
-            warn!(%url, %error, "Could not fetch Contrix server description");
+            warn!(%url, %error, "Could not fetch Cokret server description");
         }
     }
 }

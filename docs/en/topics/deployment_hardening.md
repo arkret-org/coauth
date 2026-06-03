@@ -121,10 +121,10 @@ read/export surfaces return `signature_status`:
 - `key_unavailable` — the row references a service DID/kid that this process
   cannot verify.
 
-Keep `contrix.audit_signature_fail_closed: false` while rolling out signing
+Keep `cokret.audit_signature_fail_closed: false` while rolling out signing
 keys. For production regulated workloads, publish the service JWKS, verify the
 audit feed reports `verified` for new rows, then set
-`contrix.audit_signature_fail_closed: true` so sensitive admin mutations fail
+`cokret.audit_signature_fail_closed: true` so sensitive admin mutations fail
 closed when coauth cannot produce a signed audit row.
 
 During key rotation, keep retired public keys in the deployment JWKS until the

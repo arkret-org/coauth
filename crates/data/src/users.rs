@@ -66,7 +66,7 @@ pub struct User {
     /// `did:webvh:…` minted by `starid` during onboarding (see
     /// [`crate::services::starid_adapter::StaridRegistry::create_principal_did`]).
     /// False for accounts that pre-date the starid integration or were
-    /// created when `[contrix.starid]` config was absent — those still
+    /// created when `[cokret.starid]` config was absent — those still
     /// resolve to the local `did:web:coauth.invalid:…` derivation.
     ///
     /// Backfill: migration `20260510000200_account_starid_backend_marker`
@@ -75,7 +75,7 @@ pub struct User {
     pub starid_backend: bool,
     /// Interop alias handles for this user (e.g. `acct:<local>@<host>`).
     ///
-    /// Spec 7157ee8 §3.1 — the canonical Contrix handle form is
+    /// Spec 7157ee8 §3.1 — the canonical Cokret handle form is
     /// `<localpart>:<domain>`, derived at read time from `handle` + the
     /// public host name (see [`Self::canonical_handle`]). Aliases are
     /// *additional* identifiers kept for RFC 7565 / WebFinger interop and
@@ -197,11 +197,11 @@ impl Node<Ulid> for User {
 /// surfaces this verbatim in their error envelopes per spec 7157ee8 §3.1.
 pub const HANDLE_NOT_CANONICAL_CODE: &str = "handle_not_canonical";
 
-/// Validate that an input string is a canonical Contrix handle of the
+/// Validate that an input string is a canonical Cokret handle of the
 /// form `<lowercase-localpart>:<lowercase-domain>` per spec 7157ee8 §3.1.
 ///
 /// Rejects:
-///   * the legacy `contrix://<host>/users/<localpart>` URI form
+///   * the legacy `cokret://<host>/users/<localpart>` URI form
 ///   * `acct:` interop aliases (those belong in `handle_aliases[]`)
 ///   * leading `@` (display form — strip before submitting)
 ///   * bare host strings, `did:` strings, display strings
@@ -227,10 +227,10 @@ pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, Str
                 .to_owned(),
         ));
     }
-    if trimmed.starts_with("contrix://") {
+    if trimmed.starts_with("cokret://") {
         return Err((
             HANDLE_NOT_CANONICAL_CODE,
-            "legacy contrix:// URI form is no longer canonical; supply a <localpart>:<domain> handle"
+            "legacy cokret:// URI form is no longer canonical; supply a <localpart>:<domain> handle"
                 .to_owned(),
         ));
     }
@@ -276,7 +276,7 @@ pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, Str
 }
 
 impl User {
-    /// Canonical Contrix handle per spec 7157ee8:
+    /// Canonical Cokret handle per spec 7157ee8:
     /// `<lowercase-localpart>:<lowercase-domain>`.
     ///
     /// The host is supplied by the caller (typically the URL builder's

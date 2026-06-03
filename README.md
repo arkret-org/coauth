@@ -1,6 +1,6 @@
 # coauth
 
-> **Spec target**: [contrix-spec @ c2848a4](../contrix-spec) (R3.4 sync 2026-05-31)
+> **Spec target**: [cokret-spec @ c2848a4](../cokret-spec) (R3.4 sync 2026-05-31)
 
 ## Pre-commit hook setup
 
@@ -13,7 +13,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on a
 branch, copy it from
-[`contrix-rust-sdk`](https://github.com/contrix-dev/contrix-rust-sdk) and
+[`cokret-rust-sdk`](https://github.com/cokret-dev/cokret-rust-sdk) and
 adapt the package list to coauth's workspace.
 
 > **DO NOT commit secrets.** Files like `config.dev.yaml`, `config.local.*`,
@@ -23,9 +23,9 @@ adapt the package list to coauth's workspace.
 > [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) fails the build
 > if anything that looks like a credential lands in a tracked path.
 
-`coauth` is the Contrix Auth / Account Server. It provides OIDC/OAuth login,
+`coauth` is the Cokret Auth / Account Server. It provides OIDC/OAuth login,
 account lifecycle management, short-lived session grants, policy hooks,
-notifications, and a stable admin API for Contrix deployments.
+notifications, and a stable admin API for Cokret deployments.
 
 `coauth` is not a DID registry. It proves who authenticated to which local
 account, device, and session, then publishes that state to Principal Servers
@@ -44,16 +44,16 @@ inside a Realm and inherit its auth context.
 ## Trust domain rotation
 
 Round R2/R3 (2026-05-20) introduces the deployment-level `trust_domain`
-config knob (`contrix.trust_domain` in `config.yaml`):
+config knob (`cokret.trust_domain` in `config.yaml`):
 
 ```yaml
-contrix:
-  trust_domain: cx:trust_domain:soland-prod.eu
+cokret:
+  trust_domain: ck:trust_domain:soland-prod.eu
 ```
 
-The value MUST match `cx:trust_domain:<scope>` where `<scope>` is
+The value MUST match `ck:trust_domain:<scope>` where `<scope>` is
 `[a-z0-9._:-]{1,128}` and starts with `[a-z0-9]`. coauth validates it
-on load via `ContrixConfig::validate_trust_domain` (mirrors the SDK's
+on load via `CokretConfig::validate_trust_domain` (mirrors the SDK's
 `TypedTrustDomainId` acceptance rules) and injects it into the Realm
 policy + `/api/v1/server/describe` document via soland's config API.
 
@@ -82,12 +82,12 @@ Both forms run the same 7-trigger non-enumerable failure state machine
 (byte-identical `{"error":"not_found"}` body, ≤50 ms constant-time
 padding) so external observers cannot distinguish "expired" from
 "never existed". See [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]`
-and [`../contrix-spec/CHANGELOG.md`](../contrix-spec/CHANGELOG.md)
+and [`../cokret-spec/CHANGELOG.md`](../cokret-spec/CHANGELOG.md)
 Round R2/R3 entries for the normative source.
 
 ## Round R4 (protocol review closures)
 
-Spec round 4 (`contrix-spec` range `2a4d39b..a77b995`, 8 commits) layers
+Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) layers
 on top of the R2/R3 trust-domain and OOB-invite work. See
 [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
 [`../_todos.md`](../_todos.md) for the canonical wire-breaking list.
@@ -119,16 +119,16 @@ Per-project task lists are consolidated upstream — see
 
 ## Integration model
 
-- `yougen` acts as a public/native Contrix client and consumes OIDC tokens.
+- `yougen` acts as a public/native Cokret client and consumes OIDC tokens.
 - Principal Servers such as `soland` consume session grants and account
   metadata from `coauth`.
 - `sodmin` uses the admin API with `urn:coauth:admin` or
-  `urn:contrix:admin:*`.
+  `urn:cokret:admin:*`.
 - A delegated/public DID resolver remains the identity registry / resolver source.
 
 ## Current status
 
-The primary Contrix paths include:
+The primary Cokret paths include:
 
 - `/.well-known/openid-configuration`
 - `/.well-known/did.json`
@@ -140,7 +140,7 @@ The primary Contrix paths include:
 
 - OpenID Connect provider with authorization code, refresh token, client
   credentials, and device code grants
-- Contrix discovery, service DID documents, handle resolution, and short-lived
+- Cokret discovery, service DID documents, handle resolution, and short-lived
   session grants with Principal Server introspection
 - Local account lifecycle, password auth, upstream OAuth federation, and
   recovery workflows
@@ -166,7 +166,7 @@ http:
 database:
   uri: postgresql://coauth:password@localhost/coauth
 
-contrix:
+cokret:
   principal_servers:
     - name: soland
       audience: https://soland.example.com/api
@@ -203,7 +203,7 @@ launches the background worker unless disabled with flags.
 `coauth` is a Rust workspace. The frontend is a Dioxus app.
 
 ```bash
-git clone https://github.com/contrix-dev/coauth.git
+git clone https://github.com/cokret-dev/coauth.git
 cd coauth
 
 # Backend binary only
@@ -219,13 +219,13 @@ just build-all
 |----------|---------|
 | `/.well-known/openid-configuration` | OIDC discovery |
 | `/.well-known/did.json` | Service DID document |
-| `/api/v1/server/describe` | Contrix service metadata |
+| `/api/v1/server/describe` | Cokret service metadata |
 | `/api/v1/identity/describe` | Identity-registry contract |
 | `/api/v1/directory/resolve-handle` | Handle -> DID resolution |
 | `/api/v1/session-grants/introspect` | Principal Server session grant validation |
 | `/api/admin/v1/*` | Admin API for `sodmin` and service automation |
-| `/api/admin/v1/openapi.yaml` | Contrix admin API OpenAPI document |
-| `/.well-known/contrix/openapi.yaml` | Admin API discovery document for `sodmin` |
+| `/api/admin/v1/openapi.yaml` | Cokret admin API OpenAPI document |
+| `/.well-known/cokret/openapi.yaml` | Admin API discovery document for `sodmin` |
 
 ## Documentation
 
@@ -259,5 +259,5 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_coauth_todos.md` in the parent `contrix-dev/` directory for the
+> `_coauth_todos.md` in the parent `cokret-dev/` directory for the
 > circle-rollout (CXP-0007) work item list and per-stage checkpoints.

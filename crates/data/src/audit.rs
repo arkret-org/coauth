@@ -122,7 +122,7 @@ pub struct HandleAuditEvent {
     /// The kind of event recorded.
     pub event_type: HandleAuditEventType,
     /// Canonical `<localpart>:<domain>` handle affected by the event
-    /// (spec 7157ee8 §3.1 — replaces the legacy `contrix://…` URI form).
+    /// (spec 7157ee8 §3.1 — replaces the legacy `cokret://…` URI form).
     pub handle: Option<String>,
     /// Interop aliases (e.g. `acct:<local>@<host>`) recorded with the event.
     pub handle_aliases: Vec<String>,

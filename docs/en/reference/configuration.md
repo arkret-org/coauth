@@ -48,7 +48,7 @@ Common resource names:
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `http.max_body_bytes` | `1048576` (1 MiB) | Maximum accepted request-body size. Matches the Contrix `cx.server.describe.limits.max_body_bytes` advertisement. |
+| `http.max_body_bytes` | `1048576` (1 MiB) | Maximum accepted request-body size. Matches the Cokret `cx.server.describe.limits.max_body_bytes` advertisement. |
 | `http.request_timeout_seconds` | `30` | Per-request handling deadline. Set to `0` to disable. |
 | `http.shutdown_grace_seconds` | `30` | Grace period granted to in-flight requests on SIGTERM/SIGINT. |
 | `http.trusted_proxies` | RFC1918 + loopback | CIDR ranges trusted to set `X-Forwarded-For`. See [reverse-proxy](../setup/reverse-proxy.md). |
@@ -70,12 +70,12 @@ database:
 deployment because the service uses PostgreSQL features that require session
 semantics.
 
-## `contrix`
+## `cokret`
 
-Contrix-specific deployment metadata layered on top of the generic OIDC server.
+Cokret-specific deployment metadata layered on top of the generic OIDC server.
 
 ```yaml
-contrix:
+cokret:
   principal_servers:
     - name: soland
       audience: https://soland.example.com/api
@@ -94,13 +94,13 @@ contrix:
 ```
 
 - `principal_servers`: trusted Principal Server descriptors published through
-  Contrix discovery
+  Cokret discovery
 - `identity_registry`: delegated DID / identity resolver, typically a public DID resolver service
 - `service_did`: explicit service DID, otherwise derived from `http.public_base`
 - `issuer_did`: DID emitted in session grants, defaults to `service_did`
-- `admin_audience`: audience expected by Contrix admin integrations, defaults
+- `admin_audience`: audience expected by Cokret admin integrations, defaults
   to the local `/api/v1` endpoint
-- `session_grant_ttl`: lifetime in seconds for Contrix session-grant JWTs
+- `session_grant_ttl`: lifetime in seconds for Cokret session-grant JWTs
   returned by the REST auth bridge login/exchange paths and refresh endpoint.
   Default: `300` (5 minutes).
 
@@ -142,7 +142,7 @@ secrets:
 ```
 
 At least one signing key should be configured. `coauth` uses these keys for ID
-tokens, signed userinfo responses, JWKS publication, and Contrix session
+tokens, signed userinfo responses, JWKS publication, and Cokret session
 grants.
 
 ## `passwords`
