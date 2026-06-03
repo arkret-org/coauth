@@ -1,6 +1,7 @@
 //! Admin endpoints for notification template management.
 //!
-//! - `GET  /_cokret/local/admin/notification-templates` — list known template keys
+//! - `GET  /_cokret/local/admin/notification-templates` — list known template
+//!   keys
 //! - `POST /_cokret/local/admin/notification-templates/publish` — publish a new
 //!   template version
 //!

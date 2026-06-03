@@ -2,9 +2,9 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /_cokret/local/admin/bridge/describe` — `AdminBridgeDescribeResponse` from
-//!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`, bundled with
-//!   the `AdminBridgeRiskAction*Example` request examples.
+//! - `GET /_cokret/local/admin/bridge/describe` — `AdminBridgeDescribeResponse`
+//!   from `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`, bundled
+//!   with the `AdminBridgeRiskAction*Example` request examples.
 //!
 //! Round-34 (C34.2): lifted out of the inline
 //! `AdminBridgeDescribeResponse` / `AdminBridgeRiskActionExamples` /
@@ -25,11 +25,12 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const ADMIN_BRIDGE_CONTRACT: &str = "cx.contract.coauth_admin_bridge.v1";
+pub const ADMIN_BRIDGE_CONTRACT: &str = "ck.contract.coauth_admin_bridge.v1";
 pub const ADMIN_BRIDGE_VERSION: &str = "0.2.0-durable-proposals";
 pub const ADMIN_BRIDGE_API_BASE_PATH: &str = "/_cokret/local/admin";
 pub const ADMIN_BRIDGE_ACCOUNTS_PATH: &str = "/_cokret/local/admin/accounts";
-pub const ADMIN_BRIDGE_ACCOUNT_DETAIL_PATH_TEMPLATE: &str = "/_cokret/local/admin/accounts/{account_id}";
+pub const ADMIN_BRIDGE_ACCOUNT_DETAIL_PATH_TEMPLATE: &str =
+    "/_cokret/local/admin/accounts/{account_id}";
 pub const ADMIN_BRIDGE_ACCOUNT_DIDS_PATH_TEMPLATE: &str =
     "/_cokret/local/admin/accounts/{account_id}/dids";
 pub const ADMIN_BRIDGE_ACCOUNT_CLAIMS_PATH_TEMPLATE: &str =
@@ -331,7 +332,7 @@ mod tests {
     #[test]
     fn describe_still_decodes_legacy_todo_payload() {
         let wire = r#"{
-            "contract": "cx.contract.coauth_admin_bridge.v1",
+            "contract": "ck.contract.coauth_admin_bridge.v1",
             "version": "0.2.0-durable-proposals",
             "api_base_path": "/_cokret/local/admin",
             "accounts_path": "/_cokret/local/admin/accounts",
@@ -369,7 +370,7 @@ mod tests {
             "todos": ["legacy inline scaffold note"]
         }"#;
         let d: AdminBridgeDescribe = serde_json::from_str(wire).unwrap();
-        assert_eq!(d.contract, "cx.contract.coauth_admin_bridge.v1");
+        assert_eq!(d.contract, "ck.contract.coauth_admin_bridge.v1");
         assert_eq!(d.version, "0.2.0-durable-proposals");
         assert_eq!(
             d.risk_action_state_store_kind,

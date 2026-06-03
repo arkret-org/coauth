@@ -892,9 +892,10 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // used=true
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=true")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=true")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
 
@@ -959,9 +960,10 @@ mod tests {
         "#);
 
         // used=false
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=false")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=false")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
 
@@ -1059,9 +1061,10 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // revoked=true
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[revoked]=true")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[revoked]=true")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
 
@@ -1126,9 +1129,10 @@ mod tests {
         "#);
 
         // revoked=false
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[revoked]=false")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[revoked]=false")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
 
@@ -1226,9 +1230,10 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // expired=true
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[expired]=true")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[expired]=true")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
 
@@ -1271,9 +1276,10 @@ mod tests {
         "#);
 
         // expired=false
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[expired]=false")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[expired]=false")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
 
@@ -1393,9 +1399,10 @@ mod tests {
         seed_tokens(&mut state).await;
 
         // valid=true
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[valid]=true")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[valid]=true")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
 
@@ -1460,9 +1467,10 @@ mod tests {
         "#);
 
         // valid=false
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[valid]=false")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[valid]=false")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
 
@@ -1809,9 +1817,10 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=invalid")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-registration-tokens?filter[used]=invalid")
+                .bearer(&admin_token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::BAD_REQUEST);
 
@@ -1982,10 +1991,11 @@ mod tests {
         "#);
 
         // count=false combined with a filter
-        let request =
-            Request::get("/_cokret/local/admin/user-registration-tokens?count=false&filter[valid]=true")
-                .bearer(&admin_token)
-                .empty();
+        let request = Request::get(
+            "/_cokret/local/admin/user-registration-tokens?count=false&filter[valid]=true",
+        )
+        .bearer(&admin_token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -2046,10 +2056,11 @@ mod tests {
         "#);
 
         // count=only combined with a filter
-        let request =
-            Request::get("/_cokret/local/admin/user-registration-tokens?count=only&filter[revoked]=true")
-                .bearer(&admin_token)
-                .empty();
+        let request = Request::get(
+            "/_cokret/local/admin/user-registration-tokens?count=only&filter[revoked]=true",
+        )
+        .bearer(&admin_token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -2653,12 +2664,13 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request =
-            Request::put("/_cokret/local/admin/user-registration-tokens/01040G2081040G2081040G2081")
-                .bearer(&token)
-                .json(json!({
-                    "usage_limit": 5
-                }));
+        let request = Request::put(
+            "/_cokret/local/admin/user-registration-tokens/01040G2081040G2081040G2081",
+        )
+        .bearer(&token)
+        .json(json!({
+            "usage_limit": 5
+        }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);

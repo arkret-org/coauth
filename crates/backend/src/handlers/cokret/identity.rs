@@ -2,9 +2,8 @@ use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::handlers::common::DepotExt;
-
 use super::*;
+use crate::handlers::common::DepotExt;
 
 #[derive(Debug, Serialize)]
 struct IdentityDescribeResBody {
@@ -251,4 +250,3 @@ pub async fn directory_resolve_handle(
         claims: Vec::new(),
     }))
 }
-

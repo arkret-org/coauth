@@ -267,8 +267,7 @@ impl DidResolverService for DefaultDidResolverService {
         let mut authentication = Vec::new();
         let mut assertion_method = Vec::new();
 
-        if let Some(public_key) = crate::handlers::cokret::preferred_public_signing_key(key_store)
-        {
+        if let Some(public_key) = crate::handlers::cokret::preferred_public_signing_key(key_store) {
             let key_id = format!("{did}#key-1");
             verification_method.push(VerificationMethod {
                 id: key_id.clone(),
@@ -290,9 +289,7 @@ impl DidResolverService for DefaultDidResolverService {
                 DidService {
                     id: format!("{did}#auth-server"),
                     kind: "CokretAuthServer".to_owned(),
-                    service_endpoint: url_builder
-                        .absolute_url("/_cokret/describe")
-                        .to_string(),
+                    service_endpoint: url_builder.absolute_url("/_cokret/describe").to_string(),
                 },
                 DidService {
                     id: format!("{did}#openid-configuration"),

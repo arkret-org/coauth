@@ -109,10 +109,7 @@ pub async fn query_consent_cell(
     //   the consent gate is documented to treat as fail-open (see
     //   module comment). Tracked in `_improve_todos.md` C.4.
     let cell_id = build_cell_id(consent_id);
-    let path = format!(
-        "_soland/admin/cells/{}",
-        urlencoding::encode_path(&cell_id)
-    );
+    let path = format!("_soland/admin/cells/{}", urlencoding::encode_path(&cell_id));
     let url = match base.join(&path) {
         Ok(u) => u,
         Err(error) => {
@@ -195,7 +192,7 @@ fn build_cell_id(consent_id: &str) -> String {
 /// lookup result and the requested `(peer_did, scope)` pair.
 ///
 /// `require_consent` mirrors the principal control Realm's
-/// `cx.realm.policy_components.preauth.require_consent` toggle. When `true`
+/// `ck.realm.policy_components.preauth.require_consent` toggle. When `true`
 /// and the lookup result is `Unknown` or revoked/absent, the invite is
 /// rejected with `ConsentRequired`. When `false` the same condition routes
 /// to a holder-side quarantine (caller decides how to enact that).

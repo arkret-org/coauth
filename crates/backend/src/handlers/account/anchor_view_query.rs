@@ -206,7 +206,7 @@ fn fresh_hlc() -> String {
     let mut node_bytes = [0u8; 4];
     rand::rng().fill(&mut node_bytes[..]);
     let node = u32::from_be_bytes(node_bytes);
-    format!("{unix_ms:012x}-00000000-{node:08x}")
+    format!("{unix_ms:012x}-0000-{node:08x}")
 }
 
 /// Resolve the holder's principal control Space from their DID.
@@ -322,10 +322,10 @@ mod tests {
             view.leaf_anchor_id,
             "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222"
         );
-        // HLC shape: 12-hex + - + 8-hex + - + 8-hex.
-        assert_eq!(view.hlc.len(), 30);
+        // HLC shape: 12-hex + - + 4-hex + - + 8-hex.
+        assert_eq!(view.hlc.len(), 26);
         assert_eq!(view.hlc.as_bytes()[12], b'-');
-        assert_eq!(view.hlc.as_bytes()[21], b'-');
+        assert_eq!(view.hlc.as_bytes()[17], b'-');
     }
 
     #[tokio::test]
@@ -421,7 +421,7 @@ mod tests {
         assert_ne!(a, c, "different DIDs must map to different spaces");
         // SDK validates `ck:space:` IDs as strict UUIDv7 — let it round-trip
         // so we know the convention is accepted by the wire layer.
-        cokret_core::SpaceId::new(a).unwrap();
-        cokret_core::SpaceId::new(c).unwrap();
+        cokret_core::RealmId::new(a).unwrap();
+        cokret_core::RealmId::new(c).unwrap();
     }
 }

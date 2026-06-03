@@ -248,7 +248,10 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
     let mut status = use_resource(move || {
         let rid = status_id.clone();
         async move {
-            crate::api::api_get::<RegisterStatusResponse>(&format!("/gate/account/auth/register/{rid}")).await
+            crate::api::api_get::<RegisterStatusResponse>(&format!(
+                "/gate/account/auth/register/{rid}"
+            ))
+            .await
         }
     });
 

@@ -89,12 +89,8 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         audit_signature_fail_closed: false,
     };
 
-    let body = serde_json::to_value(service_describe_response(
-        &url_builder,
-        &cokret_config,
-        &[],
-    ))
-    .unwrap();
+    let body =
+        serde_json::to_value(service_describe_response(&url_builder, &cokret_config, &[])).unwrap();
 
     assert_eq!(body["service_did"], "did:web:auth.example.com");
     assert_eq!(body["trust_domain"], "ck:trust_domain:auth.example.com");
@@ -143,24 +139,24 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     let supported_profiles = body["supported_profiles"].as_array().unwrap();
     assert!(supported_profiles.is_empty());
     let supported_reducer_profiles = body["supported_reducer_profiles"].as_array().unwrap();
-    assert!(supported_reducer_profiles.contains(&serde_json::json!("cx.reducer.v1")));
-    // T6.3 — `cx.schema.v1` was a coauth-only placeholder. The actual
-    // schemas this surface emits are `cx.schema.core.v1` (umbrella
+    assert!(supported_reducer_profiles.contains(&serde_json::json!("ck.reducer.v1")));
+    // T6.3 — `ck.schema.v1` was a coauth-only placeholder. The actual
+    // schemas this surface emits are `ck.schema.core.v1` (umbrella
     // core schemas, soland / SDK convention) and
-    // `cx.schema.service_describe.v1` (this very payload).
+    // `ck.schema.service_describe.v1` (this very payload).
     let supported_schema_profiles = body["supported_schema_profiles"].as_array().unwrap();
-    assert!(supported_schema_profiles.contains(&serde_json::json!("cx.schema.core.v1")));
+    assert!(supported_schema_profiles.contains(&serde_json::json!("ck.schema.core.v1")));
     assert!(
-        supported_schema_profiles.contains(&serde_json::json!("cx.schema.service_describe.v1"))
+        supported_schema_profiles.contains(&serde_json::json!("ck.schema.service_describe.v1"))
     );
     assert!(
-        !supported_schema_profiles.contains(&serde_json::json!("cx.schema.v1")),
-        "the legacy `cx.schema.v1` placeholder MUST NOT be advertised"
+        !supported_schema_profiles.contains(&serde_json::json!("ck.schema.v1")),
+        "the legacy `ck.schema.v1` placeholder MUST NOT be advertised"
     );
     let supported_operations = body["supported_operations"].as_array().unwrap();
     assert!(
-        supported_operations.contains(&serde_json::json!("cx.policy.check")),
-        "implemented POST /api/v1/policy/check MUST be advertised as cx.policy.check"
+        supported_operations.contains(&serde_json::json!("ck.policy.check")),
+        "implemented POST /api/v1/policy/check MUST be advertised as ck.policy.check"
     );
     let not_authoritative_for = body["service_boundary"]["not_authoritative_for"]
         .as_array()
@@ -177,7 +173,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(service_roles.contains(&serde_json::json!("identity_resolver")));
     assert!(service_roles.contains(&serde_json::json!("account_registry")));
 
-    // T6.3 — cx.identity.* operations MUST be declared as
+    // T6.3 — ck.identity.* operations MUST be declared as
     // schema-valid external interop while preserving their delegated-
     // resolver boundary in notes, not as canonical identity registry
     // surface.
@@ -189,22 +185,22 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         .filter_map(|entry| Some((entry["name"].as_str()?, entry["notes"].as_str()?)))
         .collect();
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "cx.identity.resolve" && notes.contains("delegated-resolver")
+        *name == "ck.identity.resolve" && notes.contains("delegated-resolver")
     }));
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "cx.identity.get_document" && notes.contains("delegated-resolver")
+        *name == "ck.identity.get_document" && notes.contains("delegated-resolver")
     }));
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "cx.identity.describe_registry" && notes.contains("delegated-resolver")
+        *name == "ck.identity.describe_registry" && notes.contains("delegated-resolver")
     }));
-    // verified_profiles MUST NOT include cx.profile.identity_registry.v1
+    // verified_profiles MUST NOT include ck.profile.identity_registry.v1
     // because coauth is a delegated resolver, not a registry.
     let verified = body["verified_profiles"]
         .as_array()
         .expect("verified_profiles array present");
     for entry in verified {
         assert_ne!(
-            entry["profile_id"], "cx.profile.identity_registry.v1",
+            entry["profile_id"], "ck.profile.identity_registry.v1",
             "coauth MUST NOT advertise canonical identity registry conformance"
         );
     }
@@ -319,7 +315,7 @@ fn describe_separates_claim_levels() {
     assert!(experimental.is_disjoint(&verified_ids));
 
     // compat_surfaces entries must declare a schema-known kind.
-    // T6.3 — coauth's `cx.identity.*` proxy operations are NOT a
+    // T6.3 — coauth's `ck.identity.*` proxy operations are NOT a
     // canonical identity registry; the delegated-resolver semantics
     // are carried in notes while kind stays schema-valid.
     for surface in body["compat_surfaces"]
@@ -356,7 +352,7 @@ fn describe_separates_claim_levels() {
     let supported_operations = body["supported_operations"]
         .as_array()
         .expect("supported_operations array present");
-    assert!(supported_operations.contains(&serde_json::json!("cx.policy.check")));
+    assert!(supported_operations.contains(&serde_json::json!("ck.policy.check")));
 }
 
 #[test]
@@ -376,8 +372,7 @@ fn service_describe_emits_trust_domain_when_configured() {
         ..Default::default()
     };
 
-    let body =
-        serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
+    let body = serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
     assert_eq!(body["trust_domain"], "ck:trust_domain:example.net");
 }
 
@@ -445,8 +440,7 @@ fn service_describe_advertises_configured_session_grant_ttl() {
         ..CokretConfig::default()
     };
 
-    let body =
-        serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
+    let body = serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
 
     assert_eq!(body["limits"]["session_grant_ttl_seconds"], 900);
 }
@@ -480,7 +474,7 @@ fn session_grant_is_signed_for_the_user_did() {
     jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
 
     let payload = jwt.payload();
-    assert_eq!(payload.kind, "cx.session.grant");
+    assert_eq!(payload.kind, "ck.session.grant");
     assert_eq!(
         payload.subject,
         user_did_for(&url_builder, &cokret_config, &browser_session.user)
@@ -489,10 +483,7 @@ fn session_grant_is_signed_for_the_user_did() {
         payload.service_account_id,
         browser_session.user.id.to_string()
     );
-    assert_eq!(
-        payload.issuer,
-        issuer_did_for(&url_builder, &cokret_config)
-    );
+    assert_eq!(payload.issuer, issuer_did_for(&url_builder, &cokret_config));
     assert_eq!(
         payload.audience,
         required_audience_for(&url_builder, &cokret_config)
@@ -504,7 +495,7 @@ fn session_grant_is_signed_for_the_user_did() {
         payload.expires_at - payload.not_before,
         Duration::try_minutes(5).unwrap()
     );
-    assert_eq!(payload.proof.kind, "cx.session.grant.proof.v1");
+    assert_eq!(payload.proof.kind, "ck.session.grant.proof.v1");
     assert_eq!(payload.proof.alg, "EdDSA");
     assert_eq!(payload.proof.key_id, "test-eddsa");
     assert_eq!(payload.proof.payload_digest_alg, "sha-256");
@@ -698,7 +689,7 @@ fn session_grant_introspection_proof(
         .unwrap();
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa);
     let claims = SessionGrantIntrospectionProofClaims {
-        kind: "cx.session_grant.introspection_proof.v1".to_owned(),
+        kind: "ck.session_grant.introspection_proof.v1".to_owned(),
         grant_id: grant.id.to_string(),
         grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
         audience: grant.audience.clone(),
@@ -965,13 +956,14 @@ async fn primary_handle_patch_validates_claims_and_updates_did_documents() {
 
     let bob_cookies = CookieHelper::new();
     bob_cookies.import(state.cookie_jar().set_session(&bob_session));
-    let response = state
-        .request(bob_cookies.with_cookies(
-            Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
-                "primary_handle": handle,
-            })),
-        ))
-        .await;
+    let response =
+        state
+            .request(bob_cookies.with_cookies(
+                Request::patch("/api/v1/identity/primary-handle").json(serde_json::json!({
+                    "primary_handle": handle,
+                })),
+            ))
+            .await;
     response.assert_status(StatusCode::BAD_REQUEST);
 
     let response = state
@@ -1071,9 +1063,7 @@ async fn did_document_resolution_uses_primary_handle_preference_as_of_query() {
     );
 
     let response = state
-        .request(
-            Request::get(format!("/users/{}/did.json?asOf={first_as_of}", user.id)).empty(),
-        )
+        .request(Request::get(format!("/users/{}/did.json?asOf={first_as_of}", user.id)).empty())
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();

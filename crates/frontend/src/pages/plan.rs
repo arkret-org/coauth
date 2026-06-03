@@ -4,7 +4,8 @@ use crate::{api::types::SiteConfig, components::loading::LoadingScreen, pages::R
 
 #[component]
 pub fn Plan() -> Element {
-    let data = use_resource(|| async { crate::api::api_get::<SiteConfig>("/self/site-config").await });
+    let data =
+        use_resource(|| async { crate::api::api_get::<SiteConfig>("/self/site-config").await });
     let nav = navigator();
     let binding = data.read();
 

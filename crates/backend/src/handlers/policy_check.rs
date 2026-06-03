@@ -49,8 +49,8 @@ use serde_json::Value;
 use crate::{
     app_state::DepotExt as AppStateDepotExt,
     handlers::{
-        common::DepotExt,
         cokret::{self, CokretRouteError},
+        common::DepotExt,
     },
     services::{
         policy_evaluator::{
@@ -248,7 +248,7 @@ pub(crate) async fn build_policy_check_response(
     // captures the request id plus every signed response field, so a
     // verifier can rebuild these bytes from the wire request + response.
     let transcript = DecisionTranscript {
-        kind: "cx.policy.check.transcript.v1",
+        kind: "ck.policy.check.transcript.v1",
         request_id: request.request_id.as_str(),
         decision: &decision.decision,
         bound_to: &bound_to,
@@ -266,9 +266,9 @@ pub(crate) async fn build_policy_check_response(
             // Signing failure is a true server-side fault — we can't
             // emit an unsigned response per spec §5 (the caller would
             // reject it). Surface as 500.
-            return Err(CokretRouteError::Internal(Box::new(
-                std::io::Error::other(format!("policy decision signing failed: {e}")),
-            )));
+            return Err(CokretRouteError::Internal(Box::new(std::io::Error::other(
+                format!("policy decision signing failed: {e}"),
+            ))));
         }
     };
 
@@ -511,7 +511,7 @@ mod tests {
             serde_json::Value::String(expires_at_str.clone())
         );
         let transcript = DecisionTranscript {
-            kind: "cx.policy.check.transcript.v1",
+            kind: "ck.policy.check.transcript.v1",
             request_id: request.request_id.as_str(),
             decision: &response.decision,
             bound_to: &response.bound_to,

@@ -14,7 +14,8 @@ use crate::{
 
 #[component]
 pub fn PasswordChange() -> Element {
-    let data = use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
+    let data =
+        use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
     let binding = data.read();
 
     match &*binding {

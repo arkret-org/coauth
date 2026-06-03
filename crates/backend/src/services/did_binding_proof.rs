@@ -6,7 +6,7 @@
 //!
 //! ```json
 //! {
-//!   "type": "cx.did_binding.control_proof.v1",
+//!   "type": "ck.did_binding.control_proof.v1",
 //!   "account_did": "<account DID>",
 //!   "cx_account_id": "<local account ULID>",
 //!   "verification_method": "<DID URL from verificationMethod.id>",
@@ -73,7 +73,7 @@ use crate::services::did_resolver::{DidResolveError, DidResolverService};
 /// Canonical binding statement claims embedded in a proof JWS.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingStatementClaims {
-    /// Discriminator. Must equal `cx.did_binding.control_proof.v1`.
+    /// Discriminator. Must equal `ck.did_binding.control_proof.v1`.
     #[serde(rename = "type")]
     pub kind: String,
     /// The DID being bound.
@@ -450,7 +450,7 @@ fn validate_binding_statement_claims(
     nonce: &str,
     now: DateTime<Utc>,
 ) -> Result<(), DidBindingProofError> {
-    if claims.kind != "cx.did_binding.control_proof.v1" {
+    if claims.kind != "ck.did_binding.control_proof.v1" {
         return Err(DidBindingProofError::StatementKindMismatch);
     }
     if claims.account_did != account_did {
@@ -638,7 +638,7 @@ mod tests {
 
     fn statement_claims_default() -> BindingStatementClaims {
         BindingStatementClaims {
-            kind: "cx.did_binding.control_proof.v1".to_owned(),
+            kind: "ck.did_binding.control_proof.v1".to_owned(),
             account_did: "did:web:alice.example".to_owned(),
             cx_account_id: Ulid::nil().to_string(),
             verification_method: "did:web:alice.example#key-1".to_owned(),
@@ -665,7 +665,7 @@ mod tests {
         // Sanity check: type discriminator literal is what the validator expects.
         assert_eq!(
             statement_claims_default().kind,
-            "cx.did_binding.control_proof.v1"
+            "ck.did_binding.control_proof.v1"
         );
     }
 

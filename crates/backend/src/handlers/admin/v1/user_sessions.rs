@@ -256,9 +256,12 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::post(format!("/_cokret/local/admin/user-sessions/{}/finish", session.id))
-            .bearer(&token)
-            .empty();
+        let request = Request::post(format!(
+            "/_cokret/local/admin/user-sessions/{}/finish",
+            session.id
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -305,9 +308,12 @@ mod tests {
         // Move the clock forward
         state.clock.advance(Duration::try_minutes(1).unwrap());
 
-        let request = Request::post(format!("/_cokret/local/admin/user-sessions/{}/finish", session.id))
-            .bearer(&token)
-            .empty();
+        let request = Request::post(format!(
+            "/_cokret/local/admin/user-sessions/{}/finish",
+            session.id
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::BAD_REQUEST);
         let body: serde_json::Value = response.json();
@@ -747,9 +753,10 @@ mod tests {
         "#);
 
         // Test count=only with filtering
-        let request = Request::get("/_cokret/local/admin/user-sessions?count=only&filter[status]=active")
-            .bearer(&token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-sessions?count=only&filter[status]=active")
+                .bearer(&token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();

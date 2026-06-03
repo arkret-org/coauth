@@ -374,10 +374,10 @@ pub struct StaridConfig {
     /// adapter joins `/_cokret/root/webvh/...` itself.
     pub base_url: Url,
 
-    /// `host` value passed to starid's `POST /_cokret/root/webvh/dids`. Defaults
-    /// to the host of `base_url` when omitted. Override when starid is
-    /// fronted by a different public-facing hostname than the URL coauth
-    /// reaches it on.
+    /// `host` value passed to starid's `POST /_cokret/root/webvh/dids`.
+    /// Defaults to the host of `base_url` when omitted. Override when
+    /// starid is fronted by a different public-facing hostname than the URL
+    /// coauth reaches it on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub did_host: Option<String>,
 

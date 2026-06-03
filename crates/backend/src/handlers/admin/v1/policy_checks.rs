@@ -449,9 +449,11 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/_cokret/local/admin/policy-decision-audits/{audit_id}"))
-                    .bearer(&token)
-                    .empty(),
+                Request::get(format!(
+                    "/_cokret/local/admin/policy-decision-audits/{audit_id}"
+                ))
+                .bearer(&token)
+                .empty(),
             )
             .await;
         response.assert_status(StatusCode::OK);

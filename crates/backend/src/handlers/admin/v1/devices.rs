@@ -378,7 +378,11 @@ mod tests {
         repo.save().await.unwrap();
 
         let response = state
-            .request(Request::get("/_cokret/local/admin/devices").bearer(&token).empty())
+            .request(
+                Request::get("/_cokret/local/admin/devices")
+                    .bearer(&token)
+                    .empty(),
+            )
             .await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();

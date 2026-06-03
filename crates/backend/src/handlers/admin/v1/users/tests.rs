@@ -200,7 +200,9 @@ mod tests {
         repo.save().await.unwrap();
 
         // Test default behavior (count=true)
-        let request = Request::get("/_cokret/local/admin/users").bearer(&token).empty();
+        let request = Request::get("/_cokret/local/admin/users")
+            .bearer(&token)
+            .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -513,11 +515,12 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         // Set the password through the API
-        let request = Request::post("/_cokret/local/admin/users/01040G2081040G2081040G2081/set-password")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "password": "this is a good enough password",
-            }));
+        let request =
+            Request::post("/_cokret/local/admin/users/01040G2081040G2081040G2081/set-password")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "password": "this is a good enough password",
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
@@ -539,11 +542,12 @@ mod tests {
         state.password_manager = PasswordManager::disabled();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/_cokret/local/admin/users/01040G2081040G2081040G2081/set-password")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "password": "hunter2",
-            }));
+        let request =
+            Request::post("/_cokret/local/admin/users/01040G2081040G2081040G2081/set-password")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "password": "hunter2",
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::FORBIDDEN);

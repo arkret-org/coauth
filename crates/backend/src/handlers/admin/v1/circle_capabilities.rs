@@ -1,4 +1,4 @@
-//! Admin endpoints for managing CXP-0007 `cx.circle.*` capability grants.
+//! Admin endpoints for managing CXP-0007 `ck.circle.*` capability grants.
 //!
 //! Surfaces three routes consumed by sodmin and any other admin client:
 //!

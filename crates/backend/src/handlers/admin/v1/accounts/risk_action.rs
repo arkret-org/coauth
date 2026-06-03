@@ -27,8 +27,8 @@ use crate::{
             params::extract_ulid_param,
             response::SingleResponse,
         },
-        common::DepotExt,
         cokret::service_did_for,
+        common::DepotExt,
     },
     services::{
         did_binding_proof::verify_detached_jws_with_sdk,
@@ -269,7 +269,7 @@ pub(crate) fn risk_action_approval_transcript(
     approved_by: &str,
 ) -> RiskActionApprovalTranscript {
     RiskActionApprovalTranscript {
-        kind: "cx.coauth.account_risk_action.approval.v1",
+        kind: "ck.coauth.account_risk_action.approval.v1",
         proposal_id: proposal_id.to_owned(),
         account_id: account_id.to_string(),
         action: action.to_owned(),

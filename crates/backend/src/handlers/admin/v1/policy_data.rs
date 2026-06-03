@@ -153,9 +153,12 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::get(format!("/_cokret/local/admin/policy-data/{}", policy_data.id))
-            .bearer(&token)
-            .empty();
+        let request = Request::get(format!(
+            "/_cokret/local/admin/policy-data/{}",
+            policy_data.id
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();

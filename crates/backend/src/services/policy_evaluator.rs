@@ -314,7 +314,7 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
         .get("strict_reject_profile")
         .and_then(Value::as_bool)
         .unwrap_or(false)
-        && action_str.starts_with("cx.actor.profile.")
+        && action_str.starts_with("ck.actor.profile.")
         && request
             .event_preview
             .get("accountable_principal_ids_unverified")
@@ -379,7 +379,7 @@ fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str)
         }
     }
 
-    // CAP-1 (R3 spec-sync) — `cx.call.{join,screen_share,record,
+    // CAP-1 (R3 spec-sync) — `ck.call.{join,screen_share,record,
     // transcribe,moderate}` are recognised capability actions even when
     // no realm rule names them explicitly. Default-allow path; the
     // recognition is a no-op for matching purposes but ensures the
@@ -457,9 +457,9 @@ mod tests {
     #[test]
     fn require_review_action_matches() {
         let data = serde_json::json!({
-            "require_review_actions": ["cx.member.application"]
+            "require_review_actions": ["ck.member.application"]
         });
-        let r = req("did:web:alice.example", "cx.member.application");
+        let r = req("did:web:alice.example", "ck.member.application");
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::RequireReview));
         assert_eq!(d.reason_code, "policy_review_required");
@@ -474,7 +474,7 @@ mod tests {
                     // Realm-specific scope: NO deny_actors, so alice is
                     // allowed in this realm even though the default
                     // scope would deny her.
-                    "deny_actions": ["cx.evil"]
+                    "deny_actions": ["ck.evil"]
                 }
             }
         });
@@ -536,7 +536,7 @@ mod tests {
         let data = serde_json::json!({
             "strict_reject_profile": true,
         });
-        let mut r = req("did:web:alice.example", "cx.actor.profile.update");
+        let mut r = req("did:web:alice.example", "ck.actor.profile.update");
         r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Deny));
@@ -548,7 +548,7 @@ mod tests {
     #[test]
     fn policy1_strict_reject_inert_when_profile_off() {
         let data = serde_json::json!({});
-        let mut r = req("did:web:alice.example", "cx.actor.profile.update");
+        let mut r = req("did:web:alice.example", "ck.actor.profile.update");
         r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
         let d = match_rules(&data, &r, "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));

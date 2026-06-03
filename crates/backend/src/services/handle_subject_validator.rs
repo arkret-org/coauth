@@ -1,7 +1,7 @@
 //! R3.2 (cokret-spec @ b56cab1) handle-claim issuer guards.
 //!
 //! Two normative tightenings land here, shared by every coauth code path
-//! that mints a `cx.handle.claim` artefact:
+//! that mints a `ck.handle.claim` artefact:
 //!
 //!   1. **`claim_kind` deny check** — the draft-era `service_handle`
 //!      `claim_kind` was removed from `ck.schema.handle_claim.v1`

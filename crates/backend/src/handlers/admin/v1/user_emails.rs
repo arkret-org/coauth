@@ -828,9 +828,10 @@ mod tests {
         "#);
 
         // Filter by email
-        let request = Request::get("/_cokret/local/admin/user-emails?filter[email]=alice@example.com")
-            .bearer(&token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/user-emails?filter[email]=alice@example.com")
+                .bearer(&token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();

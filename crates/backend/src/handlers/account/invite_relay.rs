@@ -78,7 +78,7 @@ pub struct RelayRequest {
     /// (`peer=...;scope=<scope>` or `peer=...;scope=any`).
     pub scope: String,
 
-    /// Mirror of the holder's `cx.realm.policy_components.preauth
+    /// Mirror of the holder's `ck.realm.policy_components.preauth
     /// .require_consent` policy bit. Defaults to `true` (fail closed).
     #[serde(default = "default_require_consent")]
     pub require_consent: bool,
@@ -315,7 +315,7 @@ mod tests {
 
     fn payload() -> serde_json::Value {
         serde_json::json!({
-            "kind": "cx.invite.v1",
+            "kind": "ck.invite.v1",
             "from": "did:web:inviter",
         })
     }

@@ -274,10 +274,7 @@ async fn handle_post(
     Ok(reply)
 }
 
-fn principal_server_static_oauth_bearer_matches(
-    cokret_config: &CokretConfig,
-    token: &str,
-) -> bool {
+fn principal_server_static_oauth_bearer_matches(cokret_config: &CokretConfig, token: &str) -> bool {
     !token.trim().is_empty()
         && cokret_config
             .principal_servers

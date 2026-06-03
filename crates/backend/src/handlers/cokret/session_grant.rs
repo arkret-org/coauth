@@ -20,9 +20,8 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 use ulid::Ulid;
 
-use crate::handlers::common::DepotExt;
-
 use super::*;
+use crate::handlers::common::DepotExt;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionGrantMaterial {
@@ -291,7 +290,7 @@ pub(crate) fn issue_session_grant_for_audience(
         .as_ref()
         .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
     let claims = SessionGrantPayloadClaims {
-        kind: "cx.session.grant".to_owned(),
+        kind: "ck.session.grant".to_owned(),
         issuer: issuer.clone(),
         subject: subject.clone(),
         service_account_id: browser_session.user.id.to_string(),
@@ -326,7 +325,7 @@ pub(crate) fn issue_session_grant_for_audience(
         browser_session_id: claims.browser_session_id,
         cnf: claims.cnf,
         proof: SessionGrantProof {
-            kind: "cx.session.grant.proof.v1".to_owned(),
+            kind: "ck.session.grant.proof.v1".to_owned(),
             alg: alg.to_string(),
             key_id: key_id.clone(),
             canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
@@ -574,7 +573,7 @@ fn verify_session_grant_introspection_proof(
 
     let claims = jwt.payload();
     let max_future_skew = Duration::try_seconds(30).unwrap();
-    if claims.kind != "cx.session_grant.introspection_proof.v1"
+    if claims.kind != "ck.session_grant.introspection_proof.v1"
         || claims.grant_id != grant.id.to_string()
         || claims.grant_jwt_hash != session_grant_jwt_hash(&grant.grant_jwt)
         || claims.audience != grant.audience
@@ -844,9 +843,7 @@ pub async fn refresh_session_grant(
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
 
     if body.grant_jwt.trim().is_empty() {
-        return Err(CokretRouteError::BadRequest(
-            "missing grant_jwt".to_owned(),
-        ));
+        return Err(CokretRouteError::BadRequest("missing grant_jwt".to_owned()));
     }
 
     // 2. Parse + load the existing grant. We never verify the JWT signature here —
@@ -860,9 +857,7 @@ pub async fn refresh_session_grant(
         .as_ref()
         .map(|cnf| cnf.jkt.clone())
         .ok_or_else(|| {
-            CokretRouteError::BadRequest(
-                "grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned(),
-            )
+            CokretRouteError::BadRequest("grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned())
         })?;
 
     let mut repo = depot.repo().await?;
@@ -970,4 +965,3 @@ pub async fn refresh_session_grant(
         previous_grant_id: revoked_prior.id.to_string(),
     }))
 }
-

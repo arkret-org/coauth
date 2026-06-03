@@ -788,9 +788,11 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let missing_id = Ulid::nil();
-        let request = Request::get(format!("/_cokret/local/admin/personal-sessions/{missing_id}"))
-            .bearer(&token)
-            .empty();
+        let request = Request::get(format!(
+            "/_cokret/local/admin/personal-sessions/{missing_id}"
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
     }
@@ -1226,10 +1228,11 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request =
-            Request::post("/_cokret/local/admin/personal-sessions/01040G2081040G2081040G2081/revoke")
-                .bearer(&token)
-                .empty();
+        let request = Request::post(
+            "/_cokret/local/admin/personal-sessions/01040G2081040G2081040G2081/revoke",
+        )
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
         let body: serde_json::Value = response.json();

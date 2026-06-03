@@ -91,7 +91,7 @@ mod tests {
             soland_fanout_state: AccountabilityGrantFanoutState::Queued,
             soland_fanout_idempotency_key: format!("idem-{label}"),
             soland_fanout_payload: serde_json::json!({
-                "kind": "cx.coauth.accountability_grant.fanout.v1",
+                "kind": "ck.coauth.accountability_grant.fanout.v1",
                 "label": label,
             }),
             soland_fanout_attempt: 0,

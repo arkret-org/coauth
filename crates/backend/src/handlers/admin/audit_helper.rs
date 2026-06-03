@@ -28,7 +28,7 @@ use signature::{RandomizedSigner as _, Verifier as _};
 use ulid::Ulid;
 use uuid::Uuid;
 
-const AUDIT_TRANSCRIPT_KIND: &str = "cx.coauth.audit.admin_operation.v1";
+const AUDIT_TRANSCRIPT_KIND: &str = "ck.coauth.audit.admin_operation.v1";
 const AUDIT_TRANSCRIPT_SCHEMA_VERSION: u32 = 1;
 
 /// Verification state returned on admin audit read/export surfaces.
@@ -317,7 +317,7 @@ struct LegacyAuditTranscriptV1<'a> {
 
 fn legacy_transcript_v1_for_log(log: &AdminOperationLog) -> LegacyAuditTranscriptV1<'_> {
     LegacyAuditTranscriptV1 {
-        kind: "cx.coauth.audit.admin_operation.v1",
+        kind: "ck.coauth.audit.admin_operation.v1",
         admin_user_id: log.admin_user_id.to_string(),
         operation: &log.operation,
         resource_type: &log.resource_type,

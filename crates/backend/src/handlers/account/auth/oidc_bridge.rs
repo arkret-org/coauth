@@ -2093,11 +2093,13 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/_cokret/gate/account/auth/oidc/browser-bridge/session").json(serde_json::json!({
-                    "redirect_uri": "http://localhost:8080/auth/callback",
-                    "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
-                    "client_id_hint": "yougen"
-                })),
+                Request::post("/_cokret/gate/account/auth/oidc/browser-bridge/session").json(
+                    serde_json::json!({
+                        "redirect_uri": "http://localhost:8080/auth/callback",
+                        "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
+                        "client_id_hint": "yougen"
+                    }),
+                ),
             )
             .await;
 

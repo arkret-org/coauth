@@ -384,7 +384,9 @@ mod tests {
             create_recovery_ticket(&state, "alice@example.com".to_owned()).await;
 
         let response = state
-            .request(Request::get(format!("/_cokret/gate/account/password-recovery/{ticket}")).empty())
+            .request(
+                Request::get(format!("/_cokret/gate/account/password-recovery/{ticket}")).empty(),
+            )
             .await;
 
         response.assert_status(StatusCode::OK);

@@ -454,9 +454,7 @@ pub(crate) async fn primary_did_for_user(
     cokret_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> String {
-    did_resolver
-        .primary_did_for_user(cokret_config, user)
-        .await
+    did_resolver.primary_did_for_user(cokret_config, user).await
 }
 
 async fn binding_records_for_user(

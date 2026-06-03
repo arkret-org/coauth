@@ -140,7 +140,7 @@ impl<'a> PolicySigner<'a> {
 /// without consulting coauth internals or audit logs.
 #[derive(Debug, Serialize)]
 pub struct DecisionTranscript<'a> {
-    /// `cx.policy.check.transcript.v1` — version tag to make the
+    /// `ck.policy.check.transcript.v1` — version tag to make the
     /// transcript unmistakable on disk / wire. Future versions MUST
     /// bump this string and consumers MUST reject unknown tags.
     pub kind: &'a str,
@@ -225,7 +225,7 @@ mod tests {
         let mem = empty_sha256();
         let obligations: Vec<serde_json::Value> = Vec::new();
         let transcript = DecisionTranscript {
-            kind: "cx.policy.check.transcript.v1",
+            kind: "ck.policy.check.transcript.v1",
             request_id: "req-1",
             decision: &AuthzDecision::Allow,
             bound_to: &bound,
@@ -243,7 +243,7 @@ mod tests {
         // the version tag verbatim.
         assert!(a.starts_with(b"{"));
         let s = std::str::from_utf8(&a).unwrap();
-        assert!(s.contains("cx.policy.check.transcript.v1"));
+        assert!(s.contains("ck.policy.check.transcript.v1"));
         // Lexicographic key order: `auth_state_digest` precedes `bound_to`
         // precedes `decision`; the serializer
         // sorts keys so we can spot-check the prefix.
@@ -256,7 +256,7 @@ mod tests {
         let h = empty_sha256();
         let obligations: Vec<serde_json::Value> = Vec::new();
         let mut transcript = DecisionTranscript {
-            kind: "cx.policy.check.transcript.v1",
+            kind: "ck.policy.check.transcript.v1",
             request_id: "req-1",
             decision: &AuthzDecision::Allow,
             bound_to: &bound,

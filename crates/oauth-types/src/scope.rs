@@ -86,13 +86,13 @@ pub const COKRET_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
 /// `urn:cokret:admin:*` — Cokret admin capability family.
 pub const COKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:cokret:admin:*");
 
-/// `cx.agent.manage` — CXP-0008 controller-approval scope. Covers the
+/// `ck.agent.manage` — CXP-0008 controller-approval scope. Covers the
 /// admin subset of the 14 personal-agent capability actions
 /// (provision / pause / resume / deactivate / grant.attach / grant.detach
 /// / rotate_key + sidecar_thread.* lifecycle hooks). Issued by coauth as
 /// part of the accountability_grant flow; consumed by soland's agent
 /// runtime authn path. Phase P2 (B-A / `_before_todos.md` §1.4).
-pub const CX_AGENT_MANAGE: ScopeToken = ScopeToken::from_static("cx.agent.manage");
+pub const CK_AGENT_MANAGE: ScopeToken = ScopeToken::from_static("ck.agent.manage");
 
 /// Check whether a character belongs to the NQCHAR set defined in
 /// [RFC 6749 Appendix A]:

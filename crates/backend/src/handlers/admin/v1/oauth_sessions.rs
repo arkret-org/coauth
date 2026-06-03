@@ -375,9 +375,11 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::post(format!("/_cokret/local/admin/oauth-sessions/{session_id}/finish"))
-            .bearer(&token)
-            .empty();
+        let request = Request::post(format!(
+            "/_cokret/local/admin/oauth-sessions/{session_id}/finish"
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();

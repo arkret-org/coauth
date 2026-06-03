@@ -325,7 +325,7 @@ pub struct InviteClaimBindingProof {
 /// verification method.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubjectProofClaims {
-    /// Discriminator. MUST equal `cx.invite.subject_proof.v1`.
+    /// Discriminator. MUST equal `ck.invite.subject_proof.v1`.
     #[serde(rename = "type")]
     pub kind: String,
     /// Inviter actor DID — the entity claiming to present this invite.
@@ -348,7 +348,7 @@ pub struct SubjectProofClaims {
 
 /// Constant for the subject-proof type discriminator. Kept as a
 /// `const` so callers can re-use it without typos.
-pub const SUBJECT_PROOF_KIND: &str = "cx.invite.subject_proof.v1";
+pub const SUBJECT_PROOF_KIND: &str = "ck.invite.subject_proof.v1";
 
 /// Inputs to [`verify_invite`].
 ///
@@ -988,7 +988,7 @@ mod tests {
     #[test]
     fn subject_proof_kind_constant_is_stable() {
         // Tripwire: any rename of the kind discriminator is a wire break.
-        assert_eq!(SUBJECT_PROOF_KIND, "cx.invite.subject_proof.v1");
+        assert_eq!(SUBJECT_PROOF_KIND, "ck.invite.subject_proof.v1");
     }
 }
 

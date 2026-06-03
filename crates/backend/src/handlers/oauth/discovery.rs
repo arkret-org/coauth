@@ -310,9 +310,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
             "session_end".to_owned(),
         ],
         cokret_api_endpoint: url_builder.absolute_url("/_cokret").to_string(),
-        cokret_server_describe: url_builder
-            .absolute_url("/_cokret/describe")
-            .to_string(),
+        cokret_server_describe: url_builder.absolute_url("/_cokret/describe").to_string(),
         cokret_service_did: cokret::service_did_for(url_builder, &cokret_config),
         cokret_did_binding_methods: vec!["session_grant".to_owned()],
         cokret_supported_scopes: vec![
@@ -423,11 +421,7 @@ mod tests {
                 .any(|claim| claim == cokret::CLAIM_PRINCIPAL_DID)
         );
         assert!(claims.iter().any(|claim| claim == cokret::CLAIM_DEVICE_ID));
-        assert!(
-            claims
-                .iter()
-                .any(|claim| claim == cokret::CLAIM_SESSION_ID)
-        );
+        assert!(claims.iter().any(|claim| claim == cokret::CLAIM_SESSION_ID));
     }
 
     /// Round 25 production-stability audit: `email` scope and

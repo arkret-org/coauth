@@ -21,8 +21,8 @@ use crate::{
             audit_helper::record_admin_operation_signed, call_context::extract_call_context,
             model::User, params::extract_ulid_param, response::SingleResponse,
         },
-        common::DepotExt,
         cokret::service_did_for,
+        common::DepotExt,
     },
 };
 

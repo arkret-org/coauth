@@ -868,9 +868,10 @@ mod tests {
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
         create_test_providers(&mut state).await;
 
-        let request = Request::get("/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true")
+                .bearer(&admin_token)
+                .empty();
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
@@ -940,9 +941,10 @@ mod tests {
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
         create_test_providers(&mut state).await;
 
-        let request = Request::get("/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=false")
-            .bearer(&admin_token)
-            .empty();
+        let request =
+            Request::get("/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=false")
+                .bearer(&admin_token)
+                .empty();
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
@@ -1228,10 +1230,11 @@ mod tests {
         "#);
 
         // Test count=false with filtering
-        let request =
-            Request::get("/_cokret/local/admin/upstream-oauth-providers?count=false&filter[enabled]=true")
-                .bearer(&admin_token)
-                .empty();
+        let request = Request::get(
+            "/_cokret/local/admin/upstream-oauth-providers?count=false&filter[enabled]=true",
+        )
+        .bearer(&admin_token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();
@@ -1287,10 +1290,11 @@ mod tests {
         "#);
 
         // Test count=only with filtering
-        let request =
-            Request::get("/_cokret/local/admin/upstream-oauth-providers?count=only&filter[enabled]=false")
-                .bearer(&admin_token)
-                .empty();
+        let request = Request::get(
+            "/_cokret/local/admin/upstream-oauth-providers?count=only&filter[enabled]=false",
+        )
+        .bearer(&admin_token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json::<serde_json::Value>();

@@ -1,14 +1,14 @@
 mod did_document;
-mod session_grant;
 mod handle_claim;
-mod service_describe;
 mod identity;
+mod service_describe;
+mod session_grant;
 
 pub use did_document::*;
-pub use session_grant::*;
 pub use handle_claim::*;
-pub use service_describe::*;
 pub use identity::*;
+pub use service_describe::*;
+pub use session_grant::*;
 
 #[cfg(test)]
 mod tests;
@@ -134,18 +134,14 @@ async fn require_session_grant_caller(
     let auth_header = req
         .headers()
         .get(http::header::AUTHORIZATION)
-        .ok_or_else(|| {
-            CokretRouteError::Unauthorized("missing authorization header".to_owned())
-        })?;
+        .ok_or_else(|| CokretRouteError::Unauthorized("missing authorization header".to_owned()))?;
     let auth_str = auth_header
         .to_str()
         .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
     let token = auth_str
         .strip_prefix("Bearer ")
         .or_else(|| auth_str.strip_prefix("bearer "))
-        .ok_or_else(|| {
-            CokretRouteError::Unauthorized("invalid authorization header".to_owned())
-        })?;
+        .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
 
     // Static bearer fallback: a Principal Server may authenticate with a
     // token configured in `cokret.principal_servers[].
@@ -170,9 +166,7 @@ async fn require_session_grant_caller(
                 .find_by_token(token)
                 .await
                 .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-                .ok_or_else(|| {
-                    CokretRouteError::Unauthorized("unknown access token".to_owned())
-                })?;
+                .ok_or_else(|| CokretRouteError::Unauthorized("unknown access token".to_owned()))?;
             let session = repo
                 .oauth_session()
                 .lookup(access.session_id)
@@ -191,9 +185,7 @@ async fn require_session_grant_caller(
                 .find_by_token(token)
                 .await
                 .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-                .ok_or_else(|| {
-                    CokretRouteError::Unauthorized("unknown access token".to_owned())
-                })?;
+                .ok_or_else(|| CokretRouteError::Unauthorized("unknown access token".to_owned()))?;
             let session = repo
                 .personal_session()
                 .lookup(access.session_id)
@@ -713,9 +705,7 @@ pub async fn debug_issue_dpop_grant(
         return Err(CokretRouteError::BadRequest("missing actor_id".to_owned()));
     }
     if body.device_id.trim().is_empty() {
-        return Err(CokretRouteError::BadRequest(
-            "missing device_id".to_owned(),
-        ));
+        return Err(CokretRouteError::BadRequest("missing device_id".to_owned()));
     }
 
     let public_jwk: PublicJsonWebKey = serde_json::from_value(body.dpop_jwk.clone())
@@ -795,4 +785,3 @@ pub async fn debug_issue_dpop_grant(
         expires_at: material.expires_at,
     }))
 }
-

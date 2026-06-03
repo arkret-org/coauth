@@ -40,7 +40,7 @@
 //!    to soland's `/_cokret/peer/moves` endpoint.
 
 use cokret_core::{
-    AnchorId, CellRef, Did, Hlc, Move, SpaceId, UnsignedMove,
+    AnchorId, CellRef, Did, Hlc, Move, RealmId, UnsignedMove,
     move_event::{Effect, LatticeOp, LatticeOpType},
 };
 use cokret_signatures::Ed25519MoveSigner;
@@ -572,7 +572,7 @@ pub(crate) fn build_and_sign_move(
     pending: &PendingMove,
     signer: &AnchorerSigner,
 ) -> Result<Move, MimiConsentError> {
-    let space = SpaceId::new(pending.space_id.clone()).map_err(|error| {
+    let space = RealmId::new(pending.space_id.clone()).map_err(|error| {
         MimiConsentError::InvalidTypedId {
             field: "space_id",
             reason: format!("{error}"),

@@ -1,4 +1,4 @@
-//! Admin DTOs for managing CXP-0007 `cx.circle.*` capability grants.
+//! Admin DTOs for managing CXP-0007 `ck.circle.*` capability grants.
 //!
 //! CXP-0007 introduces a Circle primitive — an encrypted sub-boundary
 //! inside a Realm — and ships six capability actions that govern who can
@@ -73,7 +73,7 @@ impl CircleCapabilityAction {
         ]
     }
 
-    /// The registry string (`cx.circle.*`) for this action.
+    /// The registry string (`ck.circle.*`) for this action.
     #[must_use]
     pub fn as_action_str(&self) -> &'static str {
         match self {
@@ -151,7 +151,8 @@ impl CircleCapabilityAction {
     }
 }
 
-/// A capability grant as returned by `GET /_cokret/local/admin/circles/capabilities`.
+/// A capability grant as returned by `GET
+/// /_cokret/local/admin/circles/capabilities`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",

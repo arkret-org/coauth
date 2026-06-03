@@ -433,10 +433,11 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let response =
-            state
-                .request(Request::post("/_cokret/local/admin/claims").bearer(&token).json(
-                    serde_json::json!({
+        let response = state
+            .request(
+                Request::post("/_cokret/local/admin/claims")
+                    .bearer(&token)
+                    .json(serde_json::json!({
                         "account_id": user.id.to_string(),
                         "claim_kind": "org_role",
                         "subject": user.id.to_string(),
@@ -446,9 +447,9 @@ mod tests {
                             "value": "admin",
                             "scope": "progressive_disclosure"
                         }
-                    }),
-                ))
-                .await;
+                    })),
+            )
+            .await;
         response.assert_status(StatusCode::CREATED);
         let body: serde_json::Value = response.json();
         assert_eq!(body["account_id"], user.id.to_string());

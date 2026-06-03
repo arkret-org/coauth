@@ -32,8 +32,8 @@ use crate::{
             audit_helper::record_admin_operation_signed, call_context::extract_call_context,
             params::extract_ulid_param,
         },
-        common::DepotExt,
         cokret::service_did_for,
+        common::DepotExt,
     },
     services::{
         onboarding_starid::{OnboardingStaridError, mint_principal_did_for_first_credential},

@@ -861,16 +861,22 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::delete(format!("/_cokret/local/admin/upstream-oauth-links/{}", link.id))
-            .bearer(&token)
-            .empty();
+        let request = Request::delete(format!(
+            "/_cokret/local/admin/upstream-oauth-links/{}",
+            link.id
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NO_CONTENT);
 
         // Verify that the link was deleted
-        let request = Request::get(format!("/_cokret/local/admin/upstream-oauth-links/{}", link.id))
-            .bearer(&token)
-            .empty();
+        let request = Request::get(format!(
+            "/_cokret/local/admin/upstream-oauth-links/{}",
+            link.id
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
 
@@ -898,9 +904,11 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let link_id = Ulid::nil();
-        let request = Request::delete(format!("/_cokret/local/admin/upstream-oauth-links/{link_id}"))
-            .bearer(&token)
-            .empty();
+        let request = Request::delete(format!(
+            "/_cokret/local/admin/upstream-oauth-links/{link_id}"
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
     }
@@ -949,9 +957,11 @@ mod tests {
         repo.save().await.unwrap();
 
         let link_id = link.id;
-        let request = Request::get(format!("/_cokret/local/admin/upstream-oauth-links/{link_id}"))
-            .bearer(&token)
-            .empty();
+        let request = Request::get(format!(
+            "/_cokret/local/admin/upstream-oauth-links/{link_id}"
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -988,9 +998,11 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let link_id = Ulid::nil();
-        let request = Request::get(format!("/_cokret/local/admin/upstream-oauth-links/{link_id}"))
-            .bearer(&token)
-            .empty();
+        let request = Request::get(format!(
+            "/_cokret/local/admin/upstream-oauth-links/{link_id}"
+        ))
+        .bearer(&token)
+        .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
     }
@@ -1558,13 +1570,16 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::patch(format!("/_cokret/local/admin/upstream-oauth-links/{}", link.id))
-            .bearer(&token)
-            .json(serde_json::json!({
-                "user_id": bob.id,
-                "subject": format!("subject-{suffix}-2"),
-                "human_account_name": "Bob Provider"
-            }));
+        let request = Request::patch(format!(
+            "/_cokret/local/admin/upstream-oauth-links/{}",
+            link.id
+        ))
+        .bearer(&token)
+        .json(serde_json::json!({
+            "user_id": bob.id,
+            "subject": format!("subject-{suffix}-2"),
+            "human_account_name": "Bob Provider"
+        }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
@@ -1655,11 +1670,14 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::patch(format!("/_cokret/local/admin/upstream-oauth-links/{}", second.id))
-            .bearer(&token)
-            .json(serde_json::json!({
-                "subject": format!("subject-{suffix}-1")
-            }));
+        let request = Request::patch(format!(
+            "/_cokret/local/admin/upstream-oauth-links/{}",
+            second.id
+        ))
+        .bearer(&token)
+        .json(serde_json::json!({
+            "subject": format!("subject-{suffix}-1")
+        }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::CONFLICT);

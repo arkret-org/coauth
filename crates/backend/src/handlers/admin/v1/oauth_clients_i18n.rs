@@ -13,11 +13,11 @@
 //! locales are left untouched. Pass an empty `display_name` to delete
 //! the entry for that locale.
 //!
-//! This is distinct from `/_cokret/local/admin/oauth-clients/{id}/localized-metadata`
-//! which only covers the OIDC-spec-shaped fields (`client_name`,
-//! `logo_uri`, `client_uri`, `policy_uri`, `tos_uri`). The i18n payload
-//! covered here adds a free-form `description` that the consent screen
-//! shows to end-users.
+//! This is distinct from
+//! `/_cokret/local/admin/oauth-clients/{id}/localized-metadata` which only
+//! covers the OIDC-spec-shaped fields (`client_name`, `logo_uri`, `client_uri`,
+//! `policy_uri`, `tos_uri`). The i18n payload covered here adds a free-form
+//! `description` that the consent screen shows to end-users.
 
 use std::collections::BTreeMap;
 

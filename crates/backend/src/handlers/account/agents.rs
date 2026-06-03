@@ -92,7 +92,7 @@ pub struct AccountabilityGrantRequest {
     pub controller_did: String,
 
     /// Capability actions covered by the grant. Each entry must be a
-    /// registered `cx.agent.*` action from `capability-action-registry.json`;
+    /// registered `ck.agent.*` action from `capability-action-registry.json`;
     /// the agent principal below references the union as a single
     /// accountability grant.
     pub capabilities: Vec<String>,
@@ -109,7 +109,7 @@ pub struct AccountabilityGrantRequest {
 /// freshly minted `ck:accountability_grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
-/// `cx.agent.*` set before issuing the response; soland still verifies
+/// `ck.agent.*` set before issuing the response; soland still verifies
 /// the grant on ingest.
 ///
 /// `accountability_grant_id` and `agent_principal_id` are emitted as
@@ -201,12 +201,8 @@ pub async fn post_accountability_grant(
     let idempotency_key = accountability_grant_idempotency_key(&accountability_grant_id);
     let url_builder = depot.url_builder()?;
     let service_did = service_did_for(&url_builder, &cokret_config);
-    let fanout_payload = build_soland_fanout_payload(
-        &response,
-        &raw_payload_digest,
-        &service_did,
-        &cokret_config,
-    )?;
+    let fanout_payload =
+        build_soland_fanout_payload(&response, &raw_payload_digest, &service_did, &cokret_config)?;
 
     let mut repo = depot.repo().await?;
     if repo
@@ -323,7 +319,7 @@ pub async fn post_accountability_grant(
 fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<String>, AppError> {
     if capabilities.is_empty() {
         return Err(AppError::bad_request(
-            "capabilities must list at least one cx.agent.* action",
+            "capabilities must list at least one ck.agent.* action",
         ));
     }
 
@@ -337,7 +333,7 @@ fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<String>, AppE
         }
         if !is_registered_agent_capability(capability) {
             return Err(AppError::bad_request(format!(
-                "capability {capability:?} is not a registered cx.agent.* action"
+                "capability {capability:?} is not a registered ck.agent.* action"
             )));
         }
         unique.insert(capability.to_owned());
@@ -360,7 +356,7 @@ fn accountability_capabilities_digest(
     capabilities: &[String],
 ) -> Result<String, AppError> {
     canonical_digest(&CapabilityDigestInput {
-        kind: "cx.coauth.accountability_grant.capabilities.v1",
+        kind: "ck.coauth.accountability_grant.capabilities.v1",
         agent_principal_id,
         controller_did,
         capabilities,
@@ -399,7 +395,7 @@ fn build_soland_fanout_payload(
         .collect();
 
     Ok(serde_json::json!({
-        "kind": "cx.coauth.accountability_grant.fanout.v1",
+        "kind": "ck.coauth.accountability_grant.fanout.v1",
         "issuer_service_did": service_did,
         "raw_payload_digest": raw_payload_digest,
         "grant": response,
@@ -496,8 +492,8 @@ pub async fn revoke_accountability_grant_by_id(
 // Do not expose these operations in discovery, docs, or sodmin before routed
 // handlers land.
 //
-// TODO(R3.1): wire up the actual `POST /_cokret/gate/account/agent-key-pair` and
-// agent-branch session-grant handlers. The error matrix below is the bound
+// TODO(R3.1): wire up the actual `POST /_cokret/gate/account/agent-key-pair`
+// and agent-branch session-grant handlers. The error matrix below is the bound
 // surface; the internal lookups (pairing request lifetime, agent state,
 // accountability grant existence) are implemented in soland.
 // ─────────────────────────────────────────────────────────────────────────
@@ -728,12 +724,12 @@ mod agent_auth_error_matrix_tests {
 
     #[test]
     fn unknown_accountability_grant_action_is_rejected() {
-        let err = normalize_capabilities(vec!["cx.agent.unregistered".to_owned()])
+        let err = normalize_capabilities(vec!["ck.agent.unregistered".to_owned()])
             .expect_err("unknown action must fail closed");
         assert_eq!(err.status(), http::StatusCode::BAD_REQUEST);
         assert!(
             err.message()
-                .contains("is not a registered cx.agent.* action")
+                .contains("is not a registered ck.agent.* action")
         );
     }
 

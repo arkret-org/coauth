@@ -15,7 +15,8 @@ use crate::{
 
 #[component]
 pub fn AccountSettings() -> Element {
-    let data = use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
+    let data =
+        use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
     let nav = navigator();
     let binding = data.read();
 

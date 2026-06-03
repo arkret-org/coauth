@@ -1,7 +1,7 @@
 //! REST endpoints for user notification preferences.
 //!
-//! - `GET   /_cokret/self/viewer/preferences` — returns available channels and the
-//!   user's current preference settings.
+//! - `GET   /_cokret/self/viewer/preferences` — returns available channels and
+//!   the user's current preference settings.
 //! - `PATCH /_cokret/self/viewer/preferences` — updates the user's notification
 //!   preferences.
 
@@ -257,7 +257,8 @@ mod tests {
         assert_eq!(patch_body["preferences"][1]["channel"], "sms");
         assert_eq!(patch_body["preferences"][1]["enabled"], true);
 
-        let get_request = cookies.with_cookies(Request::get("/_cokret/self/viewer/preferences").empty());
+        let get_request =
+            cookies.with_cookies(Request::get("/_cokret/self/viewer/preferences").empty());
         let get_response = state.request(get_request).await;
         get_response.assert_status(StatusCode::OK);
         let get_body: serde_json::Value = get_response.json();

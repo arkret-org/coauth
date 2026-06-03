@@ -3,9 +3,8 @@ use coauth_data::{RepositoryAccess, UrlBuilder};
 use salvo::prelude::*;
 use serde::Serialize;
 
-use crate::handlers::common::DepotExt;
-
 use super::*;
+use crate::handlers::common::DepotExt;
 
 #[derive(Debug, Serialize)]
 struct SupportedBinding {
@@ -114,7 +113,7 @@ struct PlaintextVisibilityDescriptor {
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ServiceDescribeResponse {
-    // --- canonical `cx.schema.service_describe.v1` fields, in the schema's
+    // --- canonical `ck.schema.service_describe.v1` fields, in the schema's
     //     property order (see service-describe.schema.json). ---
     service_did: String,
     /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
@@ -135,7 +134,7 @@ pub(crate) struct ServiceDescribeResponse {
     plaintext_visibility: PlaintextVisibilityDescriptor,
     /// T6.1 — feature ids the service has implementation code for but
     /// does NOT claim conformance for. Schema:
-    /// `cx.schema.service_describe.v1` (see service-surface.md §3.0).
+    /// `ck.schema.service_describe.v1` (see service-surface.md §3.0).
     implemented_features: Vec<&'static str>,
     /// T6.1 — self-claimed profiles. `claim_kind` MUST be `self_claimed`.
     claimed_profiles: Vec<ClaimedProfileDescriptor>,
@@ -275,7 +274,7 @@ fn service_boundary_descriptor() -> ServiceBoundaryDescriptor {
 
 fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
     StandardErrorEnvelopeDescriptor {
-        schema: "cx.error.envelope.v1",
+        schema: "ck.error.envelope.v1",
         content_type: "application/json",
         example: StandardErrorEnvelopeExample {
             ok: false,
@@ -303,7 +302,7 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
 fn build_verified_profile_descriptors(
     loaded: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
 ) -> Vec<VerifiedProfileDescriptor> {
-    const CLAIMED_PROFILE_IDS: &[&str] = &["cx.profile.auth_server.v1"];
+    const CLAIMED_PROFILE_IDS: &[&str] = &["ck.profile.auth_server.v1"];
     loaded
         .iter()
         .filter_map(|entry| {
@@ -367,7 +366,7 @@ pub(crate) fn service_describe_response(
         // account-registry service) without affecting the others.
         //   - "auth_server"        : OIDC / token issuance, the canonical role.
         //   - "identity_resolver"  : DID / handle resolution proxy. NOT canonical identity
-        //     registry; backed by `cx.identity.*` proxy operations that ultimately route to an
+        //     registry; backed by `ck.identity.*` proxy operations that ultimately route to an
         //     upstream registry (configured via `identity_registry_resolver`).
         //   - "account_registry"   : internal service-account / recovery / claim-attestation
         //     management.
@@ -385,27 +384,27 @@ pub(crate) fn service_describe_response(
             "claim_attestation",
             "policy_hook",
         ],
-        supported_reducer_profiles: vec!["cx.reducer.v1"],
-        // T6.3 — replace the historical `cx.schema.v1` placeholder with
+        supported_reducer_profiles: vec!["ck.reducer.v1"],
+        // T6.3 — replace the historical `ck.schema.v1` placeholder with
         // the actual spec-declared schemas this surface emits. The
-        // `cx.schema.service_describe.v1` schema covers the very
-        // payload being served here; `cx.schema.core.v1` matches the
+        // `ck.schema.service_describe.v1` schema covers the very
+        // payload being served here; `ck.schema.core.v1` matches the
         // soland / SDK convention for the core-event-store schema
         // profile and is the umbrella the OIDC + account artefacts hash
-        // under. Older `cx.schema.v1` is no longer published.
-        supported_schema_profiles: vec!["cx.schema.core.v1", "cx.schema.service_describe.v1"],
+        // under. Older `ck.schema.v1` is no longer published.
+        supported_schema_profiles: vec!["ck.schema.core.v1", "ck.schema.service_describe.v1"],
         supported_bindings: vec![SupportedBinding {
             binding: COKRET_HTTP_BINDING,
             base_url: url_builder.http_base().to_string(),
         }],
         supported_operations: vec![
-            "cx.server.describe",
-            "cx.identity.describe_registry",
-            "cx.identity.resolve",
-            "cx.identity.get_document",
-            "cx.directory.describe",
-            "cx.directory.resolve_handle",
-            "cx.policy.check",
+            "ck.server.describe",
+            "ck.identity.describe_registry",
+            "ck.identity.resolve",
+            "ck.identity.get_document",
+            "ck.directory.describe",
+            "ck.directory.resolve_handle",
+            "ck.policy.check",
         ],
         // Required `service-describe.schema.json` field: coauth receives no
         // canonical plaintext / reversible derived content, so it declares
@@ -436,20 +435,20 @@ pub(crate) fn service_describe_response(
         //
         // coauth wears three roles (see `service_roles` above). The only
         // canonical v1 profile whose role + required surface coauth
-        // actually serves is `cx.profile.auth_server.v1` (added under
+        // actually serves is `ck.profile.auth_server.v1` (added under
         // G3.C3 to `cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json`).
         // The other directory-role profiles that would superficially
         // apply are NOT claimed and the reason is documented inline:
         //
-        //   * `cx.profile.identity_registry.v1`   — role=directory. coauth's `cx.identity.*` ops
+        //   * `ck.profile.identity_registry.v1`   — role=directory. coauth's `ck.identity.*` ops
         //     are a DELEGATED proxy onto an upstream resolver, not a canonical registry. Claiming
         //     this profile would lie about authority over DID documents.
-        //   * `cx.profile.directory_service.v1`   — role=directory. coauth exposes
-        //     `cx.directory.resolve_handle` only for local handles it issued; it does NOT publish a
+        //   * `ck.profile.directory_service.v1`   — role=directory. coauth exposes
+        //     `ck.directory.resolve_handle` only for local handles it issued; it does NOT publish a
         //     network-wide actor directory.
-        //   * `cx.profile.public_network_identity.v1` — role=directory. Same reason — coauth is a
+        //   * `ck.profile.public_network_identity.v1` — role=directory. Same reason — coauth is a
         //     service-local issuer, not the network identity authority.
-        //   * `cx.profile.principal_server.v1`    — role=server. coauth is not Realm-authoritative;
+        //   * `ck.profile.principal_server.v1`    — role=server. coauth is not Realm-authoritative;
         //     principal-server event acceptance is soland's role.
         //
         // The boundary against those non-claimed profiles is still
@@ -457,10 +456,10 @@ pub(crate) fn service_describe_response(
         // delegated identity ops) so cotest's ProfileValidator does
         // not flag a role mismatch.
         claimed_profiles: vec![ClaimedProfileDescriptor {
-            profile_id: "cx.profile.auth_server.v1",
+            profile_id: "ck.profile.auth_server.v1",
             claim_kind: "self_claimed",
             notes: Some(
-                "Auth-server-shaped profile: issues short-lived audience-bound cx.session.grant, exposes cx.server.describe, MAY expose cx.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",
+                "Auth-server-shaped profile: issues short-lived audience-bound ck.session.grant, exposes ck.server.describe, MAY expose ck.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",
             ),
         }],
         // G4.T3 — verified_profiles populated by the cotest artifact loader
@@ -485,7 +484,7 @@ pub(crate) fn service_describe_response(
             "principal_server_delegation_targets",
         ],
         // T6.3 — compat_surfaces declares non-canonical surfaces. The
-        // `cx.identity.*` operations are exposed for client
+        // `ck.identity.*` operations are exposed for client
         // convenience but are a DELEGATED resolver shim onto an
         // upstream registry (starid, public DID network, etc.); coauth
         // is NOT the canonical identity authority for any DID it
@@ -493,21 +492,21 @@ pub(crate) fn service_describe_response(
         // each note preserves the delegated-resolver boundary explicitly.
         compat_surfaces: vec![
             CompatSurfaceDescriptor {
-                name: "cx.identity.describe_registry",
+                name: "ck.identity.describe_registry",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: reports the upstream registry coauth proxies to; does not assert canonical ownership.",
                 ),
             },
             CompatSurfaceDescriptor {
-                name: "cx.identity.resolve",
+                name: "ck.identity.resolve",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
                 ),
             },
             CompatSurfaceDescriptor {
-                name: "cx.identity.get_document",
+                name: "ck.identity.get_document",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: returns the cached/resolved DID document; coauth holds no authoritative key log for external DIDs.",
@@ -616,4 +615,3 @@ pub async fn server_describe(
     response.auth_metadata.oidc_clients = oidc_clients;
     Ok(Json(response))
 }
-

@@ -3,13 +3,13 @@
 //! Mirrors the wire contracts spoken by coauth's
 //! `coauth/crates/backend/src/handlers/admin/v1/account_dids.rs`:
 //!
-//! - `GET    /_cokret/local/admin/accounts/{account_id}/dids` — full per-binding
-//!   inventory (`AccountDidBinding`) plus a meta block describing the resolver
-//!   mode and which proof shapes the deployment accepts.
-//! - `POST   /_cokret/local/admin/accounts/{account_id}/dids` — request body used to
-//!   add a binding (`AddAccountDidBindingRequest`).
-//! - `DELETE /_cokret/local/admin/accounts/{account_id}/dids/{did}` — request body for
-//!   revoke (`RemoveAccountDidBindingRequest`).
+//! - `GET    /_cokret/local/admin/accounts/{account_id}/dids` — full
+//!   per-binding inventory (`AccountDidBinding`) plus a meta block describing
+//!   the resolver mode and which proof shapes the deployment accepts.
+//! - `POST   /_cokret/local/admin/accounts/{account_id}/dids` — request body
+//!   used to add a binding (`AddAccountDidBindingRequest`).
+//! - `DELETE /_cokret/local/admin/accounts/{account_id}/dids/{did}` — request
+//!   body for revoke (`RemoveAccountDidBindingRequest`).
 //!
 //! Round-33 (C33.3): lifted out of the inline definitions in the
 //! backend handler and the divergent `CoauthAdminDidBindingRecord`

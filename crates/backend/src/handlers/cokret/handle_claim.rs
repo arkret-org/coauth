@@ -55,7 +55,7 @@ pub struct HandleClaimProof {
 pub struct HandleClaimPayload {
     #[serde(rename = "type")]
     pub kind: String,
-    /// R3.2 — `cx.schema.handle_claim.v1` `claim_kind`. coauth only emits
+    /// R3.2 — `ck.schema.handle_claim.v1` `claim_kind`. coauth only emits
     /// the allow-listed values (`handle_binding` / `organization_handle`);
     /// the removed `service_handle` value is rejected at issuance time by
     /// [`crate::services::handle_subject_validator::ensure_claim_kind_supported`].
@@ -94,7 +94,7 @@ pub struct HandleClaimMaterial {
 pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 
 /// R3.2 — the `claim_kind` coauth's handle-claim issuer stamps on the
-/// emitted `cx.handle.claim` payload.
+/// emitted `ck.handle.claim` payload.
 ///
 /// Modelled as an enum so the removed `service_handle` value can never be
 /// *named* by an in-process caller (fail-closed at the type level), while
@@ -102,7 +102,7 @@ pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 /// [`crate::services::handle_subject_validator::ensure_claim_kind_supported`]
 /// allow-list check for defence in depth against future drift. Matches the
 /// SDK `HandleClass::{UserHandle, OrganizationHandle}` enum, serialised as
-/// the `cx.schema.handle_claim.v1` `claim_kind` snake-case strings.
+/// the `ck.schema.handle_claim.v1` `claim_kind` snake-case strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HandleClaimKind {
     /// A holder-bound user handle (`HandleClass::UserHandle`).
@@ -174,7 +174,7 @@ pub(crate) fn issue_handle_claim(
     // The proof block then carries that hash; the JWT signs the complete
     // payload.
     let mut payload_no_proofs = HandleClaimPayload {
-        kind: "cx.handle.claim".to_owned(),
+        kind: "ck.handle.claim".to_owned(),
         claim_kind: claim_kind.as_wire().to_owned(),
         subject_id: subject_id.clone(),
         handle,
@@ -215,7 +215,7 @@ pub(crate) fn issue_handle_claim(
     let signer = key_store.signer_for_algorithm(&alg)?;
     let unsigned_payload = HandleClaimPayload {
         proofs: vec![HandleClaimProof {
-            kind: "cx.handle.claim.proof.v1".to_owned(),
+            kind: "ck.handle.claim.proof.v1".to_owned(),
             alg: alg.to_string(),
             verification_method: verification_method.clone(),
             canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
@@ -232,7 +232,7 @@ pub(crate) fn issue_handle_claim(
 
     let final_payload = HandleClaimPayload {
         proofs: vec![HandleClaimProof {
-            kind: "cx.handle.claim.proof.v1".to_owned(),
+            kind: "ck.handle.claim.proof.v1".to_owned(),
             alg: alg.to_string(),
             verification_method,
             canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
@@ -275,4 +275,3 @@ struct HandleClaimDigestInput<'a> {
     issued_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 }
-

@@ -1,8 +1,8 @@
 //! Admin DTOs for the coauth notification surfaces:
 //!
-//! - `GET  /_cokret/local/admin/notification-channels` — configured channel roster
-//!   (currently `email` and `sms`) with a per-channel `configured` flag derived
-//!   from `SiteConfig`.
+//! - `GET  /_cokret/local/admin/notification-channels` — configured channel
+//!   roster (currently `email` and `sms`) with a per-channel `configured` flag
+//!   derived from `SiteConfig`.
 //! - `GET  /_cokret/local/admin/notification-templates` — known template keys +
 //!   human-readable descriptions.
 //! - `POST /_cokret/local/admin/notification-templates/publish` — publish a new

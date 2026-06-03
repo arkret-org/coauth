@@ -28,8 +28,8 @@ use crate::{
             },
             v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
         },
-        common::DepotExt,
         cokret::service_did_for,
+        common::DepotExt,
     },
     services::{
         account_claims::{AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord},
@@ -771,13 +771,16 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/_cokret/local/admin/accounts/{}/risk-action", user.id))
-                    .bearer(&token)
-                    .json(serde_json::json!({
-                        "action": "lock",
-                        "reason": "suspicious recovery activity",
-                        "ticket": "INC-2.1",
-                    })),
+                Request::post(format!(
+                    "/_cokret/local/admin/accounts/{}/risk-action",
+                    user.id
+                ))
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "action": "lock",
+                    "reason": "suspicious recovery activity",
+                    "ticket": "INC-2.1",
+                })),
             )
             .await;
         response.assert_status(StatusCode::OK);
@@ -931,13 +934,16 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/_cokret/local/admin/accounts/{}/risk-action", user.id))
-                    .bearer(&token)
-                    .json(serde_json::json!({
-                        "action": "disable",
-                        "reason": "confirmed account takeover",
-                        "ticket": "INC-SEC-COA-1",
-                    })),
+                Request::post(format!(
+                    "/_cokret/local/admin/accounts/{}/risk-action",
+                    user.id
+                ))
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "action": "disable",
+                    "reason": "confirmed account takeover",
+                    "ticket": "INC-SEC-COA-1",
+                })),
             )
             .await;
         response.assert_status(StatusCode::OK);
@@ -1199,7 +1205,7 @@ mod tests {
         let verification_method = format!("{did}#key-1");
         let header = JsonWebSignatureHeader::new(alg).with_kid(verification_method.clone());
         let claims = BindingStatementClaims {
-            kind: "cx.did_binding.control_proof.v1".to_owned(),
+            kind: "ck.did_binding.control_proof.v1".to_owned(),
             account_did: did.to_owned(),
             cx_account_id: account_id.to_string(),
             verification_method,

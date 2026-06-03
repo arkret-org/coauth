@@ -6,9 +6,8 @@ use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use crate::handlers::common::DepotExt;
-
 use super::*;
+use crate::handlers::common::DepotExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DidDocument {
@@ -50,7 +49,7 @@ pub struct DidDocument {
 /// holder's verified handle claims they'd prefer surfaced as the canonical
 /// display handle. It is explicitly **NOT** a handle declaration channel —
 /// a verifier MUST still construct the `claim_set_snapshot` from signed
-/// `cx.schema.handle_claim.v1` evidence and MUST ignore this field if the
+/// `ck.schema.handle_claim.v1` evidence and MUST ignore this field if the
 /// pointed-at handle is not backed by such a claim. Default is `null`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DidDocumentMetadata {
@@ -153,7 +152,9 @@ fn user_primary_handle_preference(_user: &User) -> Option<String> {
     None
 }
 
-pub(crate) fn did_document_as_of_query(req: &Request) -> Result<Option<DateTime<Utc>>, CokretRouteError> {
+pub(crate) fn did_document_as_of_query(
+    req: &Request,
+) -> Result<Option<DateTime<Utc>>, CokretRouteError> {
     let Some(raw) = req
         .query::<String>("as_of")
         .or_else(|| req.query::<String>("asOf"))
@@ -259,4 +260,3 @@ pub async fn user_did_json(
         primary_handle,
     )))
 }
-

@@ -21,8 +21,8 @@ use crate::{
             audit_helper::{AuditSignatureStatus, verify_admin_operation_signature},
             call_context::extract_call_context,
         },
-        common::DepotExt,
         cokret::service_did_for,
+        common::DepotExt,
     },
 };
 

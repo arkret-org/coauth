@@ -768,8 +768,7 @@ fn build_account_api_router(router: Router) -> Router {
         // User emails
         .push(Router::with_path("self/user-emails/{id}").delete(emails::remove_email))
         .push(
-            Router::with_path("gate/account/integration/describe")
-                .get(auth::integration_describe),
+            Router::with_path("gate/account/integration/describe").get(auth::integration_describe),
         )
         // Auth (login, logout, providers, registration, recovery)
         .push(
@@ -872,9 +871,7 @@ fn build_account_api_router(router: Router) -> Router {
         // reducer lives on soland; this endpoint is the trusted
         // pre-flight check the claimant runs before submitting
         // `ck.invite.claim`.
-        .push(
-            Router::with_path("self/invites/3pid/verify").post(invite_accept::post_verify_invite),
-        )
+        .push(Router::with_path("self/invites/3pid/verify").post(invite_accept::post_verify_invite))
         // Device code link & consent
         .push(Router::with_path("self/device-link").get(consent::device_link_get))
         .push(
@@ -942,7 +939,7 @@ fn build_admin_router(router: Router) -> Router {
         )
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
-        // CXP-0007 cx.circle.* capability grants (P2B.2). Wire shape is in
+        // CXP-0007 ck.circle.* capability grants (P2B.2). Wire shape is in
         // coauth-admin-types::circle_capability_admin; persistence is
         // in-memory until the follow-up migration lands.
         .push(
@@ -1460,7 +1457,10 @@ mod tests {
 
             let body = response.take_string().await.unwrap();
             assert!(body.contains("title: coauth Admin API"), "{body}");
-            assert!(body.contains("/_cokret/local/admin/user-sessions:"), "{body}");
+            assert!(
+                body.contains("/_cokret/local/admin/user-sessions:"),
+                "{body}"
+            );
             assert!(!body.contains("coauth Admin API"), "{body}");
         }
     }

@@ -271,8 +271,7 @@ mod tests {
         assert_eq!(
             payload.get("sub").and_then(Value::as_str),
             Some(
-                cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user)
-                    .as_str()
+                cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user).as_str()
             )
         );
         assert_eq!(
@@ -280,8 +279,7 @@ mod tests {
                 .get(cokret::CLAIM_PRINCIPAL_DID)
                 .and_then(Value::as_str),
             Some(
-                cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user)
-                    .as_str()
+                cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user).as_str()
             )
         );
         assert_eq!(
