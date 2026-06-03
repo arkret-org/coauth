@@ -275,7 +275,7 @@ pub async fn post_invite_relay(
     // soland's invite-intake endpoint is tracked under
     // `TODO(c10e-invite-intake)`.
     let forward_target = principal_url.as_ref().and_then(|u| {
-        u.join("api/v1/invites/intake")
+        u.join("_cokret/self/invites/intake")
             .map_err(|error| {
                 warn!(?error, "invite-relay: failed to build forward URL");
             })
@@ -347,7 +347,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("api/v1/invites/intake").unwrap();
+        let forward = base.join("_cokret/self/invites/intake").unwrap();
         let p = payload();
 
         let outcome = relay_invite_with(
@@ -390,7 +390,7 @@ mod tests {
         // see forwarded_ok=false. The Allow branch must not execute.
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("api/v1/invites/intake").unwrap();
+        let forward = base.join("_cokret/self/invites/intake").unwrap();
         let p = payload();
 
         let outcome = relay_invite_with(
@@ -428,7 +428,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("api/v1/invites/intake").unwrap();
+        let forward = base.join("_cokret/self/invites/intake").unwrap();
         let p = payload();
 
         let outcome = relay_invite_with(
@@ -504,7 +504,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("api/v1/invites/intake").unwrap();
+        let forward = base.join("_cokret/self/invites/intake").unwrap();
         let p = payload();
 
         let outcome = relay_invite_with(

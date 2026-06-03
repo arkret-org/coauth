@@ -1431,7 +1431,7 @@ mod tests {
         assert!(json["paths"]["/_cokret/local/admin/claims"].is_object());
         assert!(json["paths"]["/_cokret/local/admin/claims/status"].is_object());
         assert!(json["paths"]["/_cokret/local/admin/policy-checks/dry-run"].is_object());
-        assert!(!body.contains("coauth Admin API"));
+        assert!(!body.contains("Pasion Admin API"));
     }
 
     #[tokio::test]
@@ -1461,7 +1461,7 @@ mod tests {
                 body.contains("/_cokret/local/admin/user-sessions:"),
                 "{body}"
             );
-            assert!(!body.contains("coauth Admin API"), "{body}");
+            assert!(!body.contains("Pasion Admin API"), "{body}");
         }
     }
 }
