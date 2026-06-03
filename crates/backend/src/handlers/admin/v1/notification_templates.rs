@@ -98,8 +98,8 @@ pub async fn publish_handler(
         locale: "en".to_owned(),
         subject_template: record.subject_template,
         body_template: record.body_template,
-        created_at: record.created_at.to_rfc3339(),
-        published_at: record.published_at.map(|t| t.to_rfc3339()),
+        created_at: record.created_at,
+        published_at: record.published_at,
     };
 
     Ok(CreatedJson(response))

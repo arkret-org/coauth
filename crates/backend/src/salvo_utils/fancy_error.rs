@@ -2,7 +2,7 @@ use coauth_templates::ErrorContext;
 use http::StatusCode;
 use salvo::prelude::*;
 
-use super::sentry::SentryEventID;
+use super::sentry::SentryEventId;
 
 fn build_context(mut err: &dyn std::error::Error) -> ErrorContext {
     let description = err.to_string();
@@ -53,7 +53,7 @@ pub struct InternalError {
 impl Scribe for InternalError {
     fn render(self, res: &mut Response) {
         tracing::error!(message = &*self.error);
-        let event_id = SentryEventID::for_last_event();
+        let event_id = SentryEventId::for_last_event();
         let context = build_context(&*self.error);
         let context_text = format!("{context}");
 

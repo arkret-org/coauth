@@ -5,22 +5,16 @@
 //! the `*_with_client` constructors and pass the backend guarded client.
 #![allow(clippy::disallowed_methods)]
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::Utc;
-use hmac::{Hmac, Mac};
 use reqwest::{Client, Method};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
 
 use super::{aliyun::AliyunSmsTransport, tencent::TencentSmsTransport};
-
-type HmacSha256 = Hmac<Sha256>;
+use crate::crypto::{paloud_internal_nonce, sign_paloud_internal_request};
 
 /// Errors that can occur when sending an SMS
 #[derive(Debug, Error)]
@@ -449,41 +443,6 @@ impl SmsTransport {
 
         Ok(())
     }
-}
-
-fn hex_sha256(data: &[u8]) -> String {
-    hex::encode(Sha256::digest(data))
-}
-
-fn paloud_internal_nonce(timestamp: i64) -> String {
-    static COUNTER: AtomicU64 = AtomicU64::new(1);
-    format!(
-        "{timestamp:x}-{:x}-{:x}",
-        std::process::id(),
-        COUNTER.fetch_add(1, Ordering::Relaxed)
-    )
-}
-
-fn sign_paloud_internal_request(
-    secret: &str,
-    method: &str,
-    path: &str,
-    timestamp: i64,
-    nonce: &str,
-    body: &[u8],
-) -> String {
-    let payload = format!(
-        "{}\n{}\n{}\n{}\n{}",
-        method.trim().to_ascii_uppercase(),
-        path.trim(),
-        timestamp,
-        nonce.trim(),
-        hex_sha256(body)
-    );
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts arbitrary key lengths");
-    mac.update(payload.as_bytes());
-    hex::encode(mac.finalize().into_bytes())
 }
 
 #[cfg(test)]

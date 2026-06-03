@@ -125,10 +125,13 @@ impl<D: Digest + BlockSizeUser>
         msg: &[u8],
         signature: &Signature<<hmac::SimpleHmac<D> as OutputSizeUser>::OutputSize>,
     ) -> Result<(), signature::Error> {
-        let new_signature = self.try_sign(msg)?;
-        if &new_signature != signature {
-            return Err(signature::Error::new());
-        }
-        Ok(())
+        // Constant-time verification: `SimpleHmac`'s `verify_slice` defers to
+        // `subtle::ConstantTimeEq`, so we avoid the short-circuiting byte-wise
+        // `==` on `GenericArray` that would otherwise leak MAC bytes via timing.
+        let mut mac = <hmac::SimpleHmac<D> as Mac>::new_from_slice(&self.key)
+            .map_err(signature::Error::from_source)?;
+        mac.update(msg);
+        mac.verify_slice(signature.as_ref())
+            .map_err(|_| signature::Error::new())
     }
 }

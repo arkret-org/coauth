@@ -4,13 +4,10 @@
 // `SmsTransport::tencent_cloud_with_client`; this crate stays backend-agnostic.
 #![allow(clippy::disallowed_methods)]
 
-use hmac::{Hmac, Mac};
 use reqwest::Client;
-use sha2::{Digest, Sha256};
 
 use super::transport::SmsTransportError;
-
-type HmacSha256 = Hmac<Sha256>;
+use crate::crypto::{hex_sha256, hmac_sha256};
 
 /// Tencent Cloud SMS transport backend
 pub struct TencentSmsTransport {
@@ -120,20 +117,6 @@ impl TencentSmsTransport {
 
         Ok(())
     }
-}
-
-/// Compute SHA-256 hash and return as hex string
-fn hex_sha256(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    hex::encode(hasher.finalize())
-}
-
-/// Compute HMAC-SHA256 and return raw bytes
-fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
-    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key size");
-    mac.update(data);
-    mac.finalize().into_bytes().to_vec()
 }
 
 /// Private hex encoding module to avoid adding hex as a dependency

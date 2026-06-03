@@ -79,15 +79,15 @@ impl ParametersInfo for JsonWebKeyPrivateParameters {
 }
 
 #[derive(Debug, Error)]
-#[error("can't extract a public key out of a symetric key")]
-pub struct SymetricKeyError;
+#[error("can't extract a public key out of a symmetric key")]
+pub struct SymmetricKeyError;
 
 impl TryFrom<JsonWebKeyPrivateParameters> for JsonWebKeyPublicParameters {
-    type Error = SymetricKeyError;
+    type Error = SymmetricKeyError;
 
     fn try_from(value: JsonWebKeyPrivateParameters) -> Result<Self, Self::Error> {
         match value {
-            JsonWebKeyPrivateParameters::Oct(_) => Err(SymetricKeyError),
+            JsonWebKeyPrivateParameters::Oct(_) => Err(SymmetricKeyError),
             JsonWebKeyPrivateParameters::Rsa(p) => Ok(JsonWebKeyPublicParameters::Rsa(p.into())),
             JsonWebKeyPrivateParameters::Ec(p) => Ok(JsonWebKeyPublicParameters::Ec(p.into())),
             JsonWebKeyPrivateParameters::Okp(p) => Ok(JsonWebKeyPublicParameters::Okp(p.into())),

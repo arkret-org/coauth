@@ -47,7 +47,7 @@ use crate::outbound_http::RequestBuilderExt;
 /// # Errors
 ///
 /// Returns an error if the request fails or the response is invalid.
-#[tracing::instrument(skip_all, fields(token_endpoint, request))]
+#[tracing::instrument(skip_all, fields(token_endpoint, grant_type = request.grant_type()))]
 pub async fn request_access_token(
     http_client: &reqwest::Client,
     client_credentials: ClientCredentials,
@@ -56,7 +56,10 @@ pub async fn request_access_token(
     now: DateTime<Utc>,
     rng: &mut impl Rng,
 ) -> Result<AccessTokenResponse, TokenRequestError> {
-    tracing::debug!(?request, "Requesting access token...");
+    // Never log the full request body: it carries the single-use authorization
+    // code, the PKCE `code_verifier`, and (for refresh grants) the long-lived
+    // `refresh_token`. Only the grant type is safe to record.
+    tracing::debug!(grant_type = request.grant_type(), "Requesting access token...");
 
     let token_request = http_client
         .post(token_endpoint.as_str())

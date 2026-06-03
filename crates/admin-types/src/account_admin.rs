@@ -19,7 +19,7 @@
 //! lifecycle state surfaces as a compile error rather than a silent
 //! `is_locked = false` UI fallback.
 //!
-//! The sodmin shim was also missing `locked_at`, `disabled_at`,
+//! The sodmin shim was also missing `locked_at`, `deactivated_at`,
 //! `principal_id_bindings`, and `primary_principal_binding` — fields
 //! the backend has been emitting since the DID binding preview landed.
 //! The shared shape now carries them explicitly.
@@ -29,12 +29,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::did_binding_admin::AccountDidBindingPreview;
 
-/// Lifecycle bucket for a coauth account. Wire format is the literal
-/// `"active"` / `"locked"` / `"disabled"` strings the backend emits.
+/// Lifecycle bucket for a coauth account. Wire format is the canonical
+/// account-lifecycle `status` axis from
+/// `contrix-spec/spec/v1/zh/identity/account-lifecycle.md`:
+/// `active` / `soft_logged_out` / `locked` / `suspended` / `deactivated` /
+/// `erasure_pending`.
 ///
 /// Kept as a typed enum so the admin UI can drive its badge tone /
-/// disabled-button gating off a `match` rather than stringly-typed
-/// comparisons.
+/// gating off a `match` rather than stringly-typed comparisons. The backend
+/// currently only derives `active` / `locked` / `deactivated` from the user
+/// row, but the full closed enum decodes here so a governance/erasure state
+/// added server-side surfaces as a new variant rather than a decode failure.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(
     feature = "schema",
@@ -45,8 +50,11 @@ use crate::did_binding_admin::AccountDidBindingPreview;
 pub enum AdminAccountStatus {
     #[default]
     Active,
+    SoftLoggedOut,
     Locked,
-    Disabled,
+    Suspended,
+    Deactivated,
+    ErasurePending,
 }
 
 impl AdminAccountStatus {
@@ -54,8 +62,11 @@ impl AdminAccountStatus {
     pub fn label(&self) -> &'static str {
         match self {
             AdminAccountStatus::Active => "Active",
+            AdminAccountStatus::SoftLoggedOut => "Soft logged out",
             AdminAccountStatus::Locked => "Locked",
-            AdminAccountStatus::Disabled => "Disabled",
+            AdminAccountStatus::Suspended => "Suspended",
+            AdminAccountStatus::Deactivated => "Deactivated",
+            AdminAccountStatus::ErasurePending => "Erasure pending",
         }
     }
 
@@ -63,8 +74,11 @@ impl AdminAccountStatus {
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "active" => Some(AdminAccountStatus::Active),
+            "soft_logged_out" => Some(AdminAccountStatus::SoftLoggedOut),
             "locked" => Some(AdminAccountStatus::Locked),
-            "disabled" => Some(AdminAccountStatus::Disabled),
+            "suspended" => Some(AdminAccountStatus::Suspended),
+            "deactivated" => Some(AdminAccountStatus::Deactivated),
+            "erasure_pending" => Some(AdminAccountStatus::ErasurePending),
             _ => None,
         }
     }
@@ -75,8 +89,8 @@ impl AdminAccountStatus {
     }
 
     #[must_use]
-    pub fn is_disabled(&self) -> bool {
-        matches!(self, AdminAccountStatus::Disabled)
+    pub fn is_deactivated(&self) -> bool {
+        matches!(self, AdminAccountStatus::Deactivated)
     }
 
     #[must_use]
@@ -89,8 +103,11 @@ impl std::fmt::Display for AdminAccountStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AdminAccountStatus::Active => f.write_str("active"),
+            AdminAccountStatus::SoftLoggedOut => f.write_str("soft_logged_out"),
             AdminAccountStatus::Locked => f.write_str("locked"),
-            AdminAccountStatus::Disabled => f.write_str("disabled"),
+            AdminAccountStatus::Suspended => f.write_str("suspended"),
+            AdminAccountStatus::Deactivated => f.write_str("deactivated"),
+            AdminAccountStatus::ErasurePending => f.write_str("erasure_pending"),
         }
     }
 }
@@ -128,9 +145,9 @@ pub struct AdminAccountAttributes {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub locked_at: Option<DateTime<Utc>>,
 
-    /// When the account was disabled, if applicable.
+    /// When the account was deactivated, if applicable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub disabled_at: Option<DateTime<Utc>>,
+    pub deactivated_at: Option<DateTime<Utc>>,
 
     /// Whether the account can request coauth admin privileges.
     #[serde(default)]
@@ -186,8 +203,11 @@ mod tests {
     fn status_wire_round_trip() {
         for (wire, label) in [
             ("active", "Active"),
+            ("soft_logged_out", "Soft logged out"),
             ("locked", "Locked"),
-            ("disabled", "Disabled"),
+            ("suspended", "Suspended"),
+            ("deactivated", "Deactivated"),
+            ("erasure_pending", "Erasure pending"),
         ] {
             let s = AdminAccountStatus::from_wire(wire).expect("variant");
             assert_eq!(s.label(), label);
@@ -197,7 +217,8 @@ mod tests {
             assert_eq!(s, back);
         }
         assert!(AdminAccountStatus::from_wire("nope").is_none());
-        assert!(AdminAccountStatus::from_wire("deactivated").is_none());
+        // The legacy non-spec `disabled` value is no longer accepted.
+        assert!(AdminAccountStatus::from_wire("disabled").is_none());
     }
 
     #[test]
@@ -231,7 +252,7 @@ mod tests {
         assert!(s.contains("\"handle\":\"alice\""));
         assert!(s.contains("\"status\":\"active\""));
         assert!(!s.contains("\"locked_at\""));
-        assert!(!s.contains("\"disabled_at\""));
+        assert!(!s.contains("\"deactivated_at\""));
         assert!(!s.contains("\"created_at\""));
         assert!(!s.contains("\"updated_at\""));
         assert!(!s.contains("\"display_name\""));
@@ -239,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn deserialize_matches_backend_wire_with_locked_and_disabled_at() {
+    fn deserialize_matches_backend_wire_with_locked_and_deactivated_at() {
         // Mirrors what the coauth backend emits for a locked account.
         let wire = r#"{
             "handle": "alice",
@@ -247,7 +268,7 @@ mod tests {
             "created_at": "2026-05-01T00:00:00Z",
             "updated_at": "2026-05-02T00:00:00Z",
             "locked_at": "2026-05-02T00:00:00Z",
-            "disabled_at": null,
+            "deactivated_at": null,
             "admin": false,
             "display_name": null,
             "avatar_url": null,
@@ -260,7 +281,7 @@ mod tests {
         let a: AdminAccountAttributes = serde_json::from_str(wire).unwrap();
         assert_eq!(a.status, AdminAccountStatus::Locked);
         assert!(a.locked_at.is_some());
-        assert!(a.disabled_at.is_none());
+        assert!(a.deactivated_at.is_none());
         assert!(!a.admin);
     }
 
@@ -270,7 +291,7 @@ mod tests {
         assert!(!AdminAccountStatus::Active.is_locked());
         assert!(AdminAccountStatus::Locked.is_locked());
         assert!(!AdminAccountStatus::Locked.is_active());
-        assert!(AdminAccountStatus::Disabled.is_disabled());
-        assert!(!AdminAccountStatus::Disabled.is_active());
+        assert!(AdminAccountStatus::Deactivated.is_deactivated());
+        assert!(!AdminAccountStatus::Deactivated.is_active());
     }
 }

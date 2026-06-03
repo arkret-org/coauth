@@ -9,10 +9,11 @@
 //!
 //! ## Form 1 — `OobCodeKind::OfflineVerifiable`
 //!
-//! Offline-verifiable opaque token with ≥128-bit entropy. Encoded as
-//! base32-no-padding from a 16-byte (128-bit) random seed, excluding the
-//! easily-confused characters `I`, `L`, `0`, `1`, `O`. The 16-byte seed
-//! expands to ≥22 characters of base32 output. Holders verify by direct
+//! Offline-verifiable opaque token with ≥128-bit entropy. Sampled from the
+//! restricted 31-symbol base32 alphabet (excluding the easily-confused
+//! characters `I`, `L`, `0`, `1`, `O`). At [`OFFLINE_CODE_LEN`] = 26 chars
+//! the code carries ≈128.8 bits, clearing the spec's ≥128-bit floor.
+//! Holders verify by direct
 //! byte comparison against a stored hash; no server-side rate-limit
 //! pepper is required for confidentiality. Suitable for email-link
 //! delivery where the recipient's mailbox is the second factor.
@@ -62,9 +63,14 @@ const OOB_ALPHABET_BYTES: &[u8] = OOB_ALPHABET;
 
 /// Number of characters in a Form 1 (offline-verifiable) code. 26 chars
 /// from the 31-symbol alphabet yield 26·log2(31) ≈ 128.8 bits, which
-/// is comfortably above the 128-bit floor required by T15. We pick 26
-/// (not the spec's 22) because log2(31) < log2(32) — at 22 chars we'd
-/// land at 109.0 bits, below the floor.
+/// clears the **≥128-bit entropy floor** the spec requires for production
+/// offline OOB codes (`security-closure-vectors.json`: "production offline
+/// OOB code must have at least 128 bits of entropy"). The spec states the
+/// requirement as an entropy floor, not a fixed character count; with this
+/// restricted 31-symbol alphabet (log2(31) ≈ 4.954 bits/char) 26 chars is
+/// the smallest length that clears 128 bits (22 chars would be only
+/// 109.0 bits — a 22-char floor only holds for a full 32-symbol base32
+/// alphabet, which this alphabet is not).
 pub const OFFLINE_CODE_LEN: usize = 26;
 
 /// Number of characters in a Form 2 (lookup) short code. 6 chars × ~4.75
@@ -93,6 +99,15 @@ pub enum OobCodeKind {
     /// Form 2 — short lookup-style code with server-side pepper. Wire
     /// surface MUST include `oob_code_kind = "lookup"` so verifiers
     /// know to apply the 3-strike rule.
+    ///
+    /// FEATURE-GATED OFF: config rejects `oob_code_kind=lookup` (see
+    /// `coauth-config` `ContrixConfig::validate`, the
+    /// "oob_code_kind=lookup is disabled until lookup-mode strike counters
+    /// are durable" guard). Every Form-2 code path below
+    /// (`LOOKUP_CODE_LEN`, `LOOKUP_STRIKE_LIMIT`,
+    /// `OobInviteFailure::RateLimitInvalidated`) is therefore unreachable in
+    /// production until strike-counter persistence lands; do not assume the
+    /// lookup wire behaviour is live.
     Lookup,
 }
 

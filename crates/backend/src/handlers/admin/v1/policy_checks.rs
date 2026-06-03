@@ -65,12 +65,12 @@ pub struct PolicyDryRunResponse {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct SignedPolicyDecisionAudit {
+pub struct PolicyDecisionAuditRecord {
     /// Audit record identifier.
     id: String,
 
-    /// Signed policy decision payload.
-    signed_decision: serde_json::Value,
+    /// Policy decision payload plus its integrity digest.
+    decision_record: serde_json::Value,
 }
 
 #[endpoint]
@@ -95,7 +95,7 @@ pub async fn dry_run(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Poli
     let policy_data = repo.policy_data().get().await?;
     let decision = evaluate_policy_dry_run(&request, policy_data.as_ref().map(|p| &p.data));
     let issued_at = clock.now();
-    let signed_decision = signed_decision_payload(
+    let decision_record = decision_digest_payload(
         &request,
         &decision,
         policy_data.as_ref().map(|p| p.id.to_string()),
@@ -114,7 +114,7 @@ pub async fn dry_run(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Poli
                 serde_json::json!({
                     "request": request,
                     "decision": decision,
-                    "signed_decision": signed_decision,
+                    "decision_record": decision_record,
                 }),
             ),
         )
@@ -139,7 +139,7 @@ pub async fn dry_run(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Poli
 pub async fn get_signed_decision_audit(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SignedPolicyDecisionAudit> {
+) -> JsonResult<PolicyDecisionAuditRecord> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let id = req
@@ -158,16 +158,16 @@ pub async fn get_signed_decision_audit(
             "Policy decision audit {id} not found"
         )));
     }
-    let signed_decision = audit
+    let decision_record = audit
         .details
-        .get("signed_decision")
+        .get("decision_record")
         .cloned()
         .ok_or_else(|| AppError::not_found(format!("Policy decision audit {id} not found")))?;
     repo.cancel().await?;
 
-    Ok(Json(SignedPolicyDecisionAudit {
+    Ok(Json(PolicyDecisionAuditRecord {
         id: id.to_string(),
-        signed_decision,
+        decision_record,
     }))
 }
 
@@ -301,7 +301,16 @@ fn parse_policy_effect(value: &str) -> Option<PolicyEffect> {
     }
 }
 
-fn signed_decision_payload(
+/// Build the dry-run decision record with an integrity digest.
+///
+/// This is a plaintext SHA-256 *integrity digest*, NOT a cryptographic
+/// signature: it carries no key material and anyone can recompute it. It is
+/// deliberately named `integrity` (and the digest is taken over the spec
+/// canonical-JSON byte form via [`contrix_core::canonical::canonical_sha256`])
+/// to avoid being confused with the keyed admin-audit signatures produced by
+/// `audit_helper`, which are unforgeable and verifiable against the service
+/// public key.
+fn decision_digest_payload(
     request: &NormalizedPolicyDryRunRequest,
     decision: &PolicyDryRunDecision,
     policy_data_revision: Option<String>,
@@ -314,14 +323,12 @@ fn signed_decision_payload(
         "policy_data_revision": policy_data_revision,
         "issued_at": issued_at,
     });
-    let digest = contrix_core::canonical::sha256_digest(
-        serde_json::to_vec(&payload).map_err(AppError::internal)?,
-    );
+    let digest = contrix_core::canonical::canonical_sha256(&payload).map_err(AppError::internal)?;
 
     Ok(serde_json::json!({
         "payload": payload,
-        "signature": {
-            "alg": "sha256-audit-v1",
+        "integrity": {
+            "digest_algorithm": "sha256",
             "digest": digest,
         }
     }))
@@ -380,12 +387,12 @@ mod tests {
         let decision = evaluate_policy_dry_run(&request, None);
         let issued_at = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
 
-        let signed = signed_decision_payload(&request, &decision, None, issued_at).unwrap();
+        let record = decision_digest_payload(&request, &decision, None, issued_at).unwrap();
 
-        assert_eq!(signed["payload"]["type"], "coauth.policy.decision.v1");
-        assert_eq!(signed["signature"]["alg"], "sha256-audit-v1");
+        assert_eq!(record["payload"]["type"], "coauth.policy.decision.v1");
+        assert_eq!(record["integrity"]["digest_algorithm"], "sha256");
         assert!(
-            signed["signature"]["digest"]
+            record["integrity"]["digest"]
                 .as_str()
                 .unwrap()
                 .starts_with("sha256:")
@@ -451,12 +458,12 @@ mod tests {
         let body: serde_json::Value = response.json();
         assert_eq!(body["id"], audit_id);
         assert_eq!(
-            body["signed_decision"]["payload"]["decision"]["effect"],
+            body["decision_record"]["payload"]["decision"]["effect"],
             "deny"
         );
         assert_eq!(
-            body["signed_decision"]["signature"]["alg"],
-            "sha256-audit-v1"
+            body["decision_record"]["integrity"]["digest_algorithm"],
+            "sha256"
         );
     }
 }

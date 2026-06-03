@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::{
     Clock, Pagination, User, UserPatch, UserProfilePatch, new_id,
     pagination::PaginationDirection,
-    user::{UserFilter, UserRepository, UserState},
+    user::{UserFilter, UserRepository, UserStatus},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -473,15 +473,15 @@ impl UserRepository for PgUserRepository<'_> {
         let mut query = users::table.select(select_user_columns!()).into_boxed();
 
         // Apply filters
-        if let Some(state) = filter.state() {
+        if let Some(state) = filter.status() {
             match state {
-                UserState::Deactivated => {
+                UserStatus::Deactivated => {
                     query = query.filter(users::deactivated_at.is_not_null());
                 }
-                UserState::Locked => {
+                UserStatus::Locked => {
                     query = query.filter(users::locked_at.is_not_null());
                 }
-                UserState::Active => {
+                UserStatus::Active => {
                     query = query
                         .filter(users::locked_at.is_null())
                         .filter(users::deactivated_at.is_null());
@@ -528,15 +528,15 @@ impl UserRepository for PgUserRepository<'_> {
     async fn count(&mut self, filter: UserFilter<'_>) -> Result<usize, Self::Error> {
         let mut query = users::table.into_boxed();
 
-        if let Some(state) = filter.state() {
+        if let Some(state) = filter.status() {
             match state {
-                UserState::Deactivated => {
+                UserStatus::Deactivated => {
                     query = query.filter(users::deactivated_at.is_not_null());
                 }
-                UserState::Locked => {
+                UserStatus::Locked => {
                     query = query.filter(users::locked_at.is_not_null());
                 }
-                UserState::Active => {
+                UserStatus::Active => {
                     query = query
                         .filter(users::locked_at.is_null())
                         .filter(users::deactivated_at.is_null());

@@ -4,20 +4,11 @@
 //! stays backend-agnostic and therefore does not depend on `outbound_http`.
 #![allow(clippy::disallowed_methods)]
 
-use std::{
-    collections::BTreeMap,
-    ffi::OsString,
-    num::NonZeroU16,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-};
+use std::{collections::BTreeMap, ffi::OsString, num::NonZeroU16, sync::Arc};
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::Utc;
-use hmac::{Hmac, Mac};
 use lettre::{
     AsyncTransport, Message, Tokio1Executor,
     message::{
@@ -31,11 +22,10 @@ use lettre::{
 };
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
 
-type HmacSha256 = Hmac<Sha256>;
+use crate::crypto::{hex_sha256, hmac_sha256, paloud_internal_nonce, sign_paloud_internal_request};
 
 /// Encryption mode to use for SMTP transports.
 #[derive(Debug, Clone, Copy)]
@@ -1402,47 +1392,6 @@ fn aws_percent_encode(value: &str, keep_slash: bool) -> String {
 
 fn normalize_aws_header_value(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn hex_sha256(data: &[u8]) -> String {
-    hex::encode(Sha256::digest(data))
-}
-
-fn paloud_internal_nonce(timestamp: i64) -> String {
-    static COUNTER: AtomicU64 = AtomicU64::new(1);
-    format!(
-        "{timestamp:x}-{:x}-{:x}",
-        std::process::id(),
-        COUNTER.fetch_add(1, Ordering::Relaxed)
-    )
-}
-
-fn sign_paloud_internal_request(
-    secret: &str,
-    method: &str,
-    path: &str,
-    timestamp: i64,
-    nonce: &str,
-    body: &[u8],
-) -> String {
-    let payload = format!(
-        "{}\n{}\n{}\n{}\n{}",
-        method.trim().to_ascii_uppercase(),
-        path.trim(),
-        timestamp,
-        nonce.trim(),
-        hex_sha256(body)
-    );
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts arbitrary key lengths");
-    mac.update(payload.as_bytes());
-    hex::encode(mac.finalize().into_bytes())
-}
-
-fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
-    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts arbitrary key lengths");
-    mac.update(data);
-    mac.finalize().into_bytes().to_vec()
 }
 
 fn aws_signing_key(

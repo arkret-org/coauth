@@ -108,7 +108,7 @@ pub fn Sessions() -> Element {
                     // App sessions list
                     for edge in app_sessions.iter() {
                         match &edge.node {
-                            AppSession::OauthSession(session) => rsx! {
+                            AppSession::OAuthSession(session) => rsx! {
                                 OAuthSessionCard { key: "{edge.cursor}", session: session.clone() }
                             },
                         }

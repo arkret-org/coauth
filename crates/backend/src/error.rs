@@ -14,7 +14,7 @@ use crate::{
         },
         common::RouteError as RestRouteError,
     },
-    salvo_utils::sentry::SentryEventID,
+    salvo_utils::sentry::SentryEventId,
 };
 
 type BoxError = Box<dyn StdError + Send + Sync + 'static>;
@@ -136,7 +136,7 @@ impl Scribe for AppError {
         let response = ErrorResponse::from_error(&self);
         let sentry_event_id = if self.capture {
             tracing::error!(message = &self as &dyn StdError);
-            SentryEventID::for_last_event()
+            SentryEventId::for_last_event()
         } else {
             tracing::warn!(message = &self as &dyn StdError);
             None

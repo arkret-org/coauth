@@ -21,6 +21,7 @@
 //! (c) revoke an existing one. The actual cedar policy evaluation lives
 //! in `coauth-policy`; this crate only defines the operator-facing JSON.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// One of the six CXP-0007 capability actions. Stored as the literal
@@ -172,11 +173,11 @@ pub struct CircleCapabilityGrant {
     pub allowed_circle_ids: Vec<String>,
     /// Who granted it (admin DID or `system`).
     pub granted_by: String,
-    /// RFC 3339 grant timestamp.
-    pub granted_at: String,
+    /// Grant timestamp (RFC 3339 UTC on the wire).
+    pub granted_at: DateTime<Utc>,
     /// Optional revocation timestamp; `None` = active.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoked_at: Option<String>,
+    pub revoked_at: Option<DateTime<Utc>>,
 }
 
 /// Request body for `POST /api/admin/v1/circles/capabilities`.

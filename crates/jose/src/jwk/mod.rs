@@ -19,7 +19,7 @@ use crate::{
 pub(crate) mod private_parameters;
 pub(crate) mod public_parameters;
 
-use self::private_parameters::SymetricKeyError;
+use self::private_parameters::SymmetricKeyError;
 pub use self::{
     private_parameters::JsonWebKeyPrivateParameters, public_parameters::JsonWebKeyPublicParameters,
 };
@@ -179,7 +179,7 @@ pub type PublicJsonWebKey = JsonWebKey<self::public_parameters::JsonWebKeyPublic
 pub type PrivateJsonWebKey = JsonWebKey<self::private_parameters::JsonWebKeyPrivateParameters>;
 
 impl TryFrom<PrivateJsonWebKey> for PublicJsonWebKey {
-    type Error = SymetricKeyError;
+    type Error = SymmetricKeyError;
 
     fn try_from(value: PrivateJsonWebKey) -> Result<Self, Self::Error> {
         value.try_map(JsonWebKeyPublicParameters::try_from)

@@ -101,7 +101,7 @@ impl Scribe for RouteError {
             }
         }
 
-        let sentry_event_id = crate::salvo_utils::sentry::SentryEventID::from(event_id);
+        let sentry_event_id = crate::salvo_utils::sentry::SentryEventId::from(event_id);
         sentry_event_id.write_to_response(res);
     }
 }

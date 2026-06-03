@@ -57,6 +57,14 @@ pub struct AuthorizationCode {
     pub pkce: Option<Pkce>,
 }
 
+/// Workflow-progress axis of an authorization grant.
+///
+/// The discriminator key is deliberately `stage` (not `state`, as
+/// `DeviceCodeGrantState` uses): this is a multi-step business *progress*
+/// axis (`pending` → `fulfilled` → `exchanged`/`cancelled`), which
+/// `common-fields.md` assigns to `stage`. The word `state` is also already
+/// taken on the enclosing [`AuthorizationGrant`] for the OAuth `state`
+/// request parameter, so reusing it here would be ambiguous.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 #[serde(tag = "stage", rename_all = "lowercase")]
 pub enum AuthorizationGrantStage {

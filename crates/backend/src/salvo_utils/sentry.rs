@@ -3,9 +3,9 @@ use sentry::types::Uuid;
 
 /// A wrapper to include a Sentry event ID in the response headers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SentryEventID(Uuid);
+pub struct SentryEventId(Uuid);
 
-impl SentryEventID {
+impl SentryEventId {
     /// Create a new Sentry event ID header for the last event on the hub.
     pub fn for_last_event() -> Option<Self> {
         sentry::last_event_id().map(Self)
@@ -19,13 +19,13 @@ impl SentryEventID {
     }
 }
 
-impl std::fmt::Display for SentryEventID {
+impl std::fmt::Display for SentryEventId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl From<Uuid> for SentryEventID {
+impl From<Uuid> for SentryEventId {
     fn from(uuid: Uuid) -> Self {
         Self(uuid)
     }
@@ -38,7 +38,7 @@ impl From<Uuid> for SentryEventID {
 macro_rules! record_error {
     ($error:expr, !) => {{
         tracing::warn!(message = &$error as &dyn std::error::Error);
-        Option::<$crate::salvo_utils::sentry::SentryEventID>::None
+        Option::<$crate::salvo_utils::sentry::SentryEventId>::None
     }};
 
     ($error:expr) => {{
@@ -47,7 +47,7 @@ macro_rules! record_error {
         // With the `sentry-tracing` integration, Sentry should have
         // captured an error, so let's extract the last event ID from the
         // current hub
-        $crate::salvo_utils::sentry::SentryEventID::for_last_event()
+        $crate::salvo_utils::sentry::SentryEventId::for_last_event()
     }};
 
     ($error:expr, $pattern:pat) => {

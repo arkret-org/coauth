@@ -28,7 +28,6 @@ pub mod federation_admin;
 pub mod integration_manifest_admin;
 pub mod notification_admin;
 pub mod risk_action;
-pub mod space_policy_admin;
 
 pub use account_admin::*;
 pub use account_claims_admin::*;
@@ -42,4 +41,3 @@ pub use federation_admin::*;
 pub use integration_manifest_admin::*;
 pub use notification_admin::*;
 pub use risk_action::*;
-pub use space_policy_admin::*;

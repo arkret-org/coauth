@@ -4,6 +4,7 @@
 
 #![deny(missing_docs)]
 
+mod crypto;
 pub mod email;
 mod notification;
 pub mod sms;

@@ -33,9 +33,11 @@ pub use self::{
     totp::UserTotpRepository,
 };
 
-/// The state of a user account
+/// The lifecycle status of a user account. Account lifecycle lives on the
+/// `status` axis (per `common-fields.md`), matching the admin-facing
+/// `AdminAccountStatus` / `UserStatus` rather than the `state` axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UserState {
+pub enum UserStatus {
     /// The account is deactivated, it has the `deactivated_at` timestamp set
     Deactivated,
 
@@ -46,10 +48,10 @@ pub enum UserState {
     Active,
 }
 
-impl UserState {
+impl UserStatus {
     /// Returns `true` if the user state is [`Locked`].
     ///
-    /// [`Locked`]: UserState::Locked
+    /// [`Locked`]: UserStatus::Locked
     #[must_use]
     pub fn is_locked(&self) -> bool {
         matches!(self, Self::Locked)
@@ -57,7 +59,7 @@ impl UserState {
 
     /// Returns `true` if the user state is [`Deactivated`].
     ///
-    /// [`Deactivated`]: UserState::Deactivated
+    /// [`Deactivated`]: UserStatus::Deactivated
     #[must_use]
     pub fn is_deactivated(&self) -> bool {
         matches!(self, Self::Deactivated)
@@ -65,7 +67,7 @@ impl UserState {
 
     /// Returns `true` if the user state is [`Active`].
     ///
-    /// [`Active`]: UserState::Active
+    /// [`Active`]: UserStatus::Active
     #[must_use]
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
@@ -75,7 +77,7 @@ impl UserState {
 /// Filter parameters for listing users
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct UserFilter<'a> {
-    state: Option<UserState>,
+    status: Option<UserStatus>,
     can_request_admin: Option<bool>,
     search: Option<&'a str>,
 }
@@ -90,21 +92,21 @@ impl<'a> UserFilter<'a> {
     /// Filter for active users
     #[must_use]
     pub fn active_only(mut self) -> Self {
-        self.state = Some(UserState::Active);
+        self.status = Some(UserStatus::Active);
         self
     }
 
     /// Filter for locked users
     #[must_use]
     pub fn locked_only(mut self) -> Self {
-        self.state = Some(UserState::Locked);
+        self.status = Some(UserStatus::Locked);
         self
     }
 
     /// Filter for deactivated users
     #[must_use]
     pub fn deactivated_only(mut self) -> Self {
-        self.state = Some(UserState::Deactivated);
+        self.status = Some(UserStatus::Deactivated);
         self
     }
 
@@ -129,12 +131,12 @@ impl<'a> UserFilter<'a> {
         self
     }
 
-    /// Get the state filter
+    /// Get the status filter
     ///
-    /// Returns [`None`] if no state filter was set
+    /// Returns [`None`] if no status filter was set
     #[must_use]
-    pub fn state(&self) -> Option<UserState> {
-        self.state
+    pub fn status(&self) -> Option<UserStatus> {
+        self.status
     }
 
     /// Get the can request admin filter

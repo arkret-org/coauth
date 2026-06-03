@@ -538,32 +538,39 @@ struct AuthMetadata {
     oidc_clients: Vec<OAuthClientHintDescriptor>,
 }
 
+/// Plaintext boundary declaration (`service-describe.schema.json`
+/// `plaintext_visibility`, a `required` field). coauth is an auth/OIDC
+/// server: it receives no canonical plaintext or reversible derived event
+/// content, so it declares `max_visibility = "none"` with an empty
+/// `data_classes`. Omission is not allowed — peers read this object to
+/// decide whether the service may be registered as plaintext-visible.
+#[derive(Debug, Serialize)]
+struct PlaintextVisibilityDescriptor {
+    max_visibility: &'static str,
+    data_classes: Vec<&'static str>,
+}
+
 #[derive(Debug, Serialize)]
 struct ServiceDescribeResponse {
+    // --- canonical `cx.schema.service_describe.v1` fields, in the schema's
+    //     property order (see service-describe.schema.json). ---
     service_did: String,
-    service_type: &'static str,
     /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
     /// form `cx:trust_domain:<scope>`). Explicit configuration wins;
     /// otherwise coauth derives a stable deployment-local value from the
     /// public host so the service-describe schema can require it.
     trust_domain: String,
-    /// T6.3 — explicit Contrix v1 role declaration. A coauth instance can
-    /// simultaneously act as `auth_server` (OIDC token issuer),
-    /// `identity_resolver` (DID / handle resolution proxy), and
-    /// `account_registry` (internal service-account management). The
-    /// entries here are independent capability claims; each maps to a
-    /// distinct subset of `supported_operations`. Consumers MUST NOT
-    /// infer canonical identity-registry ownership from
-    /// `identity_resolver` alone (that role is held by an upstream
-    /// resolver such as starid / public DID network).
-    service_roles: Vec<&'static str>,
+    service_type: &'static str,
     protocol_version: &'static str,
     supported_profiles: Vec<&'static str>,
-    supported_features: Vec<&'static str>,
-    supported_reducer_profiles: Vec<&'static str>,
-    supported_schema_profiles: Vec<&'static str>,
-    supported_bindings: Vec<SupportedBinding>,
     supported_operations: Vec<&'static str>,
+    supported_bindings: Vec<SupportedBinding>,
+    supported_features: Vec<&'static str>,
+    auth_metadata: AuthMetadata,
+    limits: ServiceLimitsDescriptor,
+    /// Required by `service-describe.schema.json`; see
+    /// [`PlaintextVisibilityDescriptor`].
+    plaintext_visibility: PlaintextVisibilityDescriptor,
     /// T6.1 — feature ids the service has implementation code for but
     /// does NOT claim conformance for. Schema:
     /// `cx.schema.service_describe.v1` (see service-surface.md §3.0).
@@ -584,6 +591,20 @@ struct ServiceDescribeResponse {
     /// is added later the `verified_profiles=[]` invariant MUST be
     /// re-enforced.
     development_mode: bool,
+
+    // --- coauth-proprietary extension fields. NOTE: these are not part of
+    //     `service-describe.schema.json`; a strict validator with
+    //     `additionalProperties:false` would reject them unless they are
+    //     adopted into the schema or moved under the `x_*` extension
+    //     namespace. Kept here as the service's richer self-description;
+    //     promoting them is a spec-maintainer decision. ---
+    /// T6.3 — explicit Contrix v1 role declaration. A coauth instance can
+    /// simultaneously act as `auth_server` (OIDC token issuer),
+    /// `identity_resolver` (DID / handle resolution proxy), and
+    /// `account_registry` (internal service-account management).
+    service_roles: Vec<&'static str>,
+    supported_reducer_profiles: Vec<&'static str>,
+    supported_schema_profiles: Vec<&'static str>,
     admin_audience: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     principal_servers: Vec<PrincipalServerDescriptor>,
@@ -591,8 +612,6 @@ struct ServiceDescribeResponse {
     principal_server_delegation_targets: Vec<PrincipalServerDescriptor>,
     identity_registry_resolver: IdentityRegistryResolverDescriptor,
     service_boundary: ServiceBoundaryDescriptor,
-    auth_metadata: AuthMetadata,
-    limits: ServiceLimitsDescriptor,
     standard_error_envelope: StandardErrorEnvelopeDescriptor,
 }
 
@@ -681,16 +700,12 @@ struct ResolveHandleResponse {
 #[derive(Debug, Deserialize)]
 struct ResolveIdentityRequest {
     did: String,
-    #[allow(dead_code)]
-    include: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ResolveHandleRequest {
     handle: String,
     expected_did: Option<String>,
-    #[allow(dead_code)]
-    proof_challenge: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -958,7 +973,7 @@ pub struct HandleClaimPayload {
     /// R3.2 — `cx.schema.handle_claim.v1` `claim_kind`. coauth only emits
     /// the allow-listed values (`handle_binding` / `organization_handle`);
     /// the removed `service_handle` value is rejected at issuance time by
-    /// [`crate::services::handle_subject_validator::ensure_claim_type_supported`].
+    /// [`crate::services::handle_subject_validator::ensure_claim_kind_supported`].
     pub claim_kind: String,
     pub subject_id: String,
     /// Canonical Contrix handle of the form `<localpart>:<domain>` per
@@ -999,7 +1014,7 @@ pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 /// Modelled as an enum so the removed `service_handle` value can never be
 /// *named* by an in-process caller (fail-closed at the type level), while
 /// [`issue_handle_claim`] still runs the runtime
-/// [`crate::services::handle_subject_validator::ensure_claim_type_supported`]
+/// [`crate::services::handle_subject_validator::ensure_claim_kind_supported`]
 /// allow-list check for defence in depth against future drift. Matches the
 /// SDK `HandleClass::{UserHandle, OrganizationHandle}` enum, serialised as
 /// the `cx.schema.handle_claim.v1` `claim_kind` snake-case strings.
@@ -1038,7 +1053,7 @@ pub(crate) fn issue_handle_claim(
     member_delivery_binding: HandleClaimDeliveryBindingHint,
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
     use crate::services::handle_subject_validator::{
-        ensure_claim_type_supported, ensure_subject_is_principal_did,
+        ensure_claim_kind_supported, ensure_subject_is_principal_did,
     };
 
     let issuer_service_did = service_did_for(url_builder, contrix_config);
@@ -1049,7 +1064,7 @@ pub(crate) fn issue_handle_claim(
     // [`HandleClaimKind`] enum already prevents an in-process caller from
     // naming `service_handle`; this re-checks the wire string so the deny
     // also covers any future code path that bypasses the enum.
-    ensure_claim_type_supported(claim_kind.as_wire())?;
+    ensure_claim_kind_supported(claim_kind.as_wire())?;
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
     // `cx:actor:` / `cx:account:` typed id or a service DID. coauth always
@@ -1498,6 +1513,13 @@ fn service_describe_response(
             "cx.directory.resolve_handle",
             "cx.policy.check",
         ],
+        // Required `service-describe.schema.json` field: coauth receives no
+        // canonical plaintext / reversible derived content, so it declares
+        // no plaintext classes.
+        plaintext_visibility: PlaintextVisibilityDescriptor {
+            max_visibility: "none",
+            data_classes: Vec::new(),
+        },
         // T6.1 — claim-level partition. See service-surface.md §3.0.
         //
         // implemented_features mirrors supported_features: coauth has

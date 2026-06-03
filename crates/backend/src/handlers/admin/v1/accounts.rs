@@ -93,7 +93,7 @@ impl AccountRecord {
         did_resolver: &dyn DidResolverService,
     ) -> Self {
         let status = if user.deactivated_at.is_some() {
-            AccountStatus::Disabled
+            AccountStatus::Deactivated
         } else if user.locked_at.is_some() {
             AccountStatus::Locked
         } else {
@@ -120,7 +120,7 @@ impl AccountRecord {
                 created_at: Some(user.created_at),
                 updated_at: Some(user.updated_at),
                 locked_at: user.locked_at,
-                disabled_at: user.deactivated_at,
+                deactivated_at: user.deactivated_at,
                 admin: user.can_request_admin,
                 display_name: user.display_name,
                 avatar_url: user.avatar_url,
@@ -158,7 +158,7 @@ impl Resource for AccountRecord {
 enum AccountFilterStatus {
     Active,
     Locked,
-    Disabled,
+    Deactivated,
 }
 
 impl std::fmt::Display for AccountFilterStatus {
@@ -166,7 +166,7 @@ impl std::fmt::Display for AccountFilterStatus {
         match self {
             Self::Active => f.write_str("active"),
             Self::Locked => f.write_str("locked"),
-            Self::Disabled => f.write_str("disabled"),
+            Self::Deactivated => f.write_str("deactivated"),
         }
     }
 }
@@ -236,7 +236,7 @@ pub async fn list_accounts(
     filter = match params.status {
         Some(AccountFilterStatus::Active) => filter.active_only(),
         Some(AccountFilterStatus::Locked) => filter.locked_only(),
-        Some(AccountFilterStatus::Disabled) => filter.deactivated_only(),
+        Some(AccountFilterStatus::Deactivated) => filter.deactivated_only(),
         None => filter,
     };
 
@@ -733,7 +733,7 @@ mod tests {
         assert_eq!(body["data"]["attributes"]["status"], "locked");
         assert!(body["data"]["attributes"]["locked_at"].is_string());
         assert_eq!(
-            body["data"]["attributes"]["disabled_at"],
+            body["data"]["attributes"]["deactivated_at"],
             serde_json::Value::Null
         );
 
@@ -746,9 +746,9 @@ mod tests {
             .await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        assert_eq!(body["data"]["attributes"]["status"], "disabled");
+        assert_eq!(body["data"]["attributes"]["status"], "deactivated");
         assert!(body["data"]["attributes"]["locked_at"].is_string());
-        assert!(body["data"]["attributes"]["disabled_at"].is_string());
+        assert!(body["data"]["attributes"]["deactivated_at"].is_string());
     }
 
     #[tokio::test]

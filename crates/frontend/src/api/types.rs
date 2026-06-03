@@ -150,16 +150,16 @@ pub struct Authentication {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "__typename")]
 pub enum AppSession {
-    OauthSession(OauthSession),
+    OAuthSession(OAuthSession),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct OauthSession {
+pub struct OAuthSession {
     pub id: String,
     #[serde(default)]
     pub scope: Option<String>,
     #[serde(default)]
-    pub client: Option<OauthClient>,
+    pub client: Option<OAuthClient>,
     #[serde(default)]
     pub user_agent: Option<UserAgent>,
     #[serde(default)]
@@ -173,7 +173,7 @@ pub struct OauthSession {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct OauthClient {
+pub struct OAuthClient {
     pub id: String,
     pub client_id: String,
     pub client_name: Option<String>,
@@ -186,7 +186,7 @@ pub struct OauthClient {
 #[allow(clippy::large_enum_variant)]
 pub enum Session {
     BrowserSession(BrowserSession),
-    OauthSession(OauthSession),
+    OAuthSession(OAuthSession),
 }
 
 // ── Email ──────────────────────────────────────────────────────
@@ -449,11 +449,11 @@ pub struct ViewerResponse {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "__typename")]
 pub enum ClientNode {
-    OauthClient(OauthClientDetail),
+    OAuthClient(OAuthClientDetail),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct OauthClientDetail {
+pub struct OAuthClientDetail {
     pub id: String,
     pub client_id: String,
     pub client_name: Option<String>,

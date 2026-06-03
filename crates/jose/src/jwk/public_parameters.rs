@@ -282,6 +282,15 @@ mod rsa_impls {
         fn try_from(params: &RsaPublicParameters) -> Result<Self, Self::Error> {
             let modulus = BigUint::from_bytes_be(params.n.as_bytes());
             let exponent = BigUint::from_bytes_be(params.e.as_bytes());
+            // Reject weak RSA public keys outright: `RsaPublicKey::new` only
+            // guards the *upper* size bound, so a compromised/misconfigured
+            // upstream JWKS returning a 512/1024-bit key would otherwise be
+            // accepted for ID-token verification and let an attacker forge
+            // signatures offline. Require a 2048-bit minimum modulus.
+            const MIN_RSA_MODULUS_BITS: usize = 2048;
+            if modulus.bits() < MIN_RSA_MODULUS_BITS {
+                return Err(rsa::errors::Error::InvalidModulus);
+            }
             RsaPublicKey::new(modulus, exponent)
         }
     }

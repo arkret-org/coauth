@@ -12,7 +12,7 @@ pub enum SymmetricKey {
 }
 
 #[derive(Debug, Error)]
-#[error("Invalid algorithm {alg} used for symetric key")]
+#[error("Invalid algorithm {alg} used for symmetric key")]
 pub struct InvalidAlgorithm {
     pub alg: JsonWebSignatureAlg,
     pub key: Vec<u8>,

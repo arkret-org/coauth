@@ -64,8 +64,8 @@ impl TryFrom<CircleCapabilityGrantRow> for CircleCapabilityGrant {
             action,
             allowed_circle_ids: value.allowed_circle_ids,
             granted_by: value.granted_by,
-            granted_at: value.granted_at.to_rfc3339(),
-            revoked_at: value.revoked_at.map(|ts| ts.to_rfc3339()),
+            granted_at: value.granted_at,
+            revoked_at: value.revoked_at,
         })
     }
 }
@@ -121,7 +121,7 @@ impl CircleCapabilityGrantRepository for PgCircleCapabilityGrantRepository<'_> {
             action: params.action,
             allowed_circle_ids: row.allowed_circle_ids,
             granted_by: row.granted_by,
-            granted_at: row.granted_at.to_rfc3339(),
+            granted_at: row.granted_at,
             revoked_at: None,
         })
     }

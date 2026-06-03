@@ -5,11 +5,11 @@ use super::session_card::{
     SessionCardMetadata, SessionCardName, SessionCardRoot,
 };
 use crate::{
-    api::types::{DeviceType, OauthSession as OauthSessionData},
+    api::types::{DeviceType, OAuthSession as OAuthSessionData},
     pages::Route,
 };
 
-fn session_display_name(session: &OauthSessionData) -> String {
+fn session_display_name(session: &OAuthSessionData) -> String {
     if let Some(ref name) = session.display_name {
         return name.clone();
     }
@@ -23,7 +23,7 @@ fn session_display_name(session: &OauthSessionData) -> String {
 }
 
 #[component]
-pub fn OAuthSessionCard(session: OauthSessionData) -> Element {
+pub fn OAuthSessionCard(session: OAuthSessionData) -> Element {
     let device_type = session
         .user_agent
         .as_ref()

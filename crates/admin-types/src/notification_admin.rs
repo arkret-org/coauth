@@ -19,6 +19,7 @@
 //! crate turns that drift into a compile error rather than a
 //! silent serde-default empty UI.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // ── notification channels ───────────────────────────────────────────
@@ -150,10 +151,9 @@ pub struct PublishedTemplateResponse {
     pub subject_template: Option<String>,
     #[serde(default)]
     pub body_template: String,
-    #[serde(default)]
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub published_at: Option<String>,
+    pub published_at: Option<DateTime<Utc>>,
 }
 
 #[cfg(test)]
@@ -250,7 +250,7 @@ mod tests {
             locale: "en".into(),
             subject_template: None,
             body_template: "x".into(),
-            created_at: "2026-05-10T00:00:00Z".into(),
+            created_at: "2026-05-10T00:00:00Z".parse().unwrap(),
             published_at: None,
         };
         let s = serde_json::to_string(&r).unwrap();

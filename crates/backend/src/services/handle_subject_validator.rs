@@ -3,13 +3,14 @@
 //! Two normative tightenings land here, shared by every coauth code path
 //! that mints a `cx.handle.claim` artefact:
 //!
-//!   1. **`claim_type` deny check** — the draft-era `service_handle`
-//!      `claim_type` was removed from `cx.schema.handle_claim.v1`
+//!   1. **`claim_kind` deny check** — the draft-era `service_handle`
+//!      `claim_kind` was removed from `cx.schema.handle_claim.v1`
 //!      (`HandleClass::ServiceHandle` no longer exists in the SDK). v1 only
 //!      allows `handle_binding` / `organization_handle`. coauth never emits
 //!      `service_handle` today, but to fail closed against future drift we keep
 //!      an explicit allow-list + deny check rather than relying on the absence
-//!      of a code path.
+//!      of a code path. (Handle Claim's closed protocol taxonomy uses
+//!      `claim_kind`, per `common-fields.md` §`kind`/`type` naming rules.)
 //!
 //!   2. **`subject` validator** — a handle claim subject MUST be a holder /
 //!      principal DID. It is NOT a Realm `actor_id` (`cx:actor:`), a
@@ -23,9 +24,9 @@ use contrix_core::Did;
 use thiserror::Error;
 
 /// Wire-level reason code returned when an issuance request asks for a
-/// `claim_type` coauth no longer supports (notably the removed
+/// `claim_kind` coauth no longer supports (notably the removed
 /// `service_handle`). Mirrors the audit reason soland emits (HC-SOL-1).
-pub const CLAIM_TYPE_UNSUPPORTED_CODE: &str = "claim_type_unsupported";
+pub const CLAIM_KIND_UNSUPPORTED_CODE: &str = "claim_kind_unsupported";
 
 /// Wire-level reason code returned when the handle-claim subject is not a
 /// holder / principal DID. Kept in sync with the SDK validator's
@@ -33,35 +34,35 @@ pub const CLAIM_TYPE_UNSUPPORTED_CODE: &str = "claim_type_unsupported";
 pub const HANDLE_CLAIM_SUBJECT_NOT_PRINCIPAL_DID_CODE: &str =
     "handle_claim_subject_not_principal_did";
 
-/// The only `claim_type` values coauth's handle-claim issuer accepts.
+/// The only `claim_kind` values coauth's handle-claim issuer accepts.
 ///
-/// Matches the post-R3.2 `cx.schema.handle_claim.v1` `claim_type` enum
+/// Matches the post-R3.2 `cx.schema.handle_claim.v1` `claim_kind` enum
 /// (`HandleClass::{UserHandle, OrganizationHandle}` in the SDK). The SDK
 /// serialises those variants as the snake-case strings below.
-pub const ALLOWED_CLAIM_TYPES: &[&str] = &["handle_binding", "organization_handle"];
+pub const ALLOWED_CLAIM_KINDS: &[&str] = &["handle_binding", "organization_handle"];
 
 #[derive(Debug, Error)]
 pub enum HandleClaimSubjectError {
-    /// The requested `claim_type` is not in [`ALLOWED_CLAIM_TYPES`]
+    /// The requested `claim_kind` is not in [`ALLOWED_CLAIM_KINDS`]
     /// (typically the removed `service_handle`).
-    #[error("{CLAIM_TYPE_UNSUPPORTED_CODE}: claim_type {0:?} is not supported by this issuer")]
-    ClaimTypeUnsupported(String),
+    #[error("{CLAIM_KIND_UNSUPPORTED_CODE}: claim_kind {0:?} is not supported by this issuer")]
+    ClaimKindUnsupported(String),
 
     /// The subject is not a holder / principal DID.
     #[error("{HANDLE_CLAIM_SUBJECT_NOT_PRINCIPAL_DID_CODE}: {0}")]
     SubjectNotPrincipalDid(String),
 }
 
-/// HC-COAUTH-1 — reject any `claim_type` outside [`ALLOWED_CLAIM_TYPES`].
+/// HC-COAUTH-1 — reject any `claim_kind` outside [`ALLOWED_CLAIM_KINDS`].
 ///
 /// `service_handle` was removed from the schema in R3.2; this fails closed
 /// against any caller (or future internal path) that tries to mint one.
-pub fn ensure_claim_type_supported(claim_type: &str) -> Result<(), HandleClaimSubjectError> {
-    if ALLOWED_CLAIM_TYPES.contains(&claim_type) {
+pub fn ensure_claim_kind_supported(claim_kind: &str) -> Result<(), HandleClaimSubjectError> {
+    if ALLOWED_CLAIM_KINDS.contains(&claim_kind) {
         Ok(())
     } else {
-        Err(HandleClaimSubjectError::ClaimTypeUnsupported(
-            claim_type.to_owned(),
+        Err(HandleClaimSubjectError::ClaimKindUnsupported(
+            claim_kind.to_owned(),
         ))
     }
 }
@@ -94,24 +95,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn allows_v1_claim_types() {
-        ensure_claim_type_supported("handle_binding").unwrap();
-        ensure_claim_type_supported("organization_handle").unwrap();
+    fn allows_v1_claim_kinds() {
+        ensure_claim_kind_supported("handle_binding").unwrap();
+        ensure_claim_kind_supported("organization_handle").unwrap();
     }
 
     #[test]
-    fn rejects_service_handle_claim_type() {
-        let err = ensure_claim_type_supported("service_handle").unwrap_err();
+    fn rejects_service_handle_claim_kind() {
+        let err = ensure_claim_kind_supported("service_handle").unwrap_err();
         assert!(matches!(
             err,
-            HandleClaimSubjectError::ClaimTypeUnsupported(_)
+            HandleClaimSubjectError::ClaimKindUnsupported(_)
         ));
-        assert!(err.to_string().starts_with(CLAIM_TYPE_UNSUPPORTED_CODE));
+        assert!(err.to_string().starts_with(CLAIM_KIND_UNSUPPORTED_CODE));
     }
 
     #[test]
-    fn rejects_unknown_claim_type() {
-        assert!(ensure_claim_type_supported("user_handle").is_err());
+    fn rejects_unknown_claim_kind() {
+        assert!(ensure_claim_kind_supported("user_handle").is_err());
     }
 
     #[test]
