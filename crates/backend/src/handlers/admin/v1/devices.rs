@@ -29,7 +29,7 @@ pub enum DeviceRiskLevel {
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum DeviceMFAState {
+pub enum DeviceMfaState {
     Verified,
     Required,
     Unknown,
@@ -53,7 +53,7 @@ pub struct DeviceRecord {
     risk_level: DeviceRiskLevel,
 
     /// MFA/passkey state for this device.
-    mfa_state: DeviceMFAState,
+    mfa_state: DeviceMfaState,
 
     /// When the device was registered.
     registered_at: Option<DateTime<Utc>>,
@@ -116,7 +116,7 @@ impl DeviceDraft {
             device_did: self.device_did,
             display_name: self.display_name,
             risk_level: DeviceRiskLevel::Unknown,
-            mfa_state: DeviceMFAState::Unknown,
+            mfa_state: DeviceMfaState::Unknown,
             registered_at: self.registered_at,
             revoked_at: self.revoked_at,
         }
@@ -246,7 +246,7 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
             device_did: Some(device_id),
             display_name: None,
             risk_level: DeviceRiskLevel::Unknown,
-            mfa_state: DeviceMFAState::Unknown,
+            mfa_state: DeviceMfaState::Unknown,
             registered_at: None,
             revoked_at: Some(outcome.revoked_at),
         },
