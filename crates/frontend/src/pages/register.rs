@@ -6,7 +6,8 @@ use crate::{
         RegisterStatusResponse, ResendEmailAuthCodePayload, StepResponse,
     },
     components::{
-        layout::Layout, loading::LoadingSpinner, password_input::PasswordCreationDoubleInput,
+        form_error::FormError, layout::Layout, loading::LoadingSpinner,
+        password_input::PasswordCreationDoubleInput,
     },
     pages::Route,
 };
@@ -73,9 +74,7 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
                 h1 { class: "heading-md login-title", "Create account" }
 
                 if let Some(ref err) = *error.read() {
-                    div { class: "alert alert-critical",
-                        p { "{err}" }
-                    }
+                    FormError { message: err.clone() }
                 }
 
                 if reg_enabled {
@@ -210,6 +209,7 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
                     div { class: "login-providers",
                         for provider in providers.providers.iter() {
                             a {
+                                key: "{provider.id}",
                                 class: "btn btn-secondary btn-block",
                                 href: "{provider.authorize_url}",
                                 {provider.human_name.clone().unwrap_or_else(|| format!("Sign up with {}", provider.id))}
@@ -705,9 +705,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
                     p { class: "text-secondary", "This is how others will see you. You can change it later." }
 
                     if let Some(ref err) = *error.read() {
-                        div { class: "alert alert-critical",
-                            p { "{err}" }
-                        }
+                        FormError { message: err.clone() }
                     }
 
                     form {
@@ -924,9 +922,7 @@ pub fn RegisterFinish(id: String) -> Element {
                             }
 
                             if let Some(err) = error_message {
-                                div { class: "alert alert-critical",
-                                    p { "{err}" }
-                                }
+                                FormError { message: err }
                             }
 
                             form {

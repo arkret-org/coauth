@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     api::types::{ConsentDataResponse, ConsentSubmitResponse},
-    components::{layout::Layout, loading::LoadingScreen},
+    components::{form_error::FormError, layout::Layout, loading::LoadingScreen},
     pages::Route,
 };
 
@@ -78,7 +78,17 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
         .clone()
         .unwrap_or_else(|| data.client.client_id.clone());
 
-    let scopes: Vec<&str> = data.scope.split_whitespace().collect();
+    // Scope parsing + description lookup only depends on the (immutable) prop,
+    // so memoize it instead of recomputing on every submitting/error rerender.
+    let scope_descriptions = use_memo({
+        let scope = data.scope.clone();
+        move || {
+            scope
+                .split_whitespace()
+                .map(scope_description)
+                .collect::<Vec<String>>()
+        }
+    });
 
     rsx! {
         div { class: "login-page consent-page",
@@ -97,21 +107,19 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
                     strong { "{data.user.principal_id}" }
                 }
 
-                if !scopes.is_empty() {
+                if !scope_descriptions.read().is_empty() {
                     div { class: "consent-scopes",
                         p { class: "form-label", "This will allow the application to:" }
                         ul {
-                            for scope in scopes.iter() {
-                                li { {scope_description(scope)} }
+                            for (i, description) in scope_descriptions.read().iter().enumerate() {
+                                li { key: "{i}", "{description}" }
                             }
                         }
                     }
                 }
 
                 if let Some(ref err) = *error.read() {
-                    div { class: "alert alert-critical",
-                        p { "{err}" }
-                    }
+                    FormError { message: err.clone() }
                 }
 
                 div { class: "consent-actions",

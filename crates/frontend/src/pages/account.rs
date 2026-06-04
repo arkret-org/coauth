@@ -90,8 +90,8 @@ pub fn AccountPage() -> Element {
                         nav { class: "account-sidebar",
                             div { class: "sidebar-profile",
                                 UserGreeting {
-                                    principal: current_principal.read().clone(),
-                                    profile: current_profile.read().clone(),
+                                    principal: current_principal,
+                                    profile: current_profile,
                                     display_name_change_allowed: display_name_change_allowed,
                                     on_edit: move |()| show_edit_dialog.set(true),
                                 }

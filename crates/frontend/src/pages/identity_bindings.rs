@@ -74,6 +74,7 @@ pub fn IdentityBindings() -> Element {
                                     let can_unlink = account_count > 1;
                                     rsx! {
                                         div {
+                                            key: "{account_id}",
                                             class: "flex items-center justify-between p-3 rounded-lg border",
                                             div { class: "flex flex-col gap-1",
                                                 span { class: "text-md font-semibold", "{provider_label}" }
@@ -145,6 +146,7 @@ pub fn IdentityBindings() -> Element {
                                     div { class: "flex flex-wrap gap-2",
                                         for provider in unlinked.iter() {
                                             a {
+                                                key: "{provider.id}",
                                                 class: "btn btn-secondary btn-sm",
                                                 href: "{provider.authorize_url}",
                                                 "Link {provider.human_name.clone().unwrap_or_else(|| provider.id.clone())}"

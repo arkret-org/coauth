@@ -5,6 +5,7 @@ use crate::{
     components::{
         loading::LoadingScreen,
         separator::{Separator, SeparatorKind},
+        status_badge::StatusBadge,
     },
 };
 
@@ -64,8 +65,13 @@ fn NotificationPreferencesForm(
     let sms_available = available_channels
         .iter()
         .any(|c| c.channel == "sms" && c.enabled);
-    let email_enabled = is_channel_enabled(&preferences.read(), "email");
-    let sms_enabled = is_channel_enabled(&preferences.read(), "sms");
+    let (email_enabled, sms_enabled) = {
+        let prefs = preferences.read();
+        (
+            is_channel_enabled(&prefs, "email"),
+            is_channel_enabled(&prefs, "sms"),
+        )
+    };
 
     rsx! {
         div { class: "flex flex-col gap-6",
@@ -75,9 +81,9 @@ fn NotificationPreferencesForm(
             div { class: "flex flex-col gap-2",
                 h4 { class: "text-md font-semibold", "Email notifications" }
                 div { class: "flex items-center gap-3",
-                    span {
-                        class: if email_available { "badge badge-success" } else { "badge badge-warning" },
-                        if email_available { "Email delivery configured" } else { "Email delivery not configured" }
+                    StatusBadge {
+                        ok: email_available,
+                        label: (if email_available { "Email delivery configured" } else { "Email delivery not configured" }).to_owned(),
                     }
                 }
                 p { class: "text-md text-secondary",
@@ -106,9 +112,9 @@ fn NotificationPreferencesForm(
             div { class: "flex flex-col gap-2",
                 h4 { class: "text-md font-semibold", "SMS notifications" }
                 div { class: "flex items-center gap-3",
-                    span {
-                        class: if sms_available { "badge badge-success" } else { "badge badge-warning" },
-                        if sms_available { "SMS delivery configured" } else { "SMS delivery not configured" }
+                    StatusBadge {
+                        ok: sms_available,
+                        label: if sms_available { "SMS delivery configured" } else { "SMS delivery not configured" }.to_owned(),
                     }
                 }
                 p { class: "text-md text-secondary",

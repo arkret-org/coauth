@@ -17,40 +17,25 @@ pub fn Sessions() -> Element {
     let mut show_inactive = use_signal(|| false);
     let mut pagination = use_signal(|| PaginationState::new(6));
 
-    // Reset pagination when filter changes
-    let _filter_effect = use_effect(move || {
-        let _ = show_inactive();
-        pagination.set(PaginationState::new(6));
-    });
-
-    let overview =
-        use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
-
+    // REST /viewer returns all session data combined, so a single request
+    // serves both the browser-session overview and the app-session list.
+    // Re-fetch when the filter toggle or pagination cursor changes.
     let sessions = use_resource(move || {
         let _inactive = show_inactive();
-        let _pag = pagination.read().clone();
-        async move {
-            // REST /viewer returns all session data combined
-            crate::api::api_get::<ViewerResponse>("/self/viewer").await
-        }
+        let _pag = &*pagination.read();
+        async move { crate::api::api_get::<ViewerResponse>("/self/viewer").await }
     });
 
-    let overview_binding = overview.read();
     let sessions_binding = sessions.read();
 
-    match (&*overview_binding, &*sessions_binding) {
-        (Some(Ok(overview_data)), Some(Ok(session_data))) => {
-            let user = match overview_data.viewer.as_user() {
-                Some(u) => u,
-                None => return rsx! { p { "Not authenticated." } },
-            };
-
+    match &*sessions_binding {
+        Some(Ok(session_data)) => {
             let session_user = match session_data.viewer.as_user() {
                 Some(u) => u,
                 None => return rsx! { p { "Not authenticated." } },
             };
 
-            let browser_session_count = user
+            let browser_session_count = session_user
                 .browser_sessions
                 .as_ref()
                 .map_or(0, |bs| bs.total_count);
@@ -86,7 +71,11 @@ pub fn Sessions() -> Element {
                     div { class: "flex items-center gap-2",
                         button {
                             class: if inactive_active { "filter-toggle active" } else { "filter-toggle" },
-                            onclick: move |_| show_inactive.set(!show_inactive()),
+                            onclick: move |_| {
+                                show_inactive.set(!show_inactive());
+                                // Reset to the first page when the filter changes.
+                                pagination.set(PaginationState::new(6));
+                            },
                             "Show inactive (90+ days)"
                         }
                     }
@@ -142,9 +131,9 @@ pub fn Sessions() -> Element {
                 }
             }
         }
-        (Some(Err(e)), _) | (_, Some(Err(e))) => rsx! {
+        Some(Err(e)) => rsx! {
             div { class: "alert alert-critical", "{e}" }
         },
-        _ => rsx! { LoadingScreen {} },
+        None => rsx! { LoadingScreen {} },
     }
 }

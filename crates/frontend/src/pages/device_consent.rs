@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     api::types::{ConsentDataResponse, DeviceConsentResponse},
-    components::{layout::Layout, loading::LoadingScreen},
+    components::{form_error::FormError, layout::Layout, loading::LoadingScreen},
     pages::Route,
 };
 
@@ -86,9 +86,7 @@ fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
                     }
 
                     if let Some(ref err) = *error.read() {
-                        div { class: "alert alert-critical",
-                            p { "{err}" }
-                        }
+                        FormError { message: err.clone() }
                     }
 
                     div { class: "consent-actions",

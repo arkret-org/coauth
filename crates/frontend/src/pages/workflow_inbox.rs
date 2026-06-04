@@ -35,7 +35,7 @@ pub fn WorkflowInbox() -> Element {
                         }
 
                         for item in inbox.pending.iter() {
-                            div { class: "flex flex-col gap-1",
+                            div { key: "{item.session_id}", class: "flex flex-col gap-1",
                                 Separator { kind: SeparatorKind::Section }
                                 h4 { class: "text-md font-semibold", "{item.flow_title}" }
                                 p { class: "text-sm text-secondary",

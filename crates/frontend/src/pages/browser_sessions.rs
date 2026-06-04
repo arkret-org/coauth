@@ -15,19 +15,12 @@ pub fn BrowserSessions() -> Element {
     let mut show_inactive = use_signal(|| false);
     let mut pagination = use_signal(|| PaginationState::new(6));
 
-    // Reset pagination when filter changes
-    let _filter_effect = use_effect(move || {
-        let _ = show_inactive();
-        pagination.set(PaginationState::new(6));
-    });
-
+    // Re-fetch when the filter toggle or pagination cursor changes. Reading the
+    // signals by reference (not clone) is enough to register the dependency.
     let data = use_resource(move || {
         let _inactive = show_inactive();
-        let _pag = pagination.read().clone();
-        async move {
-            // REST /viewer returns all session data combined
-            crate::api::api_get::<ViewerResponse>("/self/viewer").await
-        }
+        let _pag = &*pagination.read();
+        async move { crate::api::api_get::<ViewerResponse>("/self/viewer").await }
     });
     let binding = data.read();
 
@@ -75,7 +68,11 @@ pub fn BrowserSessions() -> Element {
                     div { class: "flex items-center gap-2",
                         button {
                             class: if inactive_active { "filter-toggle active" } else { "filter-toggle" },
-                            onclick: move |_| show_inactive.set(!show_inactive()),
+                            onclick: move |_| {
+                                show_inactive.set(!show_inactive());
+                                // Reset to the first page when the filter changes.
+                                pagination.set(PaginationState::new(6));
+                            },
                             "Show inactive (90+ days)"
                         }
                     }

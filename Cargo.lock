@@ -1702,6 +1702,7 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
  "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]

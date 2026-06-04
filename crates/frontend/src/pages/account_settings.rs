@@ -4,6 +4,7 @@ use crate::{
     api::types::{LinkedAccount, ProvidersResponse, ViewerResponse},
     components::{
         collapsible::CollapsibleSection,
+        dialog::Dialog,
         loading::LoadingScreen,
         password_input::AccountManagementPasswordPreview,
         separator::{Separator, SeparatorKind},
@@ -84,11 +85,11 @@ pub fn AccountSettings() -> Element {
                     }
 
                     // Linked accounts section
-                    LinkedAccountsSection { accounts: linked_accounts.clone() }
+                    LinkedAccountsSection { accounts: linked_accounts }
                     Separator { kind: SeparatorKind::Section }
 
                     // Sign out
-                    SignOutButton { session_id: session_id.clone() }
+                    SignOutButton { session_id }
 
                     // Account deactivation
                     if account_deactivation_allowed {
@@ -125,44 +126,33 @@ fn SignOutButton(session_id: String) -> Element {
             "Sign out"
         }
 
-        if show_dialog() {
-            div {
-                class: "dialog-overlay",
-                onclick: move |_| show_dialog.set(false),
-                div {
-                    class: "dialog-content",
-                    onclick: move |e| e.stop_propagation(),
-
-                    h3 { class: "dialog-title", "Sign out" }
-
-                    button {
-                        class: "btn btn-destructive-solid",
-                        disabled: signing_out(),
-                        onclick: {
-                            let sid = session_id_clone.clone();
-                            move |_| {
-                                let sid = sid.clone();
-                                signing_out.set(true);
-                                spawn(async move {
-                                    let _ = crate::api::api_delete::<crate::api::types::EndSessionPayload>(
-                                        &format!("/browser-sessions/{sid}"),
-                                    ).await;
-                                    nav.push(Route::Login {});
-                                });
-                            }
-                        },
-                        if signing_out() {
-                            span { class: "loading-spinner inline" }
-                        }
-                        "Sign out"
+        Dialog { open: show_dialog, title: "Sign out".to_owned(),
+            button {
+                class: "btn btn-destructive-solid",
+                disabled: signing_out(),
+                onclick: {
+                    let sid = session_id_clone.clone();
+                    move |_| {
+                        let sid = sid.clone();
+                        signing_out.set(true);
+                        spawn(async move {
+                            let _ = crate::api::api_delete::<crate::api::types::EndSessionPayload>(
+                                &format!("/browser-sessions/{sid}"),
+                            ).await;
+                            nav.push(Route::Login {});
+                        });
                     }
-
-                    button {
-                        class: "btn btn-tertiary",
-                        onclick: move |_| show_dialog.set(false),
-                        "Cancel"
-                    }
+                },
+                if signing_out() {
+                    span { class: "loading-spinner inline" }
                 }
+                "Sign out"
+            }
+
+            button {
+                class: "btn btn-tertiary",
+                onclick: move |_| show_dialog.set(false),
+                "Cancel"
             }
         }
     }
@@ -205,6 +195,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
                                 .unwrap_or_else(|| "External provider".to_owned());
                             rsx! {
                                 div {
+                                    key: "{account_id}",
                                     class: "flex items-center justify-between p-3 rounded-lg border",
                                     div { class: "flex flex-col gap-1",
                                         span { class: "text-md font-semibold", "{provider_label}" }
@@ -268,6 +259,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
                             div { class: "flex flex-wrap gap-2 mt-3",
                                 for provider in unlinked.iter() {
                                     a {
+                                        key: "{provider.id}",
                                         class: "btn btn-secondary btn-sm",
                                         href: "{provider.authorize_url}",
                                         "Link {provider.human_name.clone().unwrap_or_else(|| provider.id.clone())}"
@@ -333,139 +325,128 @@ fn AccountDeleteButton(
             "Deactivate account"
         }
 
-        if show_dialog() {
-            div {
-                class: "dialog-overlay",
-                onclick: move |_| show_dialog.set(false),
-                div {
-                    class: "dialog-content",
-                    onclick: move |e| e.stop_propagation(),
+        Dialog { open: show_dialog, title: "Deactivate account".to_owned(),
+            if !principal_id_clone.is_empty() {
+                p { class: "text-md",
+                    "Account: "
+                    strong { "{principal_id_clone}" }
+                }
+            }
 
-                    h3 { class: "dialog-title", "Deactivate account" }
+            p { class: "text-md text-secondary",
+                "Are you sure you want to deactivate your account? This action cannot be undone."
+            }
 
-                    if !principal_id_clone.is_empty() {
-                        p { class: "text-md",
-                            "Account: "
-                            strong { "{principal_id_clone}" }
-                        }
-                    }
+            // Erase data checkbox
+            label { class: "checkbox-label",
+                input {
+                    r#type: "checkbox",
+                    checked: erase_data(),
+                    onchange: move |e| erase_data.set(e.checked()),
+                }
+                "Erase all my data"
+            }
 
-                    p { class: "text-md text-secondary",
-                        "Are you sure you want to deactivate your account? This action cannot be undone."
-                    }
+            if erase_data() {
+                div { class: "alert alert-critical",
+                    p { class: "alert-title", "Warning" }
+                    p { "All your messages and media will be permanently deleted from the server. This cannot be reversed." }
+                }
+            }
 
-                    // Erase data checkbox
-                    label { class: "checkbox-label",
-                        input {
-                            r#type: "checkbox",
-                            checked: erase_data(),
-                            onchange: move |e| erase_data.set(e.checked()),
-                        }
-                        "Erase all my data"
-                    }
-
-                    if erase_data() {
-                        div { class: "alert alert-critical",
-                            p { class: "alert-title", "Warning" }
-                            p { "All your messages and media will be permanently deleted from the server. This cannot be reversed." }
-                        }
-                    }
-
-                    // Password or principal_id confirmation
-                    if use_password_mode {
-                        div { class: "form-field",
-                            label { class: "form-label", "Enter your password to confirm" }
-                            input {
-                                class: "form-input",
-                                r#type: "password",
-                                autocomplete: "current-password",
-                                value: "{password}",
-                                oninput: move |e| password.set(e.value()),
-                            }
-                        }
-                    } else if !principal_id_clone.is_empty() {
-                        div { class: "form-field",
-                            label { class: "form-label",
-                                "Type "
-                                strong { "{principal_id_clone}" }
-                                " to confirm"
-                            }
-                            input {
-                                class: "form-input",
-                                r#type: "text",
-                                value: "{principal_id_confirm}",
-                                oninput: move |e| principal_id_confirm.set(e.value()),
-                            }
-                        }
-                    }
-
-                    if let Some(ref err) = *error.read() {
-                        div { class: "alert alert-critical", "{err}" }
-                    }
-
-                    button {
-                        class: "btn btn-destructive-solid",
-                        disabled: deactivating() || !confirm_enabled() || !form_valid,
-                        onclick: {
-                            move |_| {
-                                let principal_erase = erase_data();
-                                let pw = if use_password_mode {
-                                    Some(password.to_string())
-                                } else {
-                                    None
-                                };
-                                deactivating.set(true);
-                                error.set(None);
-                                spawn(async move {
-                                    let mut body = serde_json::json!({
-                                        "principal_erase": principal_erase,
-                                    });
-                                    if let Some(ref pw_val) = pw {
-                                        body.as_object_mut().unwrap().insert(
-                                            "password".to_owned(),
-                                            serde_json::Value::String(pw_val.clone()),
-                                        );
-                                    }
-                                    let result = crate::api::api_post::<crate::api::types::DeactivateUserPayload>(
-                                        "/viewer/deactivate",
-                                        body,
-                                    ).await;
-                                    deactivating.set(false);
-                                    match result {
-                                        Ok(data) => match data.status {
-                                            crate::api::types::DeactivateUserStatus::Deactivated => {
-                                                nav.push(Route::Login {});
-                                            }
-                                            crate::api::types::DeactivateUserStatus::NotFound => {
-                                                error.set(Some("Account not found.".to_owned()));
-                                            }
-                                            crate::api::types::DeactivateUserStatus::IncorrectPassword => {
-                                                error.set(Some("Incorrect password.".to_owned()));
-                                            }
-                                        },
-                                        Err(e) => {
-                                            error.set(Some(e));
-                                        }
-                                    }
-                                });
-                            }
-                        },
-                        if deactivating() {
-                            span { class: "loading-spinner inline" }
-                        }
-                        if !confirm_enabled() {
-                            "Please wait..."
-                        } else {
-                            "Deactivate"
-                        }
-                    }
-
-                    button {
-                        class: "btn btn-tertiary",
-                        onclick: move |_| show_dialog.set(false),
-                        "Cancel"
+            // Password or principal_id confirmation
+            if use_password_mode {
+                div { class: "form-field",
+                    label { class: "form-label", "Enter your password to confirm" }
+                    input {
+                        class: "form-input",
+                        r#type: "password",
+                        autocomplete: "current-password",
+                        value: "{password}",
+                        oninput: move |e| password.set(e.value()),
                     }
                 }
+            } else if !principal_id_clone.is_empty() {
+                div { class: "form-field",
+                    label { class: "form-label",
+                        "Type "
+                        strong { "{principal_id_clone}" }
+                        " to confirm"
+                    }
+                    input {
+                        class: "form-input",
+                        r#type: "text",
+                        value: "{principal_id_confirm}",
+                        oninput: move |e| principal_id_confirm.set(e.value()),
+                    }
+                }
+            }
+
+            if let Some(ref err) = *error.read() {
+                div { class: "alert alert-critical", "{err}" }
+            }
+
+            button {
+                class: "btn btn-destructive-solid",
+                disabled: deactivating() || !confirm_enabled() || !form_valid,
+                onclick: {
+                    move |_| {
+                        let principal_erase = erase_data();
+                        let pw = if use_password_mode {
+                            Some(password.to_string())
+                        } else {
+                            None
+                        };
+                        deactivating.set(true);
+                        error.set(None);
+                        spawn(async move {
+                            let mut body = serde_json::json!({
+                                "principal_erase": principal_erase,
+                            });
+                            if let Some(ref pw_val) = pw {
+                                body.as_object_mut().unwrap().insert(
+                                    "password".to_owned(),
+                                    serde_json::Value::String(pw_val.clone()),
+                                );
+                            }
+                            let result = crate::api::api_post::<crate::api::types::DeactivateUserPayload>(
+                                "/viewer/deactivate",
+                                body,
+                            ).await;
+                            deactivating.set(false);
+                            match result {
+                                Ok(data) => match data.status {
+                                    crate::api::types::DeactivateUserStatus::Deactivated => {
+                                        nav.push(Route::Login {});
+                                    }
+                                    crate::api::types::DeactivateUserStatus::NotFound => {
+                                        error.set(Some("Account not found.".to_owned()));
+                                    }
+                                    crate::api::types::DeactivateUserStatus::IncorrectPassword => {
+                                        error.set(Some("Incorrect password.".to_owned()));
+                                    }
+                                },
+                                Err(e) => {
+                                    error.set(Some(e));
+                                }
+                            }
+                        });
+                    }
+                },
+                if deactivating() {
+                    span { class: "loading-spinner inline" }
+                }
+                if !confirm_enabled() {
+                    "Please wait..."
+                } else {
+                    "Deactivate"
+                }
+                    }
+
+            button {
+                class: "btn btn-tertiary",
+                onclick: move |_| show_dialog.set(false),
+                "Cancel"
             }
         }
     }

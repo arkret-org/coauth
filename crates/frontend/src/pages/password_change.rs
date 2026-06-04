@@ -4,6 +4,7 @@ use crate::{
     api::types::{SetPasswordStatus, ViewerResponse},
     components::{
         layout::Layout,
+        form_error::FormError,
         loading::{LoadingScreen, LoadingSpinner},
         page_heading::PageHeading,
         password_input::PasswordCreationDoubleInput,
@@ -116,10 +117,7 @@ fn PasswordChangeForm(user_id: String) -> Element {
                 },
 
                 if let Some(ref err) = *error.read() {
-                    div { class: "alert alert-critical",
-                        p { class: "alert-title", "Error" }
-                        p { "{err}" }
-                    }
+                    FormError { message: err.clone(), title: "Error".to_owned() }
                 }
 
                 div { class: "form-field",

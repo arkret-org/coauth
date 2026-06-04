@@ -311,6 +311,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                                     .unwrap_or_else(|| format!("Sign in with {}", provider.id));
                                 rsx! {
                                     a {
+                                        key: "{provider.id}",
                                         class: "btn btn-secondary btn-block",
                                         href: "{href}",
                                         "aria-label": "{label}",

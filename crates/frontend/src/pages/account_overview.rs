@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     api::types::{SecuritySummaryResponse, WorkflowInboxResponse},
-    components::loading::LoadingScreen,
+    components::{loading::LoadingScreen, status_badge::StatusBadge},
     pages::Route,
 };
 
@@ -39,21 +39,19 @@ pub fn AccountOverview() -> Element {
         }
     };
 
+    // Workflow data loads independently and degrades gracefully: while it is
+    // still in flight we show a "loading" state instead of an "unavailable"
+    // one, so the security-driven view renders immediately without flicker.
+    let workflow_loading = wf_binding.is_none();
     let pending_count = match &*wf_binding {
         Some(Ok(wf)) => Some(wf.total),
-        Some(Err(_)) => None, // silently degrade
-        None => None,
+        Some(Err(_)) | None => None, // silently degrade / still loading
     };
 
     let password_label = if summary.has_password {
         "Password is set"
     } else {
         "No password set"
-    };
-    let password_badge_class = if summary.has_password {
-        "badge badge-success"
-    } else {
-        "badge badge-warning"
     };
     let password_tone_class = if summary.has_password {
         "tone-success"
@@ -68,16 +66,19 @@ pub fn AccountOverview() -> Element {
     let workflow_badge_label = match pending_count {
         Some(0) => "No pending workflows".to_owned(),
         Some(count) => format!("{count} workflow(s) pending"),
+        None if workflow_loading => "Checking workflows…".to_owned(),
         None => "Workflow status unavailable".to_owned(),
     };
     let workflow_title = match pending_count {
         Some(0) => "No workflows waiting",
         Some(_) => "Pending workflow actions",
+        None if workflow_loading => "Checking your workflow inbox",
         None => "Workflow visibility degraded",
     };
     let workflow_message = match pending_count {
         Some(0) => "Everything looks clear right now. You can stay focused on profile and security hygiene.".to_owned(),
         Some(count) => format!("{count} workflow(s) still need attention. Review them before they expire or block follow-up actions."),
+        None if workflow_loading => "Loading your pending workflows…".to_owned(),
         None => "The workflow inbox could not be loaded. You can still open it directly and retry from there.".to_owned(),
     };
     rsx! {
@@ -90,7 +91,7 @@ pub fn AccountOverview() -> Element {
                         "Scan account posture, pending work, and the fastest routes to your common account tasks."
                     }
                     div { class: "flex flex-wrap items-center gap-2",
-                        span { class: "{password_badge_class}", "{password_label}" }
+                        StatusBadge { ok: summary.has_password, label: password_label.to_owned() }
                         span { class: "{workflow_badge_class}", "{workflow_badge_label}" }
                     }
                 }
