@@ -6,7 +6,7 @@ use crate::{
         empty_state::EmptyState,
         loading::LoadingScreen,
         oauth_session::OAuthSessionCard,
-        pagination::{PaginationControls, PaginationDirection, PaginationState},
+        pagination::{PaginationState, SessionFilterToggle, SessionPaginationControls},
         separator::{Separator, SeparatorKind},
     },
     pages::Route,
@@ -14,8 +14,8 @@ use crate::{
 
 #[component]
 pub fn Sessions() -> Element {
-    let mut show_inactive = use_signal(|| false);
-    let mut pagination = use_signal(|| PaginationState::new(6));
+    let show_inactive = use_signal(|| false);
+    let pagination = use_signal(|| PaginationState::new(6));
 
     // REST /viewer returns all session data combined, so a single request
     // serves both the browser-session overview and the app-session list.
@@ -61,24 +61,11 @@ pub fn Sessions() -> Element {
             let start_cursor = page_info.as_ref().and_then(|p| p.start_cursor.clone());
             let end_cursor = page_info.as_ref().and_then(|p| p.end_cursor.clone());
 
-            let inactive_active = show_inactive();
-
             rsx! {
                 div { class: "flex flex-col gap-6",
                     h3 { class: "heading-xs", "Sessions" }
 
-                    // Inactive session filter toggle
-                    div { class: "flex items-center gap-2",
-                        button {
-                            class: if inactive_active { "filter-toggle active" } else { "filter-toggle" },
-                            onclick: move |_| {
-                                show_inactive.set(!show_inactive());
-                                // Reset to the first page when the filter changes.
-                                pagination.set(PaginationState::new(6));
-                            },
-                            "Show inactive (90+ days)"
-                        }
-                    }
+                    SessionFilterToggle { active: show_inactive, pagination }
 
                     // Browser sessions overview
                     div { class: "browser-sessions-overview",
@@ -108,25 +95,12 @@ pub fn Sessions() -> Element {
                     }
 
                     // Pagination controls
-                    PaginationControls {
-                        has_previous: has_previous,
-                        has_next: has_next,
-                        on_previous: move |()| {
-                            if let Some(ref cursor) = start_cursor {
-                                pagination.set(PaginationState {
-                                    page_size: 6,
-                                    direction: PaginationDirection::Backward(cursor.clone()),
-                                });
-                            }
-                        },
-                        on_next: move |()| {
-                            if let Some(ref cursor) = end_cursor {
-                                pagination.set(PaginationState {
-                                    page_size: 6,
-                                    direction: PaginationDirection::Forward(cursor.clone()),
-                                });
-                            }
-                        },
+                    SessionPaginationControls {
+                        pagination,
+                        has_previous,
+                        has_next,
+                        start_cursor,
+                        end_cursor,
                     }
                 }
             }

@@ -121,19 +121,19 @@ pub fn PasswordCreationDoubleInput(
 
             // Password strength indicator
             if strength != PasswordStrength::Empty {
-                div {
-                    style: "margin-top: 6px;",
+                div { class: "password-strength",
                     // Strength bar background
-                    div {
-                        style: "height: 4px; border-radius: 2px; background-color: #e2e8f0; overflow: hidden;",
-                        // Filled portion
+                    div { class: "password-strength-track",
+                        // Filled portion — width and color are data-driven.
                         div {
-                            style: "height: 100%; border-radius: 2px; transition: width 0.3s ease, background-color 0.3s ease; width: {strength.width_percent()}%; background-color: {strength.color()};",
+                            class: "password-strength-fill",
+                            style: "width: {strength.width_percent()}%; background-color: {strength.color()};",
                         }
                     }
                     // Strength label
                     span {
-                        style: "font-size: 0.75rem; color: {strength.color()}; margin-top: 2px; display: inline-block;",
+                        class: "password-strength-label",
+                        style: "color: {strength.color()};",
                         "{strength.label()}"
                     }
                 }

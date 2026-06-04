@@ -93,14 +93,12 @@ pub fn EditProfileDialog(
             div { class: "flex flex-col items-center gap-3",
                 if let Some(ref url) = *current_avatar_url.read() {
                     img {
-                        class: "user-avatar self-center",
-                        style: "width: 88px; height: 88px; object-fit: cover;",
+                        class: "user-avatar user-avatar-lg self-center",
                         src: "{url}",
                         alt: "Avatar",
                     }
                 } else {
-                    div { class: "user-avatar self-center",
-                        style: "width: 88px; height: 88px; font-size: 32px;",
+                    div { class: "user-avatar user-avatar-lg self-center",
                         "{avatar_initial}"
                     }
                 }

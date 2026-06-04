@@ -877,6 +877,31 @@ html[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
     pointer-events: none;
 }
 
+/* Password strength indicator. The fill width and colors are data-driven and
+   stay inline; the static box model lives here. */
+.password-strength {
+    margin-top: 6px;
+}
+
+.password-strength-track {
+    height: 4px;
+    border-radius: 2px;
+    background-color: var(--color-bg-secondary);
+    overflow: hidden;
+}
+
+.password-strength-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.password-strength-label {
+    font-size: 0.75rem;
+    margin-top: 2px;
+    display: inline-block;
+}
+
 .form-error {
     font-size: var(--font-size-sm);
     color: var(--color-destructive);
@@ -979,6 +1004,13 @@ html[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
     flex-shrink: 0;
     box-shadow: var(--shadow-md);
     object-fit: cover;
+}
+
+/* Larger avatar variant used inside the edit-profile dialog. */
+.user-avatar.user-avatar-lg {
+    width: 88px;
+    height: 88px;
+    font-size: 32px;
 }
 
 .user-meta {

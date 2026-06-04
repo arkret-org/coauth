@@ -6,14 +6,14 @@ use crate::{
         browser_session::BrowserSessionCard,
         empty_state::EmptyState,
         loading::LoadingScreen,
-        pagination::{PaginationControls, PaginationDirection, PaginationState},
+        pagination::{PaginationState, SessionFilterToggle, SessionPaginationControls},
     },
 };
 
 #[component]
 pub fn BrowserSessions() -> Element {
-    let mut show_inactive = use_signal(|| false);
-    let mut pagination = use_signal(|| PaginationState::new(6));
+    let show_inactive = use_signal(|| false);
+    let pagination = use_signal(|| PaginationState::new(6));
 
     // Re-fetch when the filter toggle or pagination cursor changes. Reading the
     // signals by reference (not clone) is enough to register the dependency.
@@ -58,24 +58,12 @@ pub fn BrowserSessions() -> Element {
             let end_cursor = page_info.as_ref().and_then(|p| p.end_cursor.clone());
 
             let current_id = &session.id;
-            let inactive_active = show_inactive();
 
             rsx! {
                 div { class: "flex flex-col gap-6",
                     h5 { class: "heading-xs", "Browser sessions" }
 
-                    // Inactive session filter toggle
-                    div { class: "flex items-center gap-2",
-                        button {
-                            class: if inactive_active { "filter-toggle active" } else { "filter-toggle" },
-                            onclick: move |_| {
-                                show_inactive.set(!show_inactive());
-                                // Reset to the first page when the filter changes.
-                                pagination.set(PaginationState::new(6));
-                            },
-                            "Show inactive (90+ days)"
-                        }
-                    }
+                    SessionFilterToggle { active: show_inactive, pagination }
 
                     for edge in browser_sessions.iter() {
                         BrowserSessionCard {
@@ -90,25 +78,12 @@ pub fn BrowserSessions() -> Element {
                     }
 
                     // Pagination controls
-                    PaginationControls {
-                        has_previous: has_previous,
-                        has_next: has_next,
-                        on_previous: move |()| {
-                            if let Some(ref cursor) = start_cursor {
-                                pagination.set(PaginationState {
-                                    page_size: 6,
-                                    direction: PaginationDirection::Backward(cursor.clone()),
-                                });
-                            }
-                        },
-                        on_next: move |()| {
-                            if let Some(ref cursor) = end_cursor {
-                                pagination.set(PaginationState {
-                                    page_size: 6,
-                                    direction: PaginationDirection::Forward(cursor.clone()),
-                                });
-                            }
-                        },
+                    SessionPaginationControls {
+                        pagination,
+                        has_previous,
+                        has_next,
+                        start_cursor,
+                        end_cursor,
                     }
                 }
             }

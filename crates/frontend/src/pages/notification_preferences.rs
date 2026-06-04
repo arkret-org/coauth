@@ -114,7 +114,7 @@ fn NotificationPreferencesForm(
                 div { class: "flex items-center gap-3",
                     StatusBadge {
                         ok: sms_available,
-                        label: if sms_available { "SMS delivery configured" } else { "SMS delivery not configured" }.to_owned(),
+                        label: (if sms_available { "SMS delivery configured" } else { "SMS delivery not configured" }).to_owned(),
                     }
                 }
                 p { class: "text-md text-secondary",

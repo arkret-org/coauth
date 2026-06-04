@@ -43,6 +43,62 @@ impl PaginationState {
     }
 }
 
+/// The "Show inactive (90+ days)" filter toggle shared by the session list
+/// pages. Flipping it also resets pagination back to the first page.
+#[component]
+pub fn SessionFilterToggle(active: Signal<bool>, pagination: Signal<PaginationState>) -> Element {
+    let page_size = pagination.read().page_size;
+    rsx! {
+        div { class: "flex items-center gap-2",
+            button {
+                class: if active() { "filter-toggle active" } else { "filter-toggle" },
+                onclick: move |_| {
+                    active.set(!active());
+                    // Reset to the first page when the filter changes.
+                    pagination.set(PaginationState::new(page_size));
+                },
+                "Show inactive (90+ days)"
+            }
+        }
+    }
+}
+
+/// Cursor-based pagination controls wired directly to a [`PaginationState`]
+/// signal. Shared by the session list pages so the forward/backward cursor
+/// bookkeeping isn't duplicated per page.
+#[component]
+pub fn SessionPaginationControls(
+    pagination: Signal<PaginationState>,
+    has_previous: bool,
+    has_next: bool,
+    start_cursor: Option<String>,
+    end_cursor: Option<String>,
+) -> Element {
+    let page_size = pagination.read().page_size;
+    rsx! {
+        PaginationControls {
+            has_previous,
+            has_next,
+            on_previous: move |()| {
+                if let Some(ref cursor) = start_cursor {
+                    pagination.set(PaginationState {
+                        page_size,
+                        direction: PaginationDirection::Backward(cursor.clone()),
+                    });
+                }
+            },
+            on_next: move |()| {
+                if let Some(ref cursor) = end_cursor {
+                    pagination.set(PaginationState {
+                        page_size,
+                        direction: PaginationDirection::Forward(cursor.clone()),
+                    });
+                }
+            },
+        }
+    }
+}
+
 #[component]
 pub fn PaginationControls(
     has_previous: bool,
