@@ -450,7 +450,7 @@ async fn patch_account(
     };
     let mut rng = crate::handlers::account::make_rng();
 
-    // CXP-0007 P2B.5: high-risk patches (disable / erase / reset_recovery)
+    // CKP-0007 P2B.5: high-risk patches (disable / erase / reset_recovery)
     // MUST be preceded by an N-of-M approved RiskActionProposal. The
     // proposal id is bound to the request via the `risk_action_proposal_id`
     // query / header parameter; the propose / approve workflow lives in

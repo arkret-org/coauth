@@ -22,7 +22,7 @@ Out-of-scope:
 - Self-hosted dev defaults intended to be overridden in production
 - Theoretical issues without practical exploitation
 
-## CXP-0007 Circle Invariants
+## CKP-0007 Circle Invariants
 
 Per spec, Circle is an intra-Realm cryptographic sub-boundary:
 - Circle member lists MUST NOT leak to directory services or push gateways in plaintext

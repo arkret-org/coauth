@@ -57,7 +57,7 @@ use crate::services::policy_frontier::Frontier;
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
 
-/// CXP-0010 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — call /
+/// CKP-0010 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — call /
 /// media capability actions registered in
 /// `capability-action-registry.json`. CAP-1: capability evaluator MUST
 /// recognise these five actions so deny/review/allow rules can target
@@ -70,7 +70,7 @@ pub const RECOGNISED_CALL_CAPABILITY_ACTIONS: &[&str] = &[
     CAP_ACTION_CALL_MODERATE,
 ];
 
-/// CAP-1: returns true when `action` is one of the five CXP-0010 call /
+/// CAP-1: returns true when `action` is one of the five CKP-0010 call /
 /// media capability actions. Used by handlers that need to short-circuit
 /// validation when the realm policy hasn't loaded yet but the action is
 /// nevertheless known to the evaluator.

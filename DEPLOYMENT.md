@@ -121,7 +121,7 @@ CI runs this automatically via `.github/workflows/oidc-conformance.yaml`.
 
 ## R3 migration notes (b47ff6ec sync)
 
-- New error codes wired (CXP-0008 agent auth matrix): `pairing_request_expired`, `proof_invalid`, `verification_method_principal_mismatch`, `agent_paused`, `agent_deactivated`, `accountability_grant_missing`. No schema migration.
+- New error codes wired (CKP-0008 agent auth matrix): `pairing_request_expired`, `proof_invalid`, `verification_method_principal_mismatch`, `agent_paused`, `agent_deactivated`, `accountability_grant_missing`. No schema migration.
 - 5 new capability action enum entries (`cx.call.{join, screen_share, record, transcribe, moderate}`) — backward-compatible policy evaluation; no rule storage migration.
 - Handle homograph wire-level reject hook on organization-issued claims — no migration; existing claims revalidated on next refresh.
 - `ck.profile.accountable_principals.strict_reject.v1` profile signal — opt-in per deployment via config (default: strict accountability-principal validation).

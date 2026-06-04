@@ -314,7 +314,7 @@ pub(crate) enum SdkJwsVerifyError {
 
 /// Verify a compact JWS using the SDK's pure-Rust Ed25519 verifier.
 ///
-/// CXP-0007 P2B.3.1: this replaces the previous embedded
+/// CKP-0007 P2B.3.1: this replaces the previous embedded
 /// `coauth_jose::jwt::Jwt::verify_with_jwks` envelope-verification path.
 /// The compact-JWS shape (`header.payload.signature`) is parsed into
 /// segment bytes here; the signing input
@@ -931,7 +931,7 @@ mod tests {
             controller: vector.did_document_fragment.controller.clone(),
             public_key_jwk: vector.did_document_fragment.public_key_jwk.clone(),
         };
-        // CXP-0007 P2B.3.1: verify through the SDK-mediated pure-Rust path.
+        // CKP-0007 P2B.3.1: verify through the SDK-mediated pure-Rust path.
         verify_compact_jws_with_sdk(&compact, std::slice::from_ref(&method), kid)
             .expect("fixture JWS should verify against DID method key");
         assert!(

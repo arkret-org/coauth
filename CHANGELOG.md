@@ -18,7 +18,7 @@ for the full release process.
 
 ## R3.3 — Spec sync 2026-05-28 (cokret-spec @ cced4b8)
 
-- R3.3 spec sync — pin to cokret-spec @ cced4b8 (CXP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
+- R3.3 spec sync — pin to cokret-spec @ cced4b8 (CKP-0011 shareable object addressing / `cx.directory.resolve_target`: N/A for this service; object-address resolution belongs to the Directory Service).
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 ## R3.2 — Spec sync 2026-05-28 (cokret-spec @ b56cab1)
@@ -41,7 +41,7 @@ for the full release process.
 
 ## [Unreleased]
 
-### CXP-0007 circle rollout — coauth P2B closeout (2026-05-26)
+### CKP-0007 circle rollout — coauth P2B closeout (2026-05-26)
 
 - **Added** (P2B.3.1) `did_binding_proof.rs` now verifies compact JWS
   binding proofs through the SDK's pure-Rust `cokret_signatures::proof::
@@ -89,7 +89,7 @@ for the full release process.
   reference in the original P2B.5 brief did not match a live stub; no
   change made there.
 
-### CXP-0007 circle rollout — coauth P2B (2026-05-26, cokret-spec `9cb47c1..2b0d70d`)
+### CKP-0007 circle rollout — coauth P2B (2026-05-26, cokret-spec `9cb47c1..2b0d70d`)
 
 - **Security** (P1.5) `config.dev.yaml` (real Gmail SMTP password + RSA/EC
   private keys + DB credentials) and `coauth-dev.log` were never committed
@@ -104,7 +104,7 @@ for the full release process.
   branch where it lands. Closes P1.5.8. Operators still need to rotate
   the Gmail app password / signing keys / DB credentials out-of-band,
   since they were exposed locally.
-- **Breaking** Admin policy dictionary now ships the six CXP-0007
+- **Breaking** Admin policy dictionary now ships the six CKP-0007
   `cx.circle.*` capability actions (`create`, `manage`, `member.add`,
   `member.manage`, `member.add.others`, `audit`) and exposes admin endpoints
   to list / grant / revoke them.

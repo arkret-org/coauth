@@ -1,4 +1,4 @@
-//! CXP-0008 personal-agent controller-approval endpoints.
+//! CKP-0008 personal-agent controller-approval endpoints.
 //!
 //! Phase P2 (B-A / `_before_todos.md` §1.4): when a controller approves
 //! provisioning of a native Personal Agent, coauth (as the controller's
@@ -105,7 +105,7 @@ pub struct AccountabilityGrantRequest {
 
 /// Response payload for `POST /_cokret/self/agents/{id}/accountability-grant`.
 ///
-/// CXP-0008 (`id-kind-registry.json`): the wire shape carries the
+/// CKP-0008 (`id-kind-registry.json`): the wire shape carries the
 /// freshly minted `ck:accountability_grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
@@ -143,7 +143,7 @@ pub struct AccountabilityGrantResponse {
 
 /// `POST /_cokret/self/agents/{id}/accountability-grant`
 ///
-/// Internal CXP-0008 grant-issuance endpoint. Accepts only the soland /
+/// Internal CKP-0008 grant-issuance endpoint. Accepts only the soland /
 /// sodmin static bearer token (matched against any
 /// `cokret.principal_servers[].session_grant_introspection_bearer`
 /// configured for the deployment); browser sessions and end-user

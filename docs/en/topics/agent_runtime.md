@@ -14,7 +14,7 @@ but they are reserved implementation details rather than a callable public API.
 
 ### `POST /_cokret/self/agents/{id}/accountability-grant`
 
-This internal CXP-0008 endpoint issues an accountability grant linking a human
+This internal CKP-0008 endpoint issues an accountability grant linking a human
 controller DID to an agent principal id and a canonical set of `cx.agent.*`
 capabilities.
 

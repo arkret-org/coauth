@@ -901,7 +901,7 @@ fn build_account_api_router(router: Router) -> Router {
                         .push(Router::with_path("respond").post(flow::respond_flow)),
                 ),
         )
-        // CXP-0008 personal-agent controller approval. Internal
+        // CKP-0008 personal-agent controller approval. Internal
         // server-to-server endpoint: accepts only soland / sodmin
         // static bearers. Issues a `accountability_grant` payload
         // referencing the agent principal + capability set.
@@ -939,7 +939,7 @@ fn build_admin_router(router: Router) -> Router {
         )
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
-        // CXP-0007 ck.circle.* capability grants (P2B.2). Wire shape is in
+        // CKP-0007 ck.circle.* capability grants (P2B.2). Wire shape is in
         // coauth-admin-types::circle_capability_admin; persistence is
         // in-memory until the follow-up migration lands.
         .push(

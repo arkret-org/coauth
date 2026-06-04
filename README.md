@@ -260,4 +260,4 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
 > `_coauth_todos.md` in the parent `cokret/` directory for the
-> circle-rollout (CXP-0007) work item list and per-stage checkpoints.
+> circle-rollout (CKP-0007) work item list and per-stage checkpoints.

@@ -1,6 +1,6 @@
-//! Admin DTOs for managing CXP-0007 `ck.circle.*` capability grants.
+//! Admin DTOs for managing CKP-0007 `ck.circle.*` capability grants.
 //!
-//! CXP-0007 introduces a Circle primitive — an encrypted sub-boundary
+//! CKP-0007 introduces a Circle primitive — an encrypted sub-boundary
 //! inside a Realm — and ships six capability actions that govern who can
 //! create / manage / audit Circles and their membership:
 //!
@@ -24,7 +24,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// One of the six CXP-0007 capability actions. Stored as the literal
+/// One of the six CKP-0007 capability actions. Stored as the literal
 /// registry string so the wire shape is stable across rollouts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(

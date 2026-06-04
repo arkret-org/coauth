@@ -361,7 +361,7 @@ Sample output
 
 ## Realm classification — Principal Control vs Collaboration
 
-CXP-0007 (cokret-spec commit `44abbd6`) made the distinction between two
+CKP-0007 (cokret-spec commit `44abbd6`) made the distinction between two
 realm classes explicit. Every admin route belongs to one of them:
 
 - **Principal Control Realm** — identity, device, handle, claim, DID
@@ -370,7 +370,7 @@ realm classes explicit. Every admin route belongs to one of them:
   alter who the principal *is*.
 - **Collaboration Realm** — Spaces, Flows, Circles, membership, content
   policy. Operators who hold capabilities here govern what the principal
-  *does together with other principals*. The six CXP-0007
+  *does together with other principals*. The six CKP-0007
   `cx.circle.*` capability actions live in this class.
 
 | Route prefix                                              | Class                  |
@@ -401,10 +401,10 @@ of the rollout will split these into per-class scopes so that an
 operator can be granted Collaboration-only access without being able to
 mutate identity state.
 
-## CXP-0007 `cx.circle.*` capability grants
+## CKP-0007 `cx.circle.*` capability grants
 
 The Collaboration class exposes a typed grant surface for the six
-CXP-0007 capability actions:
+CKP-0007 capability actions:
 
 | action                        | risk   | required constraint        |
 |-------------------------------|--------|----------------------------|

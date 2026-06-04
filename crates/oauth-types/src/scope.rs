@@ -86,7 +86,7 @@ pub const COKRET_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
 /// `urn:cokret:admin:*` — Cokret admin capability family.
 pub const COKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:cokret:admin:*");
 
-/// `ck.agent.manage` — CXP-0008 controller-approval scope. Covers the
+/// `ck.agent.manage` — CKP-0008 controller-approval scope. Covers the
 /// admin subset of the 14 personal-agent capability actions
 /// (provision / pause / resume / deactivate / grant.attach / grant.detach
 /// / rotate_key + sidecar_thread.* lifecycle hooks). Issued by coauth as
