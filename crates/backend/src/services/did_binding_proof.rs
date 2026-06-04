@@ -47,9 +47,9 @@
 //! 3PID invite chain (see `third_party_invite::verify_invite`). It
 //! validates a signed JWT issued by a trusted 3PID verification service
 //! whose claims attest that a 3PID (e.g. email) was verified for the
-//! presented invite. Required claims: `iss` (must equal the configured
-//! `expected_verification_service_did`), `aud` (must equal the local
-//! coauth service DID), `sub` (SHA-256 hex of the normalized 3PID),
+//! presented invite. Required claims: `iss` (must be a member of the
+//! configured verification-service allowlist — SEC-07a), `aud` (must equal the
+//! local coauth service DID), `sub` (SHA-256 hex of the normalized 3PID),
 //! `exp` (must be in the future), `nbf` (must be ≤ now), `jti`, and
 //! `nonce`. The signature is verified against the verification
 //! service's resolved DID document JWKS.
@@ -523,8 +523,11 @@ pub enum VerificationProofError {
     VerificationMethodNotFound,
     #[error("JWS signature did not verify against any verification-service key")]
     SignatureMismatch,
-    #[error("iss claim {actual:?} does not match expected {expected:?}")]
-    IssuerMismatch { expected: String, actual: String },
+    #[error("iss claim {actual:?} is not in the verification-service allowlist {allowlist:?}")]
+    IssuerNotAllowed {
+        allowlist: Vec<String>,
+        actual: String,
+    },
     #[error("aud claim {actual:?} does not match expected audience {expected:?}")]
     AudienceMismatch { expected: String, actual: String },
     #[error("nbf claim {nbf} is in the future (now={now})")]
@@ -535,12 +538,25 @@ pub enum VerificationProofError {
     SubjectMalformed,
 }
 
+/// SEC-07a — exact-match membership test for the verification-service
+/// allowlist (`spec/v1/zh/sync/third-party-invites.md` §2.1 / §4.3 step 2a).
+/// Returns `true` iff `iss` is byte-for-byte equal to an allowlist member.
+/// An empty allowlist always returns `false` (fail closed).
+#[must_use]
+pub fn issuer_is_allowed(allowlist: &[String], iss: &str) -> bool {
+    allowlist.iter().any(|did| did == iss)
+}
+
 /// Verify a verification-service proof JWS.
 ///
 /// Steps:
 /// 1. Parse the compact JWS into a typed JWT.
 /// 2. Reject empty / malformed claims (`sub`).
-/// 3. Match `iss` / `aud` against the expected values.
+/// 3. SEC-07a — reject any `iss` not in the verification-service allowlist
+///    (`spec/v1/zh/sync/third-party-invites.md` §2.1 / §4.3 step 2a). This
+///    membership gate runs *before* the subject proof is checked by the caller,
+///    so a valid subject proof can never admit an off-allowlist verifier. Also
+///    match `aud` against the expected value.
 /// 4. Reject `nbf > now` and `exp <= now`.
 /// 5. Resolve the issuer DID document, verify the signature against its JWKS.
 ///
@@ -557,7 +573,7 @@ pub async fn verify_verification_service_proof(
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
     proof_jws: &str,
-    expected_issuer_did: &str,
+    expected_issuer_dids: &[String],
     expected_audience: &str,
     now: DateTime<Utc>,
 ) -> Result<VerificationServiceProofClaims, VerificationProofError> {
@@ -577,9 +593,12 @@ pub async fn verify_verification_service_proof(
     if claims.sub.trim().is_empty() {
         return Err(VerificationProofError::SubjectMalformed);
     }
-    if claims.iss != expected_issuer_did {
-        return Err(VerificationProofError::IssuerMismatch {
-            expected: expected_issuer_did.to_owned(),
+    // SEC-07a / §4.3 step 2a — membership gate. The issuer MUST be in the
+    // explicit allowlist; this runs before the caller's subject-proof check,
+    // so a valid subject proof can never admit an off-allowlist verifier.
+    if !issuer_is_allowed(expected_issuer_dids, &claims.iss) {
+        return Err(VerificationProofError::IssuerNotAllowed {
+            allowlist: expected_issuer_dids.to_vec(),
             actual: claims.iss.clone(),
         });
     }
@@ -645,6 +664,25 @@ mod tests {
             nonce: "nonce-123".to_owned(),
             iat: chrono::DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap(),
         }
+    }
+
+    #[test]
+    fn issuer_allowlist_membership_gate() {
+        // SEC-07a / §4.3 step 2a — only allowlisted issuers pass.
+        let allowlist = vec![
+            "did:web:a.example".to_owned(),
+            "did:web:b.example".to_owned(),
+        ];
+        // Membership hit → allowed.
+        assert!(issuer_is_allowed(&allowlist, "did:web:a.example"));
+        assert!(issuer_is_allowed(&allowlist, "did:web:b.example"));
+        // Off-allowlist issuer → rejected (must not be admitted by any
+        // later subject-proof check).
+        assert!(!issuer_is_allowed(&allowlist, "did:web:evil.example"));
+        // Byte-exact: no prefix / substring leniency.
+        assert!(!issuer_is_allowed(&allowlist, "did:web:a.example#key-1"));
+        // Empty allowlist → fail closed.
+        assert!(!issuer_is_allowed(&[], "did:web:a.example"));
     }
 
     #[test]

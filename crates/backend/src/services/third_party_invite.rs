@@ -374,9 +374,13 @@ pub struct InviteRequest {
 /// pure verifier needs to perform key resolution + signature checks +
 /// nonce-store updates.
 pub struct VerifierCtx<'a> {
-    /// Expected `iss` of the verification-service proof. Reject any
-    /// other issuer.
-    pub expected_verification_service_did: &'a str,
+    /// SEC-07a — explicit allowlist of trusted verification-service DIDs
+    /// (`spec/v1/zh/sync/third-party-invites.md` §2.1 Allowlist MUST). The
+    /// `iss` of the verification-service proof MUST be a member of this set;
+    /// any other issuer is rejected *before* the subject proof is examined,
+    /// so a valid `subject_proof` can never admit an off-allowlist verifier
+    /// (§4.3 step 2a).
+    pub expected_verification_service_dids: &'a [String],
     /// Expected `aud` of the verification-service proof — the local
     /// coauth service DID.
     pub expected_audience: &'a str,
@@ -551,7 +555,7 @@ pub async fn verify_invite(
         ctx.repo,
         ctx.did_resolver,
         &req.binding_proof_jws,
-        ctx.expected_verification_service_did,
+        ctx.expected_verification_service_dids,
         ctx.expected_audience,
         ctx.now,
     )

@@ -515,6 +515,64 @@ mod tests {
     }
 
     #[test]
+    fn verification_allowlist_folds_legacy_single_value() {
+        // SEC-07a backward compatibility: an old single-value config
+        // behaves as a one-element allowlist.
+        let config = CokretConfig {
+            verification_service_did: Some("did:web:verifier.example".to_owned()),
+            ..CokretConfig::default()
+        };
+        assert_eq!(
+            config.verification_service_allowlist(),
+            vec!["did:web:verifier.example".to_owned()]
+        );
+    }
+
+    #[test]
+    fn verification_allowlist_merges_and_dedups() {
+        let config = CokretConfig {
+            verification_service_did: Some("did:web:a.example".to_owned()),
+            verification_service_dids: vec![
+                "did:web:a.example".to_owned(), // dup of legacy single value
+                "  ".to_owned(),                // whitespace dropped
+                "did:web:b.example".to_owned(),
+            ],
+            ..CokretConfig::default()
+        };
+        assert_eq!(
+            config.verification_service_allowlist(),
+            vec![
+                "did:web:a.example".to_owned(),
+                "did:web:b.example".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn verification_allowlist_empty_when_unset() {
+        assert!(
+            CokretConfig::default()
+                .verification_service_allowlist()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn verification_dids_deserializes_list() {
+        let config: CokretConfig = serde_json::from_value(serde_json::json!({
+            "verification_service_dids": ["did:web:x.example", "did:web:y.example"]
+        }))
+        .unwrap();
+        assert_eq!(
+            config.verification_service_allowlist(),
+            vec![
+                "did:web:x.example".to_owned(),
+                "did:web:y.example".to_owned()
+            ]
+        );
+    }
+
+    #[test]
     fn session_grant_ttl_rejects_out_of_range_values() {
         let figment = figment::Figment::new();
         let config = CokretConfig {

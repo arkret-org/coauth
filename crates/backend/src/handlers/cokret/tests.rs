@@ -86,6 +86,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         password_login_session_grants_enabled: false,
         admin_org_id: None,
         verification_service_did: None,
+        verification_service_dids: Vec::new(),
         audit_signature_fail_closed: false,
     };
 

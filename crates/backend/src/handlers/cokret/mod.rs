@@ -64,6 +64,26 @@ pub enum SessionGrantError {
     #[error("failed to encode session private key as PEM: {0}")]
     PemEncode(String),
 
+    /// SEC-04 — the inception key that would sign this issuance is past its
+    /// 24h online window (or its bootstrap anchor was missing / unparseable,
+    /// which fails closed). Carries reason code
+    /// [`cokret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`]
+    /// (`inception_key_window_exceeded`). The receiver enforces this 24h hard
+    /// cap independently, regardless of any longer window the issuing
+    /// deployment self-reports.
+    ///
+    /// NOTE (honest boundary): coauth does not currently issue any
+    /// `ck.session.grant` signed by a client inception key (grants are signed
+    /// by the deployment service key over an authenticated browser session),
+    /// so this variant is not produced by the present issuance path. It exists
+    /// as the typed rejection surface for a future genuine inception-key-signed
+    /// path; the enforcement primitive lives in
+    /// [`crate::services::inception_key_window`].
+    #[error(transparent)]
+    InceptionKeyWindowExceeded(
+        #[from] crate::services::inception_key_window::InceptionKeyWindowError,
+    ),
+
     /// R3.2 (HC-COAUTH-1/2) — the handle-claim issuance request failed the
     /// `claim_kind` allow-list or subject (holder/principal DID)
     /// validation. Carries the SDK / shared wire reason code.

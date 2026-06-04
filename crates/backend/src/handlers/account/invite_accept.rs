@@ -139,10 +139,11 @@ fn shared_nonce_store() -> &'static Arc<NonceStore> {
 /// summary; on failure returns the status code dictated by
 /// `InviteVerificationError::http_status()`.
 ///
-/// When the deployment has no `cokret.verification_service_did`
-/// configured the route returns `503 verifier_not_configured` —
-/// there's no trusted `iss` to compare the binding proof against, so
-/// we cannot safely run the verifier.
+/// When the deployment has an empty verification-service allowlist
+/// (`cokret.verification_service_did` / `cokret.verification_service_dids`
+/// both unset) the route returns `503 verifier_not_configured` — there's
+/// no trusted `iss` set to compare the binding proof against, so we
+/// cannot safely run the verifier.
 #[endpoint]
 #[tracing::instrument(name = "handlers.account.invite_accept.verify", skip_all, err)]
 pub async fn post_verify_invite(
@@ -173,18 +174,24 @@ pub async fn post_verify_invite(
     // deployment's own service DID). The latter is derived from the
     // resolver so it tracks any deployment override; the former MUST
     // come from configuration.
-    let Some(expected_iss) = cokret_config.verification_service_did.clone() else {
+    // SEC-07a — the trusted `iss` set comes from the explicit allowlist
+    // (legacy single value folded in). Empty == no verifier configured →
+    // fail closed.
+    let expected_iss_allowlist = cokret_config.verification_service_allowlist();
+    if expected_iss_allowlist.is_empty() {
         warn!(
-            "POST /_cokret/self/invites/3pid/verify called but cokret.verification_service_did is unset; \
+            "POST /_cokret/self/invites/3pid/verify called but no verification-service DID is configured \
+             (cokret.verification_service_did / cokret.verification_service_dids); \
              returning 503 verifier_not_configured"
         );
         res.status_code(StatusCode::SERVICE_UNAVAILABLE);
         res.render(Json(VerifyErrorBody {
             error: "verifier_not_configured",
-            message: "cokret.verification_service_did is not set in this deployment".into(),
+            message: "no cokret verification-service DID allowlist is set in this deployment"
+                .into(),
         }));
         return Ok(());
-    };
+    }
     let expected_aud = did_resolver.service_did(&url_builder, &cokret_config);
 
     let mut repo = depot.repo().await?;
@@ -198,7 +205,7 @@ pub async fn post_verify_invite(
     };
 
     let mut ctx = VerifierCtx {
-        expected_verification_service_did: expected_iss.as_str(),
+        expected_verification_service_dids: &expected_iss_allowlist,
         expected_audience: expected_aud.as_str(),
         now,
         nonce_store: nonce_store.as_ref(),
