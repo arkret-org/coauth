@@ -153,8 +153,33 @@ pub struct CokretConfig {
     /// it has no trusted `iss` to compare against.
     ///
     /// Override at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.
+    ///
+    /// **Deprecated single-value form** — retained for backward
+    /// compatibility. New deployments SHOULD use
+    /// [`Self::verification_service_dids`]. When set, this value is
+    /// folded into the effective allowlist (see
+    /// [`Self::verification_service_allowlist`]) as a single member.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_service_did: Option<String>,
+
+    /// SEC-07a — explicit allowlist of trusted 3PID verification-service
+    /// DIDs whose `binding_proof` JWTs this coauth deployment will accept
+    /// on `POST /_cokret/self/invites/3pid/verify`.
+    ///
+    /// Per `spec/v1/zh/sync/third-party-invites.md` §2.1 (Allowlist MUST)
+    /// the verification service is the trust root of a 3PID invite, so the
+    /// acceptable `verification_service_did` MUST be constrained to an
+    /// explicit authorization set rather than taken from invite metadata.
+    /// Any `binding_proof.verification_service_did` not in this set MUST be
+    /// rejected (and MUST NOT be admitted merely because the `subject_proof`
+    /// is valid — see §4.3 step 2a).
+    ///
+    /// The legacy single-value [`Self::verification_service_did`] (when
+    /// non-empty) is merged into this set, so an old single-value config
+    /// behaves as a one-element allowlist. The effective set is computed by
+    /// [`Self::verification_service_allowlist`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verification_service_dids: Vec<String>,
 
     /// Require signed admin-audit writes to succeed before committing
     /// security-sensitive admin mutations. Defaults to `false` so existing
@@ -190,6 +215,7 @@ impl Default for CokretConfig {
             password_login_session_grants_enabled: false,
             admin_org_id: None,
             verification_service_did: None,
+            verification_service_dids: Vec::new(),
             audit_signature_fail_closed: false,
         }
     }
@@ -213,7 +239,36 @@ impl CokretConfig {
             && !self.password_login_session_grants_enabled
             && self.admin_org_id.is_none()
             && self.verification_service_did.is_none()
+            && self.verification_service_dids.is_empty()
             && !self.audit_signature_fail_closed
+    }
+
+    /// SEC-07a — effective allowlist of trusted 3PID verification-service
+    /// DIDs, merging the deprecated single-value
+    /// [`Self::verification_service_did`] (when non-empty) with the
+    /// multi-value [`Self::verification_service_dids`].
+    ///
+    /// Empty/whitespace-only entries are dropped and duplicates are
+    /// collapsed, so an old single-value config and the new list form both
+    /// yield the same de-duplicated membership set. An empty result means
+    /// no verifier is configured and the verify endpoint MUST fail closed
+    /// (`503 verifier_not_configured`).
+    #[must_use]
+    pub fn verification_service_allowlist(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let mut push = |candidate: &str| {
+            let trimmed = candidate.trim();
+            if !trimmed.is_empty() && !out.iter().any(|existing| existing == trimmed) {
+                out.push(trimmed.to_owned());
+            }
+        };
+        if let Some(single) = self.verification_service_did.as_deref() {
+            push(single);
+        }
+        for did in &self.verification_service_dids {
+            push(did);
+        }
+        out
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
