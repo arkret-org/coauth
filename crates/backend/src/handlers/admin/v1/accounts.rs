@@ -1204,13 +1204,24 @@ mod tests {
         let signer = state.key_store.signer_for_algorithm(&alg).unwrap();
         let verification_method = format!("{did}#key-1");
         let header = JsonWebSignatureHeader::new(alg).with_kid(verification_method.clone());
+        // identity-did §5.1 / §3.6: bind the proof to this receiver (local
+        // service DID) and this deployment (trust_domain), with a bounded
+        // freshness window (exp - iat <= 300s).
+        let audience =
+            crate::handlers::cokret::service_did_for(&state.url_builder, &state.cokret_config);
+        let trust_domain =
+            crate::handlers::cokret::trust_domain_for(&state.url_builder, &state.cokret_config);
+        let iat = state.clock.now();
         let claims = BindingStatementClaims {
             kind: "ck.did_binding.control_proof.v1".to_owned(),
             account_did: did.to_owned(),
             cx_account_id: account_id.to_string(),
             verification_method,
+            audience,
+            trust_domain,
             nonce: nonce.to_owned(),
-            iat: state.clock.now(),
+            iat,
+            exp: iat + chrono::Duration::seconds(5 * 60),
         };
         let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
         let payload = cokret_core::canonical::canonical_json_bytes(&claims).unwrap();

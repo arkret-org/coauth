@@ -502,7 +502,11 @@ impl NonceStore {
 
     /// Record `jti` with its `exp`, returning `Err` if `jti` is already
     /// recorded and its `exp` has not yet passed.
-    fn check_and_record(
+    ///
+    /// Shared single-use primitive — also used by the DID-binding
+    /// control-proof verifier (`did_binding_proof::validate_control_proof`)
+    /// to consume the proof nonce after a successful verify.
+    pub fn check_and_record(
         &self,
         jti: &str,
         exp: DateTime<Utc>,

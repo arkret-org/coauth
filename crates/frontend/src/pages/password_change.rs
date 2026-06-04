@@ -3,8 +3,8 @@ use dioxus::prelude::*;
 use crate::{
     api::types::{SetPasswordStatus, ViewerResponse},
     components::{
-        layout::Layout,
         form_error::FormError,
+        layout::Layout,
         loading::{LoadingScreen, LoadingSpinner},
         page_heading::PageHeading,
         password_input::PasswordCreationDoubleInput,

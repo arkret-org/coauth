@@ -1,5 +1,7 @@
 //! Account DID binding administration endpoints.
 
+use std::sync::{Arc, OnceLock};
+
 use coauth_admin_types::{
     AccountDidBindingPreview, AdminAccountDidBinding as AccountDidBinding,
     AdminAccountDidBindingsMeta as AccountDidBindingsMeta,
@@ -27,8 +29,22 @@ use crate::{
             DidBindingProofError, normalize_did_for_binding, validate_control_proof,
         },
         did_resolver::DidResolverService,
+        third_party_invite::NonceStore,
     },
 };
+
+/// Process-global single-use store for DID-binding control-proof nonces.
+///
+/// Mirrors the 3PID invite chain's `shared_nonce_store`
+/// (`handlers::account::invite_accept`). Single-process semantics are
+/// acceptable while coauth runs as a single replica; a multi-replica
+/// deployment would back this with the shared DB (see the note on
+/// [`NonceStore`]). Held behind an `Arc` so verify calls can borrow a
+/// `&NonceStore` into it without cloning the underlying map.
+fn shared_did_binding_nonce_store() -> &'static Arc<NonceStore> {
+    static STORE: OnceLock<Arc<NonceStore>> = OnceLock::new();
+    STORE.get_or_init(|| Arc::new(NonceStore::new()))
+}
 
 const DID_BINDING_ADDED_OPERATION: &str = "account_did_binding_added";
 const DID_BINDING_REVOKED_OPERATION: &str = "account_did_binding_revoked";
@@ -203,6 +219,14 @@ pub async fn add_account_did(
         return Err(AppError::conflict("account DID binding is already active"));
     }
 
+    // identity-did §5.1 / §3.6: the control proof MUST bind to this
+    // receiver (local coauth service DID) and this deployment
+    // (`trust_domain`) so it cannot be relayed cross-receiver or carried
+    // cross-deployment. The nonce is consumed single-use on success.
+    let expected_audience = crate::handlers::cokret::service_did_for(&url_builder, &cokret_config);
+    let expected_trust_domain =
+        crate::handlers::cokret::trust_domain_for(&url_builder, &cokret_config);
+    let nonce_store = shared_did_binding_nonce_store();
     validate_control_proof(
         &http_client,
         &url_builder,
@@ -210,10 +234,13 @@ pub async fn add_account_did(
         &key_store,
         &mut repo,
         did_resolver.as_ref(),
+        nonce_store.as_ref(),
         body.control_proof.jws.as_str(),
         &did,
         id,
         body.control_proof.nonce.as_str(),
+        &expected_audience,
+        &expected_trust_domain,
         now,
     )
     .await
@@ -280,7 +307,12 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
         | DidBindingProofError::AccountDidMismatch
         | DidBindingProofError::CxAccountIdMismatch
         | DidBindingProofError::NonceMismatch
-        | DidBindingProofError::IatOutOfRange => {
+        | DidBindingProofError::AudienceMismatch
+        | DidBindingProofError::TrustDomainMismatch
+        | DidBindingProofError::IatOutOfRange
+        | DidBindingProofError::FreshnessWindowExceeded
+        | DidBindingProofError::ProofExpired
+        | DidBindingProofError::NonceReplayed => {
             AppError::bad_request(format!("control_proof_invalid: {error}"))
         }
         DidBindingProofError::Resolve(inner) => {

@@ -404,7 +404,7 @@ pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
     url_builder.absolute_url("/api/v1").to_string()
 }
 
-fn trust_domain_for(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {
+pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {
     cokret_config.trust_domain.clone().unwrap_or_else(|| {
         let scope = derived_trust_domain_scope(url_builder.public_hostname());
         let trust_domain = format!("ck:trust_domain:{scope}");
