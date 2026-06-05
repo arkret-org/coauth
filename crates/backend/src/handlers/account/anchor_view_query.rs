@@ -277,8 +277,8 @@ mod tests {
             "ck:realm:0196419b-0000-7000-8000-00000000014a",
             &client,
         )
-            .await
-            .unwrap_err();
+        .await
+        .unwrap_err();
         assert_eq!(err, AnchorViewError::PrincipalServerNotConfigured);
     }
 

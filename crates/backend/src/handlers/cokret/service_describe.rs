@@ -444,8 +444,8 @@ pub(crate) fn service_describe_response(
         //     are a DELEGATED proxy onto an upstream resolver, not a canonical registry. Claiming
         //     this profile would lie about authority over DID documents.
         //   * `ck.profile.directory_service.v1`   — role=directory. coauth exposes
-        //     `ck.find.directory.resolve_handle` only for local handles it issued; it does NOT publish a
-        //     network-wide actor directory.
+        //     `ck.find.directory.resolve_handle` only for local handles it issued; it does NOT
+        //     publish a network-wide actor directory.
         //   * `ck.profile.public_network_identity.v1` — role=directory. Same reason — coauth is a
         //     service-local issuer, not the network identity authority.
         //   * `ck.profile.principal_server.v1`    — role=server. coauth is not Realm-authoritative;

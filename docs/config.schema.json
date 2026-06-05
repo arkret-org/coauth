@@ -719,7 +719,7 @@
           "format": "uri"
         },
         "max_body_bytes": {
-          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Cokret\n`cx.server.describe.limits.max_body_bytes` advertisement.",
+          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Cokret\n`ck.server.describe.limits.max_body_bytes` advertisement.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0,

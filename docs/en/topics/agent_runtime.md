@@ -15,7 +15,7 @@ but they are reserved implementation details rather than a callable public API.
 ### `POST /_cokret/self/agents/{id}/accountability-grant`
 
 This internal CKP-0008 endpoint issues an accountability grant linking a human
-controller DID to an agent principal id and a canonical set of `cx.agent.*`
+controller DID to an agent principal id and a canonical set of `ck.agent.*`
 capabilities.
 
 The endpoint is server-to-server only:
@@ -26,7 +26,7 @@ The endpoint is server-to-server only:
 - the path `{id}` must be the agent principal DID, percent-encoded as a single
   URL path segment;
 - the `controller_did` is normalized before use;
-- each requested capability must be registered in the local `cx.agent.*`
+- each requested capability must be registered in the local `ck.agent.*`
   capability registry.
 
 On success coauth persists the accountability grant, writes a signed admin audit

@@ -13,7 +13,7 @@ coauth 尚未暴露 `ck.gate.account.agent_key_pair`，也尚未暴露
 ### `POST /_cokret/self/agents/{id}/accountability-grant`
 
 这是内部 CKP-0008 接口，用于签发 accountability grant，将人类
-controller DID、agent principal id，以及一组规范化的 `cx.agent.*`
+controller DID、agent principal id，以及一组规范化的 `ck.agent.*`
 能力绑定起来。
 
 该接口仅用于服务到服务调用：
@@ -23,7 +23,7 @@ controller DID、agent principal id，以及一组规范化的 `cx.agent.*`
 - 浏览器 session 与终端用户 OAuth token 会被拒绝；
 - 路径 `{id}` 必须是 agent principal DID，并按单个 URL path segment 做 percent-encoding；
 - `controller_did` 会在使用前规范化；
-- 每个请求的 capability 都必须存在于本地 `cx.agent.*` capability registry。
+- 每个请求的 capability 都必须存在于本地 `ck.agent.*` capability registry。
 
 成功后，coauth 会持久化 accountability grant，写入签名 admin audit 行，
 并调度 soland fan-out job。同一个 controller、agent 与 capability

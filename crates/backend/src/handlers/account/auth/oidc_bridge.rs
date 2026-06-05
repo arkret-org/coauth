@@ -1683,10 +1683,10 @@ pub async fn oidc_browser_bridge_session(
                 ))
             })?
     };
-    let state = format!("cx-state-{}", Ulid::new().to_string().to_lowercase());
-    let nonce = format!("cx-nonce-{}", Ulid::new().to_string().to_lowercase());
+    let state = format!("ck-state-{}", Ulid::new().to_string().to_lowercase());
+    let nonce = format!("ck-nonce-{}", Ulid::new().to_string().to_lowercase());
     let code_verifier = format!(
-        "cx-pkce-verifier-{}",
+        "ck-pkce-verifier-{}",
         Ulid::new().to_string().to_lowercase()
     );
     let code_challenge = pkce_s256_challenge(&code_verifier);
@@ -1790,8 +1790,8 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "session_grant_denied",
         ],
         example_request: serde_json::json!({
-            "authorization_code": "cx-auth-code-from-callback",
-            "code_verifier": "cx-pkce-verifier-01k...",
+            "authorization_code": "ck-auth-code-from-callback",
+            "code_verifier": "ck-pkce-verifier-01k...",
             "redirect_uri": "http://localhost:8080/auth/callback",
             "issuer": "https://coauth.example",
             "token_endpoint": "https://coauth.example/oauth/token",
@@ -1800,9 +1800,9 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
             "login_hint": "did:web:alice.example",
             "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
             "principal_audience": "https://soland.example",
-            "state": "cx-state-01k...",
-            "expected_state": "cx-state-01k...",
-            "expected_nonce": "cx-nonce-01k..."
+            "state": "ck-state-01k...",
+            "expected_state": "ck-state-01k...",
+            "expected_nonce": "ck-nonce-01k..."
         }),
         todos: vec![],
     }))
@@ -2109,7 +2109,7 @@ mod tests {
         assert_eq!(body["principal_audience"], expected_audience);
         assert_ne!(body["principal_audience"], "TODO_PRINCIPAL_AUDIENCE");
         assert_eq!(body["code_challenge_method"], "S256");
-        assert!(body["state"].as_str().unwrap().starts_with("cx-state-"));
-        assert!(body["nonce"].as_str().unwrap().starts_with("cx-nonce-"));
+        assert!(body["state"].as_str().unwrap().starts_with("ck-state-"));
+        assert!(body["nonce"].as_str().unwrap().starts_with("ck-nonce-"));
     }
 }

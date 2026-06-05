@@ -61,7 +61,7 @@ pub struct PolicyDryRunResponse {
     reason: Option<String>,
 
     /// Facets preserved from the reducer output.
-    facet_allow: Option<serde_json::Value>,
+    allowed_facets: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
@@ -127,7 +127,7 @@ pub async fn dry_run(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Poli
         policy_id: decision.policy_id,
         policy_version: decision.policy_version,
         reason: decision.reason,
-        facet_allow: decision.facet_allow,
+        allowed_facets: decision.allowed_facets,
     }))
 }
 
@@ -186,7 +186,7 @@ struct PolicyDryRunDecision {
     policy_id: Option<String>,
     policy_version: Option<String>,
     reason: Option<String>,
-    facet_allow: Option<serde_json::Value>,
+    allowed_facets: Option<serde_json::Value>,
 }
 
 impl PolicyDryRunRequest {
@@ -243,8 +243,8 @@ fn evaluate_policy_dry_run(
                 .and_then(|v| v.as_str())
                 .map(ToOwned::to_owned)
                 .or_else(|| Some("matched persisted policy dry-run rule".to_owned())),
-            facet_allow: rule
-                .get("facet_allow")
+            allowed_facets: rule
+                .get("allowed_facets")
                 .cloned()
                 .or_else(|| request.object_facets.clone()),
         };
@@ -269,7 +269,7 @@ fn evaluate_policy_dry_run(
             .and_then(|v| v.as_str())
             .map(ToOwned::to_owned),
         reason: Some("no matching policy dry-run rule; default decision applied".to_owned()),
-        facet_allow: request.object_facets.clone(),
+        allowed_facets: request.object_facets.clone(),
     }
 }
 

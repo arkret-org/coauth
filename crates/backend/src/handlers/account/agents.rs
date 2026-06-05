@@ -474,8 +474,8 @@ pub async fn revoke_accountability_grant_by_id(
 // ─────────────────────────────────────────────────────────────────────────
 // R3 spec-sync (2026-05-27, cokret-spec b47ff6ec) — agent auth error matrix.
 //
-// AUTH-1: `ck.gate.account.agent_key_pair` error matrix. Before invoking the proof
-//         validator, fail-closed DID match →
+// AUTH-1: `ck.gate.account.agent_key_pair` error matrix. Before invoking the
+// proof         validator, fail-closed DID match →
 // `verification_method_principal_mismatch`.         Distinct codes for
 // `pairing_request_expired`, `proof_invalid`,         `agent_deactivated`.
 // AUTH-2: `ck.gate.account.issue_session_grant` agent branch errors. Emit
@@ -498,9 +498,9 @@ pub async fn revoke_accountability_grant_by_id(
 // accountability grant existence) are implemented in soland.
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Wire-level rejection reasons for the `ck.gate.account.agent_key_pair` operation
-/// and the agent branch of `ck.gate.account.issue_session_grant`. Each variant
-/// renders to a canonical error code from
+/// Wire-level rejection reasons for the `ck.gate.account.agent_key_pair`
+/// operation and the agent branch of `ck.gate.account.issue_session_grant`.
+/// Each variant renders to a canonical error code from
 /// `cokret-spec/v1/artifacts/error-code-registry.json` v2026-05-27.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentAuthRejection {
