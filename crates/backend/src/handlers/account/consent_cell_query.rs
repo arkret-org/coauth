@@ -77,7 +77,7 @@ struct ConsentCellResponse {
 ///   `None` means soland is not wired into this coauth instance and the gate
 ///   degrades to `ConsentLookup::Unknown`.
 /// * `holder_did` — the cell-owner DID; embedded in the request path so soland
-///   can route the read to the right principal control Space.
+///   can route the read to the right principal control Realm.
 /// * `consent_id` — the consent-cell identifier per spec §6.
 /// * `http_client` — caller-provided client so tests can inject a wiremock
 ///   server and production callers can share the global pool.

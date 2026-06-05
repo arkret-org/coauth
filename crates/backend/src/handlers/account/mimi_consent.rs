@@ -17,7 +17,7 @@
 //!   `consent_id`.
 //! - `update_consent { granted = true }` → `or-set add tag` Move with
 //!   `peer=<actor>;scope=<scope>` written to the holder's principal control
-//!   Space.
+//!   Realm.
 //! - `update_consent { granted = false }` → `or-set remove tag` Move that
 //!   revokes the same `(peer, scope)` tag.
 //!
@@ -28,7 +28,7 @@
 //! point and `Ed25519MoveSigner` impl (behind the `signer` feature). This
 //! module wires the full MIMI → `SignedMove` → soland POST path:
 //!
-//! 1. Caller hands an `UpdateConsent` (with `space_id`, `anchor_ref`, `hlc`
+//! 1. Caller hands an `UpdateConsent` (with `realm_id`, `anchor_ref`, `hlc`
 //!    threaded in from upstream — typically populated either from the MIMI
 //!    envelope or from a `consent_cell_query` + `anchor_view_query`
 //!    round-trip).
@@ -80,11 +80,11 @@ impl RequestConsent {
 
 /// Inbound MIMI `update_consent` payload (subset).
 ///
-/// Round 22: `space_id`, `anchor_ref` and `hlc` are **required** so the
+/// Round 22: `realm_id`, `anchor_ref` and `hlc` are **required** so the
 /// downstream `anchor_pending_move` can build a real `UnsignedMove`. They
 /// are populated either by the MIMI gateway adapter (when those fields
 /// ride on the MIMI envelope) or by an upstream `anchor_view_query`
-/// fetch keyed by the holder's principal control Space.
+/// fetch keyed by the holder's principal control Realm.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct UpdateConsent {
@@ -93,11 +93,11 @@ pub struct UpdateConsent {
     pub holder_did: String,
     pub scope: String,
     pub granted: bool,
-    /// `ck:space:<uuidv7>` — holder's principal control Space (per spec
+    /// `ck:realm:<uuidv7>` — holder's principal control Realm (per spec
     /// §6 the consent cell lives here). Resolve from `holder_did` via
-    /// `anchor_view_query::holder_principal_space_for_did` if the wire
+    /// `anchor_view_query::holder_principal_realm_for_did` if the wire
     /// envelope does not carry it.
-    pub space_id: String,
+    pub realm_id: String,
     /// `ck:anchor:sha256:<hex>` — latest anchor leaf the issuer was
     /// working from. Fetch via
     /// `anchor_view_query::query_latest_anchor`.
@@ -114,8 +114,8 @@ pub struct UpdateConsent {
 /// each field through the SDK's `*::new` constructors.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingMove {
-    /// `ck:space:<uuidv7>` — holder's principal control Space.
-    pub space_id: String,
+    /// `ck:realm:<uuidv7>` — holder's principal control Realm.
+    pub realm_id: String,
     /// `ck:cell:ck.component.consent.grant.v1:<consent_id>`.
     pub cell_id: String,
     /// Either `or_set_add` or `or_set_remove` per spec §6.1.
@@ -154,7 +154,7 @@ pub enum MimiConsentError {
     #[error("mimi consent → move: principal server forward failed: {reason}")]
     PrincipalServerForwardFailed { reason: String },
 
-    /// One of the typed identifier inputs (`space_id`, `anchor_ref`,
+    /// One of the typed identifier inputs (`realm_id`, `anchor_ref`,
     /// `hlc`, `cell_id`, `issuer_did`) failed strict validation by the
     /// SDK constructors. Surfaces the field name + the underlying message
     /// so the caller / operator can tell whether the bug is upstream or
@@ -266,7 +266,7 @@ pub fn cascade_any_revoke(
         }
         superseded.push(SupersededRevoke {
             mv: PendingMove {
-                space_id: update.space_id.clone(),
+                realm_id: update.realm_id.clone(),
                 cell_id: consent_cell_id(&update.consent_id),
                 op: PendingMoveOp::OrSetRemove,
                 tag: tag.clone(),
@@ -335,12 +335,12 @@ pub fn update_consent_to_pending_move(
     require!(update.actor_id, "actor_id");
     require!(update.holder_did, "holder_did");
     require!(update.scope, "scope");
-    require!(update.space_id, "space_id");
+    require!(update.realm_id, "realm_id");
     require!(update.anchor_ref, "anchor_ref");
     require!(update.hlc, "hlc");
 
     Ok(PendingMove {
-        space_id: update.space_id.clone(),
+        realm_id: update.realm_id.clone(),
         cell_id: consent_cell_id(&update.consent_id),
         op: if update.granted {
             PendingMoveOp::OrSetAdd
@@ -572,9 +572,9 @@ pub(crate) fn build_and_sign_move(
     pending: &PendingMove,
     signer: &AnchorerSigner,
 ) -> Result<Move, MimiConsentError> {
-    let space = RealmId::new(pending.space_id.clone()).map_err(|error| {
+    let realm = RealmId::new(pending.realm_id.clone()).map_err(|error| {
         MimiConsentError::InvalidTypedId {
-            field: "space_id",
+            field: "realm_id",
             reason: format!("{error}"),
         }
     })?;
@@ -617,7 +617,7 @@ pub(crate) fn build_and_sign_move(
             issuer_seq: None,
         },
     };
-    let unsigned = UnsignedMove::new(issuer, space, anchor, vec![effect], hlc);
+    let unsigned = UnsignedMove::new(issuer, realm, anchor, vec![effect], hlc);
     Move::sign(&unsigned, signer.inner()).map_err(|error| MimiConsentError::SigningFailed {
         reason: format!("{error}"),
     })
@@ -646,7 +646,7 @@ mod tests {
 
     fn sample_pending() -> PendingMove {
         PendingMove {
-            space_id: "ck:space:0196419b-0000-7000-8000-00000000014a".to_owned(),
+            realm_id: "ck:realm:0196419b-0000-7000-8000-00000000014a".to_owned(),
             cell_id: consent_cell_id("c-1"),
             op: PendingMoveOp::OrSetAdd,
             tag: build_consent_tag("did:web:peer", "invite"),
@@ -690,7 +690,7 @@ mod tests {
             holder_did: "did:web:holder".into(),
             scope: "invite".into(),
             granted,
-            space_id: "ck:space:0196419b-0000-7000-8000-00000000014a".into(),
+            realm_id: "ck:realm:0196419b-0000-7000-8000-00000000014a".into(),
             anchor_ref:
                 "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
                     .into(),
@@ -705,8 +705,8 @@ mod tests {
         assert_eq!(pending.op, PendingMoveOp::OrSetAdd);
         assert_eq!(pending.tag, "peer=did:web:peer;scope=invite");
         assert_eq!(
-            pending.space_id,
-            "ck:space:0196419b-0000-7000-8000-00000000014a"
+            pending.realm_id,
+            "ck:realm:0196419b-0000-7000-8000-00000000014a"
         );
         assert_eq!(pending.hlc, "0189c4d2af00-0000-aabbccdd");
     }
@@ -734,9 +734,9 @@ mod tests {
         for sup in &cascade.superseded {
             assert_eq!(sup.marker, "superseded_by_any_revoke");
             assert_eq!(sup.mv.op, PendingMoveOp::OrSetRemove);
-            // Same cell + space + anchor + hlc as the primary.
+            // Same cell + Realm + anchor + hlc as the primary.
             assert_eq!(sup.mv.cell_id, cascade.primary.cell_id);
-            assert_eq!(sup.mv.space_id, cascade.primary.space_id);
+            assert_eq!(sup.mv.realm_id, cascade.primary.realm_id);
         }
     }
 
@@ -784,13 +784,13 @@ mod tests {
     }
 
     #[test]
-    fn update_consent_rejects_empty_space_id() {
+    fn update_consent_rejects_empty_realm_id() {
         let mut update = sample_update(true);
-        update.space_id = String::new();
+        update.realm_id = String::new();
         let err = update_consent_to_pending_move(&update).unwrap_err();
         assert!(matches!(
             err,
-            MimiConsentError::MissingField { field: "space_id" }
+            MimiConsentError::MissingField { field: "realm_id" }
         ));
     }
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Cross-service helper that fetches the holder's principal control Space
+//! Cross-service helper that fetches the holder's principal control Realm
 //! Anchor DAG snapshot from soland so coauth can populate `anchor_ref` +
 //! `hlc` on a freshly-built `UnsignedMove`.
 //!
@@ -15,16 +15,16 @@
 //! - a fresh `hlc` (`<unix-ms>-<logical>-<node>`) — used for
 //!   `UnsignedMove.hlc`,
 //!
-//! both keyed by the holder's principal control `space_id`.
+//! both keyed by the holder's principal control `realm_id`.
 //!
 //! ## Soland endpoint contract
 //!
-//! `GET /_soland/admin/spaces/{space_id}/anchor-dag` returns the
+//! `GET /_soland/admin/realms/{realm_id}/anchor-dag` returns the
 //! `AnchorDagSnapshot` shape from `sodmin::types::anchor`:
 //!
 //! ```json
 //! {
-//!   "space_id": "ck:space:...",
+//!   "realm_id": "ck:realm:...",
 //!   "leaves": [{ "anchor_id": "ck:anchor:sha256:...", "created_at": ..., "is_compaction": false }, ...],
 //!   "frontier": ["ck:move:sha256:...", ...],
 //!   "state_root": "sha256:...",
@@ -42,7 +42,7 @@ use url::Url;
 
 use crate::outbound_http;
 
-/// Result of consulting a space's anchor-dag snapshot.
+/// Result of consulting a Realm's anchor-dag snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LatestAnchorView {
     /// `ck:anchor:sha256:<hex>` of the latest leaf anchor.
@@ -93,13 +93,13 @@ struct AnchorLeafWire {
     created_at: Option<String>,
 }
 
-/// Fetch the latest leaf anchor + a fresh HLC for the given Space. Mirrors
+/// Fetch the latest leaf anchor + a fresh HLC for the given Realm. Mirrors
 /// the `consent_cell_query::query_consent_cell` shape (caller-supplied
 /// `reqwest::Client`, 5 s timeout, no `X-Cokret-Holder-Did` echo because
-/// the resource is space-scoped not holder-scoped).
+/// the resource is Realm-scoped not holder-scoped).
 pub async fn query_latest_anchor(
     principal_server_url: Option<&Url>,
-    space_id: &str,
+    realm_id: &str,
     http_client: &reqwest::Client,
 ) -> Result<LatestAnchorView, AnchorViewError> {
     let Some(base) = principal_server_url else {
@@ -107,8 +107,8 @@ pub async fn query_latest_anchor(
     };
 
     let path = format!(
-        "_soland/admin/spaces/{}/anchor-dag",
-        urlencoding::encode_path(space_id)
+        "_soland/admin/realms/{}/anchor-dag",
+        urlencoding::encode_path(realm_id)
     );
     let url = base
         .join(&path)
@@ -146,7 +146,7 @@ pub async fn query_latest_anchor(
 
     let leaf = pick_latest_leaf(&parsed.leaves).ok_or(AnchorViewError::EmptyLeaves)?;
     debug!(
-        space_id = %space_id,
+        realm_id = %realm_id,
         leaf_anchor_id = %leaf.anchor_id,
         "anchor-view: latest leaf selected",
     );
@@ -209,22 +209,12 @@ fn fresh_hlc() -> String {
     format!("{unix_ms:012x}-0000-{node:08x}")
 }
 
-/// Resolve the holder's principal control Space from their DID.
-///
-/// **Convention** (until soland exposes a canonical
-/// `account/{did}/principal-space` endpoint): map a DID to a deterministic
-/// `ck:space:` `UUIDv7` by `sha256(did)` → take the first 16 bytes, then
-/// rewrite the version + variant nibbles so the result is a valid RFC 9562
-/// `UUIDv7`. This keeps the convention reproducible across coauth /
-/// soland / sodmin without any cross-service round-trip.
-///
-/// If/when soland publishes a real lookup endpoint, swap this for an
-/// HTTP call and keep the deterministic mapping as the offline fallback.
+/// Resolve the holder's principal control Realm from their DID.
 #[must_use]
-pub fn holder_principal_space_for_did(holder_did: &str) -> String {
+pub fn holder_principal_realm_for_did(holder_did: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
-    hasher.update(b"ck:space:principal-control:v1:");
+    hasher.update(b"ck:realm:principal-control:v1:");
     hasher.update(holder_did.as_bytes());
     let digest = hasher.finalize();
     let mut bytes = [0u8; 16];
@@ -236,7 +226,7 @@ pub fn holder_principal_space_for_did(holder_did: &str) -> String {
     let h = |b: u8| -> String { format!("{b:02x}") };
     let group = |slice: &[u8]| -> String { slice.iter().copied().map(h).collect::<String>() };
     format!(
-        "ck:space:{}-{}-{}-{}-{}",
+        "ck:realm:{}-{}-{}-{}-{}",
         group(&bytes[0..4]),
         group(&bytes[4..6]),
         group(&bytes[6..8]),
@@ -282,7 +272,11 @@ mod tests {
     async fn anchor_view_returns_typed_error_when_url_missing() {
         setup();
         let client = reqwest::Client::new();
-        let err = query_latest_anchor(None, "ck:space:abc", &client)
+        let err = query_latest_anchor(
+            None,
+            "ck:realm:0196419b-0000-7000-8000-00000000014a",
+            &client,
+        )
             .await
             .unwrap_err();
         assert_eq!(err, AnchorViewError::PrincipalServerNotConfigured);
@@ -295,9 +289,9 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/spaces/.*/anchor-dag"))
+            .and(path_regex(r"^/_soland/admin/realms/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "space_id": "ck:space:test",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-00000000014a",
                 "leaves": [
                     {
                         "anchor_id": "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -315,9 +309,13 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let view = query_latest_anchor(Some(&base), "ck:space:test", &client)
-            .await
-            .unwrap();
+        let view = query_latest_anchor(
+            Some(&base),
+            "ck:realm:0196419b-0000-7000-8000-00000000014a",
+            &client,
+        )
+        .await
+        .unwrap();
         assert_eq!(
             view.leaf_anchor_id,
             "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222"
@@ -335,9 +333,9 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/spaces/.*/anchor-dag"))
+            .and(path_regex(r"^/_soland/admin/realms/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "space_id": "ck:space:test",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-00000000014a",
                 "leaves": [
                     { "anchor_id": "ck:anchor:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
                     { "anchor_id": "ck:anchor:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
@@ -348,9 +346,13 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let view = query_latest_anchor(Some(&base), "ck:space:test", &client)
-            .await
-            .unwrap();
+        let view = query_latest_anchor(
+            Some(&base),
+            "ck:realm:0196419b-0000-7000-8000-00000000014a",
+            &client,
+        )
+        .await
+        .unwrap();
         // First non-empty leaf wins when no `created_at` is present.
         assert_eq!(
             view.leaf_anchor_id,
@@ -365,9 +367,9 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/spaces/.*/anchor-dag"))
+            .and(path_regex(r"^/_soland/admin/realms/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "space_id": "ck:space:test",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-00000000014a",
                 "leaves": [],
                 "frontier": [],
             })))
@@ -375,9 +377,13 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let err = query_latest_anchor(Some(&base), "ck:space:test", &client)
-            .await
-            .unwrap_err();
+        let err = query_latest_anchor(
+            Some(&base),
+            "ck:realm:0196419b-0000-7000-8000-00000000014a",
+            &client,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err, AnchorViewError::EmptyLeaves);
     }
 
@@ -388,15 +394,19 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/spaces/.*/anchor-dag"))
+            .and(path_regex(r"^/_soland/admin/realms/.*/anchor-dag"))
             .respond_with(ResponseTemplate::new(503))
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let err = query_latest_anchor(Some(&base), "ck:space:test", &client)
-            .await
-            .unwrap_err();
+        let err = query_latest_anchor(
+            Some(&base),
+            "ck:realm:0196419b-0000-7000-8000-00000000014a",
+            &client,
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(
             err,
             AnchorViewError::PrincipalServerStatus { status: 503 }
@@ -413,13 +423,13 @@ mod tests {
     }
 
     #[test]
-    fn holder_principal_space_for_did_is_deterministic_and_strict_uuid7() {
-        let a = holder_principal_space_for_did("did:web:alice.example");
-        let b = holder_principal_space_for_did("did:web:alice.example");
+    fn holder_principal_realm_for_did_is_deterministic_and_strict_uuid7() {
+        let a = holder_principal_realm_for_did("did:web:alice.example");
+        let b = holder_principal_realm_for_did("did:web:alice.example");
         assert_eq!(a, b, "mapping must be deterministic for stable replay");
-        let c = holder_principal_space_for_did("did:web:bob.example");
-        assert_ne!(a, c, "different DIDs must map to different spaces");
-        // SDK validates `ck:space:` IDs as strict UUIDv7 — let it round-trip
+        let c = holder_principal_realm_for_did("did:web:bob.example");
+        assert_ne!(a, c, "different DIDs must map to different Realms");
+        // SDK validates `ck:realm:` IDs as strict UUIDv7 — let it round-trip
         // so we know the convention is accepted by the wire layer.
         cokret_core::RealmId::new(a).unwrap();
         cokret_core::RealmId::new(c).unwrap();
