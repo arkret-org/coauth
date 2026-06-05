@@ -17,7 +17,8 @@ use crate::handlers::account::service::sessions::{
 #[serde(tag = "__typename")]
 pub enum SessionDetailResponse {
     BrowserSession(BrowserSessionDetail),
-    OauthSession(OauthSessionDetail),
+    #[serde(rename = "OauthSession")]
+    OAuthSession(OAuthSessionDetail),
 }
 
 #[derive(Serialize, ToSchema)]
@@ -38,11 +39,11 @@ pub struct AuthenticationData {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct OauthSessionDetail {
+pub struct OAuthSessionDetail {
     pub id: String,
     pub scope: Option<String>,
     pub display_name: Option<String>,
-    pub client: Option<OauthClientBrief>,
+    pub client: Option<OAuthClientBrief>,
     pub user_agent: Option<UserAgentInfo>,
     pub last_active_ip: Option<String>,
     pub last_active_at: Option<String>,
@@ -50,7 +51,7 @@ pub struct OauthSessionDetail {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct OauthClientBrief {
+pub struct OAuthClientBrief {
     pub id: String,
     pub client_id: String,
     pub client_name: Option<String>,
@@ -106,11 +107,11 @@ pub async fn get_session(
                 .map_err(map_account_session_error)?;
             let session = detail.session;
 
-            SessionDetailResponse::OauthSession(OauthSessionDetail {
+            SessionDetailResponse::OAuthSession(OAuthSessionDetail {
                 id: NodeType::OAuthSession.serialize(session.id),
                 scope: Some(session.scope.to_string()),
                 display_name: None,
-                client: detail.client.map(|c| OauthClientBrief {
+                client: detail.client.map(|c| OAuthClientBrief {
                     id: NodeType::OAuthClient.serialize(c.id),
                     client_id: c.client_id.clone(),
                     client_name: c.client_name.clone(),

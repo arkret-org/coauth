@@ -5,7 +5,7 @@ use super::{DepotExt, NodeType, RouteError};
 use crate::handlers::account::service::connections::{OAuthClientLookupError, load_oauth_client};
 
 #[derive(Serialize, ToSchema)]
-pub struct OauthClientResponse {
+pub struct OAuthClientResponse {
     pub id: String,
     pub client_id: String,
     pub client_name: Option<String>,
@@ -20,7 +20,7 @@ pub struct OauthClientResponse {
 pub async fn get_client(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<OauthClientResponse>, RouteError> {
+) -> Result<Json<OAuthClientResponse>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -33,7 +33,7 @@ pub async fn get_client(
         .await
         .map_err(map_client_lookup_error)?;
 
-    Ok(Json(OauthClientResponse {
+    Ok(Json(OAuthClientResponse {
         id: NodeType::OAuthClient.serialize(client.id),
         client_id: client.client_id.clone(),
         client_name: client.client_name.clone(),
