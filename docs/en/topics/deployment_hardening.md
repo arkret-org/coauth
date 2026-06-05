@@ -100,7 +100,7 @@ under `accountable_principals.strict_reject.reject`:
 - `realm_id`
 - `chain_anchor` (the offending principal)
 - `reason` (one of: `stale`, `unknown`, `mismatch`, `chain_break`)
-- `requested_operation` (e.g. `ck.account.issue_session_grant`)
+- `requested_operation` (e.g. `ck.gate.account.issue_session_grant`)
 - `timestamp`
 
 These rows are consumed by the compliance pipeline. Do NOT prune them

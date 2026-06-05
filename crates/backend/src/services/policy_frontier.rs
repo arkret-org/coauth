@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 — frontier source for `ck.policy.check`.
+//! Round 4 — frontier source for `ck.self.policy.check`.
 //!
 //! The spec ([`policy-server.md` §4]) requires every signed decision to
 //! carry three frontier digests:

@@ -85,7 +85,7 @@ Strict-reject 是一项可审计的姿态变化。flip-on / flip-off 都 **必�
 - `realm_id`
 - `chain_anchor`（被拒绝的链锚 Principal）
 - `reason`（`stale` / `unknown` / `mismatch` / `chain_break` 其一）
-- `requested_operation`（例如 `ck.account.issue_session_grant`）
+- `requested_operation`（例如 `ck.gate.account.issue_session_grant`）
 - `timestamp`
 
 这些行会被合规管线消费。审计保留期内（默认 90 天，以租户 SLA 为准）

@@ -156,8 +156,8 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     let supported_operations = body["supported_operations"].as_array().unwrap();
     assert!(
-        supported_operations.contains(&serde_json::json!("ck.policy.check")),
-        "implemented POST /api/v1/policy/check MUST be advertised as ck.policy.check"
+        supported_operations.contains(&serde_json::json!("ck.self.policy.check")),
+        "implemented POST /api/v1/policy/check MUST be advertised as ck.self.policy.check"
     );
     let not_authoritative_for = body["service_boundary"]["not_authoritative_for"]
         .as_array()
@@ -186,13 +186,13 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         .filter_map(|entry| Some((entry["name"].as_str()?, entry["notes"].as_str()?)))
         .collect();
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "ck.identity.resolve" && notes.contains("delegated-resolver")
+        *name == "ck.root.identity.resolve" && notes.contains("delegated-resolver")
     }));
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "ck.identity.get_document" && notes.contains("delegated-resolver")
+        *name == "ck.root.identity.get_document" && notes.contains("delegated-resolver")
     }));
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "ck.identity.describe_registry" && notes.contains("delegated-resolver")
+        *name == "ck.root.identity.describe_registry" && notes.contains("delegated-resolver")
     }));
     // verified_profiles MUST NOT include ck.profile.identity_registry.v1
     // because coauth is a delegated resolver, not a registry.
@@ -353,7 +353,7 @@ fn describe_separates_claim_levels() {
     let supported_operations = body["supported_operations"]
         .as_array()
         .expect("supported_operations array present");
-    assert!(supported_operations.contains(&serde_json::json!("ck.policy.check")));
+    assert!(supported_operations.contains(&serde_json::json!("ck.self.policy.check")));
 }
 
 #[test]

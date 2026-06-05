@@ -16,7 +16,7 @@
 //! This module is the **issuance** side: when coauth needs to rotate
 //! or initialise a principal's cross-signing keys it MUST:
 //!   1. Read the principal's current accepted generation (from the
-//!      principal-server `ck.account.describe` or local cache),
+//!      principal-server `ck.self.account.describe` or local cache),
 //!   2. Build a [`CrossSigningPublishContent`] with
 //!      `expected_previous_generation = current_accepted` and `generation =
 //!      current_accepted + 1`,

@@ -1,8 +1,8 @@
 # Agent 运行时状态
 
 当前 coauth 只暴露 agent principal 的内部 accountability-grant 签发面。
-coauth 尚未暴露 `ck.account.agent_key_pair`，也尚未暴露
-`ck.account.issue_session_grant` 的 agent 分支。
+coauth 尚未暴露 `ck.gate.account.agent_key_pair`，也尚未暴露
+`ck.gate.account.issue_session_grant` 的 agent 分支。
 
 在这些路由真正接线前，客户端与 sodmin 不应把它们展示成可调用的 coauth
 操作。`handlers/account/agents.rs` 中保留的拒绝 helper 与错误码矩阵只是
@@ -32,16 +32,16 @@ agent principal 也会被拒绝。
 
 ## 暂缓接口
 
-### `ck.account.agent_key_pair`
+### `ck.gate.account.agent_key_pair`
 
 该操作当前没有 coauth 路由。当前服务不会创建 pairing token，不会把 key
-pair 绑定到 agent DID，也不会派发 `ck.account.agent_key_pair` 事件。
+pair 绑定到 agent DID，也不会派发 `ck.gate.account.agent_key_pair` 事件。
 
 `pairing_request_expired`、`proof_invalid`、
 `verification_method_principal_mismatch` 等失败码只描述未来 wire contract，
 不能作为生产配对接口已存在的依据。
 
-### `ck.account.issue_session_grant` 的 agent 分支
+### `ck.gate.account.issue_session_grant` 的 agent 分支
 
 agent-principal 的 session-grant 签发分支当前没有 coauth 路由。现有
 session-grant 端点不接受 agent-principal 签发请求，coauth 当前也不会在该

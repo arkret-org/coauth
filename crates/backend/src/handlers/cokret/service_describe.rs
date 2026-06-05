@@ -399,12 +399,12 @@ pub(crate) fn service_describe_response(
         }],
         supported_operations: vec![
             "ck.server.describe",
-            "ck.identity.describe_registry",
-            "ck.identity.resolve",
-            "ck.identity.get_document",
-            "ck.directory.describe",
-            "ck.directory.resolve_handle",
-            "ck.policy.check",
+            "ck.root.identity.describe_registry",
+            "ck.root.identity.resolve",
+            "ck.root.identity.get_document",
+            "ck.find.directory.describe",
+            "ck.find.directory.resolve_handle",
+            "ck.self.policy.check",
         ],
         // Required `service-describe.schema.json` field: coauth receives no
         // canonical plaintext / reversible derived content, so it declares
@@ -444,7 +444,7 @@ pub(crate) fn service_describe_response(
         //     are a DELEGATED proxy onto an upstream resolver, not a canonical registry. Claiming
         //     this profile would lie about authority over DID documents.
         //   * `ck.profile.directory_service.v1`   — role=directory. coauth exposes
-        //     `ck.directory.resolve_handle` only for local handles it issued; it does NOT publish a
+        //     `ck.find.directory.resolve_handle` only for local handles it issued; it does NOT publish a
         //     network-wide actor directory.
         //   * `ck.profile.public_network_identity.v1` — role=directory. Same reason — coauth is a
         //     service-local issuer, not the network identity authority.
@@ -492,21 +492,21 @@ pub(crate) fn service_describe_response(
         // each note preserves the delegated-resolver boundary explicitly.
         compat_surfaces: vec![
             CompatSurfaceDescriptor {
-                name: "ck.identity.describe_registry",
+                name: "ck.root.identity.describe_registry",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: reports the upstream registry coauth proxies to; does not assert canonical ownership.",
                 ),
             },
             CompatSurfaceDescriptor {
-                name: "ck.identity.resolve",
+                name: "ck.root.identity.resolve",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
                 ),
             },
             CompatSurfaceDescriptor {
-                name: "ck.identity.get_document",
+                name: "ck.root.identity.get_document",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: returns the cached/resolved DID document; coauth holds no authoritative key log for external DIDs.",
