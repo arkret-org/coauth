@@ -94,12 +94,12 @@ fn OAuthApprovalForm(data: ApprovalDataResponse, grant_id: String) -> Element {
     });
 
     rsx! {
-        div { class: "login-page consent-page",
+        div { class: "login-page approval-page",
             div { class: "login-container",
                 h1 { class: "heading-md login-title", "Authorize {client_name}" }
 
                 if let Some(ref uri) = data.client.logo_uri {
-                    div { class: "consent-logo",
+                    div { class: "approval-logo",
                         img { src: "{uri}", alt: "{client_name}", width: "64", height: "64" }
                     }
                 }
@@ -111,7 +111,7 @@ fn OAuthApprovalForm(data: ApprovalDataResponse, grant_id: String) -> Element {
                 }
 
                 if !scope_descriptions.read().is_empty() {
-                    div { class: "consent-scopes",
+                    div { class: "approval-scopes",
                         p { class: "form-label", "This will allow the application to:" }
                         ul {
                             for (i, description) in scope_descriptions.read().iter().enumerate() {
@@ -125,7 +125,7 @@ fn OAuthApprovalForm(data: ApprovalDataResponse, grant_id: String) -> Element {
                     FormError { message: err.clone() }
                 }
 
-                div { class: "consent-actions",
+                div { class: "approval-actions",
                     button {
                         class: "btn btn-primary btn-block",
                         disabled: submitting(),

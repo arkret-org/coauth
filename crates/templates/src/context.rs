@@ -7,9 +7,9 @@
 //! Domain-specific contexts are organized into sub-modules; this root module
 //! re-exports all public types for convenience.
 
+mod approval;
 mod branding;
 mod captcha;
-mod consent;
 mod device;
 mod email;
 mod ext;
@@ -26,10 +26,10 @@ mod wrappers;
 // namespace.
 
 pub use self::{
+    approval::{ApprovalContext, PolicyViolationContext},
     branding::SiteBranding,
     captcha::WithCaptcha,
-    consent::{ConsentContext, PolicyViolationContext},
-    device::{DeviceConsentContext, DeviceLinkContext, DeviceLinkFormField, DeviceNameContext},
+    device::{DeviceApprovalContext, DeviceLinkContext, DeviceLinkFormField, DeviceNameContext},
     email::{EmailRecoveryContext, EmailVerificationContext},
     ext::SiteConfigExt,
     features::SiteFeatures,

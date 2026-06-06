@@ -7,7 +7,9 @@ use crate::salvo_utils::{
     InternalError,
     csrf::{CsrfExt, ProtectedForm},
 };
-use coauth_templates::{AppContext, AppErrorState, DeviceConsentContext, PolicyViolationContext, TemplateContext};
+use coauth_templates::{
+    AppContext, AppErrorState, DeviceApprovalContext, PolicyViolationContext, TemplateContext,
+};
 use salvo::{prelude::*, writing::Text};
 use serde::Deserialize;
 use tracing::warn;
@@ -21,17 +23,17 @@ use crate::handlers::session::{
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 enum Action {
-    Consent,
-    Reject,
+    Approve,
+    Deny,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ConsentForm {
+pub struct ApprovalForm {
     action: Action,
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth.device.consent.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.device.approval.get", skip_all)]
 pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_get(req, depot, res).await {
         Ok(()) => {}
@@ -185,13 +187,13 @@ async fn handle_get(
         display_name,
     };
 
-    let ctx = DeviceConsentContext::new(grant, client, principal_user)
+    let ctx = DeviceApprovalContext::new(grant, client, principal_user)
         .with_session(session)
         .with_csrf(csrf_token.form_value())
         .with_language(locale);
 
     let rendered = templates
-        .render_device_consent(&ctx)
+        .render_device_approval(&ctx)
         .context("Failed to render template")
         .map_err(InternalError::from_anyhow)?;
 
@@ -200,7 +202,7 @@ async fn handle_get(
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth.device.consent.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.device.approval.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_post(req, depot, res).await {
         Ok(()) => {}
@@ -232,7 +234,7 @@ async fn handle_post(
         InternalError::from_anyhow(anyhow::anyhow!("Missing device_code_id path parameter"))
     })?;
 
-    let form: ProtectedForm<ConsentForm> = req
+    let form: ProtectedForm<ApprovalForm> = req
         .parse_form()
         .await
         .map_err(|e| InternalError::new(Box::new(e)))?;
@@ -330,12 +332,12 @@ async fn handle_post(
 
     let grant = if grant.is_pending() {
         match form.action {
-            Action::Consent => {
+            Action::Approve => {
                 repo.oauth_device_code_grant()
                     .fulfill(&clock, grant, &session)
                     .await?
             }
-            Action::Reject => {
+            Action::Deny => {
                 repo.oauth_device_code_grant()
                     .reject(&clock, grant, &session)
                     .await?
@@ -385,13 +387,13 @@ async fn handle_post(
         display_name,
     };
 
-    let ctx = DeviceConsentContext::new(grant, client, principal_user)
+    let ctx = DeviceApprovalContext::new(grant, client, principal_user)
         .with_session(session)
         .with_csrf(csrf_token.form_value())
         .with_language(locale);
 
     let rendered = templates
-        .render_device_consent(&ctx)
+        .render_device_approval(&ctx)
         .context("Failed to render template")
         .map_err(InternalError::from_anyhow)?;
 

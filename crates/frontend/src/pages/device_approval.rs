@@ -92,7 +92,7 @@ fn DeviceApprovalForm(data: ApprovalDataResponse, id: String) -> Element {
                         FormError { message: err.clone() }
                     }
 
-                    div { class: "consent-actions",
+                    div { class: "approval-actions",
                         button {
                             class: "btn btn-primary btn-block",
                             disabled: submitting(),

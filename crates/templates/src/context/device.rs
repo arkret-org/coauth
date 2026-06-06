@@ -77,18 +77,18 @@ impl TemplateContext for DeviceLinkContext {
     }
 }
 
-// -- Device consent ---------------------------------------------------------
+// -- Device approval --------------------------------------------------------
 
-/// Data for the `device_consent.html` template.
+/// Data for the device approval template.
 #[derive(Serialize, Debug)]
-pub struct DeviceConsentContext {
+pub struct DeviceApprovalContext {
     grant: DeviceCodeGrant,
     client: Client,
     principal_user: PrincipalUser,
 }
 
-impl DeviceConsentContext {
-    /// Build the device-consent page context.
+impl DeviceApprovalContext {
+    /// Build the device approval page context.
     #[must_use]
     pub fn new(grant: DeviceCodeGrant, client: Client, principal_user: PrincipalUser) -> Self {
         Self {
@@ -99,7 +99,7 @@ impl DeviceConsentContext {
     }
 }
 
-impl TemplateContext for DeviceConsentContext {
+impl TemplateContext for DeviceApprovalContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,

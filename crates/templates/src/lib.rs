@@ -34,7 +34,7 @@ mod macros;
 
 pub use self::{
     context::{
-        AppContext, AppErrorState, ConsentContext, DeviceConsentContext, DeviceLinkContext,
+        AppContext, AppErrorState, ApprovalContext, DeviceApprovalContext, DeviceLinkContext,
         DeviceLinkFormField, DeviceNameContext, EmailRecoveryContext, EmailVerificationContext,
         EmptyContext, ErrorContext, FormPostContext, IndexContext, LoginContext, LoginFormField,
         NotFoundContext, PasswordRegisterContext, PolicyViolationContext, PostAuthContext,

@@ -1755,33 +1755,33 @@ body:has(.dialog-overlay) .theme-toggle {
 
 /* ─── Consent pages ────────────────────────────────────────── */
 
-.consent-logo {
+.approval-logo {
     text-align: center;
 }
 
-.consent-logo img {
+.approval-logo img {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
 }
 
-.consent-scopes ul {
+.approval-scopes ul {
     padding-left: var(--space-6x);
     margin: var(--space-3x) 0;
     line-height: 2;
     color: var(--color-text-primary);
 }
 
-.consent-scopes ul li {
+.approval-scopes ul li {
     padding: var(--space-1x) 0;
     overflow-wrap: anywhere;
     word-break: break-word;
 }
 
-.consent-page .login-container {
+.approval-page .login-container {
     max-width: 560px;
 }
 
-.consent-actions {
+.approval-actions {
     display: flex;
     flex-direction: column;
     gap: var(--space-3x);

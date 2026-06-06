@@ -3,7 +3,9 @@ use crate::salvo_utils::{
     GenericError, InternalError,
     csrf::{CsrfExt, ProtectedForm},
 };
-use coauth_templates::{AppContext, AppErrorState, ConsentContext, PolicyViolationContext, TemplateContext};
+use coauth_templates::{
+    AppContext, AppErrorState, ApprovalContext, PolicyViolationContext, TemplateContext,
+};
 use salvo::{prelude::*, writing::Text};
 use thiserror::Error;
 use ulid::Ulid;
@@ -66,7 +68,7 @@ impl Scribe for RouteError {
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth.authorization.consent.get", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.authorization.approval.get", skip_all)]
 pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_get(req, depot, res).await {
         Ok(()) => {}
@@ -155,19 +157,19 @@ async fn handle_get(
         return Ok(());
     }
 
-    let ctx = ConsentContext::new(info.grant, info.client, info.principal_user)
+    let ctx = ApprovalContext::new(info.grant, info.client, info.principal_user)
         .with_session(session)
         .with_csrf(csrf_token.form_value())
         .with_language(locale);
 
-    let content = templates.render_consent(&ctx)?;
+    let content = templates.render_approval(&ctx)?;
 
     cookie_jar.finalize(res, Text::Html(content));
     Ok(())
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth.authorization.consent.post", skip_all)]
+#[tracing::instrument(name = "handlers.oauth.authorization.approval.post", skip_all)]
 pub async fn post(req: &mut Request, depot: &Depot, res: &mut Response) {
     match handle_post(req, depot, res).await {
         Ok(()) => {}

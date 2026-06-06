@@ -71,22 +71,22 @@ coauth-change-password-new = New password
 coauth-choose-display-name-description = This is the name other people will see. You can change this at any time.
 # During the registration flow, the user is asked to choose a display name. This is the headline of that form.
 coauth-choose-display-name-headline = Choose your display name
-coauth-consent-continue-to = Continue to <span>{ $client_name }</span>?
-coauth-consent-scope-list-preface = By continuing, you allow <span>{ $client_name }</span> to:
-coauth-consent-this-will-setup =
+coauth-approval-continue-to = Continue to <span>{ $client_name }</span>?
+coauth-approval-scope-list-preface = By continuing, you allow <span>{ $client_name }</span> to:
+coauth-approval-this-will-setup =
     This will set up { $client_name } (<span>{ $client_uri }</span>) with your <span>{ $server_name }</span> account.
-coauth-consent-use-another-account = Use another account
+coauth-approval-use-another-account = Use another account
 coauth-device-card-access-requested = Access requested
 coauth-device-card-device-code = Code
 coauth-device-card-generic-device = Device
 coauth-device-card-ip-address = IP address
 coauth-device-code-link-description = Link a device
 coauth-device-code-link-headline = Enter the code displayed on your device
-coauth-device-consent-denied-description = You denied access to { $client_name }. You can close this window.
-coauth-device-consent-denied-heading = Access denied
-coauth-device-consent-granted-description = You granted access to { $client_name }. You can close this window.
-coauth-device-consent-granted-heading = Access granted
-coauth-device-consent-this-will-setup =
+coauth-device-approval-denied-description = You denied access to { $client_name }. You can close this window.
+coauth-device-approval-denied-heading = Access denied
+coauth-device-approval-granted-description = You granted access to { $client_name }. You can close this window.
+coauth-device-approval-granted-heading = Access granted
+coauth-device-approval-this-will-setup =
     Another device wants to set up { $client_name } (<span>{ $client_uri }</span>) with your <span>{ $server_name }</span> account. Make sure you recognise that device.
 # The automatic device name generated for a client, e.g. 'Element on iPhone'
 coauth-device-display-name-client-on-device = { $client_name } on { $device_name }

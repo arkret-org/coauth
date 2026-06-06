@@ -1,4 +1,4 @@
-//! Consent and policy-violation template contexts.
+//! Approval and policy-violation template contexts.
 
 use std::collections::BTreeMap;
 
@@ -20,19 +20,19 @@ fn rand_alphanumeric_string(rng: &mut impl Rng, len: usize) -> String {
         .collect()
 }
 
-// -- Consent ----------------------------------------------------------------
+// -- Approval ---------------------------------------------------------------
 
-/// Data passed to the `consent.html` template.
+/// Data passed to the OAuth approval template.
 #[derive(Serialize)]
-pub struct ConsentContext {
+pub struct ApprovalContext {
     grant: AuthorizationGrant,
     client: Client,
     action: PostAuthAction,
     principal_user: PrincipalUser,
 }
 
-impl ConsentContext {
-    /// Build a consent-page context for the given grant, client and principal
+impl ApprovalContext {
+    /// Build an approval-page context for the given grant, client and principal
     /// user.
     #[must_use]
     pub fn new(grant: AuthorizationGrant, client: Client, principal_user: PrincipalUser) -> Self {
@@ -46,7 +46,7 @@ impl ConsentContext {
     }
 }
 
-impl TemplateContext for ConsentContext {
+impl TemplateContext for ApprovalContext {
     fn sample<R: Rng>(
         now: chrono::DateTime<chrono::Utc>,
         rng: &mut R,
