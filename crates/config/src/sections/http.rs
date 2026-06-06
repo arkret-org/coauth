@@ -43,7 +43,7 @@ fn rfc_private_networks() -> Vec<IpNetwork> {
     vec![
         IpNetwork::new([192, 168, 0, 0].into(), 16).unwrap(),
         IpNetwork::new([172, 16, 0, 0].into(), 12).unwrap(),
-        IpNetwork::new([10, 0, 0, 0].into(), 10).unwrap(),
+        IpNetwork::new([10, 0, 0, 0].into(), 8).unwrap(),
         IpNetwork::new(std::net::Ipv4Addr::LOCALHOST.into(), 8).unwrap(),
         IpNetwork::new([0xfd00, 0, 0, 0, 0, 0, 0, 0].into(), 8).unwrap(),
         IpNetwork::new(std::net::Ipv6Addr::LOCALHOST.into(), 128).unwrap(),
@@ -539,5 +539,32 @@ impl ConfigurationSection for HttpConfig {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::IpAddr;
+
+    use super::*;
+
+    #[test]
+    fn default_trusted_proxies_cover_rfc1918_ten_eight() {
+        let networks = rfc_private_networks();
+        let in_first_quarter: IpAddr = "10.10.20.30".parse().unwrap();
+        let outside_old_ten_ten: IpAddr = "10.128.20.30".parse().unwrap();
+
+        assert!(
+            networks
+                .iter()
+                .any(|network| network.contains(in_first_quarter)),
+            "10.0.0.0/8 default must include common 10.x proxy ranges"
+        );
+        assert!(
+            networks
+                .iter()
+                .any(|network| network.contains(outside_old_ten_ten)),
+            "10.0.0.0/8 default must include addresses outside the former /10"
+        );
     }
 }
