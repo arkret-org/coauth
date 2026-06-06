@@ -26,7 +26,7 @@ impl OptionalPostAuthAction {
             || url_builder.relative_url("/"),
             |action| match action {
                 PostAuthAction::ContinueAuthorizationGrant { id } => {
-                    url_builder.relative_url(&format!("/consent/{id}"))
+                    url_builder.relative_url(&format!("/oauth/approval/{id}"))
                 }
                 PostAuthAction::ContinueDeviceCodeGrant { id } => {
                     url_builder.relative_url(&format!("/device/{id}"))
@@ -135,7 +135,7 @@ impl OptionalPostAuthAction {
 pub fn post_auth_action_relative_url(action: &PostAuthAction, url_builder: &UrlBuilder) -> String {
     match action {
         PostAuthAction::ContinueAuthorizationGrant { id } => {
-            url_builder.relative_url(&format!("/consent/{id}"))
+            url_builder.relative_url(&format!("/oauth/approval/{id}"))
         }
         PostAuthAction::ContinueDeviceCodeGrant { id } => {
             url_builder.relative_url(&format!("/device/{id}"))

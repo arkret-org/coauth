@@ -24,10 +24,10 @@ use crate::{
 
 pub mod agents;
 pub mod anchor_view_query;
+pub mod approval;
 pub mod auth;
 pub mod avatar;
 pub mod bootstrap_admin_status;
-pub mod consent;
 pub mod consent_cell_query;
 pub mod emails;
 pub mod flow;

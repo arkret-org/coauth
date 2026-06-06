@@ -51,7 +51,7 @@ pub fn DeviceLink() -> Element {
                                 match result {
                                     Ok(resp) if resp.status == "valid" => {
                                         if let Some(grant_id) = resp.grant_id {
-                                            nav.push(Route::DeviceConsent { id: grant_id });
+                                            nav.push(Route::DeviceApproval { id: grant_id });
                                         }
                                     }
                                     Ok(_) => {

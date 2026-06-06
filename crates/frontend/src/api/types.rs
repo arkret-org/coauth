@@ -656,10 +656,10 @@ pub struct RecoveryTicketStatusResponse {
     pub email: Option<String>,
 }
 
-// ── OAuth Consent API types ──────────────────────────────────
+// ── OAuth Approval API types ─────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ConsentClientInfo {
+pub struct ApprovalClientInfo {
     pub id: String,
     pub client_id: String,
     #[serde(default)]
@@ -671,18 +671,18 @@ pub struct ConsentClientInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ConsentUserInfo {
+pub struct ApprovalUserInfo {
     pub principal_id: String,
     #[serde(default)]
     pub display_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ConsentDataResponse {
+pub struct ApprovalDataResponse {
     pub grant_id: String,
-    pub client: ConsentClientInfo,
+    pub client: ApprovalClientInfo,
     pub scope: String,
-    pub user: ConsentUserInfo,
+    pub user: ApprovalUserInfo,
     #[serde(default)]
     pub policy_violation: bool,
     #[serde(default)]
@@ -692,7 +692,7 @@ pub struct ConsentDataResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ConsentSubmitResponse {
+pub struct OAuthApprovalSubmitResponse {
     pub status: String,
     #[serde(default)]
     pub redirect_url: Option<String>,
@@ -710,7 +710,7 @@ pub struct DeviceLinkResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct DeviceConsentResponse {
+pub struct DeviceApprovalResponse {
     pub status: String,
 }
 

@@ -1,19 +1,22 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{ConsentDataResponse, DeviceConsentResponse},
+    api::types::{ApprovalDataResponse, DeviceApprovalResponse},
     components::{form_error::FormError, layout::Layout, loading::LoadingScreen},
     pages::Route,
 };
 
-/// Device code consent page — user approves or rejects device authorization.
+/// Device code approval page — user approves or rejects device authorization.
 #[component]
-pub fn DeviceConsent(id: String) -> Element {
+pub fn DeviceApproval(id: String) -> Element {
     let grant_id = id.clone();
     let data = use_resource(move || {
         let gid = grant_id.clone();
         async move {
-            crate::api::api_get::<ConsentDataResponse>(&format!("/self/device-consent/{gid}")).await
+            crate::api::api_get::<ApprovalDataResponse>(&format!(
+                "/self/device-grants/{gid}/decision"
+            ))
+            .await
         }
     });
     let binding = data.read();
@@ -41,7 +44,7 @@ pub fn DeviceConsent(id: String) -> Element {
             }
             rsx! {
                 Layout {
-                    DeviceConsentForm { data: resp.clone(), id: id.clone() }
+                    DeviceApprovalForm { data: resp.clone(), id: id.clone() }
                 }
             }
         }
@@ -55,7 +58,7 @@ pub fn DeviceConsent(id: String) -> Element {
 }
 
 #[component]
-fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
+fn DeviceApprovalForm(data: ApprovalDataResponse, id: String) -> Element {
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let mut done = use_signal(|| None::<String>);
@@ -101,9 +104,9 @@ fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
                                     let gid = gid.clone();
 
                                     spawn(async move {
-                                        let result = crate::api::api_post::<DeviceConsentResponse>(
-                                            &format!("/self/device-consent/{gid}"),
-                                            serde_json::json!({ "action": "consent" }),
+                                        let result = crate::api::api_post::<DeviceApprovalResponse>(
+                                            &format!("/self/device-grants/{gid}/decision"),
+                                            serde_json::json!({ "action": "approve" }),
                                         ).await;
                                         submitting.set(false);
                                         match result {
@@ -132,9 +135,9 @@ fn DeviceConsentForm(data: ConsentDataResponse, id: String) -> Element {
                                     let gid = gid.clone();
 
                                     spawn(async move {
-                                        let result = crate::api::api_post::<DeviceConsentResponse>(
-                                            &format!("/self/device-consent/{gid}"),
-                                            serde_json::json!({ "action": "reject" }),
+                                        let result = crate::api::api_post::<DeviceApprovalResponse>(
+                                            &format!("/self/device-grants/{gid}/decision"),
+                                            serde_json::json!({ "action": "deny" }),
                                         ).await;
                                         submitting.set(false);
                                         match result {

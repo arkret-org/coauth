@@ -838,7 +838,7 @@ pub fn RegisterFinish(id: String) -> Element {
                 if kind == Some("continue_authorization_grant")
                     && let Some(grant_id) = id
                 {
-                    nav.push(Route::Consent { grant_id });
+                    nav.push(Route::OAuthApproval { grant_id });
                     redirected = true;
                 }
             }
@@ -857,7 +857,7 @@ pub fn RegisterFinish(id: String) -> Element {
                 if kind.as_deref() == Some("continue_authorization_grant")
                     && let Some(grant_id) = id
                 {
-                    nav.push(Route::Consent { grant_id });
+                    nav.push(Route::OAuthApproval { grant_id });
                     redirected = true;
                 }
             }

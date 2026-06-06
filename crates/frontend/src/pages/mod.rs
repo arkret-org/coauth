@@ -4,8 +4,7 @@ pub mod account_settings;
 pub mod admin_oauth_client_i18n;
 pub mod browser_sessions;
 pub mod client_detail;
-pub mod consent;
-pub mod device_consent;
+pub mod device_approval;
 pub mod device_link;
 pub mod device_redirect;
 pub mod email_in_use;
@@ -14,6 +13,7 @@ pub mod error_pages;
 pub mod identity_bindings;
 pub mod login;
 pub mod notification_preferences;
+pub mod oauth_approval;
 pub mod password_change;
 pub mod password_change_success;
 pub mod password_recovery;
@@ -33,8 +33,7 @@ use account_settings::AccountSettings;
 use admin_oauth_client_i18n::AdminOAuthClientI18n;
 use browser_sessions::BrowserSessions;
 use client_detail::ClientDetail;
-use consent::Consent;
-use device_consent::DeviceConsent;
+use device_approval::DeviceApproval;
 use device_link::DeviceLink;
 use device_redirect::DeviceRedirect;
 use dioxus::prelude::*;
@@ -43,6 +42,7 @@ use email_verify::EmailVerify;
 use identity_bindings::IdentityBindings;
 use login::Login;
 use notification_preferences::NotificationPreferences;
+use oauth_approval::OAuthApproval;
 use password_change::PasswordChange;
 use password_change_success::PasswordChangeSuccess;
 use password_recovery::PasswordRecovery;
@@ -82,13 +82,13 @@ pub enum Route {
     #[route("/recover/progress/:id")]
     RecoveryProgress { id: String },
 
-    // OAuth consent & device code (public, require session)
-    #[route("/consent/:grant_id")]
-    Consent { grant_id: String },
+    // OAuth approval & device code (public, require session)
+    #[route("/oauth/approval/:grant_id")]
+    OAuthApproval { grant_id: String },
     #[route("/link")]
     DeviceLink {},
     #[route("/device/:id")]
-    DeviceConsent { id: String },
+    DeviceApproval { id: String },
 
     // Account layout with nested routes (authenticated)
     #[layout(AccountLayout)]

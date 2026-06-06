@@ -1,7 +1,7 @@
-//! REST API endpoints for OAuth consent and device-code flows.
+//! REST API endpoints for OAuth approval and device-code flows.
 //!
 //! These endpoints are consumed by the Dioxus SPA frontend and return JSON
-//! responses. They replace the server-rendered HTML consent pages.
+//! responses. They replace the server-rendered HTML approval pages.
 
 use salvo::{oapi::ToSchema, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,7 @@ pub struct UserInfo {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ConsentGetResponse {
+pub struct ApprovalGetResponse {
     pub grant_id: String,
     pub client: ClientInfo,
     pub scope: String,
@@ -48,12 +48,12 @@ pub struct ConsentGetResponse {
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct ConsentPostRequest {
+pub struct ApprovalPostRequest {
     pub action: String,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ConsentPostResponse {
+pub struct ApprovalPostResponse {
     pub status: &'static str,
     pub redirect_url: String,
 }
@@ -72,12 +72,12 @@ pub struct DeviceLinkQuery {
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct DeviceConsentPostRequest {
+pub struct DeviceApprovalPostRequest {
     pub action: String,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct DeviceConsentPostResponse {
+pub struct DeviceApprovalPostResponse {
     pub status: &'static str,
 }
 
@@ -97,8 +97,8 @@ fn client_info(client: &coauth_data::Client) -> ClientInfo {
     }
 }
 
-fn consent_get_response(screen: ConsentScreen) -> ConsentGetResponse {
-    ConsentGetResponse {
+fn approval_get_response(screen: ConsentScreen) -> ApprovalGetResponse {
+    ApprovalGetResponse {
         grant_id: screen.grant_id.to_string(),
         client: client_info(&screen.client),
         scope: screen.scope,
@@ -149,13 +149,13 @@ async fn require_authenticated_session(
     Ok(Some(session))
 }
 
-// ── GET /_coauth/self/oauth/consent/:grant_id ───────────────────────
+// ── GET /_coauth/self/oauth/authorization-grants/:grant_id/decision ─
 
-/// Return the data needed to render a consent page for an OAuth authorization
+/// Return the data needed to render an approval page for an OAuth authorization
 /// grant.
 #[endpoint]
-#[tracing::instrument(name = "handlers.rest.consent.oauth_get", skip_all)]
-pub async fn oauth_consent_get(
+#[tracing::instrument(name = "handlers.rest.oauth_approval.get", skip_all)]
+pub async fn oauth_approval_get(
     req: &mut Request,
     depot: &Depot,
     res: &mut Response,
@@ -191,17 +191,17 @@ pub async fn oauth_consent_get(
     .await
     .map_err(map_oauth_access_error)?;
 
-    res.render(Json(consent_get_response(info.into())));
+    res.render(Json(approval_get_response(info.into())));
     Ok(())
 }
 
-// ── POST /_coauth/self/oauth/consent/:grant_id ──────────────────────
+// ── POST /_coauth/self/oauth/authorization-grants/:grant_id/decision ─
 
-/// Accept the OAuth authorization consent: create an OAuth session, fulfill
+/// Approve the OAuth authorization request: create an OAuth session, fulfill
 /// the grant, and return the callback redirect URL.
 #[endpoint]
-#[tracing::instrument(name = "handlers.rest.consent.oauth_post", skip_all, err)]
-pub async fn oauth_consent_post(
+#[tracing::instrument(name = "handlers.rest.oauth_approval.post", skip_all, err)]
+pub async fn oauth_approval_post(
     req: &mut Request,
     depot: &Depot,
     res: &mut Response,
@@ -220,12 +220,12 @@ pub async fn oauth_consent_post(
         .param("grant_id")
         .ok_or_else(|| RouteError::BadRequest("missing grant_id".into()))?;
 
-    let input: ConsentPostRequest = req
+    let input: ApprovalPostRequest = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    if input.action != "consent" {
+    if input.action != "approve" {
         return Err(RouteError::BadRequest("invalid action".into()));
     }
 
@@ -258,7 +258,7 @@ pub async fn oauth_consent_post(
 
     let redirect_url = decision.redirect_url().map_err(map_oauth_access_error)?;
 
-    res.render(Json(ConsentPostResponse {
+    res.render(Json(ApprovalPostResponse {
         status: "success",
         redirect_url,
     }));
@@ -308,12 +308,12 @@ pub async fn device_link_get(
     Ok(())
 }
 
-// ── GET /_coauth/self/device-consent/:id ─────────────────────────────
+// ── GET /_coauth/self/device-grants/:id/decision ─────────────────────
 
-/// Return the data needed to render a consent page for a device code grant.
+/// Return the data needed to render an approval page for a device code grant.
 #[endpoint]
-#[tracing::instrument(name = "handlers.rest.consent.device_consent_get", skip_all)]
-pub async fn device_consent_get(
+#[tracing::instrument(name = "handlers.rest.device_approval.get", skip_all)]
+pub async fn device_approval_get(
     req: &mut Request,
     depot: &Depot,
     res: &mut Response,
@@ -349,16 +349,16 @@ pub async fn device_consent_get(
     .await
     .map_err(map_oauth_access_error)?;
 
-    res.render(Json(consent_get_response(screen)));
+    res.render(Json(approval_get_response(screen)));
     Ok(())
 }
 
-// ── POST /_coauth/self/device-consent/:id ────────────────────────────
+// ── POST /_coauth/self/device-grants/:id/decision ────────────────────
 
 /// Accept or reject a device code grant.
 #[endpoint]
-#[tracing::instrument(name = "handlers.rest.consent.device_consent_post", skip_all)]
-pub async fn device_consent_post(
+#[tracing::instrument(name = "handlers.rest.device_approval.post", skip_all)]
+pub async fn device_approval_post(
     req: &mut Request,
     depot: &Depot,
     res: &mut Response,
@@ -373,14 +373,14 @@ pub async fn device_consent_post(
         .param("id")
         .ok_or_else(|| RouteError::BadRequest("missing id".into()))?;
 
-    let input: DeviceConsentPostRequest = req
+    let input: DeviceApprovalPostRequest = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
     let action = match input.action.as_str() {
-        "consent" => DeviceConsentAction::Consent,
-        "reject" => DeviceConsentAction::Reject,
+        "approve" => DeviceConsentAction::Consent,
+        "deny" => DeviceConsentAction::Reject,
         _ => return Err(RouteError::BadRequest("invalid action".into())),
     };
 
@@ -408,7 +408,7 @@ pub async fn device_consent_post(
         DeviceConsentStatus::Rejected => "rejected",
     };
 
-    res.render(Json(DeviceConsentPostResponse {
+    res.render(Json(DeviceApprovalPostResponse {
         status: result_status,
     }));
     Ok(())

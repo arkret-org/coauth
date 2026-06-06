@@ -203,7 +203,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                                         // Check if this login is part of an OAuth authorization flow
                                         if let Some((kind, id)) = continuation {
                                             if kind == "continue_authorization_grant" {
-                                                nav.push(Route::Consent { grant_id: id });
+                                                nav.push(Route::OAuthApproval { grant_id: id });
                                             } else {
                                                 nav.push(Route::AccountOverview {});
                                             }
@@ -338,7 +338,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                             onclick: move |_| {
                                 // Carry forward any OAuth continuation so the
                                 // registration finish step can redirect to
-                                // the consent page instead of the account
+                                // the OAuth approval page instead of the account
                                 // overview.
                                 let continuation =
                                     get_query_param("kind").zip(get_query_param("id"));

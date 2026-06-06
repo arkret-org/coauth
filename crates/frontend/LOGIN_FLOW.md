@@ -11,7 +11,7 @@ continues to live in `coauth-admin-types`.
 | Load login methods | `GET /auth/providers` | `GET /_coauth/gate/account/auth/providers` |
 | Password login | `POST /auth/login` | `POST /_coauth/gate/account/auth/login` |
 | Upstream OAuth login | provider `authorize_url` from providers response | backend-managed upstream authorize route |
-| Continue OAuth grant after login | `kind=continue_authorization_grant&id=...` query | frontend routes to `Route::Consent { grant_id }` |
+| Continue OAuth grant after login | `kind=continue_authorization_grant&id=...` query | frontend routes to `Route::OAuthApproval { grant_id }` |
 | Register during grant continuation | store `post_auth_kind` and `post_auth_id` in `sessionStorage` | registration finish resumes the same grant context |
 
 The `/login` server-rendered page and the Dioxus SPA both resolve available

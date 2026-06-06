@@ -421,7 +421,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                             .record_browser_session(&clock, &user_session)
                             .await;
                         salvo::writing::Redirect::other(
-                            url_builder.relative_url(&format!("/consent/{}", grant.id)),
+                            url_builder.relative_url(&format!("/oauth/approval/{}", grant.id)),
                         )
                     }
                 }

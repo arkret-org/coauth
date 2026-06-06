@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{ConsentDataResponse, ConsentSubmitResponse},
+    api::types::{ApprovalDataResponse, OAuthApprovalSubmitResponse},
     components::{form_error::FormError, layout::Layout, loading::LoadingScreen},
     pages::Route,
 };
@@ -16,14 +16,17 @@ fn navigate_to_redirect_url(url: &str) {
 #[cfg(not(target_arch = "wasm32"))]
 fn navigate_to_redirect_url(_url: &str) {}
 
-/// OAuth consent page — shows what permissions a client is requesting.
+/// OAuth approval page — shows what permissions a client is requesting.
 #[component]
-pub fn Consent(grant_id: String) -> Element {
+pub fn OAuthApproval(grant_id: String) -> Element {
     let gid = grant_id.clone();
     let data = use_resource(move || {
         let id = gid.clone();
         async move {
-            crate::api::api_get::<ConsentDataResponse>(&format!("/self/oauth/consent/{id}")).await
+            crate::api::api_get::<ApprovalDataResponse>(&format!(
+                "/self/oauth/authorization-grants/{id}/decision"
+            ))
+            .await
         }
     });
     let binding = data.read();
@@ -50,8 +53,8 @@ pub fn Consent(grant_id: String) -> Element {
                 };
             }
             rsx! {
-                Layout {
-                    ConsentForm {
+                    Layout {
+                    OAuthApprovalForm {
                         data: resp.clone(),
                         grant_id: grant_id.clone(),
                     }
@@ -68,7 +71,7 @@ pub fn Consent(grant_id: String) -> Element {
 }
 
 #[component]
-fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
+fn OAuthApprovalForm(data: ApprovalDataResponse, grant_id: String) -> Element {
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
 
@@ -134,9 +137,9 @@ fn ConsentForm(data: ConsentDataResponse, grant_id: String) -> Element {
                                 let gid = gid.clone();
 
                                 spawn(async move {
-                                    let result = crate::api::api_post::<ConsentSubmitResponse>(
-                                        &format!("/oauth/consent/{gid}"),
-                                        serde_json::json!({ "action": "consent" }),
+                                    let result = crate::api::api_post::<OAuthApprovalSubmitResponse>(
+                                        &format!("/self/oauth/authorization-grants/{gid}/decision"),
+                                        serde_json::json!({ "action": "approve" }),
                                     ).await;
                                     submitting.set(false);
                                     match result {

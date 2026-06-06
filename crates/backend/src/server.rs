@@ -599,7 +599,7 @@ fn build_human_router(router: Router, _templates: Templates) -> Router {
         .push(Router::with_path("/register/{**rest}").get(spa::get))
         .push(Router::with_path("/recover").get(spa::get))
         .push(Router::with_path("/recover/{**rest}").get(spa::get))
-        .push(Router::with_path("/consent/{**rest}").get(spa::get))
+        .push(Router::with_path("/oauth/approval/{**rest}").get(spa::get))
         .push(Router::with_path("/link").get(spa::get))
         .push(Router::with_path("/device/{**rest}").get(spa::get))
         // Account pages (root-level frontend routes)
@@ -674,7 +674,7 @@ fn build_oauth_router(router: Router) -> Router {
 fn build_account_api_router(router: Router) -> Router {
     use crate::handlers::{
         account::{
-            agents, auth, avatar, bootstrap_admin_status, consent, emails, flow, invite_accept,
+            agents, approval, auth, avatar, bootstrap_admin_status, emails, flow, invite_accept,
             invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
             recovery, register, sessions, site_config, upstream_oauth, users, viewer,
         },
@@ -871,11 +871,11 @@ fn build_account_api_router(router: Router) -> Router {
                         )),
                 ),
         )
-        // OAuth consent
+        // OAuth approval
         .push(
-            Router::with_path("self/oauth/consent/{grant_id}")
-                .get(consent::oauth_consent_get)
-                .post(consent::oauth_consent_post),
+            Router::with_path("self/oauth/authorization-grants/{grant_id}/decision")
+                .get(approval::oauth_approval_get)
+                .post(approval::oauth_approval_post),
         )
         // Invite relay (consent-gated forward to target principal)
         .push(Router::with_path("self/account/invites/relay").post(invite_relay::post_invite_relay))
@@ -886,12 +886,12 @@ fn build_account_api_router(router: Router) -> Router {
         // pre-flight check the claimant runs before submitting
         // `ck.invite.claim`.
         .push(Router::with_path("self/invites/3pid/verify").post(invite_accept::post_verify_invite))
-        // Device code link & consent
-        .push(Router::with_path("self/device-link").get(consent::device_link_get))
+        // Device code link & approval
+        .push(Router::with_path("self/device-link").get(approval::device_link_get))
         .push(
-            Router::with_path("self/device-consent/{id}")
-                .get(consent::device_consent_get)
-                .post(consent::device_consent_post),
+            Router::with_path("self/device-grants/{id}/decision")
+                .get(approval::device_approval_get)
+                .post(approval::device_approval_post),
         )
         // Linked accounts
         .push(
