@@ -6,7 +6,7 @@ use super::*;
 use crate::handlers::common::DepotExt;
 
 #[derive(Debug, Serialize)]
-struct IdentityDescribeResBody {
+struct IdentityDescribeOutcome {
     service_did: String,
     registry_mode: &'static str,
     supported_receipts: Vec<String>,
@@ -17,7 +17,7 @@ struct IdentityDescribeResBody {
 }
 
 #[derive(Debug, Serialize)]
-struct IdentityResolveResBody {
+struct IdentityResolveOutcome {
     did_document: DidDocument,
     key_log_head: Option<String>,
     seq: Option<u64>,
@@ -26,7 +26,7 @@ struct IdentityResolveResBody {
 }
 
 #[derive(Debug, Serialize)]
-struct IdentityDocumentResBody {
+struct IdentityDocumentView {
     did_document: DidDocument,
     head_event_digest: Option<String>,
     seq: Option<u64>,
@@ -34,7 +34,7 @@ struct IdentityDocumentResBody {
 }
 
 #[derive(Debug, Serialize)]
-struct DirectoryDescribeResBody {
+struct DirectoryDescribeOutcome {
     service_did: String,
     resource_types: Vec<&'static str>,
     discovery_profiles: Vec<&'static str>,
@@ -63,12 +63,12 @@ struct ResolveHandleRequest {
 #[handler]
 pub async fn identity_describe(
     depot: &Depot,
-) -> Result<Json<IdentityDescribeResBody>, CokretRouteError> {
+) -> Result<Json<IdentityDescribeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let identity_registry = delegated_identity_registry_descriptor(&cokret_config);
 
-    Ok(Json(IdentityDescribeResBody {
+    Ok(Json(IdentityDescribeOutcome {
         service_did: service_did_for(&url_builder, &cokret_config),
         registry_mode: if identity_registry.is_some() {
             "delegated_resolver"
@@ -86,7 +86,7 @@ pub async fn identity_describe(
 pub async fn identity_resolve(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityResolveResBody>, CokretRouteError> {
+) -> Result<Json<IdentityResolveOutcome>, CokretRouteError> {
     let body: ResolveIdentityRequest = req
         .parse_json()
         .await
@@ -106,7 +106,7 @@ pub async fn identity_resolve(
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        return Ok(Json(IdentityResolveResBody {
+        return Ok(Json(IdentityResolveOutcome {
             did_document,
             key_log_head: None,
             seq: None,
@@ -133,7 +133,7 @@ pub async fn identity_resolve(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(IdentityResolveResBody {
+    Ok(Json(IdentityResolveOutcome {
         did_document: resolution.document,
         key_log_head: None,
         seq: None,
@@ -146,7 +146,7 @@ pub async fn identity_resolve(
 pub async fn identity_document(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityDocumentResBody>, CokretRouteError> {
+) -> Result<Json<IdentityDocumentView>, CokretRouteError> {
     let did = req
         .query::<String>("did")
         .ok_or_else(|| CokretRouteError::BadRequest("missing did query parameter".into()))?;
@@ -165,7 +165,7 @@ pub async fn identity_document(
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        return Ok(Json(IdentityDocumentResBody {
+        return Ok(Json(IdentityDocumentView {
             did_document,
             head_event_digest: None,
             seq: None,
@@ -188,7 +188,7 @@ pub async fn identity_document(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(IdentityDocumentResBody {
+    Ok(Json(IdentityDocumentView {
         did_document: resolution.document,
         head_event_digest: None,
         seq: None,
@@ -199,11 +199,11 @@ pub async fn identity_document(
 #[handler]
 pub async fn directory_describe(
     depot: &Depot,
-) -> Result<Json<DirectoryDescribeResBody>, CokretRouteError> {
+) -> Result<Json<DirectoryDescribeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
 
-    Ok(Json(DirectoryDescribeResBody {
+    Ok(Json(DirectoryDescribeOutcome {
         service_did: service_did_for(&url_builder, &cokret_config),
         resource_types: vec!["actor", "handle"],
         discovery_profiles: Vec::new(),

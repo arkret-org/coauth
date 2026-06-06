@@ -21,8 +21,8 @@ Read this page before enabling a build that includes the R4 changes.
   must read the current generation and submit
   `expected_previous_generation`; accepted generations advance by
   exactly one.
-- **`/policy/check` v2** uses `PolicyCheckRequest` and returns a
-  `PolicyCheckResponse` with `bound_to`, frontier digests, and a
+- **`/policy/check` v2** uses `PolicyCheckRequestBody` and returns a
+  `PolicyCheckOutcome` with `bound_to`, frontier digests, and a
   DID-keyed signature envelope.
 - **`identity_link`** payloads are bound to both `realm_id` and
   `trust_domain`.

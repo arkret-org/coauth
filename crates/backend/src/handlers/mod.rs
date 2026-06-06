@@ -87,7 +87,7 @@ pub mod oauth;
 /// Password hashing, verification, and complexity checking.
 pub mod passwords;
 /// Round 4 `ck.self.policy.check` v2 handler. Round-4 wire shape:
-/// `PolicyCheckRequest` → `PolicyCheckResponse` with full `bound_to`
+/// `PolicyCheckRequestBody` → `PolicyCheckOutcome` with full `bound_to`
 /// binding + frontier hashes + DID-URL signature kid.
 pub mod policy_check;
 /// Post-authentication action utilities (shared across handlers).

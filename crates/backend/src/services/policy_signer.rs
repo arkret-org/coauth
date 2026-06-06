@@ -8,7 +8,7 @@
 //! canonical-JSON transcript (RFC 8785 / `cokret_core::canonical`), and
 //! returns the wire-form `{kid, sig}` payload that
 //! [`crate::handlers::policy_check`] embeds in
-//! [`cokret_core::PolicyCheckResponse`].
+//! [`cokret_core::PolicyCheckOutcome`].
 //!
 //! ## Why a dedicated module
 //!

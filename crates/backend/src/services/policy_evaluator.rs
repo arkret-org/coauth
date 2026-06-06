@@ -10,7 +10,7 @@
 //! `Allow | Deny | Quarantine | RequireReview | SoftFail`. This module
 //! is responsible for picking one of those values, plus the
 //! `reason_code` and the optional `obligations` array, for every
-//! incoming `PolicyCheckRequest`.
+//! incoming `PolicyCheckRequestBody`.
 //!
 //! ## Why a separate trait
 //!
@@ -43,7 +43,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
 use cokret_core::{
     AuthzDecision, CAP_ACTION_CALL_JOIN, CAP_ACTION_CALL_MODERATE, CAP_ACTION_CALL_RECORD,
-    CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, PolicyCheckRequest,
+    CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, PolicyCheckRequestBody,
 };
 use serde_json::Value;
 use thiserror::Error;
@@ -130,7 +130,7 @@ pub struct PolicyObligation {
 
 impl PolicyObligation {
     /// Render to the wire form embedded in
-    /// [`cokret_core::PolicyCheckResponse::obligations`].
+    /// [`cokret_core::PolicyCheckOutcome::obligations`].
     pub fn to_wire(&self) -> Value {
         let mut obj = serde_json::Map::new();
         obj.insert("kind".to_owned(), Value::String(self.kind.clone()));
@@ -148,7 +148,7 @@ impl PolicyObligation {
 }
 
 /// What the evaluator produces. The handler turns this into the wire
-/// [`cokret_core::PolicyCheckResponse`].
+/// [`cokret_core::PolicyCheckOutcome`].
 #[derive(Debug, Clone)]
 pub struct PolicyDecision {
     pub decision: AuthzDecision,
@@ -226,7 +226,7 @@ impl PolicyDecision {
 pub trait PolicyEvaluator: Send + Sync {
     fn evaluate<'a>(
         &'a self,
-        request: &'a PolicyCheckRequest,
+        request: &'a PolicyCheckRequestBody,
         frontier: &'a Frontier,
     ) -> Pin<Box<dyn Future<Output = Result<PolicyDecision, EvaluatorError>> + Send + 'a>>;
 }
@@ -257,7 +257,7 @@ impl RuleEvaluator {
 impl PolicyEvaluator for RuleEvaluator {
     fn evaluate<'a>(
         &'a self,
-        request: &'a PolicyCheckRequest,
+        request: &'a PolicyCheckRequestBody,
         _frontier: &'a Frontier,
     ) -> Pin<Box<dyn Future<Output = Result<PolicyDecision, EvaluatorError>> + Send + 'a>> {
         Box::pin(async move {
@@ -298,7 +298,7 @@ impl PolicyEvaluator for RuleEvaluator {
 
 /// Pure rule-matcher; pulled out so unit tests can exercise it without
 /// a postgres connection.
-fn match_rules(data: &Value, request: &PolicyCheckRequest, policy_version: &str) -> PolicyDecision {
+fn match_rules(data: &Value, request: &PolicyCheckRequestBody, policy_version: &str) -> PolicyDecision {
     let actor_str = request.actor.as_str();
     let action_str = request.action.as_str();
 
@@ -406,8 +406,8 @@ mod tests {
 
     use super::*;
 
-    fn req(actor: &str, action: &str) -> PolicyCheckRequest {
-        PolicyCheckRequest {
+    fn req(actor: &str, action: &str) -> PolicyCheckRequestBody {
+        PolicyCheckRequestBody {
             request_id: "req-1".into(),
             realm_id: RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap(),
             actor: Did::new(actor.to_owned()).unwrap(),

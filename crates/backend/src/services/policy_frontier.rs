@@ -14,7 +14,7 @@
 //!
 //! These come from soland's `/_cokret/self/events/frontier?peer_role=
 //! federation_peer` response, which returns
-//! [`cokret_core::EventsFrontierFederationPeerResponse`] including a
+//! [`cokret_core::EventsFrontierFederationPeerState`] including a
 //! single `frontier_root`. The federation-peer variant is the only one
 //! that exposes the root commitment; account-client and
 //! anonymous-health variants intentionally omit it.
@@ -162,7 +162,7 @@ impl FrontierSource for SolandFrontierSource {
             // TODO(G3.S0): when soland exposes dedicated
             // `auth_state_root`, `policy_frontier_root`,
             // `membership_frontier_root` fields on
-            // `EventsFrontierFederationPeerResponse`, plumb each into
+            // `EventsFrontierFederationPeerState`, plumb each into
             // the matching slot below instead of duplicating
             // `frontier_root`. See `soland/src/routing/events/event_log.rs`
             // around `events_frontier` for the response builder.
@@ -210,7 +210,7 @@ impl FrontierSource for SolandFrontierSource {
 
             // soland's response envelope places the typed federation
             // peer response under `events_frontier`; the inner shape
-            // is `EventsFrontierFederationPeerResponse`. We probe
+            // is `EventsFrontierFederationPeerState`. We probe
             // defensively so a soland that hasn't migrated yet (or a
             // mock that returns the legacy envelope) still produces a
             // signed sentinel rather than a 500.

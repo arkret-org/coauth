@@ -8,7 +8,7 @@
 //! exposed under `/_coauth/admin/policy-checks/dry-run`. The round-4
 //! endpoint is the production policy-decision API: principal servers,
 //! events submitters, and federation peers MUST consume this surface
-//! to obtain a signed [`PolicyCheckResponse`] they can attach to their
+//! to obtain a signed [`PolicyCheckOutcome`] they can attach to their
 //! own audit transcript.
 //!
 //! ## Pipeline (G3.C0)
@@ -23,7 +23,7 @@
 //!    2-second budget (fail-closed on timeout per spec §6);
 //! 4. build the canonical [`policy_signer::DecisionTranscript`] and detach-sign
 //!    it with the keystore's preferred service key;
-//! 5. emit the [`PolicyCheckResponse`] with `bound_to`, three frontier hashes,
+//! 5. emit the [`PolicyCheckOutcome`] with `bound_to`, three frontier hashes,
 //!    signature, reason code, expiry, and obligations;
 //! 6. append the canonical transcript + signature to the structured
 //!    `policy_audit` tracing target.
@@ -41,7 +41,7 @@ use coauth_config::CokretConfig;
 use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory, UrlBuilder};
 use coauth_keystore::Keystore;
 use cokret_core::{
-    Did, PolicyCheckBoundTo, PolicyCheckRequest, PolicyCheckResponse, PolicyCheckSignature,
+    Did, PolicyCheckBoundTo, PolicyCheckRequestBody, PolicyCheckOutcome, PolicyCheckSignature,
 };
 use salvo::prelude::*;
 use serde_json::Value;
@@ -76,12 +76,12 @@ const DEFAULT_ALLOW_TTL_SECONDS: i64 = 30;
 /// `POST /_cokret/self/policy/check`
 ///
 /// Round 4 `ck.self.policy.check` endpoint. Consumes
-/// [`PolicyCheckRequest`], emits a signed [`PolicyCheckResponse`].
+/// [`PolicyCheckRequestBody`], emits a signed [`PolicyCheckOutcome`].
 #[handler]
 pub async fn post_policy_check(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PolicyCheckResponse>, CokretRouteError> {
+) -> Result<Json<PolicyCheckOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
@@ -100,7 +100,7 @@ pub async fn post_policy_check(
         .clone();
     let repo_factory: BoxRepositoryFactory = PgRepositoryFactory::new(pg_pool).boxed();
 
-    let body: PolicyCheckRequest = req
+    let body: PolicyCheckRequestBody = req
         .parse_json()
         .await
         .map_err(|e| CokretRouteError::BadRequest(format!("invalid policy-check body: {e}")))?;
@@ -140,18 +140,18 @@ pub async fn post_policy_check(
     Ok(Json(response))
 }
 
-/// Build the full [`PolicyCheckResponse`] bound to the request
+/// Build the full [`PolicyCheckOutcome`] bound to the request
 /// transcript. Pulled out so unit tests can exercise the binding with
 /// fakes for the frontier source / evaluator without spinning up the
 /// full salvo Depot.
 pub(crate) async fn build_policy_check_response(
-    request: &PolicyCheckRequest,
+    request: &PolicyCheckRequestBody,
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     frontier_source: &dyn FrontierSource,
     evaluator: &dyn PolicyEvaluator,
-) -> Result<PolicyCheckResponse, CokretRouteError> {
+) -> Result<PolicyCheckOutcome, CokretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
     let policy_server_did = cokret::service_did_for(url_builder, cokret_config);
@@ -279,7 +279,7 @@ pub(crate) async fn build_policy_check_response(
     // operators route these to a dedicated sink.
     emit_audit_record(&transcript, &signature);
 
-    Ok(PolicyCheckResponse {
+    Ok(PolicyCheckOutcome {
         decision: decision.decision,
         bound_to,
         auth_state_digest: frontier.auth_state_digest,
@@ -300,13 +300,13 @@ pub(crate) async fn build_policy_check_response(
 /// [`build_policy_check_response`] directly with fakes.
 #[allow(dead_code)]
 pub(crate) async fn build_policy_check_response_with_defaults(
-    request: &PolicyCheckRequest,
+    request: &PolicyCheckRequestBody,
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     http_client: &reqwest::Client,
     repository_factory: BoxRepositoryFactory,
-) -> Result<PolicyCheckResponse, CokretRouteError> {
+) -> Result<PolicyCheckOutcome, CokretRouteError> {
     let frontier_source = SolandFrontierSource::new(
         cokret_config.principal_server_url.clone(),
         http_client.clone(),
@@ -382,8 +382,8 @@ mod tests {
         RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap()
     }
 
-    fn req() -> PolicyCheckRequest {
-        PolicyCheckRequest {
+    fn req() -> PolicyCheckRequestBody {
+        PolicyCheckRequestBody {
             request_id: "req-1".into(),
             realm_id: realm(),
             actor: Did::new("did:web:alice.example").unwrap(),
@@ -405,7 +405,7 @@ mod tests {
     impl PolicyEvaluator for FixedEvaluator {
         fn evaluate<'a>(
             &'a self,
-            _request: &'a PolicyCheckRequest,
+            _request: &'a PolicyCheckRequestBody,
             _frontier: &'a Frontier,
         ) -> Pin<Box<dyn Future<Output = Result<PolicyDecision, EvaluatorError>> + Send + 'a>>
         {
@@ -420,7 +420,7 @@ mod tests {
     impl PolicyEvaluator for ErroringEvaluator {
         fn evaluate<'a>(
             &'a self,
-            _request: &'a PolicyCheckRequest,
+            _request: &'a PolicyCheckRequestBody,
             _frontier: &'a Frontier,
         ) -> Pin<Box<dyn Future<Output = Result<PolicyDecision, EvaluatorError>> + Send + 'a>>
         {

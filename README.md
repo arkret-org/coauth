@@ -102,9 +102,9 @@ on top of the R2/R3 trust-domain and OOB-invite work. See
 - **`ck.cross_signing.publish` CAS** — publisher reads the current
   generation and submits `expected_previous_generation`; new generation
   is strictly `current + 1`.
-- **`/policy/check` v2** — request switches to `PolicyCheckRequest`
+- **`/policy/check` v2** — request switches to `PolicyCheckRequestBody`
   (`signed_transport` + `source_ip_digest` + `source.{service_did,
-  service_type}`); response is `PolicyCheckResponse` carrying the
+  service_type}`); response is `PolicyCheckOutcome` carrying the
   `bound_to{realm_id, actor, action, request_canonical_digest,
   policy_server_id}` envelope plus `auth_state_digest` /
   `policy_frontier_digest` / `membership_frontier_digest` and a signed

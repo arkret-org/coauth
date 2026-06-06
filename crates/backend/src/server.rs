@@ -712,7 +712,7 @@ fn build_account_api_router(router: Router) -> Router {
                 .post(cokret::directory_resolve_handle),
         )
         // Round 4 (spec a77b995) — `/policy/check` v2 returns a signed
-        // PolicyCheckResponse with full `bound_to` binding.
+        // PolicyCheckOutcome with full `bound_to` binding.
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check))
         .push(
             Router::with_path("gate/account/session-grants")

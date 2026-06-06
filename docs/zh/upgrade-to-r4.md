@@ -19,9 +19,9 @@ Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
   发布者必须读取当前 generation 并提交
   `expected_previous_generation`；被接受的 generation 仅前
   进一格。
-- **`/policy/check` v2** 使用 `PolicyCheckRequest`，并返回
+- **`/policy/check` v2** 使用 `PolicyCheckRequestBody`，并返回
   带有 `bound_to`、frontier digest 与 DID 关联签名信封的
-  `PolicyCheckResponse`。
+  `PolicyCheckOutcome`。
 - **`identity_link`** 负载同时绑定 `realm_id` 与
   `trust_domain`。
 - **DID 解析** 拒绝不在收紧后的
