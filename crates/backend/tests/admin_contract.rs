@@ -634,3 +634,33 @@ fn publish_notification_template_contract() {
         }),
     );
 }
+
+#[test]
+fn collaboration_capability_templates_contract() {
+    use coauth_admin_types::{
+        CollaborationCapabilityAction, CreateCollaborationCapabilityGrant,
+        collaboration_capability_templates,
+    };
+
+    let templates = collaboration_capability_templates();
+    assert_eq!(templates.len(), 6);
+    assert_eq!(templates[0].action, CollaborationCapabilityAction::RsvpSet);
+    assert_eq!(
+        templates.last().unwrap().target_event_kinds,
+        vec!["ck.realm.search_policy"]
+    );
+
+    serde_json::from_value::<CreateCollaborationCapabilityGrant>(json!({
+        "subject": "did:web:admin.example",
+        "realm_id": "ck:realm:01JS0SP000000000000000000",
+        "action": "ck.pin.add"
+    }))
+    .expect("exact pin action is accepted");
+
+    serde_json::from_value::<CreateCollaborationCapabilityGrant>(json!({
+        "subject": "did:web:admin.example",
+        "realm_id": "ck:realm:01JS0SP000000000000000000",
+        "action": "ck.pin.*"
+    }))
+    .expect_err("wildcard capability actions must not deserialize");
+}
