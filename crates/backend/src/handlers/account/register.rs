@@ -43,7 +43,7 @@ use crate::{
     salvo_utils::SessionInfoExt,
 };
 
-// ── POST /_cokret/gate/account/auth/register ─────────────────────────────────
+// ── POST /_coauth/gate/account/auth/register ─────────────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct RegisterInput {
@@ -200,7 +200,7 @@ pub async fn post_register(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/webvh/start ────────────────────
+// ── POST /_coauth/gate/account/auth/register/webvh/start ────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationStartInput {
@@ -349,7 +349,7 @@ pub async fn post_webvh_start(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/webvh/:id/email ────────────────
+// ── POST /_coauth/gate/account/auth/register/webvh/:id/email ────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationEmailInput {
@@ -483,7 +483,7 @@ pub async fn post_webvh_email(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/webvh/:id/verify-email ─────────
+// ── POST /_coauth/gate/account/auth/register/webvh/:id/verify-email ─────────
 
 #[endpoint]
 pub async fn post_webvh_verify_email(
@@ -543,7 +543,7 @@ pub async fn post_webvh_verify_email(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/webvh/:id/finish ───────────────
+// ── POST /_coauth/gate/account/auth/register/webvh/:id/finish ───────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct WebvhRegistrationFinishInput {
@@ -732,7 +732,7 @@ pub async fn post_webvh_finish(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/did/start ──────────────────────
+// ── POST /_coauth/gate/account/auth/register/did/start ──────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct ExistingDidRegistrationInput {
@@ -944,7 +944,7 @@ fn normalize_webvh_local_id(value: &str) -> Option<String> {
     valid.then_some(normalized)
 }
 
-// ── GET /_cokret/gate/account/auth/register/:id ──────────────────────────────
+// ── GET /_coauth/gate/account/auth/register/:id ──────────────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct RegistrationStatusResponse {
@@ -992,7 +992,7 @@ pub async fn get_registration(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/:id/verify-email ────────────────
+// ── POST /_coauth/gate/account/auth/register/:id/verify-email ────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct VerifyEmailInput {
@@ -1066,7 +1066,7 @@ pub async fn post_verify_email(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/:id/resend-verification ────────
+// ── POST /_coauth/gate/account/auth/register/:id/resend-verification ────────
 
 #[derive(Serialize, ToSchema)]
 pub struct ResendVerificationResponse {
@@ -1131,7 +1131,7 @@ pub async fn post_resend_verification(
     Ok(Json(ResendVerificationResponse { status, error }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/:id/change-email ──────────────
+// ── POST /_coauth/gate/account/auth/register/:id/change-email ──────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct ChangeRegistrationEmailInput {
@@ -1212,7 +1212,7 @@ pub async fn post_change_email(
     Ok(Json(ChangeRegistrationEmailResponse { status, error }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/:id/verify-phone ────────────────
+// ── POST /_coauth/gate/account/auth/register/:id/verify-phone ────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct VerifyPhoneInput {
@@ -1286,7 +1286,7 @@ pub async fn post_verify_phone(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/:id/display-name ────────────────
+// ── POST /_coauth/gate/account/auth/register/:id/display-name ────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct DisplayNameInput {
@@ -1356,7 +1356,7 @@ pub async fn post_display_name(
     }))
 }
 
-// ── POST /_cokret/gate/account/auth/register/:id/finish ──────────────────────
+// ── POST /_coauth/gate/account/auth/register/:id/finish ──────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct FinishRegistrationResponse {

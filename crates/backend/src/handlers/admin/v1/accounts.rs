@@ -146,7 +146,7 @@ impl AccountRecord {
 
 impl Resource for AccountRecord {
     const KIND: &'static str = "account";
-    const PATH: &'static str = "/_cokret/local/admin/accounts";
+    const PATH: &'static str = "/_coauth/admin/accounts";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -667,7 +667,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get("/_cokret/local/admin/accounts")
+                Request::get("/_coauth/admin/accounts")
                     .bearer(&token)
                     .empty(),
             )
@@ -690,7 +690,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/_cokret/local/admin/accounts/{}", user.id))
+                Request::get(format!("/_coauth/admin/accounts/{}", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -723,7 +723,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/_cokret/local/admin/accounts/{}/lock", user.id))
+                Request::post(format!("/_coauth/admin/accounts/{}/lock", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -739,7 +739,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/_cokret/local/admin/accounts/{}/disable", user.id))
+                Request::post(format!("/_coauth/admin/accounts/{}/disable", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -771,16 +771,13 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action",
-                    user.id
-                ))
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "action": "lock",
-                    "reason": "suspicious recovery activity",
-                    "ticket": "INC-2.1",
-                })),
+                Request::post(format!("/_coauth/admin/accounts/{}/risk-action", user.id))
+                    .bearer(&token)
+                    .json(serde_json::json!({
+                        "action": "lock",
+                        "reason": "suspicious recovery activity",
+                        "ticket": "INC-2.1",
+                    })),
             )
             .await;
         response.assert_status(StatusCode::OK);
@@ -810,7 +807,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action/{}/execute",
+                    "/_coauth/admin/accounts/{}/risk-action/{}/execute",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -826,7 +823,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action/{}/approve",
+                    "/_coauth/admin/accounts/{}/risk-action/{}/approve",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -853,7 +850,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action/{}/execute",
+                    "/_coauth/admin/accounts/{}/risk-action/{}/execute",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -878,7 +875,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action/{}/execute",
+                    "/_coauth/admin/accounts/{}/risk-action/{}/execute",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -894,7 +891,7 @@ mod tests {
         let response = state
             .request(
                 Request::get(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action/current",
+                    "/_coauth/admin/accounts/{}/risk-action/current",
                     user.id
                 ))
                 .bearer(&token)
@@ -934,16 +931,13 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action",
-                    user.id
-                ))
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "action": "disable",
-                    "reason": "confirmed account takeover",
-                    "ticket": "INC-SEC-COA-1",
-                })),
+                Request::post(format!("/_coauth/admin/accounts/{}/risk-action", user.id))
+                    .bearer(&token)
+                    .json(serde_json::json!({
+                        "action": "disable",
+                        "reason": "confirmed account takeover",
+                        "ticket": "INC-SEC-COA-1",
+                    })),
             )
             .await;
         response.assert_status(StatusCode::OK);
@@ -967,7 +961,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action/{}/approve",
+                    "/_coauth/admin/accounts/{}/risk-action/{}/approve",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -1000,7 +994,7 @@ mod tests {
             let response = state
                 .request(
                     Request::post(format!(
-                        "/_cokret/local/admin/accounts/{}/risk-action/{}/approve",
+                        "/_coauth/admin/accounts/{}/risk-action/{}/approve",
                         user.id, proposal_id
                     ))
                     .bearer(&token)
@@ -1027,7 +1021,7 @@ mod tests {
         let response = state
             .request(
                 Request::post(format!(
-                    "/_cokret/local/admin/accounts/{}/risk-action/{}/execute",
+                    "/_coauth/admin/accounts/{}/risk-action/{}/execute",
                     user.id, proposal_id
                 ))
                 .bearer(&token)
@@ -1061,7 +1055,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/_cokret/local/admin/accounts/{}/dids", user.id))
+                Request::get(format!("/_coauth/admin/accounts/{}/dids", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -1079,7 +1073,7 @@ mod tests {
         let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
         let response = state
             .request(
-                Request::post(format!("/_cokret/local/admin/accounts/{}/dids", user.id))
+                Request::post(format!("/_coauth/admin/accounts/{}/dids", user.id))
                     .bearer(&token)
                     .json(serde_json::json!({
                         "did": recovery_did,
@@ -1106,7 +1100,7 @@ mod tests {
             sign_did_binding_control_proof(&state, &recovery_did, user.id, "duplicate-nonce");
         let response = state
             .request(
-                Request::post(format!("/_cokret/local/admin/accounts/{}/dids", user.id))
+                Request::post(format!("/_coauth/admin/accounts/{}/dids", user.id))
                     .bearer(&token)
                     .json(serde_json::json!({
                         "did": recovery_did,
@@ -1123,7 +1117,7 @@ mod tests {
         let response = state
             .request(
                 Request::delete(format!(
-                    "/_cokret/local/admin/accounts/{}/dids/{}",
+                    "/_coauth/admin/accounts/{}/dids/{}",
                     user.id, recovery_did
                 ))
                 .bearer(&token)
@@ -1143,7 +1137,7 @@ mod tests {
         let response = state
             .request(
                 Request::delete(format!(
-                    "/_cokret/local/admin/accounts/{}/dids/{}",
+                    "/_coauth/admin/accounts/{}/dids/{}",
                     user.id, recovery_did
                 ))
                 .bearer(&token)
@@ -1156,7 +1150,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/_cokret/local/admin/accounts/{}/dids", user.id))
+                Request::get(format!("/_coauth/admin/accounts/{}/dids", user.id))
                     .bearer(&token)
                     .empty(),
             )

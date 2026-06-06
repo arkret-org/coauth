@@ -15,7 +15,7 @@ use crate::handlers::account::service::{
     },
 };
 
-// ── POST /_cokret/self/viewer/password ───────────────────────────────
+// ── POST /_coauth/self/viewer/password ───────────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct SetPasswordInput {
@@ -97,7 +97,7 @@ pub async fn set_password(
     }
 }
 
-// ── GET /_cokret/gate/account/password-recovery/:ticket ─────────────────────
+// ── GET /_coauth/gate/account/password-recovery/:ticket ─────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct RecoveryTicketStatusResponse {
@@ -159,7 +159,7 @@ pub async fn get_recovery_ticket_status(
     Ok(Json(RecoveryTicketStatusResponse { status, email }))
 }
 
-// ── POST /_cokret/gate/account/password-recovery/set ─────────────────────────
+// ── POST /_coauth/gate/account/password-recovery/set ─────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct SetPasswordByRecoveryInput {
@@ -231,7 +231,7 @@ pub async fn set_password_by_recovery(
     }
 }
 
-// ── POST /_cokret/gate/account/password-recovery/resend ──────────────────────
+// ── POST /_coauth/gate/account/password-recovery/resend ──────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct ResendRecoveryInput {
@@ -385,7 +385,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/_cokret/gate/account/password-recovery/{ticket}")).empty(),
+                Request::get(format!("/_coauth/gate/account/password-recovery/{ticket}")).empty(),
             )
             .await;
 
@@ -412,7 +412,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/_cokret/gate/account/password-recovery/resend")
+                Request::post("/_coauth/gate/account/password-recovery/resend")
                     .json(serde_json::json!({ "ticket": ticket })),
             )
             .await;

@@ -37,7 +37,7 @@
 //! 3. `anchor_pending_move(...)` builds the `UnsignedMove`, calls
 //!    `Move::sign(&unsigned, signer)` against the deployment's `AnchorerSigner`
 //!    (an `Ed25519MoveSigner` wrapper), and POSTs the resulting `Move` envelope
-//!    to soland's `/_cokret/peer/moves` endpoint.
+//!    to soland's private peer-move endpoint.
 
 use cokret_core::{
     AnchorId, CellRef, Did, Hlc, Move, RealmId, UnsignedMove,
@@ -508,7 +508,7 @@ impl AnchorerSigner {
 /// Build, sign, and POST a `PendingMove` to the holder's `server_name`.
 ///
 /// On success the `SignedMove` envelope returned by `Move::sign` has been
-/// `POSTed` to soland's `/_cokret/peer/moves` endpoint and accepted with 2xx.
+/// `POSTed` to soland's private peer-move endpoint and accepted with 2xx.
 ///
 /// ### Wire shape
 ///
@@ -529,7 +529,7 @@ pub async fn anchor_pending_move(
 
     let signed_move = build_and_sign_move(pending, signer)?;
 
-    let url = base.join("_cokret/peer/moves").map_err(|error| {
+    let url = base.join("_soland/peer/moves").map_err(|error| {
         MimiConsentError::PrincipalServerForwardFailed {
             reason: format!("invalid server_name url: {error}"),
         }
@@ -977,7 +977,7 @@ mod tests {
         let signer = sample_signer();
 
         Mock::given(method("POST"))
-            .and(path("/_cokret/peer/moves"))
+            .and(path("/_soland/peer/moves"))
             .and(header("x-cokret-holder-did", "did:web:holder.example"))
             .respond_with(move |req: &Request| {
                 let body: serde_json::Value =
@@ -1022,7 +1022,7 @@ mod tests {
         let signer = sample_signer();
 
         Mock::given(method("POST"))
-            .and(path("/_cokret/peer/moves"))
+            .and(path("/_soland/peer/moves"))
             .respond_with(ResponseTemplate::new(503))
             .mount(&server)
             .await;

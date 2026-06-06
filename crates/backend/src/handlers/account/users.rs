@@ -12,7 +12,7 @@ use crate::{
     services::user_profile::{self, UserProfileServiceError},
 };
 
-// ── PATCH /_cokret/self/viewer/profile ────────────────────────────────
+// ── PATCH /_coauth/self/viewer/profile ────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct PatchViewerProfileInput {
@@ -94,7 +94,7 @@ pub async fn patch_profile(
     }))
 }
 
-// ── POST /_cokret/self/viewer/deactivate ─────────────────────────────
+// ── POST /_coauth/self/viewer/deactivate ─────────────────────────────
 
 #[derive(Deserialize, salvo::oapi::ToSchema)]
 pub struct DeactivateUserInput {
@@ -235,7 +235,7 @@ mod tests {
         let cookies = CookieHelper::new();
         cookies.import(state.cookie_jar().set_session(&session));
 
-        let request = cookies.with_cookies(Request::patch("/_cokret/self/viewer/profile").json(
+        let request = cookies.with_cookies(Request::patch("/_coauth/self/viewer/profile").json(
             serde_json::json!({
                 "display_name": "Alice Example",
                 "avatar_url": "mxc://example.com/alice",

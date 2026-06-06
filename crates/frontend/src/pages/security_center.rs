@@ -11,7 +11,7 @@ use crate::{
 
 /// Security center page.
 ///
-/// Fetches `GET /_cokret/self/viewer/security` and displays:
+/// Fetches `GET /_coauth/self/viewer/security` and displays:
 /// - Password status (set / not set)
 /// - Active sessions count
 /// - Verified emails count

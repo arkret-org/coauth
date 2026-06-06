@@ -152,7 +152,7 @@ impl CircleCapabilityAction {
 }
 
 /// A capability grant as returned by `GET
-/// /_cokret/local/admin/circles/capabilities`.
+/// /_coauth/admin/circles/capabilities`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
@@ -181,7 +181,7 @@ pub struct CircleCapabilityGrant {
     pub revoked_at: Option<DateTime<Utc>>,
 }
 
-/// Request body for `POST /_cokret/local/admin/circles/capabilities`.
+/// Request body for `POST /_coauth/admin/circles/capabilities`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",
@@ -220,7 +220,7 @@ impl CreateCircleCapabilityGrant {
     }
 }
 
-/// Response body for `GET /_cokret/local/admin/circles/capabilities`.
+/// Response body for `GET /_coauth/admin/circles/capabilities`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "schema",

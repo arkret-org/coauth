@@ -107,7 +107,7 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
 
                             spawn(async move {
                                 let result = crate::api::api_post::<RegisterResponse>(
-                                    "/auth/register",
+                                    "/gate/account/auth/register",
                                     serde_json::json!({
                                         "handle": user,
                                         "email": if em.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(em) },
@@ -316,7 +316,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
 
                                 spawn(async move {
                                     let result = crate::api::api_post::<ChangeRegistrationEmailResponse>(
-                                        &format!("/auth/register/{rid}/change-email"),
+                                        &format!("/gate/account/auth/register/{rid}/change-email"),
                                         serde_json::json!({ "email": new_email }),
                                     ).await;
                                     changing_email.set(false);
@@ -406,7 +406,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
 
                             spawn(async move {
                                 let result = crate::api::api_post::<StepResponse>(
-                                    &format!("/auth/register/{rid}/verify-email"),
+                                    &format!("/gate/account/auth/register/{rid}/verify-email"),
                                     serde_json::json!({ "code": c }),
                                 ).await;
                                 submitting.set(false);
@@ -465,7 +465,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                                 error.set(None);
                                 spawn(async move {
                                     let result = crate::api::api_post::<ResendEmailAuthCodePayload>(
-                                        &format!("/auth/register/{rid}/resend-verification"),
+                                        &format!("/gate/account/auth/register/{rid}/resend-verification"),
                                         serde_json::json!({}),
                                     ).await;
                                     resending.set(false);
@@ -535,7 +535,7 @@ async fn submit_registration_finish(
     bootstrap_admin_token: Option<String>,
 ) -> Result<StepResponse, String> {
     crate::api::api_post::<StepResponse>(
-        &format!("/auth/register/{registration_id}/finish"),
+        &format!("/gate/account/auth/register/{registration_id}/finish"),
         serde_json::json!({
             "bootstrap_admin_token": bootstrap_admin_token,
         }),
@@ -604,7 +604,7 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
 
                             spawn(async move {
                                 let result = crate::api::api_post::<StepResponse>(
-                                    &format!("/auth/register/{rid}/verify-phone"),
+                                    &format!("/gate/account/auth/register/{rid}/verify-phone"),
                                     serde_json::json!({ "code": c }),
                                 ).await;
                                 submitting.set(false);
@@ -661,7 +661,7 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
                                 error.set(None);
                                 spawn(async move {
                                     let result = crate::api::api_post::<ResendEmailAuthCodePayload>(
-                                        &format!("/auth/register/{rid}/resend-verification"),
+                                        &format!("/gate/account/auth/register/{rid}/resend-verification"),
                                         serde_json::json!({}),
                                     ).await;
                                     resending.set(false);
@@ -720,7 +720,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
 
                             spawn(async move {
                                 let result = crate::api::api_post::<StepResponse>(
-                                    &format!("/auth/register/{rid}/display-name"),
+                                    &format!("/gate/account/auth/register/{rid}/display-name"),
                                     serde_json::json!({ "display_name": name }),
                                 ).await;
                                 submitting.set(false);
@@ -768,7 +768,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
 
                                 spawn(async move {
                                     let result = crate::api::api_post::<StepResponse>(
-                                        &format!("/auth/register/{rid}/display-name"),
+                                        &format!("/gate/account/auth/register/{rid}/display-name"),
                                         serde_json::json!({ "skip": true }),
                                     ).await;
                                     submitting.set(false);

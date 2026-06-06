@@ -53,7 +53,7 @@ pub fn from_site_config(config: &SiteConfig) -> SiteConfigResponse {
     }
 }
 
-/// GET /_cokret/self/site-config
+/// GET /_coauth/self/site-config
 #[endpoint]
 pub async fn get(depot: &Depot) -> Result<Json<SiteConfigResponse>, RouteError> {
     let config = depot.site_config()?;

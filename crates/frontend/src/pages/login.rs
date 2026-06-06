@@ -187,7 +187,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
 
                             spawn(async move {
                                 let result = crate::api::api_post::<LoginResponse>(
-                                    "/auth/login",
+                                    "/gate/account/auth/login",
                                     serde_json::json!({
                                         "handle": user,
                                         "password": pass,

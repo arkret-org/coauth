@@ -20,7 +20,7 @@ pub fn AddEmailForm(on_add: Option<EventHandler<String>>) -> Element {
                 let on_add = on_add;
                 spawn(async move {
                     let result = crate::api::api_post::<crate::api::types::AddEmailPayload>(
-                        "/email-auth/start",
+                        "/gate/account/email-auth/start",
                         serde_json::json!({
                             "email": email,
                             "password": serde_json::Value::Null,

@@ -37,11 +37,12 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/_cokret/local/admin/users")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "username": "alice",
-            }));
+        let request =
+            Request::post("/_coauth/admin/users")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "username": "alice",
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
@@ -76,11 +77,12 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/_cokret/local/admin/users")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "username": "this is invalid",
-            }));
+        let request =
+            Request::post("/_coauth/admin/users")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "username": "this is invalid",
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::BAD_REQUEST);
@@ -98,11 +100,12 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/_cokret/local/admin/users")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "username": "alice",
-            }));
+        let request =
+            Request::post("/_coauth/admin/users")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "username": "alice",
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
@@ -111,11 +114,12 @@ mod tests {
         assert_eq!(body["data"]["type"], "user");
         assert_eq!(body["data"]["attributes"]["username"], "alice");
 
-        let request = Request::post("/_cokret/local/admin/users")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "username": "alice",
-            }));
+        let request =
+            Request::post("/_coauth/admin/users")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "username": "alice",
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::CONFLICT);
@@ -136,11 +140,12 @@ mod tests {
         // Reserve a username on the PrincipalServer and try to add it
         state.principal_server_admin.reserve_handle("bob").await;
 
-        let request = Request::post("/_cokret/local/admin/users")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "username": "bob",
-            }));
+        let request =
+            Request::post("/_coauth/admin/users")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "username": "bob",
+                }));
 
         let response = state.request(request).await;
 
@@ -151,12 +156,13 @@ mod tests {
         );
 
         // But we can force it with the skip_principal_server_check flag
-        let request = Request::post("/_cokret/local/admin/users")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "username": "bob",
-                "skip_principal_server_check": true,
-            }));
+        let request =
+            Request::post("/_coauth/admin/users")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "username": "bob",
+                    "skip_principal_server_check": true,
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
@@ -200,9 +206,7 @@ mod tests {
         repo.save().await.unwrap();
 
         // Test default behavior (count=true)
-        let request = Request::get("/_cokret/local/admin/users")
-            .bearer(&token)
-            .empty();
+        let request = Request::get("/_coauth/admin/users").bearer(&token).empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -223,7 +227,7 @@ mod tests {
                 "admin": false
               },
               "links": {
-                "self": "/_cokret/local/admin/users/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+                "self": "/_coauth/admin/users/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
               },
               "meta": {
                 "page": {
@@ -242,7 +246,7 @@ mod tests {
                 "admin": false
               },
               "links": {
-                "self": "/_cokret/local/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -252,15 +256,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/users?page[first]=10",
-            "first": "/_cokret/local/admin/users?page[first]=10",
-            "last": "/_cokret/local/admin/users?page[last]=10"
+            "self": "/_coauth/admin/users?page[first]=10",
+            "first": "/_coauth/admin/users?page[first]=10",
+            "last": "/_coauth/admin/users?page[last]=10"
           }
         }
         "#);
 
         // Test count=false
-        let request = Request::get("/_cokret/local/admin/users?count=false")
+        let request = Request::get("/_coauth/admin/users?count=false")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -280,7 +284,7 @@ mod tests {
                 "admin": false
               },
               "links": {
-                "self": "/_cokret/local/admin/users/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+                "self": "/_coauth/admin/users/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
               },
               "meta": {
                 "page": {
@@ -299,7 +303,7 @@ mod tests {
                 "admin": false
               },
               "links": {
-                "self": "/_cokret/local/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -309,15 +313,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/users?count=false&page[first]=10",
-            "first": "/_cokret/local/admin/users?count=false&page[first]=10",
-            "last": "/_cokret/local/admin/users?count=false&page[last]=10"
+            "self": "/_coauth/admin/users?count=false&page[first]=10",
+            "first": "/_coauth/admin/users?count=false&page[first]=10",
+            "last": "/_coauth/admin/users?count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only
-        let request = Request::get("/_cokret/local/admin/users?count=only")
+        let request = Request::get("/_coauth/admin/users?count=only")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -329,13 +333,13 @@ mod tests {
             "count": 2
           },
           "links": {
-            "self": "/_cokret/local/admin/users?count=only"
+            "self": "/_coauth/admin/users?count=only"
           }
         }
         "###);
 
         // Test count=false with filtering
-        let request = Request::get("/_cokret/local/admin/users?count=false&filter[search]=alice")
+        let request = Request::get("/_coauth/admin/users?count=false&filter[search]=alice")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -355,7 +359,7 @@ mod tests {
                 "admin": false
               },
               "links": {
-                "self": "/_cokret/local/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -365,15 +369,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/users?filter[search]=alice&count=false&page[first]=10",
-            "first": "/_cokret/local/admin/users?filter[search]=alice&count=false&page[first]=10",
-            "last": "/_cokret/local/admin/users?filter[search]=alice&count=false&page[last]=10"
+            "self": "/_coauth/admin/users?filter[search]=alice&count=false&page[first]=10",
+            "first": "/_coauth/admin/users?filter[search]=alice&count=false&page[first]=10",
+            "last": "/_coauth/admin/users?filter[search]=alice&count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only with filtering
-        let request = Request::get("/_cokret/local/admin/users?count=only&filter[search]=alice")
+        let request = Request::get("/_coauth/admin/users?count=only&filter[search]=alice")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -385,7 +389,7 @@ mod tests {
             "count": 1
           },
           "links": {
-            "self": "/_cokret/local/admin/users?filter[search]=alice&count=only"
+            "self": "/_coauth/admin/users?filter[search]=alice&count=only"
           }
         }
         "#);
@@ -417,7 +421,7 @@ mod tests {
         let user_id = user.id;
 
         // Set the password through the API
-        let request = Request::post(format!("/_cokret/local/admin/users/{user_id}/set-password"))
+        let request = Request::post(format!("/_coauth/admin/users/{user_id}/set-password"))
             .bearer(&token)
             .json(serde_json::json!({
                 "password": "this is a good enough password",
@@ -463,7 +467,7 @@ mod tests {
         let user_id = user.id;
 
         // Set a weak password through the API
-        let request = Request::post(format!("/_cokret/local/admin/users/{user_id}/set-password"))
+        let request = Request::post(format!("/_coauth/admin/users/{user_id}/set-password"))
             .bearer(&token)
             .json(serde_json::json!({
                 "password": "password",
@@ -479,7 +483,7 @@ mod tests {
         repo.save().await.unwrap();
 
         // Now try with the skip_password_check flag
-        let request = Request::post(format!("/_cokret/local/admin/users/{user_id}/set-password"))
+        let request = Request::post(format!("/_coauth/admin/users/{user_id}/set-password"))
             .bearer(&token)
             .json(serde_json::json!({
                 "password": "password",
@@ -515,12 +519,11 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         // Set the password through the API
-        let request =
-            Request::post("/_cokret/local/admin/users/01040G2081040G2081040G2081/set-password")
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "password": "this is a good enough password",
-                }));
+        let request = Request::post("/_coauth/admin/users/01040G2081040G2081040G2081/set-password")
+            .bearer(&token)
+            .json(serde_json::json!({
+                "password": "this is a good enough password",
+            }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
@@ -542,12 +545,11 @@ mod tests {
         state.password_manager = PasswordManager::disabled();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request =
-            Request::post("/_cokret/local/admin/users/01040G2081040G2081040G2081/set-password")
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "password": "hunter2",
-                }));
+        let request = Request::post("/_coauth/admin/users/01040G2081040G2081040G2081/set-password")
+            .bearer(&token)
+            .json(serde_json::json!({
+                "password": "hunter2",
+            }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::FORBIDDEN);
@@ -582,7 +584,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::patch(format!("/_cokret/local/admin/users/{}", user.id))
+        let request = Request::patch(format!("/_coauth/admin/users/{}", user.id))
             .bearer(&token)
             .json(serde_json::json!({
                 "display_name": "Alice Admin",
@@ -641,7 +643,7 @@ mod tests {
             .await
             .unwrap();
 
-        let request = Request::patch(format!("/_cokret/local/admin/users/{}", user.id))
+        let request = Request::patch(format!("/_coauth/admin/users/{}", user.id))
             .bearer(&token)
             .json(serde_json::json!({
                 "deactivated": false

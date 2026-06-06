@@ -1,8 +1,8 @@
 //! REST endpoints for user notification preferences.
 //!
-//! - `GET   /_cokret/self/viewer/preferences` — returns available channels and
+//! - `GET   /_coauth/self/viewer/preferences` — returns available channels and
 //!   the user's current preference settings.
-//! - `PATCH /_cokret/self/viewer/preferences` — updates the user's notification
+//! - `PATCH /_coauth/self/viewer/preferences` — updates the user's notification
 //!   preferences.
 
 use salvo::prelude::*;
@@ -39,7 +39,7 @@ pub struct ChannelPreference {
     pub enabled: bool,
 }
 
-/// Response for `GET /_cokret/self/viewer/preferences`.
+/// Response for `GET /_coauth/self/viewer/preferences`.
 #[derive(Serialize, salvo::oapi::ToSchema)]
 pub struct NotificationPreferencesResponse {
     /// Server-side channel availability.
@@ -49,14 +49,14 @@ pub struct NotificationPreferencesResponse {
     pub preferences: Vec<ChannelPreference>,
 }
 
-/// Request body for `PATCH /_cokret/self/viewer/preferences`.
+/// Request body for `PATCH /_coauth/self/viewer/preferences`.
 #[derive(Deserialize, salvo::oapi::ToSchema)]
 pub struct PatchNotificationPreferencesRequest {
     /// The per-channel preferences to update.
     pub preferences: Vec<ChannelPreference>,
 }
 
-/// Response for `PATCH /_cokret/self/viewer/preferences`.
+/// Response for `PATCH /_coauth/self/viewer/preferences`.
 #[derive(Serialize, salvo::oapi::ToSchema)]
 pub struct PatchNotificationPreferencesResponse {
     /// The preferences as persisted by the server.
@@ -241,7 +241,7 @@ mod tests {
         cookies.import(state.cookie_jar().set_session(&session));
 
         let patch_request = cookies.with_cookies(
-            Request::patch("/_cokret/self/viewer/preferences").json(serde_json::json!({
+            Request::patch("/_coauth/self/viewer/preferences").json(serde_json::json!({
                 "preferences": [
                     { "channel": "email", "enabled": false },
                     { "channel": "sms", "enabled": true }
@@ -258,7 +258,7 @@ mod tests {
         assert_eq!(patch_body["preferences"][1]["enabled"], true);
 
         let get_request =
-            cookies.with_cookies(Request::get("/_cokret/self/viewer/preferences").empty());
+            cookies.with_cookies(Request::get("/_coauth/self/viewer/preferences").empty());
         let get_response = state.request(get_request).await;
         get_response.assert_status(StatusCode::OK);
         let get_body: serde_json::Value = get_response.json();

@@ -434,21 +434,19 @@ mod tests {
         repo.save().await.unwrap();
 
         let response = state
-            .request(
-                Request::post("/_cokret/local/admin/claims")
-                    .bearer(&token)
-                    .json(serde_json::json!({
-                        "account_id": user.id.to_string(),
-                        "claim_kind": "org_role",
-                        "subject": user.id.to_string(),
-                        "verifier_did": "did:web:verifier.example",
-                        "represented_org": "Example Org",
-                        "payload": {
-                            "value": "admin",
-                            "scope": "progressive_disclosure"
-                        }
-                    })),
-            )
+            .request(Request::post("/_coauth/admin/claims").bearer(&token).json(
+                serde_json::json!({
+                    "account_id": user.id.to_string(),
+                    "claim_kind": "org_role",
+                    "subject": user.id.to_string(),
+                    "verifier_did": "did:web:verifier.example",
+                    "represented_org": "Example Org",
+                    "payload": {
+                        "value": "admin",
+                        "scope": "progressive_disclosure"
+                    }
+                }),
+            ))
             .await;
         response.assert_status(StatusCode::CREATED);
         let body: serde_json::Value = response.json();
@@ -460,7 +458,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!("/_cokret/local/admin/accounts/{}/claims", user.id))
+                Request::get(format!("/_coauth/admin/accounts/{}/claims", user.id))
                     .bearer(&token)
                     .empty(),
             )
@@ -474,7 +472,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post(format!("/_cokret/local/admin/claims/{claim_id}/revoke"))
+                Request::post(format!("/_coauth/admin/claims/{claim_id}/revoke"))
                     .bearer(&token)
                     .json(serde_json::json!({
                         "reason": "attestation superseded"
@@ -489,7 +487,7 @@ mod tests {
         let response = state
             .request(
                 Request::get(format!(
-                    "/_cokret/local/admin/claims/status?filter[account_id]={}&filter[status]=revoked",
+                    "/_coauth/admin/claims/status?filter[account_id]={}&filter[status]=revoked",
                     user.id
                 ))
                 .bearer(&token)

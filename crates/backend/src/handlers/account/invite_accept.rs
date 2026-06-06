@@ -11,7 +11,7 @@
 //!
 //! ## Route
 //!
-//! `POST /_cokret/self/invites/3pid/verify`
+//! `POST /_coauth/self/invites/3pid/verify`
 //!
 //! This is the **pure verifier** form: the handler takes the two JWS
 //! proofs + the presenter DID, runs `verify_invite`, and on success
@@ -69,7 +69,7 @@ use crate::services::third_party_invite::{InviteRequest, NonceStore, VerifierCtx
 
 // ── Request / response shapes ──────────────────────────────────
 
-/// Body of `POST /_cokret/self/invites/3pid/verify`.
+/// Body of `POST /_coauth/self/invites/3pid/verify`.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct VerifyInviteRequest {
     /// Verification-service proof JWS (compact serialization). Signed
@@ -132,7 +132,7 @@ fn shared_nonce_store() -> &'static Arc<NonceStore> {
 
 // ── Salvo handler ──────────────────────────────────────────────
 
-/// `POST /_cokret/self/invites/3pid/verify`
+/// `POST /_coauth/self/invites/3pid/verify`
 ///
 /// Runs the two-step `verify_invite` proof chain (verification-service
 /// proof + subject proof + cross-checks). On success returns a JSON
@@ -180,7 +180,7 @@ pub async fn post_verify_invite(
     let expected_iss_allowlist = cokret_config.verification_service_allowlist();
     if expected_iss_allowlist.is_empty() {
         warn!(
-            "POST /_cokret/self/invites/3pid/verify called but no verification-service DID is configured \
+            "POST /_coauth/self/invites/3pid/verify called but no verification-service DID is configured \
              (cokret.verification_service_did / cokret.verification_service_dids); \
              returning 503 verifier_not_configured"
         );

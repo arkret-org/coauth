@@ -2,9 +2,9 @@
 //!
 //! Surfaces three routes consumed by sodmin and any other admin client:
 //!
-//! - `GET    /_cokret/local/admin/circles/capabilities` — list grants
-//! - `POST   /_cokret/local/admin/circles/capabilities` — create a grant
-//! - `DELETE /_cokret/local/admin/circles/capabilities/{id}` — revoke a grant
+//! - `GET    /_coauth/admin/circles/capabilities` — list grants
+//! - `POST   /_coauth/admin/circles/capabilities` — create a grant
+//! - `DELETE /_coauth/admin/circles/capabilities/{id}` — revoke a grant
 //!
 //! Wire shape lives in
 //! [`coauth_admin_types::circle_capability_admin`]. Grants are durable:

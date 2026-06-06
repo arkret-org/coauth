@@ -6,7 +6,7 @@
 //!   `register_finish` admin handler the **first** time an account enrols a
 //!   credential. Derives an `update_key` from the passkey's COSE public key
 //!   ([`crate::services::passkey_derive::derive_update_key_from_credential`]),
-//!   posts `POST /_cokret/root/webvh/dids` to starid, persists `(account → did,
+//!   posts `POST /_starid/root/webvh/dids` to starid, persists `(account → did,
 //!   update_key, version_id)`, and flips `user.starid_backend = true` so
 //!   subsequent reads of `primary_did_for_user` route to the starid form.
 //!
@@ -14,7 +14,7 @@
 //!   **subsequent** passkey enrolments (account already has a starid-minted
 //!   DID). Derives the new device's `update_key`, looks up the prior
 //!   `version_id` from the binding row, posts `POST
-//!   /_cokret/root/webvh/dids/{did}/update` to starid, and persists the bumped
+//!   /_starid/root/webvh/dids/{did}/update` to starid, and persists the bumped
 //!   version.
 //!
 //! Round 37.4 contract change (rip-and-replace): the old
@@ -180,7 +180,7 @@ mod tests {
         let server = MockServer::start().await;
         let derived = derive_update_key_from_cose_bytes(b"fake-cose-key-bytes-for-test");
         Mock::given(method("POST"))
-            .and(path("/_cokret/root/webvh/dids"))
+            .and(path("/_starid/root/webvh/dids"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "did": "did:webvh:ztest:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
                 "scid": "ztest",
@@ -219,7 +219,7 @@ mod tests {
         let server = MockServer::start().await;
         let new_key = derive_update_key_from_cose_bytes(b"second-passkey-cose-bytes");
         Mock::given(method("POST"))
-            .and(path_regex(r"^/_cokret/root/webvh/dids/.+/update$"))
+            .and(path_regex(r"^/_starid/root/webvh/dids/.+/update$"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "did": "did:webvh:ztest:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
                 "scid": "ztest",

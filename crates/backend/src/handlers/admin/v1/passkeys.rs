@@ -3,10 +3,10 @@
 //! These endpoints drive the four ceremonies the
 //! [`crate::services::webauthn`] service exposes:
 //!
-//!   * `POST /_cokret/local/admin/accounts/{id}/passkeys/register/start`
-//!   * `POST /_cokret/local/admin/accounts/{id}/passkeys/register/finish`
-//!   * `POST /_cokret/local/admin/accounts/{id}/passkeys/auth/start`
-//!   * `POST /_cokret/local/admin/accounts/{id}/passkeys/auth/finish`
+//!   * `POST /_coauth/admin/accounts/{id}/passkeys/register/start`
+//!   * `POST /_coauth/admin/accounts/{id}/passkeys/register/finish`
+//!   * `POST /_coauth/admin/accounts/{id}/passkeys/auth/start`
+//!   * `POST /_coauth/admin/accounts/{id}/passkeys/auth/finish`
 //!
 //! The handlers are intentionally thin — they extract the account
 //! ULID, marshal the payload into / out of `webauthn-rs` types, audit

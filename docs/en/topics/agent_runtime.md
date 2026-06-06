@@ -12,7 +12,7 @@ but they are reserved implementation details rather than a callable public API.
 
 ## Exposed Surface
 
-### `POST /_cokret/self/agents/{id}/accountability-grant`
+### `POST /_coauth/self/agents/{id}/accountability-grant`
 
 This internal CKP-0008 endpoint issues an accountability grant linking a human
 controller DID to an agent principal id and a canonical set of `ck.agent.*`

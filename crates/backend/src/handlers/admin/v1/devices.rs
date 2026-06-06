@@ -379,7 +379,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::get("/_cokret/local/admin/devices")
+                Request::get("/_coauth/admin/devices")
                     .bearer(&token)
                     .empty(),
             )
@@ -393,7 +393,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/_cokret/local/admin/devices/device-1/revoke")
+                Request::post("/_coauth/admin/devices/device-1/revoke")
                     .bearer(&token)
                     .json(serde_json::json!({ "reason": "lost device" })),
             )

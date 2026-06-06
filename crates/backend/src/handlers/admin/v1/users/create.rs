@@ -35,7 +35,7 @@ use crate::{
     util::handle_valid,
 };
 
-/// # JSON payload for the `POST /_cokret/local/admin/users` endpoint
+/// # JSON payload for the `POST /_coauth/admin/users` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUserRequest")]
 pub struct AddRequest {
@@ -128,7 +128,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     ))
 }
 
-/// # JSON payload for the `POST /_cokret/local/admin/users/batch-invite` endpoint
+/// # JSON payload for the `POST /_coauth/admin/users/batch-invite` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "BatchInviteRequest")]
 pub struct BatchInviteRequest {
@@ -430,7 +430,7 @@ pub async fn batch_invite(
             // soft-reject pending admin review. The queue id is
             // surfaced via the `quarantine_id` slot in the audit log
             // and admin-list endpoint at
-            // `GET /_cokret/local/admin/invite-quarantine`.
+            // `GET /_coauth/admin/invite-quarantine`.
             let quarantine_id = if let Some(gate) = params.consent_gate.as_ref() {
                 let queue = depot.invite_quarantine_service()?;
                 let payload = serde_json::json!({

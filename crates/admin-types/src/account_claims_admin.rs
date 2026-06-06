@@ -2,8 +2,8 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /_cokret/local/admin/accounts/{account_id}/claims` —
-//!   `AccountClaimsResponse { data: [AccountClaimRecord, ...] }` from
+//! - `GET /_coauth/admin/accounts/{account_id}/claims` — `AccountClaimsResponse
+//!   { data: [AccountClaimRecord, ...] }` from
 //!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`.
 //!
 //! The claim issuance / revocation request bodies and the

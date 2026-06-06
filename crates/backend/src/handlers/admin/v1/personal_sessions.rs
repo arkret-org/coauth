@@ -50,7 +50,7 @@ pub(crate) fn personal_session_owner_from_caller(caller: &CallerSession) -> Pers
     }
 }
 
-/// Request body accepted by `POST /_cokret/local/admin/personal-sessions`.
+/// Request body accepted by `POST /_coauth/admin/personal-sessions`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "CreatePersonalSessionRequest")]
 pub struct AddRequest {
@@ -606,7 +606,7 @@ mod tests {
             "expires_in": 3600
         });
 
-        let request = Request::post("/_cokret/local/admin/personal-sessions")
+        let request = Request::post("/_coauth/admin/personal-sessions")
             .bearer(&token)
             .json(&payload);
 
@@ -634,11 +634,11 @@ mod tests {
               "access_token": "mpt_FM44zJN5qePGMLvvMXC4Ds1A3lCWc6_bJ9Wj1"
             },
             "links": {
-              "self": "/_cokret/local/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
+              "self": "/_coauth/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
             }
           },
           "links": {
-            "self": "/_cokret/local/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
+            "self": "/_coauth/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
           }
         }
         "#);
@@ -660,7 +660,7 @@ mod tests {
             "expires_in": 3600
         });
 
-        let request = Request::post("/_cokret/local/admin/personal-sessions")
+        let request = Request::post("/_coauth/admin/personal-sessions")
             .bearer(&token)
             .json(&payload);
 
@@ -695,7 +695,7 @@ mod tests {
             "expires_in": 3600
         });
 
-        let request = Request::post("/_cokret/local/admin/personal-sessions")
+        let request = Request::post("/_coauth/admin/personal-sessions")
             .bearer(&token)
             .json(&payload);
 
@@ -741,7 +741,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let request = Request::get(format!(
-            "/_cokret/local/admin/personal-sessions/{}",
+            "/_coauth/admin/personal-sessions/{}",
             personal_session.id
         ))
         .bearer(&token)
@@ -768,11 +768,11 @@ mod tests {
               "expires_at": null
             },
             "links": {
-              "self": "/_cokret/local/admin/personal-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+              "self": "/_coauth/admin/personal-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
             }
           },
           "links": {
-            "self": "/_cokret/local/admin/personal-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+            "self": "/_coauth/admin/personal-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
           }
         }
         "#);
@@ -788,11 +788,9 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let missing_id = Ulid::nil();
-        let request = Request::get(format!(
-            "/_cokret/local/admin/personal-sessions/{missing_id}"
-        ))
-        .bearer(&token)
-        .empty();
+        let request = Request::get(format!("/_coauth/admin/personal-sessions/{missing_id}"))
+            .bearer(&token)
+            .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
     }
@@ -894,7 +892,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let token = state.token_with_scope("urn:coauth:admin").await;
-        let request = Request::get("/_cokret/local/admin/personal-sessions")
+        let request = Request::get("/_coauth/admin/personal-sessions")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -922,7 +920,7 @@ mod tests {
                 "expires_at": "2022-02-27T14:40:00Z"
               },
               "links": {
-                "self": "/_cokret/local/admin/personal-sessions/01FSHN9AG0YQYAR04VCYTHJ8SK"
+                "self": "/_coauth/admin/personal-sessions/01FSHN9AG0YQYAR04VCYTHJ8SK"
               },
               "meta": {
                 "page": {
@@ -946,7 +944,7 @@ mod tests {
                 "expires_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/personal-sessions/01FSM7P1G0VBGAMK9D9QMGQ5MY"
+                "self": "/_coauth/admin/personal-sessions/01FSM7P1G0VBGAMK9D9QMGQ5MY"
               },
               "meta": {
                 "page": {
@@ -970,7 +968,7 @@ mod tests {
                 "expires_at": "2022-02-01T14:40:00Z"
               },
               "links": {
-                "self": "/_cokret/local/admin/personal-sessions/01FSPT2RG08Y11Y5BM4VZ4CN8K"
+                "self": "/_coauth/admin/personal-sessions/01FSPT2RG08Y11Y5BM4VZ4CN8K"
               },
               "meta": {
                 "page": {
@@ -980,9 +978,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/personal-sessions?page[first]=10",
-            "first": "/_cokret/local/admin/personal-sessions?page[first]=10",
-            "last": "/_cokret/local/admin/personal-sessions?page[last]=10"
+            "self": "/_coauth/admin/personal-sessions?page[first]=10",
+            "first": "/_coauth/admin/personal-sessions?page[first]=10",
+            "last": "/_coauth/admin/personal-sessions?page[last]=10"
           }
         }
         "#);
@@ -1014,7 +1012,7 @@ mod tests {
         ];
 
         for (qs, want_ids) in cases {
-            let request = Request::get(format!("/_cokret/local/admin/personal-sessions?{qs}"))
+            let request = Request::get(format!("/_coauth/admin/personal-sessions?{qs}"))
                 .bearer(&token)
                 .empty();
             let response = state.request(request).await;
@@ -1052,7 +1050,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::post("/_cokret/local/admin/personal-sessions")
+        let request = Request::post("/_coauth/admin/personal-sessions")
             .bearer(&token)
             .json(json!({
                 "actor_user_id": user.id,
@@ -1070,7 +1068,7 @@ mod tests {
         state.clock.advance(Duration::minutes(3));
 
         let request = Request::post(format!(
-            "/_cokret/local/admin/personal-sessions/{sess_id}/regenerate"
+            "/_coauth/admin/personal-sessions/{sess_id}/regenerate"
         ))
         .bearer(&token)
         .json(json!({
@@ -1101,11 +1099,11 @@ mod tests {
               "access_token": "mpt_6cq7FqNSYoosbXl3bbpfh9yNy9NzuR_0vOV2O"
             },
             "links": {
-              "self": "/_cokret/local/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
+              "self": "/_coauth/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
             }
           },
           "links": {
-            "self": "/_cokret/local/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
+            "self": "/_coauth/admin/personal-sessions/01FSHN9AG07HNEZXNQM2KNBNF6"
           }
         }
         "#);
@@ -1145,7 +1143,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let request = Request::post(format!(
-            "/_cokret/local/admin/personal-sessions/{}/revoke",
+            "/_coauth/admin/personal-sessions/{}/revoke",
             sess.id
         ))
         .bearer(&token)
@@ -1202,7 +1200,7 @@ mod tests {
         state.clock.advance(Duration::try_minutes(1).unwrap());
 
         let request = Request::post(format!(
-            "/_cokret/local/admin/personal-sessions/{}/revoke",
+            "/_coauth/admin/personal-sessions/{}/revoke",
             revoked_sess.id
         ))
         .bearer(&token)
@@ -1228,11 +1226,10 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post(
-            "/_cokret/local/admin/personal-sessions/01040G2081040G2081040G2081/revoke",
-        )
-        .bearer(&token)
-        .empty();
+        let request =
+            Request::post("/_coauth/admin/personal-sessions/01040G2081040G2081040G2081/revoke")
+                .bearer(&token)
+                .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
         let body: serde_json::Value = response.json();

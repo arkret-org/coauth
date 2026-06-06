@@ -149,7 +149,7 @@ async fn require_authenticated_session(
     Ok(Some(session))
 }
 
-// ── GET /_cokret/self/oauth/consent/:grant_id ───────────────────────
+// ── GET /_coauth/self/oauth/consent/:grant_id ───────────────────────
 
 /// Return the data needed to render a consent page for an OAuth authorization
 /// grant.
@@ -195,7 +195,7 @@ pub async fn oauth_consent_get(
     Ok(())
 }
 
-// ── POST /_cokret/self/oauth/consent/:grant_id ──────────────────────
+// ── POST /_coauth/self/oauth/consent/:grant_id ──────────────────────
 
 /// Accept the OAuth authorization consent: create an OAuth session, fulfill
 /// the grant, and return the callback redirect URL.
@@ -265,7 +265,7 @@ pub async fn oauth_consent_post(
     Ok(())
 }
 
-// ── GET /_cokret/self/device-link ────────────────────────────────────
+// ── GET /_coauth/self/device-link ────────────────────────────────────
 
 /// Validate a device user code and return the grant ID if valid.
 #[endpoint]
@@ -308,7 +308,7 @@ pub async fn device_link_get(
     Ok(())
 }
 
-// ── GET /_cokret/self/device-consent/:id ─────────────────────────────
+// ── GET /_coauth/self/device-consent/:id ─────────────────────────────
 
 /// Return the data needed to render a consent page for a device code grant.
 #[endpoint]
@@ -353,7 +353,7 @@ pub async fn device_consent_get(
     Ok(())
 }
 
-// ── POST /_cokret/self/device-consent/:id ────────────────────────────
+// ── POST /_coauth/self/device-consent/:id ────────────────────────────
 
 /// Accept or reject a device code grant.
 #[endpoint]

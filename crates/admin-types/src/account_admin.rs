@@ -2,9 +2,9 @@
 //!
 //! Mirrors the JSON:API attributes block emitted by:
 //!
-//! - `GET /_cokret/local/admin/accounts` — paginated account list.
-//! - `GET /_cokret/local/admin/accounts/{account_id}` — single-account detail.
-//! - `POST /_cokret/local/admin/accounts/{account_id}/
+//! - `GET /_coauth/admin/accounts` — paginated account list.
+//! - `GET /_coauth/admin/accounts/{account_id}` — single-account detail.
+//! - `POST /_coauth/admin/accounts/{account_id}/
 //!   {lock|disable|erase|reset-recovery}` — mutation endpoints that return the
 //!   same `AccountRecord` envelope.
 //!

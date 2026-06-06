@@ -10,7 +10,7 @@ coauth 尚未暴露 `ck.gate.account.agent_key_pair`，也尚未暴露
 
 ## 已暴露接口
 
-### `POST /_cokret/self/agents/{id}/accountability-grant`
+### `POST /_coauth/self/agents/{id}/accountability-grant`
 
 这是内部 CKP-0008 接口，用于签发 accountability grant，将人类
 controller DID、agent principal id，以及一组规范化的 `ck.agent.*`

@@ -1,8 +1,7 @@
 //! Admin endpoints for notification template management.
 //!
-//! - `GET  /_cokret/local/admin/notification-templates` — list known template
-//!   keys
-//! - `POST /_cokret/local/admin/notification-templates/publish` — publish a new
+//! - `GET  /_coauth/admin/notification-templates` — list known template keys
+//! - `POST /_coauth/admin/notification-templates/publish` — publish a new
 //!   template version
 //!
 //! Wire shapes (request + response bodies) live in

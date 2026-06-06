@@ -44,7 +44,7 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::get("/_cokret/local/admin/version")
+        let request = Request::get("/_coauth/admin/version")
             .bearer(&token)
             .empty();
 

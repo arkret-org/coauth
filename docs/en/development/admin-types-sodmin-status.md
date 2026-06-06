@@ -32,7 +32,7 @@ Expected sodmin follow-up:
   bridge, and risk-action admin DTOs with `coauth-admin-types` imports where
   crate boundaries allow it.
 - Keep any sodmin-only presentation model separate from the wire DTOs.
-- Confirm sodmin decodes `GET /_cokret/local/admin/bridge/describe` with typed
+- Confirm sodmin decodes `GET /_coauth/admin/bridge/describe` with typed
   `risk_action_examples` instead of opaque JSON values.
 - Confirm the admin bridge does not own user login credentials; interactive
   login remains on the account-auth endpoints documented in
@@ -52,6 +52,6 @@ Expected sodmin follow-up:
 - Sodmin compiles with `coauth-admin-types` and no local duplicate DTOs for the
   surfaces listed above.
 - A sodmin smoke run can fetch `/.well-known/cokret/openapi.yaml` and
-  `GET /_cokret/local/admin/bridge/describe`.
+  `GET /_coauth/admin/bridge/describe`.
 - No release tag, GitHub release, crate publication, or image push is required
   for this local status record.

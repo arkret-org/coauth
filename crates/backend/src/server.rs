@@ -681,9 +681,23 @@ fn build_account_api_router(router: Router) -> Router {
         cokret, policy_check,
     };
 
-    let api_router = Router::with_path("/_cokret")
+    let cokret_router = Router::with_path("/_cokret")
         .hoop(public_oidc_browser_cors())
-        // Cokret service surface
+        .push(Router::with_path("describe").get(cokret::server_describe))
+        .push(Router::with_path("root/identity/describe").get(cokret::identity_describe))
+        .push(Router::with_path("root/identity/resolve").post(cokret::identity_resolve))
+        .push(Router::with_path("root/identity/document").get(cokret::identity_document))
+        .push(Router::with_path("find/directory/describe").get(cokret::directory_describe))
+        .push(
+            Router::with_path("find/directory/resolve-handle")
+                .post(cokret::directory_resolve_handle),
+        )
+        .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check));
+
+    let coauth_router = Router::with_path("/_coauth")
+        .hoop(public_oidc_browser_cors())
+        // Coauth-local compatibility surface. Protocol-standard Cokret
+        // endpoints are mounted separately under `/_cokret` above.
         .push(Router::with_path("describe").get(cokret::server_describe))
         .push(Router::with_path("root/identity/describe").get(cokret::identity_describe))
         .push(Router::with_path("root/identity/resolve").post(cokret::identity_resolve))
@@ -909,9 +923,12 @@ fn build_account_api_router(router: Router) -> Router {
             Router::with_path("self/agents/{id}/accountability-grant")
                 .post(agents::post_accountability_grant),
         );
-    let docs_router = openapi::build_openapi_router(&api_router);
+    let docs_router = openapi::build_openapi_router(&coauth_router);
 
-    router.push(api_router).push(docs_router)
+    router
+        .push(cokret_router)
+        .push(coauth_router)
+        .push(docs_router)
 }
 
 fn build_admin_router(router: Router) -> Router {
@@ -923,7 +940,7 @@ fn build_admin_router(router: Router) -> Router {
         user_emails, user_registration_tokens, user_sessions, users, version,
     };
 
-    let admin_router = Router::with_path("/_cokret/local/admin")
+    let admin_router = Router::with_path("/_coauth/admin")
         // Version
         .push(Router::with_path("version").get(version::handler))
         // Site config
@@ -1182,7 +1199,7 @@ fn build_admin_router(router: Router) -> Router {
     router
         .push(admin_router)
         .push(admin_doc.clone().into_router("/api-doc/admin/openapi.json"))
-        .push(Router::with_path("/_cokret/local/admin/openapi.yaml").get(admin_doc_yaml.clone()))
+        .push(Router::with_path("/_coauth/admin/openapi.yaml").get(admin_doc_yaml.clone()))
         .push(Router::with_path("/.well-known/cokret/openapi.yaml").get(admin_doc_yaml))
         .push(
             salvo::oapi::swagger_ui::SwaggerUi::new("/api-doc/admin/openapi.json")
@@ -1412,25 +1429,25 @@ mod tests {
         let json: serde_json::Value = serde_json::from_str(&body).unwrap();
 
         assert_eq!(json["info"]["title"], "coauth Admin API");
-        assert!(json["paths"]["/_cokret/local/admin/user-sessions"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/user-sessions/{id}"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/user-sessions/{id}/finish"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/oauth-sessions"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/oauth-sessions/{id}"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/oauth-sessions/{id}/finish"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/personal-sessions"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/personal-sessions/{id}"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/personal-sessions/{id}/revoke"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/accounts"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/accounts/{id}"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/accounts/{id}/lock"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/accounts/{id}/disable"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/accounts/{id}/dids"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/devices"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/devices/{id}/revoke"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/claims"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/claims/status"].is_object());
-        assert!(json["paths"]["/_cokret/local/admin/policy-checks/dry-run"].is_object());
+        assert!(json["paths"]["/_coauth/admin/user-sessions"].is_object());
+        assert!(json["paths"]["/_coauth/admin/user-sessions/{id}"].is_object());
+        assert!(json["paths"]["/_coauth/admin/user-sessions/{id}/finish"].is_object());
+        assert!(json["paths"]["/_coauth/admin/oauth-sessions"].is_object());
+        assert!(json["paths"]["/_coauth/admin/oauth-sessions/{id}"].is_object());
+        assert!(json["paths"]["/_coauth/admin/oauth-sessions/{id}/finish"].is_object());
+        assert!(json["paths"]["/_coauth/admin/personal-sessions"].is_object());
+        assert!(json["paths"]["/_coauth/admin/personal-sessions/{id}"].is_object());
+        assert!(json["paths"]["/_coauth/admin/personal-sessions/{id}/revoke"].is_object());
+        assert!(json["paths"]["/_coauth/admin/accounts"].is_object());
+        assert!(json["paths"]["/_coauth/admin/accounts/{id}"].is_object());
+        assert!(json["paths"]["/_coauth/admin/accounts/{id}/lock"].is_object());
+        assert!(json["paths"]["/_coauth/admin/accounts/{id}/disable"].is_object());
+        assert!(json["paths"]["/_coauth/admin/accounts/{id}/dids"].is_object());
+        assert!(json["paths"]["/_coauth/admin/devices"].is_object());
+        assert!(json["paths"]["/_coauth/admin/devices/{id}/revoke"].is_object());
+        assert!(json["paths"]["/_coauth/admin/claims"].is_object());
+        assert!(json["paths"]["/_coauth/admin/claims/status"].is_object());
+        assert!(json["paths"]["/_coauth/admin/policy-checks/dry-run"].is_object());
         assert!(!body.contains("Pasion Admin API"));
     }
 
@@ -1439,7 +1456,7 @@ mod tests {
         let service = salvo::Service::new(build_admin_router(Router::new()));
 
         for path in [
-            "/_cokret/local/admin/openapi.yaml",
+            "/_coauth/admin/openapi.yaml",
             "/.well-known/cokret/openapi.yaml",
         ] {
             let mut response = TestClient::get(format!("http://127.0.0.1:8698{path}"))
@@ -1457,10 +1474,7 @@ mod tests {
 
             let body = response.take_string().await.unwrap();
             assert!(body.contains("title: coauth Admin API"), "{body}");
-            assert!(
-                body.contains("/_cokret/local/admin/user-sessions:"),
-                "{body}"
-            );
+            assert!(body.contains("/_coauth/admin/user-sessions:"), "{body}");
             assert!(!body.contains("Pasion Admin API"), "{body}");
         }
     }

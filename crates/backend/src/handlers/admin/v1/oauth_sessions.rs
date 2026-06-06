@@ -90,7 +90,7 @@ pub async fn finish_session(
 
     Ok(Json(SingleResponse::new(
         OAuthSession::from(ended),
-        format!("/_cokret/local/admin/oauth-sessions/{session_id}/finish"),
+        format!("/_coauth/admin/oauth-sessions/{session_id}/finish"),
     )))
 }
 
@@ -375,11 +375,9 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::post(format!(
-            "/_cokret/local/admin/oauth-sessions/{session_id}/finish"
-        ))
-        .bearer(&token)
-        .empty();
+        let request = Request::post(format!("/_coauth/admin/oauth-sessions/{session_id}/finish"))
+            .bearer(&token)
+            .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -434,7 +432,7 @@ mod tests {
         state.clock.advance(Duration::try_minutes(1).unwrap());
 
         let request = Request::post(format!(
-            "/_cokret/local/admin/oauth-sessions/{}/finish",
+            "/_coauth/admin/oauth-sessions/{}/finish",
             session.id
         ))
         .bearer(&admin_token)
@@ -458,7 +456,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let request =
-            Request::post("/_cokret/local/admin/oauth-sessions/01040G2081040G2081040G2081/finish")
+            Request::post("/_coauth/admin/oauth-sessions/01040G2081040G2081040G2081/finish")
                 .bearer(&token)
                 .empty();
         let response = state.request(request).await;
@@ -489,7 +487,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::get(format!("/_cokret/local/admin/oauth-sessions/{session_id}"))
+        let request = Request::get(format!("/_coauth/admin/oauth-sessions/{session_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -514,11 +512,11 @@ mod tests {
               "human_name": null
             },
             "links": {
-              "self": "/_cokret/local/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+              "self": "/_coauth/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
             }
           },
           "links": {
-            "self": "/_cokret/local/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+            "self": "/_coauth/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
           }
         }
         "#);
@@ -534,7 +532,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let session_id = Ulid::nil();
-        let request = Request::get(format!("/_cokret/local/admin/oauth-sessions/{session_id}"))
+        let request = Request::get(format!("/_coauth/admin/oauth-sessions/{session_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -551,7 +549,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         // We already have a session because of the token above
-        let request = Request::get("/_cokret/local/admin/oauth-sessions")
+        let request = Request::get("/_coauth/admin/oauth-sessions")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -579,7 +577,7 @@ mod tests {
                 "human_name": null
               },
               "links": {
-                "self": "/_cokret/local/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+                "self": "/_coauth/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
               },
               "meta": {
                 "page": {
@@ -589,15 +587,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/oauth-sessions?page[first]=10",
-            "first": "/_cokret/local/admin/oauth-sessions?page[first]=10",
-            "last": "/_cokret/local/admin/oauth-sessions?page[last]=10"
+            "self": "/_coauth/admin/oauth-sessions?page[first]=10",
+            "first": "/_coauth/admin/oauth-sessions?page[first]=10",
+            "last": "/_coauth/admin/oauth-sessions?page[last]=10"
           }
         }
         "#);
 
         // Test count=false
-        let request = Request::get("/_cokret/local/admin/oauth-sessions?count=false")
+        let request = Request::get("/_coauth/admin/oauth-sessions?count=false")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -622,7 +620,7 @@ mod tests {
                 "human_name": null
               },
               "links": {
-                "self": "/_cokret/local/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
+                "self": "/_coauth/admin/oauth-sessions/01FSHN9AG0MKGTBNZ16RDR3PVY"
               },
               "meta": {
                 "page": {
@@ -632,15 +630,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/oauth-sessions?count=false&page[first]=10",
-            "first": "/_cokret/local/admin/oauth-sessions?count=false&page[first]=10",
-            "last": "/_cokret/local/admin/oauth-sessions?count=false&page[last]=10"
+            "self": "/_coauth/admin/oauth-sessions?count=false&page[first]=10",
+            "first": "/_coauth/admin/oauth-sessions?count=false&page[first]=10",
+            "last": "/_coauth/admin/oauth-sessions?count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only
-        let request = Request::get("/_cokret/local/admin/oauth-sessions?count=only")
+        let request = Request::get("/_coauth/admin/oauth-sessions?count=only")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -652,7 +650,7 @@ mod tests {
             "count": 1
           },
           "links": {
-            "self": "/_cokret/local/admin/oauth-sessions?count=only"
+            "self": "/_coauth/admin/oauth-sessions?count=only"
           }
         }
         "#);

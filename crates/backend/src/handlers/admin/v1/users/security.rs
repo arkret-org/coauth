@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-/// # JSON payload for the `POST /_cokret/local/admin/users/:id/risk-action` endpoint
+/// # JSON payload for the `POST /_coauth/admin/users/:id/risk-action` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "RiskActionRequest")]
 pub struct RiskActionRequest {
@@ -144,7 +144,7 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
 
     let user_response = SingleResponse::new(
         User::from(user),
-        format!("/_cokret/local/admin/users/{id}/risk-action"),
+        format!("/_coauth/admin/users/{id}/risk-action"),
     );
 
     Ok(Json(RiskActionResponse {
@@ -155,7 +155,7 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
     }))
 }
 
-/// # JSON payload for the `POST /_cokret/local/admin/users/:id/set-password` endpoint
+/// # JSON payload for the `POST /_coauth/admin/users/:id/set-password` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[schemars(rename = "SetUserPasswordRequest")]
 pub struct SetPasswordRequest {

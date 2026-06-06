@@ -741,7 +741,7 @@ pub struct UserTotpConfig {
 
 /// Per-user `did:webvh` update-key material minted against an embedded
 /// principal-server provider (e.g. soland's
-/// `POST /_cokret/root/identity/webvh/register`).
+/// soland private WebVH registration endpoint).
 ///
 /// `update_secret_b64` is the **encrypted** ed25519 seed for the update
 /// key — encryption is the caller's responsibility (use

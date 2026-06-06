@@ -916,7 +916,7 @@
           ]
         },
         {
-          "description": "Administrative REST API (`/_cokret/local/admin`)",
+          "description": "Administrative REST API (`/_coauth/admin`)",
           "type": "object",
           "properties": {
             "name": {
@@ -1353,7 +1353,7 @@
           ]
         },
         "session_grant_ttl": {
-          "description": "Lifetime of Cokret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and refreshed through\n`/_cokret/gate/account/session-grants/refresh`. Default: 300 (5 min).",
+          "description": "Lifetime of Cokret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and refreshed through\n`/_coauth/gate/account/session-grants/refresh`. Default: 300 (5 min).",
           "type": "integer",
           "format": "uint64",
           "minimum": 60,
@@ -1398,7 +1398,7 @@
           ]
         },
         "password_login_session_grants_enabled": {
-          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nCokret principal-server session grant directly from\n`POST /_cokret/gate/account/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
+          "description": "Fail-closed gate for the temporary password-login bridge that returns a\nCokret principal-server session grant directly from\n`POST /_coauth/gate/account/auth/login`.\n\nDefaults to `false`: production callers must use the OIDC/passkey bridge\nand proof-bound grant exchange. When enabled for development, the login\nhandler still requires a valid DPoP proof before minting the grant.",
           "type": "boolean"
         },
         "admin_org_id": {
@@ -1409,7 +1409,7 @@
           ]
         },
         "verification_service_did": {
-          "description": "Round 4 — DID of the trusted 3PID verification service whose\n`binding_proof` JWTs this coauth deployment will accept on\n`POST /_cokret/self/invites/3pid/verify`. When omitted, the invite\nverifier endpoint returns `503 verifier_not_configured` because\nit has no trusted `iss` to compare against.\n\nOverride at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.",
+          "description": "Round 4 — DID of the trusted 3PID verification service whose\n`binding_proof` JWTs this coauth deployment will accept on\n`POST /_coauth/self/invites/3pid/verify`. When omitted, the invite\nverifier endpoint returns `503 verifier_not_configured` because\nit has no trusted `iss` to compare against.\n\nOverride at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.",
           "type": [
             "string",
             "null"
@@ -1453,7 +1453,7 @@
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint\n(`/_cokret/gate/account/session-grants/introspect`). Mirrors\n`oauth_introspection_bearer` for the session-grant exchange path:\navoids requiring a DB-backed PAT/OAuth-session for the\nserver-to-server hop, which is awkward in dev when the coauth DB\nis reset frequently.",
+          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint\n(`/_coauth/gate/account/session-grants/introspect`). Mirrors\n`oauth_introspection_bearer` for the session-grant exchange path:\navoids requiring a DB-backed PAT/OAuth-session for the\nserver-to-server hop, which is awkward in dev when the coauth DB\nis reset frequently.",
           "type": [
             "string",
             "null"

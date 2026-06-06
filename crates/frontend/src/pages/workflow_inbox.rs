@@ -10,7 +10,7 @@ use crate::{
 
 /// Workflow inbox page.
 ///
-/// Fetches `GET /_cokret/self/viewer/workflow-inbox` and displays a list of
+/// Fetches `GET /_coauth/self/viewer/workflow-inbox` and displays a list of
 /// pending flow sessions the user needs to act on.
 #[component]
 pub fn WorkflowInbox() -> Element {

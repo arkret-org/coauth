@@ -59,7 +59,7 @@ pub struct OAuthClientBrief {
     pub logo_uri: Option<String>,
 }
 
-// ── GET /_cokret/self/sessions/:id ───────────────────────────────────
+// ── GET /_coauth/self/sessions/:id ───────────────────────────────────
 
 #[endpoint]
 pub async fn get_session(
@@ -130,7 +130,7 @@ pub async fn get_session(
     Ok(Json(response))
 }
 
-// ── DELETE /_cokret/self/browser-sessions/:id ────────────────────────
+// ── DELETE /_coauth/self/browser-sessions/:id ────────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct EndSessionResponse {
@@ -163,7 +163,7 @@ pub async fn end_browser_session(
     Ok(Json(EndSessionResponse { status: "ENDED" }))
 }
 
-// ── DELETE /_cokret/self/oauth-sessions/:id ─────────────────────────
+// ── DELETE /_coauth/self/oauth-sessions/:id ─────────────────────────
 
 #[endpoint]
 pub async fn end_oauth_session(
@@ -192,7 +192,7 @@ pub async fn end_oauth_session(
     Ok(Json(EndSessionResponse { status: "ENDED" }))
 }
 
-// ── PUT /_cokret/self/oauth-sessions/:id/name ───────────────────────
+// ── PUT /_coauth/self/oauth-sessions/:id/name ───────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct SetSessionNameInput {

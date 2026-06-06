@@ -595,7 +595,7 @@ mod tests {
         let provider = create_test_provider(&mut state).await;
 
         let request = Request::get(format!(
-            "/_cokret/local/admin/upstream-oauth-providers/{}",
+            "/_coauth/admin/upstream-oauth-providers/{}",
             provider.id
         ))
         .bearer(&admin_token)
@@ -622,11 +622,11 @@ mod tests {
               "disabled_at": null
             },
             "links": {
-              "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+              "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
             }
           },
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+            "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
           }
         }
         "###);
@@ -643,7 +643,7 @@ mod tests {
 
         let provider_id = Ulid::nil();
         let request = Request::get(format!(
-            "/_cokret/local/admin/upstream-oauth-providers/{provider_id}"
+            "/_coauth/admin/upstream-oauth-providers/{provider_id}"
         ))
         .bearer(&admin_token)
         .empty();
@@ -774,7 +774,7 @@ mod tests {
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
         create_test_providers(&mut state).await;
 
-        let request = Request::get("/_cokret/local/admin/upstream-oauth-providers")
+        let request = Request::get("/_coauth/admin/upstream-oauth-providers")
             .bearer(&admin_token)
             .empty();
 
@@ -802,7 +802,7 @@ mod tests {
                 "disabled_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -821,7 +821,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -840,7 +840,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -850,9 +850,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?page[first]=10",
-            "first": "/_cokret/local/admin/upstream-oauth-providers?page[first]=10",
-            "last": "/_cokret/local/admin/upstream-oauth-providers?page[last]=10"
+            "self": "/_coauth/admin/upstream-oauth-providers?page[first]=10",
+            "first": "/_coauth/admin/upstream-oauth-providers?page[first]=10",
+            "last": "/_coauth/admin/upstream-oauth-providers?page[last]=10"
           }
         }
         "#);
@@ -868,10 +868,9 @@ mod tests {
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
         create_test_providers(&mut state).await;
 
-        let request =
-            Request::get("/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true")
-                .bearer(&admin_token)
-                .empty();
+        let request = Request::get("/_coauth/admin/upstream-oauth-providers?filter[enabled]=true")
+            .bearer(&admin_token)
+            .empty();
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
@@ -894,7 +893,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -913,7 +912,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -923,9 +922,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true&page[first]=10",
-            "first": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true&page[first]=10",
-            "last": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true&page[last]=10"
+            "self": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=true&page[first]=10",
+            "first": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=true&page[first]=10",
+            "last": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=true&page[last]=10"
           }
         }
         "#);
@@ -941,10 +940,9 @@ mod tests {
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
         create_test_providers(&mut state).await;
 
-        let request =
-            Request::get("/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=false")
-                .bearer(&admin_token)
-                .empty();
+        let request = Request::get("/_coauth/admin/upstream-oauth-providers?filter[enabled]=false")
+            .bearer(&admin_token)
+            .empty();
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
@@ -967,7 +965,7 @@ mod tests {
                 "disabled_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -977,9 +975,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=false&page[first]=10",
-            "first": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=false&page[first]=10",
-            "last": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=false&page[last]=10"
+            "self": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=false&page[first]=10",
+            "first": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=false&page[first]=10",
+            "last": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=false&page[last]=10"
           }
         }
         "#);
@@ -996,7 +994,7 @@ mod tests {
         create_test_providers(&mut state).await;
 
         // Test first page with limit of 2
-        let request = Request::get("/_cokret/local/admin/upstream-oauth-providers?page[first]=2")
+        let request = Request::get("/_coauth/admin/upstream-oauth-providers?page[first]=2")
             .bearer(&admin_token)
             .empty();
 
@@ -1021,7 +1019,7 @@ mod tests {
                 "disabled_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -1040,7 +1038,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1050,10 +1048,10 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?page[first]=2",
-            "first": "/_cokret/local/admin/upstream-oauth-providers?page[first]=2",
-            "last": "/_cokret/local/admin/upstream-oauth-providers?page[last]=2",
-            "next": "/_cokret/local/admin/upstream-oauth-providers?page[after]=01FSHN9AG09AVTNSQFMSR34AJC&page[first]=2"
+            "self": "/_coauth/admin/upstream-oauth-providers?page[first]=2",
+            "first": "/_coauth/admin/upstream-oauth-providers?page[first]=2",
+            "last": "/_coauth/admin/upstream-oauth-providers?page[last]=2",
+            "next": "/_coauth/admin/upstream-oauth-providers?page[after]=01FSHN9AG09AVTNSQFMSR34AJC&page[first]=2"
           }
         }
         "#);
@@ -1061,7 +1059,7 @@ mod tests {
         // Extract the ID of the last item for pagination
         let last_item_id = body["data"][1]["id"].as_str().unwrap();
         let request = Request::get(format!(
-            "/_cokret/local/admin/upstream-oauth-providers?page[first]=2&page[after]={last_item_id}",
+            "/_coauth/admin/upstream-oauth-providers?page[first]=2&page[after]={last_item_id}",
         ))
         .bearer(&admin_token)
         .empty();
@@ -1087,7 +1085,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1097,9 +1095,9 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?page[after]=01FSHN9AG09AVTNSQFMSR34AJC&page[first]=2",
-            "first": "/_cokret/local/admin/upstream-oauth-providers?page[first]=2",
-            "last": "/_cokret/local/admin/upstream-oauth-providers?page[last]=2"
+            "self": "/_coauth/admin/upstream-oauth-providers?page[after]=01FSHN9AG09AVTNSQFMSR34AJC&page[first]=2",
+            "first": "/_coauth/admin/upstream-oauth-providers?page[first]=2",
+            "last": "/_coauth/admin/upstream-oauth-providers?page[last]=2"
           }
         }
         "#);
@@ -1115,7 +1113,7 @@ mod tests {
         let admin_token = state.token_with_scope("urn:coauth:admin").await;
 
         let request =
-            Request::get("/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=invalid")
+            Request::get("/_coauth/admin/upstream-oauth-providers?filter[enabled]=invalid")
                 .bearer(&admin_token)
                 .empty();
 
@@ -1134,7 +1132,7 @@ mod tests {
         create_test_providers(&mut state).await;
 
         // Test count=false
-        let request = Request::get("/_cokret/local/admin/upstream-oauth-providers?count=false")
+        let request = Request::get("/_coauth/admin/upstream-oauth-providers?count=false")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1155,7 +1153,7 @@ mod tests {
                 "disabled_at": "2022-01-16T14:40:00Z"
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG07HNEZXNQM2KNBNF6"
               },
               "meta": {
                 "page": {
@@ -1174,7 +1172,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1193,7 +1191,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1203,15 +1201,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?count=false&page[first]=10",
-            "first": "/_cokret/local/admin/upstream-oauth-providers?count=false&page[first]=10",
-            "last": "/_cokret/local/admin/upstream-oauth-providers?count=false&page[last]=10"
+            "self": "/_coauth/admin/upstream-oauth-providers?count=false&page[first]=10",
+            "first": "/_coauth/admin/upstream-oauth-providers?count=false&page[first]=10",
+            "last": "/_coauth/admin/upstream-oauth-providers?count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only
-        let request = Request::get("/_cokret/local/admin/upstream-oauth-providers?count=only")
+        let request = Request::get("/_coauth/admin/upstream-oauth-providers?count=only")
             .bearer(&admin_token)
             .empty();
         let response = state.request(request).await;
@@ -1224,14 +1222,14 @@ mod tests {
             "count": 3
           },
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?count=only"
+            "self": "/_coauth/admin/upstream-oauth-providers?count=only"
           }
         }
         "#);
 
         // Test count=false with filtering
         let request = Request::get(
-            "/_cokret/local/admin/upstream-oauth-providers?count=false&filter[enabled]=true",
+            "/_coauth/admin/upstream-oauth-providers?count=false&filter[enabled]=true",
         )
         .bearer(&admin_token)
         .empty();
@@ -1253,7 +1251,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG09AVTNSQFMSR34AJC"
               },
               "meta": {
                 "page": {
@@ -1272,7 +1270,7 @@ mod tests {
                 "disabled_at": null
               },
               "links": {
-                "self": "/_cokret/local/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
+                "self": "/_coauth/admin/upstream-oauth-providers/01FSHN9AG0MZAA6S4AF7CTV32E"
               },
               "meta": {
                 "page": {
@@ -1282,16 +1280,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true&count=false&page[first]=10",
-            "first": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true&count=false&page[first]=10",
-            "last": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=true&count=false&page[last]=10"
+            "self": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=true&count=false&page[first]=10",
+            "first": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=true&count=false&page[first]=10",
+            "last": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=true&count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only with filtering
         let request = Request::get(
-            "/_cokret/local/admin/upstream-oauth-providers?count=only&filter[enabled]=false",
+            "/_coauth/admin/upstream-oauth-providers?count=only&filter[enabled]=false",
         )
         .bearer(&admin_token)
         .empty();
@@ -1305,7 +1303,7 @@ mod tests {
             "count": 1
           },
           "links": {
-            "self": "/_cokret/local/admin/upstream-oauth-providers?filter[enabled]=false&count=only"
+            "self": "/_coauth/admin/upstream-oauth-providers?filter[enabled]=false&count=only"
           }
         }
         "#);

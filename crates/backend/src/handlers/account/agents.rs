@@ -83,7 +83,7 @@ fn is_registered_agent_capability(action: &str) -> bool {
     AGENT_CAPABILITY_ACTIONS.contains(&action)
 }
 
-/// Request body for `POST /_cokret/self/agents/{id}/accountability-grant`.
+/// Request body for `POST /_coauth/self/agents/{id}/accountability-grant`.
 #[derive(Deserialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantRequest {
     /// DID of the controller (account holder) issuing the grant. MUST
@@ -103,7 +103,7 @@ pub struct AccountabilityGrantRequest {
     pub reason: Option<String>,
 }
 
-/// Response payload for `POST /_cokret/self/agents/{id}/accountability-grant`.
+/// Response payload for `POST /_coauth/self/agents/{id}/accountability-grant`.
 ///
 /// CKP-0008 (`id-kind-registry.json`): the wire shape carries the
 /// freshly minted `ck:accountability_grant:<uuid7>` typed id, the
@@ -141,7 +141,7 @@ pub struct AccountabilityGrantResponse {
     pub issued_at: DateTime<Utc>,
 }
 
-/// `POST /_cokret/self/agents/{id}/accountability-grant`
+/// `POST /_coauth/self/agents/{id}/accountability-grant`
 ///
 /// Internal CKP-0008 grant-issuance endpoint. Accepts only the soland /
 /// sodmin static bearer token (matched against any

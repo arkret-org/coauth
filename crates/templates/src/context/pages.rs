@@ -83,7 +83,7 @@ impl AppContext {
         Self {
             app_config: AppConfig {
                 root,
-                api_endpoint: format!("{prefix}/_cokret"),
+                api_endpoint: format!("{prefix}/_coauth"),
                 script_src: script_src.to_owned(),
                 error: None,
             },

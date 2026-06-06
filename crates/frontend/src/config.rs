@@ -26,7 +26,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             root: "/".to_owned(),
-            api_endpoint: "/_cokret".to_owned(),
+            api_endpoint: "/_coauth".to_owned(),
             error: None,
         }
     }
@@ -50,7 +50,7 @@ pub fn get_config() -> AppConfig {
                         .ok()
                         .and_then(|v| v.as_string())
                 })
-                .unwrap_or_else(|| "/_cokret".to_string());
+                .unwrap_or_else(|| "/_coauth".to_string());
 
             let error = read_error_from_js(&val);
 

@@ -2,7 +2,7 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /_cokret/gate/account/integration/describe` —
+//! - `GET /_coauth/gate/account/integration/describe` —
 //!   `IntegrationManifestResponse` from
 //!   `coauth/crates/backend/src/handlers/account/auth/oidc_bridge.rs`.
 //!
@@ -122,14 +122,14 @@ mod tests {
             "version": "2026-05-04-scaffold",
             "service": "coauth",
             "service_kind": "account_authority",
-            "api_base_path": "/_cokret",
-            "describe_path": "/_cokret/gate/account/integration/describe",
+            "api_base_path": "/_coauth",
+            "describe_path": "/_coauth/gate/account/integration/describe",
             "dependencies": [
                 {
                     "service": "soland",
                     "purpose": "principal_server_session_exchange",
                     "required_contract": "cokret.rest.principal_bridge.v1",
-                    "discovery_path": "/_cokret/gate/account/auth/bridge/describe",
+                    "discovery_path": "/_coauth/gate/account/auth/bridge/describe",
                     "mode": "remote_service_contract"
                 }
             ],
@@ -137,7 +137,7 @@ mod tests {
                 {
                     "name": "auth_bridge",
                     "method": "GET",
-                    "path": "/_cokret/gate/account/auth/bridge/describe",
+                    "path": "/_coauth/gate/account/auth/bridge/describe",
                     "contract": "cokret.rest.auth_bridge.v1",
                     "stability": "scaffold",
                     "todo": "TODO: keep aligned"
@@ -145,8 +145,8 @@ mod tests {
             ],
             "examples": {
                 "compose_flow": {
-                    "step_1": {"service": "coauth", "path": "/_cokret/gate/account/auth/oidc/browser-bridge/session", "method": "POST"},
-                    "step_2": {"service": "coauth", "path": "/_cokret/gate/account/auth/oidc/exchange", "method": "POST"}
+                    "step_1": {"service": "coauth", "path": "/_coauth/gate/account/auth/oidc/browser-bridge/session", "method": "POST"},
+                    "step_2": {"service": "coauth", "path": "/_coauth/gate/account/auth/oidc/exchange", "method": "POST"}
                 }
             },
             "todos": ["TODO: persist things"]
@@ -170,7 +170,7 @@ mod tests {
             service: "soland".into(),
             purpose: "session-exchange".into(),
             required_contract: "cokret.rest.principal_bridge.v1".into(),
-            discovery_path: "/_cokret/gate/account/auth/bridge/describe".into(),
+            discovery_path: "/_coauth/gate/account/auth/bridge/describe".into(),
             mode: "remote_service_contract".into(),
         };
         let s = serde_json::to_string(&d).unwrap();
@@ -183,7 +183,7 @@ mod tests {
         let s_in = IntegrationManifestSurface {
             name: "admin_bridge".into(),
             method: "GET".into(),
-            path: "/_cokret/local/admin/bridge/describe".into(),
+            path: "/_coauth/admin/bridge/describe".into(),
             contract: "cokret.rest.coauth_admin_bridge.v1".into(),
             stability: "scaffold".into(),
             todo: "TODO".into(),

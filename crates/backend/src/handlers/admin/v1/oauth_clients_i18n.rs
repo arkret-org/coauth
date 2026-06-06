@@ -3,7 +3,7 @@
 
 //! Admin endpoint for editing per-locale OAuth client display strings.
 //!
-//! `POST /_cokret/local/admin/oauth/clients/{id}/i18n`
+//! `POST /_coauth/admin/oauth/clients/{id}/i18n`
 //!
 //! Body:
 //!     { "locale": "zh-CN", "`display_name"`: "示例", "description": "..." }
@@ -14,7 +14,7 @@
 //! the entry for that locale.
 //!
 //! This is distinct from
-//! `/_cokret/local/admin/oauth-clients/{id}/localized-metadata` which only
+//! `/_coauth/admin/oauth-clients/{id}/localized-metadata` which only
 //! covers the OIDC-spec-shaped fields (`client_name`, `logo_uri`, `client_uri`,
 //! `policy_uri`, `tos_uri`). The i18n payload covered here adds a free-form
 //! `description` that the consent screen shows to end-users.
@@ -87,7 +87,7 @@ fn is_valid_locale(tag: &str) -> bool {
     tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-/// `GET /_cokret/local/admin/oauth/clients/{id}/i18n`
+/// `GET /_coauth/admin/oauth/clients/{id}/i18n`
 ///
 /// Returns the full set of locale → entry mappings for the client.
 #[endpoint]
@@ -108,7 +108,7 @@ pub async fn get_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nRespon
     Ok(Json(I18nResponse::from_domain(entries)))
 }
 
-/// `POST /_cokret/local/admin/oauth/clients/{id}/i18n`
+/// `POST /_coauth/admin/oauth/clients/{id}/i18n`
 ///
 /// Upserts a single locale entry. Returns the post-update map.
 #[endpoint]

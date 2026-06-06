@@ -97,7 +97,7 @@ fn RecoveryProgressContent(data: RecoveryStatusResponse, id: String) -> Element 
 
                                 spawn(async move {
                                     let result = crate::api::api_post::<serde_json::Value>(
-                                        &format!("/auth/recovery/{rid}/resend"),
+                                        &format!("/gate/account/auth/recovery/{rid}/resend"),
                                         serde_json::json!({}),
                                     ).await;
                                     resending.set(false);

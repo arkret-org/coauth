@@ -5,7 +5,7 @@
 //! Round 4 (2026-05-20, spec a77b995) — `/_cokret/self/policy/check` handler.
 //!
 //! Wire-breaking: replaces the pre-round-4 dry-run-only policy surface
-//! exposed under `/_cokret/local/admin/policy-checks/dry-run`. The round-4
+//! exposed under `/_coauth/admin/policy-checks/dry-run`. The round-4
 //! endpoint is the production policy-decision API: principal servers,
 //! events submitters, and federation peers MUST consume this surface
 //! to obtain a signed [`PolicyCheckResponse`] they can attach to their

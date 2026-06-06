@@ -5,7 +5,7 @@
 //! OAuth client.
 //!
 //! This is the round-26 i18n editor backed by `POST
-//! /_cokret/local/admin/oauth/clients/{id}/i18n`. The page renders the existing
+//! /_coauth/admin/oauth/clients/{id}/i18n`. The page renders the existing
 //! locale rows (loaded via `GET .../i18n`) and a small form for adding /
 //! updating one locale at a time. Submitting an empty `display_name`
 //! clears the entry for that locale (matches the backend semantics).

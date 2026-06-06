@@ -53,7 +53,7 @@ Per the R3.2 issuer hardening:
 > **Status: not implemented (deferred).**
 >
 > An optional issuer-internal admin endpoint
-> `GET /_cokret/local/admin/handles?subject=<did>` could let org operators audit
+> `GET /_coauth/admin/handles?subject=<did>` could let org operators audit
 > which handles coauth currently holds for a subject **within this
 > organization**. This is an issuer-side ledger view, explicitly **not**
 > an implementation of `ck.find.directory.list_handles_for_subject` and **not**

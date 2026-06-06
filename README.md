@@ -222,9 +222,9 @@ just build-all
 | `/_cokret/describe` | Cokret service metadata |
 | `/_cokret/root/identity/describe` | Identity-registry contract |
 | `/_cokret/find/directory/resolve-handle` | Handle -> DID resolution |
-| `/_cokret/gate/account/session-grants/introspect` | Principal Server session grant validation |
-| `/_cokret/local/admin/*` | Admin API for `sodmin` and service automation |
-| `/_cokret/local/admin/openapi.yaml` | Cokret admin API OpenAPI document |
+| `/_coauth/gate/account/session-grants/introspect` | Principal Server session grant validation |
+| `/_coauth/admin/*` | Admin API for `sodmin` and service automation |
+| `/_coauth/admin/openapi.yaml` | Coauth admin API OpenAPI document |
 | `/.well-known/cokret/openapi.yaml` | Admin API discovery document for `sodmin` |
 
 ## Documentation

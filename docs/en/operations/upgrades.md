@@ -40,7 +40,7 @@ The following surfaces are tracked compatibility contracts:
 - `/.well-known/openid-configuration`
 - `/.well-known/did.json`
 - `/.well-known/cokret/openapi.yaml`
-- `/_cokret/local/admin/openapi.yaml` (the canonical `sodmin` integration
+- `/_coauth/admin/openapi.yaml` (the canonical `sodmin` integration
   contract)
 - `/_cokret/describe` and the rest of `/_cokret/*`
 - The CLI subcommand surface (`server`, `worker`, `manage`, `database`,

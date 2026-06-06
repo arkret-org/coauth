@@ -99,7 +99,7 @@ pub async fn query_consent_cell(
 
     // TODO(soland-cell-query): soland does not yet expose a public admin
     // endpoint for reading OrSet cell state. The path below is a forward
-    // compatible guess that mirrors the existing `/_cokret/peer/moves` POST
+    // compatible guess that mirrors the existing private soland peer-move POST
     // surface. Once soland adds the read endpoint, update this path and
     // align the response struct with the official schema.
     //

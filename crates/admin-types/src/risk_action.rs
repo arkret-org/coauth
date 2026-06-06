@@ -1,7 +1,7 @@
 //! Admin risk-action workflow request and read-side shapes.
 //!
 //! These are the input bodies for the
-//! `POST /_cokret/local/admin/accounts/{id}/risk-action`,
+//! `POST /_coauth/admin/accounts/{id}/risk-action`,
 //! `…/risk-action/{proposal_id}/approve`, and `…/{proposal_id}/execute`
 //! endpoints, plus the GET-side `current` snapshot and history transition
 //! record. They migrated out of
@@ -345,7 +345,7 @@ pub struct AccountRiskActionCurrentResponse {
 
 impl Resource for AccountRiskActionCurrentResponse {
     const KIND: &'static str = "account-risk-action-current";
-    const PATH: &'static str = "/_cokret/local/admin/accounts";
+    const PATH: &'static str = "/_coauth/admin/accounts";
 
     fn id(&self) -> String {
         self.account_id.clone()
@@ -353,7 +353,7 @@ impl Resource for AccountRiskActionCurrentResponse {
 
     fn path(&self) -> String {
         format!(
-            "/_cokret/local/admin/accounts/{}/risk-action/current",
+            "/_coauth/admin/accounts/{}/risk-action/current",
             self.account_id
         )
     }

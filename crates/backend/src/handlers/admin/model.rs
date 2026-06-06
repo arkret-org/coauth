@@ -70,7 +70,7 @@ impl From<coauth_data::User> for User {
 
 impl Resource for User {
     const KIND: &'static str = "user";
-    const PATH: &'static str = "/_cokret/local/admin/users";
+    const PATH: &'static str = "/_coauth/admin/users";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -105,7 +105,7 @@ pub struct UserEmail {
 
 impl Resource for UserEmail {
     const KIND: &'static str = "user-email";
-    const PATH: &'static str = "/_cokret/local/admin/user-emails";
+    const PATH: &'static str = "/_coauth/admin/user-emails";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -186,7 +186,7 @@ impl From<coauth_data::Session> for OAuthSession {
 
 impl Resource for OAuthSession {
     const KIND: &'static str = "oauth-session";
-    const PATH: &'static str = "/_cokret/local/admin/oauth-sessions";
+    const PATH: &'static str = "/_coauth/admin/oauth-sessions";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -235,7 +235,7 @@ impl From<coauth_data::BrowserSession> for UserSession {
 
 impl Resource for UserSession {
     const KIND: &'static str = "user-session";
-    const PATH: &'static str = "/_cokret/local/admin/user-sessions";
+    const PATH: &'static str = "/_coauth/admin/user-sessions";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -271,7 +271,7 @@ pub struct UpstreamOAuthLink {
 
 impl Resource for UpstreamOAuthLink {
     const KIND: &'static str = "upstream-oauth-link";
-    const PATH: &'static str = "/_cokret/local/admin/upstream-oauth-links";
+    const PATH: &'static str = "/_coauth/admin/upstream-oauth-links";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -317,7 +317,7 @@ impl From<coauth_data::PolicyData> for PolicyData {
 
 impl Resource for PolicyData {
     const KIND: &'static str = "policy-data";
-    const PATH: &'static str = "/_cokret/local/admin/policy-data";
+    const PATH: &'static str = "/_coauth/admin/policy-data";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -373,7 +373,7 @@ impl UserRegistrationToken {
 
 impl Resource for UserRegistrationToken {
     const KIND: &'static str = "user-registration_token";
-    const PATH: &'static str = "/_cokret/local/admin/user-registration-tokens";
+    const PATH: &'static str = "/_coauth/admin/user-registration-tokens";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -456,7 +456,7 @@ impl From<coauth_data::UpstreamOAuthProvider> for UpstreamOAuthProvider {
 
 impl Resource for UpstreamOAuthProvider {
     const KIND: &'static str = "upstream-oauth-provider";
-    const PATH: &'static str = "/_cokret/local/admin/upstream-oauth-providers";
+    const PATH: &'static str = "/_coauth/admin/upstream-oauth-providers";
 
     fn id(&self) -> String {
         self.id.to_string()
@@ -573,7 +573,7 @@ impl
 
 impl Resource for PersonalSession {
     const KIND: &'static str = "personal-session";
-    const PATH: &'static str = "/_cokret/local/admin/personal-sessions";
+    const PATH: &'static str = "/_coauth/admin/personal-sessions";
 
     fn id(&self) -> String {
         self.id.to_string()

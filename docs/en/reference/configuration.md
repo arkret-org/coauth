@@ -40,7 +40,7 @@ Common resource names:
 - `oauth` for OAuth / OIDC endpoints
 - `restapi` for the SPA/API backend
 - `assets` for frontend assets
-- `adminapi` for `/_cokret/local/admin/*`
+- `adminapi` for `/_coauth/admin/*`
 - `health` for `/health`, `/healthz`, and `/readyz` probes
 - `prometheus` for `/metrics`
 

@@ -10,9 +10,9 @@ use crate::{
 
 /// Identity bindings page.
 ///
-/// Fetches `GET /_cokret/self/linked-accounts` and displays each linked
+/// Fetches `GET /_coauth/self/linked-accounts` and displays each linked
 /// upstream account with provider name and subject. The "Unlink" button calls
-/// `DELETE /_cokret/self/linked-accounts/{id}` to remove the link.
+/// `DELETE /_coauth/self/linked-accounts/{id}` to remove the link.
 #[component]
 pub fn IdentityBindings() -> Element {
     let mut data = use_resource(|| async {

@@ -1,6 +1,6 @@
 //! Admin DTOs for the coauth connector-health probe surface.
 //!
-//! Mirrors `GET /_cokret/local/admin/connector-health` — per-provider principal
+//! Mirrors `GET /_coauth/admin/connector-health` — per-provider principal
 //! connector health bucket. The endpoint enumerates every registered
 //! connector in the depot's `ConnectorRegistry`; if no registry is
 //! present, the single principal connection is probed directly and
@@ -95,7 +95,7 @@ impl ConnectorHealthRow {
     }
 }
 
-/// Top-level response for `GET /_cokret/local/admin/connector-health`.
+/// Top-level response for `GET /_coauth/admin/connector-health`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "schema",

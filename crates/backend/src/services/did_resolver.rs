@@ -205,7 +205,7 @@ impl DidResolverService for DefaultDidResolverService {
         // `did:web:<host>:<path_prefix>:<slug>` form that the webvh DID
         // minted at onboarding aliases via its `alsoKnownAs` set. The
         // SCID-bearing `did:webvh:zXXXX:…` form is what `starid` returns
-        // from `POST /_cokret/root/webvh/dids` — coauth doesn't persist it
+        // from starid's private WebVH DID create response — coauth doesn't persist it
         // separately because the deterministic alias is sufficient as a
         // *primary* identifier (subject of session grants, audit logs,
         // etc.). Verification & log-tail reads still go through

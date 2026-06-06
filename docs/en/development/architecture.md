@@ -116,13 +116,13 @@ The whole project is highly modular and APIs are coherent between crates.
 
 ## API Layering
 
-### User Portal API (/_cokret/self/viewer/*, /_cokret/gate/account/auth/*, /_cokret/gate/account/email-auth/*, etc.)
+### User Portal API (/_coauth/self/viewer/*, /_coauth/gate/account/auth/*, /_coauth/gate/account/email-auth/*, etc.)
 User self-service endpoints, consumed by the Dioxus frontend.
 
-### Workflow API (/_cokret/self/flow/*)
+### Workflow API (/_coauth/self/flow/*)
 Flow engine endpoints, supporting multi-step interactive flows (registration, recovery, MFA, etc.).
 
-### Admin Operations API (/_cokret/local/admin/*)
+### Admin Operations API (/_coauth/admin/*)
 Administrative operation endpoints, consumed by the Padmin management interface.
 
 ### OAuth Protocol API (/oauth/*, /.well-known/*)

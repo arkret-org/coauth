@@ -432,7 +432,7 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/_cokret/local/admin/policy-checks/dry-run")
+                Request::post("/_coauth/admin/policy-checks/dry-run")
                     .bearer(&token)
                     .json(serde_json::json!({
                         "subject": "did:cokret:alice",
@@ -449,11 +449,9 @@ mod tests {
 
         let response = state
             .request(
-                Request::get(format!(
-                    "/_cokret/local/admin/policy-decision-audits/{audit_id}"
-                ))
-                .bearer(&token)
-                .empty(),
+                Request::get(format!("/_coauth/admin/policy-decision-audits/{audit_id}"))
+                    .bearer(&token)
+                    .empty(),
             )
             .await;
         response.assert_status(StatusCode::OK);

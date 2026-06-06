@@ -14,7 +14,7 @@
 //! ## Flow
 //!
 //! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
-//!    /_cokret/self/account/invites/relay` along with `(target_principal_url,
+//!    /_coauth/self/account/invites/relay` along with `(target_principal_url,
 //!    target_holder_did, consent_id, scope)`.
 //! 2. Coauth queries the target's consent cell via
 //!    `consent_cell_query::query_consent_cell`.
@@ -50,7 +50,7 @@ use crate::{
 
 // ── Request / response shapes ──────────────────────────────────
 
-/// Body of `POST /_cokret/self/account/invites/relay`.
+/// Body of `POST /_coauth/self/account/invites/relay`.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RelayRequest {
     /// DID of the actor issuing the invite. Recorded in audit but not
@@ -164,7 +164,7 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, RelayRe
 ///
 /// `forward_target_url` is the URL to POST the invite payload at when the
 /// gate allows. In production this is typically
-/// `{target_principal_url}/_cokret/self/invites/intake` or similar. The actual
+/// `{target_principal_url}/_soland/self/invites/intake` or similar. The actual
 /// path is decided by the target principal's API surface; coauth only
 /// needs a fully-qualified URL to POST to.
 ///
@@ -239,7 +239,7 @@ pub async fn relay_invite_with(
 
 // ── Salvo handler ──────────────────────────────────────────────
 
-/// `POST /_cokret/self/account/invites/relay`
+/// `POST /_coauth/self/account/invites/relay`
 #[endpoint]
 #[tracing::instrument(name = "handlers.account.invite_relay.post", skip_all, err)]
 pub async fn post_invite_relay(
@@ -271,11 +271,11 @@ pub async fn post_invite_relay(
         .or_else(|| cokret_config.principal_server_url.clone());
 
     // Forward target: in this scaffolding we use the same principal URL +
-    // a conservative `/_cokret/self/invites/intake` path. Real wiring with
+    // a conservative `/_soland/self/invites/intake` path. Real wiring with
     // soland's invite-intake endpoint is tracked under
     // `TODO(c10e-invite-intake)`.
     let forward_target = principal_url.as_ref().and_then(|u| {
-        u.join("_cokret/self/invites/intake")
+        u.join("_soland/self/invites/intake")
             .map_err(|error| {
                 warn!(?error, "invite-relay: failed to build forward URL");
             })
@@ -340,14 +340,14 @@ mod tests {
 
         // Forward-target mock: 200 OK accepts the payload.
         Mock::given(method("POST"))
-            .and(path_regex(r"^/_cokret/self/invites/intake"))
+            .and(path_regex(r"^/_soland/self/invites/intake"))
             .respond_with(ResponseTemplate::new(200))
             .expect(1)
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("_cokret/self/invites/intake").unwrap();
+        let forward = base.join("_soland/self/invites/intake").unwrap();
         let p = payload();
 
         let outcome = relay_invite_with(
@@ -390,7 +390,7 @@ mod tests {
         // see forwarded_ok=false. The Allow branch must not execute.
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("_cokret/self/invites/intake").unwrap();
+        let forward = base.join("_soland/self/invites/intake").unwrap();
         let p = payload();
 
         let outcome = relay_invite_with(
@@ -428,7 +428,7 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("_cokret/self/invites/intake").unwrap();
+        let forward = base.join("_soland/self/invites/intake").unwrap();
         let p = payload();
 
         let outcome = relay_invite_with(
@@ -498,13 +498,13 @@ mod tests {
             .await;
 
         Mock::given(method("POST"))
-            .and(path_regex(r"^/_cokret/self/invites/intake"))
+            .and(path_regex(r"^/_soland/self/invites/intake"))
             .respond_with(ResponseTemplate::new(503))
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("_cokret/self/invites/intake").unwrap();
+        let forward = base.join("_soland/self/invites/intake").unwrap();
         let p = payload();
 
         let outcome = relay_invite_with(

@@ -12,7 +12,7 @@
 //!    * `StaridRegistry::create_principal_did` (first passkey on the account →
 //!      mints the DID), or
 //!    * `StaridRegistry::rotate_update_key` (subsequent enrolment → `POST
-//!      /_cokret/root/webvh/dids/{did}/update` swaps the key on the existing
+//!      /_starid/root/webvh/dids/{did}/update` swaps the key on the existing
 //!      DID).
 //!
 //! Determinism note: the returned string is a function of the
@@ -42,8 +42,8 @@ use webauthn_rs::prelude::Passkey;
 
 /// Derive a deterministic, multibase-encoded `update_key` from
 /// `passkey`. Returns a string of the form `z6Mk…` that starid accepts
-/// in the `update_keys` slot of `POST /_cokret/root/webvh/dids` and
-/// `POST /_cokret/root/webvh/dids/{did}/update`.
+/// in the `update_keys` slot of `POST /_starid/root/webvh/dids` and
+/// `POST /_starid/root/webvh/dids/{did}/update`.
 ///
 /// The hash input is the JSON serialisation of the passkey's COSE
 /// public key (via `Passkey::get_public_key`). This is stable across

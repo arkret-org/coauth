@@ -238,7 +238,7 @@ pub struct FlowResponse {
     pub errors: Option<Vec<FlowValidationError>>,
 }
 
-/// Request body for `POST /_cokret/self/flow/session/:id/respond`.
+/// Request body for `POST /_coauth/self/flow/session/:id/respond`.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FlowStageResponse {
@@ -382,7 +382,7 @@ fn parse_flow_session_id(req: &Request) -> Result<Ulid, RouteError> {
 }
 
 // ---------------------------------------------------------------------------
-// POST /_cokret/self/flow/:slug/start
+// POST /_coauth/self/flow/:slug/start
 // ---------------------------------------------------------------------------
 
 /// Start a new flow session for the given flow slug.
@@ -435,7 +435,7 @@ pub async fn start_flow(req: &mut Request) -> Result<Json<FlowResponse>, RouteEr
 }
 
 // ---------------------------------------------------------------------------
-// GET /_cokret/self/flow/session/:id
+// GET /_coauth/self/flow/session/:id
 // ---------------------------------------------------------------------------
 
 /// Get the current challenge for an existing flow session.
@@ -464,7 +464,7 @@ pub async fn get_flow_session(req: &mut Request) -> Result<Json<FlowResponse>, R
 }
 
 // ---------------------------------------------------------------------------
-// POST /_cokret/self/flow/session/:id/respond
+// POST /_coauth/self/flow/session/:id/respond
 // ---------------------------------------------------------------------------
 
 /// Submit a response to the current stage challenge.

@@ -102,7 +102,7 @@ struct EmailData {
     is_primary: bool,
 }
 
-// ── GET /_cokret/self/viewer ─────────────────────────────────────────
+// ── GET /_coauth/self/viewer ─────────────────────────────────────────
 
 /// Returns the current viewer (user or anonymous), viewer session, and site
 /// config in a single response.
@@ -243,7 +243,7 @@ fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
     }
 }
 
-// ── GET /_cokret/self/viewer/security ───────────────────────────────
+// ── GET /_coauth/self/viewer/security ───────────────────────────────
 
 /// Returns a lightweight security summary for the current user, including
 /// password status, active session count, linked provider count, and
@@ -289,14 +289,14 @@ pub struct WorkflowInboxItem {
     pub started_at: String,
 }
 
-/// Response for `GET /_cokret/self/viewer/workflow-inbox`.
+/// Response for `GET /_coauth/self/viewer/workflow-inbox`.
 #[derive(Serialize, ToSchema)]
 pub struct WorkflowInboxResponse {
     pub pending: Vec<WorkflowInboxItem>,
     pub total: usize,
 }
 
-// ── GET /_cokret/self/viewer/workflow-inbox ────────────────────────
+// ── GET /_coauth/self/viewer/workflow-inbox ────────────────────────
 
 /// Returns the list of pending flow sessions for the current user.
 ///
@@ -394,7 +394,7 @@ impl From<&AccountSecuritySummary> for SecuritySummaryData {
     }
 }
 
-// ── GET /_cokret/self/viewer/overview ────────────────────────────
+// ── GET /_coauth/self/viewer/overview ────────────────────────────
 
 /// Returns a unified account overview for the dashboard, combining the
 /// security summary, contact-point counts, identity-binding counts, and

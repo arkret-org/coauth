@@ -40,7 +40,7 @@ http:
 - `oauth`：OAuth / OIDC 端点
 - `restapi`：SPA/API 后端
 - `assets`：前端静态资源
-- `adminapi`：`/_cokret/local/admin/*`
+- `adminapi`：`/_coauth/admin/*`
 - `health`、`prometheus`：运维端点
 
 ### 请求体限制与超时

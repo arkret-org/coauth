@@ -39,7 +39,7 @@ impl RiskActionStateService for AuditLogRiskActionStateService {
         };
 
         Ok(format!(
-            "/_cokret/local/admin/accounts/{account_id}/{action_path}"
+            "/_coauth/admin/accounts/{account_id}/{action_path}"
         ))
     }
 

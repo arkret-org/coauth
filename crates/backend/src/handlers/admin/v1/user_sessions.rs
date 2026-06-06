@@ -74,7 +74,7 @@ pub async fn finish_session(
 
     Ok(Json(SingleResponse::new(
         UserSession::from(ended),
-        format!("/_cokret/local/admin/user-sessions/{session_id}/finish"),
+        format!("/_coauth/admin/user-sessions/{session_id}/finish"),
     )))
 }
 
@@ -257,7 +257,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let request = Request::post(format!(
-            "/_cokret/local/admin/user-sessions/{}/finish",
+            "/_coauth/admin/user-sessions/{}/finish",
             session.id
         ))
         .bearer(&token)
@@ -309,7 +309,7 @@ mod tests {
         state.clock.advance(Duration::try_minutes(1).unwrap());
 
         let request = Request::post(format!(
-            "/_cokret/local/admin/user-sessions/{}/finish",
+            "/_coauth/admin/user-sessions/{}/finish",
             session.id
         ))
         .bearer(&token)
@@ -333,7 +333,7 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         let request =
-            Request::post("/_cokret/local/admin/user-sessions/01040G2081040G2081040G2081/finish")
+            Request::post("/_coauth/admin/user-sessions/01040G2081040G2081040G2081/finish")
                 .bearer(&token)
                 .empty();
         let response = state.request(request).await;
@@ -370,7 +370,7 @@ mod tests {
         repo.save().await.unwrap();
 
         let session_id = session.id;
-        let request = Request::get(format!("/_cokret/local/admin/user-sessions/{session_id}"))
+        let request = Request::get(format!("/_coauth/admin/user-sessions/{session_id}"))
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -390,11 +390,11 @@ mod tests {
               "last_active_ip": null
             },
             "links": {
-              "self": "/_cokret/local/admin/user-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+              "self": "/_coauth/admin/user-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
             }
           },
           "links": {
-            "self": "/_cokret/local/admin/user-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
+            "self": "/_coauth/admin/user-sessions/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
           }
         }
         "###);
@@ -443,7 +443,7 @@ mod tests {
 
         repo.save().await.unwrap();
 
-        let request = Request::get("/_cokret/local/admin/user-sessions")
+        let request = Request::get("/_coauth/admin/user-sessions")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -467,7 +467,7 @@ mod tests {
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_cokret/local/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -487,7 +487,7 @@ mod tests {
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_cokret/local/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
+                "self": "/_coauth/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
               },
               "meta": {
                 "page": {
@@ -497,16 +497,16 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/user-sessions?page[first]=10",
-            "first": "/_cokret/local/admin/user-sessions?page[first]=10",
-            "last": "/_cokret/local/admin/user-sessions?page[last]=10"
+            "self": "/_coauth/admin/user-sessions?page[first]=10",
+            "first": "/_coauth/admin/user-sessions?page[first]=10",
+            "last": "/_coauth/admin/user-sessions?page[last]=10"
           }
         }
         "#);
 
         // Filter by user
         let request = Request::get(format!(
-            "/_cokret/local/admin/user-sessions?filter[user]={}",
+            "/_coauth/admin/user-sessions?filter[user]={}",
             alice.id
         ))
         .bearer(&token)
@@ -532,7 +532,7 @@ mod tests {
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_cokret/local/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -542,15 +542,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "first": "/_cokret/local/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
-            "last": "/_cokret/local/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[last]=10"
+            "self": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
+            "first": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[first]=10",
+            "last": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&page[last]=10"
           }
         }
         "#);
 
         // Filter by status (active)
-        let request = Request::get("/_cokret/local/admin/user-sessions?filter[status]=active")
+        let request = Request::get("/_coauth/admin/user-sessions?filter[status]=active")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -574,7 +574,7 @@ mod tests {
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_cokret/local/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -584,15 +584,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/user-sessions?filter[status]=active&page[first]=10",
-            "first": "/_cokret/local/admin/user-sessions?filter[status]=active&page[first]=10",
-            "last": "/_cokret/local/admin/user-sessions?filter[status]=active&page[last]=10"
+            "self": "/_coauth/admin/user-sessions?filter[status]=active&page[first]=10",
+            "first": "/_coauth/admin/user-sessions?filter[status]=active&page[first]=10",
+            "last": "/_coauth/admin/user-sessions?filter[status]=active&page[last]=10"
           }
         }
         "#);
 
         // Filter by status (finished)
-        let request = Request::get("/_cokret/local/admin/user-sessions?filter[status]=finished")
+        let request = Request::get("/_coauth/admin/user-sessions?filter[status]=finished")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -616,7 +616,7 @@ mod tests {
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_cokret/local/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
+                "self": "/_coauth/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
               },
               "meta": {
                 "page": {
@@ -626,15 +626,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/user-sessions?filter[status]=finished&page[first]=10",
-            "first": "/_cokret/local/admin/user-sessions?filter[status]=finished&page[first]=10",
-            "last": "/_cokret/local/admin/user-sessions?filter[status]=finished&page[last]=10"
+            "self": "/_coauth/admin/user-sessions?filter[status]=finished&page[first]=10",
+            "first": "/_coauth/admin/user-sessions?filter[status]=finished&page[first]=10",
+            "last": "/_coauth/admin/user-sessions?filter[status]=finished&page[last]=10"
           }
         }
         "#);
 
         // Test count=false
-        let request = Request::get("/_cokret/local/admin/user-sessions?count=false")
+        let request = Request::get("/_coauth/admin/user-sessions?count=false")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -655,7 +655,7 @@ mod tests {
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_cokret/local/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -675,7 +675,7 @@ mod tests {
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_cokret/local/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
+                "self": "/_coauth/admin/user-sessions/01FSHNB530KEPHYQQXW9XPTX6Z"
               },
               "meta": {
                 "page": {
@@ -685,15 +685,15 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/user-sessions?count=false&page[first]=10",
-            "first": "/_cokret/local/admin/user-sessions?count=false&page[first]=10",
-            "last": "/_cokret/local/admin/user-sessions?count=false&page[last]=10"
+            "self": "/_coauth/admin/user-sessions?count=false&page[first]=10",
+            "first": "/_coauth/admin/user-sessions?count=false&page[first]=10",
+            "last": "/_coauth/admin/user-sessions?count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only
-        let request = Request::get("/_cokret/local/admin/user-sessions?count=only")
+        let request = Request::get("/_coauth/admin/user-sessions?count=only")
             .bearer(&token)
             .empty();
         let response = state.request(request).await;
@@ -705,14 +705,14 @@ mod tests {
             "count": 2
           },
           "links": {
-            "self": "/_cokret/local/admin/user-sessions?count=only"
+            "self": "/_coauth/admin/user-sessions?count=only"
           }
         }
         "###);
 
         // Test count=false with filtering
         let request = Request::get(format!(
-            "/_cokret/local/admin/user-sessions?count=false&filter[user]={}",
+            "/_coauth/admin/user-sessions?count=false&filter[user]={}",
             alice.id
         ))
         .bearer(&token)
@@ -735,7 +735,7 @@ mod tests {
                 "last_active_ip": null
               },
               "links": {
-                "self": "/_cokret/local/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
+                "self": "/_coauth/admin/user-sessions/01FSHNB5309NMZYX8MFYH578R9"
               },
               "meta": {
                 "page": {
@@ -745,18 +745,17 @@ mod tests {
             }
           ],
           "links": {
-            "self": "/_cokret/local/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "first": "/_cokret/local/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
-            "last": "/_cokret/local/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[last]=10"
+            "self": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
+            "first": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[first]=10",
+            "last": "/_coauth/admin/user-sessions?filter[user]=01FSHN9AG0MZAA6S4AF7CTV32E&count=false&page[last]=10"
           }
         }
         "#);
 
         // Test count=only with filtering
-        let request =
-            Request::get("/_cokret/local/admin/user-sessions?count=only&filter[status]=active")
-                .bearer(&token)
-                .empty();
+        let request = Request::get("/_coauth/admin/user-sessions?count=only&filter[status]=active")
+            .bearer(&token)
+            .empty();
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
@@ -766,7 +765,7 @@ mod tests {
             "count": 1
           },
           "links": {
-            "self": "/_cokret/local/admin/user-sessions?filter[status]=active&count=only"
+            "self": "/_coauth/admin/user-sessions?filter[status]=active&count=only"
           }
         }
         "#);

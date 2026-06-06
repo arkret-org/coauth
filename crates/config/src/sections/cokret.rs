@@ -64,7 +64,7 @@ pub struct CokretConfig {
     ///
     /// These are the DPoP-bound JWT grants returned by the REST auth bridge
     /// login/exchange paths and refreshed through
-    /// `/_cokret/gate/account/session-grants/refresh`. Default: 300 (5 min).
+    /// `/_coauth/gate/account/session-grants/refresh`. Default: 300 (5 min).
     #[schemars(with = "u64", range(min = 60, max = 86400))]
     #[serde(
         default = "default_session_grant_ttl",
@@ -129,7 +129,7 @@ pub struct CokretConfig {
 
     /// Fail-closed gate for the temporary password-login bridge that returns a
     /// Cokret principal-server session grant directly from
-    /// `POST /_cokret/gate/account/auth/login`.
+    /// `POST /_coauth/gate/account/auth/login`.
     ///
     /// Defaults to `false`: production callers must use the OIDC/passkey bridge
     /// and proof-bound grant exchange. When enabled for development, the login
@@ -148,7 +148,7 @@ pub struct CokretConfig {
 
     /// Round 4 — DID of the trusted 3PID verification service whose
     /// `binding_proof` JWTs this coauth deployment will accept on
-    /// `POST /_cokret/self/invites/3pid/verify`. When omitted, the invite
+    /// `POST /_coauth/self/invites/3pid/verify`. When omitted, the invite
     /// verifier endpoint returns `503 verifier_not_configured` because
     /// it has no trusted `iss` to compare against.
     ///
@@ -164,7 +164,7 @@ pub struct CokretConfig {
 
     /// SEC-07a — explicit allowlist of trusted 3PID verification-service
     /// DIDs whose `binding_proof` JWTs this coauth deployment will accept
-    /// on `POST /_cokret/self/invites/3pid/verify`.
+    /// on `POST /_coauth/self/invites/3pid/verify`.
     ///
     /// Per `spec/v1/zh/sync/third-party-invites.md` §2.1 (Allowlist MUST)
     /// the verification service is the trust root of a 3PID invite, so the
@@ -374,7 +374,7 @@ pub struct PrincipalServerConfig {
 
     /// Optional static bearer token accepted when this Principal Server calls
     /// coauth's session-grant introspection endpoint
-    /// (`/_cokret/gate/account/session-grants/introspect`). Mirrors
+    /// (`/_coauth/gate/account/session-grants/introspect`). Mirrors
     /// `oauth_introspection_bearer` for the session-grant exchange path:
     /// avoids requiring a DB-backed PAT/OAuth-session for the
     /// server-to-server hop, which is awkward in dev when the coauth DB
@@ -426,10 +426,10 @@ pub enum IdentityRegistryKind {
 pub struct StaridConfig {
     /// Base URL of the starid deployment, for example
     /// `https://starid.example.com`. Path segments are ignored — the
-    /// adapter joins `/_cokret/root/webvh/...` itself.
+    /// adapter joins `/_starid/root/webvh/...` itself.
     pub base_url: Url,
 
-    /// `host` value passed to starid's `POST /_cokret/root/webvh/dids`.
+    /// `host` value passed to starid's `POST /_starid/root/webvh/dids`.
     /// Defaults to the host of `base_url` when omitted. Override when
     /// starid is fronted by a different public-facing hostname than the URL
     /// coauth reaches it on.
@@ -443,8 +443,8 @@ pub struct StaridConfig {
     pub path_prefix: String,
 
     /// Optional bearer token for starid's admin endpoints. When set,
-    /// the adapter prefers `POST /_cokret/local/admin/dids` over the public
-    /// `POST /_cokret/root/webvh/dids` — both produce the same DID but the
+    /// the adapter prefers `POST /_starid/local/admin/dids` over the public
+    /// `POST /_starid/root/webvh/dids` — both produce the same DID but the
     /// admin route bypasses public-rate-limits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_token: Option<String>,

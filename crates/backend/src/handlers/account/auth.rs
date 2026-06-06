@@ -165,7 +165,7 @@ pub struct ProviderInfo {
     pub brand_name: Option<String>,
     pub authorize_url: String,
 }
-// ── POST /_cokret/gate/account/auth/login ────────────────────────────────────
+// ── POST /_coauth/gate/account/auth/login ────────────────────────────────────
 
 /// Authenticate a user with username and password, returning viewer info,
 /// setting a session cookie on success, and minting a temporary scaffold
@@ -491,7 +491,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     }
 }
 
-// ── POST /_cokret/gate/account/auth/logout ───────────────────────────────────
+// ── POST /_coauth/gate/account/auth/logout ───────────────────────────────────
 
 /// End the current browser session and clear the session cookie.
 #[endpoint]
@@ -522,7 +522,7 @@ pub async fn logout(
     Ok(())
 }
 
-// ── GET /_cokret/gate/account/auth/providers ─────────────────────────────────
+// ── GET /_coauth/gate/account/auth/providers ─────────────────────────────────
 
 /// List all enabled upstream OAuth providers and site configuration flags
 /// relevant to the login/registration UI.

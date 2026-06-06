@@ -11,10 +11,10 @@ use crate::{
 
 /// Notification preferences page.
 ///
-/// Fetches `GET /_cokret/self/viewer/preferences` to obtain channel
+/// Fetches `GET /_coauth/self/viewer/preferences` to obtain channel
 /// availability and the user's current per-channel preferences. The user can
 /// toggle channels on/off and save via
-/// `PATCH /_cokret/self/viewer/preferences`.
+/// `PATCH /_coauth/self/viewer/preferences`.
 #[component]
 pub fn NotificationPreferences() -> Element {
     let data = use_resource(|| async {
