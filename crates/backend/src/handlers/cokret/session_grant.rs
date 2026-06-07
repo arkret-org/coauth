@@ -5,14 +5,12 @@ use coauth_data::{
     SessionGrant, UrlBuilder, User,
     oauth::{NewSessionGrant, SessionGrantFilter},
 };
-use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::{
     constraints::Constrainable,
-    jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey, PublicJsonWebKeySet},
+    jwk::{PublicJsonWebKey, PublicJsonWebKeySet},
     jwt::{JsonWebSignatureHeader, Jwt},
 };
-use coauth_keystore::{Keystore, PrivateKey};
-use der::pem::LineEnding;
+use coauth_keystore::Keystore;
 use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::{CryptoRngCore, RngCore};
 use salvo::prelude::*;
@@ -27,7 +25,6 @@ use crate::handlers::common::DepotExt;
 pub struct SessionGrantMaterial {
     pub grant_jwt: String,
     pub session_public_key: String,
-    pub session_private_key_pem: String,
     pub expires_at: String,
     pub expires_at_timestamp: DateTime<Utc>,
     pub issuer: String,
@@ -226,21 +223,22 @@ impl From<SessionGrant> for SessionGrantRecord {
 }
 
 pub(crate) fn issue_session_grant(
-    rng: &mut (dyn CryptoRngCore + Send),
+    _rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
+    session_public_key: PublicJsonWebKey,
     scopes: Vec<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience(
-        rng,
         clock,
         url_builder,
         cokret_config,
         key_store,
         browser_session,
+        session_public_key,
         required_audience_for(url_builder, cokret_config),
         scopes,
         None,
@@ -255,12 +253,12 @@ pub(crate) fn issue_session_grant(
 // would reject the exchange with `session grant subject does not match
 // principal_did`.
 pub(crate) fn issue_session_grant_for_audience(
-    rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
+    session_public_key: PublicJsonWebKey,
     audience: String,
     scopes: Vec<String>,
     subject_override: Option<&str>,
@@ -270,17 +268,7 @@ pub(crate) fn issue_session_grant_for_audience(
         || user_did_for(url_builder, cokret_config, &browser_session.user),
         ToOwned::to_owned,
     );
-    let session_key = PrivateKey::generate_ed25519(rng);
-    let session_public_key = JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
-        .with_use(JsonWebKeyUse::Sig)
-        .with_key_ops(vec![JsonWebKeyOperation::Verify])
-        .with_alg(JsonWebSignatureAlg::EdDsa)
-        .with_kid(format!("session-{}", browser_session.id));
     let session_public_key = serde_json::to_string(&session_public_key)?;
-    let session_private_key_pem = session_key
-        .to_pem(LineEnding::LF)
-        .map_err(|error| SessionGrantError::PemEncode(error.to_string()))?
-        .to_string();
 
     let now = clock.now();
     let expires_at = now + cokret_config.session_grant_ttl;
@@ -340,7 +328,6 @@ pub(crate) fn issue_session_grant_for_audience(
     Ok(SessionGrantMaterial {
         grant_jwt,
         session_public_key,
-        session_private_key_pem,
         expires_at: expires_at.to_rfc3339(),
         expires_at_timestamp: expires_at,
         issuer,
@@ -801,7 +788,6 @@ pub struct RefreshSessionGrantOneShotResponse {
     pub grant_id: String,
     pub grant_jwt: String,
     pub session_public_key: String,
-    pub session_private_key_pem: String,
     pub expires_at: String,
     pub audience: String,
     pub scopes: Vec<String>,
@@ -918,12 +904,12 @@ pub async fn refresh_session_grant(
         .map(|scope| scope.as_str().to_owned())
         .collect();
     let new_material = issue_session_grant_for_audience(
-        &mut rng,
         &*clock,
         &url_builder,
         &cokret_config,
         &key_store,
         &browser_session,
+        verification.jwk.clone(),
         audience,
         scopes,
         Some(&prior_grant.subject),
@@ -957,7 +943,6 @@ pub async fn refresh_session_grant(
         grant_id: persisted.id.to_string(),
         grant_jwt: new_material.grant_jwt,
         session_public_key: new_material.session_public_key,
-        session_private_key_pem: new_material.session_private_key_pem,
         expires_at: new_material.expires_at,
         audience: new_material.audience,
         scopes: new_material.scopes,

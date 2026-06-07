@@ -9,6 +9,7 @@ pub mod passkey;
 use std::sync::LazyLock;
 
 use coauth_data::UrlBuilder;
+use coauth_jose::jwk::PublicJsonWebKey;
 pub use oidc_bridge::{
     auth_bridge_describe, integration_describe, oidc_browser_bridge_session, oidc_code_exchange,
     oidc_exchange_describe,
@@ -35,6 +36,12 @@ use crate::{
     services::dpop::{DpopError, DpopVerifier, dpop_header_from_request, dpop_htu},
 };
 
+#[derive(Clone)]
+pub(crate) struct DpopSessionBinding {
+    pub jkt: String,
+    pub public_jwk: PublicJsonWebKey,
+}
+
 /// Extract a DPoP proof from the "kickoff" request — i.e. the initial
 /// auth-side request that mints a session grant (login or
 /// `oidc/exchange`). When no `DPoP` header is present we return
@@ -46,10 +53,10 @@ use crate::{
 /// On these kickoff endpoints we do NOT require an `ath` claim — there
 /// is no access token to bind to yet; the proof's `jkt` becomes the
 /// `cnf.jkt` of the newly issued grant.
-pub(crate) async fn extract_dpop_jkt_for_kickoff(
+pub(crate) async fn extract_dpop_binding_for_kickoff(
     req: &salvo::Request,
     url_builder: &UrlBuilder,
-) -> Result<Option<String>, DpopError> {
+) -> Result<Option<DpopSessionBinding>, DpopError> {
     let Some(header) = dpop_header_from_request(req) else {
         return Ok(None);
     };
@@ -59,7 +66,10 @@ pub(crate) async fn extract_dpop_jkt_for_kickoff(
     let public_base = url_builder.http_base();
     let htu = dpop_htu(&public_base, req);
     let result = verifier.verify(&header, &htm, &htu, now, None).await?;
-    Ok(Some(result.jkt))
+    Ok(Some(DpopSessionBinding {
+        jkt: result.jkt,
+        public_jwk: result.jwk,
+    }))
 }
 
 // ── Metrics ────────────────────────────────────────────────────
@@ -131,7 +141,6 @@ pub struct SessionGrantOneShotInfo {
     pub id: String,
     pub grant_jwt: String,
     pub session_public_key: String,
-    pub session_private_key_pem: String,
     pub expires_at: String,
     pub audience: String,
     pub scopes: Vec<String>,
@@ -194,9 +203,9 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         .map(std::borrow::ToOwned::to_owned);
 
     // Same DPoP extraction as `oidc_code_exchange`: a present-but-broken
-    // proof must reject the login outright; absence is allowed for the
-    // legacy password-bootstrap path.
-    let dpop_jkt = match extract_dpop_jkt_for_kickoff(req, &url_builder).await {
+    // proof rejects the login outright, and session-grant issuance below
+    // requires a verified proof-bound public key.
+    let dpop_binding = match extract_dpop_binding_for_kickoff(req, &url_builder).await {
         Ok(jkt) => jkt,
         Err(error) => {
             res.status_code(StatusCode::BAD_REQUEST);
@@ -372,7 +381,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 );
                 return Ok(());
             }
-            if dpop_jkt.is_none() {
+            let Some(dpop_binding) = dpop_binding else {
                 PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                 res.status_code(StatusCode::BAD_REQUEST);
                 res.render(Json(LoginResponse {
@@ -385,7 +394,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     ],
                 }));
                 return Ok(());
-            }
+            };
             let grant_target = match cokret::password_login_session_grant_target(
                 &url_builder,
                 &cokret_config,
@@ -429,16 +438,16 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             //   - enforce policy on scopes the caller may request.
             // Tracked in `_improve_todos.md` C.4 (TODO scaffold).
             let session_grant = cokret::issue_session_grant_for_audience(
-                &mut rng,
                 &clock,
                 &url_builder,
                 &cokret_config,
                 &key_store,
                 &user_session,
+                dpop_binding.public_jwk,
                 grant_target.audience.clone(),
                 vec![cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
                 None,
-                dpop_jkt.clone(),
+                Some(dpop_binding.jkt),
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
@@ -471,7 +480,6 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         id: persisted_session_grant.id.to_string(),
                         grant_jwt: session_grant.grant_jwt,
                         session_public_key: session_grant.session_public_key,
-                        session_private_key_pem: session_grant.session_private_key_pem,
                         expires_at: session_grant.expires_at,
                         audience: session_grant.audience,
                         scopes: session_grant.scopes,

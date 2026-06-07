@@ -13,7 +13,7 @@
 //! decrypting.
 //!
 //! The encrypted payload itself remains opaque on the wire — coauth
-//! only knows the realm + trust_domain binding, not the cleartext
+//! only knows the realm + trust_domain binding, not the plaintext
 //! material. End-to-end decryption happens at the claimant device.
 //!
 //! ## Why both realm_id and trust_domain?
@@ -47,7 +47,7 @@ pub struct IdentityLinkEnvelope {
     pub trust_domain: TypedTrustDomainId,
     /// Opaque ciphertext bytes (base64url-encoded on the wire). The
     /// recipient device decrypts with the link's ephemeral key; coauth
-    /// never sees the cleartext.
+    /// never sees the plaintext.
     pub encrypted_payload: String,
     /// Wall-clock expiry; receivers MUST reject after this.
     pub expires_at: DateTime<Utc>,

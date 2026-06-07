@@ -570,12 +570,12 @@ where
     F: Fn() -> reqwest::RequestBuilder,
 {
     let max_attempts = policy.max_attempts();
-    for attempt in 1..=max_attempts {
+    for attempt in 1..max_attempts {
         let result = build_request().timeout(policy.timeout).send_traced().await;
         match result {
             Ok(response) => {
                 let status = response.status();
-                if retryable_status(status) && attempt < max_attempts {
+                if retryable_status(status) {
                     record_retry(
                         policy,
                         attempt,
@@ -590,7 +590,7 @@ where
                 }
                 return Ok(response);
             }
-            Err(error) if retryable_error(&error) && attempt < max_attempts => {
+            Err(error) if retryable_error(&error) => {
                 record_retry(policy, attempt, reqwest_error_type(&error), None);
                 sleep(policy.backoff).await;
             }
@@ -601,7 +601,23 @@ where
         }
     }
 
-    unreachable!("outbound retry loop must return from the final attempt")
+    let result = build_request().timeout(policy.timeout).send_traced().await;
+    match result {
+        Ok(response) => {
+            if !response.status().is_success() {
+                record_terminal_error(
+                    policy,
+                    "http_status",
+                    Some(i64::from(response.status().as_u16())),
+                );
+            }
+            Ok(response)
+        }
+        Err(error) => {
+            record_terminal_error(policy, reqwest_error_type(&error), None);
+            Err(error)
+        }
+    }
 }
 
 fn retryable_status(status: reqwest::StatusCode) -> bool {

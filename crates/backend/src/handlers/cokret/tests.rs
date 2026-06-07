@@ -6,7 +6,11 @@ use coauth_data::{
     BrowserSession, Clock, NewUserPrimaryHandlePreference, RepositoryAccess, SessionGrant,
     SystemClock, User,
 };
-use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
+use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
+use coauth_jose::{
+    jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey},
+    jwt::{JsonWebSignatureHeader, Jwt},
+};
 use coauth_keystore::{JsonWebKeySet, PrivateKey};
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
@@ -25,6 +29,14 @@ fn test_keystore() -> Keystore {
     let eddsa = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
         .with_kid("test-eddsa");
     Keystore::new(JsonWebKeySet::new(vec![eddsa]))
+}
+
+fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> PublicJsonWebKey {
+    JsonWebKey::new(JsonWebKeyPublicParameters::from(session_key))
+        .with_use(JsonWebKeyUse::Sig)
+        .with_key_ops(vec![JsonWebKeyOperation::Verify])
+        .with_alg(JsonWebSignatureAlg::EdDsa)
+        .with_kid(kid)
 }
 
 #[test]
@@ -459,6 +471,8 @@ fn session_grant_is_signed_for_the_user_did() {
         .next()
         .unwrap();
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
+    let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
+    let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
 
     let grant = issue_session_grant(
         &mut signing_rng,
@@ -467,6 +481,7 @@ fn session_grant_is_signed_for_the_user_did() {
         &cokret_config,
         &key_store,
         &browser_session,
+        session_public_key,
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();
@@ -504,8 +519,11 @@ fn session_grant_is_signed_for_the_user_did() {
         payload.proof.payload_digest,
         session_grant_claims_hash(&session_grant_claims_from_payload(payload)).unwrap()
     );
-    assert!(grant.session_private_key_pem.contains("PRIVATE KEY"));
-    assert!(payload.session_public_key.contains("\"kid\":\"session-"));
+    assert!(
+        payload
+            .session_public_key
+            .contains("\"kid\":\"test-session-key\"")
+    );
 }
 
 #[test]
@@ -524,6 +542,8 @@ fn session_grant_uses_configured_ttl() {
         .next()
         .unwrap();
     let mut signing_rng = ChaChaRng::seed_from_u64(11);
+    let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
+    let session_public_key = test_session_public_jwk(&session_key, "ttl-session-key");
 
     let grant = issue_session_grant(
         &mut signing_rng,
@@ -532,6 +552,7 @@ fn session_grant_uses_configured_ttl() {
         &cokret_config,
         &key_store,
         &browser_session,
+        session_public_key,
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();
@@ -636,7 +657,12 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
 
 async fn seed_persisted_session_grant(
     state: &TestState,
-) -> (BrowserSession, SessionGrant, SessionGrantMaterial) {
+) -> (
+    BrowserSession,
+    SessionGrant,
+    SessionGrantMaterial,
+    PrivateKey,
+) {
     let mut rng = state.rng();
     let mut repo = state.repository().await.unwrap();
     let user = repo
@@ -654,6 +680,7 @@ async fn seed_persisted_session_grant(
         )
         .await
         .unwrap();
+    let session_key = PrivateKey::generate_ed25519(&mut rng);
     let material = issue_session_grant(
         &mut rng,
         &*state.clock,
@@ -661,6 +688,7 @@ async fn seed_persisted_session_grant(
         &state.cokret_config,
         &state.key_store,
         &browser_session,
+        test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();
@@ -675,17 +703,17 @@ async fn seed_persisted_session_grant(
     .unwrap();
     repo.save().await.unwrap();
 
-    (browser_session, grant, material)
+    (browser_session, grant, material, session_key)
 }
 
 fn session_grant_introspection_proof(
     grant: &SessionGrant,
     material: &SessionGrantMaterial,
+    session_key: &PrivateKey,
     challenge: &str,
 ) -> String {
     let now = Utc::now();
-    let key = PrivateKey::load_pem(&material.session_private_key_pem).unwrap();
-    let signer = key
+    let signer = session_key
         .signing_key_for_alg(&JsonWebSignatureAlg::EdDsa)
         .unwrap();
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa);
@@ -708,7 +736,8 @@ async fn session_grant_http_list_and_filter_work() {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();
-    let (browser_session, grant, _material) = seed_persisted_session_grant(&state).await;
+    let (browser_session, grant, _material, _session_key) =
+        seed_persisted_session_grant(&state).await;
 
     let response = state
         .request(Request::get("/api/v1/session-grants").empty())
@@ -755,9 +784,10 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();
-    let (_browser_session, grant, material) = seed_persisted_session_grant(&state).await;
+    let (_browser_session, grant, material, session_key) =
+        seed_persisted_session_grant(&state).await;
     let challenge = format!("introspect-{}", grant.id);
-    let proof_jwt = session_grant_introspection_proof(&grant, &material, &challenge);
+    let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
 
     let response = state
         .request(
@@ -819,7 +849,8 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
         return;
     };
     let state = TestState::from_pool(pool.clone()).await.unwrap();
-    let (_browser_session, grant, _material) = seed_persisted_session_grant(&state).await;
+    let (_browser_session, grant, _material, _session_key) =
+        seed_persisted_session_grant(&state).await;
 
     let response = state
         .request(Request::post(format!("/api/v1/session-grants/{}/revoke", grant.id)).empty())

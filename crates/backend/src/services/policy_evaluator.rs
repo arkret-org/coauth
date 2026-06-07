@@ -298,7 +298,11 @@ impl PolicyEvaluator for RuleEvaluator {
 
 /// Pure rule-matcher; pulled out so unit tests can exercise it without
 /// a postgres connection.
-fn match_rules(data: &Value, request: &PolicyCheckRequestBody, policy_version: &str) -> PolicyDecision {
+fn match_rules(
+    data: &Value,
+    request: &PolicyCheckRequestBody,
+    policy_version: &str,
+) -> PolicyDecision {
     let actor_str = request.actor.as_str();
     let action_str = request.action.as_str();
 

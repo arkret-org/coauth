@@ -25,6 +25,8 @@ use diesel_async::{
         deadpool::{Hook as DieselPoolHook, HookError as DieselPoolHookError, Pool as DieselPool},
     },
 };
+use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::Instrument;
 
@@ -137,6 +139,14 @@ pub fn is_typed_uuid7(s: &str, prefix: &str) -> bool {
         Ok(u) => u.get_version_num() == 7,
         Err(_) => false,
     }
+}
+
+/// Compare bearer-style secrets without leaking the matching prefix length.
+#[must_use]
+pub fn constant_time_token_eq(left: &str, right: &str) -> bool {
+    let left = Sha256::digest(left.as_bytes());
+    let right = Sha256::digest(right.as_bytes());
+    left.ct_eq(&right).into()
 }
 
 pub async fn password_manager_from_config(

@@ -395,7 +395,7 @@ pub async fn oidc_code_exchange(
     // proof binds the upcoming session grant to the device's
     // proof-of-possession key. Failures here are fatal — a malformed
     // proof must not silently fall back to an unbound grant.
-    let dpop_jkt = match super::extract_dpop_jkt_for_kickoff(req, &url_builder).await {
+    let dpop_binding = match super::extract_dpop_binding_for_kickoff(req, &url_builder).await {
         Ok(jkt) => jkt,
         Err(error) => {
             res.status_code(StatusCode::BAD_REQUEST);
@@ -869,17 +869,28 @@ pub async fn oidc_code_exchange(
             }));
             return Ok(());
         }
+        let Some(dpop_binding) = dpop_binding.clone() else {
+            res.status_code(StatusCode::BAD_REQUEST);
+            res.render(Json(LoginResponse {
+                status: "error",
+                error: Some("invalid_dpop_proof"),
+                viewer: None,
+                session_grant: None,
+                warnings: vec!["OIDC session grants require a valid DPoP proof".to_owned()],
+            }));
+            return Ok(());
+        };
         let session_grant = cokret::issue_session_grant_for_audience(
-            &mut rng,
             &*clock,
             &url_builder,
             &cokret_config,
             &key_store,
             &browser_session,
+            dpop_binding.public_jwk,
             grant_target.audience.clone(),
             principal_session_grant_scopes(&device_id),
             Some(&principal_did),
-            dpop_jkt.clone(),
+            Some(dpop_binding.jkt),
         )
         .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
@@ -914,7 +925,6 @@ pub async fn oidc_code_exchange(
                 id: persisted_session_grant.id.to_string(),
                 grant_jwt: session_grant.grant_jwt,
                 session_public_key: session_grant.session_public_key,
-                session_private_key_pem: session_grant.session_private_key_pem,
                 expires_at: session_grant.expires_at,
                 audience: session_grant.audience,
                 scopes: session_grant.scopes,
@@ -1520,17 +1530,28 @@ pub async fn oidc_code_exchange(
         }));
         return Ok(());
     }
+    let Some(dpop_binding) = dpop_binding.clone() else {
+        res.status_code(StatusCode::BAD_REQUEST);
+        res.render(Json(LoginResponse {
+            status: "error",
+            error: Some("invalid_dpop_proof"),
+            viewer: None,
+            session_grant: None,
+            warnings: vec!["OIDC session grants require a valid DPoP proof".to_owned()],
+        }));
+        return Ok(());
+    };
     let session_grant = cokret::issue_session_grant_for_audience(
-        &mut rng,
         &clock,
         &url_builder,
         &cokret_config,
         &key_store,
         &browser_session,
+        dpop_binding.public_jwk,
         grant_target.audience.clone(),
         principal_session_grant_scopes(&device_id),
         Some(&principal_did),
-        dpop_jkt.clone(),
+        Some(dpop_binding.jkt),
     )
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
@@ -1565,7 +1586,6 @@ pub async fn oidc_code_exchange(
             id: persisted_session_grant.id.to_string(),
             grant_jwt: session_grant.grant_jwt,
             session_public_key: session_grant.session_public_key,
-            session_private_key_pem: session_grant.session_private_key_pem,
             expires_at: session_grant.expires_at,
             audience: session_grant.audience,
             scopes: session_grant.scopes,

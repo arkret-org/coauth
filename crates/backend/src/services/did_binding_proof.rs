@@ -90,7 +90,6 @@ use cokret_signatures::proof::PublicKeyMaterial;
 use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use ulid::Ulid;
 
 use crate::services::did_resolver::{DidResolveError, DidResolverService};
 
@@ -99,7 +98,8 @@ pub const DID_BINDING_CONTROL_PROOF_SCHEMA: &str = "ck.schema.did_binding_contro
 /// Canonical binding statement claims embedded in a proof JWS.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingStatementClaims {
-    /// Schema discriminator. Must equal `ck.schema.did_binding_control_proof.v1`.
+    /// Schema discriminator. Must equal
+    /// `ck.schema.did_binding_control_proof.v1`.
     pub schema: String,
     /// The DID being bound.
     pub account_did: String,
@@ -253,7 +253,6 @@ pub async fn validate_control_proof(
     nonce_store: &crate::services::third_party_invite::NonceStore,
     proof_jws: &str,
     account_did: &str,
-    _cx_account_id: Ulid,
     nonce: &str,
     expected_audience: &str,
     expected_trust_domain: &str,

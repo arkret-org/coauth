@@ -531,7 +531,6 @@ pub struct SessionGrantInfo {
     pub id: Option<String>,
     pub grant_jwt: String,
     pub session_public_key: String,
-    pub session_private_key_pem: String,
     pub expires_at: String,
 }
 

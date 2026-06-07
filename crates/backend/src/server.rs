@@ -694,7 +694,7 @@ fn build_account_api_router(router: Router) -> Router {
         )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check));
 
-    let coauth_router = Router::with_path("/_coauth")
+    let mut coauth_router = Router::with_path("/_coauth")
         .hoop(public_oidc_browser_cors())
         // Coauth-local compatibility surface. Protocol-standard Cokret
         // endpoints are mounted separately under `/_cokret` above.
@@ -720,15 +720,6 @@ fn build_account_api_router(router: Router) -> Router {
                 .push(Router::with_path("introspect").post(cokret::introspect_session_grant))
                 .push(Router::with_path("refresh").post(cokret::refresh_session_grant))
                 .push(Router::with_path("{id}/revoke").post(cokret::revoke_session_grant)),
-        )
-        // G3.C1: debug-only DPoP-bound grant seeding for the cotest
-        // harness. The handler itself short-circuits to 404 when the
-        // `debug_assertions` cfg + `COAUTH_ENABLE_TEST_ENDPOINTS` env
-        // gate are both off, so this route is safe to mount
-        // unconditionally.
-        .push(
-            Router::with_path("gate/account/test/debug/issue-dpop-grant")
-                .post(cokret::debug_issue_dpop_grant),
         )
         // Viewer
         .push(
@@ -923,6 +914,15 @@ fn build_account_api_router(router: Router) -> Router {
             Router::with_path("self/agents/{id}/accountability-grant")
                 .post(agents::post_accountability_grant),
         );
+
+    #[cfg(debug_assertions)]
+    if cokret::test_endpoints_enabled() {
+        coauth_router = coauth_router.push(
+            Router::with_path("gate/account/test/debug/issue-dpop-grant")
+                .post(cokret::debug_issue_dpop_grant),
+        );
+    }
+
     let docs_router = openapi::build_openapi_router(&coauth_router);
 
     router

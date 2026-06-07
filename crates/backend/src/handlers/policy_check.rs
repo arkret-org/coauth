@@ -41,7 +41,7 @@ use coauth_config::CokretConfig;
 use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory, UrlBuilder};
 use coauth_keystore::Keystore;
 use cokret_core::{
-    Did, PolicyCheckBoundTo, PolicyCheckRequestBody, PolicyCheckOutcome, PolicyCheckSignature,
+    Did, PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
 };
 use salvo::prelude::*;
 use serde_json::Value;

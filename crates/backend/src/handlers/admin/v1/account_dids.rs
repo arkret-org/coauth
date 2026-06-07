@@ -237,7 +237,6 @@ pub async fn add_account_did(
         nonce_store.as_ref(),
         body.control_proof.jws.as_str(),
         &did,
-        id,
         body.control_proof.nonce.as_str(),
         &expected_audience,
         &expected_trust_domain,

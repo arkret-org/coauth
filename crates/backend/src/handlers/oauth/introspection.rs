@@ -280,7 +280,7 @@ fn principal_server_static_oauth_bearer_matches(cokret_config: &CokretConfig, to
             .principal_servers
             .iter()
             .filter_map(|server| server.oauth_introspection_bearer.as_deref())
-            .any(|configured| configured == token)
+            .any(|configured| crate::util::constant_time_token_eq(configured, token))
 }
 
 #[cfg(test)]

@@ -61,9 +61,6 @@ pub enum SessionGrantError {
     #[error(transparent)]
     Canonical(#[from] cokret_core::Error),
 
-    #[error("failed to encode session private key as PEM: {0}")]
-    PemEncode(String),
-
     /// SEC-04 — the inception key that would sign this issuance is past its
     /// 24h online window (or its bootstrap anchor was missing / unparseable,
     /// which fails closed). Carries reason code
@@ -246,7 +243,7 @@ fn principal_server_static_session_grant_bearer_matches(
             .principal_servers
             .iter()
             .filter_map(|server| server.session_grant_introspection_bearer.as_deref())
-            .any(|configured| configured == token)
+            .any(|configured| crate::util::constant_time_token_eq(configured, token))
 }
 
 impl Scribe for CokretRouteError {
@@ -685,14 +682,11 @@ pub struct DebugIssueDpopGrantResponse {
     pub expires_at: String,
 }
 
-/// Returns true when test-only endpoints are allowed at runtime. We are
-/// permissive when either `cfg!(debug_assertions)` is true (i.e. dev /
-/// debug builds) OR the operator sets `COAUTH_ENABLE_TEST_ENDPOINTS=1`.
+/// Returns true when test-only endpoints are explicitly allowed at runtime.
+/// The route is only mounted in debug builds, and this env gate must still
+/// be enabled there.
 #[must_use]
 pub fn test_endpoints_enabled() -> bool {
-    if cfg!(debug_assertions) {
-        return true;
-    }
     matches!(
         std::env::var("COAUTH_ENABLE_TEST_ENDPOINTS")
             .ok()
@@ -774,12 +768,12 @@ pub async fn debug_issue_dpop_grant(
     });
 
     let material = issue_session_grant_for_audience(
-        &mut rng,
         &*clock,
         &url_builder,
         &cokret_config,
         &key_store,
         &browser_session,
+        public_jwk,
         audience,
         scopes,
         Some(&body.actor_id),

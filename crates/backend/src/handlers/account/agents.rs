@@ -813,7 +813,7 @@ fn authn_internal_caller(req: &Request, cokret_config: &CokretConfig) -> Result<
         server
             .session_grant_introspection_bearer
             .as_deref()
-            .is_some_and(|configured| configured == token)
+            .is_some_and(|configured| crate::util::constant_time_token_eq(configured, token))
     });
     if !accepted {
         return Err(AppError::forbidden(

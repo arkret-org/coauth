@@ -1,4 +1,4 @@
-[workspace]
+﻿[workspace]
 default-members = ["crates/cli"]
 members = ["crates/*"]
 exclude = [
@@ -7,7 +7,7 @@ exclude = [
 resolver = "3"
 
 [workspace.package]
-version = "1.8.0"
+version = "0.3.0"
 authors = ["Meldry Team"]
 edition = "2024"
 homepage = "https://cokret.dev/docs/"
@@ -73,25 +73,25 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 
 # Workspace crates
-coauth = { path = "./crates/cli/", version = "=1.8.0" }
-coauth-admin-types = { path = "./crates/admin-types/", version = "=1.8.0" }
-coauth-backend = { path = "./crates/backend/", version = "=1.8.0" }
-coauth-config = { path = "./crates/config/", version = "=1.8.0" }
-coauth-data = { path = "./crates/data/", version = "=1.8.0" }
-coauth-messaging = { path = "./crates/messaging/", version = "=1.8.0" }
-coauth-i18n = { path = "./crates/i18n/", version = "=1.8.0" }
-coauth-i18n-scan = { path = "./crates/i18n-scan/", version = "=1.8.0" }
-coauth-iana = { path = "./crates/iana/", version = "=1.8.0" }
-coauth-iana-codegen = { path = "./crates/iana-codegen/", version = "=1.8.0" }
-coauth-jose = { path = "./crates/jose/", version = "=1.8.0" }
-coauth-keystore = { path = "./crates/keystore/", version = "=1.8.0" }
-coauth-principal = { path = "./crates/principal/", version = "=1.8.0" }
-coauth-policy = { path = "./crates/policy/", version = "=1.8.0" }
-coauth-tasks = { path = "./crates/tasks/", version = "=1.8.0" }
-coauth-templates = { path = "./crates/templates/", version = "=1.8.0" }
-oauth-types = { path = "./crates/oauth-types/", version = "=1.8.0" }
+coauth = { path = "./crates/cli/", version = "=0.3.0" }
+coauth-admin-types = { path = "./crates/admin-types/", version = "=0.3.0" }
+coauth-backend = { path = "./crates/backend/", version = "=0.3.0" }
+coauth-config = { path = "./crates/config/", version = "=0.3.0" }
+coauth-data = { path = "./crates/data/", version = "=0.3.0" }
+coauth-messaging = { path = "./crates/messaging/", version = "=0.3.0" }
+coauth-i18n = { path = "./crates/i18n/", version = "=0.3.0" }
+coauth-i18n-scan = { path = "./crates/i18n-scan/", version = "=0.3.0" }
+coauth-iana = { path = "./crates/iana/", version = "=0.3.0" }
+coauth-iana-codegen = { path = "./crates/iana-codegen/", version = "=0.3.0" }
+coauth-jose = { path = "./crates/jose/", version = "=0.3.0" }
+coauth-keystore = { path = "./crates/keystore/", version = "=0.3.0" }
+coauth-principal = { path = "./crates/principal/", version = "=0.3.0" }
+coauth-policy = { path = "./crates/policy/", version = "=0.3.0" }
+coauth-tasks = { path = "./crates/tasks/", version = "=0.3.0" }
+coauth-templates = { path = "./crates/templates/", version = "=0.3.0" }
+oauth-types = { path = "./crates/oauth-types/", version = "=0.3.0" }
 
-coauth-frontend = { path = "./crates/frontend/", version = "=1.8.0" }
+coauth-frontend = { path = "./crates/frontend/", version = "=0.3.0" }
 
 salvo = { version = "0.92", features = [
     "oapi",
@@ -124,18 +124,18 @@ console = "0.16.3"
 # identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
 # `cokret-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
-cokret-core = { version = "1.0.0", path = "../cokret-rust-sdk/crates/core", default-features = false }
+cokret-core = { version = "0.3.0", path = "../cokret-rust-sdk/crates/core", default-features = false }
 # Lightweight typed-identifier validators (no heavy transitive deps beyond
 # what `cokret-core` already pulls in). Used by `coauth-config` for the
 # `ck:trust_domain:<scope>` wire-form check so config and SDK never drift.
-cokret-identifiers = { version = "1.0.0", path = "../cokret-rust-sdk/crates/identifiers", default-features = false }
-cokret-signatures = { version = "1.0.0", path = "../cokret-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
+cokret-identifiers = { version = "0.3.0", path = "../cokret-rust-sdk/crates/identifiers", default-features = false }
+cokret-signatures = { version = "0.3.0", path = "../cokret-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
 # Umbrella `cokret` SDK pulled in for the pure-protocol modules that
 # don't have a smaller-crate home: today just `cokret::identity::binding`
 # (consumed by `services::passkey_derive`). Default features pull in the
 # heavy client / openmls / sync surface, so opt into only `full-surface`
 # (gates the identity tree).
-cokret = { version = "1.0.0", path = "../cokret-rust-sdk/crates/sdk", default-features = false, features = ["full-surface"] }
+cokret = { version = "0.3.0", path = "../cokret-rust-sdk/crates/sdk", default-features = false, features = ["full-surface"] }
 cookie_store = { version = "0.22.1", default-features = false, features = [
     "serde_json",
 ] }
@@ -342,6 +342,7 @@ sha2 = { version = "0.10.9", features = ["oid"] }
 signature = "2.2.0"
 socket2 = "0.6.3"
 spki = { version = "0.7.3", features = ["std"] }
+subtle = "2.6.1"
 thiserror = "2.0.18"
 thiserror-ext = "0.3.0"
 tokio = { version = "1.52.1", features = ["full"] }

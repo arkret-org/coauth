@@ -48,9 +48,8 @@ pub struct HandleClaimProof {
 
 /// Canonical `handle_claim` payload signed by coauth's audience-bound
 /// session-grant signing key. Shape aligned with
-/// `member-delivery-binding-candidate.schema.json` so a downstream
-/// directory can pack this directly into a candidate without rewriting
-/// fields.
+/// `ck.schema.handle_claim.v1` so a downstream directory can verify and
+/// consume the claim without private field rewrites.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandleClaimPayload {
     pub schema: String,
@@ -59,21 +58,20 @@ pub struct HandleClaimPayload {
     /// the removed `service_handle` value is rejected at issuance time by
     /// [`crate::services::handle_subject_validator::ensure_claim_kind_supported`].
     pub claim_kind: String,
-    pub subject_id: String,
+    pub subject: String,
     /// Canonical Cokret handle of the form `<localpart>:<domain>` per
     /// spec 7157ee8 §3.1 (replaces the legacy `handle_uri` URI form).
     pub handle: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub handle_aliases: Vec<String>,
+    pub issuer: String,
     pub issuer_service_did: String,
+    pub binding_state: String,
     pub audience: String,
     pub member_delivery_binding: HandleClaimDeliveryBindingHint,
-    pub issued_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub proofs: Vec<HandleClaimProof>,
-    /// `sha256:<hex>` digest of the canonical-JSON encoding of the claim
-    /// minus the `proofs[]` field (proofs are produced *over* this hash).
-    pub claim_digest: String,
 }
 
 /// Output of [`issue_handle_claim`]. Carries the signed JWT, the raw
@@ -172,19 +170,20 @@ pub(crate) fn issue_handle_claim(
     // Build the payload sans proofs so we can hash it deterministically.
     // The proof block then carries that hash; the JWT signs the complete
     // payload.
-    let mut payload_no_proofs = HandleClaimPayload {
+    let payload_no_proofs = HandleClaimPayload {
         schema: "ck.schema.handle_claim.v1".to_owned(),
         claim_kind: claim_kind.as_wire().to_owned(),
-        subject_id: subject_id.clone(),
+        subject: subject_id.clone(),
         handle,
         handle_aliases: aliases.clone(),
+        issuer: issuer_service_did.clone(),
         issuer_service_did: issuer_service_did.clone(),
+        binding_state: "verified".to_owned(),
         audience: audience.clone(),
         member_delivery_binding: member_delivery_binding.clone(),
-        issued_at: now,
+        created_at: now,
         expires_at,
         proofs: Vec::new(),
-        claim_digest: String::new(),
     };
     // PROOF-1 (spec 7157ee8 §3.2): the signing transcript MUST cover the
     // canonical `handle` field, not the retired `handle_uri`. The digest
@@ -194,16 +193,17 @@ pub(crate) fn issue_handle_claim(
     let claim_digest = canonical_json_sha256(&HandleClaimDigestInput {
         schema: &payload_no_proofs.schema,
         claim_kind: &payload_no_proofs.claim_kind,
-        subject_id: &payload_no_proofs.subject_id,
+        subject: &payload_no_proofs.subject,
         handle: &payload_no_proofs.handle,
         handle_aliases: &payload_no_proofs.handle_aliases,
+        issuer: &payload_no_proofs.issuer,
         issuer_service_did: &payload_no_proofs.issuer_service_did,
+        binding_state: &payload_no_proofs.binding_state,
         audience: &payload_no_proofs.audience,
         member_delivery_binding: &payload_no_proofs.member_delivery_binding,
-        issued_at: payload_no_proofs.issued_at,
+        created_at: payload_no_proofs.created_at,
         expires_at: payload_no_proofs.expires_at,
     })?;
-    payload_no_proofs.claim_digest.clone_from(&claim_digest);
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
@@ -253,7 +253,7 @@ pub(crate) fn issue_handle_claim(
 }
 
 /// Helper struct used to canonicalise the *digest input* — i.e. the
-/// payload minus the `proofs[]` and `claim_digest` fields. Sorting and
+/// payload minus the `proofs[]` field. Sorting and
 /// shape must match the wire shape of `HandleClaimPayload` for
 /// downstream digesters to reproduce the hash.
 ///
@@ -264,12 +264,14 @@ pub(crate) fn issue_handle_claim(
 struct HandleClaimDigestInput<'a> {
     schema: &'a str,
     claim_kind: &'a str,
-    subject_id: &'a str,
+    subject: &'a str,
     handle: &'a str,
     handle_aliases: &'a Vec<String>,
+    issuer: &'a str,
     issuer_service_did: &'a str,
+    binding_state: &'a str,
     audience: &'a str,
     member_delivery_binding: &'a HandleClaimDeliveryBindingHint,
-    issued_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 }
