@@ -23,7 +23,7 @@ use ulid::Ulid;
 use super::*;
 use crate::handlers::common::DepotExt;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct SessionGrantMaterial {
     pub grant_jwt: String,
     pub session_public_key: String,
@@ -797,7 +797,7 @@ pub struct RefreshSessionGrantRequest {
 }
 
 #[derive(Debug, Serialize)]
-pub struct RefreshSessionGrantResponse {
+pub struct RefreshSessionGrantOneShotResponse {
     pub grant_id: String,
     pub grant_jwt: String,
     pub session_public_key: String,
@@ -823,7 +823,7 @@ pub struct RefreshSessionGrantResponse {
 pub async fn refresh_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RefreshSessionGrantResponse>, CokretRouteError> {
+) -> Result<Json<RefreshSessionGrantOneShotResponse>, CokretRouteError> {
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
@@ -953,7 +953,7 @@ pub async fn refresh_session_grant(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(RefreshSessionGrantResponse {
+    Ok(Json(RefreshSessionGrantOneShotResponse {
         grant_id: persisted.id.to_string(),
         grant_jwt: new_material.grant_jwt,
         session_public_key: new_material.session_public_key,

@@ -644,7 +644,7 @@ mod tests {
 
     use crate::{
         handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup},
-        services::did_binding_proof::BindingStatementClaims,
+        services::did_binding_proof::{BindingStatementClaims, DID_BINDING_CONTROL_PROOF_SCHEMA},
     };
 
     #[tokio::test]
@@ -1177,7 +1177,7 @@ mod tests {
     fn sign_did_binding_control_proof(
         state: &TestState,
         did: &str,
-        account_id: Ulid,
+        _account_id: Ulid,
         nonce: &str,
     ) -> String {
         let alg = [
@@ -1207,9 +1207,8 @@ mod tests {
             crate::handlers::cokret::trust_domain_for(&state.url_builder, &state.cokret_config);
         let iat = state.clock.now();
         let claims = BindingStatementClaims {
-            kind: "ck.did_binding.control_proof.v1".to_owned(),
+            schema: DID_BINDING_CONTROL_PROOF_SCHEMA.to_owned(),
             account_did: did.to_owned(),
-            cx_account_id: account_id.to_string(),
             verification_method,
             audience,
             trust_domain,

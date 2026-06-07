@@ -1239,6 +1239,9 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let acct = user_handle_acct_alias(&url_builder, &user);
     // Spec 7157ee8 §3.1 — canonical `<localpart>:<domain>` form on
     // the wire `handle` field.
+    assert_eq!(material.payload.schema, "ck.schema.handle_claim.v1");
+    let payload_value = serde_json::to_value(&material.payload).unwrap();
+    assert!(payload_value.get("type").is_none());
     assert_eq!(material.payload.handle, canonical);
     assert!(
         material.payload.handle.contains(':'),

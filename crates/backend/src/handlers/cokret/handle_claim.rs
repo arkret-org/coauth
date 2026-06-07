@@ -53,8 +53,7 @@ pub struct HandleClaimProof {
 /// fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandleClaimPayload {
-    #[serde(rename = "type")]
-    pub kind: String,
+    pub schema: String,
     /// R3.2 — `ck.schema.handle_claim.v1` `claim_kind`. coauth only emits
     /// the allow-listed values (`handle_binding` / `organization_handle`);
     /// the removed `service_handle` value is rejected at issuance time by
@@ -94,7 +93,7 @@ pub struct HandleClaimMaterial {
 pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 
 /// R3.2 — the `claim_kind` coauth's handle-claim issuer stamps on the
-/// emitted `ck.handle.claim` payload.
+/// emitted `ck.schema.handle_claim.v1` payload.
 ///
 /// Modelled as an enum so the removed `service_handle` value can never be
 /// *named* by an in-process caller (fail-closed at the type level), while
@@ -174,7 +173,7 @@ pub(crate) fn issue_handle_claim(
     // The proof block then carries that hash; the JWT signs the complete
     // payload.
     let mut payload_no_proofs = HandleClaimPayload {
-        kind: "ck.handle.claim".to_owned(),
+        schema: "ck.schema.handle_claim.v1".to_owned(),
         claim_kind: claim_kind.as_wire().to_owned(),
         subject_id: subject_id.clone(),
         handle,
@@ -193,7 +192,7 @@ pub(crate) fn issue_handle_claim(
     // downstream verifiers can reproduce the hash from the on-the-wire
     // claim without renaming.
     let claim_digest = canonical_json_sha256(&HandleClaimDigestInput {
-        kind: &payload_no_proofs.kind,
+        schema: &payload_no_proofs.schema,
         claim_kind: &payload_no_proofs.claim_kind,
         subject_id: &payload_no_proofs.subject_id,
         handle: &payload_no_proofs.handle,
@@ -263,8 +262,7 @@ pub(crate) fn issue_handle_claim(
 /// is no longer included in the digest input on any code path.
 #[derive(Debug, Serialize)]
 struct HandleClaimDigestInput<'a> {
-    #[serde(rename = "type")]
-    kind: &'a str,
+    schema: &'a str,
     claim_kind: &'a str,
     subject_id: &'a str,
     handle: &'a str,

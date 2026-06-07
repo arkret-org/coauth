@@ -303,9 +303,8 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
         | DidBindingProofError::SignatureMismatch
         | DidBindingProofError::CanonicalStatement(_)
         | DidBindingProofError::CanonicalStatementMismatch
-        | DidBindingProofError::StatementKindMismatch
+        | DidBindingProofError::StatementSchemaMismatch
         | DidBindingProofError::AccountDidMismatch
-        | DidBindingProofError::CxAccountIdMismatch
         | DidBindingProofError::NonceMismatch
         | DidBindingProofError::AudienceMismatch
         | DidBindingProofError::TrustDomainMismatch

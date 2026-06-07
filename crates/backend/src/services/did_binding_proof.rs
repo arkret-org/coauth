@@ -6,9 +6,8 @@
 //!
 //! ```json
 //! {
-//!   "type": "ck.did_binding.control_proof.v1",
+//!   "schema": "ck.schema.did_binding_control_proof.v1",
 //!   "account_did": "<account DID>",
-//!   "cx_account_id": "<local account ULID>",
 //!   "verification_method": "<DID URL from verificationMethod.id>",
 //!   "audience": "<local coauth service DID>",
 //!   "trust_domain": "<local deployment ck:trust_domain:...>",
@@ -50,7 +49,7 @@
 //!   5. Reject if the attached payload bytes are not the canonical JSON
 //!      encoding of the decoded binding statement.
 //!   6. Reject if the embedded binding statement doesn't match the request
-//!      (`account_did` + `cx_account_id` + nonce all match exactly).
+//!      (`account_did` + nonce both match exactly).
 //!
 //! SDK integration: signature verification is performed by the SDK's
 //! pure-Rust `cokret_signatures::PublicKeyMaterial::ed25519_bytes()`
@@ -95,16 +94,15 @@ use ulid::Ulid;
 
 use crate::services::did_resolver::{DidResolveError, DidResolverService};
 
+pub const DID_BINDING_CONTROL_PROOF_SCHEMA: &str = "ck.schema.did_binding_control_proof.v1";
+
 /// Canonical binding statement claims embedded in a proof JWS.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingStatementClaims {
-    /// Discriminator. Must equal `ck.did_binding.control_proof.v1`.
-    #[serde(rename = "type")]
-    pub kind: String,
+    /// Schema discriminator. Must equal `ck.schema.did_binding_control_proof.v1`.
+    pub schema: String,
     /// The DID being bound.
     pub account_did: String,
-    /// The local coauth account ULID (string-encoded).
-    pub cx_account_id: String,
     /// DID URL of the resolved verification method that signs the proof.
     pub verification_method: String,
     /// Receiver binding — MUST equal the local coauth service DID. Stops
@@ -164,14 +162,11 @@ pub enum DidBindingProofError {
     #[error("binding statement payload is not the canonical JSON encoding of the decoded claims")]
     CanonicalStatementMismatch,
 
-    #[error("binding statement type discriminator mismatch")]
-    StatementKindMismatch,
+    #[error("binding statement schema discriminator mismatch")]
+    StatementSchemaMismatch,
 
     #[error("binding statement account_did does not match request")]
     AccountDidMismatch,
-
-    #[error("binding statement cx_account_id does not match request")]
-    CxAccountIdMismatch,
 
     #[error("binding statement nonce does not match request")]
     NonceMismatch,
@@ -234,7 +229,7 @@ pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofErr
 /// Validate a `control_proof` JWS against the resolved DID document and
 /// the requested binding statement.
 ///
-/// `account_did` / `cx_account_id` / `nonce` form the canonical statement
+/// `schema` / `account_did` / `nonce` form the canonical statement
 /// that must be embedded inside the JWS payload. `now` is used to bound
 /// the `iat` / `exp` claims (skew ±300s, freshness window ≤ 300s).
 ///
@@ -258,7 +253,7 @@ pub async fn validate_control_proof(
     nonce_store: &crate::services::third_party_invite::NonceStore,
     proof_jws: &str,
     account_did: &str,
-    cx_account_id: Ulid,
+    _cx_account_id: Ulid,
     nonce: &str,
     expected_audience: &str,
     expected_trust_domain: &str,
@@ -323,7 +318,6 @@ pub async fn validate_control_proof(
     validate_binding_statement_claims(
         claims,
         account_did,
-        cx_account_id,
         nonce,
         expected_audience,
         expected_trust_domain,
@@ -337,8 +331,12 @@ pub async fn validate_control_proof(
     // so distinct receivers / deployments / DIDs cannot collide on a
     // shared nonce value.
     let replay_key = format!(
-        "ck.did_binding.control_proof.v1|{}|{}|{}|{}",
-        claims.audience, claims.trust_domain, claims.account_did, claims.nonce
+        "{}|{}|{}|{}|{}",
+        DID_BINDING_CONTROL_PROOF_SCHEMA,
+        claims.audience,
+        claims.trust_domain,
+        claims.account_did,
+        claims.nonce
     );
     nonce_store
         .check_and_record(&replay_key, claims.exp, now)
@@ -540,20 +538,16 @@ pub(crate) fn verify_detached_jws_with_sdk(
 fn validate_binding_statement_claims(
     claims: &BindingStatementClaims,
     account_did: &str,
-    cx_account_id: Ulid,
     nonce: &str,
     expected_audience: &str,
     expected_trust_domain: &str,
     now: DateTime<Utc>,
 ) -> Result<(), DidBindingProofError> {
-    if claims.kind != "ck.did_binding.control_proof.v1" {
-        return Err(DidBindingProofError::StatementKindMismatch);
+    if claims.schema != DID_BINDING_CONTROL_PROOF_SCHEMA {
+        return Err(DidBindingProofError::StatementSchemaMismatch);
     }
     if claims.account_did != account_did {
         return Err(DidBindingProofError::AccountDidMismatch);
-    }
-    if claims.cx_account_id != cx_account_id.to_string() {
-        return Err(DidBindingProofError::CxAccountIdMismatch);
     }
     if claims.nonce != nonce {
         return Err(DidBindingProofError::NonceMismatch);
@@ -778,9 +772,8 @@ mod tests {
     fn statement_claims_default() -> BindingStatementClaims {
         let iat = chrono::DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         BindingStatementClaims {
-            kind: "ck.did_binding.control_proof.v1".to_owned(),
+            schema: DID_BINDING_CONTROL_PROOF_SCHEMA.to_owned(),
             account_did: "did:web:alice.example".to_owned(),
-            cx_account_id: Ulid::nil().to_string(),
             verification_method: "did:web:alice.example#key-1".to_owned(),
             audience: TEST_AUDIENCE.to_owned(),
             trust_domain: TEST_TRUST_DOMAIN.to_owned(),
@@ -814,9 +807,8 @@ mod tests {
         let original = statement_claims_default();
         let json = serde_json::to_string(&original).unwrap();
         let decoded: BindingStatementClaims = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.kind, original.kind);
+        assert_eq!(decoded.schema, original.schema);
         assert_eq!(decoded.account_did, original.account_did);
-        assert_eq!(decoded.cx_account_id, original.cx_account_id);
         assert_eq!(decoded.verification_method, original.verification_method);
         assert_eq!(decoded.audience, original.audience);
         assert_eq!(decoded.trust_domain, original.trust_domain);
@@ -826,11 +818,11 @@ mod tests {
     }
 
     #[test]
-    fn binding_statement_kind_must_be_explicit() {
-        // Sanity check: type discriminator literal is what the validator expects.
+    fn binding_statement_schema_must_be_explicit() {
+        // Sanity check: schema discriminator literal is what the validator expects.
         assert_eq!(
-            statement_claims_default().kind,
-            "ck.did_binding.control_proof.v1"
+            statement_claims_default().schema,
+            DID_BINDING_CONTROL_PROOF_SCHEMA
         );
     }
 
@@ -885,7 +877,6 @@ mod tests {
         validate_binding_statement_claims(
             &claims,
             "did:web:alice.example",
-            Ulid::nil(),
             "nonce-123",
             TEST_AUDIENCE,
             TEST_TRUST_DOMAIN,
@@ -901,7 +892,6 @@ mod tests {
         let err = validate_binding_statement_claims(
             &claims,
             "did:web:alice.example",
-            Ulid::nil(),
             "different-nonce",
             TEST_AUDIENCE,
             TEST_TRUST_DOMAIN,
@@ -920,7 +910,6 @@ mod tests {
         let err = validate_binding_statement_claims(
             &claims,
             "did:web:alice.example",
-            Ulid::nil(),
             "nonce-123",
             TEST_AUDIENCE,
             TEST_TRUST_DOMAIN,
@@ -940,7 +929,6 @@ mod tests {
         let err = validate_binding_statement_claims(
             &claims,
             "did:web:alice.example",
-            Ulid::nil(),
             "nonce-123",
             "did:web:other-receiver.example",
             TEST_TRUST_DOMAIN,
@@ -960,7 +948,6 @@ mod tests {
         let err = validate_binding_statement_claims(
             &claims,
             "did:web:alice.example",
-            Ulid::nil(),
             "nonce-123",
             TEST_AUDIENCE,
             "ck:trust_domain:other-deployment.example",
@@ -981,7 +968,6 @@ mod tests {
         let err = validate_binding_statement_claims(
             &claims,
             "did:web:alice.example",
-            Ulid::nil(),
             "nonce-123",
             TEST_AUDIENCE,
             TEST_TRUST_DOMAIN,
@@ -1000,7 +986,6 @@ mod tests {
         let err = validate_binding_statement_claims(
             &claims,
             "did:web:alice.example",
-            Ulid::nil(),
             "nonce-123",
             TEST_AUDIENCE,
             TEST_TRUST_DOMAIN,
@@ -1020,7 +1005,6 @@ mod tests {
         let err = validate_binding_statement_claims(
             &claims,
             "did:web:alice.example",
-            Ulid::nil(),
             "nonce-123",
             TEST_AUDIENCE,
             TEST_TRUST_DOMAIN,
@@ -1039,8 +1023,12 @@ mod tests {
         let claims = statement_claims_default();
         let store = crate::services::third_party_invite::NonceStore::new();
         let key = format!(
-            "ck.did_binding.control_proof.v1|{}|{}|{}|{}",
-            claims.audience, claims.trust_domain, claims.account_did, claims.nonce
+            "{}|{}|{}|{}|{}",
+            DID_BINDING_CONTROL_PROOF_SCHEMA,
+            claims.audience,
+            claims.trust_domain,
+            claims.account_did,
+            claims.nonce
         );
         store
             .check_and_record(&key, claims.exp, claims.iat)

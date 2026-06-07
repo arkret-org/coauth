@@ -101,7 +101,7 @@ pub struct LoginResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewer: Option<ViewerInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_grant: Option<SessionGrantInfo>,
+    pub session_grant: Option<SessionGrantOneShotInfo>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }
@@ -126,7 +126,7 @@ pub enum SessionGrantKind {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct SessionGrantInfo {
+pub struct SessionGrantOneShotInfo {
     pub kind: SessionGrantKind,
     pub id: String,
     pub grant_jwt: String,
@@ -466,7 +466,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         principal_id: principal_server.principal_id(&user.handle),
                         display_name,
                     }),
-                    session_grant: Some(SessionGrantInfo {
+                    session_grant: Some(SessionGrantOneShotInfo {
                         kind: SessionGrantKind::PrincipalSession,
                         id: persisted_session_grant.id.to_string(),
                         grant_jwt: session_grant.grant_jwt,

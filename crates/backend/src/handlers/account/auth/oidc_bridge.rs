@@ -18,7 +18,7 @@ use sha2::{Digest as _, Sha256};
 use ulid::Ulid;
 
 use super::{
-    DepotExt, LoginResponse, NodeType, RouteError, SessionGrantInfo, SessionGrantKind,
+    DepotExt, LoginResponse, NodeType, RouteError, SessionGrantKind, SessionGrantOneShotInfo,
     SessionGrantPrincipalServerInfo, ViewerInfo, make_clock, make_rng,
 };
 use crate::{
@@ -909,7 +909,7 @@ pub async fn oidc_code_exchange(
                 principal_id: principal_server.principal_id(&user.handle),
                 display_name,
             }),
-            session_grant: Some(SessionGrantInfo {
+            session_grant: Some(SessionGrantOneShotInfo {
                 kind: SessionGrantKind::PrincipalSession,
                 id: persisted_session_grant.id.to_string(),
                 grant_jwt: session_grant.grant_jwt,
@@ -1560,7 +1560,7 @@ pub async fn oidc_code_exchange(
             principal_id: principal_server.principal_id(&user.handle),
             display_name,
         }),
-        session_grant: Some(SessionGrantInfo {
+        session_grant: Some(SessionGrantOneShotInfo {
             kind: SessionGrantKind::PrincipalSession,
             id: persisted_session_grant.id.to_string(),
             grant_jwt: session_grant.grant_jwt,
