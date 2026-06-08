@@ -8,7 +8,7 @@
 //! and any other admin client deserialize against the same typed
 //! definition rustc enforces here.
 
-use coauth_admin_types::{NotificationChannelStatus, NotificationChannelsResponse};
+use coauth_admin_types::{NotificationChannelStatus, NotificationChannelsOutcome};
 use salvo::prelude::*;
 
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.notification_channels", skip_all)]
-pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<NotificationChannelsResponse> {
+pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<NotificationChannelsOutcome> {
     let _call_context = extract_call_context(req, depot).await?;
     let site_config = depot.site_config()?;
 
@@ -42,5 +42,5 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<Notificatio
         },
     ];
 
-    Ok(Json(NotificationChannelsResponse { channels }))
+    Ok(Json(NotificationChannelsOutcome { channels }))
 }

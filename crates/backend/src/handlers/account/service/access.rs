@@ -18,7 +18,7 @@ use crate::handlers::{
 };
 
 #[derive(Debug)]
-pub struct PasswordLoginRequest {
+pub struct PasswordLoginRequestBody {
     pub username_or_email: String,
     pub password: Zeroizing<String>,
     pub user_agent: Option<String>,
@@ -68,7 +68,7 @@ pub async fn login_with_password(
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     site_config: &SiteConfig,
-    request: PasswordLoginRequest,
+    request: PasswordLoginRequestBody,
 ) -> Result<PasswordLoginOutcome, PasswordLoginError> {
     if !site_config.password_login_enabled {
         return Ok(PasswordLoginOutcome::Disabled);

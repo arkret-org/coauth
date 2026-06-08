@@ -13,7 +13,7 @@ use super::{PASSWORD_LOGIN_COUNTER, RESULT};
 use crate::handlers::RequesterFingerprint;
 use crate::handlers::account::DepotExt;
 use crate::handlers::account::service::access::{
-    PasswordLoginOutcome, PasswordLoginRequest, login_with_password,
+    PasswordLoginOutcome, PasswordLoginRequestBody, login_with_password,
 };
 use crate::handlers::session::AccountError;
 use crate::handlers::views::shared::OptionalPostAuthAction;
@@ -107,7 +107,7 @@ pub async fn post(
         &url_builder,
         &cokret_config,
         &site_config,
-        PasswordLoginRequest {
+        PasswordLoginRequestBody {
             username_or_email: form.username,
             password: Zeroizing::new(form.password),
             user_agent,

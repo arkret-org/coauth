@@ -17,7 +17,7 @@ use crate::{
         model::{Resource, UserRegistrationToken},
         params::{IncludeCount, extract_pagination, extract_ulid_param},
         response::{
-            PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
             paginated_response_for_page,
         },
     },
@@ -26,7 +26,7 @@ use crate::{
 /// Payload for `POST /_coauth/admin/user-registration-tokens`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUserRegistrationTokenRequest")]
-pub struct AddRequest {
+pub struct AddRequestBody {
     /// Explicit token string. A random one is generated when omitted.
     token: Option<String>,
 
@@ -44,7 +44,7 @@ pub struct AddRequest {
 pub async fn add_token(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<SingleResponse<UserRegistrationToken>> {
+) -> CreatedJsonResult<SingleOutcome<UserRegistrationToken>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -53,7 +53,7 @@ pub async fn add_token(
         ..
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
-    let body: AddRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     // Fall back to a randomly generated token string
     let token_str = body
@@ -96,7 +96,7 @@ pub async fn add_token(
 
     repo.save().await?;
 
-    Ok(CreatedJson(SingleResponse::new_canonical(
+    Ok(CreatedJson(SingleOutcome::new_canonical(
         UserRegistrationToken::new(entry, clock.now()),
     )))
 }
@@ -107,7 +107,7 @@ pub async fn add_token(
 pub async fn get_token(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UserRegistrationToken>> {
+) -> JsonResult<SingleOutcome<UserRegistrationToken>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo, clock, ..
@@ -122,7 +122,7 @@ pub async fn get_token(
             AppError::not_found(format!("Registration token with ID {target_id} not found"))
         })?;
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         UserRegistrationToken::new(entry, clock.now()),
     )))
 }
@@ -182,7 +182,7 @@ impl std::fmt::Display for FilterParams {
 pub async fn list_tokens(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PaginatedResponse<UserRegistrationToken>> {
+) -> JsonResult<PaginatedOutcome<UserRegistrationToken>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo, clock, ..
@@ -241,7 +241,7 @@ pub async fn list_tokens(
 pub async fn revoke_token(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UserRegistrationToken>> {
+) -> JsonResult<SingleOutcome<UserRegistrationToken>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -282,7 +282,7 @@ pub async fn revoke_token(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new(
+    Ok(Json(SingleOutcome::new(
         UserRegistrationToken::new(revoked, clock.now()),
         format!("/_coauth/admin/user-registration-tokens/{target_id}/revoke"),
     )))
@@ -294,7 +294,7 @@ pub async fn revoke_token(
 pub async fn unrevoke_token(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UserRegistrationToken>> {
+) -> JsonResult<SingleOutcome<UserRegistrationToken>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo, clock, ..
@@ -319,7 +319,7 @@ pub async fn unrevoke_token(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new(
+    Ok(Json(SingleOutcome::new(
         UserRegistrationToken::new(restored, clock.now()),
         format!("/_coauth/admin/user-registration-tokens/{target_id}/unrevoke"),
     )))
@@ -337,7 +337,7 @@ where
 /// Payload for `PUT /_coauth/admin/user-registration-tokens/{id}`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "EditUserRegistrationTokenRequest")]
-pub struct UpdateRequest {
+pub struct UpdateRequestBody {
     /// Updated expiration timestamp, or `null` to clear it
     #[serde(
         skip_serializing_if = "Option::is_none",
@@ -363,13 +363,13 @@ pub struct UpdateRequest {
 pub async fn update_token(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UserRegistrationToken>> {
+) -> JsonResult<SingleOutcome<UserRegistrationToken>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo, clock, ..
     } = ctx;
     let target_id = extract_ulid_param(req)?;
-    let body: UpdateRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: UpdateRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     let mut entry = repo
         .user_registration_token()
@@ -397,7 +397,7 @@ pub async fn update_token(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new(
+    Ok(Json(SingleOutcome::new(
         UserRegistrationToken::new(entry, clock.now()),
         format!("/_coauth/admin/user-registration-tokens/{target_id}"),
     )))

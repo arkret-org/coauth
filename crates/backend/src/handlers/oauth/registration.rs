@@ -152,7 +152,7 @@ impl Scribe for RouteError {
 }
 
 #[derive(Serialize)]
-struct RouteResponse {
+struct RegistrationRouteOutcome {
     #[serde(flatten)]
     response: ClientRegistrationResponse,
     #[serde(flatten)]
@@ -201,7 +201,10 @@ pub async fn post(req: &mut Request, depot: &Depot, res: &mut Response) {
     }
 }
 
-async fn handle_post(req: &mut Request, depot: &Depot) -> Result<RouteResponse, RouteError> {
+async fn handle_post(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<RegistrationRouteOutcome, RouteError> {
     let encrypter = depot
         .get::<Encrypter>("encrypter")
         .expect("Encrypter not found in depot");
@@ -392,7 +395,7 @@ async fn handle_post(req: &mut Request, depot: &Depot) -> Result<RouteResponse, 
 
     repo.save().await?;
 
-    Ok(RouteResponse { response, metadata })
+    Ok(RegistrationRouteOutcome { response, metadata })
 }
 
 /// Extract the tagged (locale-specific) variants from `metadata` into a

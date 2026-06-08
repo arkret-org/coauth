@@ -42,7 +42,7 @@ struct DirectoryDescribeOutcome {
 }
 
 #[derive(Debug, Serialize)]
-struct ResolveHandleResponse {
+struct ResolveHandleOutcome {
     did: String,
     handle: String,
     verified: bool,
@@ -50,12 +50,12 @@ struct ResolveHandleResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct ResolveIdentityRequest {
+struct ResolveIdentityRequestBody {
     did: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct ResolveHandleRequest {
+struct ResolveHandleRequestBody {
     handle: String,
     expected_did: Option<String>,
 }
@@ -87,7 +87,7 @@ pub async fn identity_resolve(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<IdentityResolveOutcome>, CokretRouteError> {
-    let body: ResolveIdentityRequest = req
+    let body: ResolveIdentityRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
@@ -215,8 +215,8 @@ pub async fn directory_describe(
 pub async fn directory_resolve_handle(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ResolveHandleResponse>, CokretRouteError> {
-    let body: ResolveHandleRequest = req
+) -> Result<Json<ResolveHandleOutcome>, CokretRouteError> {
+    let body: ResolveHandleRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
@@ -243,7 +243,7 @@ pub async fn directory_resolve_handle(
             == crate::services::did_resolver::DidBindingVerification::Verified
     });
 
-    Ok(Json(ResolveHandleResponse {
+    Ok(Json(ResolveHandleOutcome {
         did,
         handle: user_handle(&url_builder, &user),
         verified,

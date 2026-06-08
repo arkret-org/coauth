@@ -2,8 +2,8 @@ use dioxus::prelude::*;
 
 use crate::{
     api::types::{
-        BootstrapAdminStatus, ChangeRegistrationEmailResponse, ProvidersResponse, RegisterResponse,
-        RegisterStatusResponse, ResendEmailAuthCodePayload, StepResponse,
+        BootstrapAdminStatus, ChangeRegistrationEmailOutcome, ProvidersOutcome, RegisterOutcome,
+        RegisterStatusOutcome, ResendEmailAuthCodePayload, StepOutcome,
     },
     components::{
         form_error::FormError, layout::Layout, loading::LoadingSpinner,
@@ -25,7 +25,7 @@ const REGISTER_PHONE_VERIFY_STATUS_ID: &str = "register-phone-verify-status";
 #[component]
 pub fn Register() -> Element {
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersResponse>("/gate/account/auth/providers").await
+        crate::api::api_get::<ProvidersOutcome>("/gate/account/auth/providers").await
     });
     let binding = providers_data.read();
 
@@ -43,7 +43,7 @@ pub fn Register() -> Element {
         None => rsx! {
             Layout {
                 RegisterPage {
-                    providers: ProvidersResponse {
+                    providers: ProvidersOutcome {
                         providers: vec![],
                         password_login_enabled: true,
                         password_registration_enabled: true,
@@ -56,7 +56,7 @@ pub fn Register() -> Element {
 }
 
 #[component]
-fn RegisterPage(providers: ProvidersResponse) -> Element {
+fn RegisterPage(providers: ProvidersOutcome) -> Element {
     let mut handle = use_signal(String::new);
     let mut email = use_signal(String::new);
     let mut phone = use_signal(String::new);
@@ -106,7 +106,7 @@ fn RegisterPage(providers: ProvidersResponse) -> Element {
                             error.set(None);
 
                             spawn(async move {
-                                let result = crate::api::api_post::<RegisterResponse>(
+                                let result = crate::api::api_post::<RegisterOutcome>(
                                     "/gate/account/auth/register",
                                     serde_json::json!({
                                         "handle": user,
@@ -248,7 +248,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
     let mut status = use_resource(move || {
         let rid = status_id.clone();
         async move {
-            crate::api::api_get::<RegisterStatusResponse>(&format!(
+            crate::api::api_get::<RegisterStatusOutcome>(&format!(
                 "/gate/account/auth/register/{rid}"
             ))
             .await
@@ -315,7 +315,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                                 let rid = change_id.clone();
 
                                 spawn(async move {
-                                    let result = crate::api::api_post::<ChangeRegistrationEmailResponse>(
+                                    let result = crate::api::api_post::<ChangeRegistrationEmailOutcome>(
                                         &format!("/gate/account/auth/register/{rid}/change-email"),
                                         serde_json::json!({ "email": new_email }),
                                     ).await;
@@ -405,7 +405,7 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
                             let rid = reg_id.clone();
 
                             spawn(async move {
-                                let result = crate::api::api_post::<StepResponse>(
+                                let result = crate::api::api_post::<StepOutcome>(
                                     &format!("/gate/account/auth/register/{rid}/verify-email"),
                                     serde_json::json!({ "code": c }),
                                 ).await;
@@ -533,8 +533,8 @@ fn registration_error_message(code: &str) -> String {
 async fn submit_registration_finish(
     registration_id: &str,
     bootstrap_admin_token: Option<String>,
-) -> Result<StepResponse, String> {
-    crate::api::api_post::<StepResponse>(
+) -> Result<StepOutcome, String> {
+    crate::api::api_post::<StepOutcome>(
         &format!("/gate/account/auth/register/{registration_id}/finish"),
         serde_json::json!({
             "bootstrap_admin_token": bootstrap_admin_token,
@@ -603,7 +603,7 @@ pub fn RegisterVerifyPhone(id: String) -> Element {
                             let rid = reg_id.clone();
 
                             spawn(async move {
-                                let result = crate::api::api_post::<StepResponse>(
+                                let result = crate::api::api_post::<StepOutcome>(
                                     &format!("/gate/account/auth/register/{rid}/verify-phone"),
                                     serde_json::json!({ "code": c }),
                                 ).await;
@@ -719,7 +719,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
                             let rid = reg_id.clone();
 
                             spawn(async move {
-                                let result = crate::api::api_post::<StepResponse>(
+                                let result = crate::api::api_post::<StepOutcome>(
                                     &format!("/gate/account/auth/register/{rid}/display-name"),
                                     serde_json::json!({ "display_name": name }),
                                 ).await;
@@ -767,7 +767,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
                                 let rid = reg_id2.clone();
 
                                 spawn(async move {
-                                    let result = crate::api::api_post::<StepResponse>(
+                                    let result = crate::api::api_post::<StepOutcome>(
                                         &format!("/gate/account/auth/register/{rid}/display-name"),
                                         serde_json::json!({ "skip": true }),
                                     ).await;
@@ -792,7 +792,7 @@ pub fn RegisterDisplayName(id: String) -> Element {
 pub fn RegisterFinish(id: String) -> Element {
     let nav = navigator();
     let mut bootstrap_admin_token = use_signal(String::new);
-    let mut finish_result = use_signal(|| None::<Result<StepResponse, String>>);
+    let mut finish_result = use_signal(|| None::<Result<StepOutcome, String>>);
     let mut submitting = use_signal(|| false);
     let mut auto_submit_started = use_signal(|| false);
 

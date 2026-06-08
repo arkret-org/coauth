@@ -44,7 +44,7 @@ pub enum LinkState {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct LinkActionResponse {
+pub struct LinkActionOutcome {
     pub status: String,
     pub redirect_url: Option<String>,
     pub error: Option<String>,
@@ -209,7 +209,7 @@ fn SuggestLinkView(
                             submitting.set(true);
                             spawn(async move {
                                 let body = serde_json::json!({ "action": "link" });
-                                match api_post::<LinkActionResponse>(
+                                match api_post::<LinkActionOutcome>(
                                     &format!("/self/upstream-oauth/link/{id}"),
                                     body,
                                 )
@@ -320,7 +320,7 @@ fn RegisterView(
                                     "import_display_name": idn,
                                     "accept_terms": at,
                                 });
-                                match api_post::<LinkActionResponse>(
+                                match api_post::<LinkActionOutcome>(
                                     &format!("/self/upstream-oauth/link/{id}"),
                                     body,
                                 )

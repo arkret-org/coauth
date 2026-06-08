@@ -3,7 +3,7 @@ use js_sys::Reflect;
 use web_sys::wasm_bindgen::JsValue;
 
 use crate::{
-    api::types::{LoginResponse, ProvidersResponse},
+    api::types::{LoginOutcome, ProvidersOutcome},
     components::{layout::Layout, loading::LoadingSpinner},
     pages::Route,
 };
@@ -99,7 +99,7 @@ fn store_post_auth_continuation(kind: &str, id: &str) {
 #[component]
 pub fn Login() -> Element {
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersResponse>("/gate/account/auth/providers").await
+        crate::api::api_get::<ProvidersOutcome>("/gate/account/auth/providers").await
     });
     let binding = providers_data.read();
 
@@ -128,7 +128,7 @@ pub fn Login() -> Element {
 fn LoginFormBasic(error_msg: Option<String>) -> Element {
     rsx! {
         LoginForm {
-            providers: ProvidersResponse {
+            providers: ProvidersOutcome {
                 providers: vec![],
                 password_login_enabled: true,
                 password_registration_enabled: false,
@@ -139,7 +139,7 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
 }
 
 #[component]
-fn LoginForm(providers: ProvidersResponse) -> Element {
+fn LoginForm(providers: ProvidersOutcome) -> Element {
     let mut handle = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut submitting = use_signal(|| false);
@@ -186,7 +186,7 @@ fn LoginForm(providers: ProvidersResponse) -> Element {
                             error.set(None);
 
                             spawn(async move {
-                                let result = crate::api::api_post::<LoginResponse>(
+                                let result = crate::api::api_post::<LoginOutcome>(
                                     "/gate/account/auth/login",
                                     serde_json::json!({
                                         "handle": user,

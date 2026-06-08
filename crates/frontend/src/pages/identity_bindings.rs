@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{LinkedAccountsResponse, ProvidersResponse},
+    api::types::{LinkedAccountsOutcome, ProvidersOutcome},
     components::{
         loading::LoadingScreen,
         separator::{Separator, SeparatorKind},
@@ -16,10 +16,10 @@ use crate::{
 #[component]
 pub fn IdentityBindings() -> Element {
     let mut data = use_resource(|| async {
-        crate::api::api_get::<LinkedAccountsResponse>("/self/linked-accounts").await
+        crate::api::api_get::<LinkedAccountsOutcome>("/self/linked-accounts").await
     });
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersResponse>("/gate/account/auth/providers").await
+        crate::api::api_get::<ProvidersOutcome>("/gate/account/auth/providers").await
     });
     let mut feedback: Signal<Option<Result<String, String>>> = use_signal(|| None);
     let mut unlinking_id: Signal<Option<String>> = use_signal(|| None);
@@ -93,7 +93,7 @@ pub fn IdentityBindings() -> Element {
                                                         unlinking_id.set(Some(aid.clone()));
                                                         feedback.set(None);
                                                         spawn(async move {
-                                                            let result = crate::api::api_delete::<crate::api::types::UnlinkResponse>(
+                                                            let result = crate::api::api_delete::<crate::api::types::UnlinkOutcome>(
                                                                 &format!("/linked-accounts/{aid}"),
                                                             ).await;
                                                             unlinking_id.set(None);

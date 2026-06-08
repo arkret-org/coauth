@@ -183,12 +183,12 @@ where
     serialize = "T: Serialize",
     deserialize = "T: Default + serde::Deserialize<'de>"
 ))]
-pub struct SingleResponse<T> {
+pub struct SingleOutcome<T> {
     pub data: SingleResource<T>,
     pub links: SelfLinks,
 }
 
-impl<T> SingleResponse<T>
+impl<T> SingleOutcome<T>
 where
     T: Resource,
 {
@@ -216,7 +216,7 @@ where
     serialize = "T: Serialize",
     deserialize = "T: Default + serde::Deserialize<'de>"
 ))]
-pub struct PaginatedResponse<T> {
+pub struct PaginatedOutcome<T> {
     #[serde(default, skip_serializing_if = "PaginationMeta::is_empty")]
     pub meta: PaginationMeta,
 
@@ -227,7 +227,7 @@ pub struct PaginatedResponse<T> {
     pub links: PaginationLinks,
 }
 
-impl<T> PaginatedResponse<T> {
+impl<T> PaginatedOutcome<T> {
     /// Build a count-only response (no `data` array).
     #[must_use]
     pub fn for_count_only(count: usize, self_link: String) -> Self {
@@ -268,11 +268,11 @@ impl<T> PaginatedResponse<T> {
 mod schema_impls {
     use std::borrow::Cow;
 
-    use super::{PaginatedResponse, SingleResponse};
+    use super::{PaginatedOutcome, SingleOutcome};
 
-    impl<T> schemars::JsonSchema for PaginatedResponse<T> {
+    impl<T> schemars::JsonSchema for PaginatedOutcome<T> {
         fn schema_name() -> Cow<'static, str> {
-            Cow::Borrowed("PaginatedResponse")
+            Cow::Borrowed("PaginatedOutcome")
         }
 
         fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
@@ -310,9 +310,9 @@ mod schema_impls {
         }
     }
 
-    impl<T> schemars::JsonSchema for SingleResponse<T> {
+    impl<T> schemars::JsonSchema for SingleOutcome<T> {
         fn schema_name() -> Cow<'static, str> {
-            Cow::Borrowed("SingleResponse")
+            Cow::Borrowed("SingleOutcome")
         }
 
         fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
@@ -337,7 +337,7 @@ mod schema_impls {
         }
     }
 
-    impl<T: 'static> salvo::oapi::ToSchema for PaginatedResponse<T> {
+    impl<T: 'static> salvo::oapi::ToSchema for PaginatedOutcome<T> {
         fn to_schema(
             _components: &mut salvo::oapi::Components,
         ) -> salvo::oapi::RefOr<salvo::oapi::Schema> {
@@ -368,7 +368,7 @@ mod schema_impls {
         }
     }
 
-    impl<T: 'static> salvo::oapi::ToSchema for SingleResponse<T> {
+    impl<T: 'static> salvo::oapi::ToSchema for SingleOutcome<T> {
         fn to_schema(
             _components: &mut salvo::oapi::Components,
         ) -> salvo::oapi::RefOr<salvo::oapi::Schema> {

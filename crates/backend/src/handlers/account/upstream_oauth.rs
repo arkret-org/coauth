@@ -80,7 +80,7 @@ pub enum LinkState {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct LinkResponse {
+pub struct LinkOutcome {
     #[serde(flatten)]
     pub state: LinkState,
 }
@@ -102,7 +102,7 @@ pub enum LinkAction {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct LinkActionResponse {
+pub struct LinkActionOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub redirect_url: Option<String>,
@@ -258,7 +258,7 @@ pub async fn post_link(
         Err(SubmitUpstreamLinkError::InvalidAction) => {
             cookie_jar.finalize(
                 res,
-                Json(LinkActionResponse {
+                Json(LinkActionOutcome {
                     status: "error",
                     redirect_url: None,
                     error: Some("invalid_action".to_owned()),
@@ -270,7 +270,7 @@ pub async fn post_link(
         Err(SubmitUpstreamLinkError::Validation { field_errors }) => {
             cookie_jar.finalize(
                 res,
-                Json(LinkActionResponse {
+                Json(LinkActionOutcome {
                     status: "error",
                     redirect_url: None,
                     error: Some("validation_failed".to_owned()),
@@ -301,7 +301,7 @@ fn render_get_link_outcome(
             let cookie_jar = cookie_jar.set_session(&session);
             cookie_jar.finalize(
                 res,
-                Json(LinkResponse {
+                Json(LinkOutcome {
                     state: LinkState::Redirect { redirect_url },
                 }),
             );
@@ -321,7 +321,7 @@ fn render_get_link_outcome(
 
             cookie_jar.finalize(
                 res,
-                Json(LinkResponse {
+                Json(LinkOutcome {
                     state: LinkState::Redirect { redirect_url },
                 }),
             );
@@ -329,7 +329,7 @@ fn render_get_link_outcome(
         LoadUpstreamLinkOutcome::LinkMismatch { existing_handle } => {
             cookie_jar.finalize(
                 res,
-                Json(LinkResponse {
+                Json(LinkOutcome {
                     state: LinkState::LinkMismatch { existing_handle },
                 }),
             );
@@ -340,7 +340,7 @@ fn render_get_link_outcome(
         } => {
             cookie_jar.finalize(
                 res,
-                Json(LinkResponse {
+                Json(LinkOutcome {
                     state: LinkState::SuggestLink {
                         provider_name,
                         upstream_subject,
@@ -351,7 +351,7 @@ fn render_get_link_outcome(
         LoadUpstreamLinkOutcome::Register { screen } => {
             cookie_jar.finalize(
                 res,
-                Json(LinkResponse {
+                Json(LinkOutcome {
                     state: LinkState::Register {
                         suggested_handle: screen.suggested_handle,
                         handle_forced: screen.handle_forced,
@@ -381,7 +381,7 @@ fn render_get_link_outcome(
 
             cookie_jar.finalize(
                 res,
-                Json(LinkResponse {
+                Json(LinkOutcome {
                     state: LinkState::Redirect { redirect_url },
                 }),
             );
@@ -389,7 +389,7 @@ fn render_get_link_outcome(
         LoadUpstreamLinkOutcome::AccountDeactivated { handle } => {
             cookie_jar.finalize(
                 res,
-                Json(LinkResponse {
+                Json(LinkOutcome {
                     state: LinkState::AccountDeactivated { handle },
                 }),
             );
@@ -397,7 +397,7 @@ fn render_get_link_outcome(
         LoadUpstreamLinkOutcome::AccountLocked { handle } => {
             cookie_jar.finalize(
                 res,
-                Json(LinkResponse {
+                Json(LinkOutcome {
                     state: LinkState::AccountLocked { handle },
                 }),
             );
@@ -428,7 +428,7 @@ fn render_post_link_outcome(
 
             cookie_jar.finalize(
                 res,
-                Json(LinkActionResponse {
+                Json(LinkActionOutcome {
                     status: "success",
                     redirect_url: Some(redirect_url),
                     error: None,
@@ -452,7 +452,7 @@ fn render_post_link_outcome(
 
             cookie_jar.finalize(
                 res,
-                Json(LinkActionResponse {
+                Json(LinkActionOutcome {
                     status: "success",
                     redirect_url: Some(redirect_url),
                     error: None,

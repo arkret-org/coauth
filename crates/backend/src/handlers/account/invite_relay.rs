@@ -52,7 +52,7 @@ use crate::{
 
 /// Body of `POST /_coauth/self/account/invites/relay`.
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct RelayRequest {
+pub struct InviteRelayRequestBody {
     /// DID of the actor issuing the invite. Recorded in audit but not
     /// trusted as authentication on its own; the bearer cookie / OAuth
     /// token guards the route.
@@ -96,7 +96,7 @@ fn default_require_consent() -> bool {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct RelayResponse {
+pub struct InviteRelayHttpOutcome {
     /// One of `forwarded`, `consent_required`, `quarantined`.
     pub status: &'static str,
 
@@ -129,11 +129,11 @@ pub enum RelayOutcome {
 /// Convert a `RelayOutcome` into HTTP `(status, body)`. Pulled out so
 /// both the real handler and the unit tests can share it.
 #[must_use]
-pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, RelayResponse) {
+pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, InviteRelayHttpOutcome) {
     match outcome {
         RelayOutcome::Forwarded { forwarded_ok } => (
             StatusCode::OK,
-            RelayResponse {
+            InviteRelayHttpOutcome {
                 status: "forwarded",
                 decision: "Allow",
                 forwarded_ok: Some(*forwarded_ok),
@@ -141,7 +141,7 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, RelayRe
         ),
         RelayOutcome::ConsentRequired => (
             StatusCode::FORBIDDEN,
-            RelayResponse {
+            InviteRelayHttpOutcome {
                 status: "consent_required",
                 decision: "ConsentRequired",
                 forwarded_ok: None,
@@ -149,7 +149,7 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, RelayRe
         ),
         RelayOutcome::Quarantined => (
             StatusCode::ACCEPTED,
-            RelayResponse {
+            InviteRelayHttpOutcome {
                 status: "quarantined",
                 decision: "Quarantine",
                 forwarded_ok: None,
@@ -247,7 +247,7 @@ pub async fn post_invite_relay(
     depot: &Depot,
     res: &mut Response,
 ) -> Result<(), RouteError> {
-    let params: RelayRequest = req
+    let params: InviteRelayRequestBody = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid_request_body".into()))?;

@@ -10,8 +10,8 @@
 //! enforces here.
 
 use coauth_admin_types::{
-    NotificationTemplateEntry, NotificationTemplatesResponse, PublishTemplateRequest,
-    PublishedTemplateResponse,
+    NotificationTemplateEntry, NotificationTemplatesOutcome, PublishTemplateRequestBody,
+    PublishedTemplateOutcome,
 };
 use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
@@ -27,7 +27,7 @@ use crate::{
 pub async fn list_handler(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<NotificationTemplatesResponse> {
+) -> JsonResult<NotificationTemplatesOutcome> {
     let _call_context = extract_call_context(req, depot).await?;
 
     let templates = vec![
@@ -49,7 +49,7 @@ pub async fn list_handler(
         },
     ];
 
-    Ok(Json(NotificationTemplatesResponse { templates }))
+    Ok(Json(NotificationTemplatesOutcome { templates }))
 }
 
 /// Publish a new notification template version.
@@ -58,13 +58,13 @@ pub async fn list_handler(
 pub async fn publish_handler(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<PublishedTemplateResponse> {
+) -> CreatedJsonResult<PublishedTemplateOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo, clock, ..
     } = ctx;
 
-    let body: PublishTemplateRequest = req
+    let body: PublishTemplateRequestBody = req
         .parse_json()
         .await
         .map_err(|e| AppError::bad_request(format!("Invalid request body: {e}")))?;
@@ -90,7 +90,7 @@ pub async fn publish_handler(
 
     let channel_str = format!("{:?}", record.channel).to_lowercase();
 
-    let response = PublishedTemplateResponse {
+    let response = PublishedTemplateOutcome {
         id: record.id.to_string(),
         template_key: record.template_key,
         version: record.version,

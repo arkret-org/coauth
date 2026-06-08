@@ -46,7 +46,7 @@ pub struct NotificationChannelStatus {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct NotificationChannelsResponse {
+pub struct NotificationChannelsOutcome {
     #[serde(default)]
     pub channels: Vec<NotificationChannelStatus>,
 }
@@ -75,7 +75,7 @@ pub struct NotificationTemplateEntry {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct NotificationTemplatesResponse {
+pub struct NotificationTemplatesOutcome {
     #[serde(default)]
     pub templates: Vec<NotificationTemplateEntry>,
 }
@@ -85,13 +85,13 @@ pub struct NotificationTemplatesResponse {
 /// Request body for
 /// `POST /_coauth/admin/notification-templates/publish`. The backend
 /// accepts the body, persists a new template version row, and returns
-/// the persisted row as [`PublishedTemplateResponse`].
+/// the persisted row as [`PublishedTemplateOutcome`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct PublishTemplateRequest {
+pub struct PublishTemplateRequestBody {
     /// The template key to publish (e.g. `"verification"`).
     #[serde(default)]
     pub template_key: String,
@@ -114,7 +114,7 @@ fn default_locale() -> String {
     "en".to_owned()
 }
 
-impl PublishTemplateRequest {
+impl PublishTemplateRequestBody {
     /// Validate that the request is internally consistent. Returns the
     /// first invariant violation as a human-readable string.
     pub fn validate(&self) -> Result<(), String> {
@@ -135,7 +135,7 @@ impl PublishTemplateRequest {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct PublishedTemplateResponse {
+pub struct PublishedTemplateOutcome {
     #[serde(default)]
     pub id: String,
     #[serde(default)]
@@ -162,10 +162,10 @@ mod tests {
 
     #[test]
     fn publish_request_validates_required_fields() {
-        let r = PublishTemplateRequest::default();
+        let r = PublishTemplateRequestBody::default();
         assert!(r.validate().is_err());
 
-        let r = PublishTemplateRequest {
+        let r = PublishTemplateRequestBody {
             template_key: "verification".into(),
             channel: "email".into(),
             locale: "en".into(),
@@ -175,7 +175,7 @@ mod tests {
         let err = r.validate().unwrap_err();
         assert!(err.contains("body_template"));
 
-        let r = PublishTemplateRequest {
+        let r = PublishTemplateRequestBody {
             template_key: "verification".into(),
             channel: "email".into(),
             locale: "en".into(),
@@ -188,13 +188,13 @@ mod tests {
     #[test]
     fn publish_request_locale_defaults_to_en() {
         let json = r#"{"template_key":"v","channel":"email","body_template":"x"}"#;
-        let r: PublishTemplateRequest = serde_json::from_str(json).unwrap();
+        let r: PublishTemplateRequestBody = serde_json::from_str(json).unwrap();
         assert_eq!(r.locale, "en");
     }
 
     #[test]
     fn publish_request_omits_subject_when_none() {
-        let r = PublishTemplateRequest {
+        let r = PublishTemplateRequestBody {
             template_key: "v".into(),
             channel: "email".into(),
             locale: "en".into(),
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn channels_response_round_trips() {
-        let resp = NotificationChannelsResponse {
+        let resp = NotificationChannelsOutcome {
             channels: vec![
                 NotificationChannelStatus {
                     channel: "email".into(),
@@ -220,7 +220,7 @@ mod tests {
             ],
         };
         let s = serde_json::to_string(&resp).unwrap();
-        let back: NotificationChannelsResponse = serde_json::from_str(&s).unwrap();
+        let back: NotificationChannelsOutcome = serde_json::from_str(&s).unwrap();
         assert_eq!(back.channels.len(), 2);
         assert!(back.channels[0].configured);
         assert!(!back.channels[1].configured);
@@ -228,21 +228,21 @@ mod tests {
 
     #[test]
     fn templates_response_round_trips() {
-        let resp = NotificationTemplatesResponse {
+        let resp = NotificationTemplatesOutcome {
             templates: vec![NotificationTemplateEntry {
                 key: "verification".into(),
                 description: "Verification code".into(),
             }],
         };
         let s = serde_json::to_string(&resp).unwrap();
-        let back: NotificationTemplatesResponse = serde_json::from_str(&s).unwrap();
+        let back: NotificationTemplatesOutcome = serde_json::from_str(&s).unwrap();
         assert_eq!(back.templates.len(), 1);
         assert_eq!(back.templates[0].key, "verification");
     }
 
     #[test]
     fn published_response_omits_published_at_when_unset() {
-        let r = PublishedTemplateResponse {
+        let r = PublishedTemplateOutcome {
             id: "tpl-1".into(),
             template_key: "verification".into(),
             version: 1,

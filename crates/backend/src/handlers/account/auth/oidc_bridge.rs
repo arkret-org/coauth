@@ -18,7 +18,7 @@ use sha2::{Digest as _, Sha256};
 use ulid::Ulid;
 
 use super::{
-    DepotExt, LoginResponse, NodeType, RouteError, SessionGrantKind, SessionGrantOneShotInfo,
+    DepotExt, LoginOutcome, NodeType, RouteError, SessionGrantKind, SessionGrantOneShotInfo,
     SessionGrantPrincipalServerInfo, ViewerInfo, make_clock, make_rng,
 };
 use crate::{
@@ -33,7 +33,7 @@ use crate::{
 };
 
 #[derive(Deserialize, ToSchema)]
-pub struct OidcCodeExchangeRequest {
+pub struct OidcCodeExchangeRequestBody {
     pub authorization_code: String,
     pub code_verifier: String,
     pub redirect_uri: String,
@@ -55,7 +55,7 @@ pub struct OidcCodeExchangeRequest {
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct OidcBrowserBridgeSessionRequest {
+pub struct OidcBrowserBridgeSessionRequestBody {
     pub redirect_uri: String,
     #[serde(default)]
     pub login_hint: String,
@@ -67,7 +67,7 @@ pub struct OidcBrowserBridgeSessionRequest {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct AuthBridgeDescribeResponse {
+pub struct AuthBridgeDescribeOutcome {
     pub contract: &'static str,
     pub version: &'static str,
     pub api_base_path: &'static str,
@@ -130,7 +130,7 @@ use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
 #[derive(Serialize, ToSchema)]
-pub struct OidcBrowserBridgeSessionResponse {
+pub struct OidcBrowserBridgeSessionOutcome {
     pub contract: &'static str,
     pub version: &'static str,
     pub authorize_url: String,
@@ -150,7 +150,7 @@ pub struct OidcBrowserBridgeSessionResponse {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct OidcExchangeDescribeResponse {
+pub struct OidcExchangeDescribeOutcome {
     pub contract: &'static str,
     pub version: &'static str,
     pub exchange_path: &'static str,
@@ -228,7 +228,7 @@ fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
 }
 
 #[derive(Serialize)]
-struct SolandAccountRegisterRequest<'a> {
+struct SolandAccountRegisterRequestBody<'a> {
     did: &'a str,
     handle: String,
     display_name: Option<&'a str>,
@@ -317,7 +317,7 @@ async fn ensure_soland_account_registered(
         return Ok(());
     };
     let endpoint = soland_account_register_endpoint(principal_endpoint)?;
-    let body = SolandAccountRegisterRequest {
+    let body = SolandAccountRegisterRequestBody {
         did: principal_did,
         handle: soland_account_handle_for_did(principal_did),
         display_name,
@@ -399,7 +399,7 @@ pub async fn oidc_code_exchange(
         Ok(jkt) => jkt,
         Err(error) => {
             res.status_code(StatusCode::BAD_REQUEST);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_dpop_proof"),
                 viewer: None,
@@ -410,13 +410,13 @@ pub async fn oidc_code_exchange(
         }
     };
 
-    let input: OidcCodeExchangeRequest = req
+    let input: OidcCodeExchangeRequestBody = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
     if input.code_verifier.trim().is_empty() {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("pkce_required"),
             viewer: None,
@@ -437,7 +437,7 @@ pub async fn oidc_code_exchange(
         || input.client_id.trim().is_empty()
         || input.device_id.trim().is_empty()
     {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_request"),
             viewer: None,
@@ -451,7 +451,7 @@ pub async fn oidc_code_exchange(
     }
     let device_id = input.device_id.trim().to_owned();
     if !is_protocol_device_id(&device_id) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_device_id"),
             viewer: None,
@@ -464,7 +464,7 @@ pub async fn oidc_code_exchange(
     let redirect_uri = if let Ok(uri) = url::Url::parse(input.redirect_uri.trim()) {
         uri
     } else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_redirect_uri"),
             viewer: None,
@@ -476,7 +476,7 @@ pub async fn oidc_code_exchange(
     let issuer = if let Ok(uri) = url::Url::parse(input.issuer.trim()) {
         uri
     } else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_issuer"),
             viewer: None,
@@ -488,7 +488,7 @@ pub async fn oidc_code_exchange(
     let token_endpoint = if let Ok(uri) = url::Url::parse(input.token_endpoint.trim()) {
         uri
     } else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_token_endpoint"),
             viewer: None,
@@ -500,7 +500,7 @@ pub async fn oidc_code_exchange(
     let userinfo_endpoint = if let Ok(uri) = url::Url::parse(input.userinfo_endpoint.trim()) {
         uri
     } else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_userinfo_endpoint"),
             viewer: None,
@@ -514,7 +514,7 @@ pub async fn oidc_code_exchange(
     if let Some(expected_state) = input.expected_state.as_deref() {
         let returned_state = input.state.as_deref().unwrap_or_default();
         if returned_state.is_empty() {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_state"),
                 viewer: None,
@@ -526,7 +526,7 @@ pub async fn oidc_code_exchange(
             return Ok(());
         }
         if returned_state != expected_state {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_state"),
                 viewer: None,
@@ -548,7 +548,7 @@ pub async fn oidc_code_exchange(
     ) {
         Ok(mode) => mode,
         Err(message) => {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_issuer"),
                 viewer: None,
@@ -564,7 +564,7 @@ pub async fn oidc_code_exchange(
             || issuer.domain() != token_endpoint.domain()
             || issuer.port_or_known_default() != token_endpoint.port_or_known_default()
         {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_discovery_binding"),
                 viewer: None,
@@ -580,7 +580,7 @@ pub async fn oidc_code_exchange(
             || issuer.domain() != userinfo_endpoint.domain()
             || issuer.port_or_known_default() != userinfo_endpoint.port_or_known_default()
         {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_discovery_binding"),
                 viewer: None,
@@ -610,7 +610,7 @@ pub async fn oidc_code_exchange(
                 discovery::insecure_discover(&http_client, issuer.as_str()).await
             }
             UpstreamOAuthProviderDiscoveryMode::Disabled => {
-                res.render(Json(LoginResponse {
+                res.render(Json(LoginOutcome {
                     status: "error",
                     error: Some("invalid_discovery_binding"),
                     viewer: None,
@@ -627,7 +627,7 @@ pub async fn oidc_code_exchange(
     let discovered_metadata = match discovery_result {
         Ok(metadata) => metadata,
         Err(error) => {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_discovery_binding"),
                 viewer: None,
@@ -646,7 +646,7 @@ pub async fn oidc_code_exchange(
         &token_endpoint,
         &userinfo_endpoint,
     ) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_discovery_binding"),
             viewer: None,
@@ -681,7 +681,7 @@ pub async fn oidc_code_exchange(
         {
             Ok(exchange) => exchange,
             Err(error) => {
-                res.render(Json(LoginResponse {
+                res.render(Json(LoginOutcome {
                     status: "error",
                     error: Some("invalid_authorization_code"),
                     viewer: None,
@@ -728,7 +728,7 @@ pub async fn oidc_code_exchange(
             .find_by_subject(&provider, upstream_subject.as_str())
             .await?
         else {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("upstream_link_required"),
                 viewer: None,
@@ -745,7 +745,7 @@ pub async fn oidc_code_exchange(
             return Ok(());
         };
         let Some(user_id) = upstream_link.user_id else {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("upstream_link_required"),
                 viewer: None,
@@ -766,7 +766,7 @@ pub async fn oidc_code_exchange(
             ))));
         };
         if !user.is_valid() {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("account_unavailable"),
                 viewer: None,
@@ -786,7 +786,7 @@ pub async fn oidc_code_exchange(
                 input.login_hint.trim(),
             )
         {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_login_hint"),
                 viewer: None,
@@ -816,7 +816,7 @@ pub async fn oidc_code_exchange(
         ) {
             Ok(target) => target,
             Err(message) => {
-                res.render(Json(LoginResponse {
+                res.render(Json(LoginOutcome {
                     status: "error",
                     error: Some("invalid_audience"),
                     viewer: None,
@@ -841,7 +841,7 @@ pub async fn oidc_code_exchange(
         {
             Ok(did) => did,
             Err(message) => {
-                res.render(Json(LoginResponse {
+                res.render(Json(LoginOutcome {
                     status: "error",
                     error: Some("principal_did_minting_failed"),
                     viewer: None,
@@ -860,7 +860,7 @@ pub async fn oidc_code_exchange(
         )
         .await
         {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("principal_account_registration_failed"),
                 viewer: None,
@@ -871,7 +871,7 @@ pub async fn oidc_code_exchange(
         }
         let Some(dpop_binding) = dpop_binding.clone() else {
             res.status_code(StatusCode::BAD_REQUEST);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_dpop_proof"),
                 viewer: None,
@@ -909,7 +909,7 @@ pub async fn oidc_code_exchange(
             Err(_) => None,
         };
 
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "success",
             error: None,
             viewer: Some(ViewerInfo {
@@ -986,7 +986,7 @@ pub async fn oidc_code_exchange(
         .find_by_code(input.authorization_code.trim())
         .await?
     else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -999,7 +999,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     };
     let Some(authz_code) = authz_grant.code.as_ref() else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1012,7 +1012,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     };
     let Some(pkce) = authz_code.pkce.as_ref() else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("pkce_required"),
             viewer: None,
@@ -1025,7 +1025,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     };
     if let Err(error) = pkce.verify(input.code_verifier.trim()) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_code_verifier"),
             viewer: None,
@@ -1040,7 +1040,7 @@ pub async fn oidc_code_exchange(
         authz_grant.nonce.as_deref(),
         input.expected_nonce.as_deref(),
     ) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_nonce"),
             viewer: None,
@@ -1056,7 +1056,7 @@ pub async fn oidc_code_exchange(
     };
 
     if authz_grant.redirect_uri != redirect_uri {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_redirect_uri"),
             viewer: None,
@@ -1073,7 +1073,7 @@ pub async fn oidc_code_exchange(
         && !input.login_hint.trim().is_empty()
         && expected_login_hint != input.login_hint.trim()
     {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_login_hint"),
             viewer: None,
@@ -1088,7 +1088,7 @@ pub async fn oidc_code_exchange(
     }
 
     let Some(oauth_client) = repo.oauth_client().lookup(authz_grant.client_id).await? else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1104,7 +1104,7 @@ pub async fn oidc_code_exchange(
         .resolve_redirect_uri(&Some(redirect_uri.clone()))
         .is_err()
     {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_redirect_uri"),
             viewer: None,
@@ -1117,7 +1117,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
     if oauth_client.client_id != input.client_id.trim() {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_client"),
             viewer: None,
@@ -1133,7 +1133,7 @@ pub async fn oidc_code_exchange(
     if oauth_client.token_endpoint_auth_method.as_ref()
         != Some(&OAuthClientAuthenticationMethod::None)
     {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_client"),
             viewer: None,
@@ -1214,7 +1214,7 @@ pub async fn oidc_code_exchange(
                     ClientErrorCode::InvalidRequest => ("invalid_request", error_description),
                     _ => ("invalid_authorization_code", error_description),
                 };
-                res.render(Json(LoginResponse {
+                res.render(Json(LoginOutcome {
                     status: "error",
                     error: Some(code),
                     viewer: None,
@@ -1262,7 +1262,7 @@ pub async fn oidc_code_exchange(
     }
 
     let Some(user_session_id) = oauth_session.user_session_id else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1273,7 +1273,7 @@ pub async fn oidc_code_exchange(
     };
 
     let Some(browser_session) = repo.browser_session().lookup(user_session_id).await? else {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1310,7 +1310,7 @@ pub async fn oidc_code_exchange(
             ))));
         }
         Err(error) => {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_authorization_code"),
                 viewer: None,
@@ -1323,7 +1323,7 @@ pub async fn oidc_code_exchange(
         }
     };
     if !oauth_introspection.active {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1336,7 +1336,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
     if oauth_introspection.iss.as_deref() != Some(expected_issuer.as_str()) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_discovery_binding"),
             viewer: None,
@@ -1350,7 +1350,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
     if oauth_introspection.sub.as_deref() != Some(expected_subject.as_str()) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1365,7 +1365,7 @@ pub async fn oidc_code_exchange(
     }
     let expected_oauth_client_id = oauth_session.client_id.to_string();
     if oauth_introspection.client_id.as_deref() != Some(expected_oauth_client_id.as_str()) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_client"),
             viewer: None,
@@ -1381,7 +1381,7 @@ pub async fn oidc_code_exchange(
     let expected_oauth_session_id = oauth_session_id.to_string();
     if oauth_introspection.cokret_session_id.as_deref() != Some(expected_oauth_session_id.as_str())
     {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1414,7 +1414,7 @@ pub async fn oidc_code_exchange(
     {
         Ok(reply) => reply,
         Err(error) => {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_authorization_code"),
                 viewer: None,
@@ -1428,7 +1428,7 @@ pub async fn oidc_code_exchange(
     };
     let mut repo = depot.repo().await?;
     if oauth_userinfo.sub != expected_subject {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1441,7 +1441,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
     if oauth_userinfo.principal_did.as_deref() != Some(expected_subject.as_str()) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1455,7 +1455,7 @@ pub async fn oidc_code_exchange(
         return Ok(());
     }
     if oauth_userinfo.session_id.as_deref() != Some(expected_oauth_session_id.as_str()) {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_authorization_code"),
             viewer: None,
@@ -1476,7 +1476,7 @@ pub async fn oidc_code_exchange(
     ) {
         Ok(target) => target,
         Err(message) => {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_audience"),
                 viewer: None,
@@ -1502,7 +1502,7 @@ pub async fn oidc_code_exchange(
     {
         Ok(did) => did,
         Err(message) => {
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("principal_did_minting_failed"),
                 viewer: None,
@@ -1521,7 +1521,7 @@ pub async fn oidc_code_exchange(
     )
     .await
     {
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("principal_account_registration_failed"),
             viewer: None,
@@ -1532,7 +1532,7 @@ pub async fn oidc_code_exchange(
     }
     let Some(dpop_binding) = dpop_binding.clone() else {
         res.status_code(StatusCode::BAD_REQUEST);
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_dpop_proof"),
             viewer: None,
@@ -1570,7 +1570,7 @@ pub async fn oidc_code_exchange(
         Err(_) => None,
     };
 
-    res.render(Json(LoginResponse {
+    res.render(Json(LoginOutcome {
         status: "success",
         error: None,
         viewer: Some(ViewerInfo {
@@ -1644,10 +1644,10 @@ pub async fn oidc_code_exchange(
 pub async fn oidc_browser_bridge_session(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<OidcBrowserBridgeSessionResponse>, RouteError> {
+) -> Result<Json<OidcBrowserBridgeSessionOutcome>, RouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
-    let input: OidcBrowserBridgeSessionRequest = req
+    let input: OidcBrowserBridgeSessionRequestBody = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid browser bridge session payload".to_owned()))?;
@@ -1727,7 +1727,7 @@ pub async fn oidc_browser_bridge_session(
         query.append_pair("resource", principal_audience.as_str());
     }
 
-    Ok(Json(OidcBrowserBridgeSessionResponse {
+    Ok(Json(OidcBrowserBridgeSessionOutcome {
         contract: "cokret.rest.oidc_browser_bridge_session.v1",
         version: "2026-05-17-validated",
         authorize_url: authorize_url.to_string(),
@@ -1748,8 +1748,8 @@ pub async fn oidc_browser_bridge_session(
 }
 
 #[endpoint]
-pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeResponse>, RouteError> {
-    Ok(Json(OidcExchangeDescribeResponse {
+pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeOutcome>, RouteError> {
+    Ok(Json(OidcExchangeDescribeOutcome {
         contract: "cokret.rest.oidc_exchange.v1",
         version: "2026-05-17-validated",
         exchange_path: "/_coauth/gate/account/auth/oidc/exchange",
@@ -1831,10 +1831,10 @@ pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeRespons
 #[endpoint]
 pub async fn auth_bridge_describe(
     depot: &Depot,
-) -> Result<Json<AuthBridgeDescribeResponse>, RouteError> {
+) -> Result<Json<AuthBridgeDescribeOutcome>, RouteError> {
     let _ = depot.url_builder()?;
 
-    Ok(Json(AuthBridgeDescribeResponse {
+    Ok(Json(AuthBridgeDescribeOutcome {
         contract: "cokret.rest.auth_bridge.v1",
         version: "2026-05-17-validated",
         api_base_path: "/_coauth",

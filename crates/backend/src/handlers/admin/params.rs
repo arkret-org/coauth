@@ -9,7 +9,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use ulid::Ulid;
 
-use super::response::ErrorResponse;
+use super::response::ErrorOutcome;
 
 #[derive(Debug, thiserror::Error)]
 #[error("Invalid ULID in path")]
@@ -18,7 +18,7 @@ pub struct UlidPathParamRejection(pub String);
 impl Scribe for UlidPathParamRejection {
     fn render(self, res: &mut Response) {
         res.status_code(StatusCode::BAD_REQUEST);
-        res.render(Json(ErrorResponse::from_error(&self)));
+        res.render(Json(ErrorOutcome::from_error(&self)));
     }
 }
 
@@ -99,7 +99,7 @@ pub enum PaginationRejection {
 impl Scribe for PaginationRejection {
     fn render(self, res: &mut Response) {
         res.status_code(StatusCode::BAD_REQUEST);
-        res.render(Json(ErrorResponse::from_error(&self)));
+        res.render(Json(ErrorOutcome::from_error(&self)));
     }
 }
 

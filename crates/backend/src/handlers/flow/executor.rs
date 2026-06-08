@@ -4,7 +4,7 @@ use coauth_data::{
     CaptchaConfig, CaptchaService,
     flow::{
         FlowDefinition, FlowSession, FlowStageBinding, StageChallenge, StageKind, StageOutcome,
-        StageResponse, StageValidationError,
+        StageSubmission, StageValidationError,
     },
 };
 use serde::Serialize;
@@ -86,7 +86,7 @@ impl FlowExecutor {
     pub async fn process_response(
         plan: &FlowPlan,
         session: &FlowSession,
-        response: StageResponse,
+        response: StageSubmission,
         captcha_ctx: Option<&CaptchaVerifyContext<'_>>,
     ) -> Result<(StageOutcome, Value), FlowPlannerError> {
         if session.status.is_terminal() {
@@ -205,14 +205,14 @@ struct CaptchaApiResponse {
 /// Validate a stage response and produce an outcome.
 async fn validate_response(
     stage: &StageKind,
-    response: &StageResponse,
+    response: &StageSubmission,
     context: &mut Value,
     captcha_ctx: Option<&CaptchaVerifyContext<'_>>,
 ) -> StageOutcome {
     match (stage, response) {
         (
             StageKind::Identification { .. },
-            StageResponse::Identification {
+            StageSubmission::Identification {
                 uid_field,
                 password,
             },
@@ -228,7 +228,7 @@ async fn validate_response(
             }
             StageOutcome::Continue
         }
-        (StageKind::EmailVerification { .. }, StageResponse::EmailVerification { code }) => {
+        (StageKind::EmailVerification { .. }, StageSubmission::EmailVerification { code }) => {
             // Actual verification happens in the stage implementation (side effect).
             // The executor just validates the response shape.
             if code.is_empty() {
@@ -245,7 +245,7 @@ async fn validate_response(
         }
         (
             StageKind::PasswordWrite { require_current },
-            StageResponse::PasswordWrite {
+            StageSubmission::PasswordWrite {
                 current_password,
                 new_password,
             },
@@ -273,7 +273,7 @@ async fn validate_response(
         }
         (
             StageKind::UserWrite { .. },
-            StageResponse::UserWrite {
+            StageSubmission::UserWrite {
                 handle,
                 display_name,
             },
@@ -286,14 +286,14 @@ async fn validate_response(
             }
             StageOutcome::Continue
         }
-        (StageKind::Consent, StageResponse::Consent { granted }) => {
+        (StageKind::Consent, StageSubmission::Consent { granted }) => {
             if *granted {
                 StageOutcome::Continue
             } else {
                 StageOutcome::Done { redirect_to: None }
             }
         }
-        (StageKind::Captcha, StageResponse::Captcha { token }) => {
+        (StageKind::Captcha, StageSubmission::Captcha { token }) => {
             if token.is_empty() {
                 return StageOutcome::Retry {
                     errors: vec![StageValidationError {
@@ -377,7 +377,7 @@ async fn validate_response(
 
             StageOutcome::Continue
         }
-        (StageKind::Prompt { fields }, StageResponse::Prompt { data }) => {
+        (StageKind::Prompt { fields }, StageSubmission::Prompt { data }) => {
             let mut errors = vec![];
             for field in fields {
                 if field.required {
@@ -407,7 +407,7 @@ async fn validate_response(
         }
         (
             StageKind::AuthenticatorValidate { .. },
-            StageResponse::AuthenticatorValidate { code, .. },
+            StageSubmission::AuthenticatorValidate { code, .. },
         ) => {
             if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
                 StageOutcome::Retry {
@@ -424,7 +424,7 @@ async fn validate_response(
                 StageOutcome::Continue
             }
         }
-        (StageKind::EnrollmentToken { required }, StageResponse::EnrollmentToken { token }) => {
+        (StageKind::EnrollmentToken { required }, StageSubmission::EnrollmentToken { token }) => {
             if token.is_empty() && *required {
                 StageOutcome::Retry {
                     errors: vec![StageValidationError {

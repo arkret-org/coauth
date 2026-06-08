@@ -226,7 +226,7 @@ impl CreateCircleCapabilityGrant {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct ListCircleCapabilityGrantsResponse {
+pub struct ListCircleCapabilityGrantsOutcome {
     pub data: Vec<CircleCapabilityGrant>,
 }
 

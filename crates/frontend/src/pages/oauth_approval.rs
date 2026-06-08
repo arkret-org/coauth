@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{ApprovalDataResponse, OAuthApprovalSubmitResponse},
+    api::types::{ApprovalDataOutcome, OAuthApprovalSubmitOutcome},
     components::{form_error::FormError, layout::Layout, loading::LoadingScreen},
     pages::Route,
 };
@@ -23,7 +23,7 @@ pub fn OAuthApproval(grant_id: String) -> Element {
     let data = use_resource(move || {
         let id = gid.clone();
         async move {
-            crate::api::api_get::<ApprovalDataResponse>(&format!(
+            crate::api::api_get::<ApprovalDataOutcome>(&format!(
                 "/self/oauth/authorization-grants/{id}/decision"
             ))
             .await
@@ -71,7 +71,7 @@ pub fn OAuthApproval(grant_id: String) -> Element {
 }
 
 #[component]
-fn OAuthApprovalForm(data: ApprovalDataResponse, grant_id: String) -> Element {
+fn OAuthApprovalForm(data: ApprovalDataOutcome, grant_id: String) -> Element {
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
 
@@ -137,7 +137,7 @@ fn OAuthApprovalForm(data: ApprovalDataResponse, grant_id: String) -> Element {
                                 let gid = gid.clone();
 
                                 spawn(async move {
-                                    let result = crate::api::api_post::<OAuthApprovalSubmitResponse>(
+                                    let result = crate::api::api_post::<OAuthApprovalSubmitOutcome>(
                                         &format!("/self/oauth/authorization-grants/{gid}/decision"),
                                         serde_json::json!({ "action": "approve" }),
                                     ).await;

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{PatchViewerProfileResponse, ViewerResponse},
+    api::types::{PatchViewerProfileOutcome, ViewerOutcome},
     components::{
         layout::{Layout, LayoutWidth},
         loading::LoadingScreen,
@@ -39,7 +39,7 @@ fn SidebarExternalLink(href: String, children: Element) -> Element {
 #[component]
 pub fn AccountPage() -> Element {
     let data =
-        use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
+        use_resource(|| async { crate::api::api_get::<ViewerOutcome>("/self/viewer").await });
     let binding = data.read();
 
     match &*binding {
@@ -134,7 +134,7 @@ pub fn AccountPage() -> Element {
                                     open: show_edit_dialog,
                                     profile: current_profile.read().clone(),
                                     principal: current_principal.read().clone(),
-                                    on_saved: move |response: PatchViewerProfileResponse| {
+                                    on_saved: move |response: PatchViewerProfileOutcome| {
                                         current_profile.set(response.profile);
                                         current_principal.set(response.principal);
                                     },

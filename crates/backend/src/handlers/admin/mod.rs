@@ -23,7 +23,7 @@ pub(crate) use self::{
     call_context::Rejection as CallContextRejection,
     model::InconsistentPersonalSession,
     params::{PaginationRejection, UlidPathParamRejection},
-    response::ErrorResponse,
+    response::ErrorOutcome,
 };
 
 /// Common error response shape for admin API endpoints.
@@ -31,7 +31,7 @@ pub(crate) use self::{
 /// Individual handlers keep their own `RouteError` enums but can convert
 /// to this shared shape for consistent JSON error bodies.
 #[derive(Serialize)]
-pub struct AdminErrorResponse {
+pub struct AdminErrorOutcome {
     /// A short machine-readable error code or label.
     pub error: String,
     /// A human-readable description of the error.

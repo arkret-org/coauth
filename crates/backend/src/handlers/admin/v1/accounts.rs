@@ -5,7 +5,7 @@ pub mod risk_action;
 use chrono::{DateTime, Utc};
 use coauth_admin_types::{
     AdminAccountAttributes, AdminAccountClaimRecord as AccountClaimRecord,
-    AdminAccountClaimsResponse as AccountClaimsResponse, AdminAccountStatus as AccountStatus,
+    AdminAccountClaimsOutcome as AccountClaimsOutcome, AdminAccountStatus as AccountStatus,
     AdminBridgeDescribe,
 };
 use coauth_data::{AdminUserPatch, RepositoryAccess, user::UserFilter};
@@ -23,7 +23,7 @@ use crate::{
             model::Resource,
             params::{IncludeCount, extract_pagination, extract_ulid_param},
             response::{
-                PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+                PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
                 paginated_response_for_page,
             },
             v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
@@ -48,7 +48,7 @@ use crate::{
 // shared `AdminBridgeDescribe` directly.
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountSessionGrantsResponse {
+pub struct AccountSessionGrantsOutcome {
     data: Vec<AccountSessionGrantRecord>,
 }
 
@@ -212,7 +212,7 @@ impl std::fmt::Display for AccountFilterParams {
 pub async fn list_accounts(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PaginatedResponse<AccountRecord>> {
+) -> JsonResult<PaginatedOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let cokret_config = depot.cokret_config()?;
@@ -276,7 +276,7 @@ pub async fn admin_bridge_describe(depot: &Depot) -> JsonResult<AdminBridgeDescr
 pub async fn get_account(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<AccountRecord>> {
+) -> JsonResult<SingleOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let cokret_config = depot.cokret_config()?;
@@ -289,7 +289,7 @@ pub async fn get_account(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await,
     )))
 }
@@ -299,7 +299,7 @@ pub async fn get_account(
 pub async fn list_account_claims(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<AccountClaimsResponse> {
+) -> JsonResult<AccountClaimsOutcome> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo, clock, ..
@@ -321,7 +321,7 @@ pub async fn list_account_claims(
         .map(account_claim_record_from_service)
         .collect();
 
-    Ok(Json(AccountClaimsResponse { data }))
+    Ok(Json(AccountClaimsOutcome { data }))
 }
 
 #[endpoint]
@@ -329,7 +329,7 @@ pub async fn list_account_claims(
 pub async fn list_account_session_grants(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<AccountSessionGrantsResponse> {
+) -> JsonResult<AccountSessionGrantsOutcome> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let cokret_config = depot.cokret_config()?;
@@ -341,7 +341,7 @@ pub async fn list_account_session_grants(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let record = AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await;
-    Ok(Json(AccountSessionGrantsResponse {
+    Ok(Json(AccountSessionGrantsOutcome {
         data: admin_session_grant_records(&record),
     }))
 }
@@ -351,7 +351,7 @@ pub async fn list_account_session_grants(
 pub async fn lock_account(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<AccountRecord>> {
+) -> JsonResult<SingleOutcome<AccountRecord>> {
     patch_account(
         req,
         depot,
@@ -370,7 +370,7 @@ pub async fn lock_account(
 pub async fn disable_account(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<AccountRecord>> {
+) -> JsonResult<SingleOutcome<AccountRecord>> {
     patch_account(
         req,
         depot,
@@ -389,7 +389,7 @@ pub async fn disable_account(
 pub async fn erase_account(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<AccountRecord>> {
+) -> JsonResult<SingleOutcome<AccountRecord>> {
     patch_account(
         req,
         depot,
@@ -408,7 +408,7 @@ pub async fn erase_account(
 pub async fn reset_recovery(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<AccountRecord>> {
+) -> JsonResult<SingleOutcome<AccountRecord>> {
     patch_account(
         req,
         depot,
@@ -428,7 +428,7 @@ async fn patch_account(
     patch: AdminUserPatch,
     principal_erase: bool,
     action_label: &str,
-) -> JsonResult<SingleResponse<AccountRecord>> {
+) -> JsonResult<SingleOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -538,7 +538,7 @@ async fn patch_account(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await,
     )))
 }

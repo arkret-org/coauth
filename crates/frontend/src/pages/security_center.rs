@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::SecuritySummaryResponse,
+    api::types::SecuritySummaryOutcome,
     components::{
         loading::LoadingScreen,
         separator::{Separator, SeparatorKind},
@@ -19,7 +19,7 @@ use crate::{
 #[component]
 pub fn SecurityCenter() -> Element {
     let data = use_resource(|| async {
-        crate::api::api_get::<SecuritySummaryResponse>("/self/viewer/security").await
+        crate::api::api_get::<SecuritySummaryOutcome>("/self/viewer/security").await
     });
     let binding = data.read();
 

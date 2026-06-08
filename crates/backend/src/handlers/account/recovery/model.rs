@@ -12,7 +12,7 @@ pub struct StartRecoveryInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct StartRecoveryResponse {
+pub struct StartRecoveryOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -21,14 +21,14 @@ pub struct StartRecoveryResponse {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct RecoveryStatusResponse {
+pub struct RecoveryStatusOutcome {
     pub id: String,
     pub email: String,
     pub status: &'static str,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ResendRecoveryResponse {
+pub struct ResendRecoveryOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,

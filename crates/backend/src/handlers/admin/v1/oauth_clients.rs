@@ -115,14 +115,14 @@ fn parse_url(
 }
 
 /// JSON envelope returned by both endpoints. We do not use the standard
-/// [`super::super::response::SingleResponse`] wrapper because that wrapper
+/// [`super::super::response::SingleOutcome`] wrapper because that wrapper
 /// requires the payload to implement
 /// [`super::super::model::Resource`], which expects a stable canonical
 /// path *per resource instance*. The localised metadata is a sub-resource
 /// of an OAuth client and has no independent identity, so a flat
 /// `{ data: ... }` envelope is a better fit.
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct LocalizedMetadataResponse {
+pub struct LocalizedMetadataOutcome {
     pub data: LocalizedMetadataPayload,
 }
 
@@ -139,7 +139,7 @@ pub struct LocalizedMetadataResponse {
 pub async fn get_localized_metadata(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<LocalizedMetadataResponse> {
+) -> JsonResult<LocalizedMetadataOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let client_id = extract_ulid_param(req)?;
@@ -158,7 +158,7 @@ pub async fn get_localized_metadata(
         .load_localized_metadata(client_id)
         .await?;
 
-    Ok(Json(LocalizedMetadataResponse {
+    Ok(Json(LocalizedMetadataOutcome {
         data: LocalizedMetadataPayload::from_domain(metadata),
     }))
 }
@@ -177,7 +177,7 @@ pub async fn get_localized_metadata(
 pub async fn replace_localized_metadata(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<LocalizedMetadataResponse> {
+) -> JsonResult<LocalizedMetadataOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -232,7 +232,7 @@ pub async fn replace_localized_metadata(
 
     repo.save().await?;
 
-    Ok(Json(LocalizedMetadataResponse {
+    Ok(Json(LocalizedMetadataOutcome {
         data: LocalizedMetadataPayload::from_domain(metadata),
     }))
 }

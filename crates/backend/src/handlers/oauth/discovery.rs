@@ -17,7 +17,7 @@ use serde::Serialize;
 use crate::handlers::cokret;
 
 #[derive(Debug, Serialize)]
-struct DiscoveryResponse {
+struct DiscoveryDocument {
     #[serde(flatten)]
     standard: ProviderMetadata,
 
@@ -72,11 +72,11 @@ struct IdentityRegistryMetadata {
 /// cokret config and the keystore's available signing algorithms — is fixed
 /// for the lifetime of the process (a single config per process). So the
 /// document only needs to be built once; subsequent requests clone the cached
-/// JSON value instead of rebuilding the whole `DiscoveryResponse` and
+/// JSON value instead of rebuilding the whole `DiscoveryDocument` and
 /// re-serializing it.
 ///
 /// We cache the serialized `serde_json::Value` (rather than the
-/// `DiscoveryResponse`, which is not `Clone`) and hand it back wrapped in
+/// `DiscoveryDocument`, which is not `Clone`) and hand it back wrapped in
 /// [`Json`], which preserves the `application/json` content type and exact
 /// response shape.
 static DISCOVERY: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
@@ -99,7 +99,7 @@ pub async fn get(depot: &Depot) -> Json<serde_json::Value> {
 /// Kept separate from [`get`] so the unit tests can exercise the full document
 /// construction directly without going through the process-wide
 /// [`OnceLock`](std::sync::OnceLock) cache.
-fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
+fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
     let key_store = depot
         .get::<Keystore>("keystore")
         .expect("Keystore not found in depot");
@@ -300,7 +300,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryResponse> {
                 proof_required_for_pairwise: registry.proof_required_for_pairwise,
             });
 
-    Json(DiscoveryResponse {
+    Json(DiscoveryDocument {
         standard,
         account_management_uri: url_builder.account_management_uri(),
         account_management_actions_supported: vec![

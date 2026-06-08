@@ -12,7 +12,7 @@ use coauth_data::{
         AuthenticatorType as DomainAuthenticatorType, FlowSession, FlowSessionStatus,
         IdentificationField as DomainIdentificationField, PromptField as DomainPromptField,
         PromptFieldType as DomainPromptFieldType, StageChallenge as DomainStageChallenge,
-        StageOutcome, StageResponse as DomainStageResponse,
+        StageOutcome, StageSubmission as DomainStageSubmission,
         StageValidationError as DomainStageValidationError,
     },
     new_id,
@@ -222,7 +222,7 @@ impl From<DomainStageValidationError> for FlowValidationError {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct FlowResponse {
+pub struct FlowOutcome {
     /// The session identifier (ULID).
     pub session_id: String,
     /// The slug of the flow being executed.
@@ -241,7 +241,7 @@ pub struct FlowResponse {
 /// Request body for `POST /_coauth/self/flow/session/:id/respond`.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum FlowStageResponse {
+pub enum FlowStageRequestBody {
     Identification {
         uid_field: String,
         password: Option<String>,
@@ -276,42 +276,42 @@ pub enum FlowStageResponse {
     },
 }
 
-impl From<FlowStageResponse> for DomainStageResponse {
-    fn from(value: FlowStageResponse) -> Self {
+impl From<FlowStageRequestBody> for DomainStageSubmission {
+    fn from(value: FlowStageRequestBody) -> Self {
         match value {
-            FlowStageResponse::Identification {
+            FlowStageRequestBody::Identification {
                 uid_field,
                 password,
             } => Self::Identification {
                 uid_field,
                 password,
             },
-            FlowStageResponse::EmailVerification { code } => Self::EmailVerification { code },
-            FlowStageResponse::PasswordWrite {
+            FlowStageRequestBody::EmailVerification { code } => Self::EmailVerification { code },
+            FlowStageRequestBody::PasswordWrite {
                 current_password,
                 new_password,
             } => Self::PasswordWrite {
                 current_password,
                 new_password,
             },
-            FlowStageResponse::UserWrite {
+            FlowStageRequestBody::UserWrite {
                 handle,
                 display_name,
             } => Self::UserWrite {
                 handle,
                 display_name,
             },
-            FlowStageResponse::Captcha { token } => Self::Captcha { token },
-            FlowStageResponse::Consent { granted } => Self::Consent { granted },
-            FlowStageResponse::Prompt { data } => Self::Prompt { data },
-            FlowStageResponse::AuthenticatorValidate {
+            FlowStageRequestBody::Captcha { token } => Self::Captcha { token },
+            FlowStageRequestBody::Consent { granted } => Self::Consent { granted },
+            FlowStageRequestBody::Prompt { data } => Self::Prompt { data },
+            FlowStageRequestBody::AuthenticatorValidate {
                 authenticator_type,
                 code,
             } => Self::AuthenticatorValidate {
                 authenticator_type: authenticator_type.into(),
                 code,
             },
-            FlowStageResponse::EnrollmentToken { token } => Self::EnrollmentToken { token },
+            FlowStageRequestBody::EnrollmentToken { token } => Self::EnrollmentToken { token },
         }
     }
 }
@@ -319,7 +319,7 @@ impl From<FlowStageResponse> for DomainStageResponse {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RespondInput {
     /// The stage response submitted by the client.
-    pub response: FlowStageResponse,
+    pub response: FlowStageRequestBody,
 }
 
 // ---------------------------------------------------------------------------
@@ -357,14 +357,14 @@ fn resolve_flow_by_slug(
     }
 }
 
-/// Build a [`FlowResponse`] from a plan, session, and challenge.
+/// Build a [`FlowOutcome`] from a plan, session, and challenge.
 fn build_response(
     plan: &FlowPlan,
     session: &FlowSession,
     challenge: DomainStageChallenge,
     errors: Option<Vec<DomainStageValidationError>>,
-) -> FlowResponse {
-    FlowResponse {
+) -> FlowOutcome {
+    FlowOutcome {
         session_id: session.id.to_string(),
         flow_slug: plan.flow.slug.clone(),
         challenge: challenge.into(),
@@ -390,7 +390,7 @@ fn parse_flow_session_id(req: &Request) -> Result<Ulid, RouteError> {
 /// Creates a `FlowSession`, plans the flow, and returns the first stage
 /// challenge.
 #[endpoint]
-pub async fn start_flow(req: &mut Request) -> Result<Json<FlowResponse>, RouteError> {
+pub async fn start_flow(req: &mut Request) -> Result<Json<FlowOutcome>, RouteError> {
     let slug: String = req
         .param::<String>("slug")
         .ok_or_else(|| RouteError::BadRequest("missing flow slug".into()))?;
@@ -440,7 +440,7 @@ pub async fn start_flow(req: &mut Request) -> Result<Json<FlowResponse>, RouteEr
 
 /// Get the current challenge for an existing flow session.
 #[endpoint]
-pub async fn get_flow_session(req: &mut Request) -> Result<Json<FlowResponse>, RouteError> {
+pub async fn get_flow_session(req: &mut Request) -> Result<Json<FlowOutcome>, RouteError> {
     let id = parse_flow_session_id(req)?;
 
     let mut store = flow_session_store_write().await;
@@ -476,7 +476,7 @@ pub async fn get_flow_session(req: &mut Request) -> Result<Json<FlowResponse>, R
 pub async fn respond_flow(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<FlowResponse>, RouteError> {
+) -> Result<Json<FlowOutcome>, RouteError> {
     let id = parse_flow_session_id(req)?;
 
     let input: RespondInput = req

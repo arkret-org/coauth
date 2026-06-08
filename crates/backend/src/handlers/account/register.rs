@@ -25,7 +25,7 @@ use crate::{
     handlers::{
         RequesterFingerprint,
         account::service::registration::{
-            BeginPasswordRegistrationError, BeginPasswordRegistrationRequest,
+            BeginPasswordRegistrationError, BeginPasswordRegistrationRequestBody,
             BeginPasswordRegistrationResult, EmailAvailabilityCheck, LoadRegistrationProgressError,
             PrincipalServerCheckMode, RegistrationDisplayNameOutcome,
             RegistrationDisplayNameWorkflowError, RegistrationEmailChangeError,
@@ -62,7 +62,7 @@ pub struct RegisterInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct RegisterResponse {
+pub struct RegisterOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -76,7 +76,7 @@ pub struct RegisterResponse {
 pub async fn post_register(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RegisterResponse>, RouteError> {
+) -> Result<Json<RegisterOutcome>, RouteError> {
     let input: RegisterInput = req
         .parse_json()
         .await
@@ -117,7 +117,7 @@ pub async fn post_register(
         .await
         {
             tracing::warn!(error = %error, "CAPTCHA verification failed on registration");
-            return Ok(Json(RegisterResponse {
+            return Ok(Json(RegisterOutcome {
                 status: "error",
                 id: None,
                 next_step: None,
@@ -136,7 +136,7 @@ pub async fn post_register(
         principal_server.as_ref(),
         policy_factory.as_ref(),
         &limiter,
-        BeginPasswordRegistrationRequest {
+        BeginPasswordRegistrationRequestBody {
             handle: input.handle,
             email: input.email,
             phone: if site_config.phone_verification_enabled {
@@ -171,7 +171,7 @@ pub async fn post_register(
     })? {
         BeginPasswordRegistrationResult::Started(started) => started,
         BeginPasswordRegistrationResult::Rejected { issues } => {
-            return Ok(Json(RegisterResponse {
+            return Ok(Json(RegisterOutcome {
                 status: "error",
                 id: None,
                 next_step: None,
@@ -192,7 +192,7 @@ pub async fn post_register(
 
     let step = next_registration_step(&registration, email_verified, phone_verified);
 
-    Ok(Json(RegisterResponse {
+    Ok(Json(RegisterOutcome {
         status: "success",
         id: Some(registration.id.to_string()),
         next_step: Some(step),
@@ -210,7 +210,7 @@ pub struct WebvhRegistrationStartInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct WebvhRegistrationStartResponse {
+pub struct WebvhRegistrationStartOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registration_id: Option<String>,
@@ -227,7 +227,7 @@ pub struct WebvhRegistrationStartResponse {
 pub async fn post_webvh_start(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<WebvhRegistrationStartResponse>, RouteError> {
+) -> Result<Json<WebvhRegistrationStartOutcome>, RouteError> {
     let input: WebvhRegistrationStartInput = req
         .parse_json()
         .await
@@ -235,7 +235,7 @@ pub async fn post_webvh_start(
 
     let site_config = depot.site_config()?;
     if !site_config.password_registration_enabled {
-        return Ok(Json(WebvhRegistrationStartResponse {
+        return Ok(Json(WebvhRegistrationStartOutcome {
             status: "error",
             registration_id: None,
             next_step: None,
@@ -248,7 +248,7 @@ pub async fn post_webvh_start(
 
     let username = input.handle.trim().to_owned();
     if username.is_empty() {
-        return Ok(Json(WebvhRegistrationStartResponse {
+        return Ok(Json(WebvhRegistrationStartOutcome {
             status: "error",
             registration_id: None,
             next_step: None,
@@ -263,7 +263,7 @@ pub async fn post_webvh_start(
     // MUST run before any storage lookup so confusable handles never
     // hit `repo.user().exists(...)` or the principal server.
     if cokret_core::normalize_handle_localpart(&username).is_err() {
-        return Ok(Json(WebvhRegistrationStartResponse {
+        return Ok(Json(WebvhRegistrationStartOutcome {
             status: "error",
             registration_id: None,
             next_step: None,
@@ -288,7 +288,7 @@ pub async fn post_webvh_start(
     let mut repo = repo_factory.create().await?;
 
     if repo.user().exists(&username).await? {
-        return Ok(Json(WebvhRegistrationStartResponse {
+        return Ok(Json(WebvhRegistrationStartOutcome {
             status: "error",
             registration_id: None,
             next_step: None,
@@ -302,7 +302,7 @@ pub async fn post_webvh_start(
         principal_server.is_handle_available(&username).await,
         Ok(false)
     ) {
-        return Ok(Json(WebvhRegistrationStartResponse {
+        return Ok(Json(WebvhRegistrationStartOutcome {
             status: "error",
             registration_id: None,
             next_step: None,
@@ -339,7 +339,7 @@ pub async fn post_webvh_start(
     }
     repo.save().await?;
 
-    Ok(Json(WebvhRegistrationStartResponse {
+    Ok(Json(WebvhRegistrationStartOutcome {
         status: "success",
         registration_id: Some(registration.id.to_string()),
         next_step: Some("email"),
@@ -357,7 +357,7 @@ pub struct WebvhRegistrationEmailInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct WebvhRegistrationEmailResponse {
+pub struct WebvhRegistrationEmailOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_step: Option<&'static str>,
@@ -373,7 +373,7 @@ pub struct WebvhRegistrationEmailResponse {
 pub async fn post_webvh_email(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<WebvhRegistrationEmailResponse>, RouteError> {
+) -> Result<Json<WebvhRegistrationEmailOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -386,7 +386,7 @@ pub async fn post_webvh_email(
     let site_config = depot.site_config()?;
     let email = input.email.trim();
     if Address::from_str(email).is_err() {
-        return Ok(Json(WebvhRegistrationEmailResponse {
+        return Ok(Json(WebvhRegistrationEmailOutcome {
             status: "error",
             next_step: None,
             delivery: None,
@@ -409,7 +409,7 @@ pub async fn post_webvh_email(
         return Err(RouteError::NotFound);
     };
     if registration.completed_at.is_some() {
-        return Ok(Json(WebvhRegistrationEmailResponse {
+        return Ok(Json(WebvhRegistrationEmailOutcome {
             status: "error",
             next_step: None,
             delivery: None,
@@ -418,7 +418,7 @@ pub async fn post_webvh_email(
         }));
     }
     if repo.user_email().find_by_email(email).await?.is_some() {
-        return Ok(Json(WebvhRegistrationEmailResponse {
+        return Ok(Json(WebvhRegistrationEmailOutcome {
             status: "error",
             next_step: None,
             delivery: None,
@@ -431,7 +431,7 @@ pub async fn post_webvh_email(
         .await
         .is_err()
     {
-        return Ok(Json(WebvhRegistrationEmailResponse {
+        return Ok(Json(WebvhRegistrationEmailOutcome {
             status: "error",
             next_step: None,
             delivery: None,
@@ -474,7 +474,7 @@ pub async fn post_webvh_email(
     };
     repo.save().await?;
 
-    Ok(Json(WebvhRegistrationEmailResponse {
+    Ok(Json(WebvhRegistrationEmailOutcome {
         status: "sent",
         next_step: Some("verify_email"),
         delivery: Some(delivery),
@@ -489,7 +489,7 @@ pub async fn post_webvh_email(
 pub async fn post_webvh_verify_email(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<VerifyEmailResponse>, RouteError> {
+) -> Result<Json<VerifyEmailOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -536,7 +536,7 @@ pub async fn post_webvh_verify_email(
         }
     };
 
-    Ok(Json(VerifyEmailResponse {
+    Ok(Json(VerifyEmailOutcome {
         status,
         next_step,
         error,
@@ -564,7 +564,7 @@ pub struct WebvhRegistrationFinishInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct WebvhRegistrationFinishResponse {
+pub struct WebvhRegistrationFinishOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -597,7 +597,7 @@ pub struct WebvhRegistrationFinishResponse {
 pub async fn post_webvh_finish(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<WebvhRegistrationFinishResponse>, RouteError> {
+) -> Result<Json<WebvhRegistrationFinishOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -714,7 +714,7 @@ pub async fn post_webvh_finish(
         }
     };
 
-    Ok(Json(WebvhRegistrationFinishResponse {
+    Ok(Json(WebvhRegistrationFinishOutcome {
         status: "success",
         error: None,
         handle: Some(completed.user.handle),
@@ -744,7 +744,7 @@ pub struct ExistingDidRegistrationInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ExistingDidRegistrationResponse {
+pub struct ExistingDidRegistrationOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -760,14 +760,14 @@ pub struct ExistingDidRegistrationResponse {
 pub async fn post_existing_did_start(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ExistingDidRegistrationResponse>, RouteError> {
+) -> Result<Json<ExistingDidRegistrationOutcome>, RouteError> {
     let input: ExistingDidRegistrationInput = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
     let did = input.did.trim();
     if !did.starts_with("did:") {
-        return Ok(Json(ExistingDidRegistrationResponse {
+        return Ok(Json(ExistingDidRegistrationOutcome {
             status: "error",
             error: Some("invalid_did".into()),
             did: None,
@@ -779,7 +779,7 @@ pub async fn post_existing_did_start(
         .url_builder()?
         .absolute_url("/register/did/proof")
         .to_string();
-    Ok(Json(ExistingDidRegistrationResponse {
+    Ok(Json(ExistingDidRegistrationOutcome {
         status: "proof_required",
         error: None,
         did: Some(did.to_owned()),
@@ -788,8 +788,8 @@ pub async fn post_existing_did_start(
     }))
 }
 
-fn webvh_finish_error(error: impl Into<String>) -> WebvhRegistrationFinishResponse {
-    WebvhRegistrationFinishResponse {
+fn webvh_finish_error(error: impl Into<String>) -> WebvhRegistrationFinishOutcome {
+    WebvhRegistrationFinishOutcome {
         status: "error",
         error: Some(error.into()),
         handle: None,
@@ -862,7 +862,7 @@ fn urls_match(left: &Url, right: &Url) -> bool {
 }
 
 #[derive(Deserialize)]
-struct SolandEmbeddedWebvhResponse {
+struct SolandEmbeddedWebvhOutcome {
     pub did: String,
     #[serde(default)]
     pub did_key_id: Option<String>,
@@ -896,7 +896,7 @@ async fn register_soland_webvh(
     update_key_id: &str,
     webvh_version_time: &str,
     webvh_proof: Value,
-) -> Result<SolandEmbeddedWebvhResponse, String> {
+) -> Result<SolandEmbeddedWebvhOutcome, String> {
     let local_id = normalize_webvh_local_id(username).unwrap_or_else(|| username.to_owned());
     let body = json!({
         "local_id": local_id,
@@ -947,7 +947,7 @@ fn normalize_webvh_local_id(value: &str) -> Option<String> {
 // ── GET /_coauth/gate/account/auth/register/:id ──────────────────────────────
 
 #[derive(Serialize, ToSchema)]
-pub struct RegistrationStatusResponse {
+pub struct RegistrationStatusOutcome {
     pub id: String,
     pub handle: String,
     pub email_pending: bool,
@@ -962,7 +962,7 @@ pub struct RegistrationStatusResponse {
 pub async fn get_registration(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RegistrationStatusResponse>, RouteError> {
+) -> Result<Json<RegistrationStatusOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -981,7 +981,7 @@ pub async fn get_registration(
 
     repo.cancel().await?;
 
-    Ok(Json(RegistrationStatusResponse {
+    Ok(Json(RegistrationStatusOutcome {
         id: status.registration.id.to_string(),
         handle: status.registration.handle,
         email_pending: status.email_pending,
@@ -1000,7 +1000,7 @@ pub struct VerifyEmailInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct VerifyEmailResponse {
+pub struct VerifyEmailOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_step: Option<&'static str>,
@@ -1012,7 +1012,7 @@ pub struct VerifyEmailResponse {
 pub async fn post_verify_email(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<VerifyEmailResponse>, RouteError> {
+) -> Result<Json<VerifyEmailOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -1059,7 +1059,7 @@ pub async fn post_verify_email(
         }
     };
 
-    Ok(Json(VerifyEmailResponse {
+    Ok(Json(VerifyEmailOutcome {
         status,
         next_step,
         error,
@@ -1069,7 +1069,7 @@ pub async fn post_verify_email(
 // ── POST /_coauth/gate/account/auth/register/:id/resend-verification ────────
 
 #[derive(Serialize, ToSchema)]
-pub struct ResendVerificationResponse {
+pub struct ResendVerificationOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -1083,7 +1083,7 @@ pub struct ResendVerificationResponse {
 pub async fn post_resend_verification(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ResendVerificationResponse>, RouteError> {
+) -> Result<Json<ResendVerificationOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -1128,7 +1128,7 @@ pub async fn post_resend_verification(
         RegistrationResendOutcome::RateLimited => ("rate_limited", None),
     };
 
-    Ok(Json(ResendVerificationResponse { status, error }))
+    Ok(Json(ResendVerificationOutcome { status, error }))
 }
 
 // ── POST /_coauth/gate/account/auth/register/:id/change-email ──────────────
@@ -1139,7 +1139,7 @@ pub struct ChangeRegistrationEmailInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ChangeRegistrationEmailResponse {
+pub struct ChangeRegistrationEmailOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -1149,7 +1149,7 @@ pub struct ChangeRegistrationEmailResponse {
 pub async fn post_change_email(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ChangeRegistrationEmailResponse>, RouteError> {
+) -> Result<Json<ChangeRegistrationEmailOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -1209,7 +1209,7 @@ pub async fn post_change_email(
         RegistrationEmailChangeOutcome::RateLimited => ("error", Some("rate_limited".into())),
     };
 
-    Ok(Json(ChangeRegistrationEmailResponse { status, error }))
+    Ok(Json(ChangeRegistrationEmailOutcome { status, error }))
 }
 
 // ── POST /_coauth/gate/account/auth/register/:id/verify-phone ────────────────
@@ -1220,7 +1220,7 @@ pub struct VerifyPhoneInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct VerifyPhoneResponse {
+pub struct VerifyPhoneOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_step: Option<&'static str>,
@@ -1232,7 +1232,7 @@ pub struct VerifyPhoneResponse {
 pub async fn post_verify_phone(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<VerifyPhoneResponse>, RouteError> {
+) -> Result<Json<VerifyPhoneOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -1279,7 +1279,7 @@ pub async fn post_verify_phone(
         }
     };
 
-    Ok(Json(VerifyPhoneResponse {
+    Ok(Json(VerifyPhoneOutcome {
         status,
         next_step,
         error,
@@ -1297,7 +1297,7 @@ pub struct DisplayNameInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct DisplayNameResponse {
+pub struct DisplayNameOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_step: Option<&'static str>,
@@ -1309,7 +1309,7 @@ pub struct DisplayNameResponse {
 pub async fn post_display_name(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<DisplayNameResponse>, RouteError> {
+) -> Result<Json<DisplayNameOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -1349,7 +1349,7 @@ pub async fn post_display_name(
         }
     };
 
-    Ok(Json(DisplayNameResponse {
+    Ok(Json(DisplayNameOutcome {
         status,
         next_step,
         error,
@@ -1359,7 +1359,7 @@ pub async fn post_display_name(
 // ── POST /_coauth/gate/account/auth/register/:id/finish ──────────────────────
 
 #[derive(Serialize, ToSchema)]
-pub struct FinishRegistrationResponse {
+pub struct FinishRegistrationOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -1381,7 +1381,7 @@ pub async fn post_finish(
     req: &mut Request,
     depot: &Depot,
     res: &mut Response,
-) -> Result<Json<FinishRegistrationResponse>, RouteError> {
+) -> Result<Json<FinishRegistrationOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -1443,7 +1443,7 @@ pub async fn post_finish(
     let completed = match outcome {
         RegistrationFinishOutcome::Completed(completed) => completed,
         RegistrationFinishOutcome::Rejected { error } => {
-            return Ok(Json(FinishRegistrationResponse {
+            return Ok(Json(FinishRegistrationOutcome {
                 status: "error",
                 error: Some(error.into()),
                 post_auth_action: None,
@@ -1462,7 +1462,7 @@ pub async fn post_finish(
 
     let post_auth_action = completed.registration.post_auth_action.clone();
 
-    Ok(Json(FinishRegistrationResponse {
+    Ok(Json(FinishRegistrationOutcome {
         status: "success",
         error: None,
         post_auth_action,

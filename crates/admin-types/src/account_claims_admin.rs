@@ -2,7 +2,7 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /_coauth/admin/accounts/{account_id}/claims` — `AccountClaimsResponse
+//! - `GET /_coauth/admin/accounts/{account_id}/claims` — `AccountClaimsOutcome
 //!   { data: [AccountClaimRecord, ...] }` from
 //!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`.
 //!
@@ -17,7 +17,7 @@
 //! path is sodmin-server-only and can lift in a later round.
 //!
 //! Round-33 (C33.3): lifted out of the inline `AccountClaimRecord` /
-//! `AccountClaimsResponse` definitions on the backend and the
+//! `AccountClaimsOutcome` definitions on the backend and the
 //! divergent `CoauthAccountClaim` / `CoauthAccountClaimsEnvelope`
 //! decoder shims in `sodmin/src/api/coauth.rs`. The sodmin shim was
 //! decoding only `claim_kind` / `value` / `state` / `source` and
@@ -132,7 +132,7 @@ impl AdminAccountClaimRecord {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct AdminAccountClaimsResponse {
+pub struct AdminAccountClaimsOutcome {
     #[serde(default)]
     pub data: Vec<AdminAccountClaimRecord>,
 }
@@ -198,7 +198,7 @@ mod tests {
                 "revoked_reason": null
             }]
         }"#;
-        let resp: AdminAccountClaimsResponse = serde_json::from_str(wire).unwrap();
+        let resp: AdminAccountClaimsOutcome = serde_json::from_str(wire).unwrap();
         assert_eq!(resp.data.len(), 1);
         let row = &resp.data[0];
         assert_eq!(row.claim_kind, "org_role");

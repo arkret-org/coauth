@@ -71,8 +71,8 @@ fn check_pair<T: DeserializeOwned>(
 
 #[test]
 fn risk_action_proposal_request_contract() {
-    use coauth_admin_types::AccountRiskActionProposalRequest;
-    check_pair::<AccountRiskActionProposalRequest>(
+    use coauth_admin_types::AccountRiskActionProposalRequestBody;
+    check_pair::<AccountRiskActionProposalRequestBody>(
         "POST /accounts/{id}/risk-action",
         json!({
             "action": "lock",
@@ -87,8 +87,8 @@ fn risk_action_proposal_request_contract() {
 
 #[test]
 fn risk_action_approval_request_contract() {
-    use coauth_admin_types::AccountRiskActionApprovalRequest;
-    check_pair::<AccountRiskActionApprovalRequest>(
+    use coauth_admin_types::AccountRiskActionApprovalRequestBody;
+    check_pair::<AccountRiskActionApprovalRequestBody>(
         "POST /accounts/{id}/risk-action/{pid}/approve",
         json!({
             "action": "disable",
@@ -101,8 +101,8 @@ fn risk_action_approval_request_contract() {
 
 #[test]
 fn risk_action_execute_request_contract() {
-    use coauth_admin_types::AccountRiskActionExecuteRequest;
-    check_pair::<AccountRiskActionExecuteRequest>(
+    use coauth_admin_types::AccountRiskActionExecuteRequestBody;
+    check_pair::<AccountRiskActionExecuteRequestBody>(
         "POST /accounts/{id}/risk-action/{pid}/execute",
         json!({
             "action": "lock",
@@ -126,7 +126,7 @@ mod replicas {
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
-    pub struct AddAccountDidBindingRequest {
+    pub struct AddAccountDidBindingRequestBody {
         pub did: String,
         pub kind: DidBindingKind,
         pub control_proof: ControlProofPayload,
@@ -155,7 +155,7 @@ mod replicas {
     }
 
     #[derive(Debug, Deserialize)]
-    pub struct PasskeyRegisterStartRequest {
+    pub struct PasskeyRegisterStartRequestBody {
         #[serde(default)]
         pub handle: Option<String>,
         #[serde(default)]
@@ -163,14 +163,14 @@ mod replicas {
     }
 
     #[derive(Debug, Deserialize)]
-    pub struct PasskeyRegisterFinishRequest {
+    pub struct PasskeyRegisterFinishRequestBody {
         #[serde(default)]
         pub label: Option<String>,
         pub attestation: serde_json::Value,
     }
 
     #[derive(Debug, Deserialize)]
-    pub struct PasskeyAuthFinishRequest {
+    pub struct PasskeyAuthFinishRequestBody {
         pub assertion: serde_json::Value,
     }
 
@@ -340,8 +340,8 @@ mod replicas {
 
 #[test]
 fn account_did_binding_request_contract() {
-    use replicas::AddAccountDidBindingRequest;
-    check_pair::<AddAccountDidBindingRequest>(
+    use replicas::AddAccountDidBindingRequestBody;
+    check_pair::<AddAccountDidBindingRequestBody>(
         "POST /accounts/{id}/dids",
         json!({
             "did": "did:web:idp.example",
@@ -366,23 +366,23 @@ fn account_did_binding_request_contract() {
 
 #[test]
 fn passkey_register_start_contract() {
-    use replicas::PasskeyRegisterStartRequest;
+    use replicas::PasskeyRegisterStartRequestBody;
     // Empty body is allowed (all fields optional). The negative test
     // uses a non-string `username` because that's a structural type
     // mismatch the deserializer must reject.
     let happy = json!({ "handle": "alice", "display_name": "Alice" });
-    let parsed: PasskeyRegisterStartRequest = serde_json::from_value(happy.clone())
+    let parsed: PasskeyRegisterStartRequestBody = serde_json::from_value(happy.clone())
         .expect("happy-path passkey register/start body must deserialize");
     assert_eq!(parsed.handle.as_deref(), Some("alice"));
-    let invalid: Result<PasskeyRegisterStartRequest, _> =
+    let invalid: Result<PasskeyRegisterStartRequestBody, _> =
         serde_json::from_value(json!({ "handle": 42 }));
     assert!(invalid.is_err(), "non-string username must be rejected");
 }
 
 #[test]
 fn passkey_register_finish_contract() {
-    use replicas::PasskeyRegisterFinishRequest;
-    check_pair::<PasskeyRegisterFinishRequest>(
+    use replicas::PasskeyRegisterFinishRequestBody;
+    check_pair::<PasskeyRegisterFinishRequestBody>(
         "POST /accounts/{id}/passkeys/register/finish",
         json!({
             "label": "yubikey-5c",
@@ -395,8 +395,8 @@ fn passkey_register_finish_contract() {
 
 #[test]
 fn passkey_auth_finish_contract() {
-    use replicas::PasskeyAuthFinishRequest;
-    check_pair::<PasskeyAuthFinishRequest>(
+    use replicas::PasskeyAuthFinishRequestBody;
+    check_pair::<PasskeyAuthFinishRequestBody>(
         "POST /accounts/{id}/passkeys/auth/finish",
         json!({ "assertion": { "id": "credential-id" } }),
         json!({}),
@@ -546,12 +546,12 @@ fn add_registration_token_contract() {
 
 #[test]
 fn registration_token_update_contract() {
-    // The handler's UpdateRequest uses `option_option<DateTime>` semantics
+    // The handler's UpdateRequestBody uses `option_option<DateTime>` semantics
     // ({absent, null, value}) — exercise the absent + value paths.
     let absent: serde_json::Value = json!({});
     let value: serde_json::Value =
         json!({ "expires_at": "2026-01-01T00:00:00Z", "usage_limit": 42 });
-    // We don't have access to the original UpdateRequest; just validate
+    // We don't have access to the original UpdateRequestBody; just validate
     // the JSON shape would not be obviously malformed. The deserializer
     // contract is owned by the existing in-crate test harness; this test
     // pins the wire shape to prevent silent renames.

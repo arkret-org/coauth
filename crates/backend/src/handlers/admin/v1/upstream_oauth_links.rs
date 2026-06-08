@@ -17,7 +17,7 @@ use crate::{
         model::{Resource, UpstreamOAuthLink},
         params::{IncludeCount, extract_pagination, extract_ulid_param},
         response::{
-            PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
             paginated_response_for_page,
         },
     },
@@ -66,7 +66,7 @@ mod test_utils {
 /// JSON body accepted by `POST /_coauth/admin/upstream-oauth-links`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUpstreamOauthLinkRequest")]
-pub struct AddRequest {
+pub struct AddRequestBody {
     /// Identifier of the user to associate with this link.
     #[schemars(with = "crate::handlers::admin::schema::Ulid")]
     user_id: Ulid,
@@ -88,7 +88,7 @@ pub struct AddRequest {
 pub async fn add_link(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<SingleResponse<UpstreamOAuthLink>> {
+) -> CreatedJsonResult<SingleOutcome<UpstreamOAuthLink>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -97,7 +97,7 @@ pub async fn add_link(
         ..
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
-    let body: AddRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     // Resolve the target user
     let owner = repo
@@ -158,7 +158,7 @@ pub async fn add_link(
         repo.save().await?;
 
         return Ok(crate::handlers::admin::CreatedJson(
-            SingleResponse::new_canonical(entry.into()),
+            SingleOutcome::new_canonical(entry.into()),
         ));
     }
 
@@ -198,7 +198,7 @@ pub async fn add_link(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleResponse::new_canonical(entry.into()),
+        SingleOutcome::new_canonical(entry.into()),
     ))
 }
 
@@ -255,7 +255,7 @@ pub async fn delete_link(req: &mut Request, depot: &Depot) -> AppResult<StatusCo
 pub async fn get_link(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UpstreamOAuthLink>> {
+) -> JsonResult<SingleOutcome<UpstreamOAuthLink>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let link_id = extract_ulid_param(req)?;
@@ -268,9 +268,9 @@ pub async fn get_link(
             AppError::not_found(format!("Upstream OAuth Link ID {link_id} not found"))
         })?;
 
-    Ok(Json(SingleResponse::new_canonical(
-        UpstreamOAuthLink::from(entry),
-    )))
+    Ok(Json(SingleOutcome::new_canonical(UpstreamOAuthLink::from(
+        entry,
+    ))))
 }
 
 /// Query-string filters for the upstream OAuth link list endpoint.
@@ -322,7 +322,7 @@ impl std::fmt::Display for FilterParams {
 pub async fn list_links(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PaginatedResponse<UpstreamOAuthLink>> {
+) -> JsonResult<PaginatedOutcome<UpstreamOAuthLink>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
@@ -402,7 +402,7 @@ pub async fn list_links(
 }
 
 #[derive(Deserialize)]
-pub struct UpdateRequest {
+pub struct UpdateRequestBody {
     user_id: Option<Option<Ulid>>,
     subject: Option<String>,
     human_account_name: Option<Option<String>>,
@@ -412,7 +412,7 @@ pub struct UpdateRequest {
 pub async fn update_link(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UpstreamOAuthLink>> {
+) -> JsonResult<SingleOutcome<UpstreamOAuthLink>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -422,7 +422,7 @@ pub async fn update_link(
     } = call_context;
     let id = extract_ulid_param(req)?;
     let mut rng = crate::handlers::account::make_rng();
-    let body: UpdateRequest = req
+    let body: UpdateRequestBody = req
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
@@ -444,9 +444,9 @@ pub async fn update_link(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(
-        UpstreamOAuthLink::from(link),
-    )))
+    Ok(Json(SingleOutcome::new_canonical(UpstreamOAuthLink::from(
+        link,
+    ))))
 }
 
 fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) -> AppError {

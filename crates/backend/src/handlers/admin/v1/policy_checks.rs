@@ -15,9 +15,9 @@ use crate::{
 };
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "PolicyDryRunRequest")]
+#[serde(rename = "PolicyDryRunRequestBody")]
 #[allow(dead_code)]
-pub struct PolicyDryRunRequest {
+pub struct PolicyDryRunRequestBody {
     /// Principal DID or account subject.
     subject: String,
 
@@ -44,7 +44,7 @@ pub enum PolicyEffect {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct PolicyDryRunResponse {
+pub struct PolicyDryRunOutcome {
     /// Signed decision audit identifier.
     audit_id: String,
 
@@ -75,7 +75,7 @@ pub struct PolicyDecisionAuditRecord {
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.policy_checks.dry_run", skip_all)]
-pub async fn dry_run(req: &mut Request, depot: &Depot) -> CreatedJsonResult<PolicyDryRunResponse> {
+pub async fn dry_run(req: &mut Request, depot: &Depot) -> CreatedJsonResult<PolicyDryRunOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -89,7 +89,7 @@ pub async fn dry_run(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Poli
         ));
     };
     let mut rng = crate::handlers::account::make_rng();
-    let body: PolicyDryRunRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: PolicyDryRunRequestBody = req.parse_json().await.map_err(AppError::internal)?;
     let request = body.normalized()?;
 
     let policy_data = repo.policy_data().get().await?;
@@ -121,7 +121,7 @@ pub async fn dry_run(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Poli
         .await?;
     repo.save().await?;
 
-    Ok(CreatedJson(PolicyDryRunResponse {
+    Ok(CreatedJson(PolicyDryRunOutcome {
         audit_id: audit.id.to_string(),
         effect: decision.effect,
         policy_id: decision.policy_id,
@@ -172,7 +172,7 @@ pub async fn get_signed_decision_audit(
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct NormalizedPolicyDryRunRequest {
+struct NormalizedPolicyDryRunRequestBody {
     subject: String,
     action: String,
     resource: String,
@@ -189,8 +189,8 @@ struct PolicyDryRunDecision {
     allowed_facets: Option<serde_json::Value>,
 }
 
-impl PolicyDryRunRequest {
-    fn normalized(self) -> Result<NormalizedPolicyDryRunRequest, AppError> {
+impl PolicyDryRunRequestBody {
+    fn normalized(self) -> Result<NormalizedPolicyDryRunRequestBody, AppError> {
         let subject = self.subject.trim().to_owned();
         let action = self.action.trim().to_owned();
         let resource = self.resource.trim().to_owned();
@@ -203,7 +203,7 @@ impl PolicyDryRunRequest {
         if resource.is_empty() {
             return Err(AppError::bad_request("resource is required"));
         }
-        Ok(NormalizedPolicyDryRunRequest {
+        Ok(NormalizedPolicyDryRunRequestBody {
             subject,
             action,
             resource,
@@ -214,7 +214,7 @@ impl PolicyDryRunRequest {
 }
 
 fn evaluate_policy_dry_run(
-    request: &NormalizedPolicyDryRunRequest,
+    request: &NormalizedPolicyDryRunRequestBody,
     policy_data: Option<&serde_json::Value>,
 ) -> PolicyDryRunDecision {
     let matching_rule = policy_data
@@ -279,7 +279,7 @@ fn policy_rules(data: &serde_json::Value) -> Option<&Vec<serde_json::Value>> {
         .and_then(|v| v.as_array())
 }
 
-fn rule_matches(rule: &serde_json::Value, request: &NormalizedPolicyDryRunRequest) -> bool {
+fn rule_matches(rule: &serde_json::Value, request: &NormalizedPolicyDryRunRequestBody) -> bool {
     field_matches(rule, "subject", &request.subject)
         && field_matches(rule, "action", &request.action)
         && field_matches(rule, "resource", &request.resource)
@@ -311,7 +311,7 @@ fn parse_policy_effect(value: &str) -> Option<PolicyEffect> {
 /// `audit_helper`, which are unforgeable and verifiable against the service
 /// public key.
 fn decision_digest_payload(
-    request: &NormalizedPolicyDryRunRequest,
+    request: &NormalizedPolicyDryRunRequestBody,
     decision: &PolicyDryRunDecision,
     policy_data_revision: Option<String>,
     issued_at: chrono::DateTime<chrono::Utc>,
@@ -344,7 +344,7 @@ mod tests {
 
     #[test]
     fn dry_run_matches_persisted_rule() {
-        let request = PolicyDryRunRequest {
+        let request = PolicyDryRunRequestBody {
             subject: "did:cokret:alice".to_owned(),
             action: "read".to_owned(),
             resource: "space:demo".to_owned(),
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn signed_decision_contains_stable_digest_shape() {
-        let request = PolicyDryRunRequest {
+        let request = PolicyDryRunRequestBody {
             subject: "did:cokret:alice".to_owned(),
             action: "read".to_owned(),
             resource: "space:demo".to_owned(),

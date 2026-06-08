@@ -6,7 +6,7 @@
 pub mod model;
 
 pub use model::{
-    RecoveryStatusResponse, ResendRecoveryResponse, StartRecoveryInput, StartRecoveryResponse,
+    RecoveryStatusOutcome, ResendRecoveryOutcome, StartRecoveryInput, StartRecoveryOutcome,
 };
 use salvo::prelude::*;
 use ulid::Ulid;
@@ -27,7 +27,7 @@ use crate::handlers::{
 pub async fn post_recovery_start(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<StartRecoveryResponse>, RouteError> {
+) -> Result<Json<StartRecoveryOutcome>, RouteError> {
     let input: StartRecoveryInput = req
         .parse_json()
         .await
@@ -55,7 +55,7 @@ pub async fn post_recovery_start(
     let ip_address = activity_tracker.ip();
 
     if !site_config.account_recovery_allowed {
-        return Ok(Json(StartRecoveryResponse {
+        return Ok(Json(StartRecoveryOutcome {
             status: "error",
             id: None,
             error: Some("recovery_disabled".into()),
@@ -74,7 +74,7 @@ pub async fn post_recovery_start(
         .await
         {
             tracing::warn!(error = %error, "CAPTCHA verification failed on recovery start");
-            return Ok(Json(StartRecoveryResponse {
+            return Ok(Json(StartRecoveryOutcome {
                 status: "error",
                 id: None,
                 error: Some("captcha_failed".into()),
@@ -99,14 +99,14 @@ pub async fn post_recovery_start(
     {
         Ok(session) => session,
         Err(StartAccountRecoveryError::InvalidEmail) => {
-            return Ok(Json(StartRecoveryResponse {
+            return Ok(Json(StartRecoveryOutcome {
                 status: "error",
                 id: None,
                 error: Some("invalid_email".into()),
             }));
         }
         Err(StartAccountRecoveryError::RateLimited) => {
-            return Ok(Json(StartRecoveryResponse {
+            return Ok(Json(StartRecoveryOutcome {
                 status: "error",
                 id: None,
                 error: Some("rate_limited".into()),
@@ -117,7 +117,7 @@ pub async fn post_recovery_start(
         }
     };
 
-    Ok(Json(StartRecoveryResponse {
+    Ok(Json(StartRecoveryOutcome {
         status: "success",
         id: Some(session.id.to_string()),
         error: None,
@@ -130,7 +130,7 @@ pub async fn post_recovery_start(
 pub async fn get_recovery(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RecoveryStatusResponse>, RouteError> {
+) -> Result<Json<RecoveryStatusOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -155,7 +155,7 @@ pub async fn get_recovery(
 
     repo.cancel().await?;
 
-    Ok(Json(RecoveryStatusResponse {
+    Ok(Json(RecoveryStatusOutcome {
         id: session.id.to_string(),
         email: session.email,
         status,
@@ -168,7 +168,7 @@ pub async fn get_recovery(
 pub async fn post_recovery_resend(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ResendRecoveryResponse>, RouteError> {
+) -> Result<Json<ResendRecoveryOutcome>, RouteError> {
     let id: Ulid = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?
@@ -188,7 +188,7 @@ pub async fn post_recovery_resend(
         .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
 
     if !site_config.account_recovery_allowed {
-        return Ok(Json(ResendRecoveryResponse {
+        return Ok(Json(ResendRecoveryOutcome {
             status: "error",
             error: Some("recovery_disabled".into()),
         }));
@@ -200,13 +200,13 @@ pub async fn post_recovery_resend(
         Ok(_) => {}
         Err(ResendAccountRecoveryError::NotFound) => return Err(RouteError::NotFound),
         Err(ResendAccountRecoveryError::AlreadyConsumed) => {
-            return Ok(Json(ResendRecoveryResponse {
+            return Ok(Json(ResendRecoveryOutcome {
                 status: "error",
                 error: Some("recovery_already_consumed".into()),
             }));
         }
         Err(ResendAccountRecoveryError::RateLimited) => {
-            return Ok(Json(ResendRecoveryResponse {
+            return Ok(Json(ResendRecoveryOutcome {
                 status: "error",
                 error: Some("rate_limited".into()),
             }));
@@ -214,7 +214,7 @@ pub async fn post_recovery_resend(
         Err(ResendAccountRecoveryError::Repository(error)) => return Err(error.into()),
     }
 
-    Ok(Json(ResendRecoveryResponse {
+    Ok(Json(ResendRecoveryOutcome {
         status: "success",
         error: None,
     }))

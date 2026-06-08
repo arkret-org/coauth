@@ -27,7 +27,7 @@ use crate::{
             model::{PersonalSession, Resource},
             params::{IncludeCount, extract_pagination, extract_ulid_param},
             response::{
-                PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+                PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
                 paginated_response_for_page,
             },
         },
@@ -53,7 +53,7 @@ pub(crate) fn personal_session_owner_from_caller(caller: &CallerSession) -> Pers
 /// Request body accepted by `POST /_coauth/admin/personal-sessions`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "CreatePersonalSessionRequest")]
-pub struct AddRequest {
+pub struct AddRequestBody {
     /// The user this session acts on behalf of
     #[schemars(with = "crate::handlers::admin::schema::Ulid")]
     actor_user_id: Ulid,
@@ -75,7 +75,7 @@ pub struct AddRequest {
 pub async fn add_session(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<SingleResponse<PersonalSession>> {
+) -> CreatedJsonResult<SingleOutcome<PersonalSession>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -85,7 +85,7 @@ pub async fn add_session(
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
     let principal_server = depot.principal_server()?;
-    let body: AddRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
     let owner = personal_session_owner_from_caller(&caller_session);
 
     // Look up the target user
@@ -150,7 +150,7 @@ pub async fn add_session(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleResponse::new_canonical(
+        SingleOutcome::new_canonical(
             PersonalSession::try_from((new_session, Some(token_record)))?.with_token(raw_token),
         ),
     ))
@@ -162,7 +162,7 @@ pub async fn add_session(
 pub async fn get_session(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<PersonalSession>> {
+) -> JsonResult<SingleOutcome<PersonalSession>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let target_id = extract_ulid_param(req)?;
@@ -181,7 +181,7 @@ pub async fn get_session(
             .await?
     };
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         PersonalSession::try_from((entry, active_token))?,
     )))
 }
@@ -299,7 +299,7 @@ impl std::fmt::Display for FilterParams {
 pub async fn list_sessions(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PaginatedResponse<PersonalSession>> {
+) -> JsonResult<PaginatedOutcome<PersonalSession>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
@@ -425,7 +425,7 @@ pub async fn list_sessions(
 /// Optional payload for the regenerate endpoint.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "RegeneratePersonalSessionRequest")]
-pub struct RegenerateRequest {
+pub struct RegenerateRequestBody {
     /// Lifetime of the new token in seconds; omit for a non-expiring token.
     expires_in: Option<u32>,
 }
@@ -436,7 +436,7 @@ pub struct RegenerateRequest {
 pub async fn regenerate_session(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<SingleResponse<PersonalSession>> {
+) -> CreatedJsonResult<SingleOutcome<PersonalSession>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -446,10 +446,10 @@ pub async fn regenerate_session(
     } = ctx;
     let target_id = extract_ulid_param(req)?;
     let mut rng = crate::handlers::account::make_rng();
-    let body: RegenerateRequest = req
+    let body: RegenerateRequestBody = req
         .parse_json()
         .await
-        .unwrap_or(RegenerateRequest { expires_in: None });
+        .unwrap_or(RegenerateRequestBody { expires_in: None });
 
     let entry = repo
         .personal_session()
@@ -496,7 +496,7 @@ pub async fn regenerate_session(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleResponse::new_canonical(
+        SingleOutcome::new_canonical(
             PersonalSession::try_from((entry, Some(new_token_record)))?.with_token(new_token_str),
         ),
     ))
@@ -508,7 +508,7 @@ pub async fn regenerate_session(
 pub async fn revoke_session(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<PersonalSession>> {
+) -> JsonResult<SingleOutcome<PersonalSession>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -560,7 +560,7 @@ pub async fn revoke_session(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         PersonalSession::try_from((revoked, None))?,
     )))
 }

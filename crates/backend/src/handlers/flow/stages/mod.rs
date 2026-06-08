@@ -16,7 +16,7 @@ pub mod user_write;
 
 use coauth_data::{
     BoxRepository, Clock,
-    flow::{StageKind, StageOutcome, StageResponse},
+    flow::{StageKind, StageOutcome, StageSubmission},
 };
 use rand_core::RngCore;
 use thiserror::Error;
@@ -60,7 +60,7 @@ pub async fn execute_stage(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     stage: &StageKind,
-    response: &StageResponse,
+    response: &StageSubmission,
     context: &mut serde_json::Value,
     limiter: Option<&Limiter>,
     starid_registry: Option<&StaridRegistryHandle>,
@@ -68,7 +68,7 @@ pub async fn execute_stage(
     match (stage, response) {
         (
             StageKind::Identification { .. },
-            StageResponse::Identification {
+            StageSubmission::Identification {
                 uid_field,
                 password,
             },
@@ -76,12 +76,12 @@ pub async fn execute_stage(
 
         (
             StageKind::EmailVerification { max_attempts, .. },
-            StageResponse::EmailVerification { code },
+            StageSubmission::EmailVerification { code },
         ) => email_verification::execute(repo, clock, code, *max_attempts, context).await,
 
         (
             StageKind::PasswordWrite { require_current },
-            StageResponse::PasswordWrite {
+            StageSubmission::PasswordWrite {
                 current_password,
                 new_password,
             },
@@ -102,7 +102,7 @@ pub async fn execute_stage(
             StageKind::UserWrite {
                 create_users_as_inactive,
             },
-            StageResponse::UserWrite {
+            StageSubmission::UserWrite {
                 handle,
                 display_name,
             },
@@ -120,24 +120,24 @@ pub async fn execute_stage(
             .await
         }
 
-        (StageKind::Captcha, StageResponse::Captcha { token }) => {
+        (StageKind::Captcha, StageSubmission::Captcha { token }) => {
             captcha::execute(token, context).await
         }
 
-        (StageKind::Prompt { fields }, StageResponse::Prompt { data }) => {
+        (StageKind::Prompt { fields }, StageSubmission::Prompt { data }) => {
             prompt::execute(data, fields, context).await
         }
 
         (
             StageKind::AuthenticatorValidate { .. },
-            StageResponse::AuthenticatorValidate { code, .. },
+            StageSubmission::AuthenticatorValidate { code, .. },
         ) => authenticator_validate::execute(repo, code, context, limiter).await,
 
-        (StageKind::Consent, StageResponse::Consent { granted }) => {
+        (StageKind::Consent, StageSubmission::Consent { granted }) => {
             consent::execute(*granted, context).await
         }
 
-        (StageKind::EnrollmentToken { required }, StageResponse::EnrollmentToken { token }) => {
+        (StageKind::EnrollmentToken { required }, StageSubmission::EnrollmentToken { token }) => {
             enrollment_token::execute(repo, *required, token, context).await
         }
 

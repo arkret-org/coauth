@@ -12,7 +12,7 @@ use crate::{
     handlers::{
         admin::{
             CreatedJson, call_context::extract_call_context, model::PolicyData,
-            params::extract_ulid_param, response::SingleResponse,
+            params::extract_ulid_param, response::SingleOutcome,
         },
         common::DepotExt,
     },
@@ -21,7 +21,7 @@ use crate::{
 /// Fetch a single policy data record by its ULID.
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.policy_data.get", skip_all)]
-pub async fn get_by_id(req: &mut Request, depot: &Depot) -> JsonResult<SingleResponse<PolicyData>> {
+pub async fn get_by_id(req: &mut Request, depot: &Depot) -> JsonResult<SingleOutcome<PolicyData>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let record_id = extract_ulid_param(req)?;
@@ -31,16 +31,13 @@ pub async fn get_by_id(req: &mut Request, depot: &Depot) -> JsonResult<SingleRes
             AppError::not_found(format!("Policy data with ID {record_id} not found"))
         })?;
 
-    Ok(Json(SingleResponse::new_canonical(entry.into())))
+    Ok(Json(SingleOutcome::new_canonical(entry.into())))
 }
 
 /// Retrieve the most recent policy data record.
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.policy_data.get_latest", skip_all)]
-pub async fn get_latest(
-    req: &mut Request,
-    depot: &Depot,
-) -> JsonResult<SingleResponse<PolicyData>> {
+pub async fn get_latest(req: &mut Request, depot: &Depot) -> JsonResult<SingleOutcome<PolicyData>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
 
@@ -50,7 +47,7 @@ pub async fn get_latest(
         .await?
         .ok_or_else(|| AppError::not_found("No policy data found"))?;
 
-    Ok(Json(SingleResponse::new_canonical(entry.into())))
+    Ok(Json(SingleOutcome::new_canonical(entry.into())))
 }
 
 fn data_example() -> serde_json::Value {
@@ -63,8 +60,8 @@ fn data_example() -> serde_json::Value {
 
 /// Request body for creating a new policy data record.
 #[derive(Deserialize, JsonSchema)]
-#[serde(rename = "SetPolicyDataRequest")]
-pub struct SetPolicyDataRequest {
+#[serde(rename = "SetPolicyDataRequestBody")]
+pub struct SetPolicyDataRequestBody {
     #[schemars(example = data_example())]
     pub data: serde_json::Value,
 }
@@ -75,7 +72,7 @@ pub struct SetPolicyDataRequest {
 pub async fn set_data(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<SingleResponse<PolicyData>> {
+) -> CreatedJsonResult<SingleOutcome<PolicyData>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -86,7 +83,7 @@ pub async fn set_data(
     let mut rng = crate::handlers::account::make_rng();
     let factory = depot.policy_factory()?;
 
-    let body: SetPolicyDataRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: SetPolicyDataRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     let record = repo.policy_data().set(&mut rng, &clock, body.data).await?;
 
@@ -118,7 +115,7 @@ pub async fn set_data(
 
     repo.save().await?;
 
-    Ok(CreatedJson(SingleResponse::new_canonical(record.into())))
+    Ok(CreatedJson(SingleOutcome::new_canonical(record.into())))
 }
 
 #[cfg(test)]

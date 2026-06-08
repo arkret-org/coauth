@@ -38,7 +38,7 @@ use crate::handlers::{
     passwords::PasswordManager,
 };
 
-pub struct StartPasswordRegistrationRequest {
+pub struct StartPasswordRegistrationRequestBody {
     pub handle: String,
     pub email: Option<String>,
     pub phone: Option<String>,
@@ -50,7 +50,7 @@ pub struct StartPasswordRegistrationRequest {
     pub notification_language: String,
 }
 
-pub struct BeginPasswordRegistrationRequest {
+pub struct BeginPasswordRegistrationRequestBody {
     pub handle: String,
     pub email: Option<String>,
     pub phone: Option<String>,
@@ -213,7 +213,7 @@ pub struct RegistrationWorkflowSnapshot {
     pub deadlines: Vec<RegistrationWorkflowDeadline>,
 }
 
-pub struct CompleteRegistrationRequest {
+pub struct CompleteRegistrationRequestBody {
     pub registration: UserRegistration,
     pub registration_token: Option<UserRegistrationToken>,
     pub email_authentication: Option<UserEmailAuthentication>,
@@ -240,8 +240,8 @@ pub struct PreparedRegistrationCompletion {
 
 impl PreparedRegistrationCompletion {
     #[must_use]
-    pub fn into_request(self, user_agent: Option<String>) -> CompleteRegistrationRequest {
-        CompleteRegistrationRequest {
+    pub fn into_request(self, user_agent: Option<String>) -> CompleteRegistrationRequestBody {
+        CompleteRegistrationRequestBody {
             registration: self.registration,
             registration_token: self.registration_token,
             email_authentication: self.email_authentication,
@@ -1021,7 +1021,7 @@ pub async fn start_password_registration(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     password_manager: &PasswordManager,
-    request: StartPasswordRegistrationRequest,
+    request: StartPasswordRegistrationRequestBody,
 ) -> Result<StartedPasswordRegistration, StartPasswordRegistrationError> {
     let mut registration = repo
         .user_registration()
@@ -1120,7 +1120,7 @@ pub async fn begin_password_registration(
     principal_server: &dyn PrincipalServerAdmin,
     policy_factory: &PolicyFactory,
     limiter: &Limiter,
-    request: BeginPasswordRegistrationRequest,
+    request: BeginPasswordRegistrationRequestBody,
 ) -> Result<BeginPasswordRegistrationResult, BeginPasswordRegistrationError> {
     if !request.password_registration_enabled {
         return Ok(BeginPasswordRegistrationResult::Rejected {
@@ -1284,7 +1284,7 @@ pub async fn begin_password_registration(
         rng,
         clock,
         password_manager,
-        StartPasswordRegistrationRequest {
+        StartPasswordRegistrationRequestBody {
             handle: request.handle,
             email,
             phone,
@@ -2012,7 +2012,7 @@ pub async fn complete_registration(
     mut repo: BoxRepository,
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
-    request: CompleteRegistrationRequest,
+    request: CompleteRegistrationRequestBody,
     grant_admin: bool,
 ) -> Result<CompletedRegistration, RepositoryError> {
     let registration = repo

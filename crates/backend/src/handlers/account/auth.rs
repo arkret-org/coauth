@@ -27,7 +27,7 @@ use crate::{
     handlers::{
         METER, RequesterFingerprint,
         account::service::access::{
-            PasswordLoginOutcome, PasswordLoginRequest, load_enabled_upstream_providers,
+            PasswordLoginOutcome, PasswordLoginRequestBody, load_enabled_upstream_providers,
             login_with_password, logout_browser_session,
         },
         cokret,
@@ -104,7 +104,7 @@ pub struct LoginReqBody {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct LoginResponse {
+pub struct LoginOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<&'static str>,
@@ -155,12 +155,12 @@ pub struct SessionGrantPrincipalServerInfo {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct LogoutResponse {
+pub struct LogoutOutcome {
     pub status: &'static str,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ProvidersResponse {
+pub struct ProvidersOutcome {
     pub providers: Vec<ProviderInfo>,
     pub password_login_enabled: bool,
     pub password_registration_enabled: bool,
@@ -209,7 +209,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         Ok(jkt) => jkt,
         Err(error) => {
             res.status_code(StatusCode::BAD_REQUEST);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_dpop_proof"),
                 viewer: None,
@@ -228,7 +228,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     // Validate fields
     if input.handle.is_empty() || input.password.is_empty() {
         PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-        res.render(Json(LoginResponse {
+        res.render(Json(LoginOutcome {
             status: "error",
             error: Some("invalid_credentials"),
             viewer: None,
@@ -251,7 +251,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         {
             tracing::warn!(error = %error, "CAPTCHA verification failed on login");
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("captcha_failed"),
                 viewer: None,
@@ -274,7 +274,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         &url_builder,
         &cokret_config,
         &site_config,
-        PasswordLoginRequest {
+        PasswordLoginRequestBody {
             username_or_email: input.handle,
             password: zeroize::Zeroizing::new(input.password),
             user_agent,
@@ -292,7 +292,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     })? {
         PasswordLoginOutcome::Disabled => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("password_login_disabled"),
                 viewer: None,
@@ -303,7 +303,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         }
         PasswordLoginOutcome::InvalidCredentials => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("invalid_credentials"),
                 viewer: None,
@@ -315,7 +315,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         PasswordLoginOutcome::RateLimited => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
             res.status_code(StatusCode::TOO_MANY_REQUESTS);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("rate_limited"),
                 viewer: None,
@@ -326,7 +326,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         }
         PasswordLoginOutcome::AccountDeactivated { .. } => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("account_deactivated"),
                 viewer: None,
@@ -337,7 +337,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         }
         PasswordLoginOutcome::AccountLocked { .. } => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginResponse {
+            res.render(Json(LoginOutcome {
                 status: "error",
                 error: Some("account_locked"),
                 viewer: None,
@@ -361,7 +361,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             if !cokret_config.password_login_session_grants_enabled {
                 cookie_jar.finalize(
                     res,
-                    Json(LoginResponse {
+                    Json(LoginOutcome {
                         status: "success",
                         error: None,
                         viewer: Some(ViewerInfo {
@@ -384,7 +384,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             let Some(dpop_binding) = dpop_binding else {
                 PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                 res.status_code(StatusCode::BAD_REQUEST);
-                res.render(Json(LoginResponse {
+                res.render(Json(LoginOutcome {
                     status: "error",
                     error: Some("invalid_dpop_proof"),
                     viewer: None,
@@ -404,7 +404,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Err(error) => {
                     PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                     res.status_code(StatusCode::BAD_REQUEST);
-                    res.render(Json(LoginResponse {
+                    res.render(Json(LoginOutcome {
                         status: "error",
                         error: Some("invalid_audience"),
                         viewer: None,
@@ -464,7 +464,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
 
             cookie_jar.finalize(
                 res,
-                Json(LoginResponse {
+                Json(LoginOutcome {
                     status: "success",
                     error: None,
                     viewer: Some(ViewerInfo {
@@ -526,7 +526,7 @@ pub async fn logout(
     // Clear the session cookie
     let cookie_jar = cookie_jar.update_session_info(&session_info.mark_session_ended());
 
-    cookie_jar.finalize(res, Json(LogoutResponse { status: "success" }));
+    cookie_jar.finalize(res, Json(LogoutOutcome { status: "success" }));
     Ok(())
 }
 
@@ -535,7 +535,7 @@ pub async fn logout(
 /// List all enabled upstream OAuth providers and site configuration flags
 /// relevant to the login/registration UI.
 #[endpoint]
-pub async fn providers(depot: &Depot) -> Result<Json<ProvidersResponse>, RouteError> {
+pub async fn providers(depot: &Depot) -> Result<Json<ProvidersOutcome>, RouteError> {
     let site_config = depot.site_config()?;
     let mut repo = depot.repo().await?;
 
@@ -556,7 +556,7 @@ pub async fn providers(depot: &Depot) -> Result<Json<ProvidersResponse>, RouteEr
 
     repo.cancel().await?;
 
-    Ok(Json(ProvidersResponse {
+    Ok(Json(ProvidersOutcome {
         providers: provider_list,
         password_login_enabled: site_config.password_login_enabled,
         password_registration_enabled: site_config.password_registration_enabled,

@@ -28,7 +28,7 @@ pub struct I18nEntry {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct I18nResponse {
+struct I18nOutcome {
     data: BTreeMap<String, I18nEntry>,
 }
 
@@ -220,7 +220,7 @@ async fn fetch_entries(client_id: &str) -> Result<BTreeMap<String, I18nEntry>, S
     if !resp.status().is_success() {
         return Err(format!("GET {} returned {}", url, resp.status()));
     }
-    let body: I18nResponse = resp.json().await.map_err(|e| format!("decode: {e}"))?;
+    let body: I18nOutcome = resp.json().await.map_err(|e| format!("decode: {e}"))?;
     Ok(body.data)
 }
 
@@ -245,6 +245,6 @@ async fn upsert_entry(
         let text = resp.text().await.unwrap_or_default();
         return Err(format!("POST {url} -> {status}: {text}"));
     }
-    let resp_body: I18nResponse = resp.json().await.map_err(|e| format!("decode: {e}"))?;
+    let resp_body: I18nOutcome = resp.json().await.map_err(|e| format!("decode: {e}"))?;
     Ok(resp_body.data)
 }

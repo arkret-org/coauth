@@ -7,7 +7,7 @@ use super::{
     extract_session_info, get_requester,
     linked_accounts::LinkedAccount,
     make_clock, parse_user_agent,
-    site_config::{SiteConfigResponse, from_site_config},
+    site_config::{SiteConfigOutcome, from_site_config},
 };
 use crate::{
     handlers::{account::service::connections::load_linked_accounts, cokret},
@@ -17,10 +17,10 @@ use crate::{
 // ── Response types ─────────────────────────────────────────────
 
 #[derive(Serialize, ToSchema)]
-struct ViewerResponse {
+struct ViewerOutcome {
     viewer: ViewerData,
     viewer_session: ViewerSessionData,
-    site_config: SiteConfigResponse,
+    site_config: SiteConfigOutcome,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -110,7 +110,7 @@ struct EmailData {
 pub async fn get_viewer(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ViewerResponse>, RouteError> {
+) -> Result<Json<ViewerOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
@@ -218,7 +218,7 @@ pub async fn get_viewer(
 
     repo.cancel().await?;
 
-    Ok(Json(ViewerResponse {
+    Ok(Json(ViewerOutcome {
         viewer,
         viewer_session,
         site_config: from_site_config(&config),
@@ -291,7 +291,7 @@ pub struct WorkflowInboxItem {
 
 /// Response for `GET /_coauth/self/viewer/workflow-inbox`.
 #[derive(Serialize, ToSchema)]
-pub struct WorkflowInboxResponse {
+pub struct WorkflowInboxOutcome {
     pub pending: Vec<WorkflowInboxItem>,
     pub total: usize,
 }
@@ -308,7 +308,7 @@ pub struct WorkflowInboxResponse {
 pub async fn get_workflow_inbox(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<WorkflowInboxResponse>, RouteError> {
+) -> Result<Json<WorkflowInboxOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
 
@@ -330,7 +330,7 @@ pub async fn get_workflow_inbox(
     let pending: Vec<WorkflowInboxItem> = Vec::new();
     let total = pending.len();
 
-    Ok(Json(WorkflowInboxResponse { pending, total }))
+    Ok(Json(WorkflowInboxOutcome { pending, total }))
 }
 
 // ── Response types for viewer overview ─────────────────────
@@ -374,7 +374,7 @@ pub struct WorkflowsSummary {
 /// Unified overview response combining security, contacts, identities, and
 /// workflow summaries into a single payload for the account dashboard.
 #[derive(Serialize, ToSchema)]
-pub struct ViewerOverviewResponse {
+pub struct ViewerOverviewOutcome {
     pub user: ViewerUserSummary,
     pub security: SecuritySummaryData,
     pub contacts: ContactsSummary,
@@ -403,7 +403,7 @@ impl From<&AccountSecuritySummary> for SecuritySummaryData {
 pub async fn get_viewer_overview(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ViewerOverviewResponse>, RouteError> {
+) -> Result<Json<ViewerOverviewOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
 
@@ -434,7 +434,7 @@ pub async fn get_viewer_overview(
     // pending count is always zero for now.
     let pending_workflow_count: usize = 0;
 
-    Ok(Json(ViewerOverviewResponse {
+    Ok(Json(ViewerOverviewOutcome {
         user: ViewerUserSummary {
             id: NodeType::User.serialize(user_id),
             has_password: security.has_password,

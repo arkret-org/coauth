@@ -1,9 +1,9 @@
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 
-pub struct JwtResponse<T>(pub Jwt<'static, T>);
+pub struct JwtBody<T>(pub Jwt<'static, T>);
 
-impl<T: Send> Scribe for JwtResponse<T> {
+impl<T: Send> Scribe for JwtBody<T> {
     fn render(self, res: &mut Response) {
         res.headers_mut().insert(
             http::header::CONTENT_TYPE,

@@ -21,7 +21,7 @@ use coauth_data::SiteConfig;
 use crate::handlers::{
     RequesterFingerprint,
     account::service::registration::{
-        BeginPasswordRegistrationIssue, BeginPasswordRegistrationRequest,
+        BeginPasswordRegistrationIssue, BeginPasswordRegistrationRequestBody,
         BeginPasswordRegistrationResult, EmailAvailabilityCheck, begin_password_registration,
     },
     account::{self, DepotExt},
@@ -234,7 +234,7 @@ pub async fn post(
         principal_server.as_ref(),
         policy_factory.as_ref(),
         &limiter,
-        BeginPasswordRegistrationRequest {
+        BeginPasswordRegistrationRequestBody {
             username: form.username,
             email,
             phone: None,

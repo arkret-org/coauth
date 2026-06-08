@@ -19,7 +19,7 @@ use crate::{
     handlers::{
         admin::{
             audit_helper::record_admin_operation_signed, call_context::extract_call_context,
-            model::User, params::extract_ulid_param, response::SingleResponse,
+            model::User, params::extract_ulid_param, response::SingleOutcome,
         },
         cokret::service_did_for,
         common::DepotExt,
@@ -28,8 +28,8 @@ use crate::{
 
 /// # JSON payload for the `POST /_coauth/admin/users/:id/risk-action` endpoint
 #[derive(Deserialize, JsonSchema)]
-#[serde(rename = "RiskActionRequest")]
-pub struct RiskActionRequest {
+#[serde(rename = "RiskActionRequestBody")]
+pub struct RiskActionRequestBody {
     /// The risk action to perform: "lock", "`force_password_reset`", or
     /// "`terminate_sessions`"
     action: String,
@@ -40,7 +40,7 @@ pub struct RiskActionRequest {
 
 /// Response indicating which risk action was taken
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct RiskActionResponse {
+pub struct RiskActionOutcome {
     /// The action that was performed
     action: String,
 
@@ -48,7 +48,7 @@ pub struct RiskActionResponse {
     reason: Option<String>,
 
     /// The user the action was performed on
-    user: SingleResponse<User>,
+    user: SingleOutcome<User>,
 
     /// Number of sessions terminated (only for `terminate_sessions` action)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,7 +71,7 @@ fn audit_signing_context(
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.users.risk_action", skip_all)]
-pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskActionResponse> {
+pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskActionOutcome> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -81,7 +81,7 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
     } = call_context;
     let id = extract_ulid_param(req)?;
     let mut rng = crate::handlers::account::make_rng();
-    let params: RiskActionRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let params: RiskActionRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     let user = repo
         .user()
@@ -142,12 +142,12 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
 
     repo.save().await?;
 
-    let user_response = SingleResponse::new(
+    let user_response = SingleOutcome::new(
         User::from(user),
         format!("/_coauth/admin/users/{id}/risk-action"),
     );
 
-    Ok(Json(RiskActionResponse {
+    Ok(Json(RiskActionOutcome {
         action: params.action,
         reason: params.reason,
         user: user_response,
@@ -158,7 +158,7 @@ pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskAct
 /// # JSON payload for the `POST /_coauth/admin/users/:id/set-password` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[schemars(rename = "SetUserPasswordRequest")]
-pub struct SetPasswordRequest {
+pub struct SetPasswordRequestBody {
     /// The password to set for the user
     #[schemars(example = &"hunter2")]
     password: String,
@@ -180,7 +180,7 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
     let id = extract_ulid_param(req)?;
     let mut rng = crate::handlers::account::make_rng();
     let password_manager = depot.password_manager()?;
-    let params: SetPasswordRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let params: SetPasswordRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     if !password_manager.is_enabled() {
         return Err(AppError::forbidden("Password auth is disabled"));

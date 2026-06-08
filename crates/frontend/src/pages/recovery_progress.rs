@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::RecoveryStatusResponse,
+    api::types::RecoveryStatusOutcome,
     components::{
         layout::Layout,
         loading::{LoadingScreen, LoadingSpinner},
@@ -16,7 +16,7 @@ pub fn RecoveryProgress(id: String) -> Element {
     let status_data = use_resource(move || {
         let rid = recovery_id.clone();
         async move {
-            crate::api::api_get::<RecoveryStatusResponse>(&format!(
+            crate::api::api_get::<RecoveryStatusOutcome>(&format!(
                 "/gate/account/auth/recovery/{rid}"
             ))
             .await
@@ -47,7 +47,7 @@ pub fn RecoveryProgress(id: String) -> Element {
 }
 
 #[component]
-fn RecoveryProgressContent(data: RecoveryStatusResponse, id: String) -> Element {
+fn RecoveryProgressContent(data: RecoveryStatusOutcome, id: String) -> Element {
     let mut resending = use_signal(|| false);
     let mut resend_msg = use_signal(|| None::<String>);
     let recovery_id = id.clone();

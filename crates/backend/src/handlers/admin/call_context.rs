@@ -12,7 +12,7 @@ use oauth_types::scope::Scope;
 use salvo::{http::StatusCode, prelude::*};
 use ulid::Ulid;
 
-use super::response::ErrorResponse;
+use super::response::ErrorOutcome;
 use crate::{handlers::account::DepotExt, record_error};
 
 #[derive(Debug, thiserror::Error)]
@@ -73,7 +73,7 @@ pub enum Rejection {
 
 impl Scribe for Rejection {
     fn render(self, res: &mut Response) {
-        let response = ErrorResponse::from_error(&self);
+        let response = ErrorOutcome::from_error(&self);
         let sentry_event_id = record_error!(
             self,
             Self::RepositorySetup(_)

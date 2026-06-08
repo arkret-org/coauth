@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::ViewerResponse,
+    api::types::ViewerOutcome,
     components::{
         browser_session::BrowserSessionCard,
         empty_state::EmptyState,
@@ -20,7 +20,7 @@ pub fn BrowserSessions() -> Element {
     let data = use_resource(move || {
         let _inactive = show_inactive();
         let _pag = &*pagination.read();
-        async move { crate::api::api_get::<ViewerResponse>("/self/viewer").await }
+        async move { crate::api::api_get::<ViewerOutcome>("/self/viewer").await }
     });
     let binding = data.read();
 

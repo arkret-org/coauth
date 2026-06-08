@@ -45,7 +45,7 @@ use crate::{
             audit_helper::record_admin_operation,
             call_context::extract_call_context,
             model::UserRegistrationToken,
-            response::SingleResponse,
+            response::SingleOutcome,
             v1::users::create::{MintRegistrationTokensParams, mint_registration_tokens},
         },
         common::DepotExt,
@@ -109,7 +109,7 @@ impl From<InviteQuarantineRecord> for InviteQuarantineEntry {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct InviteQuarantineListResponse {
+pub struct InviteQuarantineListOutcome {
     pub data: Vec<InviteQuarantineEntry>,
 }
 
@@ -128,7 +128,7 @@ pub enum ResolveDecision {
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "ResolveInviteQuarantineRequest")]
-pub struct ResolveRequest {
+pub struct ResolveRequestBody {
     pub decision: ResolveDecision,
 
     /// Optional operator note recorded alongside the resolution.
@@ -142,14 +142,14 @@ pub struct ResolveRequest {
 /// `minted_tokens`. On `reject`, only the entry is updated and
 /// `minted_tokens` is empty.
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct ResolveResponse {
+pub struct ResolveOutcome {
     pub entry: InviteQuarantineEntry,
 
     /// Empty when `decision = reject` or when the original payload had
     /// no mintable parameters. Each element matches the shape returned
     /// by `POST /_coauth/admin/users/batch-invite`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub minted_tokens: Vec<SingleResponse<UserRegistrationToken>>,
+    pub minted_tokens: Vec<SingleOutcome<UserRegistrationToken>>,
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ fn extract_uuid_param(req: &Request) -> Result<Uuid, AppError> {
 pub async fn list_invite_quarantine(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<InviteQuarantineListResponse> {
+) -> JsonResult<InviteQuarantineListOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { repo, .. } = ctx;
     let query: InviteQuarantineListQuery = req.parse_queries().unwrap_or_default();
@@ -195,14 +195,14 @@ pub async fn list_invite_quarantine(
         .map(InviteQuarantineEntry::from)
         .collect();
 
-    Ok(Json(InviteQuarantineListResponse { data }))
+    Ok(Json(InviteQuarantineListOutcome { data }))
 }
 
 /// `POST /_coauth/admin/invite-quarantine/{id}/resolve`
 ///
 /// Round-21 update: `approve` now actually re-runs the original
 /// `batch_invite` using the parameters captured in `payload` at enqueue
-/// time. The minted tokens are returned in `ResolveResponse.minted_tokens`
+/// time. The minted tokens are returned in `ResolveOutcome.minted_tokens`
 /// so the caller (sodmin / yougen) doesn't need a follow-up call. The
 /// consent gate is not re-evaluated — the operator approving the queue
 /// row has explicitly vouched for the consent decision out of band.
@@ -214,7 +214,7 @@ pub async fn list_invite_quarantine(
 pub async fn resolve_invite_quarantine(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<ResolveResponse> {
+) -> JsonResult<ResolveOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -224,7 +224,7 @@ pub async fn resolve_invite_quarantine(
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
     let id = extract_uuid_param(req)?;
-    let body: ResolveRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: ResolveRequestBody = req.parse_json().await.map_err(AppError::internal)?;
     let queue = depot.invite_quarantine_service()?;
     let now = clock.now();
 
@@ -255,7 +255,7 @@ pub async fn resolve_invite_quarantine(
     // If `payload` has no recognisable mint params (legacy enqueue
     // shapes, manual queue inserts), we log a warning and fall through
     // to the flag-flip-only path. Reject always falls through.
-    let mut minted_tokens: Vec<SingleResponse<UserRegistrationToken>> = Vec::new();
+    let mut minted_tokens: Vec<SingleOutcome<UserRegistrationToken>> = Vec::new();
     if matches!(body.decision, ResolveDecision::Approve) {
         if let Some(params) = mint_params_from_payload(&record.payload) {
             match mint_registration_tokens(
@@ -319,7 +319,7 @@ pub async fn resolve_invite_quarantine(
 
     repo.save().await?;
 
-    Ok(Json(ResolveResponse {
+    Ok(Json(ResolveOutcome {
         entry: InviteQuarantineEntry::from(record),
         minted_tokens,
     }))
@@ -411,14 +411,14 @@ mod tests {
 
     #[test]
     fn resolve_request_parses_approve() {
-        let body: ResolveRequest = serde_json::from_str(r#"{"decision": "approve"}"#).unwrap();
+        let body: ResolveRequestBody = serde_json::from_str(r#"{"decision": "approve"}"#).unwrap();
         assert_eq!(body.decision, ResolveDecision::Approve);
         assert!(body.note.is_none());
     }
 
     #[test]
     fn resolve_request_parses_reject_with_note() {
-        let body: ResolveRequest =
+        let body: ResolveRequestBody =
             serde_json::from_str(r#"{"decision": "reject", "note": "spam"}"#).unwrap();
         assert_eq!(body.decision, ResolveDecision::Reject);
         assert_eq!(body.note.as_deref(), Some("spam"));
@@ -426,7 +426,7 @@ mod tests {
 
     #[test]
     fn resolve_request_rejects_unknown_decision() {
-        let res: Result<ResolveRequest, _> = serde_json::from_str(r#"{"decision": "maybe"}"#);
+        let res: Result<ResolveRequestBody, _> = serde_json::from_str(r#"{"decision": "maybe"}"#);
         assert!(res.is_err(), "unknown decision must not parse");
     }
 

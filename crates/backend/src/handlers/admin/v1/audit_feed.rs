@@ -110,7 +110,7 @@ impl AuditEntry {
 
 /// Response body for the audit feed endpoint.
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AuditFeedResponse {
+pub struct AuditFeedOutcome {
     /// The list of audit entries, ordered by most recent first.
     pub data: Vec<AuditEntry>,
 }
@@ -130,7 +130,7 @@ pub struct AuditFeedQuery {
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.audit_feed", skip_all)]
-pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedResponse> {
+pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOutcome> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
 
@@ -164,5 +164,5 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedRe
         })
         .collect();
 
-    Ok(Json(AuditFeedResponse { data }))
+    Ok(Json(AuditFeedOutcome { data }))
 }

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::NotificationPreferencesResponse,
+    api::types::NotificationPreferencesOutcome,
     components::{
         loading::LoadingScreen,
         separator::{Separator, SeparatorKind},
@@ -18,7 +18,7 @@ use crate::{
 #[component]
 pub fn NotificationPreferences() -> Element {
     let data = use_resource(|| async {
-        crate::api::api_get::<NotificationPreferencesResponse>("/self/viewer/preferences").await
+        crate::api::api_get::<NotificationPreferencesOutcome>("/self/viewer/preferences").await
     });
     let binding = data.read();
 
@@ -175,7 +175,7 @@ fn NotificationPreferencesForm(
                             "preferences": prefs_snapshot,
                         });
                         let result = crate::api::api_patch::<
-                            crate::api::types::UpdateNotificationPreferencesResponse,
+                            crate::api::types::UpdateNotificationPreferencesOutcome,
                         >("/self/viewer/preferences", body)
                         .await;
                         saving.set(false);

@@ -91,13 +91,13 @@ pub struct ClaimRecord {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct ClaimListResponse {
+pub struct ClaimListOutcome {
     data: Vec<ClaimRecord>,
 }
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "IssueClaimRequest")]
-pub struct IssueClaimRequest {
+#[serde(rename = "IssueClaimRequestBody")]
+pub struct IssueClaimRequestBody {
     /// Optional local account to bind this claim to.
     #[schemars(with = "Option<crate::handlers::admin::schema::Ulid>")]
     account_id: Option<Ulid>,
@@ -126,8 +126,8 @@ pub struct IssueClaimRequest {
 }
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "RevokeClaimRequest")]
-pub struct RevokeClaimRequest {
+#[serde(rename = "RevokeClaimRequestBody")]
+pub struct RevokeClaimRequestBody {
     /// Operator-supplied revocation reason for audit.
     reason: String,
 }
@@ -165,7 +165,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
         ..
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
-    let body: IssueClaimRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: IssueClaimRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     let now = clock.now();
     let claim_kind = require_non_empty(body.claim_kind, "claim_kind")?;
@@ -226,7 +226,7 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.claims.status", skip_all)]
-pub async fn list_claim_status(req: &mut Request, depot: &Depot) -> JsonResult<ClaimListResponse> {
+pub async fn list_claim_status(req: &mut Request, depot: &Depot) -> JsonResult<ClaimListOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { repo, clock, .. } = ctx;
     let query: ClaimStatusQuery = req.parse_queries().unwrap_or_default();
@@ -251,7 +251,7 @@ pub async fn list_claim_status(req: &mut Request, depot: &Depot) -> JsonResult<C
         .map(claim_record_from_service)
         .collect();
 
-    Ok(Json(ClaimListResponse { data }))
+    Ok(Json(ClaimListOutcome { data }))
 }
 
 #[endpoint]
@@ -266,7 +266,7 @@ pub async fn revoke_claim(req: &mut Request, depot: &Depot) -> JsonResult<ClaimR
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
     let id = extract_ulid_param(req)?;
-    let body: RevokeClaimRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: RevokeClaimRequestBody = req.parse_json().await.map_err(AppError::internal)?;
     let reason = require_non_empty(body.reason, "reason")?;
     let claim_service = depot.account_claims_service()?;
     let now = clock.now();

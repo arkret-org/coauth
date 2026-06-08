@@ -18,7 +18,7 @@ use crate::handlers::account::service::connections::{
 // ── Response types ──────────────────────────────────────────────
 
 #[derive(Serialize, ToSchema)]
-pub struct LinkedAccountsResponse {
+pub struct LinkedAccountsOutcome {
     pub accounts: Vec<LinkedAccount>,
 }
 
@@ -34,7 +34,7 @@ pub struct LinkedAccount {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct UnlinkResponse {
+pub struct UnlinkOutcome {
     pub status: &'static str,
 }
 
@@ -45,7 +45,7 @@ pub struct UnlinkResponse {
 pub async fn list_linked_accounts(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<LinkedAccountsResponse>, RouteError> {
+) -> Result<Json<LinkedAccountsOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -69,7 +69,7 @@ pub async fn list_linked_accounts(
         })
         .collect();
 
-    Ok(Json(LinkedAccountsResponse { accounts }))
+    Ok(Json(LinkedAccountsOutcome { accounts }))
 }
 
 // ── DELETE /_coauth/self/linked-accounts/{id} ─────────────────────────
@@ -79,7 +79,7 @@ pub async fn list_linked_accounts(
 pub async fn unlink_account(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<UnlinkResponse>, RouteError> {
+) -> Result<Json<UnlinkOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -98,7 +98,7 @@ pub async fn unlink_account(
         .await
         .map_err(map_linked_account_error)?;
 
-    Ok(Json(UnlinkResponse { status: "unlinked" }))
+    Ok(Json(UnlinkOutcome { status: "unlinked" }))
 }
 
 fn map_linked_account_error(error: LinkedAccountError) -> RouteError {

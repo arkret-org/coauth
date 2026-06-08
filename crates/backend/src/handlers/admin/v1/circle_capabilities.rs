@@ -13,8 +13,7 @@
 //! visible across horizontally scaled replicas that share Postgres.
 
 use coauth_admin_types::circle_capability_admin::{
-    CircleCapabilityGrant, CreateCircleCapabilityGrant, ListCircleCapabilityGrantsResponse,
-    RiskTier,
+    CircleCapabilityGrant, CreateCircleCapabilityGrant, ListCircleCapabilityGrantsOutcome, RiskTier,
 };
 use coauth_data::{NewCircleCapabilityGrant, RepositoryAccess};
 use salvo::{http::StatusCode, oapi::extract::PathParam, prelude::*};
@@ -34,12 +33,12 @@ use crate::{
 pub async fn list_handler(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<ListCircleCapabilityGrantsResponse> {
+) -> JsonResult<ListCircleCapabilityGrantsOutcome> {
     let mut repo = extract_call_context(req, depot).await?.repo;
     let data = repo.circle_capability_grant().list_active().await?;
     repo.cancel().await?;
 
-    Ok(Json(ListCircleCapabilityGrantsResponse { data }))
+    Ok(Json(ListCircleCapabilityGrantsOutcome { data }))
 }
 
 #[endpoint]

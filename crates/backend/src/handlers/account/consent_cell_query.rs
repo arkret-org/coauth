@@ -64,7 +64,7 @@ pub struct ConsentState {
 /// soland returns the `OrSet` join value as a list of tag strings, plus the
 /// cell id for echo. `granted` is derived from `!tags.is_empty()`.
 #[derive(Debug, Deserialize)]
-struct ConsentCellResponse {
+struct ConsentCellOutcome {
     #[serde(default)]
     cell_id: String,
     #[serde(default)]
@@ -159,7 +159,7 @@ pub async fn query_consent_cell(
         };
     }
 
-    let parsed: ConsentCellResponse = match response.json().await {
+    let parsed: ConsentCellOutcome = match response.json().await {
         Ok(p) => p,
         Err(error) => {
             warn!(?error, "consent cell query: failed to parse response");

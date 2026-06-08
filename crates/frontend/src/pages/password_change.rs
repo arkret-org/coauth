@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{SetPasswordStatus, ViewerResponse},
+    api::types::{SetPasswordStatus, ViewerOutcome},
     components::{
         form_error::FormError,
         layout::Layout,
@@ -16,7 +16,7 @@ use crate::{
 #[component]
 pub fn PasswordChange() -> Element {
     let data =
-        use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
+        use_resource(|| async { crate::api::api_get::<ViewerOutcome>("/self/viewer").await });
     let binding = data.read();
 
     match &*binding {

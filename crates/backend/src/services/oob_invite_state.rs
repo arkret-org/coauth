@@ -57,12 +57,12 @@ impl NotFoundBody {
 /// salvo types so the helper is reusable from non-handler code (admin
 /// CLI tools, test fixtures).
 #[derive(Debug, Clone, Copy)]
-pub struct NonEnumerableResponse {
+pub struct NonEnumerableOutcome {
     pub status: u16,
     pub body: NotFoundBody,
 }
 
-impl NonEnumerableResponse {
+impl NonEnumerableOutcome {
     /// Canonical not-found response. All seven failure causes resolve
     /// to exactly this value on the wire.
     pub const NOT_FOUND: Self = Self {
@@ -86,13 +86,13 @@ pub struct NonEnumerableAudit {
 #[must_use]
 pub fn finalise_oob_failure(
     trigger: OobInviteFailure,
-) -> (NonEnumerableAudit, NonEnumerableResponse) {
+) -> (NonEnumerableAudit, NonEnumerableOutcome) {
     (
         NonEnumerableAudit {
             trigger,
             internal_reason_code: trigger.internal_reason_code(),
         },
-        NonEnumerableResponse::NOT_FOUND,
+        NonEnumerableOutcome::NOT_FOUND,
     )
 }
 

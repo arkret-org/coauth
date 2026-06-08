@@ -83,7 +83,7 @@ pub struct LinkedAccount {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct UnlinkResponse {
+pub struct UnlinkOutcome {
     pub status: String,
 }
 
@@ -328,7 +328,7 @@ pub enum SetDisplayNameStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ProfilePatchRequest {
+pub struct ProfilePatchRequestBody {
     #[serde(default)]
     pub display_name: Option<Option<String>>,
     #[serde(default)]
@@ -338,13 +338,13 @@ pub struct ProfilePatchRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct PatchViewerProfileResponse {
+pub struct PatchViewerProfileOutcome {
     pub profile: UserProfile,
     pub principal: PrincipalUser,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct AdminUserPatchRequest {
+pub struct AdminUserPatchRequestBody {
     #[serde(default)]
     pub display_name: Option<Option<String>>,
     #[serde(default)]
@@ -362,7 +362,7 @@ pub struct AdminUserPatchRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct UserEmailPatchRequest {
+pub struct UserEmailPatchRequestBody {
     #[serde(default)]
     pub email: Option<String>,
     #[serde(default)]
@@ -440,7 +440,7 @@ pub enum DeactivateUserStatus {
 // ── Combined viewer response from REST /_coauth/self/viewer ──────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ViewerResponse {
+pub struct ViewerOutcome {
     pub viewer: Viewer,
     pub viewer_session: ViewerSession,
     pub site_config: SiteConfig,
@@ -502,7 +502,7 @@ pub struct LoginReqBody {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LoginResponse {
+pub struct LoginOutcome {
     pub status: String,
     #[serde(default)]
     pub error: Option<String>,
@@ -535,7 +535,7 @@ pub struct SessionGrantInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LogoutResponse {
+pub struct LogoutOutcome {
     pub status: String,
 }
 
@@ -550,7 +550,7 @@ pub struct UpstreamProvider {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ProvidersResponse {
+pub struct ProvidersOutcome {
     pub providers: Vec<UpstreamProvider>,
     pub password_login_enabled: bool,
     pub password_registration_enabled: bool,
@@ -561,7 +561,7 @@ pub struct ProvidersResponse {
 // ── Registration API types ────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RegisterRequest {
+pub struct RegisterRequestBody {
     pub handle: String,
     #[serde(default)]
     pub email: Option<String>,
@@ -570,7 +570,7 @@ pub struct RegisterRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RegisterResponse {
+pub struct RegisterOutcome {
     pub status: String,
     #[serde(default)]
     pub id: Option<String>,
@@ -581,7 +581,7 @@ pub struct RegisterResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RegisterStatusResponse {
+pub struct RegisterStatusOutcome {
     pub id: String,
     pub handle: String,
     #[serde(default)]
@@ -592,12 +592,12 @@ pub struct RegisterStatusResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct VerifyEmailRequest {
+pub struct VerifyEmailRequestBody {
     pub code: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct DisplayNameRequest {
+pub struct DisplayNameRequestBody {
     #[serde(default)]
     pub display_name: Option<String>,
     #[serde(default)]
@@ -605,7 +605,7 @@ pub struct DisplayNameRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct StepResponse {
+pub struct StepOutcome {
     pub status: String,
     #[serde(default)]
     pub next_step: Option<String>,
@@ -619,7 +619,7 @@ pub struct StepResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ChangeRegistrationEmailResponse {
+pub struct ChangeRegistrationEmailOutcome {
     pub status: String,
     #[serde(default)]
     pub error: Option<String>,
@@ -628,12 +628,12 @@ pub struct ChangeRegistrationEmailResponse {
 // ── Recovery API types ────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RecoveryStartRequest {
+pub struct RecoveryStartRequestBody {
     pub email: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RecoveryStartResponse {
+pub struct RecoveryStartOutcome {
     pub status: String,
     #[serde(default)]
     pub id: Option<String>,
@@ -642,14 +642,14 @@ pub struct RecoveryStartResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RecoveryStatusResponse {
+pub struct RecoveryStatusOutcome {
     pub id: String,
     pub email: String,
     pub status: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct RecoveryTicketStatusResponse {
+pub struct RecoveryTicketStatusOutcome {
     pub status: String,
     #[serde(default)]
     pub email: Option<String>,
@@ -677,7 +677,7 @@ pub struct ApprovalUserInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ApprovalDataResponse {
+pub struct ApprovalDataOutcome {
     pub grant_id: String,
     pub client: ApprovalClientInfo,
     pub scope: String,
@@ -691,7 +691,7 @@ pub struct ApprovalDataResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct OAuthApprovalSubmitResponse {
+pub struct OAuthApprovalSubmitOutcome {
     pub status: String,
     #[serde(default)]
     pub redirect_url: Option<String>,
@@ -702,21 +702,21 @@ pub struct OAuthApprovalSubmitResponse {
 // ── Device Code API types ─────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct DeviceLinkResponse {
+pub struct DeviceLinkOutcome {
     pub status: String,
     #[serde(default)]
     pub grant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct DeviceApprovalResponse {
+pub struct DeviceApprovalOutcome {
     pub status: String,
 }
 
 // ── Security summary (GET /_coauth/self/viewer/security) ───────────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SecuritySummaryResponse {
+pub struct SecuritySummaryOutcome {
     pub has_password: bool,
     pub active_sessions_count: usize,
     pub linked_providers_count: usize,
@@ -727,7 +727,7 @@ pub struct SecuritySummaryResponse {
 // ── Linked accounts list (GET /_coauth/self/linked-accounts) ───────
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LinkedAccountsResponse {
+pub struct LinkedAccountsOutcome {
     pub accounts: Vec<LinkedAccount>,
 }
 
@@ -743,7 +743,7 @@ pub struct WorkflowInboxItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct WorkflowInboxResponse {
+pub struct WorkflowInboxOutcome {
     pub pending: Vec<WorkflowInboxItem>,
     pub total: usize,
 }
@@ -763,12 +763,12 @@ pub struct ChannelPreference {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct NotificationPreferencesResponse {
+pub struct NotificationPreferencesOutcome {
     pub available_channels: Vec<ChannelAvailability>,
     pub preferences: Vec<ChannelPreference>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct UpdateNotificationPreferencesResponse {
+pub struct UpdateNotificationPreferencesOutcome {
     pub preferences: Vec<ChannelPreference>,
 }

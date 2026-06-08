@@ -55,7 +55,7 @@ impl From<OAuthClientI18nEntry> for I18nEntryDto {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "OAuthClientI18nUpsertRequest")]
-pub struct UpsertRequest {
+pub struct UpsertRequestBody {
     pub locale: String,
     pub display_name: String,
     #[serde(default)]
@@ -64,11 +64,11 @@ pub struct UpsertRequest {
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 #[serde(rename = "OAuthClientI18nResponse")]
-pub struct I18nResponse {
+pub struct I18nOutcome {
     pub data: BTreeMap<String, I18nEntryDto>,
 }
 
-impl I18nResponse {
+impl I18nOutcome {
     fn from_domain(value: OAuthClientI18n) -> Self {
         let data = value.into_iter().map(|(k, v)| (k, v.into())).collect();
         Self { data }
@@ -92,7 +92,7 @@ fn is_valid_locale(tag: &str) -> bool {
 /// Returns the full set of locale → entry mappings for the client.
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.oauth_clients_i18n.get", skip_all)]
-pub async fn get_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nResponse> {
+pub async fn get_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let client_id = extract_ulid_param(req)?;
@@ -105,7 +105,7 @@ pub async fn get_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nRespon
     }
 
     let entries = repo.oauth_client().load_i18n(client_id).await?;
-    Ok(Json(I18nResponse::from_domain(entries)))
+    Ok(Json(I18nOutcome::from_domain(entries)))
 }
 
 /// `POST /_coauth/admin/oauth/clients/{id}/i18n`
@@ -113,7 +113,7 @@ pub async fn get_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nRespon
 /// Upserts a single locale entry. Returns the post-update map.
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.oauth_clients_i18n.upsert", skip_all)]
-pub async fn upsert_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nResponse> {
+pub async fn upsert_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -131,7 +131,7 @@ pub async fn upsert_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nRes
         )));
     }
 
-    let body: UpsertRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: UpsertRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     if !is_valid_locale(&body.locale) {
         return Err(AppError::bad_request(format!(
@@ -169,7 +169,7 @@ pub async fn upsert_i18n(req: &mut Request, depot: &Depot) -> JsonResult<I18nRes
 
     repo.save().await?;
 
-    Ok(Json(I18nResponse::from_domain(updated)))
+    Ok(Json(I18nOutcome::from_domain(updated)))
 }
 
 #[cfg(test)]

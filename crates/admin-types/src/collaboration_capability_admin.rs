@@ -270,7 +270,7 @@ impl CreateCollaborationCapabilityGrant {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct ListCollaborationCapabilityTemplatesResponse {
+pub struct ListCollaborationCapabilityTemplatesOutcome {
     pub data: Vec<CollaborationCapabilityTemplate>,
 }
 

@@ -13,7 +13,7 @@ use crate::{
     handlers::{
         admin::{
             audit_helper::AdminAuditSigning, call_context::extract_call_context, model::User,
-            params::extract_ulid_param, response::SingleResponse,
+            params::extract_ulid_param, response::SingleOutcome,
         },
         cokret::service_did_for,
         common::DepotExt,
@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[derive(Deserialize, JsonSchema)]
-pub struct UpdateRequest {
+pub struct UpdateRequestBody {
     display_name: Option<Option<String>>,
     avatar_url: Option<Option<String>>,
     preferred_locale: Option<Option<String>>,
@@ -33,7 +33,7 @@ pub struct UpdateRequest {
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.users.update", skip_all)]
-pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleResponse<User>> {
+pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleOutcome<User>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -53,7 +53,7 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleR
         fail_closed: cokret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();
-    let body: UpdateRequest = req
+    let body: UpdateRequestBody = req
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
@@ -83,7 +83,7 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleR
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(User::from(user))))
+    Ok(Json(SingleOutcome::new_canonical(User::from(user))))
 }
 
 /// Translate a `UserAdminServiceError` returned by the `user_admin`

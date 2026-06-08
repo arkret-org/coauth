@@ -19,9 +19,9 @@ use crate::envelope::Resource;
 #[cfg_attr(
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema),
-    serde(rename = "AccountRiskActionProposalRequest")
+    serde(rename = "AccountRiskActionProposalRequestBody")
 )]
-pub struct AccountRiskActionProposalRequest {
+pub struct AccountRiskActionProposalRequestBody {
     /// Risk action to stage for approval: `lock`, `disable`, `erase`, or
     /// `reset_recovery`.
     #[serde(default)]
@@ -46,9 +46,9 @@ pub struct AccountRiskActionProposalRequest {
 #[cfg_attr(
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema),
-    serde(rename = "AccountRiskActionApprovalRequest")
+    serde(rename = "AccountRiskActionApprovalRequestBody")
 )]
-pub struct AccountRiskActionApprovalRequest {
+pub struct AccountRiskActionApprovalRequestBody {
     /// Risk action being approved.
     #[serde(default)]
     pub action: String,
@@ -81,9 +81,9 @@ pub struct AccountRiskActionApprovalRequest {
 #[cfg_attr(
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema),
-    serde(rename = "AccountRiskActionExecuteRequest")
+    serde(rename = "AccountRiskActionExecuteRequestBody")
 )]
-pub struct AccountRiskActionExecuteRequest {
+pub struct AccountRiskActionExecuteRequestBody {
     /// Risk action being executed.
     #[serde(default)]
     pub action: String,
@@ -103,7 +103,7 @@ pub struct AccountRiskActionExecuteRequest {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct AccountRiskActionProposalResponse {
+pub struct AccountRiskActionProposalOutcome {
     /// Stable persisted state-record identifier for this risk-action state
     /// machine.
     #[serde(default)]
@@ -188,7 +188,7 @@ pub struct AccountRiskActionProposalResponse {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct AccountRiskActionApprovalResponse {
+pub struct AccountRiskActionApprovalOutcome {
     /// Stable persisted state-record identifier for this risk-action state
     /// machine.
     #[serde(default)]
@@ -269,7 +269,7 @@ pub struct AccountRiskActionApprovalResponse {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct AccountRiskActionCurrentResponse {
+pub struct AccountRiskActionCurrentOutcome {
     /// Account targeted by the current risk-action state machine.
     #[serde(default)]
     pub account_id: String,
@@ -343,7 +343,7 @@ pub struct AccountRiskActionCurrentResponse {
     pub todo: Option<String>,
 }
 
-impl Resource for AccountRiskActionCurrentResponse {
+impl Resource for AccountRiskActionCurrentOutcome {
     const KIND: &'static str = "account-risk-action-current";
     const PATH: &'static str = "/_coauth/admin/accounts";
 
@@ -365,7 +365,7 @@ impl Resource for AccountRiskActionCurrentResponse {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct AccountRiskActionHistoryResponse {
+pub struct AccountRiskActionHistoryOutcome {
     #[serde(default)]
     pub data: Vec<AccountRiskActionTransitionRecord>,
 }

@@ -7,15 +7,15 @@
 
 //! Server-side helpers around the JSON:API admin response envelopes.
 //!
-//! The wire-shape structs (`SingleResource`, `SingleResponse`,
-//! `PaginatedResponse`, link/meta helpers) and the `Resource` trait now
+//! The wire-shape structs (`SingleResource`, `SingleOutcome`,
+//! `PaginatedOutcome`, link/meta helpers) and the `Resource` trait now
 //! live in `coauth_admin_types::envelope` so `sodmin` can deserialize
 //! the same shape without reimplementing it. This module keeps only the
-//! cursor-paginated builder (`PaginatedResponse::for_page`) plus the
+//! cursor-paginated builder (`PaginatedOutcome::for_page`) plus the
 //! error-response shape — both depend on `coauth_data` and therefore
 //! cannot live in admin-types.
 
-pub use coauth_admin_types::{PaginatedResponse, SingleResponse};
+pub use coauth_admin_types::{PaginatedOutcome, SingleOutcome};
 use coauth_admin_types::{PaginationLinks, Resource, SingleResource};
 use coauth_data::{Pagination, pagination::Edge};
 use salvo::oapi::ToSchema;
@@ -49,14 +49,14 @@ fn url_with_pagination(base: &str, pagination: Pagination) -> String {
 }
 
 /// Cursor-paginated builder. Mirrors the previous
-/// `PaginatedResponse::for_page` inherent method but as a free function,
+/// `PaginatedOutcome::for_page` inherent method but as a free function,
 /// so the depend-on-`coauth_data` cursor logic stays out of admin-types.
 pub fn paginated_response_for_page<T: Resource>(
     page: coauth_data::Page<T>,
     current_pagination: Pagination,
     count: Option<usize>,
     base: &str,
-) -> PaginatedResponse<T> {
+) -> PaginatedOutcome<T> {
     let links = PaginationLinks {
         self_: url_with_pagination(base, current_pagination),
         first: Some(url_with_pagination(
@@ -93,12 +93,12 @@ pub fn paginated_response_for_page<T: Resource>(
         .map(|edge: Edge<T, _>| SingleResource::new_with_cursor(edge.node, edge.cursor.to_string()))
         .collect();
 
-    PaginatedResponse::from_parts(items, count, links)
+    PaginatedOutcome::from_parts(items, count, links)
 }
 
 /// Count-only paginated response (no `data` array).
-pub fn paginated_response_for_count_only<T>(count: usize, base: &str) -> PaginatedResponse<T> {
-    PaginatedResponse::for_count_only(count, base.to_owned())
+pub fn paginated_response_for_count_only<T>(count: usize, base: &str) -> PaginatedOutcome<T> {
+    PaginatedOutcome::for_count_only(count, base.to_owned())
 }
 
 /// A single error
@@ -118,12 +118,12 @@ impl Error {
 
 /// A top-level response with a list of errors
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct ErrorResponse {
+pub struct ErrorOutcome {
     /// The list of errors
     errors: Vec<Error>,
 }
 
-impl ErrorResponse {
+impl ErrorOutcome {
     /// Create a new error response from any Rust error
     pub fn from_error(error: &(dyn std::error::Error + 'static)) -> Self {
         let mut errors = Vec::new();

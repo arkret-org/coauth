@@ -10,7 +10,7 @@
 //! - **Users** — [`User`], [`BrowserSession`], [`Password`], [`UserEmail`],
 //!   [`UserRegistration`], [`UserRecoveryTicket`]
 //! - **Flows** — [`FlowDefinition`], [`FlowStageBinding`], [`StageKind`],
-//!   [`FlowSession`], [`StageChallenge`], [`StageResponse`], [`StageOutcome`]
+//!   [`FlowSession`], [`StageChallenge`], [`StageSubmission`], [`StageOutcome`]
 //! - **OAuth** — [`Client`], [`Session`], [`AuthorizationGrant`],
 //!   [`AccessToken`], [`RefreshToken`], [`DeviceCodeGrant`]
 //! - **Upstream SSO** — [`UpstreamOAuthProvider`], [`UpstreamOAuthLink`],
@@ -139,7 +139,7 @@ pub use self::{
     flow::{
         FlowDefinition, FlowDesignation, FlowSession, FlowSessionStatus, FlowStageBinding,
         IdentificationField, PromptField, PromptFieldType, StageChallenge, StageKind, StageOutcome,
-        StageResponse, StageValidationError,
+        StageSubmission, StageValidationError,
     },
     notification::{
         NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,

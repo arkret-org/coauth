@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{ApprovalDataResponse, DeviceApprovalResponse},
+    api::types::{ApprovalDataOutcome, DeviceApprovalOutcome},
     components::{form_error::FormError, layout::Layout, loading::LoadingScreen},
     pages::Route,
 };
@@ -13,7 +13,7 @@ pub fn DeviceApproval(id: String) -> Element {
     let data = use_resource(move || {
         let gid = grant_id.clone();
         async move {
-            crate::api::api_get::<ApprovalDataResponse>(&format!(
+            crate::api::api_get::<ApprovalDataOutcome>(&format!(
                 "/self/device-grants/{gid}/decision"
             ))
             .await
@@ -58,7 +58,7 @@ pub fn DeviceApproval(id: String) -> Element {
 }
 
 #[component]
-fn DeviceApprovalForm(data: ApprovalDataResponse, id: String) -> Element {
+fn DeviceApprovalForm(data: ApprovalDataOutcome, id: String) -> Element {
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let mut done = use_signal(|| None::<String>);
@@ -104,7 +104,7 @@ fn DeviceApprovalForm(data: ApprovalDataResponse, id: String) -> Element {
                                     let gid = gid.clone();
 
                                     spawn(async move {
-                                        let result = crate::api::api_post::<DeviceApprovalResponse>(
+                                        let result = crate::api::api_post::<DeviceApprovalOutcome>(
                                             &format!("/self/device-grants/{gid}/decision"),
                                             serde_json::json!({ "action": "approve" }),
                                         ).await;
@@ -135,7 +135,7 @@ fn DeviceApprovalForm(data: ApprovalDataResponse, id: String) -> Element {
                                     let gid = gid.clone();
 
                                     spawn(async move {
-                                        let result = crate::api::api_post::<DeviceApprovalResponse>(
+                                        let result = crate::api::api_post::<DeviceApprovalOutcome>(
                                             &format!("/self/device-grants/{gid}/decision"),
                                             serde_json::json!({ "action": "deny" }),
                                         ).await;

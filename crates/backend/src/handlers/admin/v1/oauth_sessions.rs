@@ -23,7 +23,7 @@ use crate::{
         model::{OAuthSession, Resource},
         params::{IncludeCount, extract_pagination, extract_ulid_param},
         response::{
-            PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
             paginated_response_for_page,
         },
     },
@@ -37,7 +37,7 @@ use crate::{
 pub async fn finish_session(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<OAuthSession>> {
+) -> JsonResult<SingleOutcome<OAuthSession>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -88,7 +88,7 @@ pub async fn finish_session(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new(
+    Ok(Json(SingleOutcome::new(
         OAuthSession::from(ended),
         format!("/_coauth/admin/oauth-sessions/{session_id}/finish"),
     )))
@@ -99,7 +99,7 @@ pub async fn finish_session(
 pub async fn get_session(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<OAuthSession>> {
+) -> JsonResult<SingleOutcome<OAuthSession>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let id = extract_ulid_param(req)?;
@@ -110,7 +110,7 @@ pub async fn get_session(
         .await?
         .ok_or_else(|| AppError::not_found(format!("OAuth session ID {id} not found")))?;
 
-    Ok(Json(SingleResponse::new_canonical(OAuthSession::from(
+    Ok(Json(SingleOutcome::new_canonical(OAuthSession::from(
         session,
     ))))
 }
@@ -228,7 +228,7 @@ impl std::fmt::Display for FilterParams {
 pub async fn list_sessions(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PaginatedResponse<OAuthSession>> {
+) -> JsonResult<PaginatedOutcome<OAuthSession>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let (pagination, include_count) = extract_pagination(req)?;

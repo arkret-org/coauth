@@ -27,7 +27,7 @@ use crate::{
         admin::{
             call_context::extract_call_context,
             model::{User, UserRegistrationToken},
-            response::SingleResponse,
+            response::SingleOutcome,
         },
         common::DepotExt,
     },
@@ -38,7 +38,7 @@ use crate::{
 /// # JSON payload for the `POST /_coauth/admin/users` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUserRequest")]
-pub struct AddRequest {
+pub struct AddRequestBody {
     /// The handle of the user to add.
     handle: String,
 
@@ -54,7 +54,7 @@ pub struct AddRequest {
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.users.add", skip_all)]
-pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<SingleResponse<User>> {
+pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<SingleOutcome<User>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -64,7 +64,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
     let principal_server = depot.principal_server()?;
-    let params: AddRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let params: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     if repo.user().exists(&params.handle).await? {
         return Err(AppError::conflict("User already exists"));
@@ -124,14 +124,14 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleResponse::new_canonical(User::from(user)),
+        SingleOutcome::new_canonical(User::from(user)),
     ))
 }
 
 /// # JSON payload for the `POST /_coauth/admin/users/batch-invite` endpoint
 #[derive(Deserialize, JsonSchema)]
-#[serde(rename = "BatchInviteRequest")]
-pub struct BatchInviteRequest {
+#[serde(rename = "BatchInviteRequestBody")]
+pub struct BatchInviteRequestBody {
     /// Number of registration tokens to create (1-100)
     count: u32,
 
@@ -157,7 +157,7 @@ pub struct BatchInviteRequest {
     consent_gate: Option<BatchInviteConsentGate>,
 }
 
-/// Inline consent-gate metadata for `BatchInviteRequest`.
+/// Inline consent-gate metadata for `BatchInviteRequestBody`.
 ///
 /// Mirrors the fields on `account::invite_relay::RelayRequest`, just
 /// without `inviter_did` / `invite_payload` (admin batch-invite mints
@@ -202,13 +202,13 @@ fn default_require_consent() -> bool {
 
 /// Response containing the list of created registration tokens
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct BatchInviteResponse {
+pub struct BatchInviteOutcome {
     /// The list of created registration tokens
-    pub data: Vec<SingleResponse<UserRegistrationToken>>,
+    pub data: Vec<SingleOutcome<UserRegistrationToken>>,
 }
 
 /// Pure parameter struct for the underlying `mint_registration_tokens`
-/// helper. Mirrors the wire fields on `BatchInviteRequest` but without
+/// helper. Mirrors the wire fields on `BatchInviteRequestBody` but without
 /// the consent-gate metadata — the gate is the caller's responsibility
 /// (see `batch_invite` and `invite_quarantine::resolve_invite_quarantine`).
 ///
@@ -324,7 +324,7 @@ pub async fn mint_registration_tokens(
     rng: &mut coauth_data::BoxRng,
     params: &MintRegistrationTokensParams,
     admin_user_id: Option<ulid::Ulid>,
-) -> Result<Vec<SingleResponse<UserRegistrationToken>>, AppError> {
+) -> Result<Vec<SingleOutcome<UserRegistrationToken>>, AppError> {
     params.validate()?;
 
     let expires_at = params
@@ -357,7 +357,7 @@ pub async fn mint_registration_tokens(
         }
 
         let model = UserRegistrationToken::new(registration_token, clock.now());
-        tokens.push(SingleResponse::new_canonical(model));
+        tokens.push(SingleOutcome::new_canonical(model));
     }
     Ok(tokens)
 }
@@ -367,7 +367,7 @@ pub async fn mint_registration_tokens(
 pub async fn batch_invite(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<BatchInviteResponse> {
+) -> CreatedJsonResult<BatchInviteOutcome> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -376,7 +376,7 @@ pub async fn batch_invite(
         ..
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
-    let params: BatchInviteRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let params: BatchInviteRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     let mint_params = MintRegistrationTokensParams {
         count: params.count,
@@ -484,7 +484,7 @@ pub async fn batch_invite(
 
     repo.save().await?;
 
-    Ok(crate::handlers::admin::CreatedJson(BatchInviteResponse {
+    Ok(crate::handlers::admin::CreatedJson(BatchInviteOutcome {
         data: tokens,
     }))
 }

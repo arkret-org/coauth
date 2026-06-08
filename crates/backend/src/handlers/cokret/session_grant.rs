@@ -128,17 +128,17 @@ pub(crate) struct SessionGrantRecord {
 }
 
 #[derive(Debug, Serialize)]
-struct SessionGrantListResponse {
+struct SessionGrantListOutcome {
     grants: Vec<SessionGrantRecord>,
 }
 
 #[derive(Debug, Serialize)]
-struct SessionGrantRevokeResponse {
+struct SessionGrantRevokeOutcome {
     grant: SessionGrantRecord,
 }
 
 #[derive(Debug, Deserialize)]
-struct SessionGrantIntrospectionRequest {
+struct SessionGrantIntrospectionRequestBody {
     id: Option<String>,
     grant_jwt: Option<String>,
     audience: Option<String>,
@@ -192,7 +192,7 @@ struct SessionGrantIntrospectionGrant {
 }
 
 #[derive(Debug, Serialize)]
-struct SessionGrantIntrospectionResponse {
+struct SessionGrantIntrospectionOutcome {
     active: bool,
     status: SessionGrantIntrospectionStatus,
     proof_required: bool,
@@ -381,7 +381,7 @@ where
 pub async fn list_session_grants(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantListResponse>, CokretRouteError> {
+) -> Result<Json<SessionGrantListOutcome>, CokretRouteError> {
     let clock = crate::handlers::make_clock();
     let subject = req.query::<String>("subject");
     let device_id = req.query::<String>("device_id");
@@ -421,7 +421,7 @@ pub async fn list_session_grants(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(SessionGrantListResponse {
+    Ok(Json(SessionGrantListOutcome {
         grants: page
             .edges
             .into_iter()
@@ -434,7 +434,7 @@ pub async fn list_session_grants(
 pub async fn revoke_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantRevokeResponse>, CokretRouteError> {
+) -> Result<Json<SessionGrantRevokeOutcome>, CokretRouteError> {
     let clock = crate::handlers::make_clock();
     let raw_id = req
         .param::<String>("id")
@@ -469,7 +469,7 @@ pub async fn revoke_session_grant(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(SessionGrantRevokeResponse {
+    Ok(Json(SessionGrantRevokeOutcome {
         grant: grant.into(),
     }))
 }
@@ -578,8 +578,8 @@ fn verify_session_grant_introspection_proof(
 pub async fn introspect_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantIntrospectionResponse>, CokretRouteError> {
-    let body: SessionGrantIntrospectionRequest = req
+) -> Result<Json<SessionGrantIntrospectionOutcome>, CokretRouteError> {
+    let body: SessionGrantIntrospectionRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
@@ -616,7 +616,7 @@ pub async fn introspect_session_grant(
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        return Ok(Json(SessionGrantIntrospectionResponse {
+        return Ok(Json(SessionGrantIntrospectionOutcome {
             active: false,
             status: SessionGrantIntrospectionStatus::NotFound,
             proof_required: true,
@@ -661,7 +661,7 @@ pub async fn introspect_session_grant(
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     }
 
-    Ok(Json(SessionGrantIntrospectionResponse {
+    Ok(Json(SessionGrantIntrospectionOutcome {
         active,
         status,
         proof_required,
@@ -671,7 +671,7 @@ pub async fn introspect_session_grant(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct PatchPrimaryHandlePreferenceRequest {
+pub struct PatchPrimaryHandlePreferenceRequestBody {
     #[serde(
         default,
         deserialize_with = "serde_with::rust::double_option::deserialize"
@@ -680,7 +680,7 @@ pub struct PatchPrimaryHandlePreferenceRequest {
 }
 
 #[derive(Debug, Serialize)]
-pub struct PrimaryHandlePreferenceResponse {
+pub struct PrimaryHandlePreferenceOutcome {
     pub primary_handle: Option<String>,
     pub effective_at: DateTime<Utc>,
     pub source_claim_id: Option<String>,
@@ -697,8 +697,8 @@ pub struct PrimaryHandlePreferenceResponse {
 pub async fn patch_primary_handle_preference(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PrimaryHandlePreferenceResponse>, CokretRouteError> {
-    let body: PatchPrimaryHandlePreferenceRequest = req
+) -> Result<Json<PrimaryHandlePreferenceOutcome>, CokretRouteError> {
+    let body: PatchPrimaryHandlePreferenceRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
@@ -757,7 +757,7 @@ pub async fn patch_primary_handle_preference(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(PrimaryHandlePreferenceResponse {
+    Ok(Json(PrimaryHandlePreferenceOutcome {
         primary_handle: preference.handle,
         effective_at: preference.effective_at,
         source_claim_id: preference.source_claim_id.map(|id| id.to_string()),
@@ -774,7 +774,7 @@ pub async fn patch_primary_handle_preference(
 // fully signed grant without going through OIDC.
 
 #[derive(Debug, Deserialize)]
-pub struct RefreshSessionGrantRequest {
+pub struct RefreshSessionGrantRequestBody {
     /// The session grant currently associated with the device. Single-use
     /// — after a successful refresh the old grant is revoked.
     pub grant_jwt: String,
@@ -784,7 +784,7 @@ pub struct RefreshSessionGrantRequest {
 }
 
 #[derive(Debug, Serialize)]
-pub struct RefreshSessionGrantOneShotResponse {
+pub struct RefreshSessionGrantOneShotOutcome {
     pub grant_id: String,
     pub grant_jwt: String,
     pub session_public_key: String,
@@ -809,7 +809,7 @@ pub struct RefreshSessionGrantOneShotResponse {
 pub async fn refresh_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RefreshSessionGrantOneShotResponse>, CokretRouteError> {
+) -> Result<Json<RefreshSessionGrantOneShotOutcome>, CokretRouteError> {
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
@@ -823,7 +823,7 @@ pub async fn refresh_session_grant(
     let dpop_header = dpop_header_from_request(req)
         .ok_or_else(|| CokretRouteError::BadRequest("device_proof_required".to_owned()))?;
 
-    let body: RefreshSessionGrantRequest = req
+    let body: RefreshSessionGrantRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
@@ -939,7 +939,7 @@ pub async fn refresh_session_grant(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(RefreshSessionGrantOneShotResponse {
+    Ok(Json(RefreshSessionGrantOneShotOutcome {
         grant_id: persisted.id.to_string(),
         grant_jwt: new_material.grant_jwt,
         session_public_key: new_material.session_public_key,

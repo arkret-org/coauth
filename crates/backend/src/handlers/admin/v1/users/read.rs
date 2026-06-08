@@ -17,7 +17,7 @@ use crate::{
         model::{Resource, User},
         params::{IncludeCount, extract_pagination, extract_ulid_param},
         response::{
-            PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
             paginated_response_for_page,
         },
     },
@@ -25,7 +25,7 @@ use crate::{
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.users.by_username", skip_all)]
-pub async fn get_by_username(req: &mut Request, depot: &Depot) -> JsonResult<SingleResponse<User>> {
+pub async fn get_by_username(req: &mut Request, depot: &Depot) -> JsonResult<SingleOutcome<User>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let username: String = req
@@ -39,12 +39,12 @@ pub async fn get_by_username(req: &mut Request, depot: &Depot) -> JsonResult<Sin
         .await?
         .ok_or_else(|| AppError::not_found(format!("User with username {username:?} not found")))?;
 
-    Ok(Json(SingleResponse::new(User::from(user), self_path)))
+    Ok(Json(SingleOutcome::new(User::from(user), self_path)))
 }
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.users.get", skip_all)]
-pub async fn get_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleResponse<User>> {
+pub async fn get_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleOutcome<User>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let id = extract_ulid_param(req)?;
@@ -55,7 +55,7 @@ pub async fn get_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleResp
         .await?
         .ok_or_else(|| AppError::not_found(format!("User ID {id} not found")))?;
 
-    Ok(Json(SingleResponse::new_canonical(User::from(user))))
+    Ok(Json(SingleOutcome::new_canonical(User::from(user))))
 }
 
 #[derive(Deserialize, JsonSchema, Clone, Copy)]
@@ -127,7 +127,7 @@ impl std::fmt::Display for FilterParams {
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.users.list", skip_all)]
-pub async fn list_users(req: &mut Request, depot: &Depot) -> JsonResult<PaginatedResponse<User>> {
+pub async fn list_users(req: &mut Request, depot: &Depot) -> JsonResult<PaginatedOutcome<User>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let (pagination, include_count) = extract_pagination(req)?;

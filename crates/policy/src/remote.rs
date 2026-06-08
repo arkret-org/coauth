@@ -110,7 +110,7 @@ impl PolicyProviderFactory for RemoteProviderFactory {
 
 /// The response format expected from the remote policy service.
 #[derive(Deserialize)]
-struct RemoteResponse {
+struct RemoteEvaluationOutcome {
     violations: Vec<Violation>,
 }
 
@@ -151,7 +151,7 @@ impl RemoteEvaluator {
             )));
         }
 
-        let remote_response: RemoteResponse = response.json().await.map_err(|e| {
+        let remote_response: RemoteEvaluationOutcome = response.json().await.map_err(|e| {
             EvaluationError::Evaluation(anyhow::anyhow!(
                 "Failed to parse remote policy response: {e}"
             ))

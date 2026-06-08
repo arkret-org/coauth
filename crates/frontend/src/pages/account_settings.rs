@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{LinkedAccount, ProvidersResponse, ViewerResponse},
+    api::types::{LinkedAccount, ProvidersOutcome, ViewerOutcome},
     components::{
         collapsible::CollapsibleSection,
         dialog::Dialog,
@@ -17,7 +17,7 @@ use crate::{
 #[component]
 pub fn AccountSettings() -> Element {
     let data =
-        use_resource(|| async { crate::api::api_get::<ViewerResponse>("/self/viewer").await });
+        use_resource(|| async { crate::api::api_get::<ViewerOutcome>("/self/viewer").await });
     let nav = navigator();
     let binding = data.read();
 
@@ -168,7 +168,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
 
     // Fetch available providers to show "Link" buttons for unlinked ones
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersResponse>("/gate/account/auth/providers").await
+        crate::api::api_get::<ProvidersOutcome>("/gate/account/auth/providers").await
     });
 
     rsx! {
@@ -211,7 +211,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
                                                 unlinking_id.set(Some(aid.clone()));
                                                 error.set(None);
                                                 spawn(async move {
-                                                    let result = crate::api::api_delete::<crate::api::types::UnlinkResponse>(
+                                                    let result = crate::api::api_delete::<crate::api::types::UnlinkOutcome>(
                                                         &format!("/linked-accounts/{aid}"),
                                                     ).await;
                                                     match result {

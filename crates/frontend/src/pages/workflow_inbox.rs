@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::WorkflowInboxResponse,
+    api::types::WorkflowInboxOutcome,
     components::{
         loading::LoadingScreen,
         separator::{Separator, SeparatorKind},
@@ -15,7 +15,7 @@ use crate::{
 #[component]
 pub fn WorkflowInbox() -> Element {
     let data = use_resource(|| async {
-        crate::api::api_get::<WorkflowInboxResponse>("/self/viewer/workflow-inbox").await
+        crate::api::api_get::<WorkflowInboxOutcome>("/self/viewer/workflow-inbox").await
     });
     let binding = data.read();
 

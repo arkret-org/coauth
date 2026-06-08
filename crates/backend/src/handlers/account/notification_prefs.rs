@@ -41,7 +41,7 @@ pub struct ChannelPreference {
 
 /// Response for `GET /_coauth/self/viewer/preferences`.
 #[derive(Serialize, salvo::oapi::ToSchema)]
-pub struct NotificationPreferencesResponse {
+pub struct NotificationPreferencesOutcome {
     /// Server-side channel availability.
     pub available_channels: Vec<ChannelAvailability>,
 
@@ -51,14 +51,14 @@ pub struct NotificationPreferencesResponse {
 
 /// Request body for `PATCH /_coauth/self/viewer/preferences`.
 #[derive(Deserialize, salvo::oapi::ToSchema)]
-pub struct PatchNotificationPreferencesRequest {
+pub struct PatchNotificationPreferencesRequestBody {
     /// The per-channel preferences to update.
     pub preferences: Vec<ChannelPreference>,
 }
 
 /// Response for `PATCH /_coauth/self/viewer/preferences`.
 #[derive(Serialize, salvo::oapi::ToSchema)]
-pub struct PatchNotificationPreferencesResponse {
+pub struct PatchNotificationPreferencesOutcome {
     /// The preferences as persisted by the server.
     pub preferences: Vec<ChannelPreference>,
 }
@@ -71,7 +71,7 @@ pub struct PatchNotificationPreferencesResponse {
 pub async fn get_notification_preferences(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<NotificationPreferencesResponse>, RouteError> {
+) -> Result<Json<NotificationPreferencesOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let clock = make_clock();
@@ -90,7 +90,7 @@ pub async fn get_notification_preferences(
 
     repo.cancel().await?;
 
-    Ok(Json(NotificationPreferencesResponse {
+    Ok(Json(NotificationPreferencesOutcome {
         available_channels: data
             .available_channels
             .into_iter()
@@ -117,7 +117,7 @@ pub async fn get_notification_preferences(
 pub async fn patch_notification_preferences(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PatchNotificationPreferencesResponse>, RouteError> {
+) -> Result<Json<PatchNotificationPreferencesOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let clock = make_clock();
@@ -131,7 +131,7 @@ pub async fn patch_notification_preferences(
         get_requester(&clock, &activity_tracker, repo, &session_info).await?;
     let user = requester.user().ok_or(RouteError::Unauthorized)?;
 
-    let body: PatchNotificationPreferencesRequest = req
+    let body: PatchNotificationPreferencesRequestBody = req
         .parse_json()
         .await
         .map_err(|e| RouteError::BadRequest(e.to_string()))?;
@@ -163,7 +163,7 @@ pub async fn patch_notification_preferences(
 
     repo.save().await?;
 
-    Ok(Json(PatchNotificationPreferencesResponse {
+    Ok(Json(PatchNotificationPreferencesOutcome {
         preferences: updated
             .preferences
             .into_iter()

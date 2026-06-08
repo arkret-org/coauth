@@ -662,7 +662,7 @@ pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Opti
 /// is gated behind `debug_assertions` / a `COAUTH_ENABLE_TEST_ENDPOINTS`
 /// env var.
 #[derive(Debug, Deserialize)]
-pub struct DebugIssueDpopGrantRequest {
+pub struct DebugIssueDpopGrantRequestBody {
     pub actor_id: String,
     pub device_id: String,
     pub dpop_jwk: serde_json::Value,
@@ -673,7 +673,7 @@ pub struct DebugIssueDpopGrantRequest {
 }
 
 #[derive(Debug, Serialize)]
-pub struct DebugIssueDpopGrantResponse {
+pub struct DebugIssueDpopGrantOutcome {
     pub grant_id: String,
     pub grant_jwt: String,
     pub dpop_jkt: String,
@@ -703,14 +703,14 @@ pub fn test_endpoints_enabled() -> bool {
 pub async fn debug_issue_dpop_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<DebugIssueDpopGrantResponse>, CokretRouteError> {
+) -> Result<Json<DebugIssueDpopGrantOutcome>, CokretRouteError> {
     use coauth_jose::jwk::{PublicJsonWebKey, Thumbprint};
 
     if !test_endpoints_enabled() {
         return Err(CokretRouteError::NotFound);
     }
 
-    let body: DebugIssueDpopGrantRequest = req
+    let body: DebugIssueDpopGrantRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
@@ -790,7 +790,7 @@ pub async fn debug_issue_dpop_grant(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(DebugIssueDpopGrantResponse {
+    Ok(Json(DebugIssueDpopGrantOutcome {
         grant_id: persisted.id.to_string(),
         grant_jwt: material.grant_jwt,
         dpop_jkt: jkt,

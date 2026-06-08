@@ -71,7 +71,7 @@ use crate::services::third_party_invite::{InviteRequest, NonceStore, VerifierCtx
 
 /// Body of `POST /_coauth/self/invites/3pid/verify`.
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct VerifyInviteRequest {
+pub struct VerifyInviteRequestBody {
     /// Verification-service proof JWS (compact serialization). Signed
     /// by the trusted 3PID verification service.
     pub binding_proof_jws: String,
@@ -88,7 +88,7 @@ pub struct VerifyInviteRequest {
 
 /// Success payload returned on `verify_invite` Ok.
 #[derive(Debug, Serialize, ToSchema)]
-pub struct VerifyInviteResponse {
+pub struct VerifyInviteOutcome {
     /// Always `true` on this branch — `false` is never produced
     /// because non-Ok branches return a 4xx instead.
     pub verified: bool,
@@ -151,7 +151,7 @@ pub async fn post_verify_invite(
     depot: &Depot,
     res: &mut Response,
 ) -> Result<(), RouteError> {
-    let body: VerifyInviteRequest = req
+    let body: VerifyInviteRequestBody = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid_request_body".into()))?;
@@ -220,7 +220,7 @@ pub async fn post_verify_invite(
     match verify_invite(&invite_request, &mut ctx).await {
         Ok(verified) => {
             res.status_code(StatusCode::OK);
-            res.render(Json(VerifyInviteResponse {
+            res.render(Json(VerifyInviteOutcome {
                 verified: true,
                 three_pid_hash: verified.three_pid_hash,
                 inviter_did: verified.inviter_did,

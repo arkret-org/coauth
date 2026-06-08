@@ -22,7 +22,7 @@ use crate::{
         model::{Resource, UserEmail},
         params::{IncludeCount, extract_pagination, extract_ulid_param},
         response::{
-            PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
             paginated_response_for_page,
         },
     },
@@ -31,7 +31,7 @@ use crate::{
 /// JSON body accepted by `POST /_coauth/admin/user-emails`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "AddUserEmailRequest")]
-pub struct AddRequest {
+pub struct AddRequestBody {
     /// Identifier of the user who should own this email.
     #[schemars(with = "crate::handlers::admin::schema::Ulid")]
     user_id: Ulid,
@@ -47,7 +47,7 @@ pub struct AddRequest {
 pub async fn add_email(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<SingleResponse<UserEmail>> {
+) -> CreatedJsonResult<SingleOutcome<UserEmail>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -56,7 +56,7 @@ pub async fn add_email(
         ..
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
-    let body: AddRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     // Resolve the target user
     let owner = repo
@@ -114,7 +114,7 @@ pub async fn add_email(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleResponse::new_canonical(entry.into()),
+        SingleOutcome::new_canonical(entry.into()),
     ))
 }
 
@@ -168,7 +168,7 @@ pub async fn delete_email(req: &mut Request, depot: &Depot) -> AppResult<StatusC
 /// Retrieve a single user email record by its identifier.
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.user_emails.get", skip_all)]
-pub async fn get_email(req: &mut Request, depot: &Depot) -> JsonResult<SingleResponse<UserEmail>> {
+pub async fn get_email(req: &mut Request, depot: &Depot) -> JsonResult<SingleOutcome<UserEmail>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let email_id = extract_ulid_param(req)?;
@@ -179,7 +179,7 @@ pub async fn get_email(req: &mut Request, depot: &Depot) -> JsonResult<SingleRes
         .await?
         .ok_or_else(|| AppError::not_found(format!("User email ID {email_id} not found")))?;
 
-    Ok(Json(SingleResponse::new_canonical(UserEmail::from(entry))))
+    Ok(Json(SingleOutcome::new_canonical(UserEmail::from(entry))))
 }
 
 /// Query-string parameters for filtering user email results.
@@ -221,7 +221,7 @@ impl std::fmt::Display for FilterParams {
 pub async fn list_emails(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PaginatedResponse<UserEmail>> {
+) -> JsonResult<PaginatedOutcome<UserEmail>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
@@ -283,7 +283,7 @@ pub async fn list_emails(
 }
 
 #[derive(Deserialize)]
-pub struct UpdateRequest {
+pub struct UpdateRequestBody {
     email: Option<String>,
     confirmed: Option<bool>,
     is_primary: Option<bool>,
@@ -293,7 +293,7 @@ pub struct UpdateRequest {
 pub async fn update_email(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UserEmail>> {
+) -> JsonResult<SingleOutcome<UserEmail>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -303,7 +303,7 @@ pub async fn update_email(
     } = call_context;
     let id = extract_ulid_param(req)?;
     let mut rng = crate::handlers::account::make_rng();
-    let body: UpdateRequest = req
+    let body: UpdateRequestBody = req
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
@@ -325,7 +325,7 @@ pub async fn update_email(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(UserEmail::from(
+    Ok(Json(SingleOutcome::new_canonical(UserEmail::from(
         user_email,
     ))))
 }

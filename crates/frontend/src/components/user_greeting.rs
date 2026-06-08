@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::{PatchViewerProfileResponse, PrincipalUser, UserProfile},
+    api::types::{PatchViewerProfileOutcome, PrincipalUser, UserProfile},
     components::dialog::Dialog,
 };
 
@@ -67,7 +67,7 @@ pub fn EditProfileDialog(
     open: Signal<bool>,
     profile: UserProfile,
     principal: PrincipalUser,
-    on_saved: EventHandler<PatchViewerProfileResponse>,
+    on_saved: EventHandler<PatchViewerProfileOutcome>,
 ) -> Element {
     let mut display_name_value = use_signal(|| profile.display_name.clone().unwrap_or_default());
     let mut preferred_locale_value =
@@ -174,7 +174,7 @@ pub fn EditProfileDialog(
                     saving.set(true);
                     error.set(None);
                     spawn(async move {
-                        let response = crate::api::api_patch::<PatchViewerProfileResponse>(
+                        let response = crate::api::api_patch::<PatchViewerProfileOutcome>(
                             "/self/viewer/profile",
                             serde_json::json!({
                                 "display_name": if display_name.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(display_name) },

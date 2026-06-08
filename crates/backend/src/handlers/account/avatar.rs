@@ -12,7 +12,7 @@ use crate::storage;
 const MAX_AVATAR_SIZE: usize = 5 * 1024 * 1024; // 5 MB
 
 #[derive(Serialize, salvo::oapi::ToSchema)]
-pub struct UploadAvatarResponse {
+pub struct UploadAvatarOutcome {
     pub avatar_url: String,
 }
 
@@ -20,7 +20,7 @@ pub struct UploadAvatarResponse {
 pub async fn upload_avatar(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<UploadAvatarResponse>, RouteError> {
+) -> Result<Json<UploadAvatarOutcome>, RouteError> {
     let repo_factory = depot.repo_factory()?;
     let principal_server = depot.principal_server()?;
     let url_builder = depot.url_builder()?;
@@ -121,7 +121,7 @@ pub async fn upload_avatar(
 
     repo.save().await?;
 
-    Ok(Json(UploadAvatarResponse { avatar_url }))
+    Ok(Json(UploadAvatarOutcome { avatar_url }))
 }
 
 // ── GET /_coauth/self/viewer/avatar/:user_id ────────────────────────

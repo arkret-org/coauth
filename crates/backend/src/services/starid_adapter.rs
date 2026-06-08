@@ -64,10 +64,10 @@ pub enum StaridError {
 }
 
 /// Wire-shape of starid's `POST /_starid/root/webvh/dids` request body. Mirrors
-/// `starid::wire::CreateWebvhDidRequest`. Only the fields the adapter
+/// `starid::wire::CreateWebvhDidRequestBody`. Only the fields the adapter
 /// actually exercises are serialised.
 #[derive(Debug, Serialize)]
-struct CreateWebvhDidRequest<'a> {
+struct CreateWebvhDidRequestBody<'a> {
     host: &'a str,
     path: String,
     update_keys: Vec<String>,
@@ -76,7 +76,7 @@ struct CreateWebvhDidRequest<'a> {
 
 /// Wire-shape of starid's `POST /_starid/root/webvh/dids` response body.
 #[derive(Debug, Deserialize)]
-struct CreateWebvhDidResponse {
+struct CreateWebvhDidOutcome {
     did: String,
     #[allow(dead_code)]
     scid: String,
@@ -86,25 +86,25 @@ struct CreateWebvhDidResponse {
 /// Wire-shape of starid's `POST /_starid/root/webvh/dids/{did}/verify`
 /// response body.
 #[derive(Debug, Deserialize)]
-struct WebvhVerifyResponse {
+struct WebvhVerifyOutcome {
     verified: bool,
     #[serde(default)]
     head_version_id: Option<String>,
 }
 
 /// Wire-shape of starid's `POST /_starid/root/webvh/dids/{did}/update`
-/// request body. Mirrors `starid::wire::UpdateWebvhDidRequest`.
+/// request body. Mirrors `starid::wire::UpdateWebvhDidRequestBody`.
 #[derive(Debug, Serialize)]
-struct UpdateWebvhDidRequest<'a> {
+struct UpdateWebvhDidRequestBody<'a> {
     prev_version_id: &'a str,
     update_keys: Vec<String>,
     document_patch: Value,
 }
 
 /// Wire-shape of starid's `POST /_starid/root/webvh/dids/{did}/update`
-/// response body. Same envelope as `CreateWebvhDidResponse`.
+/// response body. Same envelope as `CreateWebvhDidOutcome`.
 #[derive(Debug, Deserialize)]
-struct UpdateWebvhDidResponse {
+struct UpdateWebvhDidOutcome {
     did: String,
     version_id: String,
 }
@@ -295,8 +295,8 @@ impl StaridResolver {
 
     async fn post_create(
         &self,
-        body: &CreateWebvhDidRequest<'_>,
-    ) -> Result<CreateWebvhDidResponse, StaridError> {
+        body: &CreateWebvhDidRequestBody<'_>,
+    ) -> Result<CreateWebvhDidOutcome, StaridError> {
         let url = self.create_url()?;
         let response = outbound_http::send_with_policy(
             outbound_http::starid_mutation_policy("create_principal_did"),
@@ -314,7 +314,7 @@ impl StaridResolver {
         if !status.is_success() {
             return Err(parse_api_fault(status.as_u16(), &bytes));
         }
-        let parsed: CreateWebvhDidResponse = serde_json::from_slice(&bytes)?;
+        let parsed: CreateWebvhDidOutcome = serde_json::from_slice(&bytes)?;
         Ok(parsed)
     }
 }
@@ -326,7 +326,7 @@ impl StaridRegistry for StaridResolver {
         account_id: &str,
         update_key: &str,
     ) -> Result<StaridMintResult, StaridError> {
-        let body = CreateWebvhDidRequest {
+        let body = CreateWebvhDidRequestBody {
             host: &self.did_host,
             path: self.principal_path(account_id),
             update_keys: vec![update_key.to_owned()],
@@ -356,7 +356,7 @@ impl StaridRegistry for StaridResolver {
         // counter is supplied by the caller via `account_id` itself
         // when needed (e.g., `01ARYZ.../recovered-2`); we don't fabric
         // a counter here.
-        let body = CreateWebvhDidRequest {
+        let body = CreateWebvhDidRequestBody {
             host: &self.did_host,
             path: self.principal_path(account_id),
             update_keys: vec![update_key.to_owned()],
@@ -378,7 +378,7 @@ impl StaridRegistry for StaridResolver {
         prev_version_id: &str,
         new_update_key: &str,
     ) -> Result<StaridMintResult, StaridError> {
-        let body = UpdateWebvhDidRequest {
+        let body = UpdateWebvhDidRequestBody {
             prev_version_id,
             update_keys: vec![new_update_key.to_owned()],
             document_patch: json!({
@@ -402,7 +402,7 @@ impl StaridRegistry for StaridResolver {
         if !status.is_success() {
             return Err(parse_api_fault(status.as_u16(), &bytes));
         }
-        let parsed: UpdateWebvhDidResponse = serde_json::from_slice(&bytes)?;
+        let parsed: UpdateWebvhDidOutcome = serde_json::from_slice(&bytes)?;
         Ok(StaridMintResult {
             did: parsed.did,
             version_id: parsed.version_id,
@@ -434,7 +434,7 @@ impl StaridRegistry for StaridResolver {
             // and let the caller match on `error.code`.
             return Err(parse_api_fault(status.as_u16(), &bytes));
         }
-        let parsed: WebvhVerifyResponse = serde_json::from_slice(&bytes)?;
+        let parsed: WebvhVerifyOutcome = serde_json::from_slice(&bytes)?;
         if !parsed.verified {
             return Err(StaridError::MissingField("verified=true"));
         }

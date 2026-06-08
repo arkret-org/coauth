@@ -5,7 +5,7 @@ use serde::Serialize;
 use super::{DepotExt, RouteError};
 
 #[derive(Serialize, ToSchema)]
-pub struct SiteConfigResponse {
+pub struct SiteConfigOutcome {
     pub id: Option<String>,
     pub email_change_allowed: bool,
     pub password_login_enabled: bool,
@@ -22,10 +22,10 @@ pub struct SiteConfigResponse {
     pub plan_management_iframe_uri: Option<String>,
 }
 
-/// Build a [`SiteConfigResponse`] from the domain [`SiteConfig`].
+/// Build a [`SiteConfigOutcome`] from the domain [`SiteConfig`].
 #[must_use]
-pub fn from_site_config(config: &SiteConfig) -> SiteConfigResponse {
-    SiteConfigResponse {
+pub fn from_site_config(config: &SiteConfig) -> SiteConfigOutcome {
+    SiteConfigOutcome {
         id: Some("site_config".to_owned()),
         email_change_allowed: config.email_change_allowed,
         password_login_enabled: config.password_login_enabled,
@@ -55,7 +55,7 @@ pub fn from_site_config(config: &SiteConfig) -> SiteConfigResponse {
 
 /// GET /_coauth/self/site-config
 #[endpoint]
-pub async fn get(depot: &Depot) -> Result<Json<SiteConfigResponse>, RouteError> {
+pub async fn get(depot: &Depot) -> Result<Json<SiteConfigOutcome>, RouteError> {
     let config = depot.site_config()?;
 
     Ok(Json(from_site_config(&config)))

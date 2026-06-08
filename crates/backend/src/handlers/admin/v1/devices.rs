@@ -68,8 +68,8 @@ pub struct DeviceListResBody {
 }
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "RevokeDeviceRequest")]
-pub struct RevokeDeviceRequest {
+#[serde(rename = "RevokeDeviceRequestBody")]
+pub struct RevokeDeviceRequestBody {
     /// Operator-supplied reason for audit.
     pub reason: String,
 
@@ -79,7 +79,7 @@ pub struct RevokeDeviceRequest {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct DeviceRevokeResponse {
+pub struct DeviceRevokeOutcome {
     /// The device that was revoked.
     pub device: DeviceRecord,
 
@@ -187,13 +187,13 @@ pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<Device
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.devices.revoke", skip_all)]
-pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<DeviceRevokeResponse> {
+pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<DeviceRevokeOutcome> {
     let device_id = req
         .param::<String>("id")
         .map(|s| s.trim().to_owned())
         .filter(|s| !s.is_empty())
         .ok_or_else(|| AppError::bad_request("missing device id"))?;
-    let body: RevokeDeviceRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: RevokeDeviceRequestBody = req.parse_json().await.map_err(AppError::internal)?;
     let reason = body.reason.trim().to_owned();
     if reason.is_empty() {
         return Err(AppError::bad_request("reason is required"));
@@ -239,7 +239,7 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
     .await?;
     repo.save().await?;
 
-    Ok(Json(DeviceRevokeResponse {
+    Ok(Json(DeviceRevokeOutcome {
         device: DeviceRecord {
             id: device_id.clone(),
             account_id: None,

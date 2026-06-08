@@ -27,7 +27,7 @@ use crate::{
             model::{Resource, UpstreamOAuthProvider},
             params::{IncludeCount, extract_pagination, extract_ulid_param},
             response::{
-                PaginatedResponse, SingleResponse, paginated_response_for_count_only,
+                PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
                 paginated_response_for_page,
             },
         },
@@ -41,7 +41,7 @@ use crate::{
 pub async fn get_provider(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UpstreamOAuthProvider>> {
+) -> JsonResult<SingleOutcome<UpstreamOAuthProvider>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let provider_id = extract_ulid_param(req)?;
@@ -52,7 +52,7 @@ pub async fn get_provider(
         .await?
         .ok_or_else(|| AppError::not_found("Provider not found"))?;
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         UpstreamOAuthProvider::from(entry),
     )))
 }
@@ -86,7 +86,7 @@ impl std::fmt::Display for FilterParams {
 pub async fn list_providers(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PaginatedResponse<UpstreamOAuthProvider>> {
+) -> JsonResult<PaginatedOutcome<UpstreamOAuthProvider>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
@@ -137,7 +137,7 @@ pub async fn list_providers(
 /// strings to keep the API stable across data-layer refactors.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "UpstreamOAuthProviderRequest")]
-pub struct ProviderRequest {
+pub struct ProviderRequestBody {
     issuer: Option<String>,
     human_name: Option<String>,
     brand_name: Option<String>,
@@ -195,7 +195,7 @@ fn default_on_backchannel_logout() -> String {
 }
 
 fn parse_request(
-    body: ProviderRequest,
+    body: ProviderRequestBody,
     encrypter: &coauth_keystore::Encrypter,
     source: UpstreamOAuthProviderSource,
 ) -> Result<UpstreamOAuthProviderParams, AppError> {
@@ -285,7 +285,7 @@ fn parse_request(
 pub async fn add_provider(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<SingleResponse<UpstreamOAuthProvider>> {
+) -> CreatedJsonResult<SingleOutcome<UpstreamOAuthProvider>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -295,7 +295,7 @@ pub async fn add_provider(
     } = ctx;
     let encrypter = depot.encrypter().map_err(AppError::internal)?;
     let mut rng = crate::handlers::account::make_rng();
-    let body: ProviderRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: ProviderRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     let params = parse_request(body, &encrypter, UpstreamOAuthProviderSource::Manual)?;
 
@@ -323,7 +323,7 @@ pub async fn add_provider(
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleResponse::new_canonical(UpstreamOAuthProvider::from(provider)),
+        SingleOutcome::new_canonical(UpstreamOAuthProvider::from(provider)),
     ))
 }
 
@@ -334,7 +334,7 @@ pub async fn add_provider(
 pub async fn update_provider(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UpstreamOAuthProvider>> {
+) -> JsonResult<SingleOutcome<UpstreamOAuthProvider>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -345,7 +345,7 @@ pub async fn update_provider(
     let encrypter = depot.encrypter().map_err(AppError::internal)?;
     let id = extract_ulid_param(req)?;
     let mut rng = crate::handlers::account::make_rng();
-    let body: ProviderRequest = req.parse_json().await.map_err(AppError::internal)?;
+    let body: ProviderRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     let existing = repo
         .upstream_oauth_provider()
@@ -381,7 +381,7 @@ pub async fn update_provider(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         UpstreamOAuthProvider::from(provider),
     )))
 }
@@ -443,7 +443,7 @@ pub async fn delete_provider(req: &mut Request, depot: &Depot) -> AppResult<Stat
 pub async fn disable_provider(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UpstreamOAuthProvider>> {
+) -> JsonResult<SingleOutcome<UpstreamOAuthProvider>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -479,7 +479,7 @@ pub async fn disable_provider(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         UpstreamOAuthProvider::from(provider),
     )))
 }
@@ -490,7 +490,7 @@ pub async fn disable_provider(
 pub async fn enable_provider(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<UpstreamOAuthProvider>> {
+) -> JsonResult<SingleOutcome<UpstreamOAuthProvider>> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -523,7 +523,7 @@ pub async fn enable_provider(
 
     repo.save().await?;
 
-    Ok(Json(SingleResponse::new_canonical(
+    Ok(Json(SingleOutcome::new_canonical(
         UpstreamOAuthProvider::from(provider),
     )))
 }

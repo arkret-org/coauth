@@ -356,7 +356,7 @@ pub enum StageChallenge {
 /// [`StageChallenge`] and produces a [`StageOutcome`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum StageResponse {
+pub enum StageSubmission {
     /// Response to an identification challenge.
     Identification {
         /// The value entered in the identifier field.

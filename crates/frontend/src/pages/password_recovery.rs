@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     api::types::{
-        RecoveryTicketStatusResponse, ResendRecoveryEmailPayload, SetPasswordPayload,
+        RecoveryTicketStatusOutcome, ResendRecoveryEmailPayload, SetPasswordPayload,
         SetPasswordStatus,
     },
     components::{
@@ -84,7 +84,7 @@ pub fn PasswordRecovery() -> Element {
                     return;
                 }
 
-                match crate::api::api_get::<RecoveryTicketStatusResponse>(&format!(
+                match crate::api::api_get::<RecoveryTicketStatusOutcome>(&format!(
                     "/gate/account/password-recovery/{ticket_value}"
                 ))
                 .await

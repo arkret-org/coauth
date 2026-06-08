@@ -175,7 +175,7 @@ impl DirectoryAdminRow {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct ApprovalActionRequest {
+pub struct ApprovalActionRequestBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn action_request_omits_empty_note() {
-        let req = ApprovalActionRequest { note: None };
+        let req = ApprovalActionRequestBody { note: None };
         let s = serde_json::to_string(&req).unwrap();
         assert!(!s.contains("note"));
     }

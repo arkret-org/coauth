@@ -9,7 +9,7 @@ use salvo::{
 use crate::{
     handlers::{
         admin::{
-            CallContextRejection as AdminCallContextRejection, CreatedJson, ErrorResponse,
+            CallContextRejection as AdminCallContextRejection, CreatedJson, ErrorOutcome,
             InconsistentPersonalSession, PaginationRejection, UlidPathParamRejection,
         },
         common::RouteError as RestRouteError,
@@ -133,7 +133,7 @@ impl StdError for AppError {
 
 impl Scribe for AppError {
     fn render(self, res: &mut Response) {
-        let response = ErrorResponse::from_error(&self);
+        let response = ErrorOutcome::from_error(&self);
         let sentry_event_id = if self.capture {
             tracing::error!(message = &self as &dyn StdError);
             SentryEventId::for_last_event()

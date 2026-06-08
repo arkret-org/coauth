@@ -22,7 +22,7 @@ pub struct PatchViewerProfileInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PatchViewerProfileResponse {
+pub struct PatchViewerProfileOutcome {
     pub profile: ViewerProfileData,
     pub principal: PrincipalUserData,
 }
@@ -45,7 +45,7 @@ pub struct PrincipalUserData {
 pub async fn patch_profile(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<PatchViewerProfileResponse>, RouteError> {
+) -> Result<Json<PatchViewerProfileOutcome>, RouteError> {
     let input: PatchViewerProfileInput = req
         .parse_json()
         .await
@@ -80,7 +80,7 @@ pub async fn patch_profile(
 
     repo.save().await?;
 
-    Ok(Json(PatchViewerProfileResponse {
+    Ok(Json(PatchViewerProfileOutcome {
         profile: ViewerProfileData {
             display_name: user.display_name.clone(),
             avatar_url: user.avatar_url.clone(),
@@ -103,7 +103,7 @@ pub struct DeactivateUserInput {
 }
 
 #[derive(Serialize, salvo::oapi::ToSchema)]
-pub struct DeactivateUserResponse {
+pub struct DeactivateUserOutcome {
     pub status: &'static str,
 }
 
@@ -111,7 +111,7 @@ pub struct DeactivateUserResponse {
 pub async fn deactivate_user(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<DeactivateUserResponse>, RouteError> {
+) -> Result<Json<DeactivateUserOutcome>, RouteError> {
     let input: DeactivateUserInput = req
         .parse_json()
         .await
@@ -146,7 +146,7 @@ pub async fn deactivate_user(
         DeactivateAccountOutcome::Deactivated => "DEACTIVATED",
     };
 
-    Ok(Json(DeactivateUserResponse { status }))
+    Ok(Json(DeactivateUserOutcome { status }))
 }
 
 fn map_account_profile_error(error: AccountProfileError) -> RouteError {

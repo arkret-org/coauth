@@ -6,10 +6,10 @@
 
 use chrono::{DateTime, Utc};
 use coauth_admin_types::{
-    AccountRiskActionApprovalRequest, AccountRiskActionApprovalResponse,
-    AccountRiskActionCurrentResponse, AccountRiskActionExecuteRequest,
-    AccountRiskActionHistoryResponse, AccountRiskActionProposalRequest,
-    AccountRiskActionProposalResponse, AccountRiskActionTransitionRecord,
+    AccountRiskActionApprovalOutcome, AccountRiskActionApprovalRequestBody,
+    AccountRiskActionCurrentOutcome, AccountRiskActionExecuteRequestBody,
+    AccountRiskActionHistoryOutcome, AccountRiskActionProposalOutcome,
+    AccountRiskActionProposalRequestBody, AccountRiskActionTransitionRecord,
 };
 use coauth_data::{AdminUserPatch, RepositoryAccess, audit::AdminOperation};
 use cokret_core::canonical::canonical_json_bytes;
@@ -25,7 +25,7 @@ use crate::{
             audit_helper::{AdminAuditSigning, record_admin_operation_signed},
             call_context::extract_call_context,
             params::extract_ulid_param,
-            response::SingleResponse,
+            response::SingleOutcome,
         },
         cokret::service_did_for,
         common::DepotExt,
@@ -42,7 +42,7 @@ use crate::{
 };
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountRiskActionExecuteResponse {
+pub struct AccountRiskActionExecuteOutcome {
     /// Stable persisted state-record identifier for this risk-action state
     /// machine.
     state_record_id: String,
@@ -84,7 +84,7 @@ pub struct AccountRiskActionExecuteResponse {
     execution_note: Option<String>,
 
     /// Account state after the mutation was applied.
-    account: SingleResponse<super::AccountRecord>,
+    account: SingleOutcome<super::AccountRecord>,
 
     /// Legacy mutation endpoint equivalent to the controlled execute path.
     mutation_endpoint: String,
@@ -99,7 +99,7 @@ pub struct AccountRiskActionExecuteResponse {
     todo: String,
 }
 
-// `impl Resource for AccountRiskActionCurrentResponse` lives next to the
+// `impl Resource for AccountRiskActionCurrentOutcome` lives next to the
 // type in `coauth_admin_types::risk_action` — both moved together to
 // satisfy the orphan rule.
 //
@@ -372,8 +372,8 @@ fn transition_for_state(state: ProposalState) -> &'static str {
 pub async fn propose(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<AccountRiskActionProposalResponse> {
-    let params: AccountRiskActionProposalRequest =
+) -> JsonResult<AccountRiskActionProposalOutcome> {
+    let params: AccountRiskActionProposalRequestBody =
         req.parse_json().await.map_err(AppError::internal)?;
     if params.action.trim().is_empty() {
         return Err(AppError::bad_request("risk action is required"));
@@ -473,7 +473,7 @@ pub async fn propose(
         repo.cancel().await?;
     }
 
-    Ok(Json(AccountRiskActionProposalResponse {
+    Ok(Json(AccountRiskActionProposalOutcome {
         state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
@@ -501,8 +501,8 @@ pub async fn propose(
 pub async fn approve(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<AccountRiskActionApprovalResponse> {
-    let params: AccountRiskActionApprovalRequest =
+) -> JsonResult<AccountRiskActionApprovalOutcome> {
+    let params: AccountRiskActionApprovalRequestBody =
         req.parse_json().await.map_err(AppError::internal)?;
     if params.action.trim().is_empty() {
         return Err(AppError::bad_request("risk action is required"));
@@ -641,7 +641,7 @@ pub async fn approve(
         repo.cancel().await?;
     }
 
-    Ok(Json(AccountRiskActionApprovalResponse {
+    Ok(Json(AccountRiskActionApprovalOutcome {
         state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
@@ -717,8 +717,8 @@ mod tests {
 pub async fn execute(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<AccountRiskActionExecuteResponse> {
-    let params: AccountRiskActionExecuteRequest =
+) -> JsonResult<AccountRiskActionExecuteOutcome> {
+    let params: AccountRiskActionExecuteRequestBody =
         req.parse_json().await.map_err(AppError::internal)?;
     if params.action.trim().is_empty() {
         return Err(AppError::bad_request("risk action is required"));
@@ -835,12 +835,12 @@ pub async fn execute(
     .await?;
     repo.save().await?;
 
-    let account_response = SingleResponse::new_canonical(
+    let account_response = SingleOutcome::new_canonical(
         super::AccountRecord::from_user(updated_account, &cokret_config, did_resolver.as_ref())
             .await,
     );
 
-    Ok(Json(AccountRiskActionExecuteResponse {
+    Ok(Json(AccountRiskActionExecuteOutcome {
         state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
@@ -867,7 +867,7 @@ pub async fn execute(
 pub async fn list_history(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<AccountRiskActionHistoryResponse> {
+) -> JsonResult<AccountRiskActionHistoryOutcome> {
     let risk_action_state = depot.risk_action_state_service()?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } =
         extract_call_context(req, depot).await?;
@@ -894,7 +894,7 @@ pub async fn list_history(
         .map(|log| risk_action_transition_record(id, &log, risk_action_state.as_ref()))
         .collect();
 
-    Ok(Json(AccountRiskActionHistoryResponse { data }))
+    Ok(Json(AccountRiskActionHistoryOutcome { data }))
 }
 
 #[endpoint]
@@ -902,7 +902,7 @@ pub async fn list_history(
 pub async fn get_current(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<SingleResponse<AccountRiskActionCurrentResponse>> {
+) -> JsonResult<SingleOutcome<AccountRiskActionCurrentOutcome>> {
     let risk_action_state = depot.risk_action_state_service()?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } =
         extract_call_context(req, depot).await?;
@@ -926,7 +926,7 @@ pub async fn get_current(
     let current = logs
         .into_iter()
         .find(|log| is_account_risk_action_log(log, id))
-        .map(|log| AccountRiskActionCurrentResponse {
+        .map(|log| AccountRiskActionCurrentOutcome {
             account_id: id.to_string(),
             state_record_id: risk_action_detail_string(&log.details, "state_record_id"),
             proposal_id: risk_action_detail_string(&log.details, "proposal_id"),
@@ -955,7 +955,7 @@ pub async fn get_current(
                 .unwrap_or_else(|| risk_action_state.state_store_kind().to_owned()),
             todo: risk_action_detail_string(&log.details, "todo"),
         })
-        .unwrap_or(AccountRiskActionCurrentResponse {
+        .unwrap_or(AccountRiskActionCurrentOutcome {
             account_id: id.to_string(),
             state_record_id: None,
             proposal_id: None,
@@ -979,7 +979,7 @@ pub async fn get_current(
             ),
         });
 
-    Ok(Json(SingleResponse::new_canonical(current)))
+    Ok(Json(SingleOutcome::new_canonical(current)))
 }
 
 fn is_account_risk_action_log(

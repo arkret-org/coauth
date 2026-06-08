@@ -17,8 +17,8 @@
 //! audit row, and queues soland fan-out. soland remains the reducer-side
 //! authority for agent lifecycle state.
 //!
-//! Wire shape: see [`AccountabilityGrantRequest`] and
-//! [`AccountabilityGrantResponse`].
+//! Wire shape: see [`AccountabilityGrantRequestBody`] and
+//! [`AccountabilityGrantOutcome`].
 
 use std::collections::BTreeSet;
 
@@ -85,7 +85,7 @@ fn is_registered_agent_capability(action: &str) -> bool {
 
 /// Request body for `POST /_coauth/self/agents/{id}/accountability-grant`.
 #[derive(Deserialize, JsonSchema, ToSchema)]
-pub struct AccountabilityGrantRequest {
+pub struct AccountabilityGrantRequestBody {
     /// DID of the controller (account holder) issuing the grant. MUST
     /// round-trip through the SDK `Did::new` validator (Round-4 regex
     /// `^did:[a-z0-9]+:[^\s]+$`).
@@ -117,7 +117,7 @@ pub struct AccountabilityGrantRequest {
 /// by the SDK typed id helper, while `agent_principal_id` is a DID-as-id per
 /// `cokret-spec` common-fields §4.2.
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct AccountabilityGrantResponse {
+pub struct AccountabilityGrantOutcome {
     /// Typed id of the issued grant. Wire form:
     /// `ck:accountability_grant:<uuid7>`.
     pub accountability_grant_id: String,
@@ -158,7 +158,7 @@ pub struct AccountabilityGrantResponse {
 pub async fn post_accountability_grant(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<AccountabilityGrantResponse> {
+) -> CreatedJsonResult<AccountabilityGrantOutcome> {
     let agent_principal_raw = req
         .param::<String>("id")
         .ok_or_else(|| AppError::bad_request("missing agent principal id"))?;
@@ -169,7 +169,7 @@ pub async fn post_accountability_grant(
     let cokret_config = depot.cokret_config()?;
     authn_internal_caller(req, &cokret_config)?;
 
-    let body: AccountabilityGrantRequest = req
+    let body: AccountabilityGrantRequestBody = req
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
@@ -186,7 +186,7 @@ pub async fn post_accountability_grant(
         AccountabilityGrantId::new(new_prefixed_uuid7("ck:accountability_grant:"))
             .map_err(|err| AppError::internal_box(Box::new(err)))?;
     let accountability_grant_id = accountability_grant_id.into_string();
-    let response = AccountabilityGrantResponse {
+    let response = AccountabilityGrantOutcome {
         accountability_grant_id: accountability_grant_id.clone(),
         agent_principal_id: agent_principal_id.clone(),
         controller_did: controller_did.clone(),
@@ -376,7 +376,7 @@ fn accountability_grant_idempotency_key(accountability_grant_id: &str) -> String
 }
 
 fn build_soland_fanout_payload(
-    response: &AccountabilityGrantResponse,
+    response: &AccountabilityGrantOutcome,
     raw_payload_digest: &str,
     service_did: &str,
     cokret_config: &CokretConfig,

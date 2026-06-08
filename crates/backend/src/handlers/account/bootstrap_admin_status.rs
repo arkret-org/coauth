@@ -5,7 +5,7 @@ use serde::Serialize;
 use super::{DepotExt, RouteError};
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct BootstrapAdminStatusResponse {
+pub struct BootstrapAdminStatusOutcome {
     pub has_admin: bool,
     pub token_configured: bool,
     pub setup_required: bool,
@@ -22,7 +22,7 @@ fn bootstrap_token_configured(config: &SiteConfig) -> bool {
 async fn load_bootstrap_admin_status_from(
     config: &SiteConfig,
     repo: &mut BoxRepository,
-) -> Result<BootstrapAdminStatusResponse, RepositoryError> {
+) -> Result<BootstrapAdminStatusOutcome, RepositoryError> {
     let has_admin = repo
         .user()
         .count(UserFilter::new().can_request_admin_only())
@@ -30,7 +30,7 @@ async fn load_bootstrap_admin_status_from(
         > 0;
     let token_configured = bootstrap_token_configured(config);
 
-    Ok(BootstrapAdminStatusResponse {
+    Ok(BootstrapAdminStatusOutcome {
         has_admin,
         token_configured,
         setup_required: token_configured && !has_admin,
@@ -38,7 +38,7 @@ async fn load_bootstrap_admin_status_from(
 }
 
 #[endpoint]
-pub async fn get(depot: &Depot) -> Result<Json<BootstrapAdminStatusResponse>, RouteError> {
+pub async fn get(depot: &Depot) -> Result<Json<BootstrapAdminStatusOutcome>, RouteError> {
     let config = depot.site_config()?;
     let mut repo = depot.repo().await?;
     Ok(Json(

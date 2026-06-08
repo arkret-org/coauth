@@ -15,7 +15,7 @@ use crate::handlers::account::service::contacts::{
 // ── Response types ─────────────────────────────────────────────
 
 #[derive(Serialize, ToSchema)]
-pub struct StartEmailAuthResponse {
+pub struct StartEmailAuthOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authentication: Option<EmailAuthData>,
@@ -30,24 +30,24 @@ pub struct EmailAuthData {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct CompleteEmailAuthResponse {
+pub struct CompleteEmailAuthOutcome {
     pub status: &'static str,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ResendEmailAuthCodeResponse {
+pub struct ResendEmailAuthCodeOutcome {
     pub status: &'static str,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct RemoveEmailResponse {
+pub struct RemoveEmailOutcome {
     pub status: &'static str,
 }
 
 // ── GET /_coauth/gate/account/email-auth/:id ─────────────────────────────────
 
 #[derive(Serialize, ToSchema)]
-pub struct EmailAuthStatusResponse {
+pub struct EmailAuthStatusOutcome {
     pub id: String,
     pub email: String,
     pub completed_at: Option<String>,
@@ -57,7 +57,7 @@ pub struct EmailAuthStatusResponse {
 pub async fn get_email_auth(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<EmailAuthStatusResponse>, RouteError> {
+) -> Result<Json<EmailAuthStatusOutcome>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -75,7 +75,7 @@ pub async fn get_email_auth(
 
     repo.cancel().await?;
 
-    Ok(Json(EmailAuthStatusResponse {
+    Ok(Json(EmailAuthStatusOutcome {
         id: NodeType::UserEmailAuthentication.serialize(auth.id),
         email: auth.email,
         completed_at: auth.completed_at.map(|t| t.to_rfc3339()),
@@ -96,7 +96,7 @@ pub struct StartEmailAuthInput {
 pub async fn start_email_auth(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<StartEmailAuthResponse>, RouteError> {
+) -> Result<Json<StartEmailAuthOutcome>, RouteError> {
     let input: StartEmailAuthInput = req
         .parse_json()
         .await
@@ -135,22 +135,22 @@ pub async fn start_email_auth(
     .await
     {
         Err(StartEmailVerificationError::Unauthorized) => Err(RouteError::Unauthorized),
-        Err(StartEmailVerificationError::Disabled) => Ok(Json(StartEmailAuthResponse {
+        Err(StartEmailVerificationError::Disabled) => Ok(Json(StartEmailAuthOutcome {
             status: "DENIED",
             authentication: None,
             violations: Some(vec!["Email changes are not allowed".into()]),
         })),
-        Err(StartEmailVerificationError::InvalidEmail) => Ok(Json(StartEmailAuthResponse {
+        Err(StartEmailVerificationError::InvalidEmail) => Ok(Json(StartEmailAuthOutcome {
             status: "INVALID_EMAIL_ADDRESS",
             authentication: None,
             violations: None,
         })),
-        Err(StartEmailVerificationError::IncorrectPassword) => Ok(Json(StartEmailAuthResponse {
+        Err(StartEmailVerificationError::IncorrectPassword) => Ok(Json(StartEmailAuthOutcome {
             status: "INCORRECT_PASSWORD",
             authentication: None,
             violations: None,
         })),
-        Ok(started) => Ok(Json(StartEmailAuthResponse {
+        Ok(started) => Ok(Json(StartEmailAuthOutcome {
             status: "STARTED",
             authentication: Some(EmailAuthData {
                 id: NodeType::UserEmailAuthentication.serialize(started.authentication.id),
@@ -158,7 +158,7 @@ pub async fn start_email_auth(
             }),
             violations: None,
         })),
-        Err(StartEmailVerificationError::RateLimited) => Ok(Json(StartEmailAuthResponse {
+        Err(StartEmailVerificationError::RateLimited) => Ok(Json(StartEmailAuthOutcome {
             status: "RATE_LIMITED",
             authentication: None,
             violations: None,
@@ -181,7 +181,7 @@ pub struct CompleteEmailAuthInput {
 pub async fn complete_email_auth(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<CompleteEmailAuthResponse>, RouteError> {
+) -> Result<Json<CompleteEmailAuthOutcome>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -215,23 +215,23 @@ pub async fn complete_email_auth(
     .await
     {
         Err(CompleteEmailVerificationError::Unauthorized) => Err(RouteError::Unauthorized),
-        Ok(()) => Ok(Json(CompleteEmailAuthResponse {
+        Ok(()) => Ok(Json(CompleteEmailAuthOutcome {
             status: "COMPLETED",
         })),
         Err(CompleteEmailVerificationError::NotFound) => Err(RouteError::NotFound),
         Err(CompleteEmailVerificationError::NotOwned) => Err(RouteError::Unauthorized),
         Err(CompleteEmailVerificationError::AlreadyCompleted) => {
-            Ok(Json(CompleteEmailAuthResponse {
+            Ok(Json(CompleteEmailAuthOutcome {
                 status: "COMPLETED",
             }))
         }
-        Err(CompleteEmailVerificationError::RateLimited) => Ok(Json(CompleteEmailAuthResponse {
+        Err(CompleteEmailVerificationError::RateLimited) => Ok(Json(CompleteEmailAuthOutcome {
             status: "RATE_LIMITED",
         })),
-        Err(CompleteEmailVerificationError::InvalidCode) => Ok(Json(CompleteEmailAuthResponse {
+        Err(CompleteEmailVerificationError::InvalidCode) => Ok(Json(CompleteEmailAuthOutcome {
             status: "INVALID_CODE",
         })),
-        Err(CompleteEmailVerificationError::CodeExpired) => Ok(Json(CompleteEmailAuthResponse {
+        Err(CompleteEmailVerificationError::CodeExpired) => Ok(Json(CompleteEmailAuthOutcome {
             status: "CODE_EXPIRED",
         })),
         Err(CompleteEmailVerificationError::Repository(error)) => Err(error.into()),
@@ -250,7 +250,7 @@ pub struct ResendEmailAuthInput {
 pub async fn resend_email_auth_code(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ResendEmailAuthCodeResponse>, RouteError> {
+) -> Result<Json<ResendEmailAuthCodeOutcome>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -287,15 +287,15 @@ pub async fn resend_email_auth_code(
     .await
     {
         Err(ResendEmailVerificationError::Unauthorized) => Err(RouteError::Unauthorized),
-        Ok(()) => Ok(Json(ResendEmailAuthCodeResponse { status: "RESENT" })),
+        Ok(()) => Ok(Json(ResendEmailAuthCodeOutcome { status: "RESENT" })),
         Err(ResendEmailVerificationError::NotFound) => Err(RouteError::NotFound),
         Err(ResendEmailVerificationError::NotOwned) => Err(RouteError::Unauthorized),
         Err(ResendEmailVerificationError::AlreadyCompleted) => {
-            Ok(Json(ResendEmailAuthCodeResponse {
+            Ok(Json(ResendEmailAuthCodeOutcome {
                 status: "COMPLETED",
             }))
         }
-        Err(ResendEmailVerificationError::RateLimited) => Ok(Json(ResendEmailAuthCodeResponse {
+        Err(ResendEmailVerificationError::RateLimited) => Ok(Json(ResendEmailAuthCodeOutcome {
             status: "RATE_LIMITED",
         })),
         Err(ResendEmailVerificationError::Repository(error)) => Err(error.into()),
@@ -313,7 +313,7 @@ pub struct RemoveEmailInput {
 pub async fn remove_email(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RemoveEmailResponse>, RouteError> {
+) -> Result<Json<RemoveEmailOutcome>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -350,11 +350,11 @@ pub async fn remove_email(
     )
     .await
     {
-        Ok(()) => Ok(Json(RemoveEmailResponse { status: "REMOVED" })),
+        Ok(()) => Ok(Json(RemoveEmailOutcome { status: "REMOVED" })),
         Err(RemoveUserEmailError::Unauthorized) => Err(RouteError::Unauthorized),
         Err(RemoveUserEmailError::NotFound) => Err(RouteError::NotFound),
         Err(RemoveUserEmailError::UserNotFound) => Err(RouteError::LoadFailed),
-        Err(RemoveUserEmailError::IncorrectPassword) => Ok(Json(RemoveEmailResponse {
+        Err(RemoveUserEmailError::IncorrectPassword) => Ok(Json(RemoveEmailOutcome {
             status: "INCORRECT_PASSWORD",
         })),
         Err(RemoveUserEmailError::Password(error)) => Err(RouteError::Internal(error.into())),

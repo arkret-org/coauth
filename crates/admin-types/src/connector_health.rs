@@ -101,7 +101,7 @@ impl ConnectorHealthRow {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct ConnectorHealthResponse {
+pub struct ConnectorHealthOutcome {
     #[serde(default)]
     pub providers: Vec<ConnectorHealthRow>,
 }
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn response_round_trips_through_serde_json() {
-        let resp = ConnectorHealthResponse {
+        let resp = ConnectorHealthOutcome {
             providers: vec![
                 ConnectorHealthRow {
                     provider: "soland".into(),
@@ -183,7 +183,7 @@ mod tests {
             ],
         };
         let s = serde_json::to_string(&resp).unwrap();
-        let back: ConnectorHealthResponse = serde_json::from_str(&s).unwrap();
+        let back: ConnectorHealthOutcome = serde_json::from_str(&s).unwrap();
         assert_eq!(back.providers.len(), 2);
         assert!(back.providers[0].is_healthy());
         assert!(!back.providers[1].is_healthy());

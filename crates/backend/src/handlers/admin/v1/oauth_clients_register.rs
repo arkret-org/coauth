@@ -45,7 +45,7 @@ use crate::{
 /// through as part of `ClientMetadata` on the public endpoint.
 #[derive(Debug, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "AdminDynamicClientRegistrationRequest")]
-pub struct AdminClientRegistrationRequest {
+pub struct AdminClientRegistrationRequestBody {
     /// Human-readable client name (RFC 7591 §2 `client_name`).
     #[serde(default)]
     pub client_name: Option<String>,
@@ -93,7 +93,7 @@ pub struct AdminClientRegistrationRequest {
 /// stored hashed server-side and SHOULD be treated by the operator with
 /// the same care as the `client_secret` itself.
 #[derive(Debug, Serialize, JsonSchema, ToSchema)]
-pub struct AdminClientRegistrationResponse {
+pub struct AdminClientRegistrationOutcome {
     pub client_id: String,
     /// Only present for confidential clients (i.e. when the auth method
     /// is one of the `client_secret_*` variants).
@@ -238,8 +238,8 @@ fn ensure_redirect_for_grants(grants: &[GrantType], redirect_uris: &[Url]) -> Re
 pub async fn register(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<AdminClientRegistrationResponse> {
-    let body: AdminClientRegistrationRequest =
+) -> CreatedJsonResult<AdminClientRegistrationOutcome> {
+    let body: AdminClientRegistrationRequestBody =
         req.parse_json().await.map_err(AppError::internal)?;
 
     let auth_method = parse_auth_method(body.token_endpoint_auth_method.as_deref())?;
@@ -330,7 +330,7 @@ pub async fn register(
     .await?;
     repo.save().await?;
 
-    let response = AdminClientRegistrationResponse {
+    let response = AdminClientRegistrationOutcome {
         client_id: client.client_id.clone(),
         client_secret,
         client_id_issued_at: client.id.datetime().into(),

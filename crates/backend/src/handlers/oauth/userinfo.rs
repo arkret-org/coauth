@@ -104,10 +104,10 @@ impl Scribe for RouteError {
 pub async fn get(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     match handle_get(req, depot).await {
         Ok(response) => match response {
-            UserinfoResponse::Json(user_info) => {
+            UserinfoOutcome::Json(user_info) => {
                 res.render(Json(user_info));
             }
-            UserinfoResponse::Jwt(token) => {
+            UserinfoOutcome::Jwt(token) => {
                 res.headers_mut().insert(
                     http::header::CONTENT_TYPE,
                     http::HeaderValue::from_static("application/jwt"),
@@ -119,12 +119,12 @@ pub async fn get(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     }
 }
 
-enum UserinfoResponse {
+enum UserinfoOutcome {
     Json(UserInfo),
     Jwt(String),
 }
 
-async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResponse, RouteError> {
+async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutcome, RouteError> {
     let user_authorization: UserAuthorization<()> = UserAuthorization::<()>::extract(req, depot)
         .await
         .map_err(|e| match e {
@@ -211,8 +211,8 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoResp
         };
 
         let token = Jwt::sign_with_rng(&mut rng, header, signed_user_info, &*signer)?;
-        Ok(UserinfoResponse::Jwt(token.into_string()))
+        Ok(UserinfoOutcome::Jwt(token.into_string()))
     } else {
-        Ok(UserinfoResponse::Json(user_info))
+        Ok(UserinfoOutcome::Json(user_info))
     }
 }

@@ -41,7 +41,7 @@ pub struct PasskeyAccountHint {
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "AuthPasskeyRegisterFinishRequest")]
-pub struct PasskeyRegisterFinishRequest {
+pub struct PasskeyRegisterFinishRequestBody {
     #[serde(flatten)]
     pub hint: PasskeyAccountHint,
     #[serde(default)]
@@ -51,21 +51,21 @@ pub struct PasskeyRegisterFinishRequest {
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "AuthPasskeyAuthFinishRequest")]
-pub struct PasskeyAuthFinishRequest {
+pub struct PasskeyAuthFinishRequestBody {
     #[serde(flatten)]
     pub hint: PasskeyAccountHint,
     pub assertion: serde_json::Value,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PasskeyRegisterStartResponse {
+pub struct PasskeyRegisterStartOutcome {
     pub account_id: String,
     pub handle: String,
     pub challenge: serde_json::Value,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PasskeyRegisterFinishResponse {
+pub struct PasskeyRegisterFinishOutcome {
     pub account_id: String,
     pub id: String,
     pub credential_id_b64: String,
@@ -77,14 +77,14 @@ pub struct PasskeyRegisterFinishResponse {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PasskeyAuthStartResponse {
+pub struct PasskeyAuthStartOutcome {
     pub account_id: String,
     pub handle: String,
     pub challenge: serde_json::Value,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PasskeyAuthFinishResponse {
+pub struct PasskeyAuthFinishOutcome {
     pub account_id: String,
     pub credential_id_b64: String,
 }
@@ -190,7 +190,7 @@ async fn resolve_user(
 pub async fn register_start(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PasskeyRegisterStartResponse> {
+) -> JsonResult<PasskeyRegisterStartOutcome> {
     let body: PasskeyAccountHint = req.parse_json().await.unwrap_or_default();
     let (repo, user) = resolve_user(depot, &body).await?;
     let display_name = trimmed(body.display_name.as_ref()).unwrap_or(&user.handle);
@@ -202,7 +202,7 @@ pub async fn register_start(
         .map_err(map_webauthn_error)?;
     repo.cancel().await?;
 
-    Ok(Json(PasskeyRegisterStartResponse {
+    Ok(Json(PasskeyRegisterStartOutcome {
         account_id: user.id.to_string(),
         handle: user.handle,
         challenge: serde_json::to_value(challenge)
@@ -215,8 +215,9 @@ pub async fn register_start(
 pub async fn register_finish(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<PasskeyRegisterFinishResponse> {
-    let body: PasskeyRegisterFinishRequest = req.parse_json().await.map_err(AppError::internal)?;
+) -> JsonResult<PasskeyRegisterFinishOutcome> {
+    let body: PasskeyRegisterFinishRequestBody =
+        req.parse_json().await.map_err(AppError::internal)?;
     let attestation: RegisterPublicKeyCredential = serde_json::from_value(body.attestation)
         .map_err(|e| AppError::bad_request(format!("invalid attestation: {e}")))?;
     let (mut repo, user) = resolve_user(depot, &body.hint).await?;
@@ -248,7 +249,7 @@ pub async fn register_finish(
     };
     repo.save().await?;
 
-    Ok(Json(PasskeyRegisterFinishResponse {
+    Ok(Json(PasskeyRegisterFinishOutcome {
         account_id: user.id.to_string(),
         id: record.id.to_string(),
         credential_id_b64,
@@ -260,7 +261,7 @@ pub async fn register_finish(
 
 #[endpoint]
 #[tracing::instrument(name = "handler.account.auth.passkey.auth_start", skip_all)]
-pub async fn auth_start(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyAuthStartResponse> {
+pub async fn auth_start(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyAuthStartOutcome> {
     let body: PasskeyAccountHint = req.parse_json().await.unwrap_or_default();
     let (repo, user) = resolve_user(depot, &body).await?;
 
@@ -271,7 +272,7 @@ pub async fn auth_start(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyA
         .map_err(map_webauthn_error)?;
     repo.cancel().await?;
 
-    Ok(Json(PasskeyAuthStartResponse {
+    Ok(Json(PasskeyAuthStartOutcome {
         account_id: user.id.to_string(),
         handle: user.handle,
         challenge: serde_json::to_value(challenge)
@@ -281,11 +282,8 @@ pub async fn auth_start(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyA
 
 #[endpoint]
 #[tracing::instrument(name = "handler.account.auth.passkey.auth_finish", skip_all)]
-pub async fn auth_finish(
-    req: &mut Request,
-    depot: &Depot,
-) -> JsonResult<PasskeyAuthFinishResponse> {
-    let body: PasskeyAuthFinishRequest = req.parse_json().await.map_err(AppError::internal)?;
+pub async fn auth_finish(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyAuthFinishOutcome> {
+    let body: PasskeyAuthFinishRequestBody = req.parse_json().await.map_err(AppError::internal)?;
     let assertion: PublicKeyCredential = serde_json::from_value(body.assertion)
         .map_err(|e| AppError::bad_request(format!("invalid assertion: {e}")))?;
     let (repo, user) = resolve_user(depot, &body.hint).await?;
@@ -298,7 +296,7 @@ pub async fn auth_finish(
         .map_err(map_webauthn_error)?;
     repo.cancel().await?;
 
-    Ok(Json(PasskeyAuthFinishResponse {
+    Ok(Json(PasskeyAuthFinishOutcome {
         account_id: user.id.to_string(),
         credential_id_b64: Base64UrlUnpadded::encode_string(credential_id.as_ref()),
     }))

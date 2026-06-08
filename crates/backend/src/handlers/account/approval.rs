@@ -39,7 +39,7 @@ pub struct UserInfo {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ApprovalGetResponse {
+pub struct ApprovalGetOutcome {
     pub grant_id: String,
     pub client: ClientInfo,
     pub scope: String,
@@ -48,18 +48,18 @@ pub struct ApprovalGetResponse {
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct ApprovalPostRequest {
+pub struct ApprovalPostRequestBody {
     pub action: String,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ApprovalPostResponse {
+pub struct ApprovalPostOutcome {
     pub status: &'static str,
     pub redirect_url: String,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct DeviceLinkResponse {
+pub struct DeviceLinkOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grant_id: Option<String>,
@@ -72,12 +72,12 @@ pub struct DeviceLinkQuery {
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct DeviceApprovalPostRequest {
+pub struct DeviceApprovalPostRequestBody {
     pub action: String,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct DeviceApprovalPostResponse {
+pub struct DeviceApprovalPostOutcome {
     pub status: &'static str,
 }
 
@@ -97,8 +97,8 @@ fn client_info(client: &coauth_data::Client) -> ClientInfo {
     }
 }
 
-fn approval_get_response(screen: ConsentScreen) -> ApprovalGetResponse {
-    ApprovalGetResponse {
+fn approval_get_response(screen: ConsentScreen) -> ApprovalGetOutcome {
+    ApprovalGetOutcome {
         grant_id: screen.grant_id.to_string(),
         client: client_info(&screen.client),
         scope: screen.scope,
@@ -220,7 +220,7 @@ pub async fn oauth_approval_post(
         .param("grant_id")
         .ok_or_else(|| RouteError::BadRequest("missing grant_id".into()))?;
 
-    let input: ApprovalPostRequest = req
+    let input: ApprovalPostRequestBody = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
@@ -258,7 +258,7 @@ pub async fn oauth_approval_post(
 
     let redirect_url = decision.redirect_url().map_err(map_oauth_access_error)?;
 
-    res.render(Json(ApprovalPostResponse {
+    res.render(Json(ApprovalPostOutcome {
         status: "success",
         redirect_url,
     }));
@@ -283,7 +283,7 @@ pub async fn device_link_get(
         .unwrap_or(DeviceLinkQuery { code: None });
 
     let Some(code) = query.code else {
-        res.render(Json(DeviceLinkResponse {
+        res.render(Json(DeviceLinkOutcome {
             status: "invalid",
             grant_id: None,
         }));
@@ -295,12 +295,12 @@ pub async fn device_link_get(
         .await
         .map_err(map_oauth_access_error)?
     {
-        res.render(Json(DeviceLinkResponse {
+        res.render(Json(DeviceLinkOutcome {
             status: "valid",
             grant_id: Some(grant_id.to_string()),
         }));
     } else {
-        res.render(Json(DeviceLinkResponse {
+        res.render(Json(DeviceLinkOutcome {
             status: "invalid",
             grant_id: None,
         }));
@@ -373,7 +373,7 @@ pub async fn device_approval_post(
         .param("id")
         .ok_or_else(|| RouteError::BadRequest("missing id".into()))?;
 
-    let input: DeviceApprovalPostRequest = req
+    let input: DeviceApprovalPostRequestBody = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
@@ -408,7 +408,7 @@ pub async fn device_approval_post(
         DeviceConsentStatus::Rejected => "rejected",
     };
 
-    res.render(Json(DeviceApprovalPostResponse {
+    res.render(Json(DeviceApprovalPostOutcome {
         status: result_status,
     }));
     Ok(())

@@ -25,7 +25,7 @@ pub struct SetPasswordInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct SetPasswordResponse {
+pub struct SetPasswordOutcome {
     pub status: &'static str,
 }
 
@@ -33,7 +33,7 @@ pub struct SetPasswordResponse {
 pub async fn set_password(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SetPasswordResponse>, RouteError> {
+) -> Result<Json<SetPasswordOutcome>, RouteError> {
     let input: SetPasswordInput = req
         .parse_json()
         .await
@@ -70,26 +70,26 @@ pub async fn set_password(
     )
     .await
     {
-        Ok(()) => Ok(Json(SetPasswordResponse { status: "ALLOWED" })),
-        Err(ChangePasswordError::PasswordDisabled) => Ok(Json(SetPasswordResponse {
+        Ok(()) => Ok(Json(SetPasswordOutcome { status: "ALLOWED" })),
+        Err(ChangePasswordError::PasswordDisabled) => Ok(Json(SetPasswordOutcome {
             status: "PASSWORD_CHANGES_DISABLED",
         })),
-        Err(ChangePasswordError::PasswordTooWeak) => Ok(Json(SetPasswordResponse {
+        Err(ChangePasswordError::PasswordTooWeak) => Ok(Json(SetPasswordOutcome {
             status: "INVALID_NEW_PASSWORD",
         })),
-        Err(ChangePasswordError::UserNotFound) => Ok(Json(SetPasswordResponse {
+        Err(ChangePasswordError::UserNotFound) => Ok(Json(SetPasswordOutcome {
             status: "NOT_FOUND",
         })),
-        Err(ChangePasswordError::PasswordChangesDisabled) => Ok(Json(SetPasswordResponse {
+        Err(ChangePasswordError::PasswordChangesDisabled) => Ok(Json(SetPasswordOutcome {
             status: "PASSWORD_CHANGES_DISABLED",
         })),
-        Err(ChangePasswordError::NoCurrentPassword) => Ok(Json(SetPasswordResponse {
+        Err(ChangePasswordError::NoCurrentPassword) => Ok(Json(SetPasswordOutcome {
             status: "NO_CURRENT_PASSWORD",
         })),
         Err(ChangePasswordError::CurrentPasswordRequired) => Err(RouteError::BadRequest(
             "current_password required for non-admins".into(),
         )),
-        Err(ChangePasswordError::WrongPassword) => Ok(Json(SetPasswordResponse {
+        Err(ChangePasswordError::WrongPassword) => Ok(Json(SetPasswordOutcome {
             status: "WRONG_PASSWORD",
         })),
         Err(ChangePasswordError::Password(error)) => Err(RouteError::Internal(error.into())),
@@ -100,7 +100,7 @@ pub async fn set_password(
 // ── GET /_coauth/gate/account/password-recovery/:ticket ─────────────────────
 
 #[derive(Serialize, ToSchema)]
-pub struct RecoveryTicketStatusResponse {
+pub struct RecoveryTicketStatusOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
@@ -110,14 +110,14 @@ pub struct RecoveryTicketStatusResponse {
 pub async fn get_recovery_ticket_status(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RecoveryTicketStatusResponse>, RouteError> {
+) -> Result<Json<RecoveryTicketStatusOutcome>, RouteError> {
     let ticket = req
         .param::<String>("ticket")
         .ok_or(RouteError::BadRequest("missing ticket".into()))?;
 
     let config = depot.site_config()?;
     if !config.account_recovery_allowed {
-        return Ok(Json(RecoveryTicketStatusResponse {
+        return Ok(Json(RecoveryTicketStatusOutcome {
             status: "disabled",
             email: None,
         }));
@@ -129,7 +129,7 @@ pub async fn get_recovery_ticket_status(
 
     let Some(recovery_ticket) = repo.user_recovery().find_ticket(&ticket).await? else {
         repo.cancel().await?;
-        return Ok(Json(RecoveryTicketStatusResponse {
+        return Ok(Json(RecoveryTicketStatusOutcome {
             status: "not_found",
             email: None,
         }));
@@ -156,7 +156,7 @@ pub async fn get_recovery_ticket_status(
     let email = Some(recovery_session.email.clone());
     repo.cancel().await?;
 
-    Ok(Json(RecoveryTicketStatusResponse { status, email }))
+    Ok(Json(RecoveryTicketStatusOutcome { status, email }))
 }
 
 // ── POST /_coauth/gate/account/password-recovery/set ─────────────────────────
@@ -171,7 +171,7 @@ pub struct SetPasswordByRecoveryInput {
 pub async fn set_password_by_recovery(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SetPasswordResponse>, RouteError> {
+) -> Result<Json<SetPasswordOutcome>, RouteError> {
     let input: SetPasswordByRecoveryInput = req
         .parse_json()
         .await
@@ -196,23 +196,23 @@ pub async fn set_password_by_recovery(
     )
     .await
     {
-        Ok(()) => Ok(Json(SetPasswordResponse { status: "ALLOWED" })),
-        Err(CompleteAccountRecoveryError::PasswordDisabled) => Ok(Json(SetPasswordResponse {
+        Ok(()) => Ok(Json(SetPasswordOutcome { status: "ALLOWED" })),
+        Err(CompleteAccountRecoveryError::PasswordDisabled) => Ok(Json(SetPasswordOutcome {
             status: "PASSWORD_CHANGES_DISABLED",
         })),
-        Err(CompleteAccountRecoveryError::PasswordTooWeak) => Ok(Json(SetPasswordResponse {
+        Err(CompleteAccountRecoveryError::PasswordTooWeak) => Ok(Json(SetPasswordOutcome {
             status: "INVALID_NEW_PASSWORD",
         })),
-        Err(CompleteAccountRecoveryError::TicketNotFound) => Ok(Json(SetPasswordResponse {
+        Err(CompleteAccountRecoveryError::TicketNotFound) => Ok(Json(SetPasswordOutcome {
             status: "NO_SUCH_RECOVERY_TICKET",
         })),
         Err(CompleteAccountRecoveryError::SessionNotFound) => Err(RouteError::Internal(Box::new(
             std::io::Error::other("Could not load recovery session"),
         ))),
-        Err(CompleteAccountRecoveryError::AlreadyConsumed) => Ok(Json(SetPasswordResponse {
+        Err(CompleteAccountRecoveryError::AlreadyConsumed) => Ok(Json(SetPasswordOutcome {
             status: "RECOVERY_TICKET_ALREADY_USED",
         })),
-        Err(CompleteAccountRecoveryError::TicketExpired) => Ok(Json(SetPasswordResponse {
+        Err(CompleteAccountRecoveryError::TicketExpired) => Ok(Json(SetPasswordOutcome {
             status: "EXPIRED_RECOVERY_TICKET",
         })),
         Err(CompleteAccountRecoveryError::EmailNotFound) => Err(RouteError::Internal(Box::new(
@@ -221,7 +221,7 @@ pub async fn set_password_by_recovery(
         Err(CompleteAccountRecoveryError::UserNotFound) => Err(RouteError::Internal(Box::new(
             std::io::Error::other("Invalid user for recovery ticket"),
         ))),
-        Err(CompleteAccountRecoveryError::AccountLocked) => Ok(Json(SetPasswordResponse {
+        Err(CompleteAccountRecoveryError::AccountLocked) => Ok(Json(SetPasswordOutcome {
             status: "ACCOUNT_LOCKED",
         })),
         Err(CompleteAccountRecoveryError::Password(error)) => {
@@ -239,7 +239,7 @@ pub struct ResendRecoveryInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct ResendRecoveryResponse {
+pub struct ResendRecoveryOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_url: Option<String>,
@@ -249,7 +249,7 @@ pub struct ResendRecoveryResponse {
 pub async fn resend_recovery_email(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ResendRecoveryResponse>, RouteError> {
+) -> Result<Json<ResendRecoveryOutcome>, RouteError> {
     let input: ResendRecoveryInput = req
         .parse_json()
         .await
@@ -277,14 +277,14 @@ pub async fn resend_recovery_email(
     )
     .await
     {
-        Ok(session) => Ok(Json(ResendRecoveryResponse {
+        Ok(session) => Ok(Json(ResendRecoveryOutcome {
             status: "SENT",
             progress_url: Some(
                 url_builder.relative_url(&format!("/recover/progress/{}", session.id)),
             ),
         })),
         Err(ResendAccountRecoveryByTicketError::TicketNotFound) => {
-            Ok(Json(ResendRecoveryResponse {
+            Ok(Json(ResendRecoveryOutcome {
                 status: "NO_SUCH_RECOVERY_TICKET",
                 progress_url: None,
             }))
@@ -293,12 +293,12 @@ pub async fn resend_recovery_email(
             Box::new(std::io::Error::other("Could not load recovery session")),
         )),
         Err(ResendAccountRecoveryByTicketError::AlreadyConsumed) => {
-            Ok(Json(ResendRecoveryResponse {
+            Ok(Json(ResendRecoveryOutcome {
                 status: "RECOVERY_TICKET_ALREADY_USED",
                 progress_url: None,
             }))
         }
-        Err(ResendAccountRecoveryByTicketError::RateLimited) => Ok(Json(ResendRecoveryResponse {
+        Err(ResendAccountRecoveryByTicketError::RateLimited) => Ok(Json(ResendRecoveryOutcome {
             status: "RATE_LIMITED",
             progress_url: None,
         })),

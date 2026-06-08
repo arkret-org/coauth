@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::DeviceLinkResponse,
+    api::types::DeviceLinkOutcome,
     components::{layout::Layout, loading::LoadingSpinner},
     pages::Route,
 };
@@ -44,7 +44,7 @@ pub fn DeviceLink() -> Element {
                             error.set(None);
 
                             spawn(async move {
-                                let result = crate::api::api_get::<DeviceLinkResponse>(
+                                let result = crate::api::api_get::<DeviceLinkOutcome>(
                                     &format!("/device-link?code={c}"),
                                 ).await;
                                 submitting.set(false);

@@ -5,7 +5,7 @@ use std::sync::{Arc, OnceLock};
 use coauth_admin_types::{
     AccountDidBindingPreview, AdminAccountDidBinding as AccountDidBinding,
     AdminAccountDidBindingsMeta as AccountDidBindingsMeta,
-    AdminAccountDidBindingsResponse as AccountDidBindingsResponse, DidBindingKind,
+    AdminAccountDidBindingsOutcome as AccountDidBindingsOutcome, DidBindingKind,
     DidBindingResolverDescriptor, DidBindingResolverMode, DidBindingState,
     DidBindingVerificationStatus,
 };
@@ -50,8 +50,8 @@ const DID_BINDING_ADDED_OPERATION: &str = "account_did_binding_added";
 const DID_BINDING_REVOKED_OPERATION: &str = "account_did_binding_revoked";
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "AddAccountDidBindingRequest")]
-pub struct AddAccountDidBindingRequest {
+#[serde(rename = "AddAccountDidBindingRequestBody")]
+pub struct AddAccountDidBindingRequestBody {
     /// DID to bind to the account.
     pub did: String,
 
@@ -104,9 +104,9 @@ pub struct ControlProofPayload {
 }
 
 #[derive(Default, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "RemoveAccountDidBindingRequest")]
+#[serde(rename = "RemoveAccountDidBindingRequestBody")]
 #[allow(dead_code)]
-pub struct RemoveAccountDidBindingRequest {
+pub struct RemoveAccountDidBindingRequestBody {
     /// Operator-supplied reason for revoking the binding.
     reason: Option<String>,
 
@@ -128,7 +128,7 @@ pub struct RemoveAccountDidBindingRequest {
 pub async fn list_account_dids(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<AccountDidBindingsResponse> {
+) -> JsonResult<AccountDidBindingsOutcome> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let id = extract_ulid_param(req)?;
@@ -148,7 +148,7 @@ pub async fn list_account_dids(
     );
     repo.cancel().await?;
 
-    Ok(Json(AccountDidBindingsResponse {
+    Ok(Json(AccountDidBindingsOutcome {
         data,
         meta: did_bindings_meta(&cokret_config, did_resolver.as_ref()),
     }))
@@ -159,8 +159,8 @@ pub async fn list_account_dids(
 pub async fn add_account_did(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<AccountDidBindingsResponse> {
-    let body: AddAccountDidBindingRequest = req
+) -> CreatedJsonResult<AccountDidBindingsOutcome> {
+    let body: AddAccountDidBindingRequestBody = req
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
@@ -284,7 +284,7 @@ pub async fn add_account_did(
         &resolver,
     );
 
-    Ok(CreatedJson(AccountDidBindingsResponse {
+    Ok(CreatedJson(AccountDidBindingsOutcome {
         data,
         meta: did_bindings_meta(&cokret_config, did_resolver.as_ref()),
     }))
@@ -324,8 +324,8 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
 pub async fn remove_account_did(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<AccountDidBindingsResponse> {
-    let body: RemoveAccountDidBindingRequest = req.parse_json().await.unwrap_or_default();
+) -> JsonResult<AccountDidBindingsOutcome> {
+    let body: RemoveAccountDidBindingRequestBody = req.parse_json().await.unwrap_or_default();
     let id = extract_ulid_param(req)?;
     let did = req
         .param::<String>("did")
@@ -398,7 +398,7 @@ pub async fn remove_account_did(
     binding.verification_status = DidBindingVerificationStatus::Rejected;
     binding.revoked_at = Some(revoked_at);
 
-    Ok(Json(AccountDidBindingsResponse {
+    Ok(Json(AccountDidBindingsOutcome {
         data,
         meta: did_bindings_meta(&cokret_config, did_resolver.as_ref()),
     }))

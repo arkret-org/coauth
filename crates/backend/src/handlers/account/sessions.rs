@@ -15,7 +15,7 @@ use crate::handlers::account::service::sessions::{
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "__typename")]
-pub enum SessionDetailResponse {
+pub enum SessionDetailOutcome {
     BrowserSession(BrowserSessionDetail),
     #[serde(rename = "OauthSession")]
     OAuthSession(OAuthSessionDetail),
@@ -65,7 +65,7 @@ pub struct OAuthClientBrief {
 pub async fn get_session(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionDetailResponse>, RouteError> {
+) -> Result<Json<SessionDetailOutcome>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -88,7 +88,7 @@ pub async fn get_session(
                 .map_err(map_account_session_error)?;
             let session = detail.session;
 
-            SessionDetailResponse::BrowserSession(BrowserSessionDetail {
+            SessionDetailOutcome::BrowserSession(BrowserSessionDetail {
                 id: NodeType::BrowserSession.serialize(session.id),
                 display_name: None,
                 user_agent: session.user_agent.as_deref().map(parse_user_agent),
@@ -107,7 +107,7 @@ pub async fn get_session(
                 .map_err(map_account_session_error)?;
             let session = detail.session;
 
-            SessionDetailResponse::OAuthSession(OAuthSessionDetail {
+            SessionDetailOutcome::OAuthSession(OAuthSessionDetail {
                 id: NodeType::OAuthSession.serialize(session.id),
                 scope: Some(session.scope.to_string()),
                 display_name: None,
@@ -133,7 +133,7 @@ pub async fn get_session(
 // ── DELETE /_coauth/self/browser-sessions/:id ────────────────────────
 
 #[derive(Serialize, ToSchema)]
-pub struct EndSessionResponse {
+pub struct EndSessionOutcome {
     pub status: &'static str,
 }
 
@@ -141,7 +141,7 @@ pub struct EndSessionResponse {
 pub async fn end_browser_session(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<EndSessionResponse>, RouteError> {
+) -> Result<Json<EndSessionOutcome>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -160,7 +160,7 @@ pub async fn end_browser_session(
         .await
         .map_err(map_account_session_error)?;
 
-    Ok(Json(EndSessionResponse { status: "ENDED" }))
+    Ok(Json(EndSessionOutcome { status: "ENDED" }))
 }
 
 // ── DELETE /_coauth/self/oauth-sessions/:id ─────────────────────────
@@ -169,7 +169,7 @@ pub async fn end_browser_session(
 pub async fn end_oauth_session(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<EndSessionResponse>, RouteError> {
+) -> Result<Json<EndSessionOutcome>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -189,7 +189,7 @@ pub async fn end_oauth_session(
         .await
         .map_err(map_account_session_error)?;
 
-    Ok(Json(EndSessionResponse { status: "ENDED" }))
+    Ok(Json(EndSessionOutcome { status: "ENDED" }))
 }
 
 // ── PUT /_coauth/self/oauth-sessions/:id/name ───────────────────────
@@ -200,7 +200,7 @@ pub struct SetSessionNameInput {
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct SetSessionNameResponse {
+pub struct SetSessionNameOutcome {
     pub status: &'static str,
 }
 
@@ -208,7 +208,7 @@ pub struct SetSessionNameResponse {
 pub async fn set_oauth_session_name(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SetSessionNameResponse>, RouteError> {
+) -> Result<Json<SetSessionNameOutcome>, RouteError> {
     let id = req
         .param::<String>("id")
         .ok_or(RouteError::BadRequest("missing id".into()))?;
@@ -240,7 +240,7 @@ pub async fn set_oauth_session_name(
     .await
     .map_err(map_account_session_error)?;
 
-    Ok(Json(SetSessionNameResponse { status: "UPDATED" }))
+    Ok(Json(SetSessionNameOutcome { status: "UPDATED" }))
 }
 
 fn map_account_session_error(error: AccountSessionError) -> RouteError {

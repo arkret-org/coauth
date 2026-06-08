@@ -112,7 +112,7 @@ struct PlaintextVisibilityDescriptor {
 }
 
 #[derive(Debug, Serialize)]
-pub(crate) struct ServiceDescribeResponse {
+pub(crate) struct ServiceDescribeOutcome {
     // --- canonical `ck.schema.service_describe.v1` fields, in the schema's
     //     property order (see service-describe.schema.json). ---
     service_did: String,
@@ -289,7 +289,7 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
 }
 
 /// G4.T3 — convert the loader's `VerifiedProfileDescriptor` into the wire
-/// shape expected by `ServiceDescribeResponse.verified_profiles[]`. Also
+/// shape expected by `ServiceDescribeOutcome.verified_profiles[]`. Also
 /// enforces the local cross-check: any entry whose `profile_id` is not in
 /// coauth's hard-coded claimed-profile set is dropped with a `warn!` line.
 ///
@@ -333,7 +333,7 @@ pub(crate) fn service_describe_response(
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
-) -> ServiceDescribeResponse {
+) -> ServiceDescribeOutcome {
     let principal_servers: Vec<PrincipalServerDescriptor> = cokret_config
         .principal_servers
         .iter()
@@ -346,7 +346,7 @@ pub(crate) fn service_describe_response(
         .collect();
     let admin_audience = required_audience_for(url_builder, cokret_config);
 
-    ServiceDescribeResponse {
+    ServiceDescribeOutcome {
         service_did: service_did_for(url_builder, cokret_config),
         // Round 4 — surface the deployment trust domain so federation
         // peers can verify cross-deployment replay protection (see
@@ -562,7 +562,7 @@ pub(crate) fn service_describe_response(
 #[handler]
 pub async fn server_describe(
     depot: &Depot,
-) -> Result<Json<ServiceDescribeResponse>, CokretRouteError> {
+) -> Result<Json<ServiceDescribeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let mut repo = depot.repo().await?;

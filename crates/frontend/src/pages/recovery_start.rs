@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    api::types::RecoveryStartResponse,
+    api::types::RecoveryStartOutcome,
     components::{layout::Layout, loading::LoadingSpinner},
     pages::Route,
 };
@@ -44,7 +44,7 @@ pub fn RecoveryStart() -> Element {
                             error.set(None);
 
                             spawn(async move {
-                                let result = crate::api::api_post::<RecoveryStartResponse>(
+                                let result = crate::api::api_post::<RecoveryStartOutcome>(
                                     "/gate/account/auth/recovery/start",
                                     serde_json::json!({ "email": em }),
                                 ).await;

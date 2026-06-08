@@ -7,9 +7,9 @@
 //!   inventory (`AccountDidBinding`) plus a meta block describing the resolver
 //!   mode and which proof shapes the deployment accepts.
 //! - `POST   /_coauth/admin/accounts/{account_id}/dids` — request body used to
-//!   add a binding (`AddAccountDidBindingRequest`).
+//!   add a binding (`AddAccountDidBindingRequestBody`).
 //! - `DELETE /_coauth/admin/accounts/{account_id}/dids/{did}` — request body
-//!   for revoke (`RemoveAccountDidBindingRequest`).
+//!   for revoke (`RemoveAccountDidBindingRequestBody`).
 //!
 //! Round-33 (C33.3): lifted out of the inline definitions in the
 //! backend handler and the divergent `CoauthAdminDidBindingRecord`
@@ -357,7 +357,7 @@ pub struct AdminAccountDidBindingsMeta {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct AdminAccountDidBindingsResponse {
+pub struct AdminAccountDidBindingsOutcome {
     #[serde(default)]
     pub data: Vec<AdminAccountDidBinding>,
     #[serde(default)]
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn binding_response_round_trips_through_serde_json() {
-        let resp = AdminAccountDidBindingsResponse {
+        let resp = AdminAccountDidBindingsOutcome {
             data: vec![AdminAccountDidBinding {
                 id: "acctdid-abc".into(),
                 account_id: "01H...".into(),
@@ -473,7 +473,7 @@ mod tests {
             },
         };
         let s = serde_json::to_string(&resp).unwrap();
-        let back: AdminAccountDidBindingsResponse = serde_json::from_str(&s).unwrap();
+        let back: AdminAccountDidBindingsOutcome = serde_json::from_str(&s).unwrap();
         assert_eq!(back.data.len(), 1);
         assert_eq!(back.data[0].kind, DidBindingKind::Primary);
         assert_eq!(back.data[0].state, DidBindingState::Active);
