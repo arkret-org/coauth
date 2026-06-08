@@ -4,6 +4,7 @@ description = "Shared serde types for the coauth admin API surface, consumed by 
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true

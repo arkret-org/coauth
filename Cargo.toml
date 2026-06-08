@@ -10,6 +10,7 @@ resolver = "3"
 version = "0.3.0"
 authors = ["Meldry Team"]
 edition = "2024"
+rust-version = "1.96"
 homepage = "https://cokret.dev/docs/"
 repository = "https://github.com/cokret/coauth/"
 license = "Apache-2.0"
