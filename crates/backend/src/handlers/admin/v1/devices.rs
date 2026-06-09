@@ -43,9 +43,6 @@ pub struct DeviceRecord {
     /// Owning account ULID.
     account_id: Option<String>,
 
-    /// Device DID, when the device has been bound to a DID.
-    device_did: Option<String>,
-
     /// Human-facing device label.
     display_name: Option<String>,
 
@@ -90,7 +87,6 @@ pub struct DeviceRevokeOutcome {
 struct DeviceDraft {
     id: String,
     account_id: Option<String>,
-    device_did: Option<String>,
     display_name: Option<String>,
     registered_at: Option<DateTime<Utc>>,
     revoked_at: Option<DateTime<Utc>>,
@@ -98,11 +94,9 @@ struct DeviceDraft {
 
 impl DeviceDraft {
     fn new(id: String) -> Self {
-        let device_did = id.starts_with("did:").then(|| id.clone());
         Self {
             id,
             account_id: None,
-            device_did,
             display_name: None,
             registered_at: None,
             revoked_at: None,
@@ -113,7 +107,6 @@ impl DeviceDraft {
         DeviceRecord {
             id: self.id,
             account_id: self.account_id,
-            device_did: self.device_did,
             display_name: self.display_name,
             risk_level: DeviceRiskLevel::Unknown,
             mfa_state: DeviceMfaState::Unknown,
@@ -241,9 +234,8 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
 
     Ok(Json(DeviceRevokeOutcome {
         device: DeviceRecord {
-            id: device_id.clone(),
+            id: device_id,
             account_id: None,
-            device_did: Some(device_id),
             display_name: None,
             risk_level: DeviceRiskLevel::Unknown,
             mfa_state: DeviceMfaState::Unknown,
@@ -305,11 +297,12 @@ mod tests {
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
     #[test]
-    fn device_draft_uses_did_identifier_as_device_did() {
+    fn device_draft_does_not_synthesize_device_did() {
+        // Device 不是 DID 主体:即使 id 是 did: 形态,DeviceDraft 也不再
+        // 派生任何 device_did(该字段已移除)。设备只有 device_id。
         let record = DeviceDraft::new("did:web:device.example".to_owned()).into_record();
 
         assert_eq!(record.id, "did:web:device.example");
-        assert_eq!(record.device_did.as_deref(), Some("did:web:device.example"));
         assert!(record.revoked_at.is_none());
     }
 
