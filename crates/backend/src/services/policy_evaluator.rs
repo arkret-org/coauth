@@ -303,7 +303,7 @@ fn match_rules(
     request: &PolicyCheckRequestBody,
     policy_version: &str,
 ) -> PolicyDecision {
-    let actor_str = request.actor.as_str();
+    let actor_str = request.actor_id.as_str();
     let action_str = request.action.as_str();
 
     // POLICY-1 (R3 spec-sync) — if the loose JSON declares the
@@ -414,7 +414,7 @@ mod tests {
         PolicyCheckRequestBody {
             request_id: "req-1".into(),
             realm_id: RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap(),
-            actor: Did::new(actor.to_owned()).unwrap(),
+            actor_id: Did::new(actor.to_owned()).unwrap(),
             action: action.to_owned(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {

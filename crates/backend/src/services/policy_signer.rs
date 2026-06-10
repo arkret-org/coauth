@@ -83,7 +83,7 @@ impl<'a> PolicySigner<'a> {
     /// The transcript captures every field §5 of `policy-server.md`
     /// requires to be bound to the signature and keeps the set
     /// reconstructable from the wire request + response: `request_id`,
-    /// `bound_to` (realm + actor + action + canonical request hash +
+    /// `bound_to` (realm + actor_id + action + canonical request hash +
     /// policy server id), the decision, reason code, expiry, obligations,
     /// and the three frontier hashes. Optional fields are included only
     /// when present so the canonical bytes are stable across requests
@@ -210,7 +210,7 @@ mod tests {
     fn bound_to() -> PolicyCheckBoundTo {
         PolicyCheckBoundTo {
             realm_id: RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap(),
-            actor: Did::new("did:web:alice.example").unwrap(),
+            actor_id: Did::new("did:web:alice.example").unwrap(),
             action: "ck.message.create".into(),
             request_canonical_digest: empty_sha256(),
             policy_server_id: Did::new("did:web:coauth.example").unwrap(),

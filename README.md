@@ -105,7 +105,7 @@ on top of the R2/R3 trust-domain and OOB-invite work. See
 - **`/policy/check` v2** — request switches to `PolicyCheckRequestBody`
   (`signed_transport` + `source_ip_digest` + `source.{service_did,
   service_type}`); response is `PolicyCheckOutcome` carrying the
-  `bound_to{realm_id, actor, action, request_canonical_digest,
+  `bound_to{realm_id, actor_id, action, request_canonical_digest,
   policy_server_id}` envelope plus `auth_state_digest` /
   `policy_frontier_digest` / `membership_frontier_digest` and a signed
   `kid: did:.+#.+`.

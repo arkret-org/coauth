@@ -215,7 +215,7 @@ pub(crate) async fn build_policy_check_response(
     // Step 3 — build the wire binding.
     let bound_to = PolicyCheckBoundTo {
         realm_id: request.realm_id.clone(),
-        actor: request.actor.clone(),
+        actor_id: request.actor_id.clone(),
         action: request.action.clone(),
         request_canonical_digest: request.request_canonical_digest.clone(),
         policy_server_id: policy_server_id.clone(),
@@ -351,7 +351,7 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
         request_id = transcript.request_id,
         decision = ?transcript.decision,
         realm_id = transcript.bound_to.realm_id.as_str(),
-        actor = transcript.bound_to.actor.as_str(),
+        actor_id = transcript.bound_to.actor_id.as_str(),
         action = %transcript.bound_to.action,
         request_canonical_digest = transcript.bound_to.request_canonical_digest.as_str(),
         policy_server_id = transcript.bound_to.policy_server_id.as_str(),
@@ -386,7 +386,7 @@ mod tests {
         PolicyCheckRequestBody {
             request_id: "req-1".into(),
             realm_id: realm(),
-            actor: Did::new("did:web:alice.example").unwrap(),
+            actor_id: Did::new("did:web:alice.example").unwrap(),
             action: "ck.message.create".into(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
@@ -495,7 +495,7 @@ mod tests {
 
         assert!(matches!(response.decision, AuthzDecision::Allow));
         assert_eq!(response.bound_to.realm_id, request.realm_id);
-        assert_eq!(response.bound_to.actor, request.actor);
+        assert_eq!(response.bound_to.actor_id, request.actor_id);
         assert_eq!(response.bound_to.action, request.action);
         assert_eq!(
             response.bound_to.request_canonical_digest,
