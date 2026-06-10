@@ -56,7 +56,7 @@ impl UserTotpRepository for PgUserTotpRepository<'_> {
         skip_all,
         fields(
             %user.id,
-            %user.handle,
+            %user.localpart,
         ),
         err,
     )]
@@ -87,7 +87,7 @@ impl UserTotpRepository for PgUserTotpRepository<'_> {
         skip_all,
         fields(
             %user.id,
-            %user.handle,
+            %user.localpart,
             user_totp.id,
         ),
         err,

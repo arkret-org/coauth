@@ -58,12 +58,12 @@ fn service_and_user_identifiers_follow_cokret_shape() {
     // `<localpart>:<domain>` (was `<localpart>@<domain>` pre-R3.1).
     assert_eq!(
         user_handle(&url_builder, &user),
-        format!("{}:auth.example.com", user.handle.to_lowercase())
+        format!("{}:auth.example.com", user.localpart.to_lowercase())
     );
     // Display form is still available via `user_handle_display`.
     assert_eq!(
         user_handle_display(&url_builder, &user),
-        format!("{}@auth.example.com", user.handle)
+        format!("{}@auth.example.com", user.localpart)
     );
 }
 
@@ -1010,7 +1010,7 @@ fn parse_local_handle_round_trips_local_user_handle() {
     let canonical = user_handle(&url_builder, &user);
     assert_eq!(
         parse_local_handle(&url_builder, &canonical),
-        Some(user.handle.clone())
+        Some(user.localpart.clone())
     );
 
     // Legacy `<localpart>@<domain>` display form — still accepted
@@ -1018,7 +1018,7 @@ fn parse_local_handle_round_trips_local_user_handle() {
     let display = user_handle_display(&url_builder, &user);
     assert_eq!(
         parse_local_handle(&url_builder, &display),
-        Some(user.handle.clone())
+        Some(user.localpart.clone())
     );
 
     assert_eq!(

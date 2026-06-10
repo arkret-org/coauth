@@ -58,7 +58,7 @@ macro_rules! select_user_columns {
     () => {
         (
             users::id,
-            users::handle,
+            users::localpart,
             users::created_at,
             users::updated_at,
             users::locked_at,
@@ -79,7 +79,7 @@ macro_rules! select_user_columns {
 #[diesel(table_name = users)]
 struct NewUser {
     id: Uuid,
-    handle: String,
+    localpart: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -115,7 +115,7 @@ impl UserRepository for PgUserRepository<'_> {
         use crate::lower;
 
         let res: Vec<User> = users::table
-            .filter(lower(users::handle).eq(handle.to_lowercase()))
+            .filter(lower(users::localpart).eq(handle.to_lowercase()))
             .select(select_user_columns!())
             .load(self.conn)
             .await?;
@@ -124,7 +124,7 @@ impl UserRepository for PgUserRepository<'_> {
             [user] => Ok(Some(user.clone())),
             [] => Ok(None),
             list => {
-                if let Some(user) = list.iter().find(|u| u.handle == handle) {
+                if let Some(user) = list.iter().find(|u| u.localpart == handle) {
                     Ok(Some(user.clone()))
                 } else {
                     Ok(None)
@@ -151,14 +151,14 @@ impl UserRepository for PgUserRepository<'_> {
 
         let new_user = NewUser {
             id: Uuid::from(id),
-            handle: handle.clone(),
+            localpart: handle.clone(),
             created_at,
             updated_at: created_at,
         };
 
         let rows_affected = diesel::insert_into(users::table)
             .values(&new_user)
-            .on_conflict(users::handle)
+            .on_conflict(users::localpart)
             .do_nothing()
             .execute(self.conn)
             .await?;
@@ -167,7 +167,7 @@ impl UserRepository for PgUserRepository<'_> {
 
         Ok(User {
             id,
-            handle,
+            localpart: handle,
             sub: id.to_string(),
             created_at,
             updated_at: created_at,
@@ -299,7 +299,7 @@ impl UserRepository for PgUserRepository<'_> {
         use crate::lower;
 
         let result = select(exists(
-            users::table.filter(lower(users::handle).eq(handle.to_lowercase())),
+            users::table.filter(lower(users::localpart).eq(handle.to_lowercase())),
         ))
         .get_result::<bool>(self.conn)
         .await?;
@@ -495,7 +495,7 @@ impl UserRepository for PgUserRepository<'_> {
 
         if let Some(search) = filter.search() {
             let pattern = format!("%{search}%");
-            query = query.filter(users::handle.ilike(pattern));
+            query = query.filter(users::localpart.ilike(pattern));
         }
 
         // Apply pagination
@@ -550,7 +550,7 @@ impl UserRepository for PgUserRepository<'_> {
 
         if let Some(search) = filter.search() {
             let pattern = format!("%{search}%");
-            query = query.filter(users::handle.ilike(pattern));
+            query = query.filter(users::localpart.ilike(pattern));
         }
 
         let count: i64 = query.count().get_result(self.conn).await?;

@@ -139,7 +139,7 @@ pub async fn add_session(
             let raw = scope_token.as_str();
             if let Some(device_id) = raw.strip_prefix("urn:cokret:client:device:") {
                 principal_server
-                    .upsert_device(&target_user.handle, device_id, None)
+                    .upsert_device(&target_user.localpart, device_id, None)
                     .await
                     .context("Device provisioning failed")
                     .map_err(|e| AppError::internal(std::io::Error::other(e.to_string())))?;

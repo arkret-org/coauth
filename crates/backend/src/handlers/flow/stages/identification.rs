@@ -79,7 +79,7 @@ pub async fn execute(
     // Store user_id in context for subsequent stages
     if let Some(ctx) = context.as_object_mut() {
         ctx.insert("user_id".into(), serde_json::json!(user.id.to_string()));
-        ctx.insert("handle".into(), serde_json::json!(user.handle));
+        ctx.insert("handle".into(), serde_json::json!(user.localpart));
     }
 
     Ok(StageOutcome::Continue)

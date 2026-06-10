@@ -6,7 +6,7 @@
 diesel::table! {
     users (id) {
         id -> Uuid,
-        handle -> Text,
+        localpart -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         locked_at -> Nullable<Timestamptz>,
@@ -283,7 +283,7 @@ diesel::table! {
         ip_address -> Nullable<Inet>,
         user_agent -> Nullable<Text>,
         post_auth_action -> Nullable<Jsonb>,
-        handle -> Text,
+        localpart -> Text,
         display_name -> Nullable<Text>,
         avatar_url -> Nullable<Text>,
         terms_url -> Nullable<Text>,

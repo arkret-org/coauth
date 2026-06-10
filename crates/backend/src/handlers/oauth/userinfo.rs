@@ -174,7 +174,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
 
     let user_info = UserInfo {
         sub: cokret::user_did_for(&url_builder, &cokret_config, &user),
-        username: user.handle.clone(),
+        username: user.localpart.clone(),
         // OIDC `preferred_username` keeps the human-readable `local@host`
         // display form (spec 7157ee8 retires the URI form but the display
         // shape stays for OIDC client compatibility).

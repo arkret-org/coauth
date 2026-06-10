@@ -76,7 +76,7 @@ pub async fn execute(
 
     if let Some(ctx) = context.as_object_mut() {
         ctx.insert("user_id".into(), serde_json::json!(user.id.to_string()));
-        ctx.insert("handle".into(), serde_json::json!(user.handle));
+        ctx.insert("handle".into(), serde_json::json!(user.localpart));
         ctx.insert("user_created".into(), serde_json::json!(true));
         ctx.insert(
             "starid_backend".into(),

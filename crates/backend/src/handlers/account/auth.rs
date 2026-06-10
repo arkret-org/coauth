@@ -354,7 +354,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 .await;
 
             let cookie_jar = cookie_jar.set_session(&user_session);
-            let display_name = match principal_server.query_user(&user.handle).await {
+            let display_name = match principal_server.query_user(&user.localpart).await {
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
@@ -366,10 +366,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         error: None,
                         viewer: Some(ViewerInfo {
                             id: NodeType::User.serialize(user.id),
-                            handle: user.handle.clone(),
+                            handle: user.localpart.clone(),
                             did: cokret::user_did_for(&url_builder, &cokret_config, &user),
                             federated_handle: cokret::user_handle(&url_builder, &user),
-                            principal_id: principal_server.principal_id(&user.handle),
+                            principal_id: principal_server.principal_id(&user.localpart),
                             display_name,
                         }),
                         session_grant: None,
@@ -525,10 +525,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     error: None,
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
-                        handle: user.handle.clone(),
+                        handle: user.localpart.clone(),
                         did: principal_did,
                         federated_handle: cokret::user_handle(&url_builder, &user),
-                        principal_id: principal_server.principal_id(&user.handle),
+                        principal_id: principal_server.principal_id(&user.localpart),
                         display_name,
                     }),
                     session_grant: Some(SessionGrantOneShotInfo {

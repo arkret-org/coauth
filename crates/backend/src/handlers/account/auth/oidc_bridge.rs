@@ -352,7 +352,7 @@ fn login_hint_matches_user(
     login_hint: &str,
 ) -> bool {
     let login_hint = login_hint.trim();
-    login_hint == user.handle
+    login_hint == user.localpart
         || login_hint == cokret::user_did_for(url_builder, cokret_config, user)
         || login_hint == cokret::user_handle(url_builder, user)
         // Spec 7157ee8 retired the `local@host` display form as canonical,
@@ -778,7 +778,7 @@ pub async fn oidc_code_exchange(
                 session_grant: None,
                 warnings: vec![format!(
                     "linked local account username={} is locked or deactivated",
-                    user.handle
+                    user.localpart
                 )],
             }));
             return Ok(());
@@ -799,7 +799,7 @@ pub async fn oidc_code_exchange(
                 warnings: vec![format!(
                     "login_hint={} does not match linked local account username={}",
                     input.login_hint.trim(),
-                    user.handle
+                    user.localpart
                 )],
             }));
             return Ok(());
@@ -909,7 +909,7 @@ pub async fn oidc_code_exchange(
         .await?;
         repo.save().await?;
 
-        let display_name = match principal_server.query_user(&user.handle).await {
+        let display_name = match principal_server.query_user(&user.localpart).await {
             Ok(info) => info.displayname,
             Err(_) => None,
         };
@@ -919,10 +919,10 @@ pub async fn oidc_code_exchange(
             error: None,
             viewer: Some(ViewerInfo {
                 id: NodeType::User.serialize(user.id),
-                handle: user.handle.clone(),
+                handle: user.localpart.clone(),
                 did: principal_did,
                 federated_handle: cokret::user_handle(&url_builder, &user),
-                principal_id: principal_server.principal_id(&user.handle),
+                principal_id: principal_server.principal_id(&user.localpart),
                 display_name,
             }),
             session_grant: Some(SessionGrantOneShotInfo {
@@ -1570,7 +1570,7 @@ pub async fn oidc_code_exchange(
     .await?;
     repo.save().await?;
 
-    let display_name = match principal_server.query_user(&user.handle).await {
+    let display_name = match principal_server.query_user(&user.localpart).await {
         Ok(info) => info.displayname,
         Err(_) => None,
     };
@@ -1580,10 +1580,10 @@ pub async fn oidc_code_exchange(
         error: None,
         viewer: Some(ViewerInfo {
             id: NodeType::User.serialize(user.id),
-            handle: user.handle.clone(),
+            handle: user.localpart.clone(),
             did: principal_did,
             federated_handle: cokret::user_handle(&url_builder, user),
-            principal_id: principal_server.principal_id(&user.handle),
+            principal_id: principal_server.principal_id(&user.localpart),
             display_name,
         }),
         session_grant: Some(SessionGrantOneShotInfo {

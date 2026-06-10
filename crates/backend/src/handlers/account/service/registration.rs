@@ -1526,7 +1526,7 @@ pub async fn set_registration_display_name(
     }
 
     let display_name = if skip {
-        registration.handle.clone()
+        registration.localpart.clone()
     } else {
         let display_name = display_name.as_deref().unwrap_or("").trim().to_owned();
 
@@ -1774,12 +1774,12 @@ pub async fn check_registration_finish_eligibility(
         return Err(CheckRegistrationFinishEligibilityError::BrowserSessionMissing);
     }
 
-    if repo.user().exists(&registration.handle).await? {
+    if repo.user().exists(&registration.localpart).await? {
         return Err(CheckRegistrationFinishEligibilityError::HandleTaken);
     }
 
     match principal_server
-        .is_handle_available(&registration.handle)
+        .is_handle_available(&registration.localpart)
         .await
     {
         Ok(true) => Ok(()),
@@ -2028,7 +2028,7 @@ pub async fn complete_registration(
 
     let mut user = repo
         .user()
-        .add(rng, clock, registration.handle.clone())
+        .add(rng, clock, registration.localpart.clone())
         .await?;
 
     if grant_admin {
@@ -2311,7 +2311,7 @@ mod tests {
     fn sample_registration(created_at: DateTime<Utc>) -> UserRegistration {
         UserRegistration {
             id: Ulid::new(),
-            handle: "alice".into(),
+            localpart: "alice".into(),
             display_name: None,
             avatar_url: None,
             terms_url: None,

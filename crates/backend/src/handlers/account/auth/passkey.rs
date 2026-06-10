@@ -193,18 +193,18 @@ pub async fn register_start(
 ) -> JsonResult<PasskeyRegisterStartOutcome> {
     let body: PasskeyAccountHint = req.parse_json().await.unwrap_or_default();
     let (repo, user) = resolve_user(depot, &body).await?;
-    let display_name = trimmed(body.display_name.as_ref()).unwrap_or(&user.handle);
+    let display_name = trimmed(body.display_name.as_ref()).unwrap_or(&user.localpart);
 
     let webauthn = depot.webauthn_service().map_err(AppError::from)?;
     let challenge: CreationChallengeResponse = webauthn
-        .register_start(user.id, &user.handle, display_name)
+        .register_start(user.id, &user.localpart, display_name)
         .await
         .map_err(map_webauthn_error)?;
     repo.cancel().await?;
 
     Ok(Json(PasskeyRegisterStartOutcome {
         account_id: user.id.to_string(),
-        handle: user.handle,
+        handle: user.localpart,
         challenge: serde_json::to_value(challenge)
             .map_err(|e| AppError::internal(std::io::Error::other(e.to_string())))?,
     }))
@@ -274,7 +274,7 @@ pub async fn auth_start(req: &mut Request, depot: &Depot) -> JsonResult<PasskeyA
 
     Ok(Json(PasskeyAuthStartOutcome {
         account_id: user.id.to_string(),
-        handle: user.handle,
+        handle: user.localpart,
         challenge: serde_json::to_value(challenge)
             .map_err(|e| AppError::internal(std::io::Error::other(e.to_string())))?,
     }))

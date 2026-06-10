@@ -98,7 +98,7 @@ pub async fn patch_user(
 
     if should_reactivate {
         principal_server
-            .reactivate_user(&updated.handle)
+            .reactivate_user(&updated.localpart)
             .await
             .map_err(UserAdminServiceError::PrincipalServer)?;
     }

@@ -404,7 +404,7 @@ pub async fn propose(
     } = extract_call_context(req, depot).await?;
     let requested_at = clock.now();
     let requested_by = admin_user.as_ref().map(|user| user.id.to_string());
-    let requested_by_handle = admin_user.as_ref().map(|user| user.handle.clone());
+    let requested_by_handle = admin_user.as_ref().map(|user| user.localpart.clone());
     let id = extract_ulid_param(req)?;
     let account = repo
         .user()
@@ -628,7 +628,7 @@ pub async fn approve(
                 "ticket": params.ticket,
                 "approved_by": approved_by,
                 "approval_verification_method": verification_method,
-                "approved_by_handle": admin_user.as_ref().map(|user| user.handle.as_str()),
+                "approved_by_handle": admin_user.as_ref().map(|user| user.localpart.as_str()),
                 "approval_note": params.approval_note,
                 "execution_endpoint": execution_endpoint,
                 "allowed_next_transitions": allowed_next_transitions.clone(),
@@ -653,7 +653,7 @@ pub async fn approve(
         transition_kind,
         approved_at: approved.approved_at.or(Some(approved_at)),
         approved_by: Some(approved_by),
-        approved_by_handle: admin_user.as_ref().map(|user| user.handle.clone()),
+        approved_by_handle: admin_user.as_ref().map(|user| user.localpart.clone()),
         approval_note: params.approval_note,
         execution_endpoint,
         allowed_next_transitions,
@@ -825,7 +825,7 @@ pub async fn execute(
             "principal_erase": mutation.principal_erase,
             "ticket": params.ticket,
             "executed_by": admin_user.as_ref().map(|user| user.id.to_string()),
-            "executed_by_handle": admin_user.as_ref().map(|user| user.handle.as_str()),
+            "executed_by_handle": admin_user.as_ref().map(|user| user.localpart.as_str()),
             "execution_note": params.execution_note,
             "mutation_endpoint": mutation_endpoint,
             "allowed_next_transitions": allowed_next_transitions.clone(),

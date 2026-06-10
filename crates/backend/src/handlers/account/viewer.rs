@@ -173,7 +173,7 @@ pub async fn get_viewer(
 
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
-                username: user.handle.clone(),
+                username: user.localpart.clone(),
                 did: cokret::user_did_for(&url_builder, &cokret_config, user),
                 handle: cokret::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,

@@ -529,7 +529,7 @@ mod tests {
 
         let alice = User {
             id: coauth_data::new_id(now, &mut rng),
-            handle: "alice".to_owned(),
+            localpart: "alice".to_owned(),
             sub: "123-456".to_owned(),
             created_at: now,
             updated_at: now,
@@ -546,7 +546,7 @@ mod tests {
 
         let bob = User {
             id: coauth_data::new_id(now, &mut rng),
-            handle: "bob".to_owned(),
+            localpart: "bob".to_owned(),
             sub: "123-456".to_owned(),
             created_at: now,
             updated_at: now,

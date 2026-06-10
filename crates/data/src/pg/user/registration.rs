@@ -38,7 +38,7 @@ struct UserRegistrationRow {
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
     post_auth_action: Option<serde_json::Value>,
-    handle: String,
+    localpart: String,
     display_name: Option<String>,
     avatar_url: Option<String>,
     terms_url: Option<String>,
@@ -96,7 +96,7 @@ impl TryFrom<UserRegistrationRow> for UserRegistration {
             ip_address: value.ip_address.map(|network| network.ip()),
             user_agent: value.user_agent,
             post_auth_action: value.post_auth_action,
-            handle: value.handle,
+            localpart: value.localpart,
             display_name: value.display_name,
             avatar_url: value.avatar_url,
             terms_url,
@@ -120,7 +120,7 @@ struct NewUserRegistration {
     ip_address: Option<IpNetwork>,
     user_agent: Option<String>,
     post_auth_action: Option<serde_json::Value>,
-    handle: String,
+    localpart: String,
     created_at: DateTime<Utc>,
 }
 
@@ -175,7 +175,7 @@ impl UserRegistrationRepository for PgUserRegistrationRepository<'_> {
             ip_address: ip_address.map(IpNetwork::from),
             user_agent: user_agent.clone(),
             post_auth_action: post_auth_action.clone(),
-            handle: handle.clone(),
+            localpart: handle.clone(),
             created_at,
         };
 
@@ -191,7 +191,7 @@ impl UserRegistrationRepository for PgUserRegistrationRepository<'_> {
             post_auth_action,
             created_at,
             completed_at: None,
-            handle,
+            localpart: handle,
             display_name: None,
             avatar_url: None,
             terms_url: None,
@@ -584,7 +584,7 @@ mod tests {
 
         assert_eq!(registration.created_at, clock.now());
         assert_eq!(registration.completed_at, None);
-        assert_eq!(registration.handle, "alice");
+        assert_eq!(registration.localpart, "alice");
         assert_eq!(registration.display_name, None);
         assert_eq!(registration.terms_url, None);
         assert_eq!(registration.email_authentication_id, None);
@@ -603,7 +603,7 @@ mod tests {
         assert_eq!(lookup.id, registration.id);
         assert_eq!(lookup.created_at, registration.created_at);
         assert_eq!(lookup.completed_at, registration.completed_at);
-        assert_eq!(lookup.handle, registration.handle);
+        assert_eq!(lookup.localpart, registration.localpart);
         assert_eq!(lookup.display_name, registration.display_name);
         assert_eq!(lookup.terms_url, registration.terms_url);
         assert_eq!(
@@ -695,7 +695,7 @@ mod tests {
             ip_address: Some("103.151.173.203/32".parse::<IpNetwork>().unwrap()),
             user_agent: Some("Mozilla/5.0".to_owned()),
             post_auth_action: None,
-            handle: "alice".to_owned(),
+            localpart: "alice".to_owned(),
             display_name: None,
             avatar_url: None,
             terms_url: None,

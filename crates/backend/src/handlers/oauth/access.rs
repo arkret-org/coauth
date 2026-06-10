@@ -150,7 +150,7 @@ pub async fn load_authorization_consent(
 
     repo.cancel().await?;
 
-    let username = &browser_session.user.handle;
+    let username = &browser_session.user.localpart;
     let user_display_name = fetch_display_name(principal_server, username).await;
 
     Ok(AuthorizationConsentInfo {
@@ -317,7 +317,7 @@ pub async fn load_device_consent(
 
     repo.cancel().await?;
 
-    let username = &browser_session.user.handle;
+    let username = &browser_session.user.localpart;
     let user_display_name = fetch_display_name(principal_server, username).await;
 
     Ok(ConsentScreen {

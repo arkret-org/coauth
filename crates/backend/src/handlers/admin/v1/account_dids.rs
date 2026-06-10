@@ -189,7 +189,7 @@ pub async fn add_account_did(
         ));
     };
     let admin_user_id = admin_user.id;
-    let admin_user_handle = admin_user.handle.clone();
+    let admin_user_handle = admin_user.localpart.clone();
 
     // Verify the account exists before doing the (expensive) resolver call.
     let account = repo
@@ -384,7 +384,7 @@ pub async fn remove_account_did(
                     "approval_proof_present": body.approval_proof.as_ref().is_some_and(|value| !value.trim().is_empty()),
                     "revoke_related_sessions": body.revoke_related_sessions.unwrap_or(false),
                     "revoked_by": admin_user.id,
-                    "revoked_by_handle": admin_user.handle,
+                    "revoked_by_handle": admin_user.localpart,
                 }),
             )
             .with_resource_id(user.id),

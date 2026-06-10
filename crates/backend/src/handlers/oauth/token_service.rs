@@ -610,7 +610,7 @@ pub async fn exchange_authorization_code(
     }
     for device_id in &requested_device_ids {
         principal_server
-            .upsert_device(&browser_session.user.handle, device_id, Some(&device_name))
+            .upsert_device(&browser_session.user.localpart, device_id, Some(&device_name))
             .await
             .map_err(|err| {
                 error!(
@@ -1658,7 +1658,7 @@ pub async fn exchange_device_code(
     }
     for device_id in &requested_device_ids {
         principal_server
-            .upsert_device(&browser_session.user.handle, device_id, None)
+            .upsert_device(&browser_session.user.localpart, device_id, None)
             .await
             .map_err(|err| {
                 error!(

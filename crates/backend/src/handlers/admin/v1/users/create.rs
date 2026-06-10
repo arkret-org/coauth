@@ -105,7 +105,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     // attested credential.
 
     principal_server
-        .provision_user(&PrincipalProvisionRequest::new(&user.handle, &user.sub))
+        .provision_user(&PrincipalProvisionRequest::new(&user.localpart, &user.sub))
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
@@ -117,7 +117,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
         AdminOperation::UserCreated,
         "user",
         Some(user.id),
-        serde_json::json!({ "handle": user.handle }),
+        serde_json::json!({ "handle": user.localpart }),
     )
     .await?;
 
@@ -444,7 +444,7 @@ pub async fn batch_invite(
                         target_holder_did: gate.target_holder_did.clone(),
                         consent_id: gate.consent_id.clone(),
                         scope: gate.scope.clone(),
-                        requesting_admin_did: admin_user.as_ref().map(|u| u.handle.clone()),
+                        requesting_admin_did: admin_user.as_ref().map(|u| u.localpart.clone()),
                         payload,
                     })
                     .await;

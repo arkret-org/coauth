@@ -72,7 +72,7 @@ pub(super) async fn handle_set_password(
         .add(&mut rng, &clock, &user, version, hashed_password, None)
         .await?;
 
-    info!(%user.id, %user.handle, "Password changed");
+    info!(%user.id, handle = %user.localpart, "Password changed");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -119,7 +119,7 @@ pub(super) async fn handle_add_email(
     };
     info!(
         %user.id,
-        %user.handle,
+        handle = %user.localpart,
         %email.id,
         %email.email,
         "Email added"
@@ -151,7 +151,7 @@ pub(super) async fn handle_promote_admin(
 
     let user = repo.user().set_can_request_admin(user, true).await?;
 
-    info!(%user.id, %user.handle, "User promoted to admin");
+    info!(%user.id, handle = %user.localpart, "User promoted to admin");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -179,7 +179,7 @@ pub(super) async fn handle_demote_admin(
 
     let user = repo.user().set_can_request_admin(user, false).await?;
 
-    info!(%user.id, %user.handle, "User is no longer admin");
+    info!(%user.id, handle = %user.localpart, "User is no longer admin");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -204,7 +204,7 @@ pub(super) async fn handle_list_admin_users(figment: &Figment) -> anyhow::Result
         let page = repo.user().list(filter, cursor).await?;
         for edge in page.edges {
             let user = edge.node;
-            info!(%user.id, handle = %user.handle);
+            info!(%user.id, handle = %user.localpart);
             cursor = cursor.after(edge.cursor);
         }
 

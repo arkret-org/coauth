@@ -76,7 +76,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
     #[tracing::instrument(
         name = "db.principal_did.get_for_user_and_audience",
         skip_all,
-        fields(%user.id, %user.handle, audience = audience),
+        fields(%user.id, %user.localpart, audience = audience),
         err,
     )]
     async fn get_for_user_and_audience(
@@ -116,7 +116,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
     #[tracing::instrument(
         name = "db.principal_did.add",
         skip_all,
-        fields(%user.id, %user.handle, audience = audience, principal_did.id),
+        fields(%user.id, %user.localpart, audience = audience, principal_did.id),
         err,
     )]
     async fn add(

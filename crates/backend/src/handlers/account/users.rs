@@ -88,7 +88,7 @@ pub async fn patch_profile(
             updated_at: user.updated_at.to_rfc3339(),
         },
         principal: PrincipalUserData {
-            principal_id: principal_server.principal_id(&user.handle),
+            principal_id: principal_server.principal_id(&user.localpart),
             display_name: user.display_name,
         },
     }))
@@ -228,7 +228,7 @@ mod tests {
 
         state
             .principal_server_admin
-            .provision_user(&PrincipalProvisionRequest::new(&user.handle, &user.sub))
+            .provision_user(&PrincipalProvisionRequest::new(&user.localpart, &user.sub))
             .await
             .unwrap();
 

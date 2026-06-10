@@ -675,7 +675,7 @@ pub async fn post_webvh_finish(
     let webvh = register_soland_webvh(
         http_client,
         &target,
-        registration.handle.as_str(),
+        registration.localpart.as_str(),
         input.did_public_key_multibase.trim(),
         input.update_public_key_multibase.trim(),
         input.did_key_id.as_deref().unwrap_or("did-key-1"),
@@ -717,7 +717,7 @@ pub async fn post_webvh_finish(
     Ok(Json(WebvhRegistrationFinishOutcome {
         status: "success",
         error: None,
-        handle: Some(completed.user.handle),
+        handle: Some(completed.user.localpart),
         did: webvh.did,
         did_key_id: webvh.did_key_id,
         update_key_id: webvh.update_key_id,
@@ -985,7 +985,7 @@ pub async fn get_registration(
 
     Ok(Json(RegistrationStatusOutcome {
         id: status.registration.id.to_string(),
-        handle: status.registration.handle,
+        handle: status.registration.localpart,
         email_pending: status.email_pending,
         pending_email: status.pending_email,
         phone_pending: status.phone_pending,

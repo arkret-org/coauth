@@ -177,7 +177,7 @@ pub async fn register_start(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
-    let handle = body.handle.unwrap_or_else(|| account.handle.clone());
+    let handle = body.handle.unwrap_or_else(|| account.localpart.clone());
     let display_name = body.display_name.unwrap_or_else(|| handle.clone());
 
     let webauthn = depot.webauthn_service()?;

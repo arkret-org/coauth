@@ -126,7 +126,7 @@ pub async fn introspect_token(
 
                 (
                     Some(cokret::user_did_for(url_builder, cokret_config, &user)),
-                    Some(user.handle),
+                    Some(user.localpart),
                 )
             } else {
                 (None, None)
@@ -200,7 +200,7 @@ pub async fn introspect_token(
 
                 (
                     Some(cokret::user_did_for(url_builder, cokret_config, &user)),
-                    Some(user.handle),
+                    Some(user.localpart),
                 )
             } else {
                 (None, None)
@@ -304,7 +304,7 @@ pub async fn introspect_token(
                 active: true,
                 scope: Some(scope),
                 client_id,
-                username: Some(actor_user.handle),
+                username: Some(actor_user.localpart),
                 token_type: Some(OAuthTokenTypeHint::AccessToken),
                 exp: access_token.expires_at,
                 expires_in: access_token

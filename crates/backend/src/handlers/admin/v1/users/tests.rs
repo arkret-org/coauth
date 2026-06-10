@@ -61,7 +61,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(user.handle, "alice");
+        assert_eq!(user.localpart, "alice");
 
         // Check that the user was created on the PrincipalServer
         let result = state.principal_server_admin.query_user("alice").await;
@@ -180,7 +180,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(user.handle, "bob");
+        assert_eq!(user.localpart, "bob");
     }
 
     #[tokio::test]
@@ -579,7 +579,7 @@ mod tests {
             .unwrap();
         state
             .principal_server_admin
-            .provision_user(&PrincipalProvisionRequest::new(&user.handle, &user.sub))
+            .provision_user(&PrincipalProvisionRequest::new(&user.localpart, &user.sub))
             .await
             .unwrap();
         repo.save().await.unwrap();
@@ -634,12 +634,12 @@ mod tests {
 
         state
             .principal_server_admin
-            .provision_user(&PrincipalProvisionRequest::new(&user.handle, &user.sub))
+            .provision_user(&PrincipalProvisionRequest::new(&user.localpart, &user.sub))
             .await
             .unwrap();
         state
             .principal_server_admin
-            .delete_user(&user.handle, true)
+            .delete_user(&user.localpart, true)
             .await
             .unwrap();
 
@@ -659,7 +659,7 @@ mod tests {
 
         let principal_user = state
             .principal_server_admin
-            .query_user(&user.handle)
+            .query_user(&user.localpart)
             .await
             .unwrap();
         assert!(!principal_user.deactivated);

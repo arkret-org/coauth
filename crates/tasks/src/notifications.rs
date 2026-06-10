@@ -655,8 +655,8 @@ async fn prepare_delivery(
                 None
             };
 
-            let handle_from_session = browser_session.as_ref().map(|s| s.user.handle.clone());
-            let handle_from_registration = registration.as_ref().map(|r| r.handle.clone());
+            let handle_from_session = browser_session.as_ref().map(|s| s.user.localpart.clone());
+            let handle_from_registration = registration.as_ref().map(|r| r.localpart.clone());
             let handle = handle_from_registration.or(handle_from_session);
             let authentication_code = repo
                 .user_email()
@@ -767,7 +767,7 @@ async fn prepare_delivery(
                 anyhow::bail!("Recovery delivery is not an email destination");
             };
             let address: Address = email.parse()?;
-            let mailbox = Mailbox::new(Some(user.handle.clone()), address);
+            let mailbox = Mailbox::new(Some(user.localpart.clone()), address);
             let context = EmailRecoveryContext::new(user, session, url).with_language(language);
             let tags = delivery_tracking_tags(request, delivery);
 

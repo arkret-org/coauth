@@ -603,7 +603,7 @@ CREATE TABLE public.user_registrations (
     ip_address inet,
     user_agent text,
     post_auth_action jsonb,
-    handle text NOT NULL,
+    localpart text NOT NULL,
     display_name text,
     avatar_url text,
     terms_url text,
@@ -663,7 +663,7 @@ CREATE TABLE public.user_unsupported_third_party_ids (
 
 CREATE TABLE public.users (
     id uuid NOT NULL,
-    handle text NOT NULL,
+    localpart text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     locked_at timestamp with time zone,
     can_request_admin boolean DEFAULT false NOT NULL,
@@ -972,7 +972,7 @@ ALTER TABLE ONLY public.user_unsupported_third_party_ids
     ADD CONSTRAINT user_unsupported_third_party_ids_pkey PRIMARY KEY (user_id, medium, address);
 
 ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_handle_key UNIQUE (handle);
+    ADD CONSTRAINT users_localpart_key UNIQUE (localpart);
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);

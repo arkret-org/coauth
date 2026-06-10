@@ -52,7 +52,7 @@ macro_rules! select_user_columns {
     () => {
         (
             users::id,
-            users::handle,
+            users::localpart,
             users::created_at,
             users::updated_at,
             users::locked_at,

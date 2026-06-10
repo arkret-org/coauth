@@ -50,7 +50,12 @@ pub struct PrincipalUser {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct User {
     pub id: Ulid,
-    pub handle: String,
+    /// Bare handle localpart (e.g. `alice` — no `@`, no `:domain`). The
+    /// canonical Cokret handle `<localpart>:<domain>` is derived at read
+    /// time via [`Self::canonical_handle`] using the public host name, so a
+    /// service domain rename never rewrites this column. Wire/UI types keep
+    /// the field name `handle` for the value the user types.
+    pub localpart: String,
     pub sub: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -76,7 +81,7 @@ pub struct User {
     /// Interop alias handles for this user (e.g. `acct:<local>@<host>`).
     ///
     /// Spec 7157ee8 §3.1 — the canonical Cokret handle form is
-    /// `<localpart>:<domain>`, derived at read time from `handle` + the
+    /// `<localpart>:<domain>`, derived at read time from `localpart` + the
     /// public host name (see [`Self::canonical_handle`]). Aliases are
     /// *additional* identifiers kept for RFC 7565 / WebFinger interop and
     /// `handle_claim.handle_aliases` emission. Migration
@@ -150,7 +155,7 @@ impl Queryable<UserSqlType, Pg> for User {
     fn build(row: Self::Row) -> deserialize::Result<Self> {
         let (
             id,
-            handle,
+            localpart,
             created_at,
             updated_at,
             locked_at,
@@ -167,7 +172,7 @@ impl Queryable<UserSqlType, Pg> for User {
 
         Ok(Self {
             id,
-            handle,
+            localpart,
             sub: id.to_string(),
             created_at,
             updated_at,
@@ -285,7 +290,7 @@ impl User {
     /// multiple alias hosts.
     #[must_use]
     pub fn canonical_handle(&self, host: &str) -> String {
-        format!("{}:{}", self.handle.to_lowercase(), host.to_lowercase())
+        format!("{}:{}", self.localpart.to_lowercase(), host.to_lowercase())
     }
 
     /// Interop `acct:` alias for this user against the supplied host. Used
@@ -294,7 +299,7 @@ impl User {
     pub fn acct_alias(&self, host: &str) -> String {
         format!(
             "acct:{}@{}",
-            self.handle.to_lowercase(),
+            self.localpart.to_lowercase(),
             host.to_lowercase()
         )
     }
@@ -338,7 +343,7 @@ impl User {
     pub fn samples(now: chrono::DateTime<Utc>, rng: &mut (impl RngCore + ?Sized)) -> Vec<Self> {
         vec![User {
             id: new_id(now, rng),
-            handle: "john".to_owned(),
+            localpart: "john".to_owned(),
             sub: "123-456".to_owned(),
             created_at: now,
             updated_at: now,
@@ -681,7 +686,9 @@ impl UserRegistrationToken {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserRegistration {
     pub id: Ulid,
-    pub handle: String,
+    /// Bare handle localpart chosen during registration (no `@` / `:domain`);
+    /// carried into [`User::localpart`] on completion.
+    pub localpart: String,
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
     pub terms_url: Option<url::Url>,

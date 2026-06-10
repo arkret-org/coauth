@@ -59,7 +59,7 @@ impl RunnableJob for ProvisionUserJob {
             .map(|e| e.email)
             .collect();
 
-        let mut req = PrincipalProvisionRequest::new(user.handle.clone(), user.sub.clone())
+        let mut req = PrincipalProvisionRequest::new(user.localpart.clone(), user.sub.clone())
             .set_emails(emails);
 
         if let Some(name) = self.display_name_to_set() {
@@ -79,7 +79,7 @@ impl RunnableJob for ProvisionUserJob {
             .await
             .map_err(JobError::retry)?;
 
-        let principal_id = principal.principal_id(&user.handle);
+        let principal_id = principal.principal_id(&user.localpart);
         if created {
             info!(%user.id, %principal_id, "user created on principal");
         } else {
@@ -136,7 +136,7 @@ impl RunnableJob for SyncDevicesJob {
 
         // ── Push the full set to the principal ──────────────────────
         principal
-            .sync_devices(&user.handle, devices)
+            .sync_devices(&user.localpart, devices)
             .await
             .map_err(JobError::retry)?;
 

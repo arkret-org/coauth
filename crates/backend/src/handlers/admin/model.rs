@@ -55,7 +55,7 @@ impl From<coauth_data::User> for User {
     fn from(user: coauth_data::User) -> Self {
         Self {
             id: user.id,
-            handle: user.handle,
+            handle: user.localpart,
             created_at: user.created_at,
             updated_at: user.updated_at,
             locked_at: user.locked_at,

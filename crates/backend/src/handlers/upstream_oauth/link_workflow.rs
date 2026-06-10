@@ -282,7 +282,7 @@ pub async fn load_upstream_link_state(
                 .ok_or(UpstreamLinkWorkflowError::UserNotFound)?;
 
             Ok(LoadUpstreamLinkOutcome::LinkMismatch {
-                existing_handle: user.handle,
+                existing_handle: user.localpart,
             })
         }
 
@@ -308,13 +308,13 @@ pub async fn load_upstream_link_state(
 
             if user.deactivated_at.is_some() {
                 return Ok(LoadUpstreamLinkOutcome::AccountDeactivated {
-                    handle: user.handle,
+                    handle: user.localpart,
                 });
             }
 
             if user.locked_at.is_some() {
                 return Ok(LoadUpstreamLinkOutcome::AccountLocked {
-                    handle: user.handle,
+                    handle: user.localpart,
                 });
             }
 
@@ -519,13 +519,13 @@ async fn load_upstream_registration_screen(
             // user status and log them in.
             if existing_user.deactivated_at.is_some() {
                 return Ok(LoadUpstreamLinkOutcome::AccountDeactivated {
-                    handle: existing_user.handle,
+                    handle: existing_user.localpart,
                 });
             }
 
             if existing_user.locked_at.is_some() {
                 return Ok(LoadUpstreamLinkOutcome::AccountLocked {
-                    handle: existing_user.handle,
+                    handle: existing_user.localpart,
                 });
             }
 

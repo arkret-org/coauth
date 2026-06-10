@@ -348,7 +348,7 @@ pub(crate) fn user_did_for(
 pub(crate) fn user_handle_display(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
         "{}@{}",
-        user.handle,
+        user.localpart,
         url_builder.public_hostname().to_lowercase()
     )
 }
@@ -361,7 +361,7 @@ pub(crate) fn user_handle_display(url_builder: &UrlBuilder, user: &User) -> Stri
 pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
         "{}:{}",
-        user.handle.to_lowercase(),
+        user.localpart.to_lowercase(),
         url_builder.public_hostname().to_lowercase()
     )
 }
@@ -371,7 +371,7 @@ pub(crate) fn user_handle(url_builder: &UrlBuilder, user: &User) -> String {
 pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
         "acct:{}@{}",
-        user.handle.to_lowercase(),
+        user.localpart.to_lowercase(),
         url_builder.public_hostname().to_lowercase()
     )
 }
