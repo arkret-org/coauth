@@ -238,7 +238,12 @@ struct SolandAccountRegisterRequestBody<'a> {
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
-    base.join("/_cokret/gate/account/register")
+    // Account registration is soland's product-plane endpoint
+    // (`/_soland/self/account/register`); the previously-joined
+    // `/_cokret/gate/account/register` path never existed in soland's
+    // routing (gate/account only carries session-grants + agent-key-pair)
+    // and 404'd on every call.
+    base.join("/_soland/self/account/register")
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
@@ -2045,9 +2050,11 @@ mod tests {
     fn soland_account_register_endpoint_uses_origin_root_api_path() {
         let endpoint = soland_account_register_endpoint("https://local.host/base/path").unwrap();
 
+        // Soland's real account-register route lives on the product plane;
+        // the join must also discard any base path on the endpoint URL.
         assert_eq!(
             endpoint.as_str(),
-            "https://local.host/_cokret/gate/account/register"
+            "https://local.host/_soland/self/account/register"
         );
     }
 

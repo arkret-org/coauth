@@ -846,9 +846,11 @@ fn resolve_webvh_target(
     let Some(server) = candidate else {
         return Err("embedded_webvh_provider_not_configured".to_owned());
     };
+    // Product-plane endpoint — soland removed all `api/v1/*` aliases, so the
+    // historical join here 404'd (see `soland_webvh::register_against_principal`).
     let endpoint = server
         .endpoint
-        .join("api/v1/identity/webvh/register")
+        .join("/_soland/root/identity/webvh/register")
         .map_err(|_| "embedded_webvh_provider_url_invalid".to_owned())?;
     let bearer = server
         .embedded_webvh_registration_bearer

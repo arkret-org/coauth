@@ -232,8 +232,12 @@ pub async fn register_against_principal(
     bearer: Option<&str>,
     prepared: &PreparedInception,
 ) -> Result<(), SolandWebvhError> {
+    // Soland's embedded webvh provider is a product-plane (`/_soland/…`)
+    // endpoint, not part of the spec'd `/_cokret/…` protocol surface. The
+    // historical `api/v1/…` alias was removed from soland's routing
+    // entirely, so joining it here would 404 every mint.
     let endpoint = principal_endpoint
-        .join("api/v1/identity/webvh/register")
+        .join("/_soland/root/identity/webvh/register")
         .map_err(SolandWebvhError::InvalidEndpoint)?;
     let response = outbound_http::send_with_policy(
         outbound_http::soland_policy("embedded_webvh_register")

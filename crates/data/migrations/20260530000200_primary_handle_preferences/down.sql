@@ -1,5 +1,0 @@
-DROP INDEX IF EXISTS user_primary_handle_preferences_handle_idx;
-DROP INDEX IF EXISTS user_primary_handle_preferences_as_of_idx;
-DROP INDEX IF EXISTS user_primary_handle_preferences_current_idx;
-
-DROP TABLE IF EXISTS user_primary_handle_preferences;
