@@ -130,6 +130,7 @@ pub(crate) fn issue_handle_claim(
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     user: &User,
+    subject_did: &str,
     claim_kind: HandleClaimKind,
     audience: String,
     member_delivery_binding: HandleClaimDeliveryBindingHint,
@@ -139,7 +140,12 @@ pub(crate) fn issue_handle_claim(
     };
 
     let issuer_service_did = service_did_for(url_builder, cokret_config);
-    let subject_id = user_did_for(url_builder, cokret_config, user);
+    // The subject is the user's MINTED principal DID (`did:webvh:…` hosted
+    // by the principal server), supplied by the caller. coauth used to
+    // derive it via `user_did_for` (`did:web:<coauth-host>:users:<ulid>`),
+    // but coauth hosts no DID documents, so that form resolves nowhere and
+    // would also mismatch the session-grant subject minted at login.
+    let subject_id = subject_did.to_owned();
 
     // HC-COAUTH-1 (business layer) — fail closed against the removed
     // `service_handle` (and any other non-allow-listed) `claim_kind`. The
@@ -149,10 +155,9 @@ pub(crate) fn issue_handle_claim(
     ensure_claim_kind_supported(claim_kind.as_wire())?;
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
-    // `ck:actor:` / `ck:account:` typed id or a service DID. coauth always
-    // derives `subject_id` from `user_did_for`, but validating here keeps
-    // the issuer honest if that derivation ever changes and lets the same
-    // reason code surface as soland / the SDK.
+    // `ck:actor:` / `ck:account:` typed id or a service DID. Validating
+    // here keeps the issuer honest about whatever the caller passed and
+    // lets the same reason code surface as soland / the SDK.
     ensure_subject_is_principal_did(&subject_id)?;
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is

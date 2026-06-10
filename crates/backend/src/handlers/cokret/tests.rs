@@ -3,8 +3,7 @@ use coauth_config::{
     CokretConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
 };
 use coauth_data::{
-    BrowserSession, Clock, NewUserPrimaryHandlePreference, RepositoryAccess, SessionGrant,
-    SystemClock, User,
+    BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemClock, User,
 };
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::{
@@ -877,7 +876,7 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
 }
 
 #[tokio::test]
-async fn primary_handle_patch_validates_claims_and_updates_did_documents() {
+async fn primary_handle_patch_validates_claims() {
     setup();
     let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
         return;
@@ -936,13 +935,8 @@ async fn primary_handle_patch_validates_claims_and_updates_did_documents() {
         .unwrap();
     repo.save().await.unwrap();
 
-    let response = state
-        .request(Request::get(format!("/users/{}/did.json", alice.id)).empty())
-        .await;
-    response.assert_status(StatusCode::OK);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["metadata"]["primary_handle"], serde_json::Value::Null);
-
+    // NOTE: coauth no longer hosts `/users/{id}/did.json` (no DID-document
+    // serving); the preference endpoint below is the only surface left.
     let alice_cookies = CookieHelper::new();
     alice_cookies.import(state.cookie_jar().set_session(&alice_session));
     let response = state
@@ -956,21 +950,6 @@ async fn primary_handle_patch_validates_claims_and_updates_did_documents() {
     let body: serde_json::Value = response.json();
     assert_eq!(body["primary_handle"], handle);
     assert_eq!(body["source_claim_digest"], "sha256:alice-primary");
-
-    let response = state
-        .request(Request::get(format!("/users/{}/did.json", alice.id)).empty())
-        .await;
-    response.assert_status(StatusCode::OK);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["metadata"]["primary_handle"], handle);
-
-    let did = user_did_for(&state.url_builder, &state.cokret_config, &alice);
-    let response = state
-        .request(Request::get(format!("/api/v1/identity/document?did={did}")).empty())
-        .await;
-    response.assert_status(StatusCode::OK);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["did_document"]["metadata"]["primary_handle"], handle);
 
     let response = state
         .request(alice_cookies.with_cookies(
@@ -1008,115 +987,13 @@ async fn primary_handle_patch_validates_claims_and_updates_did_documents() {
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
     assert_eq!(body["primary_handle"], serde_json::Value::Null);
-
-    let response = state
-        .request(Request::get(format!("/users/{}/did.json", alice.id)).empty())
-        .await;
-    response.assert_status(StatusCode::OK);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["metadata"]["primary_handle"], serde_json::Value::Null);
 }
 
-#[tokio::test]
-async fn did_document_resolution_uses_primary_handle_preference_as_of_query() {
-    setup();
-    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
-        return;
-    };
-    let state = TestState::from_pool(pool.clone()).await.unwrap();
-    let unique = unique_test_nonce();
-    let user_handle = format!("history{unique}");
-    let first_handle = format!("{user_handle}:{}", state.url_builder.public_hostname());
-    let second_handle = format!("{user_handle}-alt:{}", state.url_builder.public_hostname());
-
-    let mut rng = state.rng();
-    let mut repo = state.repository().await.unwrap();
-    let user = repo
-        .user()
-        .add(&mut rng, &*state.clock, user_handle)
-        .await
-        .unwrap();
-    let first_preference = repo
-        .user_primary_handle_preference()
-        .set(
-            &mut rng,
-            &*state.clock,
-            NewUserPrimaryHandlePreference::self_service(
-                user.id,
-                Some(first_handle.clone()),
-                None,
-                user.id,
-            ),
-        )
-        .await
-        .unwrap();
-    let first_as_of = first_preference.effective_at.to_rfc3339();
-    state.clock.advance(Duration::try_seconds(10).unwrap());
-    repo.user_primary_handle_preference()
-        .set(
-            &mut rng,
-            &*state.clock,
-            NewUserPrimaryHandlePreference::self_service(
-                user.id,
-                Some(second_handle.clone()),
-                None,
-                user.id,
-            ),
-        )
-        .await
-        .unwrap();
-    repo.save().await.unwrap();
-
-    let did = user_did_for(&state.url_builder, &state.cokret_config, &user);
-
-    let response = state
-        .request(Request::get(format!("/api/v1/identity/document?did={did}")).empty())
-        .await;
-    response.assert_status(StatusCode::OK);
-    let body: serde_json::Value = response.json();
-    assert_eq!(
-        body["did_document"]["metadata"]["primary_handle"],
-        second_handle
-    );
-
-    let response = state
-        .request(
-            Request::get(format!(
-                "/api/v1/identity/document?did={did}&as_of={first_as_of}"
-            ))
-            .empty(),
-        )
-        .await;
-    response.assert_status(StatusCode::OK);
-    let body: serde_json::Value = response.json();
-    assert_eq!(
-        body["did_document"]["metadata"]["primary_handle"],
-        first_handle
-    );
-
-    let response = state
-        .request(Request::get(format!("/users/{}/did.json?asOf={first_as_of}", user.id)).empty())
-        .await;
-    response.assert_status(StatusCode::OK);
-    let body: serde_json::Value = response.json();
-    assert_eq!(body["metadata"]["primary_handle"], first_handle);
-
-    let response = state
-        .request(
-            Request::post(format!("/api/v1/identity/resolve?as_of={first_as_of}")).json(
-                serde_json::json!({
-                    "did": did,
-                }),
-            ),
-        )
-        .await;
-    response.assert_status(StatusCode::OK);
-    let body: serde_json::Value = response.json();
-    assert_eq!(
-        body["did_document"]["metadata"]["primary_handle"],
-        first_handle
-    );
-}
+// Removed: `did_document_resolution_uses_primary_handle_preference_as_of_query`
+// exercised coauth-fabricated local user DID documents (`/users/{id}/did.json`
+// + the identity resolve/document short-circuits). coauth hosts no DID
+// documents any more - user principal DIDs are `did:webvh:...` served by the
+// principal server.
 
 #[test]
 fn parse_local_handle_round_trips_local_user_handle() {
@@ -1154,48 +1031,9 @@ fn parse_local_handle_round_trips_local_user_handle() {
     );
 }
 
-#[test]
-fn identity_document_exposes_user_handle_binding() {
-    let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig::default();
-    let now = Utc::now();
-    let mut rng = ChaChaRng::seed_from_u64(13);
-    let user = User::samples(now, &mut rng).into_iter().next().unwrap();
-
-    let document = user_did_document(&url_builder, &cokret_config, &user);
-
-    assert_eq!(
-        document.id,
-        user_did_for(&url_builder, &cokret_config, &user)
-    );
-    // Spec 7157ee8 §3.1: `alsoKnownAs` carries the canonical
-    // `<localpart>:<domain>` form; `acct:` aliases live on
-    // `handle_claim.handle_aliases[]`, not on the DID document.
-    assert_eq!(
-        document.also_known_as,
-        vec![user_handle(&url_builder, &user)]
-    );
-    assert!(
-        document.also_known_as[0].contains(':'),
-        "alsoKnownAs MUST use the canonical `<localpart>:<domain>` form, got {}",
-        document.also_known_as[0]
-    );
-    assert!(
-        !document.also_known_as[0].starts_with("cokret://"),
-        "alsoKnownAs MUST NOT carry the retired cokret:// URI form"
-    );
-    assert!(
-        !document.also_known_as[0].starts_with("acct:"),
-        "alsoKnownAs MUST NOT carry an acct: alias as the canonical form"
-    );
-    assert_eq!(document.service[0].kind, "CokretAuthServer");
-    assert_eq!(
-        document.service[0].service_endpoint,
-        url_builder
-            .absolute_url("/api/v1/server/describe")
-            .to_string()
-    );
-}
+// Removed: `identity_document_exposes_user_handle_binding` — it asserted the
+// shape of coauth-fabricated user DID documents (`user_did_document`), which
+// were deleted along with all coauth DID-document hosting.
 
 #[test]
 fn require_canonical_handle_rejects_acct_aliases() {
@@ -1254,17 +1092,21 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         policy_event_ref: None,
     };
 
+    // Subject is the soland-minted webvh principal DID, passed by the caller.
+    let subject_did = "did:webvh:zQmExampleScid:soland.example:webvh:01arz3ndektsv4rrffq69g5fav";
     let material = issue_handle_claim(
         &clock,
         &url_builder,
         &cokret_config,
         &key_store,
         &user,
+        subject_did,
         HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
         hint.clone(),
     )
     .expect("handle claim must mint with the test keystore");
+    assert_eq!(material.payload.subject, subject_did);
 
     let canonical = user_handle(&url_builder, &user);
     let acct = user_handle_acct_alias(&url_builder, &user);
@@ -1295,8 +1137,10 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         material.payload.member_delivery_binding.binding_source,
         hint.binding_source
     );
-    assert!(material.payload.claim_digest.starts_with("sha256:"));
-    assert_eq!(material.claim_digest, material.payload.claim_digest);
+    // `claim_digest` moved off the spec-aligned payload onto the
+    // material wrapper (audit-chain anchor only).
+    assert!(material.claim_digest.starts_with("sha256:"));
+    assert!(payload_value.get("claim_digest").is_none());
     assert!(material.expires_at > now);
     assert_eq!(material.payload.proofs.len(), 1);
     assert_eq!(material.payload.proofs[0].audience, "did:web:space.example");
@@ -1331,6 +1175,7 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
         &cokret_config,
         &key_store,
         &user,
+        "did:webvh:zQmExampleScid:soland.example:webvh:01arz3ndektsv4rrffq69g5fav",
         HandleClaimKind::OrganizationHandle,
         "did:web:space.example".to_owned(),
         hint,

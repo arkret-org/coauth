@@ -16,8 +16,8 @@ use url::Url;
 
 use crate::{
     handlers::cokret::{
-        DidDocument, DidService, SessionGrantError, VerificationMethod, issuer_did_for,
-        service_did_for, user_did_for,
+        DidDocument, SessionGrantError, VerificationMethod, issuer_did_for, service_did_for,
+        user_did_for,
     },
     outbound_http::RequestBuilderExt as _,
 };
@@ -54,12 +54,6 @@ pub struct DidResolution {
     pub source: DidResolutionSource,
     pub verified_local_binding: bool,
     pub method_evidence: Value,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DidBindingVerification {
-    Verified,
-    Mismatch,
 }
 
 #[derive(Debug, Error)]
@@ -136,25 +130,6 @@ pub trait DidResolverService: Send + Sync {
     async fn primary_did_for_user(&self, cokret_config: &CokretConfig, user: &User) -> String;
     fn delegated_resolver(&self, cokret_config: &CokretConfig) -> Option<String>;
     fn proof_required_for_pairwise(&self, cokret_config: &CokretConfig) -> bool;
-    fn service_did_document(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        key_store: &Keystore,
-    ) -> Result<DidDocument, SessionGrantError>;
-    fn user_did_document(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        user: &User,
-    ) -> DidDocument;
-    fn verify_user_binding(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        user: &User,
-        did: &str,
-    ) -> DidBindingVerification;
 
     async fn resolve_did_document(
         &self,
@@ -256,78 +231,6 @@ impl DidResolverService for DefaultDidResolverService {
             .is_some_and(|registry| registry.proof_required_for_pairwise)
     }
 
-    fn service_did_document(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        key_store: &Keystore,
-    ) -> Result<DidDocument, SessionGrantError> {
-        let did = self.service_did(url_builder, cokret_config);
-        let mut verification_method = Vec::new();
-        let mut authentication = Vec::new();
-        let mut assertion_method = Vec::new();
-
-        if let Some(public_key) = crate::handlers::cokret::preferred_public_signing_key(key_store) {
-            let key_id = format!("{did}#key-1");
-            verification_method.push(VerificationMethod {
-                id: key_id.clone(),
-                kind: "JsonWebKey2020".to_owned(),
-                controller: did.clone(),
-                public_key_jwk: public_key,
-            });
-            authentication.push(key_id.clone());
-            assertion_method.push(key_id);
-        }
-
-        Ok(DidDocument {
-            id: did.clone(),
-            also_known_as: Vec::new(),
-            verification_method,
-            authentication,
-            assertion_method,
-            service: vec![
-                DidService {
-                    id: format!("{did}#auth-server"),
-                    kind: "CokretAuthServer".to_owned(),
-                    service_endpoint: url_builder.absolute_url("/_cokret/describe").to_string(),
-                },
-                DidService {
-                    id: format!("{did}#openid-configuration"),
-                    kind: "OpenIdConnectConfiguration".to_owned(),
-                    service_endpoint: url_builder.oidc_discovery().to_string(),
-                },
-            ],
-            // A service DID is not a handle holder — no primary_handle.
-            metadata: None,
-        })
-    }
-
-    fn user_did_document(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        user: &User,
-    ) -> DidDocument {
-        // Delegate to the canonical builder in `handlers::cokret` so the
-        // R3.2 `metadata.primary_handle` holder-preference logic
-        // (DID-COAUTH-1) lives in exactly one place.
-        crate::handlers::cokret::user_did_document(url_builder, cokret_config, user)
-    }
-
-    fn verify_user_binding(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        user: &User,
-        did: &str,
-    ) -> DidBindingVerification {
-        if self.user_did(url_builder, cokret_config, user) == did {
-            DidBindingVerification::Verified
-        } else {
-            DidBindingVerification::Mismatch
-        }
-    }
-
     async fn resolve_did_document(
         &self,
         http_client: &reqwest::Client,
@@ -337,25 +240,14 @@ impl DidResolverService for DefaultDidResolverService {
         repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError> {
-        if did == self.service_did(url_builder, cokret_config) {
-            return Ok(local_resolution(
-                self.service_did_document(url_builder, cokret_config, key_store)?,
-                DidResolutionSource::LocalService,
-                true,
-            ));
-        }
-
-        if let Some(user_id) = self.parse_local_user_did(url_builder, cokret_config, did) {
-            let Some(user) = repo.user().lookup(user_id).await? else {
-                return Err(DidResolveError::NotFound);
-            };
-            return Ok(local_resolution(
-                self.user_did_document(url_builder, cokret_config, &user),
-                DidResolutionSource::LocalUser,
-                true,
-            ));
-        }
-
+        // coauth no longer fabricates DID documents for its own service DID
+        // or the legacy `did:web:<coauth-host>:users:<ulid>` user form —
+        // there is no DID hosting on coauth, so a locally-built document
+        // would describe an identifier nothing serves. Both now resolve
+        // through the regular method chain below (and 404 like any other
+        // unhosted `did:web`). The `did:web:coauth.invalid:accounts:…`
+        // branch stays: that is an internal alias under an RFC2606
+        // non-resolvable TLD, never a hosted document.
         if let Some(user_id) = parse_local_primary_account_did(did) {
             let Some(user) = repo.user().lookup(user_id).await? else {
                 return Err(DidResolveError::NotFound);

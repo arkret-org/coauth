@@ -30,7 +30,6 @@
 跟踪的兼容契约：
 
 - `/.well-known/openid-configuration`
-- `/.well-known/did.json`
 - `/.well-known/cokret/openapi.yaml`
 - `/_coauth/admin/openapi.yaml`
 - `/_cokret/describe` 与 `/_cokret/*` 其余路径

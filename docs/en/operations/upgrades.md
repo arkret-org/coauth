@@ -38,7 +38,6 @@ through your orchestrator is supported on every minor release.
 The following surfaces are tracked compatibility contracts:
 
 - `/.well-known/openid-configuration`
-- `/.well-known/did.json`
 - `/.well-known/cokret/openapi.yaml`
 - `/_coauth/admin/openapi.yaml` (the canonical `sodmin` integration
   contract)

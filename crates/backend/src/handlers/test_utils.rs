@@ -425,18 +425,8 @@ impl TestState {
                 Router::with_path("/.well-known/webfinger")
                     .get(crate::handlers::oauth::webfinger::get),
             )
-            .push(
-                Router::with_path("/.well-known/did.json")
-                    .get(crate::handlers::cokret::service_did_json),
-            )
-            .push(
-                Router::with_path("/did.json")
-                    .get(crate::handlers::cokret::service_did_json),
-            )
-            .push(
-                Router::with_path("/users/{id}/did.json")
-                    .get(crate::handlers::cokret::user_did_json),
-            )
+            // coauth hosts no DID documents — see the matching note in
+            // `server.rs` (DID hosting belongs to the principal server).
             // OAuth endpoints
             .push(
                 Router::with_path("/oauth/keys.json").get(crate::handlers::oauth::keys::get),

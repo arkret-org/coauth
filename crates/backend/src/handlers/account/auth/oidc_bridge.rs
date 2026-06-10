@@ -264,7 +264,7 @@ fn soland_account_handle_for_did(did: &str) -> String {
 /// `did:webvh:<scid>:<principal_host>:webvh:<user_ulid>` against soland's
 /// soland's private WebVH registration endpoint so the DID's authority matches
 /// the host that actually serves its document.
-async fn ensure_principal_did_for_user(
+pub(super) async fn ensure_principal_did_for_user(
     repo: &mut coauth_data::BoxRepository,
     rng: &mut coauth_data::BoxRng,
     clock: &coauth_data::BoxClock,
@@ -306,12 +306,12 @@ async fn ensure_principal_did_for_user(
     .map_err(|error| format!("principal DID minting failed: {error}"))
 }
 
-async fn ensure_soland_account_registered(
+pub(super) async fn ensure_soland_account_registered(
     http_client: &reqwest::Client,
     principal_endpoint: Option<&str>,
     principal_did: &str,
     display_name: Option<&str>,
-    device_id: &str,
+    device_id: Option<&str>,
 ) -> Result<(), String> {
     let Some(principal_endpoint) = principal_endpoint else {
         return Ok(());
@@ -321,7 +321,7 @@ async fn ensure_soland_account_registered(
         did: principal_did,
         handle: soland_account_handle_for_did(principal_did),
         display_name,
-        device_id: Some(device_id),
+        device_id,
     };
     let response =
         outbound_http::send_with_policy(outbound_http::soland_policy("account_register"), || {
@@ -856,7 +856,7 @@ pub async fn oidc_code_exchange(
             grant_target.principal_server_endpoint.as_deref(),
             &principal_did,
             user.display_name.as_deref(),
-            &device_id,
+            Some(device_id.as_str()),
         )
         .await
         {
@@ -1517,7 +1517,7 @@ pub async fn oidc_code_exchange(
         grant_target.principal_server_endpoint.as_deref(),
         &principal_did,
         user.display_name.as_deref(),
-        &device_id,
+        Some(device_id.as_str()),
     )
     .await
     {

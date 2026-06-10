@@ -489,7 +489,7 @@ pub fn build_router(
 
     // Build sub-routers for each resource
     use crate::handlers::{
-        cokret, health,
+        health,
         oauth::{discovery, webfinger},
     };
 
@@ -512,22 +512,16 @@ pub fn build_router(
                     Router::with_path("/.well-known/webfinger")
                         .hoop(public_oidc_browser_cors())
                         .get(webfinger::get),
-                )
-                .push(
-                    Router::with_path("/.well-known/did.json")
-                        .hoop(public_oidc_browser_cors())
-                        .get(cokret::service_did_json),
-                )
-                .push(
-                    Router::with_path("/did.json")
-                        .hoop(public_oidc_browser_cors())
-                        .get(cokret::service_did_json),
-                )
-                .push(
-                    Router::with_path("/users/{id}/did.json")
-                        .hoop(public_oidc_browser_cors())
-                        .get(cokret::user_did_json),
                 ),
+            // NOTE: coauth deliberately hosts NO DID documents
+            // (`/.well-known/did.json`, `/did.json`, `/users/{id}/did.json`
+            // were removed). DID hosting is the principal server's job —
+            // soland's embedded webvh provider (or an external starid) serves
+            // `did:webvh` documents under its own authority; coauth only
+            // mints/registers against it. coauth-issued artefacts (session
+            // grants, handle claims) are verified via the introspection
+            // endpoints and the OAuth JWKS, never by resolving a
+            // coauth-hosted DID document.
             coauth_config::HttpResource::Human => build_human_router(router, templates.clone()),
             coauth_config::HttpResource::RestApi => build_account_api_router(router),
             coauth_config::HttpResource::Assets { path } => router

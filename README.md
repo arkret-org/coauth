@@ -131,10 +131,16 @@ Per-project task lists are consolidated upstream — see
 The primary Cokret paths include:
 
 - `/.well-known/openid-configuration`
-- `/.well-known/did.json`
 - `/_cokret/describe`
 - `/_cokret/root/identity/describe`
 - `/_cokret/find/directory/resolve-handle`
+
+coauth hosts **no** DID documents (`/.well-known/did.json`, `/did.json`, and
+`/users/{id}/did.json` were removed): DID hosting is the principal server's
+job — soland's embedded webvh provider (or an external starid) serves
+`did:webvh` documents under its own authority, and coauth only mints/registers
+against it. coauth-issued artefacts (session grants, handle claims) are
+verified via the introspection endpoints and the OAuth JWKS.
 
 ## Features
 
@@ -218,7 +224,6 @@ just build-all
 | Endpoint | Purpose |
 |----------|---------|
 | `/.well-known/openid-configuration` | OIDC discovery |
-| `/.well-known/did.json` | Service DID document |
 | `/_cokret/describe` | Cokret service metadata |
 | `/_cokret/root/identity/describe` | Identity-registry contract |
 | `/_cokret/find/directory/resolve-handle` | Handle -> DID resolution |

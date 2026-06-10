@@ -437,6 +437,63 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             //     request (not the kickoff one).
             //   - enforce policy on scopes the caller may request.
             // Tracked in `_improve_todos.md` C.4 (TODO scaffold).
+            //
+            // Subject parity with the OIDC bridge: the grant subject (and
+            // `viewer.did`) MUST be the soland-minted `did:webvh:…` principal
+            // DID, not the coauth-local `user_did_for` fallback. The fallback
+            // anchors the actor identity on coauth's own host
+            // (`did:web:<coauth-host>:users:<ulid>`), which diverges from the
+            // principal DID the bridge mints for the same user — every event
+            // the client then writes is attributed to a DID that no DID
+            // service resolves under the principal server's authority.
+            let http_client = depot.http_client()?;
+            let encrypter = depot.encrypter()?;
+            let mut grant_repo = depot.repo().await?;
+            let principal_did = match oidc_bridge::ensure_principal_did_for_user(
+                &mut grant_repo,
+                &mut rng,
+                &clock,
+                &encrypter,
+                &http_client,
+                &url_builder,
+                &cokret_config,
+                &user,
+                &grant_target.audience,
+            )
+            .await
+            {
+                Ok(did) => did,
+                Err(message) => {
+                    PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                    res.render(Json(LoginOutcome {
+                        status: "error",
+                        error: Some("principal_did_minting_failed"),
+                        viewer: None,
+                        session_grant: None,
+                        warnings: vec![message],
+                    }));
+                    return Ok(());
+                }
+            };
+            if let Err(message) = oidc_bridge::ensure_soland_account_registered(
+                &http_client,
+                grant_target.principal_server_endpoint.as_deref(),
+                &principal_did,
+                display_name.as_deref(),
+                None,
+            )
+            .await
+            {
+                PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                res.render(Json(LoginOutcome {
+                    status: "error",
+                    error: Some("principal_account_registration_failed"),
+                    viewer: None,
+                    session_grant: None,
+                    warnings: vec![message],
+                }));
+                return Ok(());
+            }
             let session_grant = cokret::issue_session_grant_for_audience(
                 &clock,
                 &url_builder,
@@ -446,12 +503,11 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 dpop_binding.public_jwk,
                 grant_target.audience.clone(),
                 vec![cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
-                None,
+                Some(&principal_did),
                 Some(dpop_binding.jkt),
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
-            let mut grant_repo = depot.repo().await?;
             let persisted_session_grant = cokret::persist_session_grant(
                 &mut grant_repo,
                 &mut rng,
@@ -470,7 +526,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
                         handle: user.handle.clone(),
-                        did: cokret::user_did_for(&url_builder, &cokret_config, &user),
+                        did: principal_did,
                         federated_handle: cokret::user_handle(&url_builder, &user),
                         principal_id: principal_server.principal_id(&user.handle),
                         display_name,

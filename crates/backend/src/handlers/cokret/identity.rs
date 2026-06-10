@@ -97,27 +97,11 @@ pub async fn identity_resolve(
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
     let mut repo = depot.repo().await?;
-    let as_of = did_document_as_of_query(req)?;
 
-    if let Some(did_document) =
-        local_user_did_document_if_owned(&mut repo, &url_builder, &cokret_config, &body.did, as_of)
-            .await?
-    {
-        repo.cancel()
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        return Ok(Json(IdentityResolveOutcome {
-            did_document,
-            key_log_head: None,
-            seq: None,
-            receipts: None,
-            method_evidence: Some(serde_json::json!({
-                "resolver": "local_user",
-                "verified_local_binding": true,
-            })),
-        }));
-    }
-
+    // coauth no longer fabricates DID documents for its own users — the
+    // legacy `did:web:<coauth-host>:users:<ulid>` form is dead; user
+    // principal DIDs are `did:webvh:…` documents hosted by the principal
+    // server and resolve through the normal chain below.
     let resolution = did_resolver
         .resolve_did_document(
             &http_client,
@@ -156,23 +140,8 @@ pub async fn identity_document(
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
     let mut repo = depot.repo().await?;
-    let as_of = did_document_as_of_query(req)?;
 
-    if let Some(did_document) =
-        local_user_did_document_if_owned(&mut repo, &url_builder, &cokret_config, &did, as_of)
-            .await?
-    {
-        repo.cancel()
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        return Ok(Json(IdentityDocumentView {
-            did_document,
-            head_event_digest: None,
-            seq: None,
-            receipts: None,
-        }));
-    }
-
+    // No local user-document fabrication — see `identity_resolve`.
     let resolution = did_resolver
         .resolve_did_document(
             &http_client,
@@ -222,7 +191,6 @@ pub async fn directory_resolve_handle(
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
-    let did_resolver = depot.did_resolver_service()?;
     let Some(handle) = parse_local_handle(&url_builder, &body.handle) else {
         return Err(CokretRouteError::NotFound);
     };
@@ -237,11 +205,33 @@ pub async fn directory_resolve_handle(
         return Err(CokretRouteError::NotFound);
     };
 
-    let did = did_resolver.user_did(&url_builder, &cokret_config, &user);
-    let verified = body.expected_did.as_deref().is_none_or(|expected| {
-        did_resolver.verify_user_binding(&url_builder, &cokret_config, &user, expected)
-            == crate::services::did_resolver::DidBindingVerification::Verified
-    });
+    // The handle resolves to the user's MINTED principal DID
+    // (`did:webvh:…` hosted by the principal server) — never a fabricated
+    // `did:web:<coauth-host>:users:<ulid>` form, which no DID service
+    // hosts. Principal DIDs are minted per audience; walk the configured
+    // principal servers in order and take the first minted one. A user
+    // who has never bound to a principal server has no resolvable DID
+    // yet — fail closed with 404 rather than synthesising an identifier.
+    let mut did = None;
+    for server in &cokret_config.principal_servers {
+        if let Some(minted) = repo
+            .principal_did()
+            .get_for_user_and_audience(&user, &server.audience)
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        {
+            did = Some(minted.did);
+            break;
+        }
+    }
+    let Some(did) = did else {
+        return Err(CokretRouteError::NotFound);
+    };
+
+    let verified = body
+        .expected_did
+        .as_deref()
+        .is_none_or(|expected| expected == did);
 
     Ok(Json(ResolveHandleOutcome {
         did,
