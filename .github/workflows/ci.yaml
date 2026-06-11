@@ -96,7 +96,7 @@ jobs:
       - name: Run typos
         uses: crate-ci/typos@master
         with:
-          config: ./typos.toml
+          config: ./.typos.toml
 
   cargo-deny:
     name: Audit dependencies with cargo-deny
