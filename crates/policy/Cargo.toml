@@ -19,24 +19,24 @@ remote = ["dep:reqwest"]
 
 [dependencies]
 # Always required
-anyhow.workspace = true
-async-trait.workspace = true
-schemars.workspace = true
-serde_json.workspace = true
-serde.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-tracing.workspace = true
 
-coauth-data.workspace = true
-oauth-types.workspace = true
 
 # Cedar backend (optional)
-cedar-policy = { workspace = true, optional = true }
-chrono = { workspace = true, optional = true }
 
 # Remote HTTP backend (optional)
-reqwest = { workspace = true, optional = true }
+anyhow = {workspace = true}
+async-trait = {workspace = true}
+cedar-policy = {workspace = true,optional = true}
+chrono = {workspace = true,optional = true}
+coauth-data = {workspace = true}
+oauth-types = {workspace = true}
+reqwest = {workspace = true,optional = true}
+schemars = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+thiserror = {workspace = true}
+tokio = {workspace = true}
+tracing = {workspace = true}
 
 [[bin]]
 name = "schema"

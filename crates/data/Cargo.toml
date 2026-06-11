@@ -13,37 +13,37 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-anyhow.workspace = true
-async-trait.workspace = true
-base64ct.workspace = true
-chrono.workspace = true
-coauth-admin-types.workspace = true
-crc.workspace = true
-diesel.workspace = true
-diesel-async.workspace = true
-diesel_migrations.workspace = true
-futures-util.workspace = true
-ipnetwork.workspace = true
-language-tags.workspace = true
-lettre.workspace = true
-oauth-types.workspace = true
-opentelemetry.workspace = true
-opentelemetry-semantic-conventions.workspace = true
-coauth-iana.workspace = true
-coauth-jose.workspace = true
-rand.workspace = true
-rand_chacha.workspace = true
-rand_core.workspace = true
-regex.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-serde_urlencoded.workspace = true
-sha2.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-tracing.workspace = true
-tracing-opentelemetry.workspace = true
-ulid.workspace = true
-url.workspace = true
-uuid.workspace = true
-woothee.workspace = true
+anyhow = {workspace = true}
+async-trait = {workspace = true}
+base64ct = {workspace = true}
+chrono = {workspace = true}
+coauth-admin-types = {workspace = true}
+coauth-iana = {workspace = true}
+coauth-jose = {workspace = true}
+crc = {workspace = true}
+diesel = {workspace = true}
+diesel-async = {workspace = true}
+diesel_migrations = {workspace = true}
+futures-util = {workspace = true}
+ipnetwork = {workspace = true}
+language-tags = {workspace = true}
+lettre = {workspace = true}
+oauth-types = {workspace = true}
+opentelemetry = {workspace = true}
+opentelemetry-semantic-conventions = {workspace = true}
+rand = {workspace = true}
+rand_chacha = {workspace = true}
+rand_core = {workspace = true}
+regex = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+serde_urlencoded = {workspace = true}
+sha2 = {workspace = true}
+thiserror = {workspace = true}
+tokio = {workspace = true}
+tracing = {workspace = true}
+tracing-opentelemetry = {workspace = true}
+ulid = {workspace = true}
+url = {workspace = true}
+uuid = {workspace = true}
+woothee = {workspace = true}

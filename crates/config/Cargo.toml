@@ -14,47 +14,47 @@ workspace = true
 
 [dependencies]
 # Configuration framework
-figment.workspace = true
-schemars.workspace = true
 
 # Serialization
-serde.workspace = true
-serde_json.workspace = true
-serde_with.workspace = true
 
 # Core utilities
-anyhow.workspace = true
-camino.workspace = true
-chrono.workspace = true
-hex.workspace = true
-indoc.workspace = true
-tracing.workspace = true
-ulid.workspace = true
-url.workspace = true
 
 # Network & security
-ipnetwork.workspace = true
-lettre.workspace = true
-pem-rfc7468.workspace = true
-rustls-pki-types.workspace = true
 
 # Async & randomness
-futures-util.workspace = true
-rand.workspace = true
-rand_chacha.workspace = true
-rand_core.workspace = true
-tokio.workspace = true
 
 # Cokret v1 SDK — lightweight typed-identifier validators. Used for the
 # `ck:trust_domain:<scope>` wire-form check (`is_trust_domain`) so the
 # config-side validation never drifts from the SDK. `default-features =
 # false` keeps the optional `salvo` surface out of the config build.
-cokret-identifiers = { workspace = true }
 
 # coauth workspace crates
-coauth-iana.workspace = true
-coauth-jose.workspace = true
-coauth-keystore.workspace = true
+anyhow = {workspace = true}
+camino = {workspace = true}
+chrono = {workspace = true}
+coauth-iana = {workspace = true}
+coauth-jose = {workspace = true}
+coauth-keystore = {workspace = true}
+cokret-identifiers = {workspace = true}
+figment = {workspace = true}
+futures-util = {workspace = true}
+hex = {workspace = true}
+indoc = {workspace = true}
+ipnetwork = {workspace = true}
+lettre = {workspace = true}
+pem-rfc7468 = {workspace = true}
+rand = {workspace = true}
+rand_chacha = {workspace = true}
+rand_core = {workspace = true}
+rustls-pki-types = {workspace = true}
+schemars = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+serde_with = {workspace = true}
+tokio = {workspace = true}
+tracing = {workspace = true}
+ulid = {workspace = true}
+url = {workspace = true}
 
 [features]
 docker = []

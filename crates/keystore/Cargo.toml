@@ -15,38 +15,38 @@ workspace = true
 
 [dependencies]
 # Cryptographic primitives
-aead.workspace = true
-chacha20poly1305.workspace = true
-ed25519-dalek.workspace = true
-elliptic-curve.workspace = true
-generic-array.workspace = true
-rand.workspace = true
-rand_core.workspace = true
-rsa.workspace = true
 
 # Elliptic curves
-k256.workspace = true
-p256.workspace = true
-p384.workspace = true
-p521.workspace = true
-sec1.workspace = true
 
 # Key encoding formats
-base64ct.workspace = true
-const-oid.workspace = true
-der.workspace = true
-pem-rfc7468.workspace = true
-pkcs1.workspace = true
-pkcs8.workspace = true
-spki.workspace = true
 
 # Error handling
-thiserror.workspace = true
 
 # Workspace crates
-coauth-iana.workspace = true
-coauth-jose.workspace = true
+aead = {workspace = true}
+base64ct = {workspace = true}
+chacha20poly1305 = {workspace = true}
+coauth-iana = {workspace = true}
+coauth-jose = {workspace = true}
+const-oid = {workspace = true}
+der = {workspace = true}
+ed25519-dalek = {workspace = true}
+elliptic-curve = {workspace = true}
+generic-array = {workspace = true}
+k256 = {workspace = true}
+p256 = {workspace = true}
+p384 = {workspace = true}
+p521 = {workspace = true}
+pem-rfc7468 = {workspace = true}
+pkcs1 = {workspace = true}
+pkcs8 = {workspace = true}
+rand = {workspace = true}
+rand_core = {workspace = true}
+rsa = {workspace = true}
+sec1 = {workspace = true}
+spki = {workspace = true}
+thiserror = {workspace = true}
 
 [dev-dependencies]
-insta.workspace = true
-rand_chacha.workspace = true
+insta = {workspace = true}
+rand_chacha = {workspace = true}

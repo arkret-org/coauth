@@ -13,14 +13,14 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-anyhow.workspace = true
-async-trait.workspace = true
-camino.workspace = true
-convert_case.workspace = true
-csv.workspace = true
-reqwest.workspace = true
-rustls.workspace = true
-serde.workspace = true
-tokio.workspace = true
-tracing-subscriber.workspace = true
-tracing.workspace = true
+anyhow = {workspace = true}
+async-trait = {workspace = true}
+camino = {workspace = true}
+convert_case = {workspace = true}
+csv = {workspace = true}
+reqwest = {workspace = true}
+rustls = {workspace = true}
+serde = {workspace = true}
+tokio = {workspace = true}
+tracing = {workspace = true}
+tracing-subscriber = {workspace = true}

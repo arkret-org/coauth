@@ -9,141 +9,141 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-anyhow.workspace = true
-bytes.workspace = true
-chrono.workspace = true
-deadpool.workspace = true
-futures-util.workspace = true
-headers.workspace = true
-http.workspace = true
-http-body.workspace = true
-http-body-util.workspace = true
-hyper.workspace = true
-hyper-util.workspace = true
-ipnetwork.workspace = true
-listenfd.workspace = true
-pin-project-lite.workspace = true
-rand.workspace = true
-rand_chacha.workspace = true
-rand_core.workspace = true
-reqwest.workspace = true
-rustls.workspace = true
-rustls-platform-verifier.workspace = true
-serde_json.workspace = true
-serde_yaml.workspace = true
-socket2.workspace = true
-diesel.workspace = true
-diesel-async.workspace = true
-diesel_migrations.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-tokio-rustls.workspace = true
-tokio-util.workspace = true
-tower-service.workspace = true
-salvo.workspace = true
-url.workspace = true
-zeroize.workspace = true
 
-tracing.workspace = true
-tracing-opentelemetry.workspace = true
-opentelemetry.workspace = true
-opentelemetry-http.workspace = true
-opentelemetry-instrumentation-process.workspace = true
-opentelemetry-instrumentation-tokio.workspace = true
-opentelemetry-jaeger-propagator.workspace = true
-opentelemetry-otlp.workspace = true
-opentelemetry-prometheus-text-exporter.workspace = true
-opentelemetry-resource-detectors.workspace = true
-opentelemetry-semantic-conventions.workspace = true
-opentelemetry-stdout.workspace = true
-opentelemetry_sdk.workspace = true
-sentry.workspace = true
-sentry-tracing.workspace = true
 
-coauth-admin-types = { workspace = true, features = ["schema"] }
-coauth-config.workspace = true
 # Cokret v1 SDK: typed Move builder + Ed25519 signer used by
 # `handlers::account::mimi_consent::anchor_pending_move`. `signer` feature
 # pulls in the production Ed25519MoveSigner; `cokret-core` carries the
 # trait + UnsignedMove + identifier types.
-cokret-core.workspace = true
-cokret-signatures = { workspace = true, features = ["signer"] }
 # Umbrella `cokret` SDK — currently consumed only for
 # `cokret::identity::binding::*` (multicodec helpers used by
 # `services::passkey_derive`). Opted in via workspace declaration with
 # default features off + `full-surface` on, so the heavier client /
 # openmls / sync surface stays out of the backend build.
-cokret.workspace = true
-coauth-data.workspace = true
-coauth-messaging.workspace = true
-coauth-i18n.workspace = true
-coauth-iana.workspace = true
-coauth-jose.workspace = true
-coauth-keystore.workspace = true
-coauth-principal.workspace = true
-coauth-policy.workspace = true
-coauth-tasks.workspace = true
-coauth-templates.workspace = true
-oauth-types.workspace = true
+anyhow = {workspace = true}
+argon2 = {workspace = true}
+async-trait = {workspace = true}
+base64ct = {workspace = true}
+bcrypt = {workspace = true}
+bytes = {workspace = true}
+camino = {workspace = true}
+chrono = {workspace = true}
+coauth-admin-types = {workspace = true,features = ["schema"]}
+coauth-config = {workspace = true}
+coauth-data = {workspace = true}
+coauth-i18n = {workspace = true}
+coauth-iana = {workspace = true}
+coauth-jose = {workspace = true}
+coauth-keystore = {workspace = true}
+coauth-messaging = {workspace = true}
+coauth-policy = {workspace = true}
+coauth-principal = {workspace = true}
+coauth-tasks = {workspace = true}
+coauth-templates = {workspace = true}
+cokret = {workspace = true}
+cokret-core = {workspace = true}
+cokret-signatures = {workspace = true,features = ["signer"]}
+cookie = {workspace = true}
+data-encoding = {workspace = true}
+deadpool = {workspace = true}
+der = {workspace = true}
+diesel = {workspace = true}
+diesel-async = {workspace = true}
+diesel_migrations = {workspace = true}
+ed25519-dalek = {workspace = true}
+elliptic-curve = {workspace = true}
+form_urlencoded = {workspace = true}
+futures-util = {workspace = true}
+headers = {workspace = true}
+hex = {workspace = true}
+hmac = {workspace = true}
+http = {workspace = true}
+http-body = {workspace = true}
+http-body-util = {workspace = true}
+hyper = {workspace = true}
+hyper-util = {workspace = true}
+icu_locid = {workspace = true}
+icu_normalizer = {workspace = true}
+indexmap = {workspace = true}
+ipnetwork = {workspace = true}
+language-tags = {workspace = true}
+lettre = {workspace = true}
+listenfd = {workspace = true}
+mime = {workspace = true}
+minijinja = {workspace = true}
+minijinja-contrib = {workspace = true}
+oauth-types = {workspace = true}
+opendal = {workspace = true}
+opentelemetry = {workspace = true}
+opentelemetry-http = {workspace = true}
+opentelemetry-instrumentation-process = {workspace = true}
+opentelemetry-instrumentation-tokio = {workspace = true}
+opentelemetry-jaeger-propagator = {workspace = true}
+opentelemetry-otlp = {workspace = true}
+opentelemetry-prometheus-text-exporter = {workspace = true}
+opentelemetry-resource-detectors = {workspace = true}
+opentelemetry-semantic-conventions = {workspace = true}
+opentelemetry-stdout = {workspace = true}
+opentelemetry_sdk = {workspace = true}
+p256 = {workspace = true}
+pbkdf2 = {workspace = true}
+pin-project-lite = {workspace = true}
+pkcs8 = {workspace = true}
+psl = {workspace = true}
+rand = {workspace = true}
+rand_chacha = {workspace = true}
+rand_core = {workspace = true}
+reqwest = {workspace = true}
+rsa = {workspace = true}
+rustls = {workspace = true}
+rustls-platform-verifier = {workspace = true}
+salvo = {workspace = true}
+schemars = {workspace = true}
+sentry = {workspace = true}
+sentry-tracing = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+serde_urlencoded = {workspace = true}
+serde_with = {workspace = true}
+serde_yaml = {workspace = true}
+sha1 = {workspace = true,features = ["oid"]}
+sha2 = {workspace = true}
+signature = {workspace = true}
+socket2 = {workspace = true}
+subtle = {workspace = true}
+thiserror = {workspace = true}
+time = {workspace = true}
+tokio = {workspace = true}
+tokio-postgres = {workspace = true}
+tokio-rustls = {workspace = true}
+tokio-util = {workspace = true}
+tower-service = {workspace = true}
+tracing = {workspace = true}
+tracing-opentelemetry = {workspace = true}
+ulid = {workspace = true}
+url = {workspace = true}
+uuid = {workspace = true}
+webauthn-rs = {workspace = true}
+webauthn-rs-proto = {workspace = true}
+woothee = {workspace = true}
+x509-cert = {workspace = true}
+zeroize = {workspace = true}
+zxcvbn = {workspace = true}
 
-argon2.workspace = true
-async-trait.workspace = true
-base64ct.workspace = true
-bcrypt.workspace = true
-camino.workspace = true
-cookie.workspace = true
-der.workspace = true
-ed25519-dalek.workspace = true
-elliptic-curve.workspace = true
-form_urlencoded.workspace = true
-hex.workspace = true
-icu_locid.workspace = true
-icu_normalizer.workspace = true
-indexmap.workspace = true
-language-tags.workspace = true
-lettre.workspace = true
-mime.workspace = true
-opendal.workspace = true
-minijinja.workspace = true
-minijinja-contrib.workspace = true
-p256.workspace = true
-pbkdf2.workspace = true
-pkcs8.workspace = true
-psl.workspace = true
-rsa.workspace = true
-schemars.workspace = true
-serde.workspace = true
-serde_urlencoded.workspace = true
-serde_with.workspace = true
-data-encoding.workspace = true
-hmac.workspace = true
-sha1 = { workspace = true, features = ["oid"] }
-sha2.workspace = true
-signature.workspace = true
-subtle.workspace = true
-time = "0.3"
-tokio-postgres.workspace = true
-ulid.workspace = true
-uuid.workspace = true
-webauthn-rs.workspace = true
-webauthn-rs-proto.workspace = true
-woothee.workspace = true
-x509-cert = "0.2.5"
-zxcvbn.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-sd-notify.workspace = true
+sd-notify = {workspace = true}
 
 [dev-dependencies]
-cookie_store.workspace = true
-insta.workspace = true
-tokio-test.workspace = true
-tracing-subscriber.workspace = true
-wiremock.workspace = true
+cookie_store = {workspace = true}
+insta = {workspace = true}
+tokio-test = {workspace = true}
+tracing-subscriber = {workspace = true}
+wiremock = {workspace = true}
 
 [build-dependencies]
-anyhow.workspace = true
-vergen-gitcl.workspace = true
+anyhow = {workspace = true}
+vergen-gitcl = {workspace = true}
 
 [features]
 # Policy engine backends

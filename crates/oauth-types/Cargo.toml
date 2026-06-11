@@ -15,24 +15,24 @@ workspace = true
 
 [dependencies]
 # Serialization & encoding
-serde.workspace = true
-serde_json.workspace = true
-serde_with.workspace = true
-base64ct.workspace = true
 
 # Data structures & utilities
-chrono.workspace = true
-indexmap.workspace = true
-language-tags.workspace = true
-sha2.workspace = true
-thiserror.workspace = true
-url.workspace = true
 
 # Workspace crates
-coauth-iana.workspace = true
-coauth-jose.workspace = true
+base64ct = {workspace = true}
+chrono = {workspace = true}
+coauth-iana = {workspace = true}
+coauth-jose = {workspace = true}
+indexmap = {workspace = true}
+language-tags = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+serde_with = {workspace = true}
+sha2 = {workspace = true}
+thiserror = {workspace = true}
+url = {workspace = true}
 
 [dev-dependencies]
-assert_matches.workspace = true
-insta.workspace = true
-serde_urlencoded.workspace = true
+assert_matches = {workspace = true}
+insta = {workspace = true}
+serde_urlencoded = {workspace = true}

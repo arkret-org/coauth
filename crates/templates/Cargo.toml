@@ -14,40 +14,40 @@ workspace = true
 
 [dependencies]
 # Template engine
-minijinja.workspace = true
-minijinja-contrib.workspace = true
-v_htmlescape.workspace = true
-walkdir.workspace = true
 
 # Serialization
-serde.workspace = true
-serde_json.workspace = true
-serde_urlencoded.workspace = true
 
 # Async runtime
-tokio.workspace = true
-arc-swap.workspace = true
 
 # Core utilities
-anyhow.workspace = true
-camino.workspace = true
-chrono.workspace = true
-http.workspace = true
-rand.workspace = true
-rand_chacha.workspace = true
-rand_core.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-ulid.workspace = true
-url.workspace = true
 
 # coauth workspace crates
-fluent-bundle.workspace = true
-oauth-types.workspace = true
-coauth-data.workspace = true
-coauth-i18n.workspace = true
-coauth-iana.workspace = true
-coauth-policy.workspace = true
+anyhow = {workspace = true}
+arc-swap = {workspace = true}
+camino = {workspace = true}
+chrono = {workspace = true}
+coauth-data = {workspace = true}
+coauth-i18n = {workspace = true}
+coauth-iana = {workspace = true}
+coauth-policy = {workspace = true}
+fluent-bundle = {workspace = true}
+http = {workspace = true}
+minijinja = {workspace = true}
+minijinja-contrib = {workspace = true}
+oauth-types = {workspace = true}
+rand = {workspace = true}
+rand_chacha = {workspace = true}
+rand_core = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+serde_urlencoded = {workspace = true}
+thiserror = {workspace = true}
+tokio = {workspace = true}
+tracing = {workspace = true}
+ulid = {workspace = true}
+url = {workspace = true}
+v_htmlescape = {workspace = true}
+walkdir = {workspace = true}
 
 [dev-dependencies]
-rand_chacha.workspace = true
+rand_chacha = {workspace = true}

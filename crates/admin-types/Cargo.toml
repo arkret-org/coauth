@@ -21,9 +21,9 @@ default = []
 schema = ["dep:schemars", "dep:salvo"]
 
 [dependencies]
-chrono = { workspace = true, features = ["serde"] }
-serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
-thiserror.workspace = true
-schemars = { workspace = true, optional = true }
-salvo = { workspace = true, optional = true }
+chrono = {workspace = true,features = ["serde"]}
+salvo = {workspace = true,optional = true}
+schemars = {workspace = true,optional = true}
+serde = {workspace = true,features = ["derive"]}
+serde_json = {workspace = true}
+thiserror = {workspace = true}

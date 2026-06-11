@@ -14,16 +14,16 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-camino.workspace = true
-fluent-bundle.workspace = true
-fluent-syntax.workspace = true
-fluent-langneg.workspace = true
-unic-langid.workspace = true
-intl-memoizer.workspace = true
-icu_calendar.workspace = true
-icu_datetime.workspace = true
-icu_experimental.workspace = true
-icu_locid.workspace = true
-icu_locid_transform.workspace = true
-thiserror.workspace = true
-writeable.workspace = true
+camino = {workspace = true}
+fluent-bundle = {workspace = true}
+fluent-langneg = {workspace = true}
+fluent-syntax = {workspace = true}
+icu_calendar = {workspace = true}
+icu_datetime = {workspace = true}
+icu_experimental = {workspace = true}
+icu_locid = {workspace = true}
+icu_locid_transform = {workspace = true}
+intl-memoizer = {workspace = true}
+thiserror = {workspace = true}
+unic-langid = {workspace = true}
+writeable = {workspace = true}

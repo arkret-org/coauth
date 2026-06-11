@@ -15,78 +15,78 @@ build = "build.rs"
 workspace = true
 
 [dependencies]
-anyhow.workspace = true
-bytes.workspace = true
-camino.workspace = true
-chrono.workspace = true
-clap.workspace = true
-console.workspace = true
-crc.workspace = true
-deadpool.workspace = true
-dialoguer.workspace = true
-dotenvy.workspace = true
-figment.workspace = true
-futures-util.workspace = true
-headers.workspace = true
-http.workspace = true
-http-body-util.workspace = true
-hyper.workspace = true
-ipnetwork.workspace = true
-itertools.workspace = true
-listenfd.workspace = true
-rand.workspace = true
-rand_chacha.workspace = true
-rand_core.workspace = true
-reqwest.workspace = true
-rustls.workspace = true
-serde_json.workspace = true
-serde_yaml.workspace = true
-diesel.workspace = true
-diesel-async.workspace = true
-diesel_migrations.workspace = true
-tokio.workspace = true
-tokio-util.workspace = true
-salvo.workspace = true
-url.workspace = true
-zeroize.workspace = true
+anyhow = {workspace = true}
+bytes = {workspace = true}
+camino = {workspace = true}
+chrono = {workspace = true}
+clap = {workspace = true}
+coauth-backend = {workspace = true}
+coauth-config = {workspace = true}
+coauth-data = {workspace = true}
+coauth-i18n = {workspace = true}
+coauth-keystore = {workspace = true}
+coauth-messaging = {workspace = true}
+coauth-policy = {workspace = true}
+coauth-principal = {workspace = true}
+coauth-tasks = {workspace = true}
+coauth-templates = {workspace = true}
+console = {workspace = true}
+crc = {workspace = true}
+deadpool = {workspace = true}
+dialoguer = {workspace = true}
+diesel = {workspace = true}
+diesel-async = {workspace = true}
+diesel_migrations = {workspace = true}
+dotenvy = {workspace = true}
+figment = {workspace = true}
+futures-util = {workspace = true}
+headers = {workspace = true}
+http = {workspace = true}
+http-body-util = {workspace = true}
+hyper = {workspace = true}
+ipnetwork = {workspace = true}
+itertools = {workspace = true}
+listenfd = {workspace = true}
+opentelemetry = {workspace = true}
+opentelemetry-http = {workspace = true}
+opentelemetry-instrumentation-process = {workspace = true}
+opentelemetry-instrumentation-tokio = {workspace = true}
+opentelemetry-jaeger-propagator = {workspace = true}
+opentelemetry-otlp = {workspace = true}
+opentelemetry-prometheus-text-exporter = {workspace = true}
+opentelemetry-resource-detectors = {workspace = true}
+opentelemetry-semantic-conventions = {workspace = true}
+opentelemetry-stdout = {workspace = true}
+opentelemetry_sdk = {workspace = true}
+rand = {workspace = true}
+rand_chacha = {workspace = true}
+rand_core = {workspace = true}
+reqwest = {workspace = true}
+rustls = {workspace = true}
+salvo = {workspace = true}
+sentry = {workspace = true}
+sentry-tracing = {workspace = true}
+serde_json = {workspace = true}
+serde_yaml = {workspace = true}
+tokio = {workspace = true}
+tokio-postgres = {workspace = true}
+tokio-util = {workspace = true}
+tracing = {workspace = true}
+tracing-appender = {workspace = true}
+tracing-opentelemetry = {workspace = true}
+tracing-subscriber = {workspace = true}
+url = {workspace = true}
+uuid = {workspace = true}
+zeroize = {workspace = true}
 
-tracing.workspace = true
-tracing-appender.workspace = true
-tracing-subscriber.workspace = true
-tracing-opentelemetry.workspace = true
-opentelemetry.workspace = true
-opentelemetry-http.workspace = true
-opentelemetry-instrumentation-process.workspace = true
-opentelemetry-instrumentation-tokio.workspace = true
-opentelemetry-jaeger-propagator.workspace = true
-opentelemetry-otlp.workspace = true
-opentelemetry-prometheus-text-exporter.workspace = true
-opentelemetry-resource-detectors.workspace = true
-opentelemetry-semantic-conventions.workspace = true
-opentelemetry-stdout.workspace = true
-opentelemetry_sdk.workspace = true
-sentry.workspace = true
-sentry-tracing.workspace = true
 
-coauth-backend.workspace = true
-coauth-config.workspace = true
-coauth-data.workspace = true
-coauth-messaging.workspace = true
-coauth-i18n.workspace = true
-coauth-keystore.workspace = true
-coauth-principal.workspace = true
-coauth-policy.workspace = true
-coauth-tasks.workspace = true
-coauth-templates.workspace = true
 
-tokio-postgres.workspace = true
-uuid.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-sd-notify.workspace = true
+sd-notify = {workspace = true}
 
 [build-dependencies]
-anyhow.workspace = true
+anyhow = {workspace = true}
 
 [features]
 # Features used for the prebuilt binaries

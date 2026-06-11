@@ -14,45 +14,45 @@ workspace = true
 
 [dependencies]
 # -- Async runtime & utilities --------------------------------------------
-tokio.workspace = true
-tokio-util.workspace = true
-tokio-postgres.workspace = true
-async-trait.workspace = true
 
 # -- Serialization & data formats -----------------------------------------
-serde.workspace = true
-serde_json.workspace = true
 
 # -- Database access -------------------------------------------------------
-diesel.workspace = true
-diesel-async.workspace = true
 
 # -- Error handling & diagnostics ------------------------------------------
-anyhow.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-tracing-opentelemetry.workspace = true
 
 # -- Observability ---------------------------------------------------------
-opentelemetry.workspace = true
-opentelemetry-semantic-conventions.workspace = true
 
 # -- Scheduling & time -----------------------------------------------------
-cron.workspace = true
-chrono.workspace = true
 
 # -- Cryptography & identifiers -------------------------------------------
-rand.workspace = true
-rand_chacha.workspace = true
-rand_core.workspace = true
-ulid.workspace = true
 
 # -- OAuth / OpenID Connect ------------------------------------------------
-oauth-types.workspace = true
 
 # -- Internal crates -------------------------------------------------------
-coauth-data.workspace = true
-coauth-i18n.workspace = true
-coauth-principal.workspace = true
-coauth-messaging.workspace = true
-coauth-templates.workspace = true
+anyhow = {workspace = true}
+async-trait = {workspace = true}
+chrono = {workspace = true}
+coauth-data = {workspace = true}
+coauth-i18n = {workspace = true}
+coauth-messaging = {workspace = true}
+coauth-principal = {workspace = true}
+coauth-templates = {workspace = true}
+cron = {workspace = true}
+diesel = {workspace = true}
+diesel-async = {workspace = true}
+oauth-types = {workspace = true}
+opentelemetry = {workspace = true}
+opentelemetry-semantic-conventions = {workspace = true}
+rand = {workspace = true}
+rand_chacha = {workspace = true}
+rand_core = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+thiserror = {workspace = true}
+tokio = {workspace = true}
+tokio-postgres = {workspace = true}
+tokio-util = {workspace = true}
+tracing = {workspace = true}
+tracing-opentelemetry = {workspace = true}
+ulid = {workspace = true}

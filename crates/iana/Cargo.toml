@@ -14,5 +14,5 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-serde.workspace = true
-schemars.workspace = true
+schemars = {workspace = true}
+serde = {workspace = true}
