@@ -186,7 +186,7 @@ impl PolicyDecision {
     #[must_use]
     pub fn hard_deny(reason_code: impl Into<String>, policy_version: String) -> Self {
         Self {
-            decision: AuthzDecision::Deny,
+            decision: AuthzDecision::HardDeny,
             reason_code: reason_code.into(),
             obligations: Vec::new(),
             policy_version,
@@ -209,7 +209,7 @@ impl PolicyDecision {
     #[must_use]
     pub fn strict_reject_accountable_principals(policy_version: String) -> Self {
         Self {
-            decision: AuthzDecision::Deny,
+            decision: AuthzDecision::HardDeny,
             reason_code: cokret_core::error::ERROR_CODE_FAILED_PRECONDITION.to_owned(),
             obligations: vec![PolicyObligation {
                 kind: "accountability_grant_required".to_owned(),
@@ -360,7 +360,7 @@ fn match_rules(
     for scope in scopes {
         if value_contains_str(scope.get("deny_actors"), actor_str) {
             return PolicyDecision {
-                decision: AuthzDecision::Deny,
+                decision: AuthzDecision::HardDeny,
                 reason_code: cokret_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
@@ -369,7 +369,7 @@ fn match_rules(
 
         if value_contains_str(scope.get("deny_actions"), action_str) {
             return PolicyDecision {
-                decision: AuthzDecision::Deny,
+                decision: AuthzDecision::HardDeny,
                 reason_code: cokret_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
@@ -447,7 +447,7 @@ mod tests {
         });
         let r = req("did:web:mallory.example", "ck.message.create");
         let d = match_rules(&data, &r, "v");
-        assert!(matches!(d.decision, AuthzDecision::Deny));
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "policy_violation");
     }
 
@@ -458,7 +458,7 @@ mod tests {
         });
         let r = req("did:web:alice.example", "ck.invite.create");
         let d = match_rules(&data, &r, "v");
-        assert!(matches!(d.decision, AuthzDecision::Deny));
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
     }
 
     #[test]
@@ -507,7 +507,7 @@ mod tests {
         });
         let r = req("did:web:alice.example", "ck.call.join");
         let d = match_rules(&data, &r, "v");
-        assert!(matches!(d.decision, AuthzDecision::Deny));
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "policy_violation");
     }
 
@@ -535,7 +535,7 @@ mod tests {
         let mut r = req("did:web:alice.example", "ck.call.record");
         r.auth_context = serde_json::json!({ "circle_id": circle_id });
         let d = match_rules(&data, &r, "v");
-        assert!(matches!(d.decision, AuthzDecision::Deny));
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
     }
 
     #[test]
@@ -546,7 +546,7 @@ mod tests {
         let mut r = req("did:web:alice.example", "ck.actor.profile.update");
         r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
         let d = match_rules(&data, &r, "v");
-        assert!(matches!(d.decision, AuthzDecision::Deny));
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "failed_precondition");
         assert_eq!(d.obligations.len(), 1);
         assert_eq!(d.obligations[0].kind, "accountability_grant_required");

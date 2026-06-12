@@ -267,7 +267,7 @@ mod tests {
             obligations: &obligations,
         };
         let allow_bytes = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();
-        transcript.decision = &AuthzDecision::Deny;
+        transcript.decision = &AuthzDecision::HardDeny;
         let deny_bytes = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();
         assert_ne!(allow_bytes, deny_bytes);
     }

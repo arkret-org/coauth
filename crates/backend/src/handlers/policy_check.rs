@@ -444,7 +444,7 @@ mod tests {
         // `handlers::test_utils`. Here we only assert the shape of
         // `PolicyDecision::hard_deny`.
         let d = PolicyDecision::hard_deny("policy_evaluator_error", "fail-closed".to_owned());
-        assert!(matches!(d.decision, AuthzDecision::Deny));
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "policy_evaluator_error");
     }
 
