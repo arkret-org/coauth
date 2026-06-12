@@ -584,7 +584,7 @@ mod tests {
             "agent",
             None,
             serde_json::json!({
-                "accountability_grant_id": "ck:accountability_grant:test",
+                "accountability_grant_id": "ck:grant:test",
                 "agent_principal_id": "did:web:agent.example",
             }),
         )

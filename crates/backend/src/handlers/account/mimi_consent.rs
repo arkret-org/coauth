@@ -36,7 +36,7 @@
 //!    resulting `Move` envelope to soland's private peer-move endpoint.
 
 use cokret_core::move_event::{Effect, LatticeOp, LatticeOpType};
-use cokret_core::{AnchorId, CellRef, Did, Hlc, Move, RealmId, UnsignedMove};
+use cokret_core::{CellRef, Did, Hash, Hlc, Move, RealmId, SealBasis, SealId, UnsignedMove};
 use cokret_signatures::Ed25519MoveSigner;
 use serde::{Deserialize, Serialize};
 
@@ -92,7 +92,7 @@ pub struct UpdateConsent {
     /// `anchor_view_query::holder_principal_realm_for_did` if the wire
     /// envelope does not carry it.
     pub realm_id: String,
-    /// `ck:anchor:sha256:<hex>` — latest anchor leaf the issuer was
+    /// `ck:seal:sha256:<hex>` — latest seal leaf the issuer was
     /// working from. Fetch via
     /// `anchor_view_query::query_latest_anchor`.
     pub anchor_ref: String,
@@ -116,7 +116,7 @@ pub struct PendingMove {
     pub op: PendingMoveOp,
     /// The `OrSet` tag to add or remove.
     pub tag: String,
-    /// Latest anchor leaf the issuer references (`ck:anchor:sha256:<hex>`).
+    /// Latest seal leaf the issuer references (`ck:seal:sha256:<hex>`).
     pub anchor_ref: String,
     /// HLC `<unix-ms-hex>-<logical-hex>-<node-hex>`.
     pub hlc: String,
@@ -578,7 +578,7 @@ pub(crate) fn build_and_sign_move(
             reason: format!("{error}"),
         }
     })?;
-    let anchor = AnchorId::new(pending.anchor_ref.clone()).map_err(|error| {
+    let seal_leaf = SealId::new(pending.anchor_ref.clone()).map_err(|error| {
         MimiConsentError::InvalidTypedId {
             field: "anchor_ref",
             reason: format!("{error}"),
@@ -611,7 +611,13 @@ pub(crate) fn build_and_sign_move(
             issuer_seq: None,
         },
     };
-    let unsigned = UnsignedMove::new(issuer, realm, anchor, vec![effect], hlc);
+    let zero_hash = Hash::new(format!("sha256:{}", "0".repeat(64))).expect("valid zero hash");
+    let seal_basis = SealBasis {
+        leaves: vec![seal_leaf],
+        control_event_set_root: zero_hash.clone(),
+        state_root: zero_hash,
+    };
+    let unsigned = UnsignedMove::new(issuer, realm, seal_basis, vec![effect], hlc);
     Move::sign(&unsigned, signer.inner()).map_err(|error| MimiConsentError::SigningFailed {
         reason: format!("{error}"),
     })
@@ -645,7 +651,7 @@ mod tests {
             op: PendingMoveOp::OrSetAdd,
             tag: build_consent_tag("did:web:peer", "invite"),
             anchor_ref:
-                "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                "ck:seal:sha256:1111111111111111111111111111111111111111111111111111111111111111"
                     .to_owned(),
             hlc: "0189c4d2af00-0000-aabbccdd".to_owned(),
         }
@@ -686,7 +692,7 @@ mod tests {
             granted,
             realm_id: "ck:realm:0196419b-0000-7000-8000-00000000014a".into(),
             anchor_ref:
-                "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                "ck:seal:sha256:1111111111111111111111111111111111111111111111111111111111111111"
                     .into(),
             hlc: "0189c4d2af00-0000-aabbccdd".into(),
         }

@@ -35,7 +35,7 @@ use cokret_core::error::{
     ERROR_CODE_PROOF_INVALID, ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
     REASON_ACCOUNTABILITY_GRANT_MISSING,
 };
-use cokret_core::identifiers::{AccountabilityGrantId, new_prefixed_uuid7};
+use cokret_core::identifiers::{GrantId, new_prefixed_uuid7};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -100,7 +100,7 @@ pub struct AccountabilityGrantRequestBody {
 /// Response payload for `POST /_coauth/self/agents/{id}/accountability-grant`.
 ///
 /// CKP-0008 (`id-kind-registry.json`): the wire shape carries the
-/// freshly minted `ck:accountability_grant:<uuid7>` typed id, the
+/// freshly minted `ck:grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
 /// `ck.agent.*` set before issuing the response; soland still verifies
@@ -113,7 +113,7 @@ pub struct AccountabilityGrantRequestBody {
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantOutcome {
     /// Typed id of the issued grant. Wire form:
-    /// `ck:accountability_grant:<uuid7>`.
+    /// `ck:grant:<uuid7>`.
     pub accountability_grant_id: String,
 
     /// Agent principal DID this grant authorizes capability actions on.
@@ -176,9 +176,8 @@ pub async fn post_accountability_grant(
     let clock = make_clock();
     let mut rng = make_rng();
     let issued_at = clock.now();
-    let accountability_grant_id =
-        AccountabilityGrantId::new(new_prefixed_uuid7("ck:accountability_grant:"))
-            .map_err(|err| AppError::internal_box(Box::new(err)))?;
+    let accountability_grant_id = GrantId::new(new_prefixed_uuid7("ck:grant:"))
+        .map_err(|err| AppError::internal_box(Box::new(err)))?;
     let accountability_grant_id = accountability_grant_id.into_string();
     let response = AccountabilityGrantOutcome {
         accountability_grant_id: accountability_grant_id.clone(),

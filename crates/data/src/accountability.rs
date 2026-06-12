@@ -10,7 +10,7 @@ pub use crate::storage::accountability::*;
 pub struct AccountabilityGrant {
     /// Storage row id.
     pub id: Ulid,
-    /// Wire typed id: `ck:accountability_grant:<uuid7>`.
+    /// Wire typed id: `ck:grant:<uuid7>`.
     pub accountability_grant_id: String,
     /// Agent principal id covered by this grant.
     pub agent_principal_id: String,
