@@ -1,5 +1,4 @@
 //! Tencent Cloud SMS (腾讯云短信) transport
-//
 // Production server callers inject the backend guarded client through
 // `SmsTransport::tencent_cloud_with_client`; this crate stays backend-agnostic.
 #![allow(clippy::disallowed_methods)]

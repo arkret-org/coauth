@@ -6,21 +6,22 @@
 //! (`crate::handlers::flow`) can already orchestrate registration as a
 //! `default-registration` flow.
 
-use std::{net::IpAddr, str::FromStr};
+use std::net::IpAddr;
+use std::str::FromStr;
 
 use anyhow::Error as AnyhowError;
 use chrono::{DateTime, Duration, Utc};
+use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _};
+use coauth_data::upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthSessionRepository};
+use coauth_data::user::{
+    BrowserSessionRepository, UserEmailFilter, UserEmailRepository, UserFilter,
+    UserPasswordRepository, UserPhoneRepository, UserRegistrationTokenRepository, UserRepository,
+    UserTermsRepository,
+};
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError,
     UpstreamOAuthAuthorizationSession, UpstreamOAuthLink, User, UserEmailAuthentication,
     UserPhoneAuthentication, UserRegistration, UserRegistrationToken,
-    queue::{ProvisionUserJob, QueueJobRepositoryExt as _},
-    upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthSessionRepository},
-    user::{
-        BrowserSessionRepository, UserEmailFilter, UserEmailRepository, UserFilter,
-        UserPasswordRepository, UserPhoneRepository, UserRegistrationTokenRepository,
-        UserRepository, UserTermsRepository,
-    },
 };
 use coauth_policy::PolicyFactory;
 use coauth_principal::PrincipalServerAdmin;
@@ -32,11 +33,9 @@ use ulid::Ulid;
 use url::Url;
 use zeroize::Zeroizing;
 
-use crate::handlers::{
-    Limiter, RequesterFingerprint,
-    notification_dispatch::{NotificationIntent, schedule_notification},
-    passwords::PasswordManager,
-};
+use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
+use crate::handlers::passwords::PasswordManager;
+use crate::handlers::{Limiter, RequesterFingerprint};
 
 pub struct StartPasswordRegistrationRequestBody {
     pub handle: String,
@@ -2301,9 +2300,9 @@ pub async fn finish_registration(
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
-    use coauth_data::{
-        RepositoryAccess as _, RepositoryFactory as _, clock::MockClock, user::UserRepository as _,
-    };
+    use coauth_data::clock::MockClock;
+    use coauth_data::user::UserRepository as _;
+    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 

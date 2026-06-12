@@ -4,10 +4,8 @@
 //! can substitute a [`MockClock`] whose value is fully deterministic and can
 //! be moved forward on demand.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicI64, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 use chrono::{DateTime, Utc};
 

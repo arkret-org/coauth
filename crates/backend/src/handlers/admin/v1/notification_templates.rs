@@ -1,8 +1,7 @@
 //! Admin endpoints for notification template management.
 //!
 //! - `GET  /_coauth/admin/notification-templates` — list known template keys
-//! - `POST /_coauth/admin/notification-templates/publish` — publish a new
-//!   template version
+//! - `POST /_coauth/admin/notification-templates/publish` — publish a new template version
 //!
 //! Wire shapes (request + response bodies) live in
 //! `coauth-admin-types::notification_admin` so sodmin and any other
@@ -16,10 +15,9 @@ use coauth_admin_types::{
 use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
 
-use crate::{
-    AppError, CreatedJsonResult, JsonResult,
-    handlers::admin::{CreatedJson, call_context::extract_call_context},
-};
+use crate::handlers::admin::CreatedJson;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::{AppError, CreatedJsonResult, JsonResult};
 
 /// List all known notification template keys.
 #[endpoint]

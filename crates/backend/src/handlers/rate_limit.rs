@@ -8,7 +8,10 @@
 //! wraps them all and exposes `check_*` methods that mirror the old
 //! governor-based API.
 
-use std::{collections::HashMap, hash::Hash, net::IpAddr, sync::Arc};
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::net::IpAddr;
+use std::sync::Arc;
 
 use coauth_config::{RateLimiterConfiguration, RateLimitingConfig};
 use coauth_data::{User, UserEmailAuthentication, UserPhoneAuthentication};
@@ -511,7 +514,8 @@ impl Limiter {
 
 #[cfg(test)]
 mod tests {
-    use coauth_data::{Clock, User, UserPhoneAuthentication, clock::MockClock};
+    use coauth_data::clock::MockClock;
+    use coauth_data::{Clock, User, UserPhoneAuthentication};
     use rand_core::SeedableRng;
 
     use super::*;

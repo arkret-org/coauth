@@ -8,7 +8,8 @@ use signature::{SignatureEncoding, Verifier};
 use thiserror::Error;
 
 use super::Jwt;
-use crate::{constraints::ConstraintSet, jwk::PublicJsonWebKeySet};
+use crate::constraints::ConstraintSet;
+use crate::jwk::PublicJsonWebKeySet;
 
 // ---------------------------------------------------------------------------
 // Errors

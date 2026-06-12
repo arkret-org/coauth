@@ -5,10 +5,8 @@
 // the Keystore / JWKS API, and thumbprint consistency.
 
 use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::{
-    jwk::{ParametersInfo, Thumbprint},
-    jwt::{JsonWebSignatureHeader, Jwt},
-};
+use coauth_jose::jwk::{ParametersInfo, Thumbprint};
+use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
 use der::pem::LineEnding;
 use rand_core::SeedableRng;

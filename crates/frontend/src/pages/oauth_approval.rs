@@ -1,10 +1,10 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{ApprovalDataOutcome, OAuthApprovalSubmitOutcome},
-    components::{form_error::FormError, layout::Layout, loading::LoadingScreen},
-    pages::Route,
-};
+use crate::api::types::{ApprovalDataOutcome, OAuthApprovalSubmitOutcome};
+use crate::components::form_error::FormError;
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingScreen;
+use crate::pages::Route;
 
 #[cfg(target_arch = "wasm32")]
 fn navigate_to_redirect_url(url: &str) {

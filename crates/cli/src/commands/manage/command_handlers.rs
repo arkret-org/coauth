@@ -12,18 +12,15 @@ use anyhow::Context;
 use chrono::Duration;
 use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config};
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
-use coauth_data::{
-    Clock, Pagination, PgRepository, RepositoryAccess, SystemClock,
-    oauth::OAuthSessionFilter,
-    queue::{
-        DeactivateUserJob, ProvisionUserJob, QueueJobRepositoryExt as _, ReactivateUserJob,
-        SyncDevicesJob,
-    },
-    user::{
-        BrowserSessionFilter, UserEmailRepository, UserFilter, UserPasswordRepository,
-        UserRepository,
-    },
+use coauth_data::oauth::OAuthSessionFilter;
+use coauth_data::queue::{
+    DeactivateUserJob, ProvisionUserJob, QueueJobRepositoryExt as _, ReactivateUserJob,
+    SyncDevicesJob,
 };
+use coauth_data::user::{
+    BrowserSessionFilter, UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
+};
+use coauth_data::{Clock, Pagination, PgRepository, RepositoryAccess, SystemClock};
 use figment::Figment;
 use rand_core::{RngCore, SeedableRng};
 use tracing::{error, info, info_span, warn};

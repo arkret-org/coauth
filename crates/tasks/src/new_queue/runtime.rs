@@ -1,15 +1,11 @@
-use opentelemetry::{
-    KeyValue,
-    metrics::{Counter, Histogram},
-};
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::{Counter, Histogram};
 use rand_core::RngCore;
 use tokio_postgres::{Client, NoTls, Notification};
 
-use super::{
-    JobContext, QueueRunnerError,
-    shared::{MAX_SLEEP_DURATION, MIN_SLEEP_DURATION},
-    tracker::JobTracker,
-};
+use super::shared::{MAX_SLEEP_DURATION, MIN_SLEEP_DURATION};
+use super::tracker::JobTracker;
+use super::{JobContext, QueueRunnerError};
 use crate::{METER, State};
 
 pub(super) struct ListenerRuntime {

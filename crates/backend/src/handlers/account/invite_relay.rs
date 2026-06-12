@@ -14,19 +14,16 @@
 //! ## Flow
 //!
 //! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
-//!    /_coauth/self/account/invites/relay` along with `(target_principal_url,
-//!    target_holder_did, consent_id, scope)`.
-//! 2. Coauth queries the target's consent cell via
-//!    `consent_cell_query::query_consent_cell`.
-//! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup +
-//!    `require_consent` policy bit into an `Allow / ConsentRequired /
-//!    Quarantine` decision.
-//! 4. On `Allow`, coauth forwards the (already-signed) invite payload to the
-//!    target principal's invite-intake endpoint and returns 200. On
-//!    `ConsentRequired`, coauth returns 403 with `consent_required`. On
-//!    `Quarantine`, coauth returns 202 with `quarantined`; the actual
-//!    holder-side queue management lives elsewhere (see `TODO(quarantine-
-//!    inbox)` in `users/create.rs`).
+//!    /_coauth/self/account/invites/relay` along with `(target_principal_url, target_holder_did,
+//!    consent_id, scope)`.
+//! 2. Coauth queries the target's consent cell via `consent_cell_query::query_consent_cell`.
+//! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `require_consent` policy
+//!    bit into an `Allow / ConsentRequired / Quarantine` decision.
+//! 4. On `Allow`, coauth forwards the (already-signed) invite payload to the target principal's
+//!    invite-intake endpoint and returns 200. On `ConsentRequired`, coauth returns 403 with
+//!    `consent_required`. On `Quarantine`, coauth returns 202 with `quarantined`; the actual
+//!    holder-side queue management lives elsewhere (see `TODO(quarantine- inbox)` in
+//!    `users/create.rs`).
 //!
 //! ## Why this is a "relay" and not a "Move-mint"
 //!
@@ -35,18 +32,17 @@
 //! posted by yougen, not by coauth. coauth's only responsibility here is
 //! the gate-check + forward; it never signs Moves on the holder's behalf.
 
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 use url::Url;
 
 use super::{DepotExt, RouteError};
-use crate::{
-    handlers::account::consent_cell_query::{
-        InviteGateDecision, evaluate_invite_gate, query_consent_cell,
-    },
-    outbound_http,
+use crate::handlers::account::consent_cell_query::{
+    InviteGateDecision, evaluate_invite_gate, query_consent_cell,
 };
+use crate::outbound_http;
 
 // ── Request / response shapes ──────────────────────────────────
 
@@ -305,10 +301,8 @@ pub async fn post_invite_relay(
 
 #[cfg(test)]
 mod tests {
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path_regex},
-    };
+    use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::handlers::test_utils::setup;

@@ -4,9 +4,8 @@ use dioxus::prelude::*;
 ///
 /// Supports two usage styles:
 /// - **Trigger mode**: pass a `trigger` element; clicking it opens the dialog.
-/// - **Controlled mode**: omit `trigger` and render the dialog conditionally
-///   (or just let it react to the `open` signal) while toggling `open` from the
-///   parent.
+/// - **Controlled mode**: omit `trigger` and render the dialog conditionally (or just let it react
+///   to the `open` signal) while toggling `open` from the parent.
 ///
 /// An optional `title` renders a standard `.dialog-title` header so call sites
 /// don't have to repeat the markup. Remaining content (body + action buttons)

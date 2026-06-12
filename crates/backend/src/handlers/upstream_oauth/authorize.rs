@@ -1,17 +1,18 @@
-use coauth_data::{
-    PostAuthAction, UpstreamOAuthProvider,
-    upstream_oauth::{UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository},
+use coauth_data::upstream_oauth::{
+    UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
 };
+use coauth_data::{PostAuthAction, UpstreamOAuthProvider};
 use salvo::prelude::*;
 use thiserror::Error;
 use ulid::Ulid;
 
-use super::{UpstreamSessionsCookie, cache::LazyProviderInfos};
-use crate::{
-    handlers::{account::DepotExt, post_auth::OptionalPostAuthAction},
-    oidc_client::requests::authorization_code::AuthorizationRequestData,
-    salvo_utils::{GenericError, InternalError, cookies::TimedCookie},
-};
+use super::UpstreamSessionsCookie;
+use super::cache::LazyProviderInfos;
+use crate::handlers::account::DepotExt;
+use crate::handlers::post_auth::OptionalPostAuthAction;
+use crate::oidc_client::requests::authorization_code::AuthorizationRequestData;
+use crate::salvo_utils::cookies::TimedCookie;
+use crate::salvo_utils::{GenericError, InternalError};
 
 #[derive(Debug, Error)]
 pub enum RouteError {

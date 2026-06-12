@@ -3,8 +3,8 @@
 //! Mirrors the wire shape emitted by:
 //!
 //! - `GET /_coauth/admin/bridge/describe` — `AdminBridgeDescribeResponse` from
-//!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`, bundled with
-//!   the `AdminBridgeRiskAction*Example` request examples.
+//!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`, bundled with the
+//!   `AdminBridgeRiskAction*Example` request examples.
 //!
 //! Round-34 (C34.2): lifted out of the inline
 //! `AdminBridgeDescribeResponse` / `AdminBridgeRiskActionExamples` /

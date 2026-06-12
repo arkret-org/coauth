@@ -1,20 +1,18 @@
-use std::{collections::HashMap, error::Error, sync::LazyLock};
+use std::collections::HashMap;
+use std::error::Error;
+use std::sync::LazyLock;
 
-use coauth_data::{
-    Clock, RepositoryAccess, Session,
-    oauth::{OAuthAccessTokenRepository, OAuthSessionRepository},
-};
-use headers::{
-    Header, HeaderMapExt, HeaderName,
-    authorization::{Bearer, Credentials},
-};
-use http::{HeaderMap, HeaderValue, StatusCode, header::WWW_AUTHENTICATE};
+use coauth_data::oauth::{OAuthAccessTokenRepository, OAuthSessionRepository};
+use coauth_data::{Clock, RepositoryAccess, Session};
+use headers::authorization::{Bearer, Credentials};
+use headers::{Header, HeaderMapExt, HeaderName};
+use http::header::WWW_AUTHENTICATE;
+use http::{HeaderMap, HeaderValue, StatusCode};
 use oauth_types::scope::ScopeToken;
-use salvo::{
-    extract::{Extractible, Metadata},
-    prelude::*,
-};
-use serde::{Deserialize, de::DeserializeOwned};
+use salvo::extract::{Extractible, Metadata};
+use salvo::prelude::*;
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 #[derive(Debug, Deserialize)]

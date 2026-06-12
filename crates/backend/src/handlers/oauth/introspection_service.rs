@@ -1,12 +1,13 @@
 use coauth_config::CokretConfig;
+use coauth_data::oauth::{
+    OAuthAccessTokenRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
+};
+use coauth_data::personal::session::PersonalSessionOwner;
+use coauth_data::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
+use coauth_data::user::UserRepository;
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, TokenFormatError, TokenType,
     UrlBuilder,
-    oauth::{OAuthAccessTokenRepository, OAuthRefreshTokenRepository, OAuthSessionRepository},
-    personal::{
-        PersonalAccessTokenRepository, PersonalSessionRepository, session::PersonalSessionOwner,
-    },
-    user::UserRepository,
 };
 use coauth_iana::oauth::OAuthTokenTypeHint;
 use oauth_types::requests::IntrospectionResponse;

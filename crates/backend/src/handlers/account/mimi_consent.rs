@@ -12,14 +12,12 @@
 //! ck:cell:ck.component.consent.grant.v1:<consent_id>
 //! ```
 //!
-//! - `request_consent` → no Move yet (the holder hasn't decided); coauth
-//!   surfaces this to yougen as a pending-consent UI prompt and correlates with
-//!   `consent_id`.
-//! - `update_consent { granted = true }` → `or-set add tag` Move with
-//!   `peer=<actor>;scope=<scope>` written to the holder's principal control
-//!   Realm.
-//! - `update_consent { granted = false }` → `or-set remove tag` Move that
-//!   revokes the same `(peer, scope)` tag.
+//! - `request_consent` → no Move yet (the holder hasn't decided); coauth surfaces this to yougen as
+//!   a pending-consent UI prompt and correlates with `consent_id`.
+//! - `update_consent { granted = true }` → `or-set add tag` Move with `peer=<actor>;scope=<scope>`
+//!   written to the holder's principal control Realm.
+//! - `update_consent { granted = false }` → `or-set remove tag` Move that revokes the same `(peer,
+//!   scope)` tag.
 //!
 //! ## Round 22 (2026-05-09)
 //!
@@ -28,21 +26,17 @@
 //! point and `Ed25519MoveSigner` impl (behind the `signer` feature). This
 //! module wires the full MIMI → `SignedMove` → soland POST path:
 //!
-//! 1. Caller hands an `UpdateConsent` (with `realm_id`, `anchor_ref`, `hlc`
-//!    threaded in from upstream — typically populated either from the MIMI
-//!    envelope or from a `consent_cell_query` + `anchor_view_query`
-//!    round-trip).
-//! 2. `update_consent_to_pending_move(...)` produces a `PendingMove` carrying
-//!    everything needed to construct an `UnsignedMove`.
-//! 3. `anchor_pending_move(...)` builds the `UnsignedMove`, calls
-//!    `Move::sign(&unsigned, signer)` against the deployment's `AnchorerSigner`
-//!    (an `Ed25519MoveSigner` wrapper), and POSTs the resulting `Move` envelope
-//!    to soland's private peer-move endpoint.
+//! 1. Caller hands an `UpdateConsent` (with `realm_id`, `anchor_ref`, `hlc` threaded in from
+//!    upstream — typically populated either from the MIMI envelope or from a `consent_cell_query` +
+//!    `anchor_view_query` round-trip).
+//! 2. `update_consent_to_pending_move(...)` produces a `PendingMove` carrying everything needed to
+//!    construct an `UnsignedMove`.
+//! 3. `anchor_pending_move(...)` builds the `UnsignedMove`, calls `Move::sign(&unsigned, signer)`
+//!    against the deployment's `AnchorerSigner` (an `Ed25519MoveSigner` wrapper), and POSTs the
+//!    resulting `Move` envelope to soland's private peer-move endpoint.
 
-use cokret_core::{
-    AnchorId, CellRef, Did, Hlc, Move, RealmId, UnsignedMove,
-    move_event::{Effect, LatticeOp, LatticeOpType},
-};
+use cokret_core::move_event::{Effect, LatticeOp, LatticeOpType};
+use cokret_core::{AnchorId, CellRef, Did, Hlc, Move, RealmId, UnsignedMove};
 use cokret_signatures::Ed25519MoveSigner;
 use serde::{Deserialize, Serialize};
 
@@ -966,10 +960,8 @@ mod tests {
 
     #[tokio::test]
     async fn anchor_pending_move_posts_signed_move_envelope_to_soland() {
-        use wiremock::{
-            Mock, MockServer, Request, ResponseTemplate,
-            matchers::{header, method, path},
-        };
+        use wiremock::matchers::{header, method, path};
+        use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
         crate::handlers::test_utils::setup();
         let server = MockServer::start().await;
@@ -1011,10 +1003,8 @@ mod tests {
 
     #[tokio::test]
     async fn anchor_pending_move_surfaces_non_success_status() {
-        use wiremock::{
-            Mock, MockServer, ResponseTemplate,
-            matchers::{method, path},
-        };
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         crate::handlers::test_utils::setup();
         let server = MockServer::start().await;

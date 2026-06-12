@@ -1,7 +1,5 @@
-use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Arc,
-};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use coauth_config::CokretConfig;
@@ -14,13 +12,11 @@ use thiserror::Error;
 use ulid::Ulid;
 use url::Url;
 
-use crate::{
-    handlers::cokret::{
-        DidDocument, SessionGrantError, VerificationMethod, issuer_did_for, service_did_for,
-        user_did_for,
-    },
-    outbound_http::RequestBuilderExt as _,
+use crate::handlers::cokret::{
+    DidDocument, SessionGrantError, VerificationMethod, issuer_did_for, service_did_for,
+    user_did_for,
 };
+use crate::outbound_http::RequestBuilderExt as _;
 
 pub type DidResolverServiceHandle = Arc<dyn DidResolverService>;
 
@@ -455,15 +451,13 @@ async fn resolve_http_did(
 /// SSRF policy for outbound DID-document fetches.
 ///
 /// Rules:
-/// - Scheme MUST be `https` (the DID method document URLs for `did:web` and
-///   `did:plc` are always HTTPS; the delegated resolver URL is
-///   operator-supplied and must opt into HTTPS too).
-/// - Host MUST be present and MUST NOT be a loopback / link-local / private /
-///   unspecified address. IP literals in those ranges are blocked outright;
-///   named hosts are resolved immediately before the request and rejected if
-///   any returned address is non-public. The request is then dispatched through
-///   a static-resolution outbound client pinned to that validated address set,
-///   closing the DNS rebinding window.
+/// - Scheme MUST be `https` (the DID method document URLs for `did:web` and `did:plc` are always
+///   HTTPS; the delegated resolver URL is operator-supplied and must opt into HTTPS too).
+/// - Host MUST be present and MUST NOT be a loopback / link-local / private / unspecified address.
+///   IP literals in those ranges are blocked outright; named hosts are resolved immediately before
+///   the request and rejected if any returned address is non-public. The request is then dispatched
+///   through a static-resolution outbound client pinned to that validated address set, closing the
+///   DNS rebinding window.
 ///
 /// Loopback is allowed when the `COAUTH_DID_RESOLVER_ALLOW_LOOPBACK`
 /// env var is set (the integration test harness uses this).

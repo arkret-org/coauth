@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::user::UserPhoneRepository;
 use coauth_data::{
     Clock, User, UserPhone, UserPhoneAuthentication, UserPhoneAuthenticationCode, UserRegistration,
-    new_id, user::UserPhoneRepository,
+    new_id,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -10,10 +11,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError,
-    schema::{user_phone_authentication_codes, user_phone_authentications, user_phones},
-};
+use crate::DatabaseError;
+use crate::schema::{user_phone_authentication_codes, user_phone_authentications, user_phones};
 
 /// An implementation of [`UserPhoneRepository`] for a PostgreSQL connection
 pub struct PgUserPhoneRepository<'c> {

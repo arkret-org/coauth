@@ -1,13 +1,13 @@
 use std::str::FromStr as _;
 
 use anyhow::Error as AnyhowError;
+use coauth_data::audit::AdminOperation;
+use coauth_data::queue::{DeactivateUserJob, QueueJobRepositoryExt as _};
+use coauth_data::upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository};
+use coauth_data::user::{UserEmailRepository, UserRepository};
 use coauth_data::{
     AdminUserPatch, BoxRepository, Clock, RepositoryAccess, RepositoryError, UpstreamOAuthLink,
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
-    audit::AdminOperation,
-    queue::{DeactivateUserJob, QueueJobRepositoryExt as _},
-    upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
-    user::{UserEmailRepository, UserRepository},
 };
 use coauth_principal::PrincipalServerAdmin;
 use lettre::address::AddressError;
@@ -15,12 +15,10 @@ use rand_core::RngCore;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::{
-    handlers::admin::audit_helper::{
-        AdminAuditSigning, record_admin_operation, record_admin_operation_signed,
-    },
-    services::user_profile::{sync_display_name_patch, validate_display_name_patch},
+use crate::handlers::admin::audit_helper::{
+    AdminAuditSigning, record_admin_operation, record_admin_operation_signed,
 };
+use crate::services::user_profile::{sync_display_name_patch, validate_display_name_patch};
 
 #[derive(Debug, Error)]
 pub enum UserAdminServiceError {

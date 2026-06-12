@@ -5,25 +5,24 @@ mod link;
 mod provider;
 mod session;
 
-pub use self::{
-    link::PgUpstreamOAuthLinkRepository, provider::PgUpstreamOAuthProviderRepository,
-    session::PgUpstreamOAuthSessionRepository,
-};
+pub use self::link::PgUpstreamOAuthLinkRepository;
+pub use self::provider::PgUpstreamOAuthProviderRepository;
+pub use self::session::PgUpstreamOAuthSessionRepository;
 
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
+    use coauth_data::clock::MockClock;
+    use coauth_data::upstream_oauth::{
+        UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderFilter,
+        UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository, UpstreamOAuthSessionFilter,
+        UpstreamOAuthSessionRepository,
+    };
+    use coauth_data::user::UserRepository;
     use coauth_data::{
         Pagination, RepositoryAccess as _, RepositoryFactory as _, UpstreamOAuthLinkPatch,
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderOnBackchannelLogout,
         UpstreamOAuthProviderTokenAuthMethod,
-        clock::MockClock,
-        upstream_oauth::{
-            UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderFilter,
-            UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
-            UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository,
-        },
-        user::UserRepository,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use oauth_types::scope::{OPENID, Scope};

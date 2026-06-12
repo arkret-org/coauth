@@ -2,10 +2,10 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::oauth::{OAuthSessionFilter, OAuthSessionRepository};
+use coauth_data::pagination::{Node, PaginationDirection};
 use coauth_data::{
     BrowserSession, Client, Clock, Page, Pagination, Session, SessionState, User, new_id,
-    oauth::{OAuthSessionFilter, OAuthSessionRepository},
-    pagination::{Node, PaginationDirection},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -15,10 +15,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{oauth_clients, oauth_sessions, user_sessions},
-};
+use crate::schema::{oauth_clients, oauth_sessions, user_sessions};
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`OAuthSessionRepository`] for a PostgreSQL connection
 pub struct PgOAuthSessionRepository<'c> {

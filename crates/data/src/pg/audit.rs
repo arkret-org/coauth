@@ -1,13 +1,10 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock,
-    audit::{
-        AccountSecurityEvent, AdminOperation, AdminOperationFilter, AdminOperationLog,
-        AuditRepository, NewAccountSecurityEvent, NewAdminOperationLog, SecurityEventType,
-    },
-    new_id,
+use coauth_data::audit::{
+    AccountSecurityEvent, AdminOperation, AdminOperationFilter, AdminOperationLog, AuditRepository,
+    NewAccountSecurityEvent, NewAdminOperationLog, SecurityEventType,
 };
+use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use ipnetwork::IpNetwork;
@@ -15,10 +12,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{account_security_events, admin_operation_logs},
-};
+use crate::schema::{account_security_events, admin_operation_logs};
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`AuditRepository`].
 pub struct PgAuditRepository<'c> {

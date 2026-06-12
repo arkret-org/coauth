@@ -5,10 +5,8 @@ mod link;
 mod provider;
 mod session;
 
-pub use self::{
-    link::{UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository},
-    provider::{
-        UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
-    },
-    session::{UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository},
+pub use self::link::{UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository};
+pub use self::provider::{
+    UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
 };
+pub use self::session::{UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository};

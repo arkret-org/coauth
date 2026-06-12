@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use minijinja::{
-    Value,
-    value::{Enumerator, Object},
-};
+use minijinja::Value;
+use minijinja::value::{Enumerator, Object};
 
 const BRANDING_NAMES: [&str; 4] = ["server_name", "policy_uri", "tos_uri", "imprint"];
 

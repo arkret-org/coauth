@@ -1,25 +1,19 @@
 use chrono::Duration;
-use coauth_iana::{
-    jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg},
-    oauth::OAuthClientAuthenticationMethod,
-};
+use coauth_iana::jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg};
+use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use language_tags::LanguageTag;
-use serde::{
-    Deserialize, Serialize,
-    de::{self, DeserializeOwned, MapAccess, Visitor},
-    ser::SerializeMap,
-};
+use serde::de::{self, DeserializeOwned, MapAccess, Visitor};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{DurationSeconds, serde_as, skip_serializing_none};
 use url::Url;
 
 use super::{ClientMetadata, Localized, VerifiedClientMetadata};
-use crate::{
-    oidc::{ApplicationType, SubjectType},
-    requests::GrantType,
-    response_type::ResponseType,
-};
+use crate::oidc::{ApplicationType, SubjectType};
+use crate::requests::GrantType;
+use crate::response_type::ResponseType;
 
 /// Serialize a `Localized<T>` into map entries: one for the base field name and
 /// one for each language-tagged variant as `"field#lang"`.

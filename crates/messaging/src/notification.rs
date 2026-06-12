@@ -5,10 +5,8 @@ use std::collections::BTreeMap;
 use coauth_templates::{EmailRecoveryContext, EmailVerificationContext, WithLanguage};
 use thiserror::Error;
 
-use crate::{
-    email::{Mailbox, Mailer, MailerError, SendResult as EmailSendResult},
-    sms::{SmsSender, SmsTransportError},
-};
+use crate::email::{Mailbox, Mailer, MailerError, SendResult as EmailSendResult};
+use crate::sms::{SmsSender, SmsTransportError};
 
 /// Unified notification dispatcher for user-facing delivery channels.
 #[derive(Default, Clone)]

@@ -1,13 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::RecoveryStatusOutcome,
-    components::{
-        layout::Layout,
-        loading::{LoadingScreen, LoadingSpinner},
-    },
-    pages::Route,
-};
+use crate::api::types::RecoveryStatusOutcome;
+use crate::components::layout::Layout;
+use crate::components::loading::{LoadingScreen, LoadingSpinner};
+use crate::pages::Route;
 
 /// Recovery progress page — shows status of recovery session.
 #[component]

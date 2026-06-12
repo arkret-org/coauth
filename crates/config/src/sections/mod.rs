@@ -32,55 +32,51 @@ mod upstream_oauth;
 
 // ── Re-exports ──
 
-pub use self::{
-    account::AccountConfig,
-    branding::BrandingConfig,
-    captcha::{CaptchaConfig, CaptchaServiceKind},
-    clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig},
-    cokret::{
-        CokretConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
-        StaridConfig,
-    },
-    database::{DatabaseConfig, PgSslMode},
-    email::{
-        AwsSesEmailProviderConfig, AwsSesWebhookConfig, BrevoEmailProviderConfig,
-        BrevoWebhookConfig, EmailConfig, EmailProviderConfig, EmailSmtpMode,
-        HttpWebhookEmailProviderConfig, PaloudInternalEmailProviderConfig,
-        ResendEmailProviderConfig, ResendWebhookConfig, SendgridEmailProviderConfig,
-        SendgridWebhookConfig, SendmailEmailProviderConfig, SmtpEmailProviderConfig,
-        TwilioEmailProviderConfig,
-    },
-    experimental::ExperimentalConfig,
-    http::{
-        BindConfig as HttpBindConfig, HstsConfig as HttpHstsConfig, HttpConfig,
-        ListenerConfig as HttpListenerConfig, Resource as HttpResource, TlsConfig as HttpTlsConfig,
-        UnixOrTcp,
-    },
-    passwords::{
-        Algorithm as PasswordAlgorithm, HashingScheme as PasswordHashingScheme, PasswordsConfig,
-    },
-    policy::{PolicyConfig, PolicyEngine},
-    rate_limiting::{RateLimiterConfiguration, RateLimitingConfig},
-    secrets::SecretsConfig,
-    sms::{
-        AliyunSmsProviderConfig, HttpWebhookSmsProviderConfig, PaloudInternalSmsProviderConfig,
-        SmsConfig, SmsProviderConfig, TencentCloudSmsProviderConfig, TwilioSmsProviderConfig,
-    },
-    storage::StorageConfig,
-    telemetry::{
-        MetricsConfig, MetricsExporterKind, Propagator, TelemetryConfig, TracingConfig,
-        TracingExporterKind,
-    },
-    templates::TemplatesConfig,
-    upstream_oauth::{
-        ClaimsImports as UpstreamOAuthClaimsImports, DiscoveryMode as UpstreamOAuthDiscoveryMode,
-        EmailImportPreference as UpstreamOAuthEmailImportPreference,
-        ImportAction as UpstreamOAuthImportAction,
-        OnBackchannelLogout as UpstreamOAuthOnBackchannelLogout,
-        OnConflict as UpstreamOAuthOnConflict, PkceMethod as UpstreamOAuthPkceMethod,
-        Provider as UpstreamOAuthProvider, ResponseMode as UpstreamOAuthResponseMode,
-        TokenAuthMethod as UpstreamOAuthTokenAuthMethod, UpstreamOAuthConfig,
-    },
+pub use self::account::AccountConfig;
+pub use self::branding::BrandingConfig;
+pub use self::captcha::{CaptchaConfig, CaptchaServiceKind};
+pub use self::clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig};
+pub use self::cokret::{
+    CokretConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig, StaridConfig,
+};
+pub use self::database::{DatabaseConfig, PgSslMode};
+pub use self::email::{
+    AwsSesEmailProviderConfig, AwsSesWebhookConfig, BrevoEmailProviderConfig, BrevoWebhookConfig,
+    EmailConfig, EmailProviderConfig, EmailSmtpMode, HttpWebhookEmailProviderConfig,
+    PaloudInternalEmailProviderConfig, ResendEmailProviderConfig, ResendWebhookConfig,
+    SendgridEmailProviderConfig, SendgridWebhookConfig, SendmailEmailProviderConfig,
+    SmtpEmailProviderConfig, TwilioEmailProviderConfig,
+};
+pub use self::experimental::ExperimentalConfig;
+pub use self::http::{
+    BindConfig as HttpBindConfig, HstsConfig as HttpHstsConfig, HttpConfig,
+    ListenerConfig as HttpListenerConfig, Resource as HttpResource, TlsConfig as HttpTlsConfig,
+    UnixOrTcp,
+};
+pub use self::passwords::{
+    Algorithm as PasswordAlgorithm, HashingScheme as PasswordHashingScheme, PasswordsConfig,
+};
+pub use self::policy::{PolicyConfig, PolicyEngine};
+pub use self::rate_limiting::{RateLimiterConfiguration, RateLimitingConfig};
+pub use self::secrets::SecretsConfig;
+pub use self::sms::{
+    AliyunSmsProviderConfig, HttpWebhookSmsProviderConfig, PaloudInternalSmsProviderConfig,
+    SmsConfig, SmsProviderConfig, TencentCloudSmsProviderConfig, TwilioSmsProviderConfig,
+};
+pub use self::storage::StorageConfig;
+pub use self::telemetry::{
+    MetricsConfig, MetricsExporterKind, Propagator, TelemetryConfig, TracingConfig,
+    TracingExporterKind,
+};
+pub use self::templates::TemplatesConfig;
+pub use self::upstream_oauth::{
+    ClaimsImports as UpstreamOAuthClaimsImports, DiscoveryMode as UpstreamOAuthDiscoveryMode,
+    EmailImportPreference as UpstreamOAuthEmailImportPreference,
+    ImportAction as UpstreamOAuthImportAction,
+    OnBackchannelLogout as UpstreamOAuthOnBackchannelLogout, OnConflict as UpstreamOAuthOnConflict,
+    PkceMethod as UpstreamOAuthPkceMethod, Provider as UpstreamOAuthProvider,
+    ResponseMode as UpstreamOAuthResponseMode, TokenAuthMethod as UpstreamOAuthTokenAuthMethod,
+    UpstreamOAuthConfig,
 };
 use crate::util::ConfigurationSection;
 

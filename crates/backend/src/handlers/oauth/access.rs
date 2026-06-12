@@ -1,14 +1,15 @@
-use std::{net::IpAddr, time::Duration};
+use std::net::IpAddr;
+use std::time::Duration;
 
 use coauth_config::CokretConfig;
+use coauth_data::oauth::{
+    OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthDeviceCodeGrantRepository,
+    OAuthSessionRepository,
+};
+use coauth_data::user::BrowserSessionRepository;
 use coauth_data::{
     AuthorizationGrant, AuthorizationGrantStage, BoxClock, BoxRepository, BoxRng, BrowserSession,
     Client, Clock, PrincipalUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
-    oauth::{
-        OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthDeviceCodeGrantRepository,
-        OAuthSessionRepository,
-    },
-    user::BrowserSessionRepository,
 };
 use coauth_keystore::Keystore;
 use coauth_policy::{Policy, PolicyFactory};
@@ -17,10 +18,9 @@ use oauth_types::requests::AuthorizationResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::{
-    oauth::{authorization::callback::CallbackDestination, generate_id_token},
-    session::count_user_sessions_for_limiting,
-};
+use crate::handlers::oauth::authorization::callback::CallbackDestination;
+use crate::handlers::oauth::generate_id_token;
+use crate::handlers::session::count_user_sessions_for_limiting;
 
 /// Rich consent information carrying the full domain objects.
 ///

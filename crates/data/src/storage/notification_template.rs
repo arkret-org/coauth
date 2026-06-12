@@ -1,7 +1,8 @@
 //! Repository for notification template versions.
 
 use async_trait::async_trait;
-use coauth_data::{Clock, notification::NotificationTemplateVersion};
+use coauth_data::Clock;
+use coauth_data::notification::NotificationTemplateVersion;
 use rand_core::RngCore;
 
 use crate::repository_impl;

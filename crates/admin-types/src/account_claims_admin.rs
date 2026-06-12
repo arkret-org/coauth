@@ -2,9 +2,8 @@
 //!
 //! Mirrors the wire shape emitted by:
 //!
-//! - `GET /_coauth/admin/accounts/{account_id}/claims` — `AccountClaimsOutcome
-//!   { data: [AccountClaimRecord, ...] }` from
-//!   `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`.
+//! - `GET /_coauth/admin/accounts/{account_id}/claims` — `AccountClaimsOutcome { data:
+//!   [AccountClaimRecord, ...] }` from `coauth/crates/backend/src/handlers/admin/v1/accounts.rs`.
 //!
 //! The claim issuance / revocation request bodies and the
 //! richer `ClaimRecord` returned by `POST /admin/v1/claims` and

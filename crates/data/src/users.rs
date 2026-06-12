@@ -1,12 +1,14 @@
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
-use diesel::{Queryable, deserialize, pg::Pg, sql_types};
+use diesel::pg::Pg;
+use diesel::{Queryable, deserialize, sql_types};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use crate::{new_id, pagination::Node};
+use crate::new_id;
+use crate::pagination::Node;
 
 type UserSqlType = (
     sql_types::Uuid,

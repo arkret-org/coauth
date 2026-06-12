@@ -1,17 +1,17 @@
 use std::net::IpAddr;
 
 use anyhow::Error as AnyhowError;
+use coauth_data::upstream_oauth::{
+    UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
+    UpstreamOAuthSessionRepository,
+};
+use coauth_data::user::{
+    BrowserSessionRepository, UserEmailRepository, UserRegistrationRepository, UserRepository,
+};
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, Pagination, PostAuthAction, RepositoryAccess,
     RepositoryError, SiteConfig, UpstreamOAuthAuthorizationSession, UpstreamOAuthLink,
     UpstreamOAuthProvider, UpstreamOAuthProviderOnConflict, UrlBuilder, User, UserRegistration,
-    upstream_oauth::{
-        UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
-        UpstreamOAuthSessionRepository,
-    },
-    user::{
-        BrowserSessionRepository, UserEmailRepository, UserRegistrationRepository, UserRepository,
-    },
 };
 use coauth_jose::jwt::Jwt;
 use coauth_policy::{Policy, RegisterInput, RegistrationMethod, Requester as PolicyRequester};
@@ -22,16 +22,10 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::{
-    handlers::{
-        post_auth::OptionalPostAuthAction,
-        upstream_oauth::{
-            UpstreamSessionsCookie,
-            template::{AttributeMappingContext, environment},
-        },
-    },
-    salvo_utils::SessionInfo,
-};
+use crate::handlers::post_auth::OptionalPostAuthAction;
+use crate::handlers::upstream_oauth::UpstreamSessionsCookie;
+use crate::handlers::upstream_oauth::template::{AttributeMappingContext, environment};
+use crate::salvo_utils::SessionInfo;
 
 const DEFAULT_HANDLE_TEMPLATE: &str = "{{ user.preferred_username }}";
 const DEFAULT_DISPLAYNAME_TEMPLATE: &str = "{{ user.name }}";

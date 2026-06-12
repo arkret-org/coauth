@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 
-use crate::{api::types::SiteConfig, components::loading::LoadingScreen, pages::Route};
+use crate::api::types::SiteConfig;
+use crate::components::loading::LoadingScreen;
+use crate::pages::Route;
 
 #[component]
 pub fn Plan() -> Element {

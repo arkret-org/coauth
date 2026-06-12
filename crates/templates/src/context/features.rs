@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use minijinja::{
-    Value,
-    value::{Enumerator, Object},
-};
+use minijinja::Value;
+use minijinja::value::{Enumerator, Object};
 
 type FeatureReader = fn(&SiteFeatures) -> bool;
 

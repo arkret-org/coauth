@@ -8,14 +8,14 @@ use coauth_keystore::Keystore;
 use coauth_policy::Policy;
 use coauth_principal::PrincipalServerAdmin;
 use coauth_templates::Templates;
-use oauth_types::{
-    errors::{ClientError, ClientErrorCode},
-    requests::{AccessTokenRequest, AccessTokenResponse},
-};
-use opentelemetry::{Key, KeyValue, metrics::Counter};
+use oauth_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
+use opentelemetry::metrics::Counter;
+use opentelemetry::{Key, KeyValue};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
-use salvo::{Extractible, prelude::*};
+use salvo::Extractible;
+use salvo::prelude::*;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -23,10 +23,8 @@ use super::token_service::{
     self, AuthorizationCodeExchangeError, ClientCredentialsGrantError, DeviceCodeExchangeError,
     RefreshTokenExchangeError,
 };
-use crate::{
-    handlers::METER,
-    salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError},
-};
+use crate::handlers::METER;
+use crate::salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError};
 
 static TOKEN_REQUEST_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER

@@ -18,21 +18,17 @@
 
 use chrono::{DateTime, Utc};
 use coauth_jose::claims::{self, TokenHash};
-use oauth_types::{
-    requests::{AccessTokenRequest, AccessTokenResponse, RefreshTokenGrant},
-    scope::Scope,
-};
+use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse, RefreshTokenGrant};
+use oauth_types::scope::Scope;
 use rand_core::RngCore as Rng;
 use url::Url;
 
-use super::{
-    super::{
-        error::{IdTokenError, TokenRefreshError},
-        requests::{jose::verify_id_token, token::request_access_token},
-        types::{IdToken, client_credentials::ClientCredentials},
-    },
-    jose::JwtVerificationData,
-};
+use super::super::error::{IdTokenError, TokenRefreshError};
+use super::super::requests::jose::verify_id_token;
+use super::super::requests::token::request_access_token;
+use super::super::types::IdToken;
+use super::super::types::client_credentials::ClientCredentials;
+use super::jose::JwtVerificationData;
 
 /// Refresh an access token using a refresh token.
 ///
@@ -40,28 +36,25 @@ use super::{
 ///
 /// * `http_client` - The reqwest client to use for making HTTP requests.
 ///
-/// * `client_credentials` - The credentials obtained when registering the
-///   client.
+/// * `client_credentials` - The credentials obtained when registering the client.
 ///
 /// * `token_endpoint` - The URL of the issuer's Token endpoint.
 ///
-/// * `refresh_token` - The token used to refresh the access token returned at
-///   the Token endpoint.
+/// * `refresh_token` - The token used to refresh the access token returned at the Token endpoint.
 ///
-/// * `scope` - The scope of the access token. The requested scope must not
-///   include any scope not originally granted to the access token, and if
-///   omitted is treated as equal to the scope originally granted by the issuer.
+/// * `scope` - The scope of the access token. The requested scope must not include any scope not
+///   originally granted to the access token, and if omitted is treated as equal to the scope
+///   originally granted by the issuer.
 ///
-/// * `id_token_verification_data` - The data required to verify the ID Token in
-///   the response.
+/// * `id_token_verification_data` - The data required to verify the ID Token in the response.
 ///
 ///   The signing algorithm corresponds to the `id_token_signed_response_alg`
 ///   field in the client metadata.
 ///
 ///   If it is not provided, the ID Token won't be verified.
 ///
-/// * `auth_id_token` - If an ID Token is expected in the response, the ID token
-///   that was returned from the latest authorization request.
+/// * `auth_id_token` - If an ID Token is expected in the response, the ID token that was returned
+///   from the latest authorization request.
 ///
 /// * `now` - The current time.
 ///

@@ -2,33 +2,30 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use coauth_data::{
-    RepositoryAccess, audit::AdminOperation, upstream_oauth::UpstreamOAuthLinkFilter,
-};
-use salvo::{http::StatusCode, prelude::*};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::AdminOperation;
+use coauth_data::upstream_oauth::UpstreamOAuthLinkFilter;
+use salvo::http::StatusCode;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use ulid::Ulid;
 
-use crate::{
-    AppError, AppResult, CreatedJsonResult, JsonResult,
-    handlers::admin::{
-        call_context::extract_call_context,
-        model::{Resource, UpstreamOAuthLink},
-        params::{IncludeCount, extract_pagination, extract_ulid_param},
-        response::{
-            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-            paginated_response_for_page,
-        },
-    },
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::{Resource, UpstreamOAuthLink};
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::{AppError, AppResult, CreatedJsonResult, JsonResult};
 
 #[cfg(test)]
 mod test_utils {
+    use coauth_data::upstream_oauth::UpstreamOAuthProviderParams;
     use coauth_data::{
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
         UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
-        UpstreamOAuthProviderTokenAuthMethod, upstream_oauth::UpstreamOAuthProviderParams,
+        UpstreamOAuthProviderTokenAuthMethod,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use oauth_types::scope::{OPENID, Scope};
@@ -493,11 +490,11 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{
-        RepositoryAccess, UpstreamOAuthAuthorizationSessionState,
-        upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
-        user::UserRepository,
+    use coauth_data::upstream_oauth::{
+        UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
     };
+    use coauth_data::user::UserRepository;
+    use coauth_data::{RepositoryAccess, UpstreamOAuthAuthorizationSessionState};
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
     use rand_chacha::ChaChaRng;

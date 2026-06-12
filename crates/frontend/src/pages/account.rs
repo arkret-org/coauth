@@ -1,14 +1,10 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{PatchViewerProfileOutcome, ViewerOutcome},
-    components::{
-        layout::{Layout, LayoutWidth},
-        loading::LoadingScreen,
-        user_greeting::{EditProfileDialog, UserGreeting},
-    },
-    pages::Route,
-};
+use crate::api::types::{PatchViewerProfileOutcome, ViewerOutcome};
+use crate::components::layout::{Layout, LayoutWidth};
+use crate::components::loading::LoadingScreen;
+use crate::components::user_greeting::{EditProfileDialog, UserGreeting};
+use crate::pages::Route;
 
 /// A sidebar navigation item for the account layout.
 #[component]

@@ -2,7 +2,8 @@
 //!
 //! Manages multiple connector providers and provides lookup by name.
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::{ConnectorCapabilities, ConnectorProvider};
 

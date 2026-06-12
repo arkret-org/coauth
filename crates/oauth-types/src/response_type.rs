@@ -14,7 +14,9 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use std::{collections::BTreeSet, fmt, str::FromStr};
+use std::collections::BTreeSet;
+use std::fmt;
+use std::str::FromStr;
 
 use coauth_iana::oauth::OAuthAuthorizationEndpointResponseType;
 use serde_with::{DeserializeFromStr, SerializeDisplay};

@@ -2,15 +2,12 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock, Page, Pagination, User, new_id,
-    pagination::{Node, PaginationDirection},
-    personal::{
-        PersonalAccessToken, PersonalSessionFilter, PersonalSessionRepository,
-        PersonalSessionState,
-        session::{PersonalSession, PersonalSessionOwner, SessionState},
-    },
+use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::personal::session::{PersonalSession, PersonalSessionOwner, SessionState};
+use coauth_data::personal::{
+    PersonalAccessToken, PersonalSessionFilter, PersonalSessionRepository, PersonalSessionState,
 };
+use coauth_data::{Clock, Page, Pagination, User, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use oauth_types::scope::Scope;
@@ -18,11 +15,9 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError,
-    pg::errors::DatabaseInconsistencyError,
-    schema::{personal_access_tokens, personal_sessions},
-};
+use crate::DatabaseError;
+use crate::pg::errors::DatabaseInconsistencyError;
+use crate::schema::{personal_access_tokens, personal_sessions};
 
 /// An implementation of [`PersonalSessionRepository`] for a PostgreSQL
 /// connection

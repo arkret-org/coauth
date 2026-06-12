@@ -2,38 +2,32 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use coauth_data::audit::AdminOperation;
+use coauth_data::upstream_oauth::{
+    UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
+};
 use coauth_data::{
     RepositoryAccess, UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
     UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderPkceMode,
     UpstreamOAuthProviderResponseMode, UpstreamOAuthProviderSource,
     UpstreamOAuthProviderTokenAuthMethod,
-    audit::AdminOperation,
-    upstream_oauth::{
-        UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
-    },
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use oauth_types::scope::Scope;
-use salvo::{http::StatusCode, prelude::*};
+use salvo::http::StatusCode;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use url::Url;
 
-use crate::{
-    AppError, AppResult, CreatedJsonResult, JsonResult,
-    handlers::{
-        admin::{
-            call_context::extract_call_context,
-            model::{Resource, UpstreamOAuthProvider},
-            params::{IncludeCount, extract_pagination, extract_ulid_param},
-            response::{
-                PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-                paginated_response_for_page,
-            },
-        },
-        common::DepotExt as _,
-    },
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::{Resource, UpstreamOAuthProvider};
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::handlers::common::DepotExt as _;
+use crate::{AppError, AppResult, CreatedJsonResult, JsonResult};
 
 /// Fetch a single upstream OAuth provider by its identifier.
 #[endpoint]
@@ -530,11 +524,13 @@ pub async fn enable_provider(
 
 #[cfg(test)]
 mod tests {
+    use coauth_data::upstream_oauth::{
+        UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository,
+    };
     use coauth_data::{
         RepositoryAccess, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
         UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
         UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod,
-        upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthProviderRepository},
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use hyper::{Request, StatusCode};

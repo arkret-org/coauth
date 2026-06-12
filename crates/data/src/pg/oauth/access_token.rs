@@ -7,7 +7,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, schema::oauth_access_tokens};
+use crate::DatabaseError;
+use crate::schema::oauth_access_tokens;
 
 /// An implementation of [`OAuthAccessTokenRepository`] for a PostgreSQL
 /// connection

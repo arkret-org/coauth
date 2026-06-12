@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::RecoveryStartOutcome,
-    components::{layout::Layout, loading::LoadingSpinner},
-    pages::Route,
-};
+use crate::api::types::RecoveryStartOutcome;
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingSpinner;
+use crate::pages::Route;
 
 /// Account recovery — enter email to receive recovery link.
 #[component]

@@ -24,13 +24,11 @@
 //! ```
 
 use chrono::Utc;
-use coauth_data::{
-    flow::{
-        AuthenticatorType, FlowDefinition, FlowDesignation, FlowStageBinding, IdentificationField,
-        PromptField, StageKind,
-    },
-    new_id,
+use coauth_data::flow::{
+    AuthenticatorType, FlowDefinition, FlowDesignation, FlowStageBinding, IdentificationField,
+    PromptField, StageKind,
 };
+use coauth_data::new_id;
 use serde::Deserialize;
 
 /// A declarative flow definition file that can be parsed from YAML (or JSON).

@@ -1,12 +1,8 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::WorkflowInboxOutcome,
-    components::{
-        loading::LoadingScreen,
-        separator::{Separator, SeparatorKind},
-    },
-};
+use crate::api::types::WorkflowInboxOutcome;
+use crate::components::loading::LoadingScreen;
+use crate::components::separator::{Separator, SeparatorKind};
 
 /// Workflow inbox page.
 ///

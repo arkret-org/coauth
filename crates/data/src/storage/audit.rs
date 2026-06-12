@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock,
-    audit::{AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType},
+use coauth_data::Clock;
+use coauth_data::audit::{
+    AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType,
 };
 use rand_core::RngCore;
 use serde_json::Value;

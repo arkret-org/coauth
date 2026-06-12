@@ -3,7 +3,8 @@ use coauth_data::{Clock, UpstreamOAuthLink, UpstreamOAuthLinkPatch, UpstreamOAut
 use rand_core::RngCore;
 use ulid::Ulid;
 
-use crate::{Pagination, pagination::Page, repository_impl};
+use crate::pagination::Page;
+use crate::{Pagination, repository_impl};
 
 /// Filter parameters for listing upstream OAuth links
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -112,8 +113,7 @@ pub trait UpstreamOAuthLinkRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `upstream_oauth_provider`: The upstream OAuth provider on which to
-    ///   find the link
+    /// * `upstream_oauth_provider`: The upstream OAuth provider on which to find the link
     /// * `subject`: The subject of the upstream OAuth link to find
     ///
     /// # Errors
@@ -133,8 +133,7 @@ pub trait UpstreamOAuthLinkRepository: Send + Sync {
     ///
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock used to generate timestamps
-    /// * `upsream_oauth_provider`: The upstream OAuth provider for which to
-    ///   create the link
+    /// * `upsream_oauth_provider`: The upstream OAuth provider for which to create the link
     /// * `subject`: The subject of the upstream OAuth link to create
     /// * `human_account_name`: A human-readable name for the upstream account
     ///
@@ -228,8 +227,7 @@ pub trait UpstreamOAuthLinkRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from
-    ///   the beginning
+    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
     /// * `until`: The maximum ULID to delete (inclusive upper bound)
     /// * `limit`: The maximum number of links to delete in this batch
     ///

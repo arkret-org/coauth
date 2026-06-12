@@ -19,19 +19,17 @@ mod session;
 mod terms;
 mod totp;
 
-pub use self::{
-    email::{UserEmailFilter, UserEmailRepository},
-    password::UserPasswordRepository,
-    phone::UserPhoneRepository,
-    primary_handle::UserPrimaryHandlePreferenceRepository,
-    principal_did::PrincipalDidRepository,
-    recovery::UserRecoveryRepository,
-    registration::UserRegistrationRepository,
-    registration_token::{UserRegistrationTokenFilter, UserRegistrationTokenRepository},
-    session::{BrowserSessionFilter, BrowserSessionRepository},
-    terms::UserTermsRepository,
-    totp::UserTotpRepository,
-};
+pub use self::email::{UserEmailFilter, UserEmailRepository};
+pub use self::password::UserPasswordRepository;
+pub use self::phone::UserPhoneRepository;
+pub use self::primary_handle::UserPrimaryHandlePreferenceRepository;
+pub use self::principal_did::PrincipalDidRepository;
+pub use self::recovery::UserRecoveryRepository;
+pub use self::registration::UserRegistrationRepository;
+pub use self::registration_token::{UserRegistrationTokenFilter, UserRegistrationTokenRepository};
+pub use self::session::{BrowserSessionFilter, BrowserSessionRepository};
+pub use self::terms::UserTermsRepository;
+pub use self::totp::UserTotpRepository;
 
 /// The lifecycle status of a user account. Account lifecycle lives on the
 /// `status` axis (per `common-fields.md`), matching the admin-facing

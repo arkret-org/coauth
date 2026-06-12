@@ -37,8 +37,6 @@ pub mod session;
 /// Extract and validate OAuth user bearer tokens.
 pub mod user_authorization;
 
-pub use self::{
-    error_wrapper::ErrorWrapper,
-    fancy_error::{GenericError, InternalError},
-    session::{SessionInfo, SessionInfoExt},
-};
+pub use self::error_wrapper::ErrorWrapper;
+pub use self::fancy_error::{GenericError, InternalError};
+pub use self::session::{SessionInfo, SessionInfoExt};

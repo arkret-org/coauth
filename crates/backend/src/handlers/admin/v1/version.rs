@@ -2,14 +2,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{
-    handlers::{admin::call_context::extract_call_context, common::DepotExt},
-    salvo_utils::InternalError,
-};
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::common::DepotExt;
+use crate::salvo_utils::InternalError;
 
 /// Payload returned by the version endpoint.
 #[derive(Serialize, JsonSchema, ToSchema)]

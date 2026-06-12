@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use url::Url;
 
-use crate::{Base64, base64::Base64UrlNoPad, jwk::PublicJsonWebKey};
+use crate::Base64;
+use crate::base64::Base64UrlNoPad;
+use crate::jwk::PublicJsonWebKey;
 
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

@@ -13,10 +13,8 @@ use serde_with::{serde_as, skip_serializing_none};
 use ulid::Ulid;
 use url::Url;
 
-use super::{
-    claims::ClaimsImports,
-    discovery::{DiscoveryMode, OnBackchannelLogout, PkceMethod},
-};
+use super::claims::ClaimsImports;
+use super::discovery::{DiscoveryMode, OnBackchannelLogout, PkceMethod};
 use crate::{ClientSecret, ClientSecretRaw};
 
 // ── Response Mode ──

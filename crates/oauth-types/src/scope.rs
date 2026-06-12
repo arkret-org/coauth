@@ -8,12 +8,10 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use std::{
-    borrow::Cow,
-    collections::BTreeSet,
-    ops::{Deref, DerefMut},
-    str::FromStr,
-};
+use std::borrow::Cow;
+use std::collections::BTreeSet;
+use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

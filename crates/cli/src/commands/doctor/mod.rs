@@ -1,7 +1,6 @@
 //! Deployment health-check diagnostics
 //!
 //! Validates Cokret/OIDC discovery surfaces exposed by the coauth server.
-//
 // CLI diagnostic checks use raw `reqwest` so they don't pull in the
 // outbound-http tracing layer required by the server runtime.
 #![allow(clippy::disallowed_methods)]

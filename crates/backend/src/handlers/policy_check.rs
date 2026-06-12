@@ -17,16 +17,14 @@
 //! service so the handler stays a thin orchestrator:
 //!
 //! 1. parse + shape-validate the request body;
-//! 2. fetch the soland-backed [`Frontier`] via
-//!    [`policy_frontier::SolandFrontierSource`];
-//! 3. run the realm-scoped [`policy_evaluator::RuleEvaluator`] with a hard
-//!    2-second budget (fail-closed on timeout per spec §6);
-//! 4. build the canonical [`policy_signer::DecisionTranscript`] and detach-sign
-//!    it with the keystore's preferred service key;
-//! 5. emit the [`PolicyCheckOutcome`] with `bound_to`, three frontier hashes,
-//!    signature, reason code, expiry, and obligations;
-//! 6. append the canonical transcript + signature to the structured
-//!    `policy_audit` tracing target.
+//! 2. fetch the soland-backed [`Frontier`] via [`policy_frontier::SolandFrontierSource`];
+//! 3. run the realm-scoped [`policy_evaluator::RuleEvaluator`] with a hard 2-second budget
+//!    (fail-closed on timeout per spec §6);
+//! 4. build the canonical [`policy_signer::DecisionTranscript`] and detach-sign it with the
+//!    keystore's preferred service key;
+//! 5. emit the [`PolicyCheckOutcome`] with `bound_to`, three frontier hashes, signature, reason
+//!    code, expiry, and obligations;
+//! 6. append the canonical transcript + signature to the structured `policy_audit` tracing target.
 //!
 //! There is no stub digest, no placeholder frontier source, and no
 //! hardcoded `Allow`. If the evaluator returns an error or the deadline
@@ -46,20 +44,14 @@ use cokret_core::{
 use salvo::prelude::*;
 use serde_json::Value;
 
-use crate::{
-    app_state::DepotExt as AppStateDepotExt,
-    handlers::{
-        cokret::{self, CokretRouteError},
-        common::DepotExt,
-    },
-    services::{
-        policy_evaluator::{
-            EvaluatorError, PolicyDecision, PolicyEvaluator, PolicyObligation, RuleEvaluator,
-        },
-        policy_frontier::{Frontier, FrontierSource, SolandFrontierSource},
-        policy_signer::{DecisionTranscript, PolicySigner},
-    },
+use crate::app_state::DepotExt as AppStateDepotExt;
+use crate::handlers::cokret::{self, CokretRouteError};
+use crate::handlers::common::DepotExt;
+use crate::services::policy_evaluator::{
+    EvaluatorError, PolicyDecision, PolicyEvaluator, PolicyObligation, RuleEvaluator,
 };
+use crate::services::policy_frontier::{Frontier, FrontierSource, SolandFrontierSource};
+use crate::services::policy_signer::{DecisionTranscript, PolicySigner};
 
 /// Maximum wall-clock time the evaluator is given. Spec §6 mandates
 /// fail-closed semantics on timeout; we layer this *outside* the
@@ -365,7 +357,8 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
 
 #[cfg(test)]
 mod tests {
-    use std::{future::Future, pin::Pin};
+    use std::future::Future;
+    use std::pin::Pin;
 
     use base64ct::{Base64UrlUnpadded, Encoding as _};
     use coauth_iana::jose::JsonWebSignatureAlg;

@@ -1,12 +1,12 @@
 //! Transparent base64 encoding / decoding as part of (de)serialization.
 
-use std::{borrow::Cow, fmt, marker::PhantomData, str};
+use std::borrow::Cow;
+use std::marker::PhantomData;
+use std::{fmt, str};
 
 use base64ct::Encoding;
-use serde::{
-    Deserialize, Deserializer, Serialize, Serializer,
-    de::{self, Unexpected, Visitor},
-};
+use serde::de::{self, Unexpected, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A wrapper around `Vec<u8>` that (de)serializes from / to a base64 string.
 ///

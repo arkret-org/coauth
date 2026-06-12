@@ -12,10 +12,8 @@
 #[allow(clippy::module_inception)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{
-        RepositoryAccess,
-        user::{UserPasswordRepository, UserRepository},
-    };
+    use coauth_data::RepositoryAccess;
+    use coauth_data::user::{UserPasswordRepository, UserRepository};
     use coauth_principal::{PrincipalProvisionRequest, PrincipalServerAdmin};
     use hyper::{Request, StatusCode};
     use rand_chacha::ChaChaRng;
@@ -23,9 +21,9 @@ mod tests {
     use ulid::Ulid;
     use zeroize::Zeroizing;
 
-    use crate::handlers::{
-        passwords::{PasswordManager, PasswordVerificationResult},
-        test_utils::{RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce},
+    use crate::handlers::passwords::{PasswordManager, PasswordVerificationResult};
+    use crate::handlers::test_utils::{
+        RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
     };
 
     #[tokio::test]

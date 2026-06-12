@@ -6,8 +6,7 @@ use super::UpstreamOAuthLink;
 use crate::InvalidTransitionError;
 
 /// coauth extends the Apache 2.0 base with:
-/// - `id_token_claims`, `extra_callback_parameters`, `userinfo` fields in
-///   Completed/Consumed
+/// - `id_token_claims`, `extra_callback_parameters`, `userinfo` fields in Completed/Consumed
 /// - `Unlinked` state variant
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub enum UpstreamOAuthAuthorizationSessionState {

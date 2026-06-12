@@ -2,11 +2,8 @@ use async_trait::async_trait;
 use coauth_data::queue::SendAccountRecoveryEmailsJob;
 use tracing::instrument;
 
-use crate::{
-    State,
-    new_queue::{JobContext, JobError, RunnableJob},
-    notifications,
-};
+use crate::new_queue::{JobContext, JobError, RunnableJob};
+use crate::{State, notifications};
 
 /// Job to send account recovery emails for a given recovery session.
 #[async_trait]

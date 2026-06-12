@@ -5,26 +5,21 @@
 //! operation log entries.
 
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    RepositoryAccess,
-    audit::{AdminOperation, AdminOperationFilter, AdminOperationLog},
-};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::{AdminOperation, AdminOperationFilter, AdminOperationLog};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use crate::{
-    JsonResult,
-    handlers::{
-        admin::{
-            audit_helper::{AuditSignatureStatus, verify_admin_operation_signature},
-            call_context::extract_call_context,
-        },
-        cokret::service_did_for,
-        common::DepotExt,
-    },
+use crate::JsonResult;
+use crate::handlers::admin::audit_helper::{
+    AuditSignatureStatus, verify_admin_operation_signature,
 };
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::cokret::service_did_for;
+use crate::handlers::common::DepotExt;
 
 /// A single entry in the admin audit feed.
 #[derive(Serialize, JsonSchema, ToSchema)]

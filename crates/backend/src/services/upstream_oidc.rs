@@ -6,21 +6,17 @@ use coauth_config::CokretConfig;
 use coauth_data::{UpstreamOAuthProvider, UrlBuilder};
 use coauth_jose::claims::{self, TokenHash};
 use coauth_keystore::{Encrypter, Keystore};
-use oauth_types::{
-    oidc::VerifiedProviderMetadata,
-    requests::{AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant},
-};
+use oauth_types::oidc::VerifiedProviderMetadata;
+use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant};
 use serde::Deserialize;
 use url::Url;
 
-use crate::{
-    handlers::cokret,
-    oidc_client::requests::{
-        jose::{JwtVerificationData, fetch_jwks, verify_id_token, verify_signed_jwt},
-        token::request_access_token,
-    },
-    outbound_http::RequestBuilderExt as _,
+use crate::handlers::cokret;
+use crate::oidc_client::requests::jose::{
+    JwtVerificationData, fetch_jwks, verify_id_token, verify_signed_jwt,
 };
+use crate::oidc_client::requests::token::request_access_token;
+use crate::outbound_http::RequestBuilderExt as _;
 
 pub type UpstreamOidcServiceHandle = Arc<dyn UpstreamOidcService>;
 

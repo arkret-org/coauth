@@ -465,10 +465,8 @@ mod tests {
     use std::sync::Once;
 
     use serde_json::json;
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{body_partial_json, header, method, path, path_regex},
-    };
+    use wiremock::matchers::{body_partial_json, header, method, path, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
 

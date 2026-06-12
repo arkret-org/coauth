@@ -5,20 +5,18 @@ use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock, Ur
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
 use coauth_keystore::Encrypter;
 use coauth_principal::PrincipalServerAdmin;
-use oauth_types::{
-    errors::{ClientError, ClientErrorCode},
-    requests::{IntrospectionRequest, IntrospectionResponse},
-};
-use opentelemetry::{Key, KeyValue, metrics::Counter};
-use salvo::{Extractible, prelude::*};
+use oauth_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::requests::{IntrospectionRequest, IntrospectionResponse};
+use opentelemetry::metrics::Counter;
+use opentelemetry::{Key, KeyValue};
+use salvo::Extractible;
+use salvo::prelude::*;
 use thiserror::Error;
 use ulid::Ulid;
 
 use super::introspection_service;
-use crate::{
-    handlers::{ActivityTracker, METER},
-    salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError},
-};
+use crate::handlers::{ActivityTracker, METER};
+use crate::salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError};
 
 static INTROSPECTION_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER

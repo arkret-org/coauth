@@ -1,15 +1,13 @@
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::CokretConfig;
+use coauth_data::oauth::{NewSessionGrant, SessionGrantFilter};
 use coauth_data::{
     BrowserSession, Clock, NewUserPrimaryHandlePreference, Pagination, RepositoryAccess,
     SessionGrant, UrlBuilder, User,
-    oauth::{NewSessionGrant, SessionGrantFilter},
 };
-use coauth_jose::{
-    constraints::Constrainable,
-    jwk::{PublicJsonWebKey, PublicJsonWebKeySet},
-    jwt::{JsonWebSignatureHeader, Jwt},
-};
+use coauth_jose::constraints::Constrainable;
+use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
+use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::{CryptoRngCore, RngCore};
@@ -798,8 +796,8 @@ pub struct RefreshSessionGrantOneShotOutcome {
 /// `POST /api/v1/session-grants/refresh` — exchange a near-expiry
 /// DPoP-bound session grant for a fresh one. The caller MUST present:
 ///
-/// * A `DPoP` header that proves possession of the same key the existing grant
-///   is bound to (`cnf.jkt` on the old grant must match the new proof's `jkt`).
+/// * A `DPoP` header that proves possession of the same key the existing grant is bound to
+///   (`cnf.jkt` on the old grant must match the new proof's `jkt`).
 /// * A request body carrying the prior grant JWT.
 ///
 /// On success the old grant is revoked (single-use semantics — its
@@ -818,8 +816,8 @@ pub async fn refresh_session_grant(
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
-    // 1. DPoP proof must be present — the refresh endpoint is the canonical
-    //    proof-of-possession check.
+    // 1. DPoP proof must be present — the refresh endpoint is the canonical proof-of-possession
+    //    check.
     let dpop_header = dpop_header_from_request(req)
         .ok_or_else(|| CokretRouteError::BadRequest("device_proof_required".to_owned()))?;
 
@@ -832,9 +830,9 @@ pub async fn refresh_session_grant(
         return Err(CokretRouteError::BadRequest("missing grant_jwt".to_owned()));
     }
 
-    // 2. Parse + load the existing grant. We never verify the JWT signature here —
-    //    the persisted row IS the source of truth — but we DO read the `cnf.jkt`
-    //    claim out of the JWT payload to bind the proof.
+    // 2. Parse + load the existing grant. We never verify the JWT signature here — the persisted
+    //    row IS the source of truth — but we DO read the `cnf.jkt` claim out of the JWT payload to
+    //    bind the proof.
     let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(body.grant_jwt.as_str())
         .map_err(|_| CokretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let prior_payload = jwt.payload().clone();
@@ -865,8 +863,8 @@ pub async fn refresh_session_grant(
         ));
     }
 
-    // 3. Verify the DPoP proof against this exact endpoint, with the prior
-    //    grant_jwt as the bound access token (so `ath` MUST match).
+    // 3. Verify the DPoP proof against this exact endpoint, with the prior grant_jwt as the bound
+    //    access token (so `ath` MUST match).
     let verifier = DpopVerifier::shared();
     let now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
@@ -880,8 +878,8 @@ pub async fn refresh_session_grant(
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt)
         .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
 
-    // 4. Resolve the underlying browser session so the new grant lives under the
-    //    same authentication context.
+    // 4. Resolve the underlying browser session so the new grant lives under the same
+    //    authentication context.
     let browser_session = repo
         .browser_session()
         .lookup(prior_grant.browser_session_id)
@@ -927,8 +925,7 @@ pub async fn refresh_session_grant(
     .await
     .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    // 6. Single-use semantics: revoke the prior grant only AFTER the new one is
-    //    persisted.
+    // 6. Single-use semantics: revoke the prior grant only AFTER the new one is persisted.
     let revoked_prior = repo
         .oauth_session_grant()
         .revoke(&*clock, prior_grant.clone())

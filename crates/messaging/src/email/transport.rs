@@ -4,24 +4,24 @@
 //! stays backend-agnostic and therefore does not depend on `outbound_http`.
 #![allow(clippy::disallowed_methods)]
 
-use std::{collections::BTreeMap, ffi::OsString, num::NonZeroU16, sync::Arc};
+use std::collections::BTreeMap;
+use std::ffi::OsString;
+use std::num::NonZeroU16;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use chrono::Utc;
-use lettre::{
-    AsyncTransport, Message, Tokio1Executor,
-    message::{
-        Mailbox, MultiPart, SinglePart,
-        header::{HeaderName, HeaderValue},
-    },
-    transport::{
-        sendmail::AsyncSendmailTransport,
-        smtp::{AsyncSmtpTransport, authentication::Credentials},
-    },
-};
+use lettre::message::header::{HeaderName, HeaderValue};
+use lettre::message::{Mailbox, MultiPart, SinglePart};
+use lettre::transport::sendmail::AsyncSendmailTransport;
+use lettre::transport::smtp::AsyncSmtpTransport;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{AsyncTransport, Message, Tokio1Executor};
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
@@ -1473,17 +1473,14 @@ fn extract_provider_error_code(body: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-    use reqwest::{
-        Client,
-        header::{HeaderMap, HeaderValue},
-    };
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+    use reqwest::Client;
+    use reqwest::header::{HeaderMap, HeaderValue};
     use rustls_platform_verifier::ConfigVerifierExt as _;
     use serde_json::json;
-    use wiremock::{
-        Mock, MockServer, Request, ResponseTemplate,
-        matchers::{body_partial_json, header, header_exists, method, path, query_param},
-    };
+    use wiremock::matchers::{body_partial_json, header, header_exists, method, path, query_param};
+    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
     use super::*;
 

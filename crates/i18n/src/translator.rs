@@ -1,10 +1,10 @@
-use std::{collections::HashMap, fs};
+use std::collections::HashMap;
+use std::fs;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fluent_bundle::{FluentArgs, FluentResource};
-use icu_experimental::relativetime::{
-    RelativeTimeFormatter, RelativeTimeFormatterOptions, options::Numeric,
-};
+use icu_experimental::relativetime::options::Numeric;
+use icu_experimental::relativetime::{RelativeTimeFormatter, RelativeTimeFormatterOptions};
 use icu_locid::Locale;
 use icu_locid_transform::fallback::{
     LocaleFallbackConfig, LocaleFallbacker, LocaleFallbackerWithConfig,
@@ -254,8 +254,8 @@ impl Translator {
     /// # Parameters
     ///
     /// * `locale` -- The locale to use.
-    /// * `days` -- The number of days to format, where 0 = today, 1 = tomorrow,
-    ///   -1 = yesterday, etc.
+    /// * `days` -- The number of days to format, where 0 = today, 1 = tomorrow, -1 = yesterday,
+    ///   etc.
     ///
     /// # Errors
     ///

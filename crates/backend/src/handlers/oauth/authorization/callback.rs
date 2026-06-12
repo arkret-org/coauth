@@ -6,10 +6,8 @@ use coauth_data::AuthorizationGrant;
 use coauth_i18n::Locale;
 use coauth_templates::{FormPostContext, Templates};
 use oauth_types::requests::ResponseMode;
-use salvo::{
-    prelude::*,
-    writing::{Redirect, Text},
-};
+use salvo::prelude::*;
+use salvo::writing::{Redirect, Text};
 use serde::Serialize;
 use thiserror::Error;
 use url::Url;

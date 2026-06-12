@@ -11,16 +11,15 @@ use coauth_data::{BoxRepository, Clock, SiteConfig, User};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
+use crate::handlers::BoundActivityTracker;
 // Re-export shared types so that existing `crate::handlers::account::X` paths
 // continue to work until all call-sites are migrated.
 pub use crate::handlers::common::{
     DepotExt, Requester, RequestingEntity, RouteError, UserAgentInfo,
     extract_bound_activity_tracker, extract_session_info, make_clock, make_rng, parse_user_agent,
 };
-use crate::{
-    handlers::{BoundActivityTracker, passwords::PasswordManager},
-    salvo_utils::SessionInfo,
-};
+use crate::handlers::passwords::PasswordManager;
+use crate::salvo_utils::SessionInfo;
 
 pub mod agents;
 pub mod anchor_view_query;

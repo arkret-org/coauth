@@ -8,18 +8,15 @@
 //! `ck.schema.invite.v1` `third_party_invite` shape. Two wire modes are
 //! supported:
 //!
-//! - `offline_token`: the OOB code is a high-entropy (`≥128 bits`) opaque
-//!   token. The wire carries `token_commitment = sha256(token | salt)` +
-//!   `token_salt_id` (opaque) + `token_entropy_bits`. The plaintext token is
-//!   delivered out-of-band; servers verify by hashing the claimant's token
+//! - `offline_token`: the OOB code is a high-entropy (`≥128 bits`) opaque token. The wire carries
+//!   `token_commitment = sha256(token | salt)` + `token_salt_id` (opaque) + `token_entropy_bits`.
+//!   The plaintext token is delivered out-of-band; servers verify by hashing the claimant's token
 //!   against the stored salt and constant-time-comparing the commitment.
 //!
-//! - `lookup`: the OOB code is a short human-typeable string indexed into a
-//!   server-private lookup table. The wire carries `lookup_table_ref` +
-//!   `pepper_id` (both opaque). The plaintext code is delivered out-of-band;
-//!   servers HMAC-pepper the claimant's input and look it up in the table. **3
-//!   wrong attempts invalidate the record** (terminal state
-//!   `invalidated_by_rate_limit`).
+//! - `lookup`: the OOB code is a short human-typeable string indexed into a server-private lookup
+//!   table. The wire carries `lookup_table_ref` + `pepper_id` (both opaque). The plaintext code is
+//!   delivered out-of-band; servers HMAC-pepper the claimant's input and look it up in the table.
+//!   **3 wrong attempts invalidate the record** (terminal state `invalidated_by_rate_limit`).
 //!
 //! **Plaintext 3PID values (email addresses / phone numbers) MUST NEVER
 //! appear on the wire.** This is enforced at the type level: the
@@ -52,32 +49,29 @@
 //! [`verify_invite`] performs the two-step proof chain that gates an
 //! incoming `ck.invite.claim`:
 //!
-//! 1. **Verification-service proof** — a signed JWT issued by the trusted 3PID
-//!    verification service. Claims `iss` / `aud` / `sub` / `exp` / `nbf` /
-//!    `nonce` are checked against [`VerifierCtx`]; signature is verified
-//!    against the resolved DID's JWKS via
+//! 1. **Verification-service proof** — a signed JWT issued by the trusted 3PID verification
+//!    service. Claims `iss` / `aud` / `sub` / `exp` / `nbf` / `nonce` are checked against
+//!    [`VerifierCtx`]; signature is verified against the resolved DID's JWKS via
 //!    [`did_binding_proof::verify_verification_service_proof`].
-//! 2. **Subject proof** — a signed JWS by the inviter actor key over the
-//!    canonical tuple `(verification_proof_jti, 3pid_hash, invitee_promise_did,
-//!    expires_at)`. The signing key is resolved via the configured
-//!    [`DidResolverService`]. The signed payload's `inviter_did` MUST equal
-//!    `ctx.expected_presenter_did` to reject cross-presenter attacks.
+//! 2. **Subject proof** — a signed JWS by the inviter actor key over the canonical tuple
+//!    `(verification_proof_jti, 3pid_hash, invitee_promise_did, expires_at)`. The signing key is
+//!    resolved via the configured [`DidResolverService`]. The signed payload's `inviter_did` MUST
+//!    equal `ctx.expected_presenter_did` to reject cross-presenter attacks.
 //!
 //! Replay defence: every accepted `jti` is recorded in
 //! [`NonceStore`] (an in-memory `Mutex<HashMap>`) and kept until the
 //! proof's `exp` passes. A duplicate `jti` within that window is
 //! rejected with [`InviteVerificationError::VerificationProofInvalid`].
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
-use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
+use coauth_jose::jwk::PublicJsonWebKeySet;
+use coauth_jose::jwt::Jwt;
 use coauth_keystore::Keystore;
 use cokret_core::{
     Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
@@ -87,9 +81,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use zeroize::Zeroize;
 
-use crate::services::{
-    did_binding_proof::verify_verification_service_proof, did_resolver::DidResolverService,
-};
+use crate::services::did_binding_proof::verify_verification_service_proof;
+use crate::services::did_resolver::DidResolverService;
 
 /// Minimum entropy (in bits) required for offline_token mode invites.
 /// Mirrors `ck.schema.invite.v1` `third_party_invite.token_entropy_bits`
@@ -353,10 +346,8 @@ pub const SUBJECT_PROOF_KIND: &str = "ck.invite.subject_proof.v1";
 /// Inputs to [`verify_invite`].
 ///
 /// Two JWS strings:
-/// - `binding_proof_jws`: the verification-service proof (signed by the 3PID
-///   verification service).
-/// - `subject_proof_jws`: the inviter's binding signature (signed by the
-///   inviter actor key).
+/// - `binding_proof_jws`: the verification-service proof (signed by the 3PID verification service).
+/// - `subject_proof_jws`: the inviter's binding signature (signed by the inviter actor key).
 #[derive(Debug, Clone)]
 pub struct InviteRequest {
     /// Verification-service proof JWS (compact serialization).
@@ -535,14 +526,12 @@ impl NonceStore {
 ///
 /// Performs (in order):
 ///
-/// 1. **Verification-service proof** — parse JWT, verify signature via resolved
-///    JWKS, check `iss` / `aud` / `sub` / `exp` / `nbf`, reject replayed `jti`.
-/// 2. **Subject proof** — parse JWT, verify signature via the inviter's
-///    DID-document JWKS, check kind / `inviter_did` / cross-link to the
-///    verification proof.
-/// 3. **Cross-checks** — `inviter_did` MUST equal `req.presenter_did`; both
-///    proofs MUST share the same `three_pid_hash`; expiries MUST be in the
-///    future.
+/// 1. **Verification-service proof** — parse JWT, verify signature via resolved JWKS, check `iss` /
+///    `aud` / `sub` / `exp` / `nbf`, reject replayed `jti`.
+/// 2. **Subject proof** — parse JWT, verify signature via the inviter's DID-document JWKS, check
+///    kind / `inviter_did` / cross-link to the verification proof.
+/// 3. **Cross-checks** — `inviter_did` MUST equal `req.presenter_did`; both proofs MUST share the
+///    same `three_pid_hash`; expiries MUST be in the future.
 ///
 /// On success returns a [`VerifiedInvite`] and persists the
 /// verification proof's `jti` to the replay store.

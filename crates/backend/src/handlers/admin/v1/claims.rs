@@ -1,26 +1,24 @@
 //! Cokret claim and attestation administration endpoints.
 
 use chrono::{DateTime, Utc};
-use coauth_data::{RepositoryAccess, audit::AdminOperation};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::AdminOperation;
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use crate::{
-    AppError, CreatedJsonResult, JsonResult,
-    handlers::{
-        admin::{
-            CreatedJson, audit_helper::record_admin_operation, call_context::extract_call_context,
-            params::extract_ulid_param,
-        },
-        common::DepotExt,
-    },
-    services::account_claims::{
-        AccountClaimFilter, AccountClaimRecord as StoredClaimRecord, AccountClaimStatus,
-        AccountClaimsError, IssueAccountClaim,
-    },
+use crate::handlers::admin::CreatedJson;
+use crate::handlers::admin::audit_helper::record_admin_operation;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::common::DepotExt;
+use crate::services::account_claims::{
+    AccountClaimFilter, AccountClaimRecord as StoredClaimRecord, AccountClaimStatus,
+    AccountClaimsError, IssueAccountClaim,
 };
+use crate::{AppError, CreatedJsonResult, JsonResult};
 
 #[derive(Clone, Copy, Deserialize, Serialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]

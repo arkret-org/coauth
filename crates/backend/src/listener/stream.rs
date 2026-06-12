@@ -5,12 +5,10 @@
 //! bytes of a connection and then hand the full stream (including those bytes)
 //! back to the caller.
 
-use std::{
-    cmp, io,
-    marker::Unpin,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::marker::Unpin;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::{cmp, io};
 
 use bytes::{Buf, Bytes};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};

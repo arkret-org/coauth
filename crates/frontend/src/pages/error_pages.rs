@@ -4,7 +4,8 @@
 
 use dioxus::prelude::*;
 
-use crate::{components::layout::Layout, config::AppError};
+use crate::components::layout::Layout;
+use crate::config::AppError;
 
 /// Top-level dispatcher: picks the right error page based on `error.kind`.
 #[component]

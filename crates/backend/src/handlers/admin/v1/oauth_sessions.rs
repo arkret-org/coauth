@@ -4,30 +4,23 @@
 
 use std::str::FromStr;
 
-use coauth_data::{
-    RepositoryAccess,
-    audit::AdminOperation,
-    oauth::OAuthSessionFilter,
-    queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
-};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::AdminOperation;
+use coauth_data::oauth::OAuthSessionFilter;
+use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
 use oauth_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use ulid::Ulid;
 
-use crate::{
-    AppError, JsonResult,
-    handlers::admin::{
-        call_context::extract_call_context,
-        model::{OAuthSession, Resource},
-        params::{IncludeCount, extract_pagination, extract_ulid_param},
-        response::{
-            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-            paginated_response_for_page,
-        },
-    },
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::{OAuthSession, Resource};
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::{AppError, JsonResult};
 
 /// Terminate an active OAuth session. If the session is associated with a
 /// user, a device-sync job is enqueued so that downstream `PrincipalServers`

@@ -1,7 +1,8 @@
 //! Context types for simple page templates: landing, app shell, API docs,
 //! error pages and account-state pages.
 
-use std::{collections::BTreeMap, fmt::Formatter};
+use std::collections::BTreeMap;
+use std::fmt::Formatter;
 
 use coauth_data::{UrlBuilder, User};
 use http::{Method, Uri, Version};

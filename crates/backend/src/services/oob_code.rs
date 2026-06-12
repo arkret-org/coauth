@@ -27,9 +27,8 @@
 //!
 //!  - the supplied code is HMAC-peppered before comparison
 //!  - per-(actor, target) rate-limit MUST be enforced upstream
-//!  - **3-strike invalidation**: three wrong attempts invalidate the code
-//!    (state transitions to `RateLimitInvalidated` and verification will never
-//!    succeed again for that code)
+//!  - **3-strike invalidation**: three wrong attempts invalidate the code (state transitions to
+//!    `RateLimitInvalidated` and verification will never succeed again for that code)
 //!
 //! ## Non-enumerable failures (7-trigger state machine)
 //!

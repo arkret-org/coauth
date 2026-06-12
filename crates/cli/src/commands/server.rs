@@ -1,20 +1,20 @@
-use std::{process::ExitCode, sync::Arc, time::Duration};
+use std::process::ExitCode;
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use clap::Parser;
-use coauth_backend::{
-    app_state::AppState,
-    handlers::{ActivityTracker, CookieManager, Limiter, MetadataCache},
-    lifecycle::LifecycleManager,
-    listener::server::Server,
-    services::email_webhook::EmailWebhookService,
-    util::{
-        database_url_from_config, diesel_pool_from_config,
-        load_policy_factory_dynamic_data_continuously, notification_center_from_config,
-        password_manager_from_config, policy_factory_from_config,
-        principal_server_connection_from_config, site_config_from_config, templates_from_config,
-        test_mailer_in_background,
-    },
+use coauth_backend::app_state::AppState;
+use coauth_backend::handlers::{ActivityTracker, CookieManager, Limiter, MetadataCache};
+use coauth_backend::lifecycle::LifecycleManager;
+use coauth_backend::listener::server::Server;
+use coauth_backend::services::email_webhook::EmailWebhookService;
+use coauth_backend::util::{
+    database_url_from_config, diesel_pool_from_config,
+    load_policy_factory_dynamic_data_continuously, notification_center_from_config,
+    password_manager_from_config, policy_factory_from_config,
+    principal_server_connection_from_config, site_config_from_config, templates_from_config,
+    test_mailer_in_background,
 };
 use coauth_config::{
     AppConfig, ClientsConfig, ConfigurationSection, ConfigurationSectionExt, HttpBindConfig,

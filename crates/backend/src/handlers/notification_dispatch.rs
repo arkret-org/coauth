@@ -4,10 +4,12 @@
 //! It will be progressively migrated to use `NotificationRepository` for
 //! unified request/delivery tracking.
 
+use coauth_data::queue::{
+    ContactVerificationTarget, DispatchNotificationJob, QueueJobRepositoryExt as _,
+};
 use coauth_data::{
     BoxRepository, Clock, RepositoryError, UserEmailAuthentication, UserPhoneAuthentication,
     UserRecoverySession,
-    queue::{ContactVerificationTarget, DispatchNotificationJob, QueueJobRepositoryExt as _},
 };
 use rand_core::RngCore;
 

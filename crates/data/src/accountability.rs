@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::Ulid;
-pub use crate::{pg::accountability::PgAccountabilityGrantRepository, storage::accountability::*};
+pub use crate::pg::accountability::PgAccountabilityGrantRepository;
+pub use crate::storage::accountability::*;
 
 /// Durable accountability grant issued for a Personal Agent capability set.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

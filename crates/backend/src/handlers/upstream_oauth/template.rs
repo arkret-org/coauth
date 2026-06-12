@@ -1,16 +1,14 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use base64ct::{Base64, Base64Unpadded, Base64Url, Base64UrlUnpadded, Encoding};
-use minijinja::{
-    Environment, Error, ErrorKind, Value,
-    value::{Enumerator, Object},
-};
+use minijinja::value::{Enumerator, Object};
+use minijinja::{Environment, Error, ErrorKind, Value};
 
 /// Context passed to the attribute mapping template
 ///
 /// The variables available in the template are:
-/// - `user`: claims for the user, merged from the ID token and userinfo
-///   endpoint
+/// - `user`: claims for the user, merged from the ID token and userinfo endpoint
 /// - `id_token_claims`: claims from the ID token
 /// - `userinfo_claims`: claims from the userinfo endpoint
 /// - `extra_callback_parameters`: extra parameters passed to the callback

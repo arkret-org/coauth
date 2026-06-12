@@ -21,10 +21,8 @@ use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
 use rand_core::RngCore as Rng;
 use url::Url;
 
-use super::super::{
-    error::{ResponseExt, TokenRequestError},
-    types::client_credentials::ClientCredentials,
-};
+use super::super::error::{ResponseExt, TokenRequestError};
+use super::super::types::client_credentials::ClientCredentials;
 use crate::outbound_http::RequestBuilderExt;
 
 /// Request an access token.
@@ -33,8 +31,7 @@ use crate::outbound_http::RequestBuilderExt;
 ///
 /// * `http_client` - The reqwest client to use for making HTTP requests.
 ///
-/// * `client_credentials` - The credentials obtained when registering the
-///   client.
+/// * `client_credentials` - The credentials obtained when registering the client.
 ///
 /// * `token_endpoint` - The URL of the issuer's Token endpoint.
 ///

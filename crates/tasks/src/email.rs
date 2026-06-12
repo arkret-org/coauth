@@ -2,11 +2,8 @@ use async_trait::async_trait;
 use coauth_data::queue::SendEmailAuthenticationCodeJob;
 use tracing::instrument;
 
-use crate::{
-    State,
-    new_queue::{JobContext, JobError, RunnableJob},
-    notifications,
-};
+use crate::new_queue::{JobContext, JobError, RunnableJob};
+use crate::{State, notifications};
 
 #[async_trait]
 impl RunnableJob for SendEmailAuthenticationCodeJob {

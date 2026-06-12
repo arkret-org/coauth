@@ -2,13 +2,9 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Client, Clock, User,
-    personal::{
-        PersonalAccessToken,
-        session::{PersonalSession, PersonalSessionOwner},
-    },
-};
+use coauth_data::personal::PersonalAccessToken;
+use coauth_data::personal::session::{PersonalSession, PersonalSessionOwner};
+use coauth_data::{Client, Clock, User};
 use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -44,11 +40,9 @@ pub trait PersonalSessionRepository: Send + Sync {
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock used to generate timestamps
     /// * `owner_user`: The user that will own the personal session
-    /// * `actor_user`: The user that will be represented by the personal
-    ///   session
+    /// * `actor_user`: The user that will be represented by the personal session
     /// * `device`: The device ID of this session
-    /// * `human_name`: The human-readable name of the session provided by the
-    ///   client or the user
+    /// * `human_name`: The human-readable name of the session provided by the client or the user
     /// * `scope`: The [`Scope`] of the [`PersonalSession`]
     ///
     /// # Errors
@@ -132,8 +126,8 @@ pub trait PersonalSessionRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `activity`: A list of tuples containing the session ID, the last
-    ///   activity timestamp and the IP address of the client
+    /// * `activity`: A list of tuples containing the session ID, the last activity timestamp and
+    ///   the IP address of the client
     ///
     /// # Errors
     ///

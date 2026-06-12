@@ -1,4 +1,5 @@
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::Serialize;
 
 use super::{DepotExt, NodeType, RouteError};

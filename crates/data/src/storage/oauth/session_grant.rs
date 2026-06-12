@@ -4,7 +4,9 @@ use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 
-use crate::{Clock, SessionGrant, pagination::Page, repository_impl, storage::Pagination};
+use crate::pagination::Page;
+use crate::storage::Pagination;
+use crate::{Clock, SessionGrant, repository_impl};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 /// Filters used when listing persisted Cokret session grants.
@@ -159,8 +161,8 @@ pub trait SessionGrantRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: Only delete grants with `expires_at` at or after this
-    ///   timestamp. `None` starts from the beginning.
+    /// * `since`: Only delete grants with `expires_at` at or after this timestamp. `None` starts
+    ///   from the beginning.
     /// * `until`: Latest `expires_at` to delete (exclusive).
     /// * `limit`: Maximum number of grants to delete in this batch.
     async fn cleanup_expired(

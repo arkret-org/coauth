@@ -4,16 +4,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use coauth_config::CokretConfig;
+use coauth_data::personal::session::{PersonalSession, PersonalSessionOwner};
 use coauth_data::{
     BoxClock, BoxRepository, RepositoryError, Session, TokenFormatError, TokenType, User,
-    personal::session::{PersonalSession, PersonalSessionOwner},
 };
 use oauth_types::scope::Scope;
-use salvo::{http::StatusCode, prelude::*};
+use salvo::http::StatusCode;
+use salvo::prelude::*;
 use ulid::Ulid;
 
 use super::response::ErrorOutcome;
-use crate::{handlers::account::DepotExt, record_error};
+use crate::handlers::account::DepotExt;
+use crate::record_error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Rejection {

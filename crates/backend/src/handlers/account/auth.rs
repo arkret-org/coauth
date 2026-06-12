@@ -14,27 +14,24 @@ pub use oidc_bridge::{
     auth_bridge_describe, integration_describe, oidc_browser_bridge_session, oidc_code_exchange,
     oidc_exchange_describe,
 };
-use opentelemetry::{Key, KeyValue, metrics::Counter};
+use opentelemetry::metrics::Counter;
+use opentelemetry::{Key, KeyValue};
 pub use passkey::{
     auth_finish as passkey_auth_finish, auth_start as passkey_auth_start,
     register_finish as passkey_register_finish, register_start as passkey_register_start,
 };
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{DepotExt, NodeType, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
-use crate::{
-    handlers::{
-        METER, RequesterFingerprint,
-        account::service::access::{
-            PasswordLoginOutcome, PasswordLoginRequestBody, load_enabled_upstream_providers,
-            login_with_password, logout_browser_session,
-        },
-        cokret,
-    },
-    salvo_utils::session::SessionInfoExt,
-    services::dpop::{DpopError, DpopVerifier, dpop_header_from_request, dpop_htu},
+use crate::handlers::account::service::access::{
+    PasswordLoginOutcome, PasswordLoginRequestBody, load_enabled_upstream_providers,
+    login_with_password, logout_browser_session,
 };
+use crate::handlers::{METER, RequesterFingerprint, cokret};
+use crate::salvo_utils::session::SessionInfoExt;
+use crate::services::dpop::{DpopError, DpopVerifier, dpop_header_from_request, dpop_htu};
 
 #[derive(Clone)]
 pub(crate) struct DpopSessionBinding {
@@ -433,8 +430,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             // PRE-PROD CHECKLIST:
             //   - swap to passkey / OIDC exchange via
             //     `crate::handlers::account::auth::oidc_bridge`.
-            //   - bind the grant `cnf.jkt` to a DPoP proof carried on the actual exchange
-            //     request (not the kickoff one).
+            //   - bind the grant `cnf.jkt` to a DPoP proof carried on the actual exchange request
+            //     (not the kickoff one).
             //   - enforce policy on scopes the caller may request.
             // Tracked in `_improve_todos.md` C.4 (TODO scaffold).
             //

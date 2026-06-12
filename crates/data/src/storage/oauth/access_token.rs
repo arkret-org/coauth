@@ -52,8 +52,8 @@ pub trait OAuthAccessTokenRepository: Send + Sync {
     /// * `clock`: The clock used to generate timestamps
     /// * `session`: The session the access token is associated with
     /// * `access_token`: The access token to add
-    /// * `expires_after`: The duration after which the access token expires. If
-    ///   [`None`] the access token never expires
+    /// * `expires_after`: The duration after which the access token expires. If [`None`] the access
+    ///   token never expires
     ///
     /// # Errors
     ///
@@ -108,8 +108,8 @@ pub trait OAuthAccessTokenRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: An optional datetime since which to clean up revoked access
-    ///   tokens. This is useful to call this method multiple times in a row
+    /// * `since`: An optional datetime since which to clean up revoked access tokens. This is
+    ///   useful to call this method multiple times in a row
     /// * `until`: The datetime until which to clean up revoked access tokens
     /// * `limit`: The maximum number of access tokens to clean up
     ///
@@ -130,8 +130,8 @@ pub trait OAuthAccessTokenRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: An optional datetime since which to clean up expired access
-    ///   tokens. This is useful to call this method multiple times in a row
+    /// * `since`: An optional datetime since which to clean up expired access tokens. This is
+    ///   useful to call this method multiple times in a row
     /// * `until`: The datetime until which to clean up expired access tokens
     /// * `limit`: The maximum number of access tokens to clean up
     ///

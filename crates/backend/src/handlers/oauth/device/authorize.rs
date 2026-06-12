@@ -1,20 +1,17 @@
 use chrono::Duration;
 use coauth_data::oauth::OAuthDeviceCodeGrantParams;
-use oauth_types::{
-    errors::{ClientError, ClientErrorCode},
-    requests::{DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType},
-    scope::ScopeToken,
-};
+use oauth_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::requests::{DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType};
+use oauth_types::scope::ScopeToken;
 use rand::distr::{Alphanumeric, SampleString};
-use salvo::{Extractible, prelude::*};
+use salvo::Extractible;
+use salvo::prelude::*;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::{
-    handlers::account::DepotExt,
-    record_error,
-    salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError},
-};
+use crate::handlers::account::DepotExt;
+use crate::record_error;
+use crate::salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError};
 
 #[derive(Debug, Error)]
 pub enum RouteError {
@@ -194,9 +191,8 @@ async fn handle_post(
 #[cfg(test)]
 mod tests {
     use hyper::{Request, StatusCode};
-    use oauth_types::{
-        registration::ClientRegistrationResponse, requests::DeviceAuthorizationResponse,
-    };
+    use oauth_types::registration::ClientRegistrationResponse;
+    use oauth_types::requests::DeviceAuthorizationResponse;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 

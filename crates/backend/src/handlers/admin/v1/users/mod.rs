@@ -8,8 +8,8 @@
 //! submodules — see `_tasks.md` T22:
 //!
 //! - [`create`] — `add_user`, `batch_invite`
-//! - [`read`]   — `get_user`, `get_by_username`, `list_users`, plus the filter
-//!   / status types they share
+//! - [`read`]   — `get_user`, `get_by_username`, `list_users`, plus the filter / status types they
+//!   share
 //! - [`update`] — `update_user` and its `AdminUserPatch` mapping
 //! - [`security`] — `set_password`, `risk_action`
 //! - [`tests`]  — the integration tests (was the larger half of the file)
@@ -27,9 +27,7 @@ mod update;
 #[cfg(test)]
 mod tests;
 
-pub use self::{
-    create::{add_user, batch_invite},
-    read::{get_by_username, get_user, list_users},
-    security::{risk_action, set_password},
-    update::update_user,
-};
+pub use self::create::{add_user, batch_invite};
+pub use self::read::{get_by_username, get_user, list_users};
+pub use self::security::{risk_action, set_password};
+pub use self::update::update_user;

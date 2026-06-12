@@ -10,15 +10,13 @@ pub use session::PgPersonalSessionRepository;
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{
-        Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _,
-        clock::MockClock,
-        personal::{
-            PersonalAccessTokenRepository, PersonalSessionFilter, PersonalSessionRepository,
-            session::PersonalSessionOwner,
-        },
-        user::UserRepository,
+    use coauth_data::clock::MockClock;
+    use coauth_data::personal::session::PersonalSessionOwner;
+    use coauth_data::personal::{
+        PersonalAccessTokenRepository, PersonalSessionFilter, PersonalSessionRepository,
     };
+    use coauth_data::user::UserRepository;
+    use coauth_data::{Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _};
     use oauth_types::scope::{OPENID, PROFILE, Scope};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;

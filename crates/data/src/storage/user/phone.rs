@@ -92,8 +92,7 @@ pub trait UserPhoneRepository: Send + Sync {
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock to use
     /// * `phone`: The phone number to add
-    /// * `registration`: The [`UserRegistration`] for which to add the
-    ///   [`UserPhoneAuthentication`]
+    /// * `registration`: The [`UserRegistration`] for which to add the [`UserPhoneAuthentication`]
     ///
     /// # Errors
     ///

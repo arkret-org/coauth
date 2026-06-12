@@ -1,13 +1,15 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{Clock, User, UserTotpConfig, new_id, user::UserTotpRepository};
+use coauth_data::user::UserTotpRepository;
+use coauth_data::{Clock, User, UserTotpConfig, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, schema::user_totp_configs};
+use crate::DatabaseError;
+use crate::schema::user_totp_configs;
 
 /// An implementation of [`UserTotpRepository`] for a PostgreSQL connection
 pub struct PgUserTotpRepository<'c> {

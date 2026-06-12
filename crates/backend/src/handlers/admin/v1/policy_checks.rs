@@ -1,18 +1,16 @@
 //! Policy dry-run and decision-audit contract endpoints.
 
-use coauth_data::{
-    RepositoryAccess,
-    audit::{AdminOperation, NewAdminOperationLog},
-};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use crate::{
-    AppError, CreatedJsonResult, JsonResult,
-    handlers::admin::{CreatedJson, call_context::extract_call_context},
-};
+use crate::handlers::admin::CreatedJson;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::{AppError, CreatedJsonResult, JsonResult};
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "PolicyDryRunRequestBody")]

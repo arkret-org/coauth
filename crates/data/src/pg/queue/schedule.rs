@@ -4,10 +4,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::queue::{QueueScheduleRepository, ScheduleStatus};
-use diesel::{
-    prelude::*,
-    sql_types::{Array, Bool, Nullable, Text, Timestamptz},
-};
+use diesel::prelude::*;
+use diesel::sql_types::{Array, Bool, Nullable, Text, Timestamptz};
 use diesel_async::RunQueryDsl;
 
 use crate::DatabaseError;

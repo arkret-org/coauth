@@ -1,9 +1,8 @@
 //! REST endpoints for user notification preferences.
 //!
-//! - `GET   /_coauth/self/viewer/preferences` — returns available channels and
-//!   the user's current preference settings.
-//! - `PATCH /_coauth/self/viewer/preferences` — updates the user's notification
-//!   preferences.
+//! - `GET   /_coauth/self/viewer/preferences` — returns available channels and the user's current
+//!   preference settings.
+//! - `PATCH /_coauth/self/viewer/preferences` — updates the user's notification preferences.
 
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -196,21 +195,17 @@ fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{
-        RepositoryAccess,
-        user::{BrowserSessionRepository, UserRepository},
-    };
+    use coauth_data::RepositoryAccess;
+    use coauth_data::user::{BrowserSessionRepository, UserRepository};
     use hyper::{Request, StatusCode};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use ulid::Ulid;
 
-    use crate::{
-        handlers::test_utils::{
-            CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
-        },
-        salvo_utils::SessionInfoExt,
+    use crate::handlers::test_utils::{
+        CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
     };
+    use crate::salvo_utils::SessionInfoExt;
 
     #[tokio::test]
     async fn test_patch_notification_preferences_persists_changes() {

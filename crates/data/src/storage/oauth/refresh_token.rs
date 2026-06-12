@@ -50,8 +50,7 @@ pub trait OAuthRefreshTokenRepository: Send + Sync {
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock used to generate timestamps
     /// * `session`: The [`Session`] in which to create the [`RefreshToken`]
-    /// * `access_token`: The [`AccessToken`] created alongside this
-    ///   [`RefreshToken`]
+    /// * `access_token`: The [`AccessToken`] created alongside this [`RefreshToken`]
     /// * `refresh_token`: The refresh token to store
     ///
     /// # Errors

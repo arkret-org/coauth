@@ -332,8 +332,7 @@ impl DeactivateUserJob {
     /// # Parameters
     ///
     /// * `user` - The user to deactivate
-    /// * `principal_erase` - Whether to erase the user from the
-    ///   `PrincipalServer`
+    /// * `principal_erase` - Whether to erase the user from the `PrincipalServer`
     #[must_use]
     pub fn new(user: &User, principal_erase: bool) -> Self {
         Self {
@@ -398,8 +397,7 @@ impl SendAccountRecoveryEmailsJob {
     ///
     /// # Parameters
     ///
-    /// * `user_recovery_session` - The user recovery session to send the email
-    ///   for
+    /// * `user_recovery_session` - The user recovery session to send the email for
     /// * `language` - The locale to send the email in
     #[must_use]
     pub fn new(user_recovery_session: &UserRecoverySession) -> Self {

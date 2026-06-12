@@ -1,5 +1,7 @@
-use coauth_data::{BoxRepository, RepositoryAccess, RepositoryError, SiteConfig, user::UserFilter};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::user::UserFilter;
+use coauth_data::{BoxRepository, RepositoryAccess, RepositoryError, SiteConfig};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::Serialize;
 
 use super::{DepotExt, RouteError};

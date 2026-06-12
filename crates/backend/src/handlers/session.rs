@@ -6,10 +6,9 @@
 //! operation (deactivated / locked / remotely ended) the caller receives
 //! an error variant that it can translate into an SPA error page.
 
-use coauth_data::{
-    BoxRepository, RepositoryError, User, oauth::OAuthSessionFilter,
-    personal::PersonalSessionFilter,
-};
+use coauth_data::oauth::OAuthSessionFilter;
+use coauth_data::personal::PersonalSessionFilter;
+use coauth_data::{BoxRepository, RepositoryError, User};
 use coauth_policy::model::SessionCounts;
 
 /// Count all active sessions belonging to the given user, for use in

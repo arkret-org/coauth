@@ -1,7 +1,8 @@
 use std::num::NonZeroU32;
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, de::Error as _};
+use serde::de::Error as _;
+use serde::{Deserialize, Serialize};
 
 use crate::ConfigurationSection;
 

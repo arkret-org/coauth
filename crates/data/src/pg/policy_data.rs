@@ -3,14 +3,16 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{Clock, PolicyData, new_id, policy_data::PolicyDataRepository};
+use coauth_data::policy_data::PolicyDataRepository;
+use coauth_data::{Clock, PolicyData, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::{DatabaseError, schema::policy_data};
+use crate::DatabaseError;
+use crate::schema::policy_data;
 
 /// An implementation of [`PolicyDataRepository`] for a PostgreSQL connection.
 pub struct PgPolicyDataRepository<'c> {
@@ -125,10 +127,9 @@ impl PolicyDataRepository for PgPolicyDataRepository<'_> {
 
 #[cfg(test)]
 mod tests {
-    use coauth_data::{
-        RepositoryAccess as _, RepositoryFactory as _, clock::MockClock,
-        policy_data::PolicyDataRepository,
-    };
+    use coauth_data::clock::MockClock;
+    use coauth_data::policy_data::PolicyDataRepository;
+    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use diesel_async::RunQueryDsl;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;

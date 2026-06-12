@@ -18,18 +18,14 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::{
-    claims::{self, TimeOptions},
-    jwk::PublicJsonWebKeySet,
-    jwt::Jwt,
-};
+use coauth_jose::claims::{self, TimeOptions};
+use coauth_jose::jwk::PublicJsonWebKeySet;
+use coauth_jose::jwt::Jwt;
 use serde_json::Value;
 use url::Url;
 
-use super::super::{
-    error::{IdTokenError, JwksError, JwtVerificationError},
-    types::IdToken,
-};
+use super::super::error::{IdTokenError, JwksError, JwtVerificationError};
+use super::super::types::IdToken;
 use crate::outbound_http::RequestBuilderExt;
 
 const MAX_JWKS_BYTES: usize = 1_048_576;
@@ -106,8 +102,7 @@ pub struct JwtVerificationData<'a> {
 ///
 /// * The signature is verified with the given JWKS.
 ///
-/// * The `iss` claim must be present and match the issuer (when an issuer is
-///   provided).
+/// * The `iss` claim must be present and match the issuer (when an issuer is provided).
 ///
 /// * The `aud` claim must be present and match the client ID.
 ///
@@ -180,9 +175,8 @@ pub fn verify_signed_jwt<'a>(
 ///
 /// * `verification_data` - The data necessary to verify the ID Token.
 ///
-/// * `auth_id_token` - If the ID Token is not verified during an authorization
-///   request, the ID token that was returned from the latest authorization
-///   request.
+/// * `auth_id_token` - If the ID Token is not verified during an authorization request, the ID
+///   token that was returned from the latest authorization request.
 ///
 /// * `now` - The current time.
 ///

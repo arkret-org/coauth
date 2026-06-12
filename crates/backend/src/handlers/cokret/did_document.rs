@@ -7,9 +7,8 @@
 //! principal server's job (soland embedded webvh / external starid); coauth
 //! artefacts are verified via introspection + OAuth JWKS instead.
 
-use serde::{Deserialize, Serialize};
-
 use coauth_jose::jwk::PublicJsonWebKey;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DidDocument {
@@ -97,4 +96,3 @@ pub struct DidService {
     #[serde(rename = "serviceEndpoint")]
     pub service_endpoint: String,
 }
-

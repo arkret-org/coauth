@@ -1,8 +1,11 @@
-use std::{collections::BTreeMap, num::NonZeroU16, str::FromStr};
+use std::collections::BTreeMap;
+use std::num::NonZeroU16;
+use std::str::FromStr;
 
 use lettre::message::Mailbox;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, de::Error};
+use serde::de::Error;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::ConfigurationSection;
@@ -469,10 +472,8 @@ impl ConfigurationSection for EmailConfig {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::result_large_err)]
-    use figment::{
-        Figment, Jail,
-        providers::{Format, Yaml},
-    };
+    use figment::providers::{Format, Yaml};
+    use figment::{Figment, Jail};
 
     use super::*;
 

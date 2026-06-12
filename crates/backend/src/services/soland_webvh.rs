@@ -9,12 +9,10 @@
 //!
 //! 1. generate the DID's verification keypair and a separate update keypair,
 //! 2. construct the inception webvh log entry with `{SCID}` placeholders,
-//! 3. derive the SCID (sha256-multihash-multibase of the canonical-JCS
-//!    skeleton),
+//! 3. derive the SCID (sha256-multihash-multibase of the canonical-JCS skeleton),
 //! 4. substitute the SCID and compute `versionId = 1-<entryHash>`,
-//! 5. sign the entry (sans `proof`) under `cryptosuite: eddsa-jcs-2022` with
-//!    the update key — soland verifies that signature in
-//!    [`verify_webvh_log_proof`].
+//! 5. sign the entry (sans `proof`) under `cryptosuite: eddsa-jcs-2022` with the update key —
+//!    soland verifies that signature in [`verify_webvh_log_proof`].
 //!
 //! This module owns step 1–5. It is intentionally storage-agnostic: it returns
 //! the registration request body, the resulting DID, and the secret seed bytes
@@ -276,8 +274,7 @@ pub async fn register_against_principal(
 /// Errors short-circuit on:
 /// - DB lookup/insert failures (`Storage`),
 /// - canonical-JSON / SCID failures (`Canonical`),
-/// - principal-server transport failures (`Http`) or non-2xx responses
-///   (`RegisterRejected`),
+/// - principal-server transport failures (`Http`) or non-2xx responses (`RegisterRejected`),
 /// - update-key encryption failures (`Encrypt`).
 #[allow(clippy::too_many_arguments)]
 pub async fn ensure_principal_did_minted(
@@ -539,7 +536,8 @@ fn base58btc_decode(value: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH, Signature, Verifier, VerifyingKey};
-    use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
+    use rand_chacha::ChaCha20Rng;
+    use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
 

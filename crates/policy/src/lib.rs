@@ -3,19 +3,19 @@
 //! This crate provides a unified interface for policy evaluation that supports
 //! multiple backends:
 //!
-//! - **Cedar** (feature `cedar`): Amazon Cedar policies evaluated natively in
-//!   Rust, offering a simpler policy language with high performance.
-//! - **Remote HTTP** (feature `remote`): Delegates policy evaluation to an
-//!   external HTTP service, enabling any language or runtime for policy logic.
+//! - **Cedar** (feature `cedar`): Amazon Cedar policies evaluated natively in Rust, offering a
+//!   simpler policy language with high performance.
+//! - **Remote HTTP** (feature `remote`): Delegates policy evaluation to an external HTTP service,
+//!   enabling any language or runtime for policy logic.
 //!
 //! ## Architecture
 //!
 //! The abstraction is based on two core traits defined in [`provider`]:
 //!
-//! - [`PolicyProviderFactory`](provider::PolicyProviderFactory): Creates
-//!   evaluator instances and manages dynamic data.
-//! - [`PolicyEvaluator`](provider::PolicyEvaluator): Evaluates individual
-//!   policy checks (registration, email, authorization, etc.).
+//! - [`PolicyProviderFactory`](provider::PolicyProviderFactory): Creates evaluator instances and
+//!   manages dynamic data.
+//! - [`PolicyEvaluator`](provider::PolicyEvaluator): Evaluates individual policy checks
+//!   (registration, email, authorization, etc.).
 //!
 //! [`PolicyFactory`] and [`Policy`] are the public-facing types that wrap
 //! these traits and form the public API used by handler code.
@@ -31,13 +31,11 @@ pub mod remote;
 
 use thiserror::Error;
 
-pub use self::{
-    model::{
-        AuthorizationGrantInput, ClientRegistrationInput, Code as ViolationCode, EmailInput,
-        EvaluationResult, GrantType, RegisterInput, RegistrationMethod, Requester, Violation,
-    },
-    provider::{PolicyEvaluator, PolicyProviderFactory},
+pub use self::model::{
+    AuthorizationGrantInput, ClientRegistrationInput, Code as ViolationCode, EmailInput,
+    EvaluationResult, GrantType, RegisterInput, RegistrationMethod, Requester, Violation,
 };
+pub use self::provider::{PolicyEvaluator, PolicyProviderFactory};
 
 // ---------------------------------------------------------------------------
 // Error types

@@ -3,11 +3,9 @@
 // policy of "use `camino::Utf8Path*`" doesn't apply here.
 #![allow(clippy::disallowed_types)]
 
-use std::{
-    env,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::env;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(tokio_unstable)");

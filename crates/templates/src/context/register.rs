@@ -8,10 +8,8 @@ use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use super::{
-    login::PostAuthContext,
-    wrappers::{SampleIdentifier, TemplateContext, sample_list},
-};
+use super::login::PostAuthContext;
+use super::wrappers::{SampleIdentifier, TemplateContext, sample_list};
 use crate::{FormField, FormState};
 
 // -- Registration form fields -----------------------------------------------

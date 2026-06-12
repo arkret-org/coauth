@@ -1,17 +1,13 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{SetPasswordStatus, ViewerOutcome},
-    components::{
-        form_error::FormError,
-        layout::Layout,
-        loading::{LoadingScreen, LoadingSpinner},
-        page_heading::PageHeading,
-        password_input::PasswordCreationDoubleInput,
-        separator::Separator,
-    },
-    pages::Route,
-};
+use crate::api::types::{SetPasswordStatus, ViewerOutcome};
+use crate::components::form_error::FormError;
+use crate::components::layout::Layout;
+use crate::components::loading::{LoadingScreen, LoadingSpinner};
+use crate::components::page_heading::PageHeading;
+use crate::components::password_input::PasswordCreationDoubleInput;
+use crate::components::separator::Separator;
+use crate::pages::Route;
 
 #[component]
 pub fn PasswordChange() -> Element {

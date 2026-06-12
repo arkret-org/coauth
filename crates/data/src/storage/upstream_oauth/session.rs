@@ -6,7 +6,8 @@ use coauth_data::{
 use rand_core::RngCore;
 use ulid::Ulid;
 
-use crate::{Pagination, pagination::Page, repository_impl};
+use crate::pagination::Page;
+use crate::{Pagination, repository_impl};
 
 /// Filter parameters for listing upstream OAuth sessions
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -100,12 +101,10 @@ pub trait UpstreamOAuthSessionRepository: Send + Sync {
     ///
     /// * `rng`: the random number generator to use
     /// * `clock`: the clock source
-    /// * `upstream_oauth_provider`: the upstream OAuth provider for which to
-    ///   create the session
-    /// * `state`: the authorization grant `state` parameter sent to the
-    ///   upstream OAuth provider
-    /// * `code_challenge_verifier`: the code challenge verifier used in this
-    ///   session, if PKCE is being used
+    /// * `upstream_oauth_provider`: the upstream OAuth provider for which to create the session
+    /// * `state`: the authorization grant `state` parameter sent to the upstream OAuth provider
+    /// * `code_challenge_verifier`: the code challenge verifier used in this session, if PKCE is
+    ///   being used
     /// * `nonce`: the `nonce` used in this session if in OIDC mode
     ///
     /// # Errors
@@ -130,13 +129,10 @@ pub trait UpstreamOAuthSessionRepository: Send + Sync {
     /// * `clock`: the clock source
     /// * `upstream_oauth_authorization_session`: the session to update
     /// * `upstream_oauth_link`: the link to associate with the session
-    /// * `id_token`: the ID token returned by the upstream OAuth provider, if
-    ///   present
+    /// * `id_token`: the ID token returned by the upstream OAuth provider, if present
     /// * `id_token_claims`: the claims contained in the ID token, if present
-    /// * `extra_callback_parameters`: the extra query parameters returned in
-    ///   the callback, if any
-    /// * `userinfo`: the user info returned by the upstream OAuth provider, if
-    ///   requested
+    /// * `extra_callback_parameters`: the extra query parameters returned in the callback, if any
+    /// * `userinfo`: the user info returned by the upstream OAuth provider, if requested
     ///
     /// # Errors
     ///
@@ -212,8 +208,7 @@ pub trait UpstreamOAuthSessionRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from
-    ///   the beginning
+    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
     /// * `until`: The maximum ULID to delete (inclusive upper bound)
     /// * `limit`: The maximum number of sessions to delete in this batch
     ///

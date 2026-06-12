@@ -4,10 +4,8 @@ use super::session_card::{
     SessionCardClient, SessionCardHeader, SessionCardInfo, SessionCardLinkBody,
     SessionCardMetadata, SessionCardName, SessionCardRoot,
 };
-use crate::{
-    api::types::{DeviceType, OAuthSession as OAuthSessionData},
-    pages::Route,
-};
+use crate::api::types::{DeviceType, OAuthSession as OAuthSessionData};
+use crate::pages::Route;
 
 fn session_display_name(session: &OAuthSessionData) -> String {
     if let Some(ref name) = session.display_name {

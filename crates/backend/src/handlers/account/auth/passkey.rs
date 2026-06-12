@@ -7,7 +7,8 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::{BoxRepository, RepositoryAccess, User};
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -16,15 +17,13 @@ use webauthn_rs::prelude::{
     RequestChallengeResponse,
 };
 
-use crate::{
-    AppError, JsonResult,
-    handlers::common::DepotExt,
-    services::{
-        onboarding_starid::{OnboardingStaridError, mint_principal_did_for_first_credential},
-        starid_adapter::StaridError,
-        webauthn::WebauthnError,
-    },
+use crate::handlers::common::DepotExt;
+use crate::services::onboarding_starid::{
+    OnboardingStaridError, mint_principal_did_for_first_credential,
 };
+use crate::services::starid_adapter::StaridError;
+use crate::services::webauthn::WebauthnError;
+use crate::{AppError, JsonResult};
 
 #[derive(Default, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename = "AuthPasskeyAccountHint")]

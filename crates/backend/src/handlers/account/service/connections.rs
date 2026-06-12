@@ -1,9 +1,9 @@
+use coauth_data::oauth::OAuthClientRepository;
+use coauth_data::upstream_oauth::{
+    UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
+};
 use coauth_data::{
     BoxRepository, Client, Clock, Pagination, RepositoryAccess, RepositoryError, User,
-    oauth::OAuthClientRepository,
-    upstream_oauth::{
-        UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
-    },
 };
 use thiserror::Error;
 use ulid::Ulid;

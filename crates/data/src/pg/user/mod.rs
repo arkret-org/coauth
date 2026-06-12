@@ -3,18 +3,17 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock, Pagination, User, UserPatch, UserProfilePatch, new_id,
-    pagination::PaginationDirection,
-    user::{UserFilter, UserRepository, UserStatus},
-};
+use coauth_data::pagination::PaginationDirection;
+use coauth_data::user::{UserFilter, UserRepository, UserStatus};
+use coauth_data::{Clock, Pagination, User, UserPatch, UserProfilePatch, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, schema::users};
+use crate::DatabaseError;
+use crate::schema::users;
 
 mod email;
 mod password;
@@ -31,14 +30,17 @@ mod totp;
 #[cfg(test)]
 mod tests;
 
-pub use self::{
-    email::PgUserEmailRepository, password::PgUserPasswordRepository, phone::PgUserPhoneRepository,
-    primary_handle::PgUserPrimaryHandlePreferenceRepository,
-    principal_did::PgPrincipalDidRepository, recovery::PgUserRecoveryRepository,
-    registration::PgUserRegistrationRepository,
-    registration_token::PgUserRegistrationTokenRepository, session::PgBrowserSessionRepository,
-    terms::PgUserTermsRepository, totp::PgUserTotpRepository,
-};
+pub use self::email::PgUserEmailRepository;
+pub use self::password::PgUserPasswordRepository;
+pub use self::phone::PgUserPhoneRepository;
+pub use self::primary_handle::PgUserPrimaryHandlePreferenceRepository;
+pub use self::principal_did::PgPrincipalDidRepository;
+pub use self::recovery::PgUserRecoveryRepository;
+pub use self::registration::PgUserRegistrationRepository;
+pub use self::registration_token::PgUserRegistrationTokenRepository;
+pub use self::session::PgBrowserSessionRepository;
+pub use self::terms::PgUserTermsRepository;
+pub use self::totp::PgUserTotpRepository;
 
 const BOOTSTRAP_ADMIN_LOCK_ID: i64 = 0x7061_7369_6f6e_4144;
 

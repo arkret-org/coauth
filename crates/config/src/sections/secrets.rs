@@ -18,10 +18,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use self::{
-    encryption::{EncryptionKey, EncryptionKeyRaw},
-    key_config::{KeyConfig, enumerate_keys_in_directory},
-};
+use self::encryption::{EncryptionKey, EncryptionKeyRaw};
+use self::key_config::{KeyConfig, enumerate_keys_in_directory};
 use super::ConfigurationSection;
 
 // ── Secrets Section ──
@@ -117,14 +115,15 @@ mod tests {
     #![allow(clippy::result_large_err)]
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable;
-    use figment::{
-        Figment, Jail,
-        providers::{Format, Yaml},
-    };
+    use figment::providers::{Format, Yaml};
+    use figment::{Figment, Jail};
     use rand_core::SeedableRng;
-    use tokio::{runtime::Handle, task};
+    use tokio::runtime::Handle;
+    use tokio::task;
 
-    use super::{encryption::EncryptionKey, key_config::Key, *};
+    use super::encryption::EncryptionKey;
+    use super::key_config::Key;
+    use super::*;
 
     #[tokio::test]
     async fn load_config() {

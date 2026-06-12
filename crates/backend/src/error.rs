@@ -1,21 +1,16 @@
-use std::{error::Error as StdError, fmt};
+use std::error::Error as StdError;
+use std::fmt;
 
-use salvo::{
-    http::StatusCode,
-    oapi::{self, BasicType, Content, EndpointOutRegister, Object},
-    prelude::{Json, Response, Scribe},
-};
+use salvo::http::StatusCode;
+use salvo::oapi::{self, BasicType, Content, EndpointOutRegister, Object};
+use salvo::prelude::{Json, Response, Scribe};
 
-use crate::{
-    handlers::{
-        admin::{
-            CallContextRejection as AdminCallContextRejection, CreatedJson, ErrorOutcome,
-            InconsistentPersonalSession, PaginationRejection, UlidPathParamRejection,
-        },
-        common::RouteError as RestRouteError,
-    },
-    salvo_utils::sentry::SentryEventId,
+use crate::handlers::admin::{
+    CallContextRejection as AdminCallContextRejection, CreatedJson, ErrorOutcome,
+    InconsistentPersonalSession, PaginationRejection, UlidPathParamRejection,
 };
+use crate::handlers::common::RouteError as RestRouteError;
+use crate::salvo_utils::sentry::SentryEventId;
 
 type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 

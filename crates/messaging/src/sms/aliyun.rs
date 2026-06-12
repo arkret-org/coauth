@@ -1,12 +1,12 @@
 //! Aliyun SMS (阿里云短信) transport
-//
 // Production server callers inject the backend guarded client through
 // `SmsTransport::aliyun_with_client`; this crate stays backend-agnostic.
 #![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use hmac::{Hmac, Mac};
 use reqwest::Client;
 use sha1::Sha1;

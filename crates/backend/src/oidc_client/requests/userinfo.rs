@@ -24,13 +24,9 @@ use mime::Mime;
 use serde_json::Value;
 use url::Url;
 
-use super::{
-    super::{
-        error::{IdTokenError, ResponseExt, UserInfoError},
-        requests::jose::verify_signed_jwt,
-    },
-    jose::JwtVerificationData,
-};
+use super::super::error::{IdTokenError, ResponseExt, UserInfoError};
+use super::super::requests::jose::verify_signed_jwt;
+use super::jose::JwtVerificationData;
 use crate::outbound_http::RequestBuilderExt;
 
 /// Obtain information about an authenticated end-user.
@@ -46,8 +42,8 @@ use crate::outbound_http::RequestBuilderExt;
 ///
 /// * `access_token` - The access token of the end-user.
 ///
-/// * `jwt_verification_data` - The data required to verify the response if a
-///   signed response was requested during client registration.
+/// * `jwt_verification_data` - The data required to verify the response if a signed response was
+///   requested during client registration.
 ///
 ///   The signing algorithm corresponds to the `userinfo_signed_response_alg`
 ///   field in the client metadata.

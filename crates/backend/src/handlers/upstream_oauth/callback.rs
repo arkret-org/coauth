@@ -1,36 +1,34 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
+use coauth_data::upstream_oauth::{
+    UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
+};
 use coauth_data::{
     Clock, UpstreamOAuthProvider, UpstreamOAuthProviderResponseMode,
     UpstreamOAuthProviderTokenAuthMethod,
-    upstream_oauth::{
-        UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
-        UpstreamOAuthSessionRepository,
-    },
 };
 use coauth_jose::claims::TokenHash;
 use coauth_templates::FormPostContext;
-use oauth_types::{errors::ClientErrorCode, requests::AccessTokenRequest};
-use opentelemetry::{Key, KeyValue, metrics::Counter};
+use oauth_types::errors::ClientErrorCode;
+use oauth_types::requests::AccessTokenRequest;
+use opentelemetry::metrics::Counter;
+use opentelemetry::{Key, KeyValue};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
 use ulid::Ulid;
 
-use super::{
-    UpstreamSessionsCookie,
-    cache::LazyProviderInfos,
-    client_credentials_for_provider,
-    template::{AttributeMappingContext, environment},
-};
-use crate::{
-    handlers::{METER, account::DepotExt},
-    oidc_client::{
-        requests::jose::JwtVerificationData, types::client_credentials::ClientCredentials,
-    },
-    salvo_utils::{GenericError, InternalError, cookies::TimedCookie},
-};
+use super::cache::LazyProviderInfos;
+use super::template::{AttributeMappingContext, environment};
+use super::{UpstreamSessionsCookie, client_credentials_for_provider};
+use crate::handlers::METER;
+use crate::handlers::account::DepotExt;
+use crate::oidc_client::requests::jose::JwtVerificationData;
+use crate::oidc_client::types::client_credentials::ClientCredentials;
+use crate::salvo_utils::cookies::TimedCookie;
+use crate::salvo_utils::{GenericError, InternalError};
 
 static CALLBACK_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER

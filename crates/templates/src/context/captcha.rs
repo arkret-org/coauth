@@ -1,14 +1,14 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use coauth_i18n::Locale;
-use minijinja::{
-    Value,
-    value::{Enumerator, Object},
-};
+use minijinja::Value;
+use minijinja::value::{Enumerator, Object};
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 
-use crate::{TemplateContext, context::SampleIdentifier};
+use crate::TemplateContext;
+use crate::context::SampleIdentifier;
 
 const CAPTCHA_FIELD_NAMES: [&str; 2] = ["service", "site_key"];
 

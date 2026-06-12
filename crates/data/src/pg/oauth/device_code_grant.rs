@@ -1,9 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    BrowserSession, Clock, DeviceCodeGrant, DeviceCodeGrantState, Session, new_id,
-    oauth::{OAuthDeviceCodeGrantParams, OAuthDeviceCodeGrantRepository},
-};
+use coauth_data::oauth::{OAuthDeviceCodeGrantParams, OAuthDeviceCodeGrantRepository};
+use coauth_data::{BrowserSession, Clock, DeviceCodeGrant, DeviceCodeGrantState, Session, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use ipnetwork::IpNetwork;
@@ -12,9 +10,9 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, pg::errors::DatabaseInconsistencyError, schema::oauth_device_code_grant,
-};
+use crate::DatabaseError;
+use crate::pg::errors::DatabaseInconsistencyError;
+use crate::schema::oauth_device_code_grant;
 
 /// An implementation of [`OAuthDeviceCodeGrantRepository`] for a PostgreSQL
 /// connection

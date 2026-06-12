@@ -6,34 +6,27 @@
 
 use chrono::Duration;
 use coauth_config::CokretConfig;
-use coauth_data::{
-    BoxClock, BoxRepository,
-    audit::{AdminOperation, NewAdminOperationLog},
-};
+use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
+use coauth_data::{BoxClock, BoxRepository};
 use coauth_principal::PrincipalProvisionRequest;
 use rand::distr::{Alphanumeric, SampleString};
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 use url::Url;
 
-use crate::{
-    AppError, CreatedJsonResult,
-    handlers::{
-        account::consent_cell_query::{
-            InviteGateDecision, evaluate_invite_gate, query_consent_cell,
-        },
-        admin::{
-            call_context::extract_call_context,
-            model::{User, UserRegistrationToken},
-            response::SingleOutcome,
-        },
-        common::DepotExt,
-    },
-    services::invite_quarantine::EnqueueInviteQuarantine,
-    util::handle_valid,
+use crate::handlers::account::consent_cell_query::{
+    InviteGateDecision, evaluate_invite_gate, query_consent_cell,
 };
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::{User, UserRegistrationToken};
+use crate::handlers::admin::response::SingleOutcome;
+use crate::handlers::common::DepotExt;
+use crate::services::invite_quarantine::EnqueueInviteQuarantine;
+use crate::util::handle_valid;
+use crate::{AppError, CreatedJsonResult};
 
 /// # JSON payload for the `POST /_coauth/admin/users` endpoint
 #[derive(Deserialize, JsonSchema)]
@@ -501,10 +494,8 @@ mod consent_gate_tests {
     //! routes the three outcomes correctly given the principal-server
     //! response.
     use coauth_config::CokretConfig;
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path_regex},
-    };
+    use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::handlers::test_utils::setup;

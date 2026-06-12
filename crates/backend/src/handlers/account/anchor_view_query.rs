@@ -10,10 +10,8 @@
 //! every issued Move must reference an Anchor that the issuer was working
 //! from. coauth's anchorer flow therefore needs:
 //!
-//! - the *latest leaf* `anchor_id` (ck:anchor:sha256:<hex>) — used for
-//!   `UnsignedMove.anchor_ref`,
-//! - a fresh `hlc` (`<unix-ms>-<logical>-<node>`) — used for
-//!   `UnsignedMove.hlc`,
+//! - the *latest leaf* `anchor_id` (ck:anchor:sha256:<hex>) — used for `UnsignedMove.anchor_ref`,
+//! - a fresh `hlc` (`<unix-ms>-<logical>-<node>`) — used for `UnsignedMove.hlc`,
 //!
 //! both keyed by the holder's principal control `realm_id`.
 //!
@@ -260,10 +258,8 @@ mod urlencoding {
 
 #[cfg(test)]
 mod tests {
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path_regex},
-    };
+    use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::handlers::test_utils::setup;

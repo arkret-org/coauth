@@ -13,11 +13,10 @@ mod utils;
 
 use dioxus::prelude::*;
 
-use crate::{
-    components::theme::{ThemeToggle, init_theme},
-    config::get_config,
-    pages::{Route, error_pages::ErrorPage},
-};
+use crate::components::theme::{ThemeToggle, init_theme};
+use crate::config::get_config;
+use crate::pages::Route;
+use crate::pages::error_pages::ErrorPage;
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 

@@ -5,7 +5,8 @@ use coauth_data::BrowserSession;
 use coauth_i18n::Locale;
 use rand_chacha::ChaCha8Rng;
 use rand_core::{RngCore as Rng, SeedableRng};
-use serde::{Serialize, ser::SerializeStruct};
+use serde::Serialize;
+use serde::ser::SerializeStruct;
 
 use super::captcha::WithCaptcha;
 

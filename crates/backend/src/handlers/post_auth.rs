@@ -1,9 +1,7 @@
 use anyhow::Context;
-use coauth_data::{
-    PostAuthAction, RepositoryAccess, UrlBuilder,
-    oauth::OAuthAuthorizationGrantRepository,
-    upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository},
-};
+use coauth_data::oauth::OAuthAuthorizationGrantRepository;
+use coauth_data::upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository};
+use coauth_data::{PostAuthAction, RepositoryAccess, UrlBuilder};
 use coauth_templates::{PostAuthContext, PostAuthContextInner};
 use serde::{Deserialize, Serialize};
 

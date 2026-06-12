@@ -4,11 +4,12 @@
 //! and exits 0 on `200 OK`. Designed for the Dockerfile `HEALTHCHECK`
 //! and orchestrator probes that cannot reach the network themselves
 //! (the distroless image ships no `curl`).
-//
 // Healthcheck binary doesn't pull in the outbound-http tracing layer.
 #![allow(clippy::disallowed_methods)]
 
-use std::{net::ToSocketAddrs, process::ExitCode, time::Duration};
+use std::net::ToSocketAddrs;
+use std::process::ExitCode;
+use std::time::Duration;
 
 use clap::Parser;
 use coauth_config::{

@@ -15,18 +15,18 @@
 
 use std::collections::BTreeMap;
 
-use coauth_data::{
-    LocalizableField, LocalizedClientMetadata, audit::AdminOperation, oauth::OAuthClientRepository,
-};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::audit::AdminOperation;
+use coauth_data::oauth::OAuthClientRepository;
+use coauth_data::{LocalizableField, LocalizedClientMetadata};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{
-    AppError, JsonResult,
-    handlers::admin::{call_context::extract_call_context, params::extract_ulid_param},
-};
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::params::extract_ulid_param;
+use crate::{AppError, JsonResult};
 
 /// JSON shape for the localised metadata of a single OAuth client.
 ///

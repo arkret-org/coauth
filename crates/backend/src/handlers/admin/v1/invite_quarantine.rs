@@ -13,11 +13,10 @@
 //! Endpoints:
 //!
 //! - `GET  /_coauth/admin/invite-quarantine` — list pending entries.
-//! - `POST /_coauth/admin/invite-quarantine/{id}/resolve` — body `{ "decision":
-//!   "approve"|"reject", "note"?: "..." }`. Approve marks the row resolved (the
-//!   actual re-run of the original invite is the caller's responsibility —
-//!   sodmin re-issues `batch-invite` once it has verified consent out of band).
-//!   Reject marks the row resolved without re-running.
+//! - `POST /_coauth/admin/invite-quarantine/{id}/resolve` — body `{ "decision": "approve"|"reject",
+//!   "note"?: "..." }`. Approve marks the row resolved (the actual re-run of the original invite is
+//!   the caller's responsibility — sodmin re-issues `batch-invite` once it has verified consent out
+//!   of band). Reject marks the row resolved without re-running.
 //!
 //! ## Why approve does not auto-mint
 //!
@@ -32,28 +31,25 @@
 
 use chrono::{DateTime, Utc};
 use coauth_data::audit::AdminOperation;
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::{
-    AppError, JsonResult,
-    handlers::{
-        admin::{
-            audit_helper::record_admin_operation,
-            call_context::extract_call_context,
-            model::UserRegistrationToken,
-            response::SingleOutcome,
-            v1::users::create::{MintRegistrationTokensParams, mint_registration_tokens},
-        },
-        common::DepotExt,
-    },
-    services::invite_quarantine::{
-        InviteQuarantineError, InviteQuarantineRecord, InviteQuarantineStatus,
-    },
+use crate::handlers::admin::audit_helper::record_admin_operation;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::UserRegistrationToken;
+use crate::handlers::admin::response::SingleOutcome;
+use crate::handlers::admin::v1::users::create::{
+    MintRegistrationTokensParams, mint_registration_tokens,
 };
+use crate::handlers::common::DepotExt;
+use crate::services::invite_quarantine::{
+    InviteQuarantineError, InviteQuarantineRecord, InviteQuarantineStatus,
+};
+use crate::{AppError, JsonResult};
 
 // ── Wire types ─────────────────────────────────────────────────
 

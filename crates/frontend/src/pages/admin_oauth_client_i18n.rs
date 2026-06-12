@@ -15,10 +15,9 @@ use std::collections::BTreeMap;
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    components::{layout::Layout, loading::LoadingScreen},
-    config::api_base_url,
-};
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingScreen;
+use crate::config::api_base_url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct I18nEntry {

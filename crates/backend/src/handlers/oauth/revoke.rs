@@ -3,20 +3,17 @@ use std::sync::Arc;
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock};
 use coauth_keystore::Encrypter;
 use coauth_principal::PrincipalServerAdmin;
-use oauth_types::{
-    errors::{ClientError, ClientErrorCode},
-    requests::RevocationRequest,
-};
+use oauth_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::requests::RevocationRequest;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
-use salvo::{Extractible, prelude::*};
+use salvo::Extractible;
+use salvo::prelude::*;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::{
-    handlers::oauth::revocation_service,
-    salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError},
-};
+use crate::handlers::oauth::revocation_service;
+use crate::salvo_utils::client_authorization::{ClientAuthorization, CredentialsVerificationError};
 
 #[derive(Debug, Error)]
 pub(crate) enum RouteError {

@@ -4,9 +4,11 @@
 //! frontend. The client-side router then handles all page routing.
 
 use coauth_templates::{AppContext, TemplateContext};
-use salvo::{prelude::*, writing::Text};
+use salvo::prelude::*;
+use salvo::writing::Text;
 
-use crate::{handlers::account::DepotExt, salvo_utils::InternalError};
+use crate::handlers::account::DepotExt;
+use crate::salvo_utils::InternalError;
 
 /// Serve the SPA shell for anonymous (public) pages.
 ///

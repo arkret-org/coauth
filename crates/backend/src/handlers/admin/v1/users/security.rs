@@ -9,22 +9,21 @@
 //! grouped here to keep the security-sensitive code paths together.
 
 use coauth_data::audit::AdminOperation;
-use salvo::{http::StatusCode, oapi::ToSchema, prelude::*};
+use salvo::http::StatusCode;
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-use crate::{
-    AppError, AppResult, JsonResult,
-    handlers::{
-        admin::{
-            audit_helper::record_admin_operation_signed, call_context::extract_call_context,
-            model::User, params::extract_ulid_param, response::SingleOutcome,
-        },
-        cokret::service_did_for,
-        common::DepotExt,
-    },
-};
+use crate::handlers::admin::audit_helper::record_admin_operation_signed;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::User;
+use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::response::SingleOutcome;
+use crate::handlers::cokret::service_did_for;
+use crate::handlers::common::DepotExt;
+use crate::{AppError, AppResult, JsonResult};
 
 /// # JSON payload for the `POST /_coauth/admin/users/:id/risk-action` endpoint
 #[derive(Deserialize, JsonSchema)]

@@ -5,14 +5,13 @@ use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
-use oauth_types::{
-    errors::{ClientError, ClientErrorCode},
-    requests::{
-        AccessTokenRequest, AccessTokenResponse,
-        AuthorizationCodeGrant as OAuthAuthorizationCodeGrant, GrantType,
-    },
+use oauth_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::requests::{
+    AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
+    GrantType,
 };
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use ulid::Ulid;
@@ -21,16 +20,13 @@ use super::{
     DepotExt, LoginOutcome, NodeType, RouteError, SessionGrantKind, SessionGrantOneShotInfo,
     SessionGrantPrincipalServerInfo, ViewerInfo, make_clock, make_rng,
 };
-use crate::{
-    handlers::cokret,
-    oidc_client::{requests::discovery, types::client_credentials::ClientCredentials},
-    outbound_http::{self, RequestBuilderExt as _},
-    services::{
-        soland_webvh,
-        upstream_oidc::UpstreamOidcExchangeMode,
-        upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token},
-    },
-};
+use crate::handlers::cokret;
+use crate::oidc_client::requests::discovery;
+use crate::oidc_client::types::client_credentials::ClientCredentials;
+use crate::outbound_http::{self, RequestBuilderExt as _};
+use crate::services::soland_webvh;
+use crate::services::upstream_oidc::UpstreamOidcExchangeMode;
+use crate::services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token};
 
 #[derive(Deserialize, ToSchema)]
 pub struct OidcCodeExchangeRequestBody {

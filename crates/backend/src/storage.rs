@@ -3,10 +3,12 @@
 //! Provides a global storage operator that supports local filesystem
 //! and S3-compatible object storage backends.
 
-use std::{sync::OnceLock, time::Duration};
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use coauth_config::StorageConfig;
-use opendal::{Operator, layers::LoggingLayer};
+use opendal::Operator;
+use opendal::layers::LoggingLayer;
 
 static OPERATOR: OnceLock<Operator> = OnceLock::new();
 static REDIRECT_CONFIG: OnceLock<Option<RedirectConfig>> = OnceLock::new();

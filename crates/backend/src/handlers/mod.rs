@@ -5,8 +5,7 @@
 //!
 //! - [`admin`] — Admin API handlers for managing users, sessions, and clients
 //! - [`health`] — Health-check endpoint
-//! - [`oauth`] — OAuth / OpenID Connect endpoints (token, authorization,
-//!   discovery, userinfo, etc.)
+//! - [`oauth`] — OAuth / OpenID Connect endpoints (token, authorization, discovery, userinfo, etc.)
 //! - [`rest`] — REST API endpoints for the account management frontend (JSON)
 //! - [`spa`] — SPA shell handler (serves the Dioxus frontend HTML wrapper)
 //! - [`upstream_oauth`] — Upstream SSO / federated identity provider flows
@@ -118,12 +117,11 @@ static METER: LazyLock<Meter> = LazyLock::new(|| {
     opentelemetry::global::meter_with_scope(scope)
 });
 
-pub use self::{
-    activity_tracker::{ActivityTracker, Bound as BoundActivityTracker},
-    common::{make_clock, make_rng},
-    notification_language::notification_language,
-    preferred_language::preferred_language,
-    rate_limit::{Limiter, RequesterFingerprint},
-    upstream_oauth::{cache::MetadataCache, jwks_cache::JwksCache},
-};
+pub use self::activity_tracker::{ActivityTracker, Bound as BoundActivityTracker};
+pub use self::common::{make_clock, make_rng};
+pub use self::notification_language::notification_language;
+pub use self::preferred_language::preferred_language;
+pub use self::rate_limit::{Limiter, RequesterFingerprint};
+pub use self::upstream_oauth::cache::MetadataCache;
+pub use self::upstream_oauth::jwks_cache::JwksCache;
 pub use crate::salvo_utils::cookies::CookieManager;

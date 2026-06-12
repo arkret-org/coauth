@@ -4,10 +4,8 @@ use super::session_card::{
     SessionCardHeader, SessionCardInfo, SessionCardLinkBody, SessionCardMetadata, SessionCardName,
     SessionCardRoot,
 };
-use crate::{
-    api::types::{BrowserSession as BrowserSessionData, DeviceType},
-    pages::Route,
-};
+use crate::api::types::{BrowserSession as BrowserSessionData, DeviceType};
+use crate::pages::Route;
 
 fn session_display_name(session: &BrowserSessionData) -> String {
     if let Some(ref name) = session.display_name {

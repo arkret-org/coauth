@@ -1,10 +1,10 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{AppSession, ViewerOutcome},
-    components::{layout::Layout, loading::LoadingScreen, page_heading::PageHeading},
-    pages::Route,
-};
+use crate::api::types::{AppSession, ViewerOutcome};
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingScreen;
+use crate::components::page_heading::PageHeading;
+use crate::pages::Route;
 
 #[component]
 pub fn DeviceRedirect(route: Vec<String>) -> Element {

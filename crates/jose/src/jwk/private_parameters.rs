@@ -5,7 +5,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{ParametersInfo, public_parameters::JsonWebKeyPublicParameters};
+use super::ParametersInfo;
+use super::public_parameters::JsonWebKeyPublicParameters;
 use crate::base64::Base64UrlNoPad;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -266,12 +267,11 @@ impl From<EcPrivateParameters> for super::public_parameters::EcPublicParameters 
 }
 
 mod ec_impls {
-    use elliptic_curve::{
-        AffinePoint, Curve, SecretKey,
-        sec1::{Coordinates, FromEncodedPoint, ModulusSize, ToEncodedPoint},
-    };
+    use elliptic_curve::sec1::{Coordinates, FromEncodedPoint, ModulusSize, ToEncodedPoint};
+    use elliptic_curve::{AffinePoint, Curve, SecretKey};
 
-    use super::{super::JwkEcCurve, EcPrivateParameters};
+    use super::super::JwkEcCurve;
+    use super::EcPrivateParameters;
     use crate::base64::Base64UrlNoPad;
 
     impl<C> TryFrom<EcPrivateParameters> for SecretKey<C>
@@ -360,7 +360,8 @@ mod okp_impls {
     use ed25519_dalek::SigningKey;
 
     use super::OkpPrivateParameters;
-    use crate::{base64::Base64UrlNoPad, jwk::InvalidOkpParameters};
+    use crate::base64::Base64UrlNoPad;
+    use crate::jwk::InvalidOkpParameters;
 
     impl TryFrom<OkpPrivateParameters> for SigningKey {
         type Error = InvalidOkpParameters;
@@ -416,10 +417,8 @@ mod tests {
     use ed25519_dalek::SigningKey;
 
     use super::*;
-    use crate::jwk::{
-        PrivateJsonWebKeySet,
-        public_parameters::{EcPublicParameters, OkpPublicParameters},
-    };
+    use crate::jwk::PrivateJsonWebKeySet;
+    use crate::jwk::public_parameters::{EcPublicParameters, OkpPublicParameters};
 
     fn load_private_keys() -> PrivateJsonWebKeySet {
         serde_json::from_str(include_str!("../../tests/keys/jwks.priv.json")).unwrap()

@@ -1,9 +1,7 @@
 //! Email template contexts (recovery and verification emails).
 
-use std::{
-    collections::BTreeMap,
-    net::{IpAddr, Ipv4Addr},
-};
+use std::collections::BTreeMap;
+use std::net::{IpAddr, Ipv4Addr};
 
 use chrono::Duration;
 use coauth_data::{

@@ -1,10 +1,10 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{ApprovalDataOutcome, DeviceApprovalOutcome},
-    components::{form_error::FormError, layout::Layout, loading::LoadingScreen},
-    pages::Route,
-};
+use crate::api::types::{ApprovalDataOutcome, DeviceApprovalOutcome};
+use crate::components::form_error::FormError;
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingScreen;
+use crate::pages::Route;
 
 /// Device code approval page — user approves or rejects device authorization.
 #[component]

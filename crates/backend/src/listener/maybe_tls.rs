@@ -1,17 +1,11 @@
-use std::{
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio_rustls::{
-    TlsAcceptor,
-    rustls::{
-        ProtocolVersion, ServerConfig, ServerConnection, SupportedCipherSuite,
-        pki_types::CertificateDer,
-    },
-};
+use tokio_rustls::TlsAcceptor;
+use tokio_rustls::rustls::pki_types::CertificateDer;
+use tokio_rustls::rustls::{ProtocolVersion, ServerConfig, ServerConnection, SupportedCipherSuite};
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]

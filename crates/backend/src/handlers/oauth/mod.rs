@@ -10,11 +10,9 @@
 //! - [`authorization`] — Authorization endpoint (authorization code grant)
 //! - [`token`] — Token endpoint (exchange codes / credentials for tokens)
 //! - [`registration`] — Dynamic client registration (RFC 7591)
-//! - [`discovery`] — OpenID Connect Discovery
-//!   (`/.well-known/openid-configuration`)
+//! - [`discovery`] — OpenID Connect Discovery (`/.well-known/openid-configuration`)
 //! - [`keys`] — JSON Web Key Set (`/.well-known/jwks.json`)
-//! - [`userinfo`] — UserInfo endpoint (returns claims about the authenticated
-//!   user)
+//! - [`userinfo`] — UserInfo endpoint (returns claims about the authenticated user)
 //! - [`introspection`] — Token introspection (RFC 7662)
 //! - [`revoke`] — Token revocation (RFC 7009)
 //! - [`device`] — Device authorization grant (RFC 8628)
@@ -29,11 +27,9 @@ use coauth_data::{
     RepositoryAccess, Session, TokenType, UrlBuilder,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::{
-    claims::{self, hash_token},
-    constraints::Constrainable,
-    jwt::{JsonWebSignatureHeader, Jwt},
-};
+use coauth_jose::claims::{self, hash_token};
+use coauth_jose::constraints::Constrainable;
+use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use thiserror::Error;
 
@@ -185,8 +181,10 @@ mod tests {
 
     use chrono::Duration;
     use coauth_config::CokretConfig;
-    use coauth_data::{AccessTokenState, AuthenticationMethod, clock::MockClock};
-    use coauth_jose::{claims::hash_token, jwt::Jwt};
+    use coauth_data::clock::MockClock;
+    use coauth_data::{AccessTokenState, AuthenticationMethod};
+    use coauth_jose::claims::hash_token;
+    use coauth_jose::jwt::Jwt;
     use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;

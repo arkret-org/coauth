@@ -1,10 +1,12 @@
-use std::{process::ExitCode, time::Duration};
+use std::process::ExitCode;
+use std::time::Duration;
 
 use coauth_templates::Templates;
 use futures_util::future::BoxFuture;
 #[cfg(unix)]
 use futures_util::future::Either;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 use crate::handlers::ActivityTracker;
 

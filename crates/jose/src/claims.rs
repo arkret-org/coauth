@@ -5,11 +5,14 @@
 // Each claim constant carries its value type and an optional validator
 // type so that extraction and validation are a single step.
 
-use std::{collections::HashMap, convert::Infallible, ops::Deref};
+use std::collections::HashMap;
+use std::convert::Infallible;
+use std::ops::Deref;
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use coauth_iana::jose::JsonWebSignatureAlg;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha384, Sha512};
 use thiserror::Error;
 
@@ -757,7 +760,9 @@ mod oidc_frontchannel {
     pub const SID: Claim<String> = Claim::new("sid");
 }
 
-pub use self::{oidc_core::*, oidc_frontchannel::*, rfc7519::*};
+pub use self::oidc_core::*;
+pub use self::oidc_frontchannel::*;
+pub use self::rfc7519::*;
 
 // ===========================================================================
 // Tests

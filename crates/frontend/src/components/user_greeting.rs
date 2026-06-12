@@ -1,9 +1,7 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{PatchViewerProfileOutcome, PrincipalUser, UserProfile},
-    components::dialog::Dialog,
-};
+use crate::api::types::{PatchViewerProfileOutcome, PrincipalUser, UserProfile};
+use crate::components::dialog::Dialog;
 
 #[component]
 pub fn UserGreeting(

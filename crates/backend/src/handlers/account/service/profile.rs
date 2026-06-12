@@ -1,13 +1,12 @@
 use anyhow::Error as AnyhowError;
-use coauth_data::{
-    BoxRepository, Clock, RepositoryAccess, RepositoryError, SiteConfig,
-    queue::{DeactivateUserJob, QueueJobRepositoryExt as _},
-    user::UserRepository,
-};
+use coauth_data::queue::{DeactivateUserJob, QueueJobRepositoryExt as _};
+use coauth_data::user::UserRepository;
+use coauth_data::{BoxRepository, Clock, RepositoryAccess, RepositoryError, SiteConfig};
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
 
-use crate::handlers::{common::Requester, passwords::PasswordManager};
+use crate::handlers::common::Requester;
+use crate::handlers::passwords::PasswordManager;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeactivateAccountOutcome {

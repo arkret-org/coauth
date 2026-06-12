@@ -10,7 +10,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_refresh_tokens};
+use crate::schema::oauth_refresh_tokens;
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`OAuthRefreshTokenRepository`] for a PostgreSQL
 /// connection
@@ -53,7 +54,7 @@ impl TryFrom<OAuthRefreshTokenRow> for RefreshToken {
             value.consumed_at,
             value.next_oauth_refresh_token_id,
         ) {
-            (Some(revoked_at), _, _) => RefreshTokenState::Revoked { revoked_at },
+            (Some(revoked_at), ..) => RefreshTokenState::Revoked { revoked_at },
             (None, None, None) => RefreshTokenState::Valid,
             (None, Some(consumed_at), None) => RefreshTokenState::Consumed {
                 consumed_at,

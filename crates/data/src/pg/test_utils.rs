@@ -4,10 +4,9 @@
 
 //! Test utilities for creating temporary test databases.
 
-use diesel_async::{
-    AsyncPgConnection,
-    pooled_connection::{AsyncDieselConnectionManager, deadpool::Pool},
-};
+use diesel_async::AsyncPgConnection;
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::pooled_connection::deadpool::Pool;
 
 /// Create a diesel connection pool suitable for tests.
 ///

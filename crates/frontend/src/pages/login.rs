@@ -2,11 +2,10 @@ use dioxus::prelude::*;
 use js_sys::Reflect;
 use web_sys::wasm_bindgen::JsValue;
 
-use crate::{
-    api::types::{LoginOutcome, ProvidersOutcome},
-    components::{layout::Layout, loading::LoadingSpinner},
-    pages::Route,
-};
+use crate::api::types::{LoginOutcome, ProvidersOutcome};
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingSpinner;
+use crate::pages::Route;
 
 const PRESERVED_LOGIN_QUERY_PROPERTY: &str = "__coauth_login_query";
 const LOGIN_ERROR_ID: &str = "login-error";

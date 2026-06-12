@@ -7,7 +7,8 @@
 use std::net::IpAddr;
 
 use coauth_data::{Client, User};
-use oauth_types::{registration::VerifiedClientMetadata, scope::Scope};
+use oauth_types::registration::VerifiedClientMetadata;
+use oauth_types::scope::Scope;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

@@ -5,30 +5,24 @@
 
 use std::sync::LazyLock;
 
-use opentelemetry::{Key, KeyValue, metrics::Counter};
-use salvo::{oapi::ToSchema, prelude::*};
+use opentelemetry::metrics::Counter;
+use opentelemetry::{Key, KeyValue};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
-use crate::{
-    handlers::{
-        METER,
-        account::registration_cookie::UserRegistrationSessions,
-        upstream_oauth::{
-            UpstreamSessionsCookie,
-            link_workflow::{
-                LoadUpstreamLinkOutcome, SubmitUpstreamLinkError, SubmitUpstreamLinkOutcome,
-                UpstreamLinkAction, UpstreamLinkRegistrationAction, UpstreamLinkWorkflowError,
-                load_upstream_link_context, load_upstream_link_state, submit_upstream_link_action,
-            },
-        },
-    },
-    salvo_utils::{
-        SessionInfoExt,
-        cookies::{CookieJar, TimedCookie},
-    },
+use crate::handlers::METER;
+use crate::handlers::account::registration_cookie::UserRegistrationSessions;
+use crate::handlers::upstream_oauth::UpstreamSessionsCookie;
+use crate::handlers::upstream_oauth::link_workflow::{
+    LoadUpstreamLinkOutcome, SubmitUpstreamLinkError, SubmitUpstreamLinkOutcome,
+    UpstreamLinkAction, UpstreamLinkRegistrationAction, UpstreamLinkWorkflowError,
+    load_upstream_link_context, load_upstream_link_state, submit_upstream_link_action,
 };
+use crate::salvo_utils::SessionInfoExt;
+use crate::salvo_utils::cookies::{CookieJar, TimedCookie};
 
 static LOGIN_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER

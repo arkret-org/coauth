@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
-use coauth_data::{Client, Clock, LocalizedClientMetadata, oauth::OAuthClientI18n};
-use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
+use coauth_data::oauth::OAuthClientI18n;
+use coauth_data::{Client, Clock, LocalizedClientMetadata};
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_jose::jwk::PublicJsonWebKeySet;
-use oauth_types::{oidc::ApplicationType, requests::GrantType};
+use oauth_types::oidc::ApplicationType;
+use oauth_types::requests::GrantType;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
@@ -45,8 +48,7 @@ pub trait OAuthClientRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `digest`: The metadata digest (SHA-256 hash encoded in hex) of the
-    ///   client to find
+    /// * `digest`: The metadata digest (SHA-256 hash encoded in hex) of the client to find
     ///
     /// # Errors
     ///
@@ -93,15 +95,13 @@ pub trait OAuthClientRepository: Send + Sync {
     /// * `tos_uri`: The URI of the terms of service of this client, if given
     /// * `jwks_uri`: The URI of the JWKS of this client, if given
     /// * `jwks`: The JWKS of this client, if given
-    /// * `id_token_signed_response_alg`: The algorithm used to sign the ID
-    ///   token
-    /// * `userinfo_signed_response_alg`: The algorithm used to sign the user
-    ///   info. If none, the user info endpoint will not sign the response
-    /// * `token_endpoint_auth_method`: The authentication method used by this
-    ///   client when calling the token endpoint
-    /// * `token_endpoint_auth_signing_alg`: The algorithm used to sign the JWT
-    ///   when using the `client_secret_jwt` or `private_key_jwt` authentication
-    ///   methods
+    /// * `id_token_signed_response_alg`: The algorithm used to sign the ID token
+    /// * `userinfo_signed_response_alg`: The algorithm used to sign the user info. If none, the
+    ///   user info endpoint will not sign the response
+    /// * `token_endpoint_auth_method`: The authentication method used by this client when calling
+    ///   the token endpoint
+    /// * `token_endpoint_auth_signing_alg`: The algorithm used to sign the JWT when using the
+    ///   `client_secret_jwt` or `private_key_jwt` authentication methods
     /// * `initiate_login_uri`: The URI used to initiate a login, if given
     ///
     /// # Errors

@@ -2,10 +2,8 @@ use std::process::ExitCode;
 
 use camino::Utf8PathBuf;
 use clap::Parser;
-use figment::{
-    Figment,
-    providers::{Env, Format, Yaml},
-};
+use figment::Figment;
+use figment::providers::{Env, Format, Yaml};
 
 mod config;
 mod database;

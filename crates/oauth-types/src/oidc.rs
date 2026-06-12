@@ -7,25 +7,24 @@
 //! metadata as defined in OpenID Connect Discovery 1.0 Section 3 and
 //! OAuth Authorization Server Metadata (RFC 8414).
 
-use std::{fmt, ops::Deref};
+use std::fmt;
+use std::ops::Deref;
 
-use coauth_iana::{
-    jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg},
-    oauth::{OAuthAccessTokenType, OAuthClientAuthenticationMethod, PkceCodeChallengeMethod},
+use coauth_iana::jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg};
+use coauth_iana::oauth::{
+    OAuthAccessTokenType, OAuthClientAuthenticationMethod, PkceCodeChallengeMethod,
 };
 use language_tags::LanguageTag;
 use serde::{Deserialize, Serialize};
+use serde_with::formats::SpaceSeparator;
 use serde_with::{
-    DeserializeFromStr, SerializeDisplay, StringWithSeparator, formats::SpaceSeparator, serde_as,
-    skip_serializing_none,
+    DeserializeFromStr, SerializeDisplay, StringWithSeparator, serde_as, skip_serializing_none,
 };
 use thiserror::Error;
 use url::Url;
 
-use crate::{
-    requests::{Display, GrantType, Prompt, ResponseMode},
-    response_type::ResponseType,
-};
+use crate::requests::{Display, GrantType, Prompt, ResponseMode};
+use crate::response_type::ResponseType;
 
 // ---------------------------------------------------------------------------
 // Macro: string_enum!
@@ -684,8 +683,7 @@ impl ProviderMetadata {
     ///
     /// # Parameters
     ///
-    /// - `issuer`: The issuer that was discovered to get this
-    ///   `ProviderMetadata`.
+    /// - `issuer`: The issuer that was discovered to get this `ProviderMetadata`.
     ///
     /// # Errors
     ///
@@ -837,8 +835,7 @@ impl ProviderMetadata {
     ///
     /// # Parameters
     ///
-    /// - `issuer`: The issuer that was discovered to get this
-    ///   `ProviderMetadata`.
+    /// - `issuer`: The issuer that was discovered to get this `ProviderMetadata`.
     ///
     /// # Errors
     ///
@@ -1239,9 +1236,9 @@ impl fmt::Debug for RpInitiatedLogoutRequest {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use coauth_iana::{
-        jose::JsonWebSignatureAlg,
-        oauth::{OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod},
+    use coauth_iana::jose::JsonWebSignatureAlg;
+    use coauth_iana::oauth::{
+        OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod,
     };
     use url::Url;
 

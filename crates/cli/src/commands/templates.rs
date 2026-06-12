@@ -4,7 +4,8 @@
 
 //! CLI sub-command for validating and optionally rendering templates.
 
-use std::{fmt::Write as _, process::ExitCode};
+use std::fmt::Write as _;
+use std::process::ExitCode;
 
 use anyhow::{Context as _, bail};
 use camino::Utf8PathBuf;

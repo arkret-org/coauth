@@ -5,10 +5,8 @@
 //! in [`crate::handlers::account::service::recovery`].
 
 use anyhow::Error as AnyhowError;
-use coauth_data::{
-    BoxRepository, Clock, RepositoryAccess, RepositoryError, User,
-    user::{UserPasswordRepository, UserRepository},
-};
+use coauth_data::user::{UserPasswordRepository, UserRepository};
+use coauth_data::{BoxRepository, Clock, RepositoryAccess, RepositoryError, User};
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
 use zeroize::Zeroizing;

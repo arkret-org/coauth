@@ -8,12 +8,13 @@
 use std::str::FromStr;
 
 use chrono::Duration;
-use coauth_data::{
-    RepositoryAccess as _,
-    user::{UserEmailRepository as _, UserRegistrationRepository as _, UserRepository as _},
+use coauth_data::RepositoryAccess as _;
+use coauth_data::user::{
+    UserEmailRepository as _, UserRegistrationRepository as _, UserRepository as _,
 };
 use lettre::Address;
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use ulid::Ulid;
@@ -21,27 +22,21 @@ use url::Url;
 use zeroize::Zeroizing;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
-use crate::{
-    handlers::{
-        RequesterFingerprint,
-        account::service::registration::{
-            BeginPasswordRegistrationError, BeginPasswordRegistrationRequestBody,
-            BeginPasswordRegistrationResult, EmailAvailabilityCheck, LoadRegistrationProgressError,
-            PrincipalServerCheckMode, RegistrationDisplayNameOutcome,
-            RegistrationDisplayNameWorkflowError, RegistrationEmailChangeError,
-            RegistrationEmailChangeOutcome, RegistrationFinishError, RegistrationFinishOutcome,
-            RegistrationResendError, RegistrationResendOutcome, RegistrationVerificationError,
-            RegistrationVerificationOutcome, begin_password_registration,
-            change_registration_email, finish_registration, load_registration_status,
-            next_registration_step, resend_registration_verification,
-            submit_registration_display_name, submit_registration_email_code,
-            submit_registration_phone_code,
-        },
-        notification_dispatch::{NotificationIntent, schedule_notification},
-    },
-    outbound_http,
-    salvo_utils::SessionInfoExt,
+use crate::handlers::RequesterFingerprint;
+use crate::handlers::account::service::registration::{
+    BeginPasswordRegistrationError, BeginPasswordRegistrationRequestBody,
+    BeginPasswordRegistrationResult, EmailAvailabilityCheck, LoadRegistrationProgressError,
+    PrincipalServerCheckMode, RegistrationDisplayNameOutcome, RegistrationDisplayNameWorkflowError,
+    RegistrationEmailChangeError, RegistrationEmailChangeOutcome, RegistrationFinishError,
+    RegistrationFinishOutcome, RegistrationResendError, RegistrationResendOutcome,
+    RegistrationVerificationError, RegistrationVerificationOutcome, begin_password_registration,
+    change_registration_email, finish_registration, load_registration_status,
+    next_registration_step, resend_registration_verification, submit_registration_display_name,
+    submit_registration_email_code, submit_registration_phone_code,
 };
+use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
+use crate::outbound_http;
+use crate::salvo_utils::SessionInfoExt;
 
 // ── POST /_coauth/gate/account/auth/register ─────────────────────────────────
 

@@ -7,18 +7,18 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use std::{io::IsTerminal, process::ExitCode, sync::Arc};
+use std::io::IsTerminal;
+use std::process::ExitCode;
+use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
 use coauth_config::{ConfigurationSectionExt, MetricsExporterKind, TelemetryConfig};
 use sentry_tracing::EventFilter;
-use tracing_subscriber::{
-    EnvFilter, Layer, Registry,
-    filter::{LevelFilter, filter_fn},
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-};
+use tracing_subscriber::filter::{LevelFilter, filter_fn};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer, Registry};
 
 mod commands;
 

@@ -7,15 +7,11 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::SecondsFormat;
-use coauth_data::{
-    BoxRepository, RepositoryAccess, RepositoryError,
-    audit::{AdminOperation, AdminOperationLog, NewAdminOperationLog},
-};
+use coauth_data::audit::{AdminOperation, AdminOperationLog, NewAdminOperationLog};
+use coauth_data::{BoxRepository, RepositoryAccess, RepositoryError};
 use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::{
-    constraints::Constrainable as _,
-    jwa::{AsymmetricVerifyingKey, Signature as JoseSignature},
-};
+use coauth_jose::constraints::Constrainable as _;
+use coauth_jose::jwa::{AsymmetricVerifyingKey, Signature as JoseSignature};
 use coauth_keystore::Keystore;
 use cokret_core::canonical::canonical_json_bytes;
 use rand_chacha::ChaChaRng;
@@ -405,11 +401,9 @@ fn parse_audit_signature(value: &str) -> Result<ParsedAuditSignature<'_>, ()> {
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone as _;
-    use coauth_data::{
-        RepositoryAccess as _, RepositoryFactory as _,
-        audit::{AdminOperation, AdminOperationFilter, AdminOperationLog},
-        clock::MockClock,
-    };
+    use coauth_data::audit::{AdminOperation, AdminOperationFilter, AdminOperationLog};
+    use coauth_data::clock::MockClock;
+    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng as _;

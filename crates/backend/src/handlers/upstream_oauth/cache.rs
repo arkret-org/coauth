@@ -1,8 +1,10 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
+use coauth_data::upstream_oauth::UpstreamOAuthProviderRepository;
 use coauth_data::{
     RepositoryAccess, UpstreamOAuthProvider, UpstreamOAuthProviderDiscoveryMode,
-    UpstreamOAuthProviderPkceMode, upstream_oauth::UpstreamOAuthProviderRepository,
+    UpstreamOAuthProviderPkceMode,
 };
 use coauth_iana::oauth::PkceCodeChallengeMethod;
 use oauth_types::oidc::VerifiedProviderMetadata;
@@ -325,17 +327,16 @@ mod tests {
     // XXX: sadly, we can't test HTTPS requests with wiremock, so we can only test
     // 'insecure' discovery
 
+    use coauth_data::clock::MockClock;
     use coauth_data::{
         Clock, UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderOnBackchannelLogout,
-        UpstreamOAuthProviderTokenAuthMethod, clock::MockClock,
+        UpstreamOAuthProviderTokenAuthMethod,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use oauth_types::scope::{OPENID, Scope};
     use ulid::Ulid;
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path},
-    };
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::handlers::test_utils::setup;

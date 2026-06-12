@@ -1,28 +1,27 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
+use coauth_data::oauth::{OAuthClientI18n, OAuthClientI18nEntry, OAuthClientRepository};
 use coauth_data::{
     Client, Clock, JwksOrJwksUri, LocalizableField, LocalizedClientMetadata, new_id,
-    oauth::{OAuthClientI18n, OAuthClientI18nEntry, OAuthClientRepository},
 };
-use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth_types::{oidc::ApplicationType, requests::GrantType};
+use oauth_types::oidc::ApplicationType;
+use oauth_types::requests::GrantType;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{
-        oauth_access_tokens, oauth_authorization_grants, oauth_client_localized_metadata,
-        oauth_clients, oauth_refresh_tokens, oauth_sessions, personal_access_tokens,
-        personal_sessions,
-    },
+use crate::schema::{
+    oauth_access_tokens, oauth_authorization_grants, oauth_client_localized_metadata,
+    oauth_clients, oauth_refresh_tokens, oauth_sessions, personal_access_tokens, personal_sessions,
 };
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`OAuthClientRepository`] for a PostgreSQL connection
 pub struct PgOAuthClientRepository<'c> {

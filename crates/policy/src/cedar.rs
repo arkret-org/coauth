@@ -11,8 +11,8 @@
 //! `(principal, action, resource, context)`. This adapter maps evaluations as:
 //!
 //! - **Principal**: `Requester::"anonymous"` (or user-specific if available)
-//! - **Action**: `Action::"register"`, `Action::"add_email"`,
-//!   `Action::"register_client"`, `Action::"authorize"`
+//! - **Action**: `Action::"register"`, `Action::"add_email"`, `Action::"register_client"`,
+//!   `Action::"authorize"`
 //! - **Resource**: `Resource::"default"`
 //! - **Context**: The serialized evaluation input data
 //!
@@ -45,14 +45,12 @@ use cedar_policy::{Authorizer, Context, Decision, Entities, EntityUid, PolicySet
 use chrono::{Datelike, Timelike, Utc};
 use coauth_data::PolicyData;
 
-use crate::{
-    EvaluationError, InstantiateError, LoadError,
-    model::{
-        AuthorizationGrantInput, ClientRegistrationInput, EmailInput, EvaluationResult,
-        RegisterInput, Violation,
-    },
-    provider::{PolicyEvaluator, PolicyProviderFactory},
+use crate::model::{
+    AuthorizationGrantInput, ClientRegistrationInput, EmailInput, EvaluationResult, RegisterInput,
+    Violation,
 };
+use crate::provider::{PolicyEvaluator, PolicyProviderFactory};
+use crate::{EvaluationError, InstantiateError, LoadError};
 
 /// Cedar policy provider factory.
 ///

@@ -1,19 +1,22 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::oauth::OAuthAuthorizationGrantRepository;
 use coauth_data::{
     AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, Clock, Pkce, Session,
-    new_id, oauth::OAuthAuthorizationGrantRepository,
+    new_id,
 };
 use coauth_iana::oauth::PkceCodeChallengeMethod;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth_types::{requests::ResponseMode, scope::Scope};
+use oauth_types::requests::ResponseMode;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_authorization_grants};
+use crate::schema::oauth_authorization_grants;
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`OAuthAuthorizationGrantRepository`] for a PostgreSQL
 /// connection

@@ -1,16 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{
-        BootstrapAdminStatus, ChangeRegistrationEmailOutcome, ProvidersOutcome, RegisterOutcome,
-        RegisterStatusOutcome, ResendEmailAuthCodePayload, StepOutcome,
-    },
-    components::{
-        form_error::FormError, layout::Layout, loading::LoadingSpinner,
-        password_input::PasswordCreationDoubleInput,
-    },
-    pages::Route,
+use crate::api::types::{
+    BootstrapAdminStatus, ChangeRegistrationEmailOutcome, ProvidersOutcome, RegisterOutcome,
+    RegisterStatusOutcome, ResendEmailAuthCodePayload, StepOutcome,
 };
+use crate::components::form_error::FormError;
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingSpinner;
+use crate::components::password_input::PasswordCreationDoubleInput;
+use crate::pages::Route;
 
 const REGISTER_EMAIL_CHANGE_ID: &str = "register-email-change";
 const REGISTER_EMAIL_VERIFY_CODE_ID: &str = "register-email-verify-code";
@@ -830,8 +828,7 @@ pub fn RegisterFinish(id: String) -> Element {
             // saved by the manual register flow.
             let mut redirected = false;
 
-            // 1. API-returned post_auth_action (set during upstream OIDC registration
-            //    flows)
+            // 1. API-returned post_auth_action (set during upstream OIDC registration flows)
             if let Some(action) = resp.post_auth_action.as_ref() {
                 let kind = action.get("kind").and_then(|v| v.as_str());
                 let id = action.get("id").and_then(|v| v.as_str()).map(String::from);

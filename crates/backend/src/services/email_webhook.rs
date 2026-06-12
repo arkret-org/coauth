@@ -7,24 +7,22 @@ use coauth_config::{
     AwsSesEmailProviderConfig, AwsSesWebhookConfig, BrevoWebhookConfig, EmailConfig,
     EmailProviderConfig, ResendWebhookConfig, SendgridWebhookConfig,
 };
+use coauth_data::notification::NewNotificationEventLog;
 use coauth_data::{
     BoxRepository, Clock, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDeliveryStatus, NotificationEventActor, NotificationEventKind,
-    NotificationRequestStatus, RepositoryAccess, notification::NewNotificationEventLog,
+    NotificationRequestStatus, RepositoryAccess,
 };
 use coauth_messaging::email::DELIVERY_ID_TAG;
 use der::{DecodePem as _, Encode as _};
 use hmac::{Hmac, Mac};
 use http::HeaderMap;
-use p256::ecdsa::{
-    Signature as P256Signature, VerifyingKey as P256VerifyingKey, signature::Verifier as _,
-};
+use p256::ecdsa::signature::Verifier as _;
+use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
 use pkcs8::DecodePublicKey;
 use rand_core::RngCore;
-use rsa::{
-    RsaPublicKey,
-    pkcs1v15::{Signature as RsaPkcs1v15Signature, VerifyingKey as RsaVerifyingKey},
-};
+use rsa::RsaPublicKey;
+use rsa::pkcs1v15::{Signature as RsaPkcs1v15Signature, VerifyingKey as RsaVerifyingKey};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha1::Sha1;

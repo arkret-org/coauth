@@ -35,7 +35,5 @@ impl PersonalAccessToken {
     }
 }
 
-pub use crate::{
-    pg::personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository},
-    storage::personal::*,
-};
+pub use crate::pg::personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository};
+pub use crate::storage::personal::*;

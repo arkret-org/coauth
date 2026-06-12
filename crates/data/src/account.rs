@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::Ulid;
-pub use crate::{pg::account::PgAccountRepository, storage::account::*};
+pub use crate::pg::account::PgAccountRepository;
+pub use crate::storage::account::*;
 
 /// A unified contact point associated with a user account.
 ///

@@ -1,6 +1,7 @@
 use tokio::io::AsyncRead;
 
-use super::{ProxyAcceptor, ProxyProtocolV1Info, acceptor::ProxyAcceptError};
+use super::acceptor::ProxyAcceptError;
+use super::{ProxyAcceptor, ProxyProtocolV1Info};
 use crate::listener::stream::BufferedStream;
 
 #[derive(Clone, Copy)]

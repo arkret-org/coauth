@@ -1,6 +1,10 @@
-use std::{pin::Pin, sync::Arc, task::Poll, time::Duration};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::Poll;
+use std::time::Duration;
 
-use futures_util::{StreamExt, stream::SelectAll};
+use futures_util::StreamExt;
+use futures_util::stream::SelectAll;
 use hyper::{Request, Response};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use thiserror::Error;
@@ -8,12 +12,10 @@ use tokio_rustls::rustls::ServerConfig;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
-use super::{
-    ConnectionInfo,
-    maybe_tls::{MaybeTlsAcceptor, TlsStreamInfo},
-    proxy_protocol::{MaybeProxyAcceptor, ProxyAcceptError},
-    unix_or_tcp::{SocketAddr, UnixOrTcpConnection, UnixOrTcpListener},
-};
+use super::ConnectionInfo;
+use super::maybe_tls::{MaybeTlsAcceptor, TlsStreamInfo};
+use super::proxy_protocol::{MaybeProxyAcceptor, ProxyAcceptError};
+use super::unix_or_tcp::{SocketAddr, UnixOrTcpConnection, UnixOrTcpListener};
 
 /// The timeout for the handshake to complete
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);

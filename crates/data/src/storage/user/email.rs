@@ -6,7 +6,8 @@ use coauth_data::{
 use rand_core::RngCore;
 use ulid::Ulid;
 
-use crate::{Pagination, pagination::Page, repository_impl};
+use crate::pagination::Page;
+use crate::{Pagination, repository_impl};
 
 /// Filter parameters for listing user emails
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -205,8 +206,7 @@ pub trait UserEmailRepository: Send + Sync {
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock to use
     /// * `email`: The email address to add
-    /// * `session`: The [`BrowserSession`] for which to add the
-    ///   [`UserEmailAuthentication`]
+    /// * `session`: The [`BrowserSession`] for which to add the [`UserEmailAuthentication`]
     ///
     /// # Errors
     ///
@@ -226,8 +226,7 @@ pub trait UserEmailRepository: Send + Sync {
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock to use
     /// * `email`: The email address to add
-    /// * `registration`: The [`UserRegistration`] for which to add the
-    ///   [`UserEmailAuthentication`]
+    /// * `registration`: The [`UserRegistration`] for which to add the [`UserEmailAuthentication`]
     ///
     /// # Errors
     ///
@@ -324,8 +323,7 @@ pub trait UserEmailRepository: Send + Sync {
     ///
     /// * `clock`: The clock to use to generate timestamps
     /// * `authentication`: The [`UserEmailAuthentication`] to complete
-    /// * `upstream_oauth_authorization_session`: The
-    ///   [`UpstreamOAuthAuthorizationSession`] to use
+    /// * `upstream_oauth_authorization_session`: The [`UpstreamOAuthAuthorizationSession`] to use
     ///
     /// # Errors
     ///
@@ -348,8 +346,7 @@ pub trait UserEmailRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from
-    ///   the beginning
+    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
     /// * `until`: The maximum ULID to delete (inclusive upper bound)
     /// * `limit`: The maximum number of authentications to delete in this batch
     ///

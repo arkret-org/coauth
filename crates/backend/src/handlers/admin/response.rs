@@ -17,7 +17,8 @@
 
 pub use coauth_admin_types::{PaginatedOutcome, SingleOutcome};
 use coauth_admin_types::{PaginationLinks, Resource, SingleResource};
-use coauth_data::{Pagination, pagination::Edge};
+use coauth_data::Pagination;
+use coauth_data::pagination::Edge;
 use salvo::oapi::ToSchema;
 use schemars::JsonSchema;
 use serde::Serialize;

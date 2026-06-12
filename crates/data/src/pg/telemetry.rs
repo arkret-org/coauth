@@ -1,9 +1,7 @@
 use std::sync::LazyLock;
 
-use opentelemetry::{
-    InstrumentationScope,
-    metrics::{Histogram, Meter},
-};
+use opentelemetry::InstrumentationScope;
+use opentelemetry::metrics::{Histogram, Meter};
 use opentelemetry_semantic_conventions as semcov;
 
 static SCOPE: LazyLock<InstrumentationScope> = LazyLock::new(|| {

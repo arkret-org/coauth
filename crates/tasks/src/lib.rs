@@ -21,11 +21,13 @@ use coauth_data::{
 };
 use coauth_messaging::NotificationCenter;
 use coauth_principal::PrincipalServerAdmin;
-use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
+use diesel_async::AsyncPgConnection;
+use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use new_queue::QueueRunnerError;
 use opentelemetry::metrics::Meter;
 use rand_core::SeedableRng;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 pub use crate::new_queue::QueueWorker;
 

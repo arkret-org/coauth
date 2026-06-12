@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use coauth_data::{AuthorizationCode, AuthorizationGrant, Client, Clock, Session};
-use oauth_types::{requests::ResponseMode, scope::Scope};
+use oauth_types::requests::ResponseMode;
+use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
@@ -25,16 +26,14 @@ pub trait OAuthAuthorizationGrantRepository: Send + Sync {
     /// * `client`: The client that requested the authorization grant
     /// * `redirect_uri`: The redirect URI the client requested
     /// * `scope`: The scope the client requested
-    /// * `code`: The authorization code used by this grant, if the `code`
-    ///   `response_type` was requested
+    /// * `code`: The authorization code used by this grant, if the `code` `response_type` was
+    ///   requested
     /// * `state`: The state the client sent, if set
     /// * `nonce`: The nonce the client sent, if set
     /// * `response_mode`: The response mode the client requested
-    /// * `response_type_id_token`: Whether the `id_token` `response_type` was
-    ///   requested
+    /// * `response_type_id_token`: Whether the `id_token` `response_type` was requested
     /// * `login_hint`: The `login_hint` the client sent, if set
-    /// * `locale`: The locale the detected when the user asked for the
-    ///   authorization grant
+    /// * `locale`: The locale the detected when the user asked for the authorization grant
     ///
     /// # Errors
     ///
@@ -131,8 +130,7 @@ pub trait OAuthAuthorizationGrantRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from
-    ///   the beginning
+    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
     /// * `until`: The maximum ULID to delete (inclusive upper bound)
     /// * `limit`: The maximum number of grants to delete in this batch
     ///

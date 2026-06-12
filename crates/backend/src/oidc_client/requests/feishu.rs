@@ -2,11 +2,9 @@
 //!
 //! Feishu uses a non-standard OAuth flow:
 //! - A separate step is needed to obtain an `app_access_token`
-//! - The token exchange uses `app_access_token` as Bearer auth (not
-//!   `client_secret`)
+//! - The token exchange uses `app_access_token` as Bearer auth (not `client_secret`)
 //! - Request bodies are JSON (not form-encoded)
-//! - All responses are wrapped in a `{"code": 0, "msg": "...", "data": {...}}`
-//!   envelope
+//! - All responses are wrapped in a `{"code": 0, "msg": "...", "data": {...}}` envelope
 
 use std::collections::HashMap;
 

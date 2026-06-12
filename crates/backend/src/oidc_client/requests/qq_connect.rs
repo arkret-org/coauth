@@ -3,8 +3,7 @@
 //! QQ Connect uses a non-standard OAuth flow:
 //! - Token endpoint returns URL-encoded by default (use `fmt=json` for JSON)
 //! - A separate `/me` endpoint is needed to get the user's OpenID
-//! - UserInfo endpoint requires `openid` and `oauth_consumer_key` as query
-//!   params
+//! - UserInfo endpoint requires `openid` and `oauth_consumer_key` as query params
 
 use std::collections::HashMap;
 

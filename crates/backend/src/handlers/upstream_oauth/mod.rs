@@ -2,17 +2,15 @@
 //!
 //! Upstream OAuth integration spans two layers:
 //!
-//! - **Connector layer** (`crates/oidc-client/`): Protocol-level operations
-//!   (discovery, authorization URL, token exchange, userinfo). These are
-//!   provider-agnostic for standard OIDC, and provider-specific for Chinese
-//!   platforms (QQ, WeChat, WeCom, Feishu, DingTalk). The provider-specific
-//!   userinfo-only adapters do not return signed ID tokens, so callbacks for
-//!   those adapters fail closed unless
-//!   `COAUTH_ALLOW_NON_STANDARD_UPSTREAM_OAUTH=true` is set.
+//! - **Connector layer** (`crates/oidc-client/`): Protocol-level operations (discovery,
+//!   authorization URL, token exchange, userinfo). These are provider-agnostic for standard OIDC,
+//!   and provider-specific for Chinese platforms (QQ, WeChat, WeCom, Feishu, DingTalk). The
+//!   provider-specific userinfo-only adapters do not return signed ID tokens, so callbacks for
+//!   those adapters fail closed unless `COAUTH_ALLOW_NON_STANDARD_UPSTREAM_OAUTH=true` is set.
 //!
-//! - **Handler layer** (this module): User-facing flow orchestration (session
-//!   management, link/unlink, attribute mapping, conflict resolution). This
-//!   logic is delegated to `upstream_link_workflow.rs`.
+//! - **Handler layer** (this module): User-facing flow orchestration (session management,
+//!   link/unlink, attribute mapping, conflict resolution). This logic is delegated to
+//!   `upstream_link_workflow.rs`.
 //!
 //! The `ConnectorRegistry` provides runtime provider lookup. Each upstream
 //! OAuth provider is NOT a `ConnectorProvider` (that's for PrincipalServers).

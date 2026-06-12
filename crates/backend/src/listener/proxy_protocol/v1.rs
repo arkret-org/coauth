@@ -1,8 +1,6 @@
-use std::{
-    net::{AddrParseError, Ipv4Addr, Ipv6Addr, SocketAddr},
-    num::ParseIntError,
-    str::Utf8Error,
-};
+use std::net::{AddrParseError, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::num::ParseIntError;
+use std::str::Utf8Error;
 
 use bytes::Buf;
 use thiserror::Error;

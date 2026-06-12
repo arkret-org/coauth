@@ -37,7 +37,10 @@
 //! behaviour while still threading the rest of the binding (frontier,
 //! signature, audit) through the real path.
 
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};

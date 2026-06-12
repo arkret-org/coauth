@@ -10,18 +10,13 @@ use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::{
-    AppError, JsonResult,
-    handlers::admin::{
-        call_context::extract_call_context,
-        model::{Resource, User},
-        params::{IncludeCount, extract_pagination, extract_ulid_param},
-        response::{
-            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-            paginated_response_for_page,
-        },
-    },
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::{Resource, User};
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::{AppError, JsonResult};
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.users.by_username", skip_all)]

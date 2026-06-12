@@ -9,14 +9,14 @@ use std::sync::Arc;
 
 use chrono::Duration;
 use coauth_config::CokretConfig;
+use coauth_data::oauth::{
+    OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthRefreshTokenRepository,
+    OAuthSessionRepository,
+};
+use coauth_data::user::BrowserSessionRepository;
 use coauth_data::{
     AuthorizationGrantStage, BoxRepository, Client, Clock, DeviceCodeGrantState, RefreshToken,
     RefreshTokenState, RepositoryAccess, RepositoryError, SiteConfig, TokenType, UrlBuilder,
-    oauth::{
-        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthRefreshTokenRepository,
-        OAuthSessionRepository,
-    },
-    user::BrowserSessionRepository,
 };
 use coauth_i18n::Locale;
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
@@ -24,28 +24,22 @@ use coauth_keystore::Keystore;
 use coauth_policy::Policy;
 use coauth_principal::PrincipalServerAdmin;
 use coauth_templates::{DeviceNameContext, TemplateContext, Templates};
-use oauth_types::{
-    pkce::CodeChallengeError,
-    requests::{
-        AccessTokenResponse, AuthorizationCodeGrant, ClientCredentialsGrant, DeviceCodeGrant,
-        GrantType, RefreshTokenGrant,
-    },
-    scope,
+use oauth_types::pkce::CodeChallengeError;
+use oauth_types::requests::{
+    AccessTokenResponse, AuthorizationCodeGrant, ClientCredentialsGrant, DeviceCodeGrant,
+    GrantType, RefreshTokenGrant,
 };
+use oauth_types::scope;
 use thiserror::Error;
 use tracing::{debug, error, warn};
 use ulid::Ulid;
 
-use crate::{
-    handlers::{
-        BoundActivityTracker,
-        oauth::{IdTokenSignatureError, generate_id_token, generate_token_pair},
-    },
-    oidc_client::types::scope::ScopeToken,
-    services::refresh_token_rotation::{
-        RefreshTokenState as RotationRefreshTokenState, RotationDecision, RotationPolicy,
-        evaluate_refresh,
-    },
+use crate::handlers::BoundActivityTracker;
+use crate::handlers::oauth::{IdTokenSignatureError, generate_id_token, generate_token_pair};
+use crate::oidc_client::types::scope::ScopeToken;
+use crate::services::refresh_token_rotation::{
+    RefreshTokenState as RotationRefreshTokenState, RotationDecision, RotationPolicy,
+    evaluate_refresh,
 };
 
 /// Public authorization-code clients must use PKCE. Confidential clients can
@@ -610,7 +604,11 @@ pub async fn exchange_authorization_code(
     }
     for device_id in &requested_device_ids {
         principal_server
-            .upsert_device(&browser_session.user.localpart, device_id, Some(&device_name))
+            .upsert_device(
+                &browser_session.user.localpart,
+                device_id,
+                Some(&device_name),
+            )
             .await
             .map_err(|err| {
                 error!(
@@ -652,15 +650,14 @@ pub async fn exchange_authorization_code(
 mod tests {
     use std::sync::Arc;
 
-    use coauth_data::{
-        PgRepositoryFactory, RepositoryFactory as _,
-        clock::MockClock,
-        oauth::{LocalizedClientMetadata, NewSessionGrant},
-    };
+    use coauth_data::clock::MockClock;
+    use coauth_data::oauth::{LocalizedClientMetadata, NewSessionGrant};
+    use coauth_data::{PgRepositoryFactory, RepositoryFactory as _};
     use oauth_types::scope::{OPENID, Scope};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
-    use tokio_util::{sync::CancellationToken, task::TaskTracker};
+    use tokio_util::sync::CancellationToken;
+    use tokio_util::task::TaskTracker;
     use url::Url;
 
     use super::*;

@@ -16,10 +16,8 @@
 //! Accounts that never enrol a passkey simply stay on the local
 //! `did:web:coauth.invalid:…` derivation.
 
-use coauth_data::{
-    BoxRepository, Clock, RepositoryAccess,
-    flow::{StageOutcome, StageValidationError},
-};
+use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 use rand_core::RngCore;
 
 use super::StageExecutionError;

@@ -14,24 +14,22 @@
 //! workflow.
 
 use anyhow::Error as AnyhowError;
+use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _};
+use coauth_data::user::{UserEmailRepository, UserRepository};
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError,
     UserEmailAuthentication,
-    queue::{ProvisionUserJob, QueueJobRepositoryExt as _},
-    user::{UserEmailRepository, UserRepository},
 };
 use rand_core::RngCore;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::{
-    Limiter, RequesterFingerprint,
-    account::service::password::{
-        VerifyPasswordIfNeededError, verify_password_if_needed as verify_contact_password_if_needed,
-    },
-    notification_dispatch::{NotificationIntent, schedule_notification},
-    passwords::PasswordManager,
+use crate::handlers::account::service::password::{
+    VerifyPasswordIfNeededError, verify_password_if_needed as verify_contact_password_if_needed,
 };
+use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
+use crate::handlers::passwords::PasswordManager;
+use crate::handlers::{Limiter, RequesterFingerprint};
 
 // ── Start email verification ──────────────────────────────────
 

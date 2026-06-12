@@ -1,9 +1,9 @@
-use coauth_data::{
-    BoxRepository, BoxRng, Clock, RepositoryAccess, RepositoryError, TokenType,
-    oauth::{OAuthAccessTokenRepository, OAuthRefreshTokenRepository, OAuthSessionRepository},
-    queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
-    user::UserRepository,
+use coauth_data::oauth::{
+    OAuthAccessTokenRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
 };
+use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
+use coauth_data::user::UserRepository;
+use coauth_data::{BoxRepository, BoxRng, Clock, RepositoryAccess, RepositoryError, TokenType};
 use coauth_iana::oauth::OAuthTokenTypeHint;
 use thiserror::Error;
 use ulid::Ulid;

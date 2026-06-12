@@ -1,18 +1,18 @@
-use coauth_data::{RepositoryAccess, account::AccountSecuritySummary};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::RepositoryAccess;
+use coauth_data::account::AccountSecuritySummary;
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::Serialize;
 
+use super::linked_accounts::LinkedAccount;
+use super::site_config::{SiteConfigOutcome, from_site_config};
 use super::{
     DepotExt, NodeType, RouteError, UserAgentInfo, extract_bound_activity_tracker,
-    extract_session_info, get_requester,
-    linked_accounts::LinkedAccount,
-    make_clock, parse_user_agent,
-    site_config::{SiteConfigOutcome, from_site_config},
+    extract_session_info, get_requester, make_clock, parse_user_agent,
 };
-use crate::{
-    handlers::{account::service::connections::load_linked_accounts, cokret},
-    services::user_profile::{UserProfileServiceError, load_viewer_profile},
-};
+use crate::handlers::account::service::connections::load_linked_accounts;
+use crate::handlers::cokret;
+use crate::services::user_profile::{UserProfileServiceError, load_viewer_profile};
 
 // ── Response types ─────────────────────────────────────────────
 

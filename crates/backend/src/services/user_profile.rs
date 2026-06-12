@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Error as AnyhowError;
+use coauth_data::notification::NotificationRepository;
+use coauth_data::user::{UserEmailRepository, UserPasswordRepository, UserRepository};
 use coauth_data::{
     BoxRepository, Clock, NotificationChannel, RepositoryAccess, RepositoryError, SiteConfig, User,
     UserEmail, UserProfile, UserProfilePatch,
-    notification::NotificationRepository,
-    user::{UserEmailRepository, UserPasswordRepository, UserRepository},
 };
 use coauth_principal::PrincipalServerAdmin;
 use rand_core::RngCore;

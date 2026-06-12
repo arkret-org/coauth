@@ -7,7 +7,9 @@ use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 
-use crate::{Pagination, pagination::Page, repository_impl, user::BrowserSessionFilter};
+use crate::pagination::Page;
+use crate::user::BrowserSessionFilter;
+use crate::{Pagination, repository_impl};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OAuthSessionState {
@@ -280,8 +282,8 @@ pub trait OAuthSessionRepository: Send + Sync {
     /// * `clock`: The clock used to generate timestamps
     /// * `client`: The [`Client`] which created the [`Session`]
     /// * `user`: The [`User`] for which the session should be created, if any
-    /// * `user_session`: The [`BrowserSession`] of the user which completed the
-    ///   authorization, if any
+    /// * `user_session`: The [`BrowserSession`] of the user which completed the authorization, if
+    ///   any
     /// * `scope`: The [`Scope`] of the [`Session`]
     ///
     /// # Errors
@@ -306,8 +308,7 @@ pub trait OAuthSessionRepository: Send + Sync {
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock used to generate timestamps
     /// * `client`: The [`Client`] which created the [`Session`]
-    /// * `user_session`: The [`BrowserSession`] of the user which completed the
-    ///   authorization
+    /// * `user_session`: The [`BrowserSession`] of the user which completed the authorization
     /// * `scope`: The [`Scope`] of the [`Session`]
     ///
     /// # Errors
@@ -421,8 +422,8 @@ pub trait OAuthSessionRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `activity`: A list of tuples containing the session ID, the last
-    ///   activity timestamp and the IP address of the client
+    /// * `activity`: A list of tuples containing the session ID, the last activity timestamp and
+    ///   the IP address of the client
     ///
     /// # Errors
     ///
@@ -464,8 +465,8 @@ pub trait OAuthSessionRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The earliest finish time to delete (exclusive). If `None`,
-    ///   starts from the beginning.
+    /// * `since`: The earliest finish time to delete (exclusive). If `None`, starts from the
+    ///   beginning.
     /// * `until`: The latest finish time to delete (exclusive)
     /// * `limit`: Maximum number of sessions to delete in this batch
     ///
@@ -487,10 +488,9 @@ pub trait OAuthSessionRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: Only process sessions with `last_active_at` at or after this
-    ///   timestamp (exclusive). If `None`, starts from the beginning.
-    /// * `threshold`: Clear IPs for sessions with `last_active_at` before this
-    ///   time
+    /// * `since`: Only process sessions with `last_active_at` at or after this timestamp
+    ///   (exclusive). If `None`, starts from the beginning.
+    /// * `threshold`: Clear IPs for sessions with `last_active_at` before this time
     /// * `limit`: Maximum number of sessions to update in this batch
     ///
     /// # Errors

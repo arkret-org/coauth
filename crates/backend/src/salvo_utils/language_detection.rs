@@ -1,7 +1,8 @@
 use std::cmp::Reverse;
 
 use headers::{Error, Header};
-use http::{HeaderName, HeaderValue, header::ACCEPT_LANGUAGE};
+use http::header::ACCEPT_LANGUAGE;
+use http::{HeaderName, HeaderValue};
 use icu_locid::Locale;
 
 #[derive(PartialEq, Eq, Debug)]
@@ -149,7 +150,8 @@ impl Header for AcceptLanguage {
 #[cfg(test)]
 mod tests {
     use headers::HeaderMapExt;
-    use http::{HeaderMap, HeaderValue, header::ACCEPT_LANGUAGE};
+    use http::header::ACCEPT_LANGUAGE;
+    use http::{HeaderMap, HeaderValue};
     use icu_locid::locale;
 
     use super::*;

@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::OAuthClientDetail,
-    components::{layout::Layout, loading::LoadingScreen},
-    pages::Route,
-};
+use crate::api::types::OAuthClientDetail;
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingScreen;
+use crate::pages::Route;
 
 #[component]
 pub fn ClientDetail(id: String) -> Element {

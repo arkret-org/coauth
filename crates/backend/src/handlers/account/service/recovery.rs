@@ -6,13 +6,16 @@
 //! (`crate::handlers::flow`) can already orchestrate recovery as a
 //! `default-recovery` flow.
 
-use std::{net::IpAddr, str::FromStr};
+use std::net::IpAddr;
+use std::str::FromStr;
 
 use anyhow::{Context as _, Error as AnyhowError};
+use coauth_data::user::{
+    UserEmailRepository, UserPasswordRepository, UserRecoveryRepository, UserRepository,
+};
 use coauth_data::{
     BoxRepository, Clock, RepositoryAccess, RepositoryError, UserRecoverySession,
     UserRecoveryTicket,
-    user::{UserEmailRepository, UserPasswordRepository, UserRecoveryRepository, UserRepository},
 };
 use lettre::Address;
 use rand_chacha::rand_core::CryptoRngCore;
@@ -21,11 +24,9 @@ use thiserror::Error;
 use ulid::Ulid;
 use zeroize::Zeroizing;
 
-use crate::handlers::{
-    Limiter, RequesterFingerprint,
-    notification_dispatch::{NotificationIntent, schedule_notification},
-    passwords::PasswordManager,
-};
+use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
+use crate::handlers::passwords::PasswordManager;
+use crate::handlers::{Limiter, RequesterFingerprint};
 
 #[derive(Debug, Error)]
 pub enum StartAccountRecoveryError {

@@ -1,31 +1,27 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::notification::{
+    NewNotificationDelivery, NewNotificationEventLog, NewNotificationRequest,
+    NotificationRepository,
+};
 use coauth_data::{
     Clock, NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDeliveryStatus, NotificationEventKind, NotificationEventLog,
     NotificationPreference, NotificationRequest, NotificationRequestStatus, User, new_id,
-    notification::{
-        NewNotificationDelivery, NewNotificationEventLog, NewNotificationRequest,
-        NotificationRepository,
-    },
 };
-use diesel::{
-    prelude::*,
-    sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid},
-};
+use diesel::prelude::*;
+use diesel::sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use serde::de::DeserializeOwned;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{
-        notification_deliveries, notification_event_logs, notification_preferences,
-        notification_requests,
-    },
+use crate::schema::{
+    notification_deliveries, notification_event_logs, notification_preferences,
+    notification_requests,
 };
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`NotificationRepository`].
 pub struct PgNotificationRepository<'c> {

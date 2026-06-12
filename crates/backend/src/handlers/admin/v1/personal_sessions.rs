@@ -6,11 +6,10 @@ use std::str::FromStr as _;
 
 use anyhow::Context;
 use chrono::{DateTime, Duration, Utc};
-use coauth_data::{
-    TokenType,
-    personal::{PersonalSessionFilter, session::PersonalSessionOwner},
-    queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
-};
+use coauth_data::TokenType;
+use coauth_data::personal::PersonalSessionFilter;
+use coauth_data::personal::session::PersonalSessionOwner;
+use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
 use coauth_principal::PrincipalServerAdmin;
 use oauth_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
@@ -19,21 +18,14 @@ use serde::Deserialize;
 use tracing::error;
 use ulid::Ulid;
 
-use crate::{
-    AppError, CreatedJsonResult, JsonResult,
-    handlers::{
-        admin::{
-            call_context::{CallerSession, extract_call_context},
-            model::{PersonalSession, Resource},
-            params::{IncludeCount, extract_pagination, extract_ulid_param},
-            response::{
-                PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-                paginated_response_for_page,
-            },
-        },
-        common::DepotExt,
-    },
+use crate::handlers::admin::call_context::{CallerSession, extract_call_context};
+use crate::handlers::admin::model::{PersonalSession, Resource};
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::handlers::common::DepotExt;
+use crate::{AppError, CreatedJsonResult, JsonResult};
 
 /// Derives the [`PersonalSessionOwner`] from the caller's active session,
 /// so that newly created personal sessions are attributed correctly.
@@ -570,7 +562,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use chrono::Duration;
-    use coauth_data::{Clock, personal::session::PersonalSessionOwner};
+    use coauth_data::Clock;
+    use coauth_data::personal::session::PersonalSessionOwner;
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
     use oauth_types::scope::{OPENID, Scope};

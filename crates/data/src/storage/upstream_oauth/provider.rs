@@ -13,9 +13,9 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
 
-use crate::{
-    Pagination, pagination::Page, repository_impl, upstream_oauth::UpstreamOAuthProviderSource,
-};
+use crate::pagination::Page;
+use crate::upstream_oauth::UpstreamOAuthProviderSource;
+use crate::{Pagination, repository_impl};
 
 /// Structure which holds parameters when inserting or updating an upstream
 /// OAuth provider

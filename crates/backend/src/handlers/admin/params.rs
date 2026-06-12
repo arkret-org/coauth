@@ -1,10 +1,12 @@
 // Generated code from schemars violates this rule
 #![allow(clippy::str_to_string)]
 
-use std::{borrow::Cow, num::NonZeroUsize};
+use std::borrow::Cow;
+use std::num::NonZeroUsize;
 
 use coauth_data::pagination::PaginationDirection;
-use salvo::{http::StatusCode, prelude::*};
+use salvo::http::StatusCode;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use ulid::Ulid;

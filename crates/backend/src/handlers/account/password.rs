@@ -1,5 +1,7 @@
-use coauth_data::{Clock, RepositoryAccess, user::UserRecoveryRepository};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::user::UserRecoveryRepository;
+use coauth_data::{Clock, RepositoryAccess};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -7,12 +9,10 @@ use super::{
     DepotExt, NodeType, RouteError, extract_bound_activity_tracker, extract_session_info,
     get_requester, make_clock, make_rng,
 };
-use crate::handlers::account::service::{
-    password::{ChangePasswordError, change_password},
-    recovery::{
-        CompleteAccountRecoveryError, ResendAccountRecoveryByTicketError,
-        complete_account_recovery, resend_account_recovery_by_ticket,
-    },
+use crate::handlers::account::service::password::{ChangePasswordError, change_password};
+use crate::handlers::account::service::recovery::{
+    CompleteAccountRecoveryError, ResendAccountRecoveryByTicketError, complete_account_recovery,
+    resend_account_recovery_by_ticket,
 };
 
 // ── POST /_coauth/self/viewer/password ───────────────────────────────
@@ -308,10 +308,8 @@ pub async fn resend_recovery_email(
 
 #[cfg(test)]
 mod tests {
-    use coauth_data::{
-        RepositoryAccess,
-        user::{UserEmailRepository, UserRecoveryRepository, UserRepository},
-    };
+    use coauth_data::RepositoryAccess;
+    use coauth_data::user::{UserEmailRepository, UserRecoveryRepository, UserRepository};
     use hyper::{Request, StatusCode};
     use ulid::Ulid;
 

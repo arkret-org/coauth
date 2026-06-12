@@ -1,5 +1,6 @@
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, de::Error};
+use serde::de::Error;
+use serde::{Deserialize, Serialize};
 
 use crate::ConfigurationSection;
 

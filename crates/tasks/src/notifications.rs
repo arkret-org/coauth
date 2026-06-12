@@ -1,25 +1,26 @@
-use std::{collections::BTreeMap, error::Error as StdError};
+use std::collections::BTreeMap;
+use std::error::Error as StdError;
 
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
+use coauth_data::notification::{
+    NewNotificationDelivery, NewNotificationEventLog, NewNotificationRequest,
+};
+use coauth_data::queue::{
+    ContactVerificationTarget, DispatchNotificationJob, ProcessNotificationDeliveriesJob,
+    QueueJobRepositoryExt as _,
+};
+use coauth_data::user::UserEmailFilter;
 use coauth_data::{
     BoxRepository, NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDestination, NotificationEventActor, NotificationEventKind,
     NotificationRequest as PersistedNotificationRequest, NotificationRequestSource,
     NotificationRequestStatus, Pagination, RepositoryAccess,
-    notification::{NewNotificationDelivery, NewNotificationEventLog, NewNotificationRequest},
-    queue::{
-        ContactVerificationTarget, DispatchNotificationJob, ProcessNotificationDeliveriesJob,
-        QueueJobRepositoryExt as _,
-    },
-    user::UserEmailFilter,
 };
 use coauth_i18n::Locale;
-use coauth_messaging::{
-    NotificationError, NotificationRequest,
-    email::{Address, DELIVERY_ID_TAG, Mailbox, REQUEST_ID_TAG},
-};
+use coauth_messaging::email::{Address, DELIVERY_ID_TAG, Mailbox, REQUEST_ID_TAG};
+use coauth_messaging::{NotificationError, NotificationRequest};
 use coauth_templates::{EmailRecoveryContext, EmailVerificationContext, TemplateContext as _};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
@@ -27,10 +28,8 @@ use serde_json::{Value, json};
 use tracing::{error, info, warn};
 use ulid::Ulid;
 
-use crate::{
-    State,
-    new_queue::{JobContext, JobError, RunnableJob},
-};
+use crate::State;
+use crate::new_queue::{JobContext, JobError, RunnableJob};
 
 const TEMPLATE_EMAIL_VERIFICATION: &str = "email_verification";
 const TEMPLATE_SMS_VERIFICATION: &str = "sms_verification_code";

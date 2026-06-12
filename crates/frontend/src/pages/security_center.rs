@@ -1,13 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::SecuritySummaryOutcome,
-    components::{
-        loading::LoadingScreen,
-        separator::{Separator, SeparatorKind},
-    },
-    pages::Route,
-};
+use crate::api::types::SecuritySummaryOutcome;
+use crate::components::loading::LoadingScreen;
+use crate::components::separator::{Separator, SeparatorKind};
+use crate::pages::Route;
 
 /// Security center page.
 ///

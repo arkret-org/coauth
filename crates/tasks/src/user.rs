@@ -9,19 +9,15 @@
 
 use anyhow::Context;
 use async_trait::async_trait;
-use coauth_data::{
-    BoxRepository, Clock, RepositoryAccess,
-    oauth::OAuthSessionFilter,
-    personal::PersonalSessionFilter,
-    queue::{DeactivateUserJob, ReactivateUserJob},
-    user::{BrowserSessionFilter, User, UserEmailFilter, UserRepository},
-};
+use coauth_data::oauth::OAuthSessionFilter;
+use coauth_data::personal::PersonalSessionFilter;
+use coauth_data::queue::{DeactivateUserJob, ReactivateUserJob};
+use coauth_data::user::{BrowserSessionFilter, User, UserEmailFilter, UserRepository};
+use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 use tracing::info;
 
-use crate::{
-    State,
-    new_queue::{JobContext, JobError, RunnableJob},
-};
+use crate::State;
+use crate::new_queue::{JobContext, JobError, RunnableJob};
 
 /// Terminate every active session that belongs to `target` and log the counts.
 ///

@@ -2,21 +2,19 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use coauth_data::{RepositoryAccess, audit::AdminOperation};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::AdminOperation;
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::{
-    AppError, CreatedJsonResult, JsonResult,
-    handlers::{
-        admin::{
-            CreatedJson, call_context::extract_call_context, model::PolicyData,
-            params::extract_ulid_param, response::SingleOutcome,
-        },
-        common::DepotExt,
-    },
-};
+use crate::handlers::admin::CreatedJson;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::PolicyData;
+use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::response::SingleOutcome;
+use crate::handlers::common::DepotExt;
+use crate::{AppError, CreatedJsonResult, JsonResult};
 
 /// Fetch a single policy data record by its ULID.
 #[endpoint]

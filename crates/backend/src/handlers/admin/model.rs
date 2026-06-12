@@ -7,9 +7,9 @@ use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
 pub use coauth_admin_types::Resource;
-use coauth_data::personal::{
-    PersonalAccessToken as DataModelPersonalAccessToken,
-    session::{PersonalSession as DataModelPersonalSession, PersonalSessionOwner},
+use coauth_data::personal::PersonalAccessToken as DataModelPersonalAccessToken;
+use coauth_data::personal::session::{
+    PersonalSession as DataModelPersonalSession, PersonalSessionOwner,
 };
 use salvo::oapi::ToSchema;
 use schemars::JsonSchema;

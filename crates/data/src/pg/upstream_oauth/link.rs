@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::upstream_oauth::{UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository};
 use coauth_data::{
     Clock, Page, Pagination, UpstreamOAuthLink, UpstreamOAuthLinkPatch, UpstreamOAuthProvider,
     User, new_id,
-    pagination::{Node, PaginationDirection},
-    upstream_oauth::{UpstreamOAuthLinkFilter, UpstreamOAuthLinkRepository},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -12,10 +12,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError,
-    schema::{upstream_oauth_links, upstream_oauth_providers},
-};
+use crate::DatabaseError;
+use crate::schema::{upstream_oauth_links, upstream_oauth_providers};
 
 /// An implementation of [`UpstreamOAuthLinkRepository`] for a PostgreSQL
 /// connection

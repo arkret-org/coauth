@@ -1,26 +1,22 @@
 //! The [`ClientMetadata`] struct and its accessor methods.
 
 use chrono::Duration;
-use coauth_iana::{
-    jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg},
-    oauth::{OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod},
-};
+use coauth_iana::jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg};
+use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use super::client_metadata_serde::ClientMetadataSerdeHelper;
+use super::localized::Localized;
+use super::validation::{ClientMetadataVerificationError, VerifiedClientMetadata};
 use super::{
     DEFAULT_APPLICATION_TYPE, DEFAULT_ENCRYPTION_ENC_ALGORITHM, DEFAULT_GRANT_TYPES,
     DEFAULT_RESPONSE_TYPES, DEFAULT_SIGNING_ALGORITHM, DEFAULT_TOKEN_AUTH_METHOD,
-    client_metadata_serde::ClientMetadataSerdeHelper,
-    localized::Localized,
-    validation::{ClientMetadataVerificationError, VerifiedClientMetadata},
 };
-use crate::{
-    oidc::{ApplicationType, SubjectType},
-    requests::GrantType,
-    response_type::ResponseType,
-};
+use crate::oidc::{ApplicationType, SubjectType};
+use crate::requests::GrantType;
+use crate::response_type::ResponseType;
 
 /// Client metadata, as described by the [IANA registry].
 ///

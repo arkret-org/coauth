@@ -8,14 +8,13 @@ mod discovery;
 mod provider;
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, de::Error as _};
+use serde::de::Error as _;
+use serde::{Deserialize, Serialize};
 
 // Re-export sub-module types so they remain accessible from the parent
 pub use self::claims::{ClaimsImports, EmailImportPreference, ImportAction, OnConflict};
-pub use self::{
-    discovery::{DiscoveryMode, OnBackchannelLogout, PkceMethod},
-    provider::{Provider, ResponseMode, TokenAuthMethod},
-};
+pub use self::discovery::{DiscoveryMode, OnBackchannelLogout, PkceMethod};
+pub use self::provider::{Provider, ResponseMode, TokenAuthMethod};
 use crate::ConfigurationSection;
 
 // ── Top-level Section ──
@@ -250,11 +249,10 @@ mod tests {
     #![allow(clippy::result_large_err)]
     use std::str::FromStr;
 
-    use figment::{
-        Figment, Jail,
-        providers::{Format, Yaml},
-    };
-    use tokio::{runtime::Handle, task};
+    use figment::providers::{Format, Yaml};
+    use figment::{Figment, Jail};
+    use tokio::runtime::Handle;
+    use tokio::task;
     use ulid::Ulid;
 
     use super::*;

@@ -2,13 +2,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::{
-    QueryableByName,
-    sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid},
-};
-use diesel_async::{
-    AsyncPgConnection, RunQueryDsl as _, pooled_connection::deadpool::Pool as DieselPool,
-};
+use diesel::QueryableByName;
+use diesel::sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
+use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
+use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
 use serde_json::Value;
 use thiserror::Error;
 use ulid::Ulid;

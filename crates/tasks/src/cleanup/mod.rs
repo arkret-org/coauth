@@ -4,12 +4,9 @@
 //! targets a particular domain:
 //!
 //! - [`tokens`]: Revoked / expired OAuth access and refresh tokens
-//! - [`sessions`]: Finished OAuth and browser sessions, plus inactive session
-//!   IPs
-//! - [`oauth`]: Authorization grants, device-code grants, upstream OAuth
-//!   sessions and links
-//! - [`user`]: Abandoned registrations, recovery sessions, email authentication
-//!   codes
+//! - [`sessions`]: Finished OAuth and browser sessions, plus inactive session IPs
+//! - [`oauth`]: Authorization grants, device-code grants, upstream OAuth sessions and links
+//! - [`user`]: Abandoned registrations, recovery sessions, email authentication codes
 //! - [`misc`]: Completed queue jobs and stale policy data
 
 use chrono::{DateTime, Utc};
@@ -34,15 +31,16 @@ pub(crate) fn ulid_upper_bound(cutoff: DateTime<Utc>) -> Ulid {
 
 macro_rules! cleanup_time_cursor_job {
     (
-		job = $job:ty,
-		span = $span:literal,
-		repo = $repo:ident,
-		method = $method:ident,
-		cutoff = $cutoff:expr,
-		timeout_secs = $timeout_secs:expr,
-		empty = $empty:literal,
-		done = $done:literal $(,)?
-	) => {
+        job =
+        $job:ty,span =
+        $span:literal,repo =
+        $repo:ident,method =
+        $method:ident,cutoff =
+        $cutoff:expr,timeout_secs =
+        $timeout_secs:expr,empty =
+        $empty:literal,done =
+        $done:literal $(,)?
+    ) => {
         #[async_trait::async_trait]
         impl crate::new_queue::RunnableJob for $job {
             #[tracing::instrument(name = $span, skip_all)]
@@ -90,15 +88,16 @@ macro_rules! cleanup_time_cursor_job {
 
 macro_rules! cleanup_ulid_cursor_job {
     (
-		job = $job:ty,
-		span = $span:literal,
-		repo = $repo:ident,
-		method = $method:ident,
-		cutoff = $cutoff:expr,
-		timeout_secs = $timeout_secs:expr,
-		empty = $empty:literal,
-		done = $done:literal $(,)?
-	) => {
+        job =
+        $job:ty,span =
+        $span:literal,repo =
+        $repo:ident,method =
+        $method:ident,cutoff =
+        $cutoff:expr,timeout_secs =
+        $timeout_secs:expr,empty =
+        $empty:literal,done =
+        $done:literal $(,)?
+    ) => {
         #[async_trait::async_trait]
         impl crate::new_queue::RunnableJob for $job {
             #[tracing::instrument(name = $span, skip_all)]

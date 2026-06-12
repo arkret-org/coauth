@@ -9,10 +9,10 @@ mod worker;
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    BoxRepositoryFactory, BrowserSession, Clock, Session, personal::session::PersonalSession,
-};
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use coauth_data::personal::session::PersonalSession;
+use coauth_data::{BoxRepositoryFactory, BrowserSession, Clock, Session};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use ulid::Ulid;
 
 pub use self::bound::Bound;

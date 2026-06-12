@@ -1,5 +1,6 @@
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, de::Error as _};
+use serde::de::Error as _;
+use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use url::Url;
 

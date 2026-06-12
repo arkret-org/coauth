@@ -16,17 +16,15 @@ use coauth_admin_types::circle_capability_admin::{
     CircleCapabilityGrant, CreateCircleCapabilityGrant, ListCircleCapabilityGrantsOutcome, RiskTier,
 };
 use coauth_data::{NewCircleCapabilityGrant, RepositoryAccess};
-use salvo::{http::StatusCode, oapi::extract::PathParam, prelude::*};
+use salvo::http::StatusCode;
+use salvo::oapi::extract::PathParam;
+use salvo::prelude::*;
 use ulid::Ulid;
 
-use crate::{
-    JsonResult,
-    error::AppError,
-    handlers::{
-        admin::call_context::extract_call_context,
-        common::{DepotExt, make_clock, make_rng},
-    },
-};
+use crate::JsonResult;
+use crate::error::AppError;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::common::{DepotExt, make_clock, make_rng};
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.circle_capabilities.list", skip_all)]

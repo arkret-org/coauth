@@ -42,8 +42,7 @@ pub trait UserRegistrationRepository: Send + Sync {
     /// * `handle`: The handle of the user
     /// * `ip_address`: The IP address of the user agent, if any
     /// * `user_agent`: The user agent of the user agent, if any
-    /// * `post_auth_action`: The post auth action to execute after the
-    ///   registration, if any
+    /// * `post_auth_action`: The post auth action to execute after the registration, if any
     ///
     /// # Errors
     ///
@@ -189,8 +188,7 @@ pub trait UserRegistrationRepository: Send + Sync {
     /// # Parameters
     ///
     /// * `user_registration`: The [`UserRegistration`] to update
-    /// * `upstream_oauth_authorization_session`: The
-    ///   [`UpstreamOAuthAuthorizationSession`] to set
+    /// * `upstream_oauth_authorization_session`: The [`UpstreamOAuthAuthorizationSession`] to set
     ///
     /// # Errors
     ///

@@ -7,10 +7,8 @@
 //! rendering.  Each page or email is backed by a dedicated context type
 //! (see the [`context`] module) and a corresponding template file on disk.
 
-use std::{
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 use anyhow::Context as _;
 use arc_swap::ArcSwap;
@@ -32,24 +30,21 @@ mod functions;
 #[macro_use]
 mod macros;
 
-pub use self::{
-    context::{
-        AppContext, AppErrorState, ApprovalContext, DeviceApprovalContext, DeviceLinkContext,
-        DeviceLinkFormField, DeviceNameContext, EmailRecoveryContext, EmailVerificationContext,
-        EmptyContext, ErrorContext, FormPostContext, IndexContext, LoginContext, LoginFormField,
-        NotFoundContext, PasswordRegisterContext, PolicyViolationContext, PostAuthContext,
-        PostAuthContextInner, RecoveryExpiredContext, RecoveryFinishContext,
-        RecoveryFinishFormField, RecoveryProgressContext, RecoveryStartContext,
-        RecoveryStartFormField, RegisterContext, RegisterFormField,
-        RegisterStepsDisplayNameContext, RegisterStepsDisplayNameFormField,
-        RegisterStepsEmailInUseContext, RegisterStepsRegistrationTokenContext,
-        RegisterStepsRegistrationTokenFormField, RegisterStepsVerifyEmailContext,
-        RegisterStepsVerifyEmailFormField, SiteBranding, SiteConfigExt, SiteFeatures,
-        TemplateContext, UpstreamExistingLinkContext, UpstreamRegister, UpstreamRegisterFormField,
-        UpstreamSuggestLink, WithCaptcha, WithCsrf, WithLanguage, WithOptionalSession, WithSession,
-    },
-    forms::{FieldError, FormError, FormField, FormState, ToFormState},
+pub use self::context::{
+    AppContext, AppErrorState, ApprovalContext, DeviceApprovalContext, DeviceLinkContext,
+    DeviceLinkFormField, DeviceNameContext, EmailRecoveryContext, EmailVerificationContext,
+    EmptyContext, ErrorContext, FormPostContext, IndexContext, LoginContext, LoginFormField,
+    NotFoundContext, PasswordRegisterContext, PolicyViolationContext, PostAuthContext,
+    PostAuthContextInner, RecoveryExpiredContext, RecoveryFinishContext, RecoveryFinishFormField,
+    RecoveryProgressContext, RecoveryStartContext, RecoveryStartFormField, RegisterContext,
+    RegisterFormField, RegisterStepsDisplayNameContext, RegisterStepsDisplayNameFormField,
+    RegisterStepsEmailInUseContext, RegisterStepsRegistrationTokenContext,
+    RegisterStepsRegistrationTokenFormField, RegisterStepsVerifyEmailContext,
+    RegisterStepsVerifyEmailFormField, SiteBranding, SiteConfigExt, SiteFeatures, TemplateContext,
+    UpstreamExistingLinkContext, UpstreamRegister, UpstreamRegisterFormField, UpstreamSuggestLink,
+    WithCaptcha, WithCsrf, WithLanguage, WithOptionalSession, WithSession,
 };
+pub use self::forms::{FieldError, FormError, FormField, FormState, ToFormState};
 use crate::context::SampleIdentifier;
 
 /// Escape the given string for use in HTML

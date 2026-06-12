@@ -1,14 +1,14 @@
 use chrono::Duration;
+use coauth_data::audit::{HandleAuditEventType, NewHandleAuditEvent};
+use coauth_data::clock::MockClock;
+use coauth_data::upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter};
+use coauth_data::user::{
+    BrowserSessionFilter, BrowserSessionRepository, UserEmailFilter, UserEmailRepository,
+    UserFilter, UserPasswordRepository, UserRepository,
+};
 use coauth_data::{
     Clock, NewUserPrimaryHandlePreference, Pagination, RepositoryAccess as _,
     RepositoryFactory as _, UserEmailPatch, UserPatch, UserProfilePatch,
-    audit::{HandleAuditEventType, NewHandleAuditEvent},
-    clock::MockClock,
-    upstream_oauth::{UpstreamOAuthProviderParams, UpstreamOAuthSessionFilter},
-    user::{
-        BrowserSessionFilter, BrowserSessionRepository, UserEmailFilter, UserEmailRepository,
-        UserFilter, UserPasswordRepository, UserRepository,
-    },
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use diesel_async::RunQueryDsl;

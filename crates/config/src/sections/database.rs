@@ -1,4 +1,5 @@
-use std::{num::NonZeroU32, time::Duration};
+use std::num::NonZeroU32;
+use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use schemars::JsonSchema;
@@ -286,10 +287,8 @@ impl ConfigurationSection for DatabaseConfig {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::result_large_err)]
-    use figment::{
-        Figment, Jail,
-        providers::{Format, Yaml},
-    };
+    use figment::providers::{Format, Yaml};
+    use figment::{Figment, Jail};
 
     use super::*;
 

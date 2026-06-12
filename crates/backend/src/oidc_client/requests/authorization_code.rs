@@ -23,27 +23,23 @@ use chrono::{DateTime, Utc};
 use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, PkceCodeChallengeMethod};
 use coauth_jose::claims::{self, TokenHash};
 use language_tags::LanguageTag;
-use oauth_types::{
-    pkce,
-    prelude::CodeChallengeMethodExt,
-    requests::{
-        AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant, AuthorizationRequest,
-        Display, Prompt, ResponseMode,
-    },
-    scope::{OPENID, Scope},
+use oauth_types::pkce;
+use oauth_types::prelude::CodeChallengeMethodExt;
+use oauth_types::requests::{
+    AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant, AuthorizationRequest, Display,
+    Prompt, ResponseMode,
 };
+use oauth_types::scope::{OPENID, Scope};
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 use url::Url;
 
-use super::{
-    super::{
-        error::{AuthorizationError, IdTokenError, TokenAuthorizationCodeError},
-        requests::{jose::verify_id_token, token::request_access_token},
-        types::{IdToken, client_credentials::ClientCredentials},
-    },
-    jose::JwtVerificationData,
-};
+use super::super::error::{AuthorizationError, IdTokenError, TokenAuthorizationCodeError};
+use super::super::requests::jose::verify_id_token;
+use super::super::requests::token::request_access_token;
+use super::super::types::IdToken;
+use super::super::types::client_credentials::ClientCredentials;
+use super::jose::JwtVerificationData;
 
 /// The data necessary to build an authorization request.
 #[derive(Debug, Clone)]
@@ -326,8 +322,7 @@ fn build_authorization_request(
 ///
 /// * `authorization_endpoint` - The URL of the issuer's authorization endpoint.
 ///
-/// * `authorization_data` - The data necessary to build the authorization
-///   request.
+/// * `authorization_data` - The data necessary to build the authorization request.
 ///
 /// * `rng` - A random number generator.
 ///
@@ -341,8 +336,8 @@ fn build_authorization_request(
 ///
 /// * A successful response will receive a `code` and a `state`.
 ///
-/// * If the authorization fails, it should receive an `error` parameter with a
-///   [`ClientErrorCode`] and optionally an `error_description`.
+/// * If the authorization fails, it should receive an `error` parameter with a [`ClientErrorCode`]
+///   and optionally an `error_description`.
 ///
 /// # Errors
 ///
@@ -391,19 +386,16 @@ pub fn build_authorization_url(
 ///
 /// * `http_client` - The reqwest client to use for making HTTP requests.
 ///
-/// * `client_credentials` - The credentials obtained when registering the
-///   client.
+/// * `client_credentials` - The credentials obtained when registering the client.
 ///
 /// * `token_endpoint` - The URL of the issuer's Token endpoint.
 ///
 /// * `code` - The authorization code returned at the Authorization endpoint.
 ///
-/// * `validation_data` - The validation data that was returned when building
-///   the Authorization URL, for the state returned at the Authorization
-///   endpoint.
+/// * `validation_data` - The validation data that was returned when building the Authorization URL,
+///   for the state returned at the Authorization endpoint.
 ///
-/// * `id_token_verification_data` - The data required to verify the ID Token in
-///   the response.
+/// * `id_token_verification_data` - The data required to verify the ID Token in the response.
 ///
 ///   The signing algorithm corresponds to the `id_token_signed_response_alg`
 ///   field in the client metadata.

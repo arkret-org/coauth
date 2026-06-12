@@ -1,17 +1,15 @@
+use coauth_data::oauth::{
+    OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthSessionFilter,
+    OAuthSessionRepository,
+};
 use coauth_data::{
     AuthorizationCode, BoxClock, BoxRepository, BoxRng, Pkce, PostAuthAction, RepositoryAccess,
     SystemClock,
-    oauth::{
-        OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthSessionFilter,
-        OAuthSessionRepository,
-    },
 };
-use oauth_types::{
-    errors::{ClientError, ClientErrorCode},
-    pkce,
-    requests::{AuthorizationRequest, GrantType, Prompt, ResponseMode},
-    response_type::ResponseType,
-};
+use oauth_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::pkce;
+use oauth_types::requests::{AuthorizationRequest, GrantType, Prompt, ResponseMode};
+use oauth_types::response_type::ResponseType;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::prelude::*;
@@ -19,7 +17,8 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use self::callback::CallbackDestination;
-use crate::salvo_utils::{SessionInfoExt, cookies::CookieJar};
+use crate::salvo_utils::SessionInfoExt;
+use crate::salvo_utils::cookies::CookieJar;
 
 pub(crate) mod callback;
 

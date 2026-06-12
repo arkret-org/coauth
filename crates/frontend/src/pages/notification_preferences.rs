@@ -1,13 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::NotificationPreferencesOutcome,
-    components::{
-        loading::LoadingScreen,
-        separator::{Separator, SeparatorKind},
-        status_badge::StatusBadge,
-    },
-};
+use crate::api::types::NotificationPreferencesOutcome;
+use crate::components::loading::LoadingScreen;
+use crate::components::separator::{Separator, SeparatorKind};
+use crate::components::status_badge::StatusBadge;
 
 /// Notification preferences page.
 ///

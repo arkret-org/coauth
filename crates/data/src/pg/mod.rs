@@ -7,7 +7,8 @@
 
 use ::tracing::{info, warn};
 use diesel::sql_types::BigInt;
-use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Pool};
+use diesel_async::pooled_connection::deadpool::Pool;
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
 /// PostgreSQL account aggregate repositories.
@@ -54,12 +55,10 @@ pub(crate) mod telemetry;
 /// test code.
 pub mod test_utils;
 
+pub use self::errors::DatabaseError;
 pub(crate) use self::errors::DatabaseInconsistencyError;
-pub use self::{
-    errors::DatabaseError,
-    notification_template::PgNotificationTemplateRepository,
-    repository::{PgRepository, PgRepositoryFactory},
-};
+pub use self::notification_template::PgNotificationTemplateRepository;
+pub use self::repository::{PgRepository, PgRepositoryFactory};
 
 /// Embedded Diesel migrations.
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");

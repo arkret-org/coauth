@@ -1,9 +1,8 @@
 use async_trait::async_trait;
 use chrono::Duration;
-use coauth_data::{
-    Clock,
-    personal::{PersonalAccessToken, session::PersonalSession},
-};
+use coauth_data::Clock;
+use coauth_data::personal::PersonalAccessToken;
+use coauth_data::personal::session::PersonalSession;
 use rand_core::RngCore;
 use ulid::Ulid;
 
@@ -71,8 +70,8 @@ pub trait PersonalAccessTokenRepository: Send + Sync {
     /// * `clock`: The clock used to generate timestamps
     /// * `session`: The session the access token is associated with
     /// * `access_token`: The access token to add
-    /// * `expires_after`: The duration after which the access token expires. If
-    ///   [`None`] the access token never expires
+    /// * `expires_after`: The duration after which the access token expires. If [`None`] the access
+    ///   token never expires
     ///
     /// # Errors
     ///

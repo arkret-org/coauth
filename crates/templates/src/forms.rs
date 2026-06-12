@@ -1,9 +1,7 @@
 use std::hash::Hash;
 
-use serde::{
-    Deserialize, Serialize, Serializer,
-    ser::{SerializeMap, SerializeStruct},
-};
+use serde::ser::{SerializeMap, SerializeStruct};
+use serde::{Deserialize, Serialize, Serializer};
 
 /// Marker trait for form field enum types, controlling which values to retain
 /// (e.g. password fields should not be retained).

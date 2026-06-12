@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{SecuritySummaryOutcome, WorkflowInboxOutcome},
-    components::{loading::LoadingScreen, status_badge::StatusBadge},
-    pages::Route,
-};
+use crate::api::types::{SecuritySummaryOutcome, WorkflowInboxOutcome};
+use crate::components::loading::LoadingScreen;
+use crate::components::status_badge::StatusBadge;
+use crate::pages::Route;
 
 /// Account overview page.
 ///

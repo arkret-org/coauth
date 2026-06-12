@@ -3,17 +3,14 @@
 //! Produces a per-credential, device-bound key that starid stores on the
 //! DID's `updateKeys` slot. The flow is:
 //!
-//! 1. Browser finishes a `WebAuthn` registration ceremony
-//!    (`PgWebauthnService::register_finish`) producing a [`Passkey`].
-//! 2. coauth runs [`derive_update_key_from_credential`] over the passkey's COSE
-//!    public key, yielding a multibase `z…` string of the same shape (`z6Mk…`)
-//!    starid expects.
+//! 1. Browser finishes a `WebAuthn` registration ceremony (`PgWebauthnService::register_finish`)
+//!    producing a [`Passkey`].
+//! 2. coauth runs [`derive_update_key_from_credential`] over the passkey's COSE public key,
+//!    yielding a multibase `z…` string of the same shape (`z6Mk…`) starid expects.
 //! 3. coauth hands that key to starid as either:
-//!    * `StaridRegistry::create_principal_did` (first passkey on the account →
-//!      mints the DID), or
+//!    * `StaridRegistry::create_principal_did` (first passkey on the account → mints the DID), or
 //!    * `StaridRegistry::rotate_update_key` (subsequent enrolment → `POST
-//!      /_starid/root/webvh/dids/{did}/update` swaps the key on the existing
-//!      DID).
+//!      /_starid/root/webvh/dids/{did}/update` swaps the key on the existing DID).
 //!
 //! Determinism note: the returned string is a function of the
 //! credential's COSE public key bytes only. Two enrolments of the same

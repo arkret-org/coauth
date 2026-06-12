@@ -5,10 +5,10 @@
 //! database.
 
 use chrono::Utc;
-use coauth_data::{
-    flow::{FlowDefinition, FlowDesignation, FlowStageBinding, IdentificationField, StageKind},
-    new_id,
+use coauth_data::flow::{
+    FlowDefinition, FlowDesignation, FlowStageBinding, IdentificationField, StageKind,
 };
+use coauth_data::new_id;
 
 /// Create the default registration flow:
 /// 1. `UserWrite` — collect username / display name

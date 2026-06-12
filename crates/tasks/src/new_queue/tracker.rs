@@ -1,18 +1,17 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use coauth_data::{Clock, RepositoryAccess, queue::InsertableJob};
-use opentelemetry::{
-    KeyValue,
-    metrics::{Histogram, UpDownCounter},
-};
+use coauth_data::queue::InsertableJob;
+use coauth_data::{Clock, RepositoryAccess};
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::{Histogram, UpDownCounter};
 use rand_core::RngCore;
 use tokio::task::JoinSet;
 use tracing::Instrument as _;
 
+use super::job_types::{JobPayload, box_runnable_job};
 use super::{
-    FromJob, JobContext, JobError, JobErrorDecision, MAX_ATTEMPTS, RunnableJob,
-    job_types::{JobPayload, box_runnable_job},
-    retry_delay,
+    FromJob, JobContext, JobError, JobErrorDecision, MAX_ATTEMPTS, RunnableJob, retry_delay,
 };
 use crate::{METER, State};
 

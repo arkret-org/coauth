@@ -1,14 +1,12 @@
 use chrono::{DateTime, Utc};
-use coauth_data::{PgRepository, RepositoryAccess, queue::Worker};
+use coauth_data::queue::Worker;
+use coauth_data::{PgRepository, RepositoryAccess};
 use tokio_util::sync::CancellationToken;
 
-use super::{
-    QueueRunnerError,
-    leader::ScheduleDefinition,
-    runtime,
-    shared::{MAX_CONCURRENT_JOBS, MAX_JOBS_TO_FETCH},
-    tracker::JobTracker,
-};
+use super::leader::ScheduleDefinition;
+use super::shared::{MAX_CONCURRENT_JOBS, MAX_JOBS_TO_FETCH};
+use super::tracker::JobTracker;
+use super::{QueueRunnerError, runtime};
 use crate::State;
 
 fn jobs_to_fetch_capacity(running_jobs: usize) -> usize {

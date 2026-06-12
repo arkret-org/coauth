@@ -4,29 +4,23 @@
 
 use std::str::FromStr as _;
 
-use coauth_data::{
-    RepositoryAccess,
-    audit::AdminOperation,
-    queue::{ProvisionUserJob, QueueJobRepositoryExt as _},
-    user::UserEmailFilter,
-};
-use salvo::{http::StatusCode, prelude::*};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::AdminOperation;
+use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _};
+use coauth_data::user::UserEmailFilter;
+use salvo::http::StatusCode;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use ulid::Ulid;
 
-use crate::{
-    AppError, AppResult, CreatedJsonResult, JsonResult,
-    handlers::admin::{
-        call_context::extract_call_context,
-        model::{Resource, UserEmail},
-        params::{IncludeCount, extract_pagination, extract_ulid_param},
-        response::{
-            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-            paginated_response_for_page,
-        },
-    },
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::{Resource, UserEmail};
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::{AppError, AppResult, CreatedJsonResult, JsonResult};
 
 /// JSON body accepted by `POST /_coauth/admin/user-emails`.
 #[derive(Deserialize, JsonSchema)]
@@ -376,10 +370,8 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{
-        RepositoryAccess,
-        user::{UserEmailRepository, UserRepository},
-    };
+    use coauth_data::RepositoryAccess;
+    use coauth_data::user::{UserEmailRepository, UserRepository};
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
     use rand_chacha::ChaChaRng;

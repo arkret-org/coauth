@@ -6,11 +6,11 @@ pub(crate) mod hmac;
 mod signature;
 mod symmetric;
 
-pub use self::{
-    asymmetric::{AsymmetricKeyFromJwkError, AsymmetricSigningKey, AsymmetricVerifyingKey},
-    signature::Signature,
-    symmetric::{InvalidAlgorithm, SymmetricKey},
+pub use self::asymmetric::{
+    AsymmetricKeyFromJwkError, AsymmetricSigningKey, AsymmetricVerifyingKey,
 };
+pub use self::signature::Signature;
+pub use self::symmetric::{InvalidAlgorithm, SymmetricKey};
 
 pub type Hs256Key = self::hmac::Hmac<Sha256>;
 pub type Hs384Key = self::hmac::Hmac<Sha384>;

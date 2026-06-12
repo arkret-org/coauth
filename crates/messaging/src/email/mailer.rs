@@ -6,10 +6,8 @@ use coauth_templates::{EmailRecoveryContext, EmailVerificationContext, Templates
 use lettre::message::Mailbox;
 use thiserror::Error;
 
-use super::{
-    OutboundEmail, SendResult,
-    transport::{Error as TransportError, Transport as MailTransport},
-};
+use super::transport::{Error as TransportError, Transport as MailTransport};
+use super::{OutboundEmail, SendResult};
 
 /// Helps sending mails to users
 #[derive(Clone)]

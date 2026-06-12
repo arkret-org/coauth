@@ -3,15 +3,14 @@
 //! Validates a TOTP second-factor code by looking up the user's TOTP secret
 //! from the repository and verifying the HMAC (RFC 6238).
 
-use coauth_data::{
-    BoxRepository,
-    flow::{StageOutcome, StageValidationError},
-};
+use coauth_data::BoxRepository;
+use coauth_data::flow::{StageOutcome, StageValidationError};
 use tracing::warn;
 use ulid::Ulid;
 
 use super::StageExecutionError;
-use crate::{handlers::Limiter, totp};
+use crate::handlers::Limiter;
+use crate::totp;
 
 /// Execute the authenticator validation stage.
 ///

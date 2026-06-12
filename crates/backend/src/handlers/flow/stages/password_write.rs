@@ -5,10 +5,8 @@
 //! `PasswordManager`) is deferred to a later integration step — this
 //! module validates the inputs and records that a password was set.
 
-use coauth_data::{
-    BoxRepository, Clock, RepositoryAccess,
-    flow::{StageOutcome, StageValidationError},
-};
+use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 use rand_core::RngCore;
 
 use super::StageExecutionError;

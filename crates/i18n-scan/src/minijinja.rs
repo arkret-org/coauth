@@ -3,11 +3,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+use minijinja::ErrorKind;
+use minijinja::machinery::ast::{Call, CallArg, Const, Expr, Macro, Spanned, Stmt};
 pub use minijinja::machinery::parse;
-use minijinja::{
-    ErrorKind,
-    machinery::ast::{Call, CallArg, Const, Expr, Macro, Spanned, Stmt},
-};
 
 use crate::key::{Context, Key};
 
@@ -268,7 +266,8 @@ fn visit_expr<'a>(ctx: &mut Context, expr: &'a Expr<'a>) -> Result<(), minijinja
 
 #[cfg(test)]
 mod tests {
-    use minijinja::{machinery::WhitespaceConfig, syntax::SyntaxConfig};
+    use minijinja::machinery::WhitespaceConfig;
+    use minijinja::syntax::SyntaxConfig;
 
     use super::*;
 

@@ -1,12 +1,11 @@
 //! Admin DTOs for the coauth notification surfaces:
 //!
-//! - `GET  /_coauth/admin/notification-channels` — configured channel roster
-//!   (currently `email` and `sms`) with a per-channel `configured` flag derived
-//!   from `SiteConfig`.
-//! - `GET  /_coauth/admin/notification-templates` — known template keys +
-//!   human-readable descriptions.
-//! - `POST /_coauth/admin/notification-templates/publish` — publish a new
-//!   template version (request + response body).
+//! - `GET  /_coauth/admin/notification-channels` — configured channel roster (currently `email` and
+//!   `sms`) with a per-channel `configured` flag derived from `SiteConfig`.
+//! - `GET  /_coauth/admin/notification-templates` — known template keys + human-readable
+//!   descriptions.
+//! - `POST /_coauth/admin/notification-templates/publish` — publish a new template version (request
+//!   + response body).
 //!
 //! Round-32 (C32.7): lifted out of the inline definitions in
 //! `coauth/crates/backend/src/handlers/admin/v1/notification_channels.rs`

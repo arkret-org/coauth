@@ -3,73 +3,58 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    process,
-    sync::{
-        Arc, Mutex, RwLock,
-        atomic::{AtomicU64, Ordering},
-    },
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::process;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Duration;
 use coauth_config::{CokretConfig, RateLimitingConfig};
+use coauth_data::clock::MockClock;
+use coauth_data::personal::session::PersonalSessionOwner;
+use coauth_data::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
+use coauth_data::user::UserRepository;
 use coauth_data::{
     AppVersion, BoxRepository, PgRepositoryFactory, RepositoryAccess, RepositoryError,
     RepositoryFactory, SiteConfig, SystemClock, TokenType, UrlBuilder,
-    clock::MockClock,
-    personal::{
-        PersonalAccessTokenRepository, PersonalSessionRepository, session::PersonalSessionOwner,
-    },
-    user::UserRepository,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
-use coauth_messaging::{
-    NotificationCenter,
-    email::{Mailer, Transport as MailTransport},
-};
+use coauth_messaging::NotificationCenter;
+use coauth_messaging::email::{Mailer, Transport as MailTransport};
 use coauth_policy::PolicyFactory;
 use coauth_principal::{MockPrincipalServerAdmin, PrincipalServerAdmin};
 use coauth_tasks::QueueWorker;
 use coauth_templates::{SiteConfigExt, Templates};
 use cookie_store::{CookieStore, RawCookie};
-use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
+use diesel_async::AsyncPgConnection;
+use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use headers::{Authorization, ContentType, HeaderMapExt, HeaderName, HeaderValue};
-use hyper::{
-    Request, Response, StatusCode,
-    header::{CONTENT_TYPE, COOKIE, SET_COOKIE},
-};
+use hyper::header::{CONTENT_TYPE, COOKIE, SET_COOKIE};
+use hyper::{Request, Response, StatusCode};
 use oauth_types::scope::Scope;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
-use salvo::{
-    prelude::*,
-    test::{ResponseExt as SalvoResponseExt, TestClient},
-};
-use serde::{Serialize, de::DeserializeOwned};
-use tokio_util::{
-    sync::{CancellationToken, DropGuard},
-    task::TaskTracker,
-};
+use salvo::prelude::*;
+use salvo::test::{ResponseExt as SalvoResponseExt, TestClient};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use tokio_util::sync::{CancellationToken, DropGuard};
+use tokio_util::task::TaskTracker;
 use ulid::Ulid;
 use url::Url;
 
-use crate::{
-    handlers::{
-        ActivityTracker, Limiter,
-        passwords::{Hasher, PasswordManager},
-        upstream_oauth::{cache::MetadataCache, jwks_cache::JwksCache},
-    },
-    salvo_utils::cookies::{CookieJar, CookieManager},
-    services::{
-        account_claims::account_claims_service, did_resolver::default_did_resolver_service,
-        invite_quarantine::invite_quarantine_service,
-        risk_action_proposals::risk_action_proposals_service,
-        risk_action_state::default_risk_action_state_service,
-        upstream_oidc::default_upstream_oidc_service,
-    },
-};
+use crate::handlers::passwords::{Hasher, PasswordManager};
+use crate::handlers::upstream_oauth::cache::MetadataCache;
+use crate::handlers::upstream_oauth::jwks_cache::JwksCache;
+use crate::handlers::{ActivityTracker, Limiter};
+use crate::salvo_utils::cookies::{CookieJar, CookieManager};
+use crate::services::account_claims::account_claims_service;
+use crate::services::did_resolver::default_did_resolver_service;
+use crate::services::invite_quarantine::invite_quarantine_service;
+use crate::services::risk_action_proposals::risk_action_proposals_service;
+use crate::services::risk_action_state::default_risk_action_state_service;
+use crate::services::upstream_oidc::default_upstream_oidc_service;
 
 static UNIQUE_TEST_NONCE: AtomicU64 = AtomicU64::new(0);
 

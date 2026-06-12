@@ -3,23 +3,17 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use coauth_data::{
-    Clock, new_id,
-    queue::{AbandonedJob, Job, QueueJobRepository, Worker},
-};
-use diesel::{
-    prelude::*,
-    sql_types::{Array, BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid},
-};
+use coauth_data::queue::{AbandonedJob, Job, QueueJobRepository, Worker};
+use coauth_data::{Clock, new_id};
+use diesel::prelude::*;
+use diesel::sql_types::{Array, BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{queue_jobs, queue_schedules},
-};
+use crate::schema::{queue_jobs, queue_schedules};
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`QueueJobRepository`] for a PostgreSQL connection.
 pub struct PgQueueJobRepository<'c> {
@@ -555,7 +549,8 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use chrono::Duration;
-    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _, clock::MockClock};
+    use coauth_data::clock::MockClock;
+    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 

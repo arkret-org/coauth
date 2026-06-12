@@ -1,16 +1,19 @@
 //! A crate to store keys which can then be used to sign and verify JWTs.
 
-use std::{ops::Deref, sync::Arc};
+use std::ops::Deref;
+use std::sync::Arc;
 
 use coauth_iana::jose::{JsonWebKeyType, JsonWebSignatureAlg};
+use coauth_jose::constraints::Constrainable;
+use coauth_jose::jwa::{AsymmetricSigningKey, AsymmetricVerifyingKey};
 pub use coauth_jose::jwk::{JsonWebKey, JsonWebKeySet};
-use coauth_jose::{
-    constraints::Constrainable,
-    jwa::{AsymmetricSigningKey, AsymmetricVerifyingKey},
-    jwk::{JsonWebKeyPublicParameters, ParametersInfo, PublicJsonWebKeySet, Thumbprint},
+use coauth_jose::jwk::{
+    JsonWebKeyPublicParameters, ParametersInfo, PublicJsonWebKeySet, Thumbprint,
 };
-use der::{Decode, Encode, EncodePem, zeroize::Zeroizing};
-use elliptic_curve::{pkcs8::EncodePrivateKey, sec1::ToEncodedPoint};
+use der::zeroize::Zeroizing;
+use der::{Decode, Encode, EncodePem};
+use elliptic_curve::pkcs8::EncodePrivateKey;
+use elliptic_curve::sec1::ToEncodedPoint;
 use pem_rfc7468::PemLabel;
 use pkcs1::EncodeRsaPrivateKey;
 use pkcs8::{AssociatedOid, DecodePrivateKey, PrivateKeyInfo};
@@ -444,8 +447,7 @@ impl PrivateKey {
     /// Returns an error if:
     ///   - the file is not a signel PEM document
     ///   - the PEM label is not a supported format
-    ///   - the underlying key is encrypted (use [`Self::load_encrypted`]
-    ///     instead)
+    ///   - the underlying key is encrypted (use [`Self::load_encrypted`] instead)
     ///   - the PKCS8/PKCS1/SEC1 key could not be loaded
     pub fn load_pem(pem: &str) -> Result<Self, LoadError> {
         let (label, raw) = pem_rfc7468::decode_vec(pem.as_bytes())?;

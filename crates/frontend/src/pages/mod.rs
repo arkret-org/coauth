@@ -58,7 +58,8 @@ use sessions::Sessions;
 use upstream_link::UpstreamLink;
 use workflow_inbox::WorkflowInbox;
 
-use crate::components::{error::NotFound, layout::Layout};
+use crate::components::error::NotFound;
+use crate::components::layout::Layout;
 
 /// Application route definition.
 #[derive(Debug, Clone, Routable, PartialEq)]

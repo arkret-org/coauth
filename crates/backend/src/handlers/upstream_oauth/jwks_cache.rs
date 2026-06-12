@@ -20,11 +20,9 @@
 //! [`JwksCache::force_refresh`] and retrying verification once when the cached
 //! keyset fails to verify a signature — see `super::callback`.
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use tokio::sync::RwLock;

@@ -1,13 +1,11 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::ViewerOutcome,
-    components::{
-        browser_session::BrowserSessionCard,
-        empty_state::EmptyState,
-        loading::LoadingScreen,
-        pagination::{PaginationState, SessionFilterToggle, SessionPaginationControls},
-    },
+use crate::api::types::ViewerOutcome;
+use crate::components::browser_session::BrowserSessionCard;
+use crate::components::empty_state::EmptyState;
+use crate::components::loading::LoadingScreen;
+use crate::components::pagination::{
+    PaginationState, SessionFilterToggle, SessionPaginationControls,
 };
 
 #[component]

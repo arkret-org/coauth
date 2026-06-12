@@ -128,8 +128,7 @@ pub trait QueueJobRepository: Send + Sync {
     /// * `payload` - The payload of the job
     /// * `metadata` - Arbitrary metadata about the job scheduled immediately.
     /// * `scheduled_at` - The date and time to schedule the job for
-    /// * `schedule_name` - The name of the recurring schedule which scheduled
-    ///   this job
+    /// * `schedule_name` - The name of the recurring schedule which scheduled this job
     ///
     /// # Errors
     ///
@@ -248,8 +247,7 @@ pub trait QueueJobRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from
-    ///   the beginning
+    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
     /// * `until`: The maximum ULID to delete (inclusive upper bound)
     /// * `limit`: The maximum number of jobs to delete in this batch
     ///

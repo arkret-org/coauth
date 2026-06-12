@@ -11,35 +11,29 @@ use coauth_admin_types::{
     AccountRiskActionHistoryOutcome, AccountRiskActionProposalOutcome,
     AccountRiskActionProposalRequestBody, AccountRiskActionTransitionRecord,
 };
-use coauth_data::{AdminUserPatch, RepositoryAccess, audit::AdminOperation};
+use coauth_data::audit::AdminOperation;
+use coauth_data::{AdminUserPatch, RepositoryAccess};
 use cokret_core::canonical::canonical_json_bytes;
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Serialize;
 use ulid::Ulid;
 
-use crate::{
-    AppError, JsonResult,
-    handlers::{
-        admin::{
-            audit_helper::{AdminAuditSigning, record_admin_operation_signed},
-            call_context::extract_call_context,
-            params::extract_ulid_param,
-            response::SingleOutcome,
-        },
-        cokret::service_did_for,
-        common::DepotExt,
-    },
-    services::{
-        did_binding_proof::verify_detached_jws_with_sdk,
-        did_resolver::DidResolverService,
-        risk_action_proposals::{
-            ApprovalProof, CreateProposal, ProposalState, RiskActionProposalRecord,
-            RiskActionProposalsError, required_approvals_for,
-        },
-        risk_action_state::RiskActionStateService,
-    },
+use crate::handlers::admin::audit_helper::{AdminAuditSigning, record_admin_operation_signed};
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::response::SingleOutcome;
+use crate::handlers::cokret::service_did_for;
+use crate::handlers::common::DepotExt;
+use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
+use crate::services::did_resolver::DidResolverService;
+use crate::services::risk_action_proposals::{
+    ApprovalProof, CreateProposal, ProposalState, RiskActionProposalRecord,
+    RiskActionProposalsError, required_approvals_for,
 };
+use crate::services::risk_action_state::RiskActionStateService;
+use crate::{AppError, JsonResult};
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionExecuteOutcome {

@@ -1,10 +1,8 @@
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::CokretConfig;
 use coauth_data::{Clock, UrlBuilder, User};
-use coauth_jose::{
-    constraints::Constrainable,
-    jwt::{JsonWebSignatureHeader, Jwt},
-};
+use coauth_jose::constraints::Constrainable;
+use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use serde::{Deserialize, Serialize};
 

@@ -1,19 +1,15 @@
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, ToSocketAddrs};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
-use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, ToSocketAddrs},
-    time::{Duration, SystemTime},
-};
+use std::time::{Duration, SystemTime};
 
 use anyhow::Context;
 use coauth_config::{HttpBindConfig, HttpResource, HttpTlsConfig, UnixOrTcp};
 use coauth_data::UrlBuilder;
 use coauth_templates::Templates;
 use headers::{CacheControl, HeaderMapExt as _, UserAgent};
-use http::{
-    HeaderValue, Method, StatusCode, Version,
-    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
-};
+use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
+use http::{HeaderValue, Method, StatusCode, Version};
 use listenfd::ListenFd;
 use opentelemetry_http::HeaderExtractor;
 use opentelemetry_semantic_conventions::trace::{
@@ -21,17 +17,14 @@ use opentelemetry_semantic_conventions::trace::{
     NETWORK_PROTOCOL_VERSION, URL_PATH, URL_QUERY, URL_SCHEME, USER_AGENT_ORIGINAL,
 };
 use rustls::ServerConfig;
-use salvo::{
-    cors::{Any, Cors},
-    prelude::*,
-    serve_static::StaticDir,
-};
+use salvo::cors::{Any, Cors};
+use salvo::prelude::*;
+use salvo::serve_static::StaticDir;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::{
-    app_state::{AppState, inject_app_state},
-    listener::{ConnectionInfo, unix_or_tcp::UnixOrTcpListener},
-};
+use crate::app_state::{AppState, inject_app_state};
+use crate::listener::ConnectionInfo;
+use crate::listener::unix_or_tcp::UnixOrTcpListener;
 
 /// Scan the Dioxus build output directory for the hashed frontend JS entry
 /// point. Returns a URL path like `/assets/coauth-frontend-dxh<hash>.js`.
@@ -488,10 +481,8 @@ pub fn build_router(
     }
 
     // Build sub-routers for each resource
-    use crate::handlers::{
-        health,
-        oauth::{discovery, webfinger},
-    };
+    use crate::handlers::health;
+    use crate::handlers::oauth::{discovery, webfinger};
 
     for resource in resources {
         router = match resource {
@@ -560,7 +551,8 @@ pub fn build_router(
 }
 
 fn build_human_router(router: Router, _templates: Templates) -> Router {
-    use crate::handlers::{email_webhooks, oauth::authorization, spa, upstream_oauth};
+    use crate::handlers::oauth::authorization;
+    use crate::handlers::{email_webhooks, spa, upstream_oauth};
 
     router
         .push(Router::with_path("/webhooks/email/{provider}").post(email_webhooks::post))
@@ -666,14 +658,12 @@ fn build_oauth_router(router: Router) -> Router {
 }
 
 fn build_account_api_router(router: Router) -> Router {
-    use crate::handlers::{
-        account::{
-            agents, approval, auth, avatar, bootstrap_admin_status, emails, flow, invite_accept,
-            invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
-            recovery, register, sessions, site_config, upstream_oauth, users, viewer,
-        },
-        cokret, policy_check,
+    use crate::handlers::account::{
+        agents, approval, auth, avatar, bootstrap_admin_status, emails, flow, invite_accept,
+        invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
+        recovery, register, sessions, site_config, upstream_oauth, users, viewer,
     };
+    use crate::handlers::{cokret, policy_check};
 
     let cokret_router = Router::with_path("/_cokret")
         .hoop(public_oidc_browser_cors())
@@ -1374,11 +1364,10 @@ mod tests {
 
     use coauth_config::HttpBindConfig;
     use coauth_data::UrlBuilder;
-    use http::{StatusCode, header::CONTENT_TYPE};
-    use salvo::{
-        prelude::Router,
-        test::{ResponseExt, TestClient},
-    };
+    use http::StatusCode;
+    use http::header::CONTENT_TYPE;
+    use salvo::prelude::Router;
+    use salvo::test::{ResponseExt, TestClient};
 
     use super::{absolute_redirect_location, build_admin_router, build_listeners};
 

@@ -2,21 +2,17 @@ use std::collections::HashSet;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use coauth_data::{
-    BoxRepository, Clock,
-    oauth::OAuthSessionFilter,
-    queue::{
-        ExpireInactiveOAuthSessionsJob, ExpireInactiveSessionsJob, ExpireInactiveUserSessionsJob,
-        InsertableJob, QueueJobRepositoryExt, SyncDevicesJob,
-    },
-    user::BrowserSessionFilter,
+use coauth_data::oauth::OAuthSessionFilter;
+use coauth_data::queue::{
+    ExpireInactiveOAuthSessionsJob, ExpireInactiveSessionsJob, ExpireInactiveUserSessionsJob,
+    InsertableJob, QueueJobRepositoryExt, SyncDevicesJob,
 };
+use coauth_data::user::BrowserSessionFilter;
+use coauth_data::{BoxRepository, Clock};
 use rand_chacha::ChaChaRng;
 
-use crate::{
-    State,
-    new_queue::{JobContext, JobError, RunnableJob},
-};
+use crate::State;
+use crate::new_queue::{JobContext, JobError, RunnableJob};
 
 const SESSION_BATCH_SIZE: usize = 100;
 const INITIAL_DEVICE_SYNC_DELAY: Duration = Duration::minutes(1);

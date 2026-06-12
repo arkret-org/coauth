@@ -14,17 +14,17 @@
 
 //! Types and methods for client credentials.
 
-use std::{collections::HashMap, fmt};
+use std::collections::HashMap;
+use std::fmt;
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use chrono::{DateTime, Duration, Utc};
-use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
-use coauth_jose::{
-    claims::{self, ClaimError},
-    constraints::Constrainable,
-    jwa::{AsymmetricSigningKey, SymmetricKey},
-    jwt::{JsonWebSignatureHeader, Jwt},
-};
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_iana::oauth::OAuthClientAuthenticationMethod;
+use coauth_jose::claims::{self, ClaimError};
+use coauth_jose::constraints::Constrainable;
+use coauth_jose::jwa::{AsymmetricSigningKey, SymmetricKey};
+use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use rand_core::RngCore as Rng;
 use serde::Serialize;

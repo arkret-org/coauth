@@ -12,13 +12,11 @@ use salvo::prelude::*;
 use ulid::Ulid;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
-use crate::handlers::{
-    RequesterFingerprint,
-    account::service::recovery::{
-        LoadAccountRecoverySessionError, ResendAccountRecoveryError, StartAccountRecoveryError,
-        load_account_recovery_session, recovery_session_status, resend_account_recovery,
-        start_account_recovery,
-    },
+use crate::handlers::RequesterFingerprint;
+use crate::handlers::account::service::recovery::{
+    LoadAccountRecoverySessionError, ResendAccountRecoveryError, StartAccountRecoveryError,
+    load_account_recovery_session, recovery_session_status, resend_account_recovery,
+    start_account_recovery,
 };
 
 // ── POST /_coauth/gate/account/auth/recovery/start ───────────────────────────

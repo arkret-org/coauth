@@ -16,8 +16,10 @@
 //! `*_start` immediately with the matching `*_finish`.
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
-use coauth_data::{RepositoryAccess, audit::AdminOperation};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::AdminOperation;
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use webauthn_rs::prelude::{
@@ -25,22 +27,17 @@ use webauthn_rs::prelude::{
     RequestChallengeResponse,
 };
 
-use crate::{
-    AppError, JsonResult,
-    handlers::{
-        admin::{
-            audit_helper::record_admin_operation_signed, call_context::extract_call_context,
-            params::extract_ulid_param,
-        },
-        cokret::service_did_for,
-        common::DepotExt,
-    },
-    services::{
-        onboarding_starid::{OnboardingStaridError, mint_principal_did_for_first_credential},
-        starid_adapter::StaridError,
-        webauthn::WebauthnError,
-    },
+use crate::handlers::admin::audit_helper::record_admin_operation_signed;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::cokret::service_did_for;
+use crate::handlers::common::DepotExt;
+use crate::services::onboarding_starid::{
+    OnboardingStaridError, mint_principal_did_for_first_credential,
 };
+use crate::services::starid_adapter::StaridError;
+use crate::services::webauthn::WebauthnError;
+use crate::{AppError, JsonResult};
 
 /// Body for `register/start`. The display fields are surfaced verbatim to
 /// the platform authenticator UI, so admins can override the default

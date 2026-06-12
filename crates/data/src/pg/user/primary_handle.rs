@@ -2,9 +2,10 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::user::UserPrimaryHandlePreferenceRepository;
 use coauth_data::{
     Clock, NewUserPrimaryHandlePreference, UserPrimaryHandlePreference, VerifiedUserHandleClaim,
-    new_id, user::UserPrimaryHandlePreferenceRepository,
+    new_id,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -12,10 +13,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError,
-    schema::{handle_audit_log, user_primary_handle_preferences},
-};
+use crate::DatabaseError;
+use crate::schema::{handle_audit_log, user_primary_handle_preferences};
 
 /// PostgreSQL implementation of [`UserPrimaryHandlePreferenceRepository`].
 pub struct PgUserPrimaryHandlePreferenceRepository<'c> {

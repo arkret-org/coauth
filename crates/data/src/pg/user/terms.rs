@@ -1,13 +1,15 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{Clock, User, new_id, user::UserTermsRepository};
+use coauth_data::user::UserTermsRepository;
+use coauth_data::{Clock, User, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use url::Url;
 use uuid::Uuid;
 
-use crate::{DatabaseError, schema::user_terms};
+use crate::DatabaseError;
+use crate::schema::user_terms;
 
 /// An implementation of [`UserTermsRepository`] for a PostgreSQL connection
 pub struct PgUserTermsRepository<'c> {

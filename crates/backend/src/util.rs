@@ -1,4 +1,5 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use coauth_config::{
@@ -10,24 +11,21 @@ use coauth_data::{
     BoxRepositoryFactory, RepositoryAccess, RepositoryFactory, SessionExpirationConfig,
     SessionLimitConfig, SiteConfig, UrlBuilder,
 };
-use coauth_messaging::{
-    NotificationCenter,
-    email::{Mailer, SmtpCredentials, SmtpMode, Transport as MailTransport},
-    sms::{SmsSender, SmsTransport},
-};
+use coauth_messaging::NotificationCenter;
+use coauth_messaging::email::{Mailer, SmtpCredentials, SmtpMode, Transport as MailTransport};
+use coauth_messaging::sms::{SmsSender, SmsTransport};
 use coauth_policy::PolicyFactory;
 use coauth_principal::{ConnectorRegistry, PrincipalServerAdmin};
 use coauth_templates::{SiteConfigExt, Templates};
-use diesel_async::{
-    AsyncPgConnection, SimpleAsyncConnection,
-    pooled_connection::{
-        AsyncDieselConnectionManager, PoolError as AsyncPoolError,
-        deadpool::{Hook as DieselPoolHook, HookError as DieselPoolHookError, Pool as DieselPool},
-    },
+use diesel_async::pooled_connection::deadpool::{
+    Hook as DieselPoolHook, HookError as DieselPoolHookError, Pool as DieselPool,
 };
+use diesel_async::pooled_connection::{AsyncDieselConnectionManager, PoolError as AsyncPoolError};
+use diesel_async::{AsyncPgConnection, SimpleAsyncConnection};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::Instrument;
 
 use crate::handlers::passwords::PasswordManager;
@@ -700,10 +698,8 @@ pub fn principal_server_connection_from_config(
 mod tests {
     use std::num::NonZeroU32;
 
-    use diesel::{
-        QueryableByName, sql_query,
-        sql_types::{BigInt, Uuid as DieselUuid},
-    };
+    use diesel::sql_types::{BigInt, Uuid as DieselUuid};
+    use diesel::{QueryableByName, sql_query};
     use diesel_async::RunQueryDsl as _;
     use rand_core::SeedableRng;
     use uuid::Uuid;

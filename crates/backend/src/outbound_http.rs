@@ -1,32 +1,28 @@
-use std::{
-    error::Error as StdError,
-    fmt,
-    future::Future,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
+use std::error::Error as StdError;
+use std::fmt;
+use std::future::Future;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
 
 use futures_util::FutureExt as _;
 use headers::{ContentLength, HeaderMapExt as _, UserAgent};
-use hyper_util::client::legacy::connect::{
-    HttpInfo,
-    dns::{GaiResolver, Name},
-};
-use opentelemetry::{
-    KeyValue,
-    metrics::{Counter, Histogram, UpDownCounter},
-};
+use hyper_util::client::legacy::connect::HttpInfo;
+use hyper_util::client::legacy::connect::dns::{GaiResolver, Name};
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 use opentelemetry_http::HeaderInjector;
-use opentelemetry_semantic_conventions::{
-    attribute::{HTTP_REQUEST_BODY_SIZE, HTTP_RESPONSE_BODY_SIZE},
-    metric::{HTTP_CLIENT_ACTIVE_REQUESTS, HTTP_CLIENT_REQUEST_DURATION},
-    trace::{
-        ERROR_TYPE, HTTP_REQUEST_METHOD, HTTP_RESPONSE_STATUS_CODE, NETWORK_LOCAL_ADDRESS,
-        NETWORK_LOCAL_PORT, NETWORK_PEER_ADDRESS, NETWORK_PEER_PORT, NETWORK_TRANSPORT,
-        NETWORK_TYPE, SERVER_ADDRESS, SERVER_PORT, URL_FULL, URL_SCHEME, USER_AGENT_ORIGINAL,
-    },
+use opentelemetry_semantic_conventions::attribute::{
+    HTTP_REQUEST_BODY_SIZE, HTTP_RESPONSE_BODY_SIZE,
+};
+use opentelemetry_semantic_conventions::metric::{
+    HTTP_CLIENT_ACTIVE_REQUESTS, HTTP_CLIENT_REQUEST_DURATION,
+};
+use opentelemetry_semantic_conventions::trace::{
+    ERROR_TYPE, HTTP_REQUEST_METHOD, HTTP_RESPONSE_STATUS_CODE, NETWORK_LOCAL_ADDRESS,
+    NETWORK_LOCAL_PORT, NETWORK_PEER_ADDRESS, NETWORK_PEER_PORT, NETWORK_TRANSPORT, NETWORK_TYPE,
+    SERVER_ADDRESS, SERVER_PORT, URL_FULL, URL_SCHEME, USER_AGENT_ORIGINAL,
 };
 use rustls_platform_verifier::ConfigVerifierExt;
 use tokio::time::{Instant, sleep};
@@ -713,19 +709,13 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        future::Future,
-        sync::{
-            Arc, Once,
-            atomic::{AtomicUsize, Ordering},
-        },
-        time::Duration,
-    };
+    use std::future::Future;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Once};
+    use std::time::Duration;
 
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpListener,
-    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
 
     use super::{
         OutboundRequestPolicy, blocked_domain_reason, blocked_ip_reason, send_with_policy,

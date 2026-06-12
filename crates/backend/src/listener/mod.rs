@@ -4,7 +4,8 @@
 //! protocol v1 support.  The [`server`] module drives the accept loop and
 //! hands established connections to a hyper service.
 
-use self::{maybe_tls::TlsStreamInfo, proxy_protocol::ProxyProtocolV1Info};
+use self::maybe_tls::TlsStreamInfo;
+use self::proxy_protocol::ProxyProtocolV1Info;
 
 /// TLS acceptor and stream metadata.
 pub mod maybe_tls;

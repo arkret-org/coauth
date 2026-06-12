@@ -1,13 +1,12 @@
 use assert_matches::assert_matches;
-use coauth_iana::{
-    jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg},
-    oauth::{OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod},
-};
+use coauth_iana::jose::{JsonWebEncryptionAlg, JsonWebEncryptionEnc, JsonWebSignatureAlg};
+use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use url::Url;
 
 use super::{ClientMetadata, ClientMetadataVerificationError};
-use crate::{requests::GrantType, response_type::ResponseType};
+use crate::requests::GrantType;
+use crate::response_type::ResponseType;
 
 fn valid_client_metadata() -> ClientMetadata {
     ClientMetadata {

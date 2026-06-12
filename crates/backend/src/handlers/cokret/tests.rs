@@ -2,26 +2,20 @@ use chrono::{Duration, Utc};
 use coauth_config::{
     CokretConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
 };
-use coauth_data::{
-    BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemClock, User,
-};
+use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemClock, User};
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
-use coauth_jose::{
-    jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey},
-    jwt::{JsonWebSignatureHeader, Jwt},
-};
+use coauth_jose::jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey};
+use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{JsonWebKeySet, PrivateKey};
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 
 use super::*;
-use crate::{
-    handlers::test_utils::{
-        CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
-    },
-    salvo_utils::SessionInfoExt,
+use crate::handlers::test_utils::{
+    CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
 };
+use crate::salvo_utils::SessionInfoExt;
 
 fn test_keystore() -> Keystore {
     let mut rng = ChaChaRng::seed_from_u64(42);

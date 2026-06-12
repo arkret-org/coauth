@@ -11,7 +11,8 @@ use std::ops::Deref;
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, de::Error};
+use serde::de::Error;
+use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use ulid::Ulid;
 use url::Url;
@@ -312,11 +313,10 @@ mod tests {
     #![allow(clippy::result_large_err)]
     use std::str::FromStr;
 
-    use figment::{
-        Figment, Jail,
-        providers::{Format, Yaml},
-    };
-    use tokio::{runtime::Handle, task};
+    use figment::providers::{Format, Yaml};
+    use figment::{Figment, Jail};
+    use tokio::runtime::Handle;
+    use tokio::task;
 
     use super::*;
 

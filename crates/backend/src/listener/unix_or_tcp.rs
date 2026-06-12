@@ -1,16 +1,12 @@
 //! A listener which can listen on either TCP sockets or on UNIX domain sockets
 
-use std::{
-    pin::Pin,
-    task::{Context, Poll, ready},
-};
+use std::pin::Pin;
+use std::task::{Context, Poll, ready};
 
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream},
-};
 
 pub enum SocketAddr {
     #[cfg(unix)]

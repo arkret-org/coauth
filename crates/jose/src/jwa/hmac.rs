@@ -11,11 +11,9 @@
 
 use std::marker::PhantomData;
 
-use digest::{
-    Digest, Mac, OutputSizeUser,
-    crypto_common::BlockSizeUser,
-    generic_array::{ArrayLength, GenericArray},
-};
+use digest::crypto_common::BlockSizeUser;
+use digest::generic_array::{ArrayLength, GenericArray};
+use digest::{Digest, Mac, OutputSizeUser};
 use signature::{Signer, Verifier};
 use thiserror::Error;
 

@@ -6,11 +6,9 @@ use coauth_iana::oauth::{
 };
 use coauth_jose::jwa::SUPPORTED_SIGNING_ALGORITHMS;
 use coauth_keystore::Keystore;
-use oauth_types::{
-    oidc::{ClaimType, ProviderMetadata, SubjectType},
-    requests::{Display, GrantType, Prompt, ResponseMode},
-    scope,
-};
+use oauth_types::oidc::{ClaimType, ProviderMetadata, SubjectType};
+use oauth_types::requests::{Display, GrantType, Prompt, ResponseMode};
+use oauth_types::scope;
 use salvo::prelude::*;
 use serde::Serialize;
 

@@ -6,12 +6,12 @@ mod mock;
 mod readonly;
 pub mod registry;
 
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
+use std::sync::Arc;
 
-pub use self::{
-    mock::PrincipalServerAdmin as MockPrincipalServerAdmin, readonly::ReadOnlyPrincipalServerAdmin,
-    registry::ConnectorRegistry,
-};
+pub use self::mock::PrincipalServerAdmin as MockPrincipalServerAdmin;
+pub use self::readonly::ReadOnlyPrincipalServerAdmin;
+pub use self::registry::ConnectorRegistry;
 
 /// Describes what operations a connector provider supports.
 #[derive(Debug, Clone, Default)]
@@ -258,8 +258,8 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `request` - a [`PrincipalProvisionRequest`] containing the details of
-    ///   the user to provision.
+    /// * `request` - a [`PrincipalProvisionRequest`] containing the details of the user to
+    ///   provision.
     ///
     /// # Errors
     ///
@@ -355,8 +355,7 @@ pub trait PrincipalServerAdmin: Send + Sync {
     /// # Parameters
     ///
     /// * `handle` - The handle of the user to delete.
-    /// * `erase` - Whether to ask the downstream system to erase the user's
-    ///   data.
+    /// * `erase` - Whether to ask the downstream system to erase the user's data.
     ///
     /// # Errors
     ///

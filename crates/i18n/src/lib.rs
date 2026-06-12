@@ -2,10 +2,10 @@
 //!
 //! This crate provides:
 //!
-//! - [`Translator`] -- loads `.ftl` (Fluent) translation files and resolves
-//!   messages for a given locale, with automatic fallback.
-//! - Re-exports of ICU crates (`icu_calendar`, `icu_datetime`, `icu_locid`) for
-//!   date/time formatting in the user's locale.
+//! - [`Translator`] -- loads `.ftl` (Fluent) translation files and resolves messages for a given
+//!   locale, with automatic fallback.
+//! - Re-exports of ICU crates (`icu_calendar`, `icu_datetime`, `icu_locid`) for date/time
+//!   formatting in the user's locale.
 
 mod translator;
 

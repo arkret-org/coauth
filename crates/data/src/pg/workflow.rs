@@ -2,10 +2,12 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::workflow::{
+    NewWorkflowEvent, NewWorkflowInstance, NewWorkflowStep, WorkflowRepository,
+};
 use coauth_data::{
     Clock, WorkflowEvent, WorkflowEventKind, WorkflowInstance, WorkflowInstanceStatus,
     WorkflowStep, WorkflowStepStatus, new_id,
-    workflow::{NewWorkflowEvent, NewWorkflowInstance, NewWorkflowStep, WorkflowRepository},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -14,10 +16,8 @@ use serde::de::DeserializeOwned;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{workflow_events, workflow_instances, workflow_steps},
-};
+use crate::schema::{workflow_events, workflow_instances, workflow_steps};
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`WorkflowRepository`].
 pub struct PgWorkflowRepository<'c> {

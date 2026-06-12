@@ -8,10 +8,9 @@ use coauth_admin_types::{ConnectorHealthOutcome, ConnectorHealthRow};
 use coauth_principal::ConnectorRegistry;
 use salvo::prelude::*;
 
-use crate::{
-    JsonResult,
-    handlers::{admin::call_context::extract_call_context, common::DepotExt},
-};
+use crate::JsonResult;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::common::DepotExt;
 
 /// Try to obtain a [`ConnectorRegistry`] from the depot.
 fn get_registry(depot: &Depot) -> Option<ConnectorRegistry> {

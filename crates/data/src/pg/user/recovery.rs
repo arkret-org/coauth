@@ -2,9 +2,8 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use coauth_data::{
-    Clock, UserEmail, UserRecoverySession, UserRecoveryTicket, new_id, user::UserRecoveryRepository,
-};
+use coauth_data::user::UserRecoveryRepository;
+use coauth_data::{Clock, UserEmail, UserRecoverySession, UserRecoveryTicket, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use ipnetwork::IpNetwork;
@@ -12,10 +11,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError,
-    schema::{user_recovery_sessions, user_recovery_tickets},
-};
+use crate::DatabaseError;
+use crate::schema::{user_recovery_sessions, user_recovery_tickets};
 
 /// An implementation of [`UserRecoveryRepository`] for a PostgreSQL connection
 pub struct PgUserRecoveryRepository<'c> {

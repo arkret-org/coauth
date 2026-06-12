@@ -2,12 +2,11 @@
 //!
 //! [Dynamic Client Registration]: https://openid.net/specs/openid-connect-registration-1_0.html
 
-use coauth_iana::{
-    jose::{JsonWebEncryptionEnc, JsonWebSignatureAlg},
-    oauth::{OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod},
-};
+use coauth_iana::jose::{JsonWebEncryptionEnc, JsonWebSignatureAlg};
+use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod};
 
-use crate::{oidc::ApplicationType, requests::GrantType};
+use crate::oidc::ApplicationType;
+use crate::requests::GrantType;
 
 mod client_metadata_serde;
 mod localized;
@@ -18,12 +17,10 @@ mod validation;
 #[cfg(test)]
 mod tests;
 
-pub use self::{
-    localized::Localized,
-    metadata::ClientMetadata,
-    response::ClientRegistrationResponse,
-    validation::{ClientMetadataVerificationError, VerifiedClientMetadata},
-};
+pub use self::localized::Localized;
+pub use self::metadata::ClientMetadata;
+pub use self::response::ClientRegistrationResponse;
+pub use self::validation::{ClientMetadataVerificationError, VerifiedClientMetadata};
 
 /// The default value of `response_types` if it is not set.
 pub const DEFAULT_RESPONSE_TYPES: [OAuthAuthorizationEndpointResponseType; 1] =

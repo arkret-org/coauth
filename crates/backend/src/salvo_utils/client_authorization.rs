@@ -1,21 +1,24 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
-use coauth_data::{Client, JwksOrJwksUri, RepositoryAccess, oauth::OAuthClientRepository};
+use coauth_data::oauth::OAuthClientRepository;
+use coauth_data::{Client, JwksOrJwksUri, RepositoryAccess};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
-use coauth_jose::{jwk::PublicJsonWebKeySet, jwt::Jwt};
+use coauth_jose::jwk::PublicJsonWebKeySet;
+use coauth_jose::jwt::Jwt;
 use coauth_keystore::Encrypter;
 use headers::authorization::{Basic, Bearer, Credentials as _};
 use http::StatusCode;
 use oauth_types::errors::{ClientError, ClientErrorCode};
-use salvo::{
-    extract::{Extractible, Metadata},
-    prelude::*,
-};
-use serde::{Deserialize, de::DeserializeOwned};
+use salvo::extract::{Extractible, Metadata};
+use salvo::prelude::*;
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::{outbound_http::RequestBuilderExt, record_error};
+use crate::outbound_http::RequestBuilderExt;
+use crate::record_error;
 
 static JWT_BEARER_CLIENT_ASSERTION: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
@@ -171,7 +174,7 @@ impl Credentials {
                     .map_err(|_| CredentialsVerificationError::InvalidAssertionSignature)?;
             }
 
-            (_, _) => {
+            (..) => {
                 return Err(CredentialsVerificationError::AuthenticationMethodMismatch);
             }
         }

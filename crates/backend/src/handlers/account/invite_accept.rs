@@ -42,8 +42,7 @@
 //! `proof_expired`, etc.) and `message` carries human-readable context
 //! for operators. The status code is one of:
 //!
-//! - `401 Unauthorized` — `verification_proof_invalid` /
-//!   `subject_proof_invalid`
+//! - `401 Unauthorized` — `verification_proof_invalid` / `subject_proof_invalid`
 //! - `403 Forbidden` — `subject_id_mismatch`
 //! - `410 Gone` — `proof_expired`
 //!
@@ -60,7 +59,8 @@
 use std::sync::{Arc, OnceLock};
 
 use chrono::Utc;
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 

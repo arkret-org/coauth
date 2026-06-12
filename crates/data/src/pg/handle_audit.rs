@@ -2,18 +2,18 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock,
-    audit::{HandleAuditEvent, HandleAuditEventType, HandleAuditRepository, NewHandleAuditEvent},
-    new_id,
+use coauth_data::audit::{
+    HandleAuditEvent, HandleAuditEventType, HandleAuditRepository, NewHandleAuditEvent,
 };
+use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::handle_audit_log};
+use crate::schema::handle_audit_log;
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`HandleAuditRepository`].
 pub struct PgHandleAuditRepository<'c> {

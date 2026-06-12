@@ -5,13 +5,11 @@ use chrono::{DateTime, Utc};
 use coauth_data::Clock;
 use rand_core::RngCore;
 
-use crate::{
-    accountability::{
-        AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,
-        AccountabilitySubjectRevocation,
-    },
-    repository_impl,
+use crate::accountability::{
+    AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,
+    AccountabilitySubjectRevocation,
 };
+use crate::repository_impl;
 
 /// Parameters used to create a durable accountability grant.
 #[derive(Debug, Clone)]

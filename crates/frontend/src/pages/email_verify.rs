@@ -1,14 +1,12 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{CompleteEmailAuthStatus, ResendEmailAuthCodePayload, UserEmailAuthentication},
-    components::{
-        layout::Layout,
-        loading::{LoadingScreen, LoadingSpinner},
-        page_heading::PageHeading,
-    },
-    pages::Route,
+use crate::api::types::{
+    CompleteEmailAuthStatus, ResendEmailAuthCodePayload, UserEmailAuthentication,
 };
+use crate::components::layout::Layout;
+use crate::components::loading::{LoadingScreen, LoadingSpinner};
+use crate::components::page_heading::PageHeading;
+use crate::pages::Route;
 
 const EMAIL_VERIFY_ERROR_ID: &str = "email-verify-error";
 const EMAIL_VERIFY_CODE_ID: &str = "email-verify-code";

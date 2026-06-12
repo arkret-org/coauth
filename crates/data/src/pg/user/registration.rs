@@ -2,10 +2,10 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::user::UserRegistrationRepository;
 use coauth_data::{
     Clock, UpstreamOAuthAuthorizationSession, UserEmailAuthentication, UserPhoneAuthentication,
     UserRegistration, UserRegistrationPassword, UserRegistrationToken, new_id,
-    user::UserRegistrationRepository,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -15,7 +15,8 @@ use ulid::Ulid;
 use url::Url;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::user_registrations};
+use crate::schema::user_registrations;
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`UserRegistrationRepository`] for a PostgreSQL
 /// connection
@@ -547,11 +548,13 @@ mod tests {
 
     use std::net::{IpAddr, Ipv4Addr};
 
+    use coauth_data::clock::MockClock;
+    use coauth_data::upstream_oauth::UpstreamOAuthProviderParams;
     use coauth_data::{
         Clock, RepositoryAccess as _, RepositoryFactory as _, UpstreamOAuthProviderClaimsImports,
         UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderOnBackchannelLogout,
         UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod, UserRegistration,
-        UserRegistrationPassword, clock::MockClock, upstream_oauth::UpstreamOAuthProviderParams,
+        UserRegistrationPassword,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
     use ipnetwork::IpNetwork;

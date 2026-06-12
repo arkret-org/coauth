@@ -6,20 +6,22 @@
 
 //! Interactive user registration flow and related types.
 
-use std::{collections::BTreeMap, process::ExitCode};
+use std::collections::BTreeMap;
+use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::CommandFactory;
 use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config};
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
+use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _};
+use coauth_data::user::{UserEmailRepository, UserPasswordRepository, UserRepository};
 use coauth_data::{
     Clock, DatabaseError, PgRepository, RepositoryAccess, SystemClock, UpstreamOAuthProvider, User,
-    queue::{ProvisionUserJob, QueueJobRepositoryExt as _},
-    user::{UserEmailRepository, UserPasswordRepository, UserRepository},
 };
 use coauth_messaging::email::Address;
 use console::{Alignment, Style, Term, pad_str, style};
-use dialoguer::{Confirm, FuzzySelect, Input, Password, theme::ColorfulTheme};
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::{Confirm, FuzzySelect, Input, Password};
 use figment::Figment;
 use rand_core::{RngCore, SeedableRng};
 use tracing::{info, warn};

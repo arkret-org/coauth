@@ -12,19 +12,23 @@
 //! - [RFC 9126 - Pushed Authorization Requests](https://datatracker.ietf.org/doc/html/rfc9126)
 //! - [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)
 
-use std::{collections::HashSet, fmt, hash::Hash};
+use std::collections::HashSet;
+use std::fmt;
+use std::hash::Hash;
 
 use chrono::{DateTime, Duration, Utc};
 use coauth_iana::oauth::{OAuthAccessTokenType, OAuthTokenTypeHint};
 use language_tags::LanguageTag;
 use serde::{Deserialize, Serialize};
+use serde_with::formats::SpaceSeparator;
 use serde_with::{
     DeserializeFromStr, DisplayFromStr, DurationSeconds, SerializeDisplay, StringWithSeparator,
-    TimestampSeconds, formats::SpaceSeparator, serde_as, skip_serializing_none,
+    TimestampSeconds, serde_as, skip_serializing_none,
 };
 use url::Url;
 
-use crate::{response_type::ResponseType, scope::Scope};
+use crate::response_type::ResponseType;
+use crate::scope::Scope;
 
 // ref: https://www.iana.org/assignments/oauth-parameters/oauth-parameters.xhtml
 
@@ -878,7 +882,8 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::{scope::OPENID, test_utils::assert_serde_json};
+    use crate::scope::OPENID;
+    use crate::test_utils::assert_serde_json;
 
     // -- Fixtures -----------------------------------------------------------
 

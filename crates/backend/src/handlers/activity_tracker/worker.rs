@@ -3,23 +3,19 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::HashMap, net::IpAddr};
+use std::collections::HashMap;
+use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    BoxRepositoryFactory, RepositoryAccess, RepositoryError, user::BrowserSessionRepository,
-};
-use opentelemetry::{
-    Key, KeyValue,
-    metrics::{Counter, Gauge, Histogram},
-};
+use coauth_data::user::BrowserSessionRepository;
+use coauth_data::{BoxRepositoryFactory, RepositoryAccess, RepositoryError};
+use opentelemetry::metrics::{Counter, Gauge, Histogram};
+use opentelemetry::{Key, KeyValue};
 use tokio_util::sync::CancellationToken;
 use ulid::Ulid;
 
-use crate::handlers::{
-    METER,
-    activity_tracker::{Message, SessionKind},
-};
+use crate::handlers::METER;
+use crate::handlers::activity_tracker::{Message, SessionKind};
 
 /// The maximum number of pending activity records before we flush them to the
 /// database automatically.

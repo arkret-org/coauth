@@ -1,20 +1,19 @@
 //! Cascade-revoke active session grants when a device is revoked.
 //!
 //! A device-revoke MUST atomically:
-//!   1. Mark the device record as revoked (today: emit an admin-audit log entry
-//!      — there is no `devices` table yet, so the device identity is the device
-//!      DID/identifier supplied by the caller).
-//!   2. Revoke every still-active `oauth_session_grant` whose `device_id`
-//!      column equals the revoked device.
+//!   1. Mark the device record as revoked (today: emit an admin-audit log entry — there is no
+//!      `devices` table yet, so the device identity is the device DID/identifier supplied by the
+//!      caller).
+//!   2. Revoke every still-active `oauth_session_grant` whose `device_id` column equals the revoked
+//!      device.
 //!
 //! Both writes share a Diesel `BoxRepository` transaction so a partial
 //! failure rolls the entire batch back. This protects against the
 //! "device looks revoked but a grant is still being honoured" race.
 
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    BoxClock, BoxRepository, Pagination, RepositoryAccess, oauth::SessionGrantFilter,
-};
+use coauth_data::oauth::SessionGrantFilter;
+use coauth_data::{BoxClock, BoxRepository, Pagination, RepositoryAccess};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -95,14 +94,13 @@ mod tests {
     //! Tests for the cascade-revoke service.
     //!
     //! Notes:
-    //!   * Two of the tests below run *without* a real DB. They assert
-    //!     pure-data invariants — the shape of the [`DeviceRevokeOutcome`] and
-    //!     the idempotency contract of the input arguments.
+    //!   * Two of the tests below run *without* a real DB. They assert pure-data invariants — the
+    //!     shape of the [`DeviceRevokeOutcome`] and the idempotency contract of the input
+    //!     arguments.
     //!   * Round 23 already covered the happy-path with a DB-backed test in
-    //!     `handlers/admin/v1/devices.rs` (covered by the 115 pre-existing pool
-    //!     tests). The two unit tests here are the round-24 regression net for
-    //!     cases that don't need a Postgres pool — specifically, the
-    //!     idempotency / clock-stamp invariants.
+    //!     `handlers/admin/v1/devices.rs` (covered by the 115 pre-existing pool tests). The two
+    //!     unit tests here are the round-24 regression net for cases that don't need a Postgres
+    //!     pool — specifically, the idempotency / clock-stamp invariants.
     use chrono::TimeZone as _;
 
     use super::*;

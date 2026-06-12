@@ -11,10 +11,8 @@
 //!
 //! - `POST {base_url}/evaluate/email` - Email policy evaluation
 //! - `POST {base_url}/evaluate/register` - Registration policy evaluation
-//! - `POST {base_url}/evaluate/client_registration` - Client registration
-//!   evaluation
-//! - `POST {base_url}/evaluate/authorization_grant` - Authorization grant
-//!   evaluation
+//! - `POST {base_url}/evaluate/client_registration` - Client registration evaluation
+//! - `POST {base_url}/evaluate/authorization_grant` - Authorization grant evaluation
 //! - `POST {base_url}/data` - Dynamic data update (optional)
 //!
 //! ### Request Format
@@ -45,14 +43,12 @@ use async_trait::async_trait;
 use coauth_data::PolicyData;
 use serde::Deserialize;
 
-use crate::{
-    EvaluationError, InstantiateError, LoadError,
-    model::{
-        AuthorizationGrantInput, ClientRegistrationInput, EmailInput, EvaluationResult,
-        RegisterInput, Violation,
-    },
-    provider::{PolicyEvaluator, PolicyProviderFactory},
+use crate::model::{
+    AuthorizationGrantInput, ClientRegistrationInput, EmailInput, EvaluationResult, RegisterInput,
+    Violation,
 };
+use crate::provider::{PolicyEvaluator, PolicyProviderFactory};
+use crate::{EvaluationError, InstantiateError, LoadError};
 
 /// Remote HTTP policy provider factory.
 ///

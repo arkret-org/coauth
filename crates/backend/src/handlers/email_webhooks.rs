@@ -1,9 +1,7 @@
 use salvo::prelude::*;
 
-use crate::{
-    handlers::common::{DepotExt, RouteError, make_clock, make_rng},
-    services::email_webhook::{EmailWebhookService, Error as EmailWebhookError},
-};
+use crate::handlers::common::{DepotExt, RouteError, make_clock, make_rng};
+use crate::services::email_webhook::{EmailWebhookService, Error as EmailWebhookError};
 
 const WEBHOOK_BODY_MAX_SIZE: usize = 256 * 1024;
 

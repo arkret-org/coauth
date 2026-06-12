@@ -7,10 +7,8 @@
 //! invitation).
 
 use chrono::Utc;
-use coauth_data::{
-    BoxRepository, RepositoryAccess,
-    flow::{StageOutcome, StageValidationError},
-};
+use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::{BoxRepository, RepositoryAccess};
 
 use super::StageExecutionError;
 

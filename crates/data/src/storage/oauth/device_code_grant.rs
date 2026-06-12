@@ -48,8 +48,8 @@ pub trait OAuthDeviceCodeGrantRepository: Send + Sync {
     ///
     /// * `rng`: A random number generator
     /// * `clock`: The clock used to generate timestamps
-    /// * `params`: The parameters used to create the device code grant. See the
-    ///   fields of [`OAuthDeviceCodeGrantParams`]
+    /// * `params`: The parameters used to create the device code grant. See the fields of
+    ///   [`OAuthDeviceCodeGrantParams`]
     ///
     /// # Errors
     ///
@@ -114,8 +114,7 @@ pub trait OAuthDeviceCodeGrantRepository: Send + Sync {
     ///
     /// * `clock`: The clock used to generate timestamps
     /// * `device_code_grant`: The device code grant to fulfill
-    /// * `browser_session`: The browser session which was used to fulfill the
-    ///   device code grant
+    /// * `browser_session`: The browser session which was used to fulfill the device code grant
     ///
     /// # Errors
     ///
@@ -138,8 +137,7 @@ pub trait OAuthDeviceCodeGrantRepository: Send + Sync {
     ///
     /// * `clock`: The clock used to generate timestamps
     /// * `device_code_grant`: The device code grant to reject
-    /// * `browser_session`: The browser session which was used to reject the
-    ///   device code grant
+    /// * `browser_session`: The browser session which was used to reject the device code grant
     ///
     /// # Errors
     ///
@@ -187,8 +185,7 @@ pub trait OAuthDeviceCodeGrantRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from
-    ///   the beginning
+    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
     /// * `until`: The ULID threshold representing 7 days ago
     /// * `limit`: The maximum number of grants to delete in this batch
     ///

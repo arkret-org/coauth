@@ -17,17 +17,14 @@
 //! [Client Credentials flow]: https://www.rfc-editor.org/rfc/rfc6749#section-4.4
 
 use chrono::{DateTime, Utc};
-use oauth_types::{
-    requests::{AccessTokenRequest, AccessTokenResponse, ClientCredentialsGrant},
-    scope::Scope,
-};
+use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse, ClientCredentialsGrant};
+use oauth_types::scope::Scope;
 use rand_core::RngCore as Rng;
 use url::Url;
 
-use super::super::{
-    error::TokenRequestError, requests::token::request_access_token,
-    types::client_credentials::ClientCredentials,
-};
+use super::super::error::TokenRequestError;
+use super::super::requests::token::request_access_token;
+use super::super::types::client_credentials::ClientCredentials;
 
 /// Obtain an access token using the client credentials grant.
 ///
@@ -35,8 +32,7 @@ use super::super::{
 ///
 /// * `http_client` - The reqwest client to use for making HTTP requests.
 ///
-/// * `client_credentials` - The credentials obtained when registering the
-///   client.
+/// * `client_credentials` - The credentials obtained when registering the client.
 ///
 /// * `token_endpoint` - The URL of the issuer's Token endpoint.
 ///

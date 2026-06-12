@@ -1,18 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{LinkedAccount, ProvidersOutcome, ViewerOutcome},
-    components::{
-        collapsible::CollapsibleSection,
-        dialog::Dialog,
-        loading::LoadingScreen,
-        password_input::AccountManagementPasswordPreview,
-        separator::{Separator, SeparatorKind},
-        user_email::UserEmailList,
-        user_profile::AddEmailForm,
-    },
-    pages::Route,
-};
+use crate::api::types::{LinkedAccount, ProvidersOutcome, ViewerOutcome};
+use crate::components::collapsible::CollapsibleSection;
+use crate::components::dialog::Dialog;
+use crate::components::loading::LoadingScreen;
+use crate::components::password_input::AccountManagementPasswordPreview;
+use crate::components::separator::{Separator, SeparatorKind};
+use crate::components::user_email::UserEmailList;
+use crate::components::user_profile::AddEmailForm;
+use crate::pages::Route;
 
 #[component]
 pub fn AccountSettings() -> Element {

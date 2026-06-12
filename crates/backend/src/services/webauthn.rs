@@ -3,12 +3,11 @@
 //! Wires `webauthn-rs` into a coauth-shaped service that:
 //!
 //! 1. starts a passkey registration ceremony for an account (`register_start`);
-//! 2. finalises that ceremony, persists a `Passkey` to `webauthn_credentials`
-//!    (`register_finish`);
-//! 3. starts an authentication ceremony for an account that already has one or
-//!    more credentials (`auth_start`);
-//! 4. finalises authentication, updates the credential's `sign_count` and
-//!    `last_used_at` (`auth_finish`).
+//! 2. finalises that ceremony, persists a `Passkey` to `webauthn_credentials` (`register_finish`);
+//! 3. starts an authentication ceremony for an account that already has one or more credentials
+//!    (`auth_start`);
+//! 4. finalises authentication, updates the credential's `sign_count` and `last_used_at`
+//!    (`auth_finish`).
 //!
 //! Challenge state lives in an in-memory map keyed by account ULID.
 //! Production deployments wanting horizontal scale-out will need a
@@ -20,28 +19,23 @@
 //! transports[], aaguid, backup_eligible, backup_state, user_verified,
 //! label, created_at, last_used_at, revoked_at`.
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use diesel::{
-    QueryableByName,
-    sql_types::{BigInt, Bytea, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid},
-};
-use diesel_async::{
-    AsyncPgConnection, RunQueryDsl as _, pooled_connection::deadpool::Pool as DieselPool,
-};
+use diesel::QueryableByName;
+use diesel::sql_types::{BigInt, Bytea, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
+use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
+use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use ulid::Ulid;
 use uuid::Uuid;
-use webauthn_rs::{
-    Webauthn, WebauthnBuilder,
-    prelude::{
-        CreationChallengeResponse, CredentialID, Passkey, PasskeyAuthentication,
-        PasskeyRegistration, PublicKeyCredential, RegisterPublicKeyCredential,
-        RequestChallengeResponse,
-    },
+use webauthn_rs::prelude::{
+    CreationChallengeResponse, CredentialID, Passkey, PasskeyAuthentication, PasskeyRegistration,
+    PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse,
 };
+use webauthn_rs::{Webauthn, WebauthnBuilder};
 
 /// Type alias for the boxed dynamic service used by handlers.
 pub type WebauthnServiceHandle = Arc<dyn WebauthnService>;
@@ -133,8 +127,7 @@ pub struct PgWebauthnService {
 impl PgWebauthnService {
     /// Build a new service.
     ///
-    /// * `rp_id` — the relying-party effective domain (e.g.
-    ///   `auth.example.com`).
+    /// * `rp_id` — the relying-party effective domain (e.g. `auth.example.com`).
     /// * `rp_origin` — the origin URL (`https://auth.example.com`).
     /// * `rp_name` — the human-readable RP name.
     pub fn new(

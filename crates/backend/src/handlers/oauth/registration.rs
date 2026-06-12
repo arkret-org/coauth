@@ -1,20 +1,19 @@
 use std::sync::{Arc, LazyLock};
 
+use coauth_data::oauth::OAuthClientRepository;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, LocalizedClientMetadata, SystemClock,
-    oauth::OAuthClientRepository,
 };
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_keystore::Encrypter;
 use coauth_policy::{EvaluationResult, Policy, PolicyFactory};
-use oauth_types::{
-    errors::{ClientError, ClientErrorCode},
-    registration::{
-        ClientMetadata, ClientMetadataVerificationError, ClientRegistrationResponse, Localized,
-        VerifiedClientMetadata,
-    },
+use oauth_types::errors::{ClientError, ClientErrorCode};
+use oauth_types::registration::{
+    ClientMetadata, ClientMetadataVerificationError, ClientRegistrationResponse, Localized,
+    VerifiedClientMetadata,
 };
-use opentelemetry::{Key, KeyValue, metrics::Counter};
+use opentelemetry::metrics::Counter;
+use opentelemetry::{Key, KeyValue};
 use psl::Psl;
 use rand::distr::{Alphanumeric, SampleString};
 use rand_chacha::ChaChaRng;

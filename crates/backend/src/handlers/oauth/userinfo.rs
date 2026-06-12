@@ -1,22 +1,20 @@
 use coauth_config::CokretConfig;
-use coauth_data::{BoxClock, BoxRepository, BoxRng, SystemClock, oauth::OAuthClientRepository};
-use coauth_jose::{
-    constraints::Constrainable,
-    jwt::{JsonWebSignatureHeader, Jwt},
-};
+use coauth_data::oauth::OAuthClientRepository;
+use coauth_data::{BoxClock, BoxRepository, BoxRng, SystemClock};
+use coauth_jose::constraints::Constrainable;
+use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use oauth_types::scope::OPENID;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
-use salvo::{Extractible, prelude::*};
+use salvo::Extractible;
+use salvo::prelude::*;
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::{
-    handlers::cokret,
-    salvo_utils::user_authorization::{AuthorizationVerificationError, UserAuthorization},
-};
+use crate::handlers::cokret;
+use crate::salvo_utils::user_authorization::{AuthorizationVerificationError, UserAuthorization};
 
 #[skip_serializing_none]
 #[derive(Serialize)]

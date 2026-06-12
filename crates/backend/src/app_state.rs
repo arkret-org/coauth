@@ -1,4 +1,5 @@
-use std::{net::IpAddr, sync::Arc};
+use std::net::IpAddr;
+use std::sync::Arc;
 
 use coauth_config::CokretConfig;
 use coauth_data::{
@@ -10,32 +11,27 @@ use coauth_keystore::{Encrypter, Keystore};
 use coauth_policy::{Policy, PolicyFactory};
 use coauth_principal::{ConnectorRegistry, PrincipalServerAdmin};
 use coauth_templates::Templates;
-use diesel_async::{AsyncPgConnection, pooled_connection::deadpool::Pool as DieselPool};
+use diesel_async::AsyncPgConnection;
+use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use ipnetwork::IpNetwork;
 use opentelemetry::KeyValue;
 use rand_core::SeedableRng;
 use salvo::prelude::*;
 use tracing::Instrument;
 
-use crate::{
-    handlers::{
-        ActivityTracker, CookieManager, JwksCache, Limiter, MetadataCache,
-        passwords::PasswordManager,
-    },
-    services::{
-        account_claims::account_claims_service,
-        did_resolver::default_did_resolver_service,
-        email_webhook::EmailWebhookService,
-        invite_quarantine::invite_quarantine_service,
-        risk_action_proposals::risk_action_proposals_service,
-        risk_action_state::default_risk_action_state_service,
-        starid_adapter::{StaridRegistryHandle, StaridResolver},
-        upstream_oidc::default_upstream_oidc_service,
-        upstream_oidc_mapping::TrustedIssuerPolicySet,
-        webauthn::webauthn_service,
-    },
-    telemetry::METER,
-};
+use crate::handlers::passwords::PasswordManager;
+use crate::handlers::{ActivityTracker, CookieManager, JwksCache, Limiter, MetadataCache};
+use crate::services::account_claims::account_claims_service;
+use crate::services::did_resolver::default_did_resolver_service;
+use crate::services::email_webhook::EmailWebhookService;
+use crate::services::invite_quarantine::invite_quarantine_service;
+use crate::services::risk_action_proposals::risk_action_proposals_service;
+use crate::services::risk_action_state::default_risk_action_state_service;
+use crate::services::starid_adapter::{StaridRegistryHandle, StaridResolver};
+use crate::services::upstream_oidc::default_upstream_oidc_service;
+use crate::services::upstream_oidc_mapping::TrustedIssuerPolicySet;
+use crate::services::webauthn::webauthn_service;
+use crate::telemetry::METER;
 
 /// Process-wide JWKS cache shared across all requests.
 ///

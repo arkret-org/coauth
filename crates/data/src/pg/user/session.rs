@@ -2,11 +2,11 @@ use std::net::IpAddr;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::user::{BrowserSessionFilter, BrowserSessionRepository};
 use coauth_data::{
     Authentication, AuthenticationMethod, BrowserSession, Clock, Page, Pagination, Password,
     UpstreamOAuthAuthorizationSession, User, new_id,
-    pagination::{Node, PaginationDirection},
-    user::{BrowserSessionFilter, BrowserSessionRepository},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -14,12 +14,10 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{
-        upstream_oauth_authorization_sessions, user_session_authentications, user_sessions, users,
-    },
+use crate::schema::{
+    upstream_oauth_authorization_sessions, user_session_authentications, user_sessions, users,
 };
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`BrowserSessionRepository`] for a PostgreSQL
 /// connection

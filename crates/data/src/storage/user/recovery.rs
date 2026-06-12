@@ -39,10 +39,8 @@ pub trait UserRecoveryRepository: Send + Sync {
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock to use
     /// * `email`: The email to create the session for
-    /// * `user_agent`: The user agent of the browser which initiated the
-    ///   session
-    /// * `ip_address`: The IP address of the browser which initiated the
-    ///   session, if known
+    /// * `user_agent`: The user agent of the browser which initiated the session
+    /// * `ip_address`: The IP address of the browser which initiated the session, if known
     /// * `locale`: The locale of the browser which initiated the session
     ///
     /// # Errors
@@ -126,8 +124,7 @@ pub trait UserRecoveryRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The cursor to start from (exclusive), or `None` to start from
-    ///   the beginning
+    /// * `since`: The cursor to start from (exclusive), or `None` to start from the beginning
     /// * `until`: The maximum ULID to delete (inclusive upper bound)
     /// * `limit`: The maximum number of sessions to delete in this batch
     ///

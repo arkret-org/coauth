@@ -7,8 +7,7 @@
 //! The spec ([`policy-server.md` §4]) requires every signed decision to
 //! carry three frontier digests:
 //!
-//! - `auth_state_digest` — accepted authorization-state root used during
-//!   evaluation;
+//! - `auth_state_digest` — accepted authorization-state root used during evaluation;
 //! - `policy_frontier_digest` — policy-source frontier digest;
 //! - `membership_frontier_digest` — membership / role frontier digest.
 //!
@@ -24,16 +23,19 @@
 //! We define a [`FrontierSource`] trait so handler code never sees the
 //! HTTP wiring. Implementations:
 //!
-//! - [`SolandFrontierSource`] — production. Holds the soland base URL + shared
-//!   `reqwest::Client`; performs the GET and maps the result.
-//! - [`StaticFrontierSource`] — tests. Returns a fixed frontier so the unit
-//!   tests in `policy_check.rs` can assert byte-equal transcripts without
-//!   standing up an HTTP mock.
+//! - [`SolandFrontierSource`] — production. Holds the soland base URL + shared `reqwest::Client`;
+//!   performs the GET and maps the result.
+//! - [`StaticFrontierSource`] — tests. Returns a fixed frontier so the unit tests in
+//!   `policy_check.rs` can assert byte-equal transcripts without standing up an HTTP mock.
 //!
 //! The trait is `async_trait`-free deliberately — the futures are
 //! `BoxFuture` so the trait stays object-safe for `dyn FrontierSource`.
 
-use std::{fmt, future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
 use cokret_core::{Hash, RealmId};
 use thiserror::Error;

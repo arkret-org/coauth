@@ -7,12 +7,12 @@
 //! # Main type categories
 //!
 //! - **Accounts** — [`AccountContactPoint`], [`AccountIdentityBinding`]
-//! - **Users** — [`User`], [`BrowserSession`], [`Password`], [`UserEmail`],
-//!   [`UserRegistration`], [`UserRecoveryTicket`]
-//! - **Flows** — [`FlowDefinition`], [`FlowStageBinding`], [`StageKind`],
-//!   [`FlowSession`], [`StageChallenge`], [`StageSubmission`], [`StageOutcome`]
-//! - **OAuth** — [`Client`], [`Session`], [`AuthorizationGrant`],
-//!   [`AccessToken`], [`RefreshToken`], [`DeviceCodeGrant`]
+//! - **Users** — [`User`], [`BrowserSession`], [`Password`], [`UserEmail`], [`UserRegistration`],
+//!   [`UserRecoveryTicket`]
+//! - **Flows** — [`FlowDefinition`], [`FlowStageBinding`], [`StageKind`], [`FlowSession`],
+//!   [`StageChallenge`], [`StageSubmission`], [`StageOutcome`]
+//! - **OAuth** — [`Client`], [`Session`], [`AuthorizationGrant`], [`AccessToken`],
+//!   [`RefreshToken`], [`DeviceCodeGrant`]
 //! - **Upstream SSO** — [`UpstreamOAuthProvider`], [`UpstreamOAuthLink`],
 //!   [`UpstreamOAuthAuthorizationSession`]
 //! - **Notifications** — [`NotificationRequest`], [`NotificationDelivery`],
@@ -86,15 +86,13 @@ pub struct InvalidTransitionError;
 
 pub use ulid::Ulid;
 
-pub use self::{
-    pg::{
-        DatabaseError, MIGRATIONS, PgRepository, PgRepositoryFactory, has_pending_migrations,
-        migrate, schema, test_utils,
-    },
-    storage::{
-        BoxRepository, BoxRepositoryFactory, MapErr, Page, Pagination, Repository,
-        RepositoryAccess, RepositoryError, RepositoryFactory, RepositoryTransaction, pagination,
-    },
+pub use self::pg::{
+    DatabaseError, MIGRATIONS, PgRepository, PgRepositoryFactory, has_pending_migrations, migrate,
+    schema, test_utils,
+};
+pub use self::storage::{
+    BoxRepository, BoxRepositoryFactory, MapErr, Page, Pagination, Repository, RepositoryAccess,
+    RepositoryError, RepositoryFactory, RepositoryTransaction, pagination,
 };
 
 /// Generate a new UUID v7-compatible identifier (RFC 9562).
@@ -126,67 +124,65 @@ pub fn new_id(
     Ulid::from(uuid::Uuid::from_bytes(bytes))
 }
 
+pub use self::account::{
+    AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType,
+};
+pub use self::accountability::{
+    AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,
+    AccountabilitySubjectRevocation,
+};
+pub use self::audit::{AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType};
+pub use self::circle_capability::{CircleCapabilityGrantRepository, NewCircleCapabilityGrant};
+pub use self::clock::{Clock, SystemClock};
+pub use self::flow::{
+    FlowDefinition, FlowDesignation, FlowSession, FlowSessionStatus, FlowStageBinding,
+    IdentificationField, PromptField, PromptFieldType, StageChallenge, StageKind, StageOutcome,
+    StageSubmission, StageValidationError,
+};
+pub use self::notification::{
+    NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
+    NotificationDeliveryStatus, NotificationDestination, NotificationEventActor,
+    NotificationEventKind, NotificationEventLog, NotificationPreference, NotificationRequest,
+    NotificationRequestSource, NotificationRequestStatus,
+};
+pub use self::oauth::{
+    AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, DeviceCodeGrant,
+    DeviceCodeGrantState, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField,
+    LocalizedClientMetadata, Pkce, Session, SessionGrant, SessionState,
+};
 pub(crate) use self::pg::DatabaseInconsistencyError;
-pub use self::{
-    account::{AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType},
-    accountability::{
-        AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,
-        AccountabilitySubjectRevocation,
-    },
-    audit::{AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType},
-    circle_capability::{CircleCapabilityGrantRepository, NewCircleCapabilityGrant},
-    clock::{Clock, SystemClock},
-    flow::{
-        FlowDefinition, FlowDesignation, FlowSession, FlowSessionStatus, FlowStageBinding,
-        IdentificationField, PromptField, PromptFieldType, StageChallenge, StageKind, StageOutcome,
-        StageSubmission, StageValidationError,
-    },
-    notification::{
-        NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
-        NotificationDeliveryStatus, NotificationDestination, NotificationEventActor,
-        NotificationEventKind, NotificationEventLog, NotificationPreference, NotificationRequest,
-        NotificationRequestSource, NotificationRequestStatus,
-    },
-    oauth::{
-        AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, DeviceCodeGrant,
-        DeviceCodeGrantState, InvalidRedirectUriError, JwksOrJwksUri, LocalizableField,
-        LocalizedClientMetadata, Pkce, Session, SessionGrant, SessionState,
-    },
-    policy_data::PolicyData,
-    post_auth_action::{AccountAction, PostAuthAction},
-    site_config::{
-        CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,
-    },
-    tokens::{
-        AccessToken, AccessTokenState, RefreshToken, RefreshTokenChainRevokeOutcome,
-        RefreshTokenState, TokenFormatError, TokenType,
-    },
-    upstream_oauth::{
-        UpstreamOAuthAuthorizationSession, UpstreamOAuthAuthorizationSessionState,
-        UpstreamOAuthLink, UpstreamOAuthLinkPatch, UpstreamOAuthProvider,
-        UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderDiscoveryMode,
-        UpstreamOAuthProviderHandlePreference, UpstreamOAuthProviderImportAction,
-        UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderOnBackchannelLogout,
-        UpstreamOAuthProviderOnConflict, UpstreamOAuthProviderPkceMode,
-        UpstreamOAuthProviderResponseMode, UpstreamOAuthProviderSource,
-        UpstreamOAuthProviderSubjectPreference, UpstreamOAuthProviderTokenAuthMethod,
-    },
-    url_builder::UrlBuilder,
-    user_agent::{DeviceType, UserAgent},
-    users::{
-        AdminUserPatch, Authentication, AuthenticationMethod, BrowserSession,
-        NewUserPrimaryHandlePreference, Password, PrincipalDidUpdateKey, PrincipalUser, User,
-        UserEmail, UserEmailAuthentication, UserEmailAuthenticationCode, UserEmailPatch, UserPatch,
-        UserPhone, UserPhoneAuthentication, UserPhoneAuthenticationCode,
-        UserPrimaryHandlePreference, UserProfile, UserProfilePatch, UserRecoverySession,
-        UserRecoveryTicket, UserRegistration, UserRegistrationPassword, UserRegistrationToken,
-        UserTotpConfig, VerifiedUserHandleClaim,
-    },
-    utils::{BoxClock, BoxRng},
-    version::AppVersion,
-    workflow::{
-        WorkflowActor, WorkflowAssignee, WorkflowAuditAction, WorkflowAuditLog, WorkflowDeadline,
-        WorkflowDeadlineStatus, WorkflowEvent, WorkflowEventKind, WorkflowInstance,
-        WorkflowInstanceStatus, WorkflowStep, WorkflowStepStatus, WorkflowSubject,
-    },
+pub use self::policy_data::PolicyData;
+pub use self::post_auth_action::{AccountAction, PostAuthAction};
+pub use self::site_config::{
+    CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,
+};
+pub use self::tokens::{
+    AccessToken, AccessTokenState, RefreshToken, RefreshTokenChainRevokeOutcome, RefreshTokenState,
+    TokenFormatError, TokenType,
+};
+pub use self::upstream_oauth::{
+    UpstreamOAuthAuthorizationSession, UpstreamOAuthAuthorizationSessionState, UpstreamOAuthLink,
+    UpstreamOAuthLinkPatch, UpstreamOAuthProvider, UpstreamOAuthProviderClaimsImports,
+    UpstreamOAuthProviderDiscoveryMode, UpstreamOAuthProviderHandlePreference,
+    UpstreamOAuthProviderImportAction, UpstreamOAuthProviderImportPreference,
+    UpstreamOAuthProviderOnBackchannelLogout, UpstreamOAuthProviderOnConflict,
+    UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderResponseMode, UpstreamOAuthProviderSource,
+    UpstreamOAuthProviderSubjectPreference, UpstreamOAuthProviderTokenAuthMethod,
+};
+pub use self::url_builder::UrlBuilder;
+pub use self::user_agent::{DeviceType, UserAgent};
+pub use self::users::{
+    AdminUserPatch, Authentication, AuthenticationMethod, BrowserSession,
+    NewUserPrimaryHandlePreference, Password, PrincipalDidUpdateKey, PrincipalUser, User,
+    UserEmail, UserEmailAuthentication, UserEmailAuthenticationCode, UserEmailPatch, UserPatch,
+    UserPhone, UserPhoneAuthentication, UserPhoneAuthenticationCode, UserPrimaryHandlePreference,
+    UserProfile, UserProfilePatch, UserRecoverySession, UserRecoveryTicket, UserRegistration,
+    UserRegistrationPassword, UserRegistrationToken, UserTotpConfig, VerifiedUserHandleClaim,
+};
+pub use self::utils::{BoxClock, BoxRng};
+pub use self::version::AppVersion;
+pub use self::workflow::{
+    WorkflowActor, WorkflowAssignee, WorkflowAuditAction, WorkflowAuditLog, WorkflowDeadline,
+    WorkflowDeadlineStatus, WorkflowEvent, WorkflowEventKind, WorkflowInstance,
+    WorkflowInstanceStatus, WorkflowStep, WorkflowStepStatus, WorkflowSubject,
 };

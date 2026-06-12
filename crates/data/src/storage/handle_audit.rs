@@ -4,9 +4,8 @@
 //!   * Handle reassignment (old_did -> new_did)
 //!   * Handle revocation (user- or admin-initiated)
 //!   * TTL expiry of an emitted `handle_claim`
-//!   * Detected divergence in DID Document `alsoKnownAs[]` (watcher hook emits
-//!     this; a `not_detected` placeholder is written when no watcher is
-//!     configured).
+//!   * Detected divergence in DID Document `alsoKnownAs[]` (watcher hook emits this; a
+//!     `not_detected` placeholder is written when no watcher is configured).
 //!
 //! UPDATE / DELETE are blocked at the database trigger level — see
 //! migration `20260520000100_handle_claims_and_audit/up.sql`. This module
@@ -19,7 +18,8 @@
 //! migration `20260527000200_handle_canonicalize_rename`.
 
 use async_trait::async_trait;
-use coauth_data::{Clock, audit::HandleAuditEvent};
+use coauth_data::Clock;
+use coauth_data::audit::HandleAuditEvent;
 use rand_core::RngCore;
 use serde_json::Value;
 use ulid::Ulid;

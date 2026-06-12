@@ -5,7 +5,8 @@
 
 use std::fmt::Debug;
 
-use serde::{Serialize, de::DeserializeOwned};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 #[track_caller]
 pub(crate) fn assert_serde_json<T: Serialize + DeserializeOwned + PartialEq + Debug>(

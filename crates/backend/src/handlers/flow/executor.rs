@@ -1,12 +1,10 @@
 use std::net::IpAddr;
 
-use coauth_data::{
-    CaptchaConfig, CaptchaService,
-    flow::{
-        FlowDefinition, FlowSession, FlowStageBinding, StageChallenge, StageKind, StageOutcome,
-        StageSubmission, StageValidationError,
-    },
+use coauth_data::flow::{
+    FlowDefinition, FlowSession, FlowStageBinding, StageChallenge, StageKind, StageOutcome,
+    StageSubmission, StageValidationError,
 };
+use coauth_data::{CaptchaConfig, CaptchaService};
 use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;

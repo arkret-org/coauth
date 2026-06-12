@@ -3,18 +3,16 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_admin_types::circle_capability_admin::{CircleCapabilityAction, CircleCapabilityGrant};
-use coauth_data::{
-    Clock,
-    circle_capability::{CircleCapabilityGrantRepository, NewCircleCapabilityGrant},
-    new_id,
-};
+use coauth_data::circle_capability::{CircleCapabilityGrantRepository, NewCircleCapabilityGrant};
+use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::circle_capability_grants};
+use crate::schema::circle_capability_grants;
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`CircleCapabilityGrantRepository`].
 pub struct PgCircleCapabilityGrantRepository<'c> {
@@ -180,7 +178,8 @@ impl CircleCapabilityGrantRepository for PgCircleCapabilityGrantRepository<'_> {
 #[cfg(test)]
 mod tests {
     use coauth_admin_types::circle_capability_admin::CircleCapabilityAction;
-    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _, clock::MockClock};
+    use coauth_data::clock::MockClock;
+    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 

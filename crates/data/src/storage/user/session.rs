@@ -8,9 +8,9 @@ use coauth_data::{
 use rand_core::RngCore;
 use ulid::Ulid;
 
-use crate::{
-    Pagination, pagination::Page, repository_impl, upstream_oauth::UpstreamOAuthSessionFilter,
-};
+use crate::pagination::Page;
+use crate::upstream_oauth::UpstreamOAuthSessionFilter;
+use crate::{Pagination, repository_impl};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BrowserSessionState {
@@ -259,8 +259,7 @@ pub trait BrowserSessionRepository: Send + Sync {
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock used to generate timestamps
     /// * `user_session`: The session to authenticate
-    /// * `upstream_oauth_session`: The upstream OAuth session which was used to
-    ///   authenticate
+    /// * `upstream_oauth_session`: The upstream OAuth session which was used to authenticate
     ///
     /// # Errors
     ///
@@ -291,8 +290,8 @@ pub trait BrowserSessionRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `activity`: A list of tuples containing the session ID, the last
-    ///   activity timestamp and the IP address of the client
+    /// * `activity`: A list of tuples containing the session ID, the last activity timestamp and
+    ///   the IP address of the client
     ///
     /// # Errors
     ///
@@ -311,8 +310,8 @@ pub trait BrowserSessionRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: The earliest finish time to delete (exclusive). If `None`,
-    ///   starts from the beginning.
+    /// * `since`: The earliest finish time to delete (exclusive). If `None`, starts from the
+    ///   beginning.
     /// * `until`: The latest finish time to delete (exclusive)
     /// * `limit`: Maximum number of sessions to delete in this batch
     ///
@@ -334,10 +333,9 @@ pub trait BrowserSessionRepository: Send + Sync {
     ///
     /// # Parameters
     ///
-    /// * `since`: Only process sessions with `last_active_at` at or after this
-    ///   timestamp (exclusive). If `None`, starts from the beginning.
-    /// * `threshold`: Clear IPs for sessions with `last_active_at` before this
-    ///   time
+    /// * `since`: Only process sessions with `last_active_at` at or after this timestamp
+    ///   (exclusive). If `None`, starts from the beginning.
+    /// * `threshold`: Clear IPs for sessions with `last_active_at` before this time
     /// * `limit`: Maximum number of sessions to update in this batch
     ///
     /// # Errors

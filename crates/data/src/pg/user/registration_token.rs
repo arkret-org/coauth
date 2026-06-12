@@ -1,19 +1,17 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock, Page, Pagination, UserRegistrationToken, new_id,
-    pagination::{Node, PaginationDirection},
-    user::{UserRegistrationTokenFilter, UserRegistrationTokenRepository},
-};
+use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::user::{UserRegistrationTokenFilter, UserRegistrationTokenRepository};
+use coauth_data::{Clock, Page, Pagination, UserRegistrationToken, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseInconsistencyError, pg::errors::DatabaseError, schema::user_registration_tokens,
-};
+use crate::DatabaseInconsistencyError;
+use crate::pg::errors::DatabaseError;
+use crate::schema::user_registration_tokens;
 
 /// An implementation of
 /// [`coauth_data::user::UserRegistrationTokenRepository`] for a PostgreSQL
@@ -505,10 +503,9 @@ struct TimesUsedRow {
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{
-        Clock as _, Pagination, RepositoryAccess as _, RepositoryFactory as _, clock::MockClock,
-        user::UserRegistrationTokenFilter,
-    };
+    use coauth_data::clock::MockClock;
+    use coauth_data::user::UserRegistrationTokenFilter;
+    use coauth_data::{Clock as _, Pagination, RepositoryAccess as _, RepositoryFactory as _};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 

@@ -1,16 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{AppSession, ViewerOutcome},
-    components::{
-        empty_state::EmptyState,
-        loading::LoadingScreen,
-        oauth_session::OAuthSessionCard,
-        pagination::{PaginationState, SessionFilterToggle, SessionPaginationControls},
-        separator::{Separator, SeparatorKind},
-    },
-    pages::Route,
+use crate::api::types::{AppSession, ViewerOutcome};
+use crate::components::empty_state::EmptyState;
+use crate::components::loading::LoadingScreen;
+use crate::components::oauth_session::OAuthSessionCard;
+use crate::components::pagination::{
+    PaginationState, SessionFilterToggle, SessionPaginationControls,
 };
+use crate::components::separator::{Separator, SeparatorKind};
+use crate::pages::Route;
 
 #[component]
 pub fn Sessions() -> Element {

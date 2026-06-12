@@ -8,15 +8,14 @@
     reason = "We use Path/PathBuf instead of camino here for simplicity"
 )]
 
-use std::{
-    io::Write as _,
-    path::{Path, PathBuf},
-};
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
 
 use coauth_policy::model::{
     AuthorizationGrantInput, ClientRegistrationInput, EmailInput, RegisterInput,
 };
-use schemars::{JsonSchema, generate::SchemaSettings};
+use schemars::JsonSchema;
+use schemars::generate::SchemaSettings;
 
 /// Resolve the destination writer: either a file in the output directory
 /// or stdout when no directory is provided.

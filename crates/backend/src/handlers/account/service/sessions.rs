@@ -1,8 +1,8 @@
+use coauth_data::oauth::{OAuthClientRepository, OAuthSessionRepository};
+use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
+use coauth_data::user::{BrowserSessionRepository, UserRepository};
 use coauth_data::{
     Authentication, BoxRepository, BrowserSession, Client, Clock, RepositoryError, Session,
-    oauth::{OAuthClientRepository, OAuthSessionRepository},
-    queue::{QueueJobRepositoryExt as _, SyncDevicesJob},
-    user::{BrowserSessionRepository, UserRepository},
 };
 use coauth_principal::PrincipalServerAdmin;
 use rand_chacha::rand_core::CryptoRngCore;

@@ -3,22 +3,19 @@
 //! Two normative tightenings land here, shared by every coauth code path
 //! that mints a `ck.handle.claim` artefact:
 //!
-//!   1. **`claim_kind` deny check** — the draft-era `service_handle`
-//!      `claim_kind` was removed from `ck.schema.handle_claim.v1`
-//!      (`HandleClass::ServiceHandle` no longer exists in the SDK). v1 only
-//!      allows `handle_binding` / `organization_handle`. coauth never emits
-//!      `service_handle` today, but to fail closed against future drift we keep
-//!      an explicit allow-list + deny check rather than relying on the absence
-//!      of a code path. (Handle Claim's closed protocol taxonomy uses
-//!      `claim_kind`, per `common-fields.md` §`kind`/`type` naming rules.)
+//!   1. **`claim_kind` deny check** — the draft-era `service_handle` `claim_kind` was removed from
+//!      `ck.schema.handle_claim.v1` (`HandleClass::ServiceHandle` no longer exists in the SDK). v1
+//!      only allows `handle_binding` / `organization_handle`. coauth never emits `service_handle`
+//!      today, but to fail closed against future drift we keep an explicit allow-list + deny check
+//!      rather than relying on the absence of a code path. (Handle Claim's closed protocol taxonomy
+//!      uses `claim_kind`, per `common-fields.md` §`kind`/`type` naming rules.)
 //!
-//!   2. **`subject` validator** — a handle claim subject MUST be a holder /
-//!      principal DID. It is NOT a Realm `actor_id` (`ck:actor:`), a
-//!      server-local `account_id` (`ck:account:`), a service DID, or a generic
-//!      resource id. We delegate to the SDK's
+//!   2. **`subject` validator** — a handle claim subject MUST be a holder / principal DID. It is
+//!      NOT a Realm `actor_id` (`ck:actor:`), a server-local `account_id` (`ck:account:`), a
+//!      service DID, or a generic resource id. We delegate to the SDK's
 //!      [`cokret_core::validate_handle_claim_subject`] so the wire code
-//!      (`handle_claim_subject_not_principal_did`) stays in lockstep with
-//!      soland / cotest / the spec.
+//!      (`handle_claim_subject_not_principal_did`) stays in lockstep with soland / cotest / the
+//!      spec.
 
 use cokret_core::Did;
 use thiserror::Error;

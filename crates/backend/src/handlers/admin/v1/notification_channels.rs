@@ -11,10 +11,9 @@
 use coauth_admin_types::{NotificationChannelStatus, NotificationChannelsOutcome};
 use salvo::prelude::*;
 
-use crate::{
-    JsonResult,
-    handlers::{admin::call_context::extract_call_context, common::DepotExt},
-};
+use crate::JsonResult;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::common::DepotExt;
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.notification_channels", skip_all)]

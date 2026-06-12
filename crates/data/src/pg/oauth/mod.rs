@@ -9,29 +9,27 @@ mod refresh_token;
 mod session;
 mod session_grant;
 
-pub use self::{
-    access_token::PgOAuthAccessTokenRepository,
-    authorization_grant::PgOAuthAuthorizationGrantRepository, client::PgOAuthClientRepository,
-    device_code_grant::PgOAuthDeviceCodeGrantRepository,
-    refresh_token::PgOAuthRefreshTokenRepository, session::PgOAuthSessionRepository,
-    session_grant::PgOAuthSessionGrantRepository,
-};
+pub use self::access_token::PgOAuthAccessTokenRepository;
+pub use self::authorization_grant::PgOAuthAuthorizationGrantRepository;
+pub use self::client::PgOAuthClientRepository;
+pub use self::device_code_grant::PgOAuthDeviceCodeGrantRepository;
+pub use self::refresh_token::PgOAuthRefreshTokenRepository;
+pub use self::session::PgOAuthSessionRepository;
+pub use self::session_grant::PgOAuthSessionGrantRepository;
 
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
+    use coauth_data::clock::MockClock;
+    use coauth_data::oauth::{
+        NewSessionGrant, OAuthDeviceCodeGrantParams, OAuthSessionFilter, OAuthSessionRepository,
+    };
     use coauth_data::{
         AuthorizationCode, Clock, Pagination, RefreshTokenState, RepositoryAccess as _,
         RepositoryFactory as _,
-        clock::MockClock,
-        oauth::{
-            NewSessionGrant, OAuthDeviceCodeGrantParams, OAuthSessionFilter, OAuthSessionRepository,
-        },
     };
-    use oauth_types::{
-        requests::{GrantType, ResponseMode},
-        scope::{EMAIL, OPENID, PROFILE, Scope},
-    };
+    use oauth_types::requests::{GrantType, ResponseMode};
+    use oauth_types::scope::{EMAIL, OPENID, PROFILE, Scope};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use ulid::Ulid;

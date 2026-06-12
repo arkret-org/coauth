@@ -1,9 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock, new_id,
-    personal::{PersonalAccessToken, PersonalAccessTokenRepository, session::PersonalSession},
-};
+use coauth_data::personal::session::PersonalSession;
+use coauth_data::personal::{PersonalAccessToken, PersonalAccessTokenRepository};
+use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
@@ -11,7 +10,8 @@ use sha2::{Digest, Sha256};
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, schema::personal_access_tokens};
+use crate::DatabaseError;
+use crate::schema::personal_access_tokens;
 
 /// An implementation of [`PersonalAccessTokenRepository`] for a PostgreSQL
 /// connection

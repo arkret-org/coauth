@@ -1,7 +1,7 @@
 //! Admin DTOs for the soland federation status surface.
 //!
 //! Mirrors `GET /_soland/admin/federation/status` — per-Realm federation
-//! peers + last-anchor-pulled-at + outbound queue depth. The endpoint is
+//! peers + last-seal-pulled-at + outbound queue depth. The endpoint is
 //! 404-tolerant on the client side; soland may not have the route wired
 //! yet for every deployment.
 //!
@@ -62,13 +62,13 @@ pub struct FederationStatusRow {
     /// `healthy` / `degraded` / `unreachable`.
     #[serde(default)]
     pub health: String,
-    /// Last successful anchor pull time (RFC3339).
+    /// Last successful Seal pull time (RFC3339).
     #[serde(default)]
-    pub last_anchor_pulled_at: Option<String>,
+    pub last_seal_pulled_at: Option<String>,
     /// Last outbound replication push time (RFC3339).
     #[serde(default)]
     pub last_pushed_at: Option<String>,
-    /// Pending Move/Anchor messages waiting to push to this peer.
+    /// Pending Control Move / Seal messages waiting to push to this peer.
     #[serde(default)]
     pub outbound_queue_depth: u64,
 }

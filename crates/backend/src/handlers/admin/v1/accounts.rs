@@ -8,34 +8,29 @@ use coauth_admin_types::{
     AdminAccountClaimsOutcome as AccountClaimsOutcome, AdminAccountStatus as AccountStatus,
     AdminBridgeDescribe,
 };
-use coauth_data::{AdminUserPatch, RepositoryAccess, user::UserFilter};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::user::UserFilter;
+use coauth_data::{AdminUserPatch, RepositoryAccess};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use crate::{
-    AppError, JsonResult,
-    handlers::{
-        admin::{
-            audit_helper::AdminAuditSigning,
-            call_context::extract_call_context,
-            model::Resource,
-            params::{IncludeCount, extract_pagination, extract_ulid_param},
-            response::{
-                PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-                paginated_response_for_page,
-            },
-            v1::account_dids::{preview_bindings_for_user, primary_did_for_user},
-        },
-        cokret::service_did_for,
-        common::DepotExt,
-    },
-    services::{
-        account_claims::{AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord},
-        did_resolver::DidResolverService,
-    },
+use crate::handlers::admin::audit_helper::AdminAuditSigning;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::Resource;
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::handlers::admin::v1::account_dids::{preview_bindings_for_user, primary_did_for_user};
+use crate::handlers::cokret::service_did_for;
+use crate::handlers::common::DepotExt;
+use crate::services::account_claims::{
+    AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord,
+};
+use crate::services::did_resolver::DidResolverService;
+use crate::{AppError, JsonResult};
 
 // `AdminBridgeDescribeResponse` (and the nested `AdminBridgeRiskAction*Example`
 // triple) used to live inline here and in `risk_action.rs`. They moved
@@ -634,7 +629,8 @@ fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGra
 #[cfg(test)]
 mod tests {
     use base64ct::{Base64UrlUnpadded, Encoding as _};
-    use coauth_data::{Clock, RepositoryAccess, personal::session::PersonalSessionOwner};
+    use coauth_data::personal::session::PersonalSessionOwner;
+    use coauth_data::{Clock, RepositoryAccess};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::jwt::JsonWebSignatureHeader;
     use hyper::{Request, StatusCode};
@@ -642,9 +638,9 @@ mod tests {
     use signature::RandomizedSigner as _;
     use ulid::Ulid;
 
-    use crate::{
-        handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup},
-        services::did_binding_proof::{BindingStatementClaims, DID_BINDING_CONTROL_PROOF_SCHEMA},
+    use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+    use crate::services::did_binding_proof::{
+        BindingStatementClaims, DID_BINDING_CONTROL_PROOF_SCHEMA,
     };
 
     #[tokio::test]

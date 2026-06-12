@@ -19,24 +19,22 @@
 //! still served by [`crate::handlers::oauth::registration`].
 
 use chrono::{DateTime, Utc};
-use coauth_data::{audit::AdminOperation, oauth::OAuthClientRepository};
+use coauth_data::audit::AdminOperation;
+use coauth_data::oauth::OAuthClientRepository;
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use oauth_types::requests::GrantType;
 use rand::distr::{Alphanumeric, SampleString};
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{
-    AppError, CreatedJsonResult,
-    handlers::{
-        admin::{
-            CreatedJson, audit_helper::record_admin_operation, call_context::extract_call_context,
-        },
-        common::DepotExt,
-    },
-};
+use crate::handlers::admin::CreatedJson;
+use crate::handlers::admin::audit_helper::record_admin_operation;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::common::DepotExt;
+use crate::{AppError, CreatedJsonResult};
 
 /// Request body for `POST /_coauth/admin/oauth/clients/register`.
 ///

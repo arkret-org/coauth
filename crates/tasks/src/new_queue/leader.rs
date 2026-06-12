@@ -1,14 +1,13 @@
 use chrono::Duration;
-use coauth_data::{
-    DatabaseError, PgRepository, RepositoryAccess,
-    pg::advisory_lock::{AdvisoryLockResult, advisory_lock_key},
-    queue::InsertableJob,
-};
+use coauth_data::pg::advisory_lock::{AdvisoryLockResult, advisory_lock_key};
+use coauth_data::queue::InsertableJob;
+use coauth_data::{DatabaseError, PgRepository, RepositoryAccess};
 use cron::Schedule;
 use diesel::sql_query;
 use diesel_async::RunQueryDsl;
 
-use super::{QueueRunnerError, shared::MAX_ATTEMPTS};
+use super::QueueRunnerError;
+use super::shared::MAX_ATTEMPTS;
 use crate::State;
 
 /// A cron-like schedule definition that the leader evaluates every tick.

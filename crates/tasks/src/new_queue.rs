@@ -15,14 +15,12 @@ mod shared;
 mod tracker;
 
 pub(crate) use self::job_types::{FromJob, JobContext, JobError, JobErrorDecision, RunnableJob};
+use self::leader::ScheduleDefinition;
+use self::repository as repo_runtime;
+use self::runtime::{ListenerRuntime, WorkerMetrics};
 pub use self::shared::QueueRunnerError;
-use self::{
-    leader::ScheduleDefinition,
-    repository as repo_runtime,
-    runtime::{ListenerRuntime, WorkerMetrics},
-    shared::{MAX_ATTEMPTS, retry_delay},
-    tracker::JobTracker,
-};
+use self::shared::{MAX_ATTEMPTS, retry_delay};
+use self::tracker::JobTracker;
 
 /// The main queue worker.
 ///

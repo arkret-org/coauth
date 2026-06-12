@@ -3,10 +3,8 @@
 //! Looks up a user by handle or email address and stores the resolved
 //! `user_id` in the flow context for subsequent stages.
 
-use coauth_data::{
-    BoxRepository, Clock, RepositoryAccess,
-    flow::{StageOutcome, StageValidationError},
-};
+use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 
 use super::StageExecutionError;
 

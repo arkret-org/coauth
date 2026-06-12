@@ -2,10 +2,8 @@
 
 use coauth_data::queue::{CleanupQueueJobsJob, PruneStalePolicyDataJob};
 
-use crate::{
-    State,
-    new_queue::{JobContext, JobError, RunnableJob},
-};
+use crate::State;
+use crate::new_queue::{JobContext, JobError, RunnableJob};
 
 cleanup_ulid_cursor_job!(
     job = CleanupQueueJobsJob,

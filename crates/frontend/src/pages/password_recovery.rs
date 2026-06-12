@@ -1,18 +1,13 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{
-        RecoveryTicketStatusOutcome, ResendRecoveryEmailPayload, SetPasswordPayload,
-        SetPasswordStatus,
-    },
-    components::{
-        layout::Layout,
-        loading::{LoadingScreen, LoadingSpinner},
-        page_heading::PageHeading,
-        password_input::PasswordCreationDoubleInput,
-    },
-    pages::Route,
+use crate::api::types::{
+    RecoveryTicketStatusOutcome, ResendRecoveryEmailPayload, SetPasswordPayload, SetPasswordStatus,
 };
+use crate::components::layout::Layout;
+use crate::components::loading::{LoadingScreen, LoadingSpinner};
+use crate::components::page_heading::PageHeading;
+use crate::components::password_input::PasswordCreationDoubleInput;
+use crate::pages::Route;
 
 #[derive(Debug, Clone, PartialEq)]
 enum RecoveryState {

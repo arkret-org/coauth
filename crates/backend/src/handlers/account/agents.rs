@@ -24,35 +24,29 @@ use std::collections::BTreeSet;
 
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
-use coauth_data::{
-    RepositoryAccess,
-    accountability::{
-        AccountabilityGrantFanoutState, AccountabilitySubjectKind, NewAccountabilityGrant,
-    },
-    audit::AdminOperation,
+use coauth_data::RepositoryAccess;
+use coauth_data::accountability::{
+    AccountabilityGrantFanoutState, AccountabilitySubjectKind, NewAccountabilityGrant,
 };
-use cokret_core::{
-    canonical::canonical_sha256,
-    error::{
-        ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_PAIRING_REQUEST_EXPIRED,
-        ERROR_CODE_PROOF_INVALID, ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
-        REASON_ACCOUNTABILITY_GRANT_MISSING,
-    },
-    identifiers::{AccountabilityGrantId, new_prefixed_uuid7},
+use coauth_data::audit::AdminOperation;
+use cokret_core::canonical::canonical_sha256;
+use cokret_core::error::{
+    ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_PAIRING_REQUEST_EXPIRED,
+    ERROR_CODE_PROOF_INVALID, ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
+    REASON_ACCOUNTABILITY_GRANT_MISSING,
 };
-use salvo::{oapi::ToSchema, prelude::*};
+use cokret_core::identifiers::{AccountabilityGrantId, new_prefixed_uuid7};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::{DepotExt, make_clock, make_rng};
-use crate::{
-    AppError, CreatedJsonResult,
-    handlers::{
-        admin::{CreatedJson, audit_helper::record_service_admin_operation_signed},
-        cokret::service_did_for,
-    },
-    services::did_binding_proof::normalize_did_for_binding,
-};
+use crate::handlers::admin::CreatedJson;
+use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
+use crate::handlers::cokret::service_did_for;
+use crate::services::did_binding_proof::normalize_did_for_binding;
+use crate::{AppError, CreatedJsonResult};
 
 const ACCOUNTABILITY_GRANT_FANOUT_QUEUE: &str = "soland-accountability-grant-fanout";
 

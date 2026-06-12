@@ -5,11 +5,13 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use serde::Serialize;
-use signature::{RandomizedSigner, SignatureEncoding, rand_core::CryptoRngCore};
+use signature::rand_core::CryptoRngCore;
+use signature::{RandomizedSigner, SignatureEncoding};
 use thiserror::Error;
 
 use super::Jwt;
-use crate::jwt::{header::JsonWebSignatureHeader, raw::RawJwt};
+use crate::jwt::header::JsonWebSignatureHeader;
+use crate::jwt::raw::RawJwt;
 
 // ---------------------------------------------------------------------------
 // Errors

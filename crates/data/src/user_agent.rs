@@ -1,7 +1,8 @@
 use std::sync::LazyLock;
 
 use serde::Serialize;
-use woothee::{parser::Parser, woothee::VALUE_UNKNOWN};
+use woothee::parser::Parser;
+use woothee::woothee::VALUE_UNKNOWN;
 
 /// coauth extension: compile regexes once via `LazyLock` instead of on every
 /// call (the Apache 2.0 base created them inline in each function).

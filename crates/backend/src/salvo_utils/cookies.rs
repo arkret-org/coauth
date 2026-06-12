@@ -5,11 +5,10 @@ use std::sync::LazyLock;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::Clock;
 use cookie::{Cookie, CookieJar as RawCookieJar, Key, SameSite};
-use salvo::{
-    extract::{Extractible, Metadata},
-    prelude::*,
-};
-use serde::{Serialize, de::DeserializeOwned};
+use salvo::extract::{Extractible, Metadata};
+use salvo::prelude::*;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 use ulid::Ulid;
 use url::Url;
@@ -105,12 +104,10 @@ impl CookieOption {
     ///
     /// SECURITY baseline:
     /// - `HttpOnly` — no JS access (defence vs XSS-driven token theft).
-    /// - `Secure` (when the base URL is HTTPS) — never travels over plaintext
-    ///   HTTP.
-    /// - `SameSite=Lax` — default for ordinary session cookies. We
-    ///   intentionally do NOT use `Strict` at the baseline because
-    ///   upstream-OIDC and SSO callbacks are top-level navigations from a
-    ///   foreign origin and `Strict` would drop the cookie on that round-trip.
+    /// - `Secure` (when the base URL is HTTPS) — never travels over plaintext HTTP.
+    /// - `SameSite=Lax` — default for ordinary session cookies. We intentionally do NOT use
+    ///   `Strict` at the baseline because upstream-OIDC and SSO callbacks are top-level navigations
+    ///   from a foreign origin and `Strict` would drop the cookie on that round-trip.
     /// - Path defaults to the deployment's base path.
     ///
     /// For cross-site OAuth state cookies that must NOT be reused

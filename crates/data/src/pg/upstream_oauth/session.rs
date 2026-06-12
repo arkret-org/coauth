@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::upstream_oauth::{UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository};
 use coauth_data::{
     BrowserSession, Clock, Page, Pagination, UpstreamOAuthAuthorizationSession,
     UpstreamOAuthAuthorizationSessionState, UpstreamOAuthLink, UpstreamOAuthProvider, new_id,
-    pagination::{Node, PaginationDirection},
-    upstream_oauth::{UpstreamOAuthSessionFilter, UpstreamOAuthSessionRepository},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -12,9 +12,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError, schema::upstream_oauth_authorization_sessions,
-};
+use crate::schema::upstream_oauth_authorization_sessions;
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`UpstreamOAuthSessionRepository`] for a PostgreSQL
 /// connection

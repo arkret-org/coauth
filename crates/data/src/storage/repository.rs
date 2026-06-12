@@ -3,33 +3,30 @@ use futures_util::future::BoxFuture;
 use thiserror::Error;
 
 use super::notification_template::NotificationTemplateRepository;
-use crate::{
-    account::AccountRepository,
-    accountability::AccountabilityGrantRepository,
-    app_session::AppSessionRepository,
-    audit::AuditRepository,
-    circle_capability::CircleCapabilityGrantRepository,
-    notification::NotificationRepository,
-    oauth::{
-        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
-        OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
-        SessionGrantRepository,
-    },
-    personal::{PersonalAccessTokenRepository, PersonalSessionRepository},
-    policy_data::PolicyDataRepository,
-    queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository},
-    upstream_oauth::{
-        UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
-        UpstreamOAuthSessionRepository,
-    },
-    user::{
-        BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
-        UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
-        UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
-        UserRepository, UserTermsRepository, UserTotpRepository,
-    },
-    workflow::WorkflowRepository,
+use crate::account::AccountRepository;
+use crate::accountability::AccountabilityGrantRepository;
+use crate::app_session::AppSessionRepository;
+use crate::audit::AuditRepository;
+use crate::circle_capability::CircleCapabilityGrantRepository;
+use crate::notification::NotificationRepository;
+use crate::oauth::{
+    OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
+    OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
+    SessionGrantRepository,
 };
+use crate::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
+use crate::policy_data::PolicyDataRepository;
+use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
+use crate::upstream_oauth::{
+    UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
+};
+use crate::user::{
+    BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository, UserPasswordRepository,
+    UserPhoneRepository, UserPrimaryHandlePreferenceRepository, UserRecoveryRepository,
+    UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
+    UserTermsRepository, UserTotpRepository,
+};
+use crate::workflow::WorkflowRepository;
 
 /// A [`RepositoryFactory`] is a factory that can create a [`BoxRepository`].
 ///
@@ -275,38 +272,37 @@ pub trait RepositoryAccess: Send {
 /// Implementations of the [`RepositoryAccess`], [`RepositoryTransaction`] and
 /// [`Repository`] for the [`crate::MapErr`] wrapper and [`Box<R>`]
 mod impls {
-    use futures_util::{FutureExt, TryFutureExt, future::BoxFuture};
+    use futures_util::future::BoxFuture;
+    use futures_util::{FutureExt, TryFutureExt};
 
     use super::RepositoryAccess;
-    use crate::{
-        MapErr, Repository, RepositoryTransaction,
-        account::AccountRepository,
-        accountability::AccountabilityGrantRepository,
-        app_session::AppSessionRepository,
-        audit::AuditRepository,
-        circle_capability::CircleCapabilityGrantRepository,
-        notification::NotificationRepository,
-        oauth::{
-            OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
-            OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
-            SessionGrantRepository,
-        },
-        personal::{PersonalAccessTokenRepository, PersonalSessionRepository},
-        policy_data::PolicyDataRepository,
-        queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository},
-        storage::notification_template::NotificationTemplateRepository,
-        upstream_oauth::{
-            UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
-            UpstreamOAuthSessionRepository,
-        },
-        user::{
-            BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
-            UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
-            UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
-            UserTermsRepository, UserTotpRepository,
-        },
-        workflow::WorkflowRepository,
+    use crate::account::AccountRepository;
+    use crate::accountability::AccountabilityGrantRepository;
+    use crate::app_session::AppSessionRepository;
+    use crate::audit::AuditRepository;
+    use crate::circle_capability::CircleCapabilityGrantRepository;
+    use crate::notification::NotificationRepository;
+    use crate::oauth::{
+        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
+        OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
+        SessionGrantRepository,
     };
+    use crate::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
+    use crate::policy_data::PolicyDataRepository;
+    use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
+    use crate::storage::notification_template::NotificationTemplateRepository;
+    use crate::upstream_oauth::{
+        UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
+        UpstreamOAuthSessionRepository,
+    };
+    use crate::user::{
+        BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
+        UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
+        UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
+        UserTermsRepository, UserTotpRepository,
+    };
+    use crate::workflow::WorkflowRepository;
+    use crate::{MapErr, Repository, RepositoryTransaction};
 
     // --- Repository ---
     impl<R, F, E1, E2> Repository<E2> for MapErr<R, F>

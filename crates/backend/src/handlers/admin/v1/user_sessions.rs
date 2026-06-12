@@ -2,24 +2,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use coauth_data::{RepositoryAccess, audit::AdminOperation, user::BrowserSessionFilter};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::AdminOperation;
+use coauth_data::user::BrowserSessionFilter;
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use ulid::Ulid;
 
-use crate::{
-    AppError, JsonResult,
-    handlers::admin::{
-        call_context::extract_call_context,
-        model::{Resource, UserSession},
-        params::{IncludeCount, extract_pagination, extract_ulid_param},
-        response::{
-            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-            paginated_response_for_page,
-        },
-    },
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::{Resource, UserSession};
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::{AppError, JsonResult};
 
 /// End an active browser session. Returns an error when the session does not
 /// exist or has already been finished.

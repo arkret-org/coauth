@@ -3,16 +3,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use coauth_config::{ClientsConfig, UpstreamOAuthConfig};
-use coauth_data::{
-    Clock, Pagination, PgRepository, RepositoryAccess, UpstreamOAuthProviderSource,
-    pg::advisory_lock::advisory_lock_key,
-    upstream_oauth::{UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams},
-};
+use coauth_data::pg::advisory_lock::advisory_lock_key;
+use coauth_data::upstream_oauth::{UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams};
+use coauth_data::{Clock, Pagination, PgRepository, RepositoryAccess, UpstreamOAuthProviderSource};
 use coauth_keystore::Encrypter;
 use diesel::sql_query;
-use diesel_async::{
-    AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Object as PooledConnection,
-};
+use diesel_async::pooled_connection::deadpool::Object as PooledConnection;
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use tracing::{error, info, info_span, warn};
 
 fn map_import_action(

@@ -4,7 +4,8 @@
 //! (registration, recovery, authentication, etc.) as composable stage
 //! sequences, inspired by authentik's flow architecture.
 
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use coauth_data::flow::FlowSession;
 use tokio::sync::RwLock;
@@ -15,13 +16,11 @@ pub mod definition;
 mod executor;
 pub mod stages;
 
-pub use self::{
-    defaults::{
-        default_authentication_flow, default_authorization_flow, default_enrollment_flow,
-        default_password_change_flow, default_recovery_flow, default_registration_flow,
-    },
-    executor::{CaptchaVerifyContext, FlowExecutor, FlowPlan, FlowPlannerError},
+pub use self::defaults::{
+    default_authentication_flow, default_authorization_flow, default_enrollment_flow,
+    default_password_change_flow, default_recovery_flow, default_registration_flow,
 };
+pub use self::executor::{CaptchaVerifyContext, FlowExecutor, FlowPlan, FlowPlannerError};
 
 // ---------------------------------------------------------------------------
 // Shared in-memory session store

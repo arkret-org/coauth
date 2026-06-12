@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
-use crate::{api::types::DeviceType, pages::Route};
+use crate::api::types::DeviceType;
+use crate::pages::Route;
 
 #[component]
 pub fn SessionCardRoot(children: Element) -> Element {

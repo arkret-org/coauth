@@ -13,8 +13,8 @@
 //!
 //! To define a new repository, you have to:
 //!   1. Define a new (async) repository trait, with the methods you need
-//!   2. Write an implementation of this trait for each storage backend you want
-//!      (currently only for `coauth-storage-pg`)
+//!   2. Write an implementation of this trait for each storage backend you want (currently only for
+//!      `coauth-storage-pg`)
 //!   3. Make it accessible via the [`RepositoryAccess`] trait
 //!
 //! The repository trait definition should look like this:
@@ -69,15 +69,14 @@
 //!
 //! Four things to note with the implementation:
 //!
-//!   1. It defined an assocated error type, and all functions are faillible,
-//!      and use that error type
-//!   2. Lookups return an `Result<Option<T>, Self::Error>`, because 'not found'
-//!      errors are usually cases that are handled differently
-//!   3. Operations that need to record the current type use a
-//!      [`coauth_data::Clock`] parameter. Operations that need to generate new
-//!      IDs also use a random number generator.
-//!   4. All the methods use an `&mut self`. This is ensures only one operation
-//!      is done at a time on a single repository instance.
+//!   1. It defined an assocated error type, and all functions are faillible, and use that error
+//!      type
+//!   2. Lookups return an `Result<Option<T>, Self::Error>`, because 'not found' errors are usually
+//!      cases that are handled differently
+//!   3. Operations that need to record the current type use a [`coauth_data::Clock`] parameter.
+//!      Operations that need to generate new IDs also use a random number generator.
+//!   4. All the methods use an `&mut self`. This is ensures only one operation is done at a time on
+//!      a single repository instance.
 //!
 //! Then update the [`RepositoryAccess`] trait to make the new repository
 //! available:
@@ -135,12 +134,10 @@ pub mod user;
 /// Workflow instance, step, and event repositories.
 pub mod workflow;
 
-pub use self::{
-    notification_template::NotificationTemplateRepository,
-    pagination::{Page, Pagination},
-    repository::{
-        BoxRepository, BoxRepositoryFactory, Repository, RepositoryAccess, RepositoryError,
-        RepositoryFactory, RepositoryTransaction,
-    },
-    utils::MapErr,
+pub use self::notification_template::NotificationTemplateRepository;
+pub use self::pagination::{Page, Pagination};
+pub use self::repository::{
+    BoxRepository, BoxRepositoryFactory, Repository, RepositoryAccess, RepositoryError,
+    RepositoryFactory, RepositoryTransaction,
 };
+pub use self::utils::MapErr;

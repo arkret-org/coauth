@@ -2,23 +2,21 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::account::{AccountRepository, AccountSecuritySummary};
+use coauth_data::audit::AccountSecurityEvent;
 use coauth_data::{
     AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType,
-    account::{AccountRepository, AccountSecuritySummary},
-    audit::AccountSecurityEvent,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{
-        account_security_events, upstream_oauth_links, upstream_oauth_providers, user_emails,
-        user_passwords, user_phones, user_sessions,
-    },
+use crate::schema::{
+    account_security_events, upstream_oauth_links, upstream_oauth_providers, user_emails,
+    user_passwords, user_phones, user_sessions,
 };
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL-backed [`AccountRepository`].
 pub struct PgAccountRepository<'c> {

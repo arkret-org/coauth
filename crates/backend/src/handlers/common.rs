@@ -8,7 +8,9 @@
 //! - [`Requester`] / [`RequestingEntity`] — authenticated caller context
 //! - [`make_rng`] / [`make_clock`] — factory helpers for randomness and clocks
 
-use std::{net::IpAddr, ops::Deref, sync::Arc};
+use std::net::IpAddr;
+use std::ops::Deref;
+use std::sync::Arc;
 
 use coauth_config::CokretConfig;
 use coauth_data::{
@@ -23,10 +25,10 @@ use salvo::prelude::*;
 use serde::Serialize;
 use ulid::Ulid;
 
-use crate::{
-    handlers::{BoundActivityTracker, Limiter, RequesterFingerprint, passwords::PasswordManager},
-    salvo_utils::{SessionInfo, SessionInfoExt, cookies::CookieJar},
-};
+use crate::handlers::passwords::PasswordManager;
+use crate::handlers::{BoundActivityTracker, Limiter, RequesterFingerprint};
+use crate::salvo_utils::cookies::CookieJar;
+use crate::salvo_utils::{SessionInfo, SessionInfoExt};
 
 // ── Requester / Auth ───────────────────────────────────────────
 

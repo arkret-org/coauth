@@ -4,7 +4,8 @@ use coauth_iana::jose::{
 use digest::Digest;
 use elliptic_curve::sec1::ToEncodedPoint;
 use sha2::{Sha256, Sha384, Sha512};
-use signature::{Signer as _, rand_core::CryptoRngCore};
+use signature::Signer as _;
+use signature::rand_core::CryptoRngCore;
 use thiserror::Error;
 
 use super::signature::Signature;

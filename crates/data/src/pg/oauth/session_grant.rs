@@ -1,10 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock, Page, Pagination, SessionGrant, new_id,
-    oauth::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository},
-    pagination::{Node, PaginationDirection},
-};
+use coauth_data::oauth::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository};
+use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::{Clock, Page, Pagination, SessionGrant, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use oauth_types::scope::{Scope, ScopeToken};
@@ -12,7 +10,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::oauth_session_grants};
+use crate::schema::oauth_session_grants;
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`SessionGrantRepository`].
 pub struct PgOAuthSessionGrantRepository<'c> {

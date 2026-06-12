@@ -1,13 +1,12 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
-use coauth_iana::{jose::JsonWebSignatureAlg, oauth::OAuthClientAuthenticationMethod};
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_jose::jwk::PublicJsonWebKeySet;
-use oauth_types::{
-    oidc::ApplicationType,
-    registration::{ClientMetadata, Localized},
-    requests::GrantType,
-};
+use oauth_types::oidc::ApplicationType;
+use oauth_types::registration::{ClientMetadata, Localized};
+use oauth_types::requests::GrantType;
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

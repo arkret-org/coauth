@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 use serde::Deserialize;
 
-use crate::{
-    api::{api_get, api_post},
-    components::{layout::Layout, loading::LoadingSpinner},
-};
+use crate::api::{api_get, api_post};
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingSpinner;
 
 // ── API types ───────────────────────────────────────────────────
 

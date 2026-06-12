@@ -11,18 +11,15 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
 
-use crate::{
-    base64::{Base64, Base64UrlNoPad},
-    constraints::{Constrainable, Constraint, ConstraintSet},
-};
+use crate::base64::{Base64, Base64UrlNoPad};
+use crate::constraints::{Constrainable, Constraint, ConstraintSet};
 
 pub(crate) mod private_parameters;
 pub(crate) mod public_parameters;
 
+pub use self::private_parameters::JsonWebKeyPrivateParameters;
 use self::private_parameters::SymmetricKeyError;
-pub use self::{
-    private_parameters::JsonWebKeyPrivateParameters, public_parameters::JsonWebKeyPublicParameters,
-};
+pub use self::public_parameters::JsonWebKeyPublicParameters;
 
 pub trait ParametersInfo {
     fn kty(&self) -> JsonWebKeyType;

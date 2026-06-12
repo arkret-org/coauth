@@ -9,11 +9,9 @@ use rand_core::{RngCore, SeedableRng};
 use tokio::task;
 use tracing::info;
 
-use super::{
-    SecretsConfig,
-    encryption::EncryptionKey,
-    key_config::{Key, KeyConfig},
-};
+use super::SecretsConfig;
+use super::encryption::EncryptionKey;
+use super::key_config::{Key, KeyConfig};
 
 /// Holds the generation logic for [`SecretsConfig`].
 impl SecretsConfig {

@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use ulid::Ulid;
 
-pub use crate::{pg::policy_data::PgPolicyDataRepository, storage::policy_data::*};
+pub use crate::pg::policy_data::PgPolicyDataRepository;
+pub use crate::storage::policy_data::*;
 
 /// A versioned snapshot of policy configuration stored as free-form JSON.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -4,18 +4,17 @@
 //! router whose handlers are annotated with `#[endpoint]`, and attaches a
 //! Swagger UI frontend so that developers can explore the API interactively.
 
-use salvo::{
-    oapi::{OpenApi, swagger_ui::SwaggerUi},
-    prelude::*,
-};
+use salvo::oapi::OpenApi;
+use salvo::oapi::swagger_ui::SwaggerUi;
+use salvo::prelude::*;
 
 /// Build an `OpenAPI` document from the given `router` and return a new router
 /// that serves both the JSON spec and the Swagger UI.
 ///
 /// # Arguments
 ///
-/// * `router` - The router whose `#[endpoint]` handlers will be introspected to
-///   produce the `OpenAPI` spec.
+/// * `router` - The router whose `#[endpoint]` handlers will be introspected to produce the
+///   `OpenAPI` spec.
 ///
 /// # Returns
 ///

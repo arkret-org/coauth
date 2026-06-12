@@ -1,13 +1,15 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{Clock, Password, User, new_id, user::UserPasswordRepository};
+use coauth_data::user::UserPasswordRepository;
+use coauth_data::{Clock, Password, User, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, DatabaseInconsistencyError, schema::user_passwords};
+use crate::schema::user_passwords;
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`UserPasswordRepository`] for a PostgreSQL connection
 pub struct PgUserPasswordRepository<'c> {

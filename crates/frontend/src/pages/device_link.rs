@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::DeviceLinkOutcome,
-    components::{layout::Layout, loading::LoadingSpinner},
-    pages::Route,
-};
+use crate::api::types::DeviceLinkOutcome;
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingSpinner;
+use crate::pages::Route;
 
 /// Device code link page — user enters the code shown on their device.
 #[component]

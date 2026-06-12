@@ -4,10 +4,8 @@
 //! record.  On success the authentication is marked as completed and
 //! `email_verified` is set in the flow context.
 
-use coauth_data::{
-    BoxRepository, Clock, RepositoryAccess,
-    flow::{StageOutcome, StageValidationError},
-};
+use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 
 use super::StageExecutionError;
 

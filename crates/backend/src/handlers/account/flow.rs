@@ -7,25 +7,23 @@
 //! will replace this once `FlowSession` has a database repository.
 
 use chrono::Utc;
-use coauth_data::{
-    flow::{
-        AuthenticatorType as DomainAuthenticatorType, FlowSession, FlowSessionStatus,
-        IdentificationField as DomainIdentificationField, PromptField as DomainPromptField,
-        PromptFieldType as DomainPromptFieldType, StageChallenge as DomainStageChallenge,
-        StageOutcome, StageSubmission as DomainStageSubmission,
-        StageValidationError as DomainStageValidationError,
-    },
-    new_id,
+use coauth_data::flow::{
+    AuthenticatorType as DomainAuthenticatorType, FlowSession, FlowSessionStatus,
+    IdentificationField as DomainIdentificationField, PromptField as DomainPromptField,
+    PromptFieldType as DomainPromptFieldType, StageChallenge as DomainStageChallenge, StageOutcome,
+    StageSubmission as DomainStageSubmission, StageValidationError as DomainStageValidationError,
 };
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::new_id;
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ulid::Ulid;
 
 use super::{RouteError, make_rng};
-use crate::{
-    app_state::DepotExt as _,
-    handlers::flow::{CaptchaVerifyContext, FlowExecutor, FlowPlan, flow_session_store_write},
+use crate::app_state::DepotExt as _;
+use crate::handlers::flow::{
+    CaptchaVerifyContext, FlowExecutor, FlowPlan, flow_session_store_write,
 };
 
 // ---------------------------------------------------------------------------

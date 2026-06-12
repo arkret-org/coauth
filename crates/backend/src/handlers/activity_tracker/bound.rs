@@ -5,7 +5,8 @@
 
 use std::net::IpAddr;
 
-use coauth_data::{BrowserSession, Clock, Session, personal::session::PersonalSession};
+use coauth_data::personal::session::PersonalSession;
+use coauth_data::{BrowserSession, Clock, Session};
 
 use crate::handlers::activity_tracker::ActivityTracker;
 

@@ -15,27 +15,23 @@
 //!
 //! Design notes:
 //!
-//! - We use raw SQL via diesel's `sql_query` to stay consistent with the
-//!   `account_claims` service style. The queue table is small and write-
-//!   through; no need for the full `Repository` abstraction.
-//! - `payload` carries an opaque JSON envelope so callers can stash the
-//!   minted-but-quarantined token bundle (or the original invite request body)
-//!   without coupling the queue schema to one caller's shape.
-//! - Status transitions are intentionally narrow: `pending` → `approved` or
-//!   `pending` → `rejected`. Re-opening a resolved row is a future concern (out
-//!   of scope this round).
+//! - We use raw SQL via diesel's `sql_query` to stay consistent with the `account_claims` service
+//!   style. The queue table is small and write- through; no need for the full `Repository`
+//!   abstraction.
+//! - `payload` carries an opaque JSON envelope so callers can stash the minted-but-quarantined
+//!   token bundle (or the original invite request body) without coupling the queue schema to one
+//!   caller's shape.
+//! - Status transitions are intentionally narrow: `pending` → `approved` or `pending` → `rejected`.
+//!   Re-opening a resolved row is a future concern (out of scope this round).
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::{
-    QueryableByName,
-    sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid},
-};
-use diesel_async::{
-    AsyncPgConnection, RunQueryDsl as _, pooled_connection::deadpool::Pool as DieselPool,
-};
+use diesel::QueryableByName;
+use diesel::sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
+use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
+use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
 use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;

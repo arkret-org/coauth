@@ -1,72 +1,67 @@
 use async_trait::async_trait;
+use coauth_data::account::AccountRepository;
+use coauth_data::accountability::AccountabilityGrantRepository;
+use coauth_data::app_session::AppSessionRepository;
+use coauth_data::audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository};
+use coauth_data::circle_capability::CircleCapabilityGrantRepository;
+use coauth_data::notification::{NotificationRepository, NotificationTemplateRepository};
+use coauth_data::oauth::{
+    OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
+    OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
+    SessionGrantRepository,
+};
+use coauth_data::personal::PersonalSessionRepository;
+use coauth_data::policy_data::PolicyDataRepository;
+use coauth_data::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
+use coauth_data::upstream_oauth::{
+    UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository, UpstreamOAuthSessionRepository,
+};
+use coauth_data::user::{
+    BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository, UserPasswordRepository,
+    UserPhoneRepository, UserPrimaryHandlePreferenceRepository, UserRecoveryRepository,
+    UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
+    UserTermsRepository, UserTotpRepository,
+};
+use coauth_data::workflow::WorkflowRepository;
 use coauth_data::{
     BoxRepository, BoxRepositoryFactory, MapErr, Repository, RepositoryAccess, RepositoryError,
     RepositoryFactory, RepositoryTransaction,
-    account::AccountRepository,
-    accountability::AccountabilityGrantRepository,
-    app_session::AppSessionRepository,
-    audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository},
-    circle_capability::CircleCapabilityGrantRepository,
-    notification::{NotificationRepository, NotificationTemplateRepository},
-    oauth::{
-        OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
-        OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
-        SessionGrantRepository,
-    },
-    personal::PersonalSessionRepository,
-    policy_data::PolicyDataRepository,
-    queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository},
-    upstream_oauth::{
-        UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository,
-        UpstreamOAuthSessionRepository,
-    },
-    user::{
-        BrowserSessionRepository, PrincipalDidRepository, UserEmailRepository,
-        UserPasswordRepository, UserPhoneRepository, UserPrimaryHandlePreferenceRepository,
-        UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
-        UserRepository, UserTermsRepository, UserTotpRepository,
-    },
-    workflow::WorkflowRepository,
 };
-use diesel_async::{
-    AsyncPgConnection, RunQueryDsl as _,
-    pooled_connection::deadpool::{Object as PooledConnection, Pool},
-};
-use futures_util::{FutureExt, future::BoxFuture};
+use diesel_async::pooled_connection::deadpool::{Object as PooledConnection, Pool};
+use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
+use futures_util::FutureExt;
+use futures_util::future::BoxFuture;
 use tracing::Instrument;
 
-use crate::{
-    DatabaseError,
-    account::PgAccountRepository,
-    accountability::PgAccountabilityGrantRepository,
-    app_session::PgAppSessionRepository,
-    audit::PgAuditRepository,
-    circle_capability::PgCircleCapabilityGrantRepository,
-    notification::{PgNotificationRepository, PgNotificationTemplateRepository},
-    oauth::{
-        PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
-        PgOAuthDeviceCodeGrantRepository, PgOAuthRefreshTokenRepository,
-        PgOAuthSessionGrantRepository, PgOAuthSessionRepository,
-    },
-    personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository},
-    pg::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM,
-    policy_data::PgPolicyDataRepository,
-    queue::{
-        job::PgQueueJobRepository, schedule::PgQueueScheduleRepository,
-        worker::PgQueueWorkerRepository,
-    },
-    upstream_oauth::{
-        PgUpstreamOAuthLinkRepository, PgUpstreamOAuthProviderRepository,
-        PgUpstreamOAuthSessionRepository,
-    },
-    user::{
-        PgBrowserSessionRepository, PgPrincipalDidRepository, PgUserEmailRepository,
-        PgUserPasswordRepository, PgUserPhoneRepository, PgUserPrimaryHandlePreferenceRepository,
-        PgUserRecoveryRepository, PgUserRegistrationRepository, PgUserRegistrationTokenRepository,
-        PgUserRepository, PgUserTermsRepository, PgUserTotpRepository,
-    },
-    workflow::PgWorkflowRepository,
+use crate::DatabaseError;
+use crate::account::PgAccountRepository;
+use crate::accountability::PgAccountabilityGrantRepository;
+use crate::app_session::PgAppSessionRepository;
+use crate::audit::PgAuditRepository;
+use crate::circle_capability::PgCircleCapabilityGrantRepository;
+use crate::notification::{PgNotificationRepository, PgNotificationTemplateRepository};
+use crate::oauth::{
+    PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
+    PgOAuthDeviceCodeGrantRepository, PgOAuthRefreshTokenRepository, PgOAuthSessionGrantRepository,
+    PgOAuthSessionRepository,
 };
+use crate::personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository};
+use crate::pg::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM;
+use crate::policy_data::PgPolicyDataRepository;
+use crate::queue::job::PgQueueJobRepository;
+use crate::queue::schedule::PgQueueScheduleRepository;
+use crate::queue::worker::PgQueueWorkerRepository;
+use crate::upstream_oauth::{
+    PgUpstreamOAuthLinkRepository, PgUpstreamOAuthProviderRepository,
+    PgUpstreamOAuthSessionRepository,
+};
+use crate::user::{
+    PgBrowserSessionRepository, PgPrincipalDidRepository, PgUserEmailRepository,
+    PgUserPasswordRepository, PgUserPhoneRepository, PgUserPrimaryHandlePreferenceRepository,
+    PgUserRecoveryRepository, PgUserRegistrationRepository, PgUserRegistrationTokenRepository,
+    PgUserRepository, PgUserTermsRepository, PgUserTotpRepository,
+};
+use crate::workflow::PgWorkflowRepository;
 
 /// An implementation of the [`RepositoryFactory`] trait backed by a
 /// diesel-async deadpool connection pool.

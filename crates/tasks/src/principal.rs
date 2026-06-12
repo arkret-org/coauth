@@ -9,20 +9,16 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use coauth_data::{
-    Pagination, RepositoryAccess,
-    oauth::OAuthSessionFilter,
-    personal::PersonalSessionFilter,
-    queue::{ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob},
-    user::{UserEmailRepository, UserRepository},
-};
+use coauth_data::oauth::OAuthSessionFilter;
+use coauth_data::personal::PersonalSessionFilter;
+use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob};
+use coauth_data::user::{UserEmailRepository, UserRepository};
+use coauth_data::{Pagination, RepositoryAccess};
 use coauth_principal::PrincipalProvisionRequest;
 use tracing::info;
 
-use crate::{
-    State,
-    new_queue::{JobContext, JobError, RunnableJob},
-};
+use crate::State;
+use crate::new_queue::{JobContext, JobError, RunnableJob};
 
 // ── Provision user ───────────────────────────────────────────────────
 

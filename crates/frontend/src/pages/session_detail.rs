@@ -1,18 +1,13 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{DeviceType, Session},
-    components::{
-        last_active::LastActive,
-        layout::Layout,
-        loading::LoadingScreen,
-        session_card::{
-            SessionCardClient, SessionCardHeader, SessionCardInfo, SessionCardMetadata,
-            SessionCardName,
-        },
-    },
-    utils::format_date,
+use crate::api::types::{DeviceType, Session};
+use crate::components::last_active::LastActive;
+use crate::components::layout::Layout;
+use crate::components::loading::LoadingScreen;
+use crate::components::session_card::{
+    SessionCardClient, SessionCardHeader, SessionCardInfo, SessionCardMetadata, SessionCardName,
 };
+use crate::utils::format_date;
 
 #[component]
 pub fn SessionDetail(id: String) -> Element {

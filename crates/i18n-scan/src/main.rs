@@ -7,7 +7,8 @@
 // which is annoying with this clippy lint
 #![allow(clippy::default_constructed_unit_structs)]
 
-use ::minijinja::{machinery::WhitespaceConfig, syntax::SyntaxConfig};
+use ::minijinja::machinery::WhitespaceConfig;
+use ::minijinja::syntax::SyntaxConfig;
 use camino::Utf8PathBuf;
 use clap::Parser;
 use key::Context;

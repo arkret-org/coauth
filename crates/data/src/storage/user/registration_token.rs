@@ -210,8 +210,7 @@ pub trait UserRegistrationTokenRepository: Send + Sync {
     /// # Parameters
     ///
     /// * `token`: The [`UserRegistrationToken`] to update
-    /// * `expires_at`: The new expiration time, or `None` to remove the
-    ///   expiration
+    /// * `expires_at`: The new expiration time, or `None` to remove the expiration
     ///
     /// # Errors
     ///

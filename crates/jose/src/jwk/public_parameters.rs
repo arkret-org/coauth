@@ -10,7 +10,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::ParametersInfo;
-use crate::{base64::Base64UrlNoPad, jwk::Thumbprint};
+use crate::base64::Base64UrlNoPad;
+use crate::jwk::Thumbprint;
 
 // ---------------------------------------------------------------------------
 // RSA parameters
@@ -234,7 +235,8 @@ impl Thumbprint for JsonWebKeyPublicParameters {
 // ---------------------------------------------------------------------------
 
 mod rsa_impls {
-    use rsa::{BigUint, RsaPublicKey, traits::PublicKeyParts};
+    use rsa::traits::PublicKeyParts;
+    use rsa::{BigUint, RsaPublicKey};
 
     use super::{JsonWebKeyPublicParameters, RsaPublicParameters};
     use crate::base64::Base64UrlNoPad;
@@ -310,12 +312,11 @@ mod rsa_impls {
 mod ec_impls {
     use digest::typenum::Unsigned;
     use ecdsa::EncodedPoint;
-    use elliptic_curve::{
-        AffinePoint, FieldBytes, PublicKey,
-        sec1::{Coordinates, FromEncodedPoint, ModulusSize, ToEncodedPoint},
-    };
+    use elliptic_curve::sec1::{Coordinates, FromEncodedPoint, ModulusSize, ToEncodedPoint};
+    use elliptic_curve::{AffinePoint, FieldBytes, PublicKey};
 
-    use super::{super::JwkEcCurve, EcPublicParameters, JsonWebKeyPublicParameters};
+    use super::super::JwkEcCurve;
+    use super::{EcPublicParameters, JsonWebKeyPublicParameters};
     use crate::base64::Base64UrlNoPad;
 
     impl<C> TryFrom<&EcPublicParameters> for PublicKey<C>
@@ -411,7 +412,8 @@ mod okp_impls {
     use ed25519_dalek::VerifyingKey;
 
     use super::{JsonWebKeyPublicParameters, OkpPublicParameters};
-    use crate::{base64::Base64UrlNoPad, jwk::InvalidOkpParameters};
+    use crate::base64::Base64UrlNoPad;
+    use crate::jwk::InvalidOkpParameters;
 
     impl TryFrom<OkpPublicParameters> for VerifyingKey {
         type Error = InvalidOkpParameters;

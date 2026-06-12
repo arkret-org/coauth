@@ -12,12 +12,11 @@ mod decode;
 mod sign;
 mod verify;
 
-pub use self::{
-    decode::JwtDecodeError,
-    sign::JwtSignatureError,
-    verify::{JwtVerificationError, NoKeyWorked},
-};
-use super::{header::JsonWebSignatureHeader, raw::RawJwt};
+pub use self::decode::JwtDecodeError;
+pub use self::sign::JwtSignatureError;
+pub use self::verify::{JwtVerificationError, NoKeyWorked};
+use super::header::JsonWebSignatureHeader;
+use super::raw::RawJwt;
 
 // ---------------------------------------------------------------------------
 // Core type

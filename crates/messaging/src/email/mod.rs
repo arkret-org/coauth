@@ -12,13 +12,11 @@ pub const DELIVERY_ID_TAG: &str = "coauth_delivery_id";
 pub const REQUEST_ID_TAG: &str = "coauth_notification_request_id";
 
 pub use coauth_templates::EmailVerificationContext;
-pub use lettre::{
-    Address, message::Mailbox, transport::smtp::authentication::Credentials as SmtpCredentials,
-};
+pub use lettre::Address;
+pub use lettre::message::Mailbox;
+pub use lettre::transport::smtp::authentication::Credentials as SmtpCredentials;
 
-pub use self::{
-    mailer::{Error as MailerError, Mailer},
-    transport::{
-        EmailProvider, Error as EmailTransportError, OutboundEmail, SendResult, SmtpMode, Transport,
-    },
+pub use self::mailer::{Error as MailerError, Mailer};
+pub use self::transport::{
+    EmailProvider, Error as EmailTransportError, OutboundEmail, SendResult, SmtpMode, Transport,
 };

@@ -25,7 +25,6 @@
 //! module is a thin coauth-side adapter so handlers and reducer-feeding
 //! code paths can call into a single function regardless of whether the
 //! deployment actually enables the OIDC-backed binding.
-//
 // TODO(R3.1): wire this into the (future) OIDC-recovery binding handler
 // alongside the recovery-session id binding and the recovery-receipt
 // emitter. Internal proof verification (cross-signing reset proof

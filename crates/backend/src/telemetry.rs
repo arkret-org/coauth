@@ -6,23 +6,18 @@ use coauth_config::{
     TracingExporterKind,
 };
 use hyper::header::CONTENT_TYPE;
-use opentelemetry::{
-    InstrumentationScope, KeyValue,
-    metrics::Meter,
-    propagation::{TextMapCompositePropagator, TextMapPropagator},
-    trace::TracerProvider as _,
-};
+use opentelemetry::metrics::Meter;
+use opentelemetry::propagation::{TextMapCompositePropagator, TextMapPropagator};
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::{InstrumentationScope, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_prometheus_text_exporter::PrometheusExporter;
-use opentelemetry_sdk::{
-    Resource,
-    metrics::{ManualReader, SdkMeterProvider, periodic_reader_with_async_runtime::PeriodicReader},
-    propagation::{BaggagePropagator, TraceContextPropagator},
-    trace::{
-        IdGenerator, Sampler, SdkTracerProvider, Tracer,
-        span_processor_with_async_runtime::BatchSpanProcessor,
-    },
-};
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::metrics::periodic_reader_with_async_runtime::PeriodicReader;
+use opentelemetry_sdk::metrics::{ManualReader, SdkMeterProvider};
+use opentelemetry_sdk::propagation::{BaggagePropagator, TraceContextPropagator};
+use opentelemetry_sdk::trace::span_processor_with_async_runtime::BatchSpanProcessor;
+use opentelemetry_sdk::trace::{IdGenerator, Sampler, SdkTracerProvider, Tracer};
 use opentelemetry_semantic_conventions as semcov;
 
 static SCOPE: LazyLock<InstrumentationScope> = LazyLock::new(|| {

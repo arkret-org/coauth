@@ -1,10 +1,10 @@
 use anyhow::Error as AnyhowError;
 use coauth_config::CokretConfig;
+use coauth_data::upstream_oauth::UpstreamOAuthProviderRepository;
+use coauth_data::user::{BrowserSessionRepository, UserPasswordRepository, UserRepository};
 use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError, SiteConfig,
     UpstreamOAuthProvider, UrlBuilder, User,
-    upstream_oauth::UpstreamOAuthProviderRepository,
-    user::{BrowserSessionRepository, UserPasswordRepository, UserRepository},
 };
 use coauth_principal::PrincipalServerAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
@@ -12,10 +12,8 @@ use thiserror::Error;
 use ulid::Ulid;
 use zeroize::Zeroizing;
 
-use crate::handlers::{
-    Limiter, RequesterFingerprint, cokret,
-    passwords::{PasswordManager, PasswordVerificationResult},
-};
+use crate::handlers::passwords::{PasswordManager, PasswordVerificationResult};
+use crate::handlers::{Limiter, RequesterFingerprint, cokret};
 
 #[derive(Debug)]
 pub struct PasswordLoginRequestBody {

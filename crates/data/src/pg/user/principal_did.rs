@@ -1,13 +1,15 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{Clock, PrincipalDidUpdateKey, User, new_id, user::PrincipalDidRepository};
+use coauth_data::user::PrincipalDidRepository;
+use coauth_data::{Clock, PrincipalDidUpdateKey, User, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, schema::principal_did_update_keys};
+use crate::DatabaseError;
+use crate::schema::principal_did_update_keys;
 
 /// PostgreSQL implementation of [`PrincipalDidRepository`].
 pub struct PgPrincipalDidRepository<'c> {

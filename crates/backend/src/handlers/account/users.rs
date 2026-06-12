@@ -1,16 +1,15 @@
-use salvo::{oapi::ToSchema, prelude::*};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{
     DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, get_requester,
     make_clock, make_rng,
 };
-use crate::{
-    handlers::account::service::profile::{
-        AccountProfileError, DeactivateAccountOutcome, deactivate_current_account,
-    },
-    services::user_profile::{self, UserProfileServiceError},
+use crate::handlers::account::service::profile::{
+    AccountProfileError, DeactivateAccountOutcome, deactivate_current_account,
 };
+use crate::services::user_profile::{self, UserProfileServiceError};
 
 // ── PATCH /_coauth/self/viewer/profile ────────────────────────────────
 
@@ -184,22 +183,18 @@ fn map_user_profile_error(error: UserProfileServiceError) -> RouteError {
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{
-        RepositoryAccess,
-        user::{BrowserSessionRepository, UserRepository},
-    };
+    use coauth_data::RepositoryAccess;
+    use coauth_data::user::{BrowserSessionRepository, UserRepository};
     use coauth_principal::{PrincipalProvisionRequest, PrincipalServerAdmin};
     use hyper::{Request, StatusCode};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use ulid::Ulid;
 
-    use crate::{
-        handlers::test_utils::{
-            CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
-        },
-        salvo_utils::SessionInfoExt,
+    use crate::handlers::test_utils::{
+        CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
     };
+    use crate::salvo_utils::SessionInfoExt;
 
     #[tokio::test]
     async fn test_patch_profile_updates_user_and_principal_profile() {

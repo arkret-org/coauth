@@ -2,24 +2,19 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock,
-    accountability::{
-        AccountabilityGrant, AccountabilityGrantRepository, AccountabilitySubjectKind,
-        AccountabilitySubjectRevocation, NewAccountabilityGrant,
-    },
-    new_id,
+use coauth_data::accountability::{
+    AccountabilityGrant, AccountabilityGrantRepository, AccountabilitySubjectKind,
+    AccountabilitySubjectRevocation, NewAccountabilityGrant,
 };
+use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError, DatabaseInconsistencyError,
-    schema::{accountability_grants, accountability_subject_revocations},
-};
+use crate::schema::{accountability_grants, accountability_subject_revocations};
+use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`AccountabilityGrantRepository`].
 pub struct PgAccountabilityGrantRepository<'c> {
@@ -38,9 +33,10 @@ impl<'c> PgAccountabilityGrantRepository<'c> {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use coauth_data::clock::MockClock;
     use coauth_data::{
         AccountabilityGrantFanoutState, AccountabilitySubjectKind, RepositoryAccess as _,
-        RepositoryFactory as _, clock::MockClock,
+        RepositoryFactory as _,
     };
     use rand_chacha::ChaChaRng;
     use rand_core::{RngCore, SeedableRng};

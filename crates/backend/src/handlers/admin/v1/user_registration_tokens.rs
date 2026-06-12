@@ -3,25 +3,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use chrono::{DateTime, Utc};
-use coauth_data::{RepositoryAccess, audit::AdminOperation, user::UserRegistrationTokenFilter};
+use coauth_data::RepositoryAccess;
+use coauth_data::audit::AdminOperation;
+use coauth_data::user::UserRegistrationTokenFilter;
 use rand::distr::{Alphanumeric, SampleString};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
 
-use crate::{
-    AppError, CreatedJsonResult, JsonResult,
-    handlers::admin::{
-        CreatedJson,
-        call_context::extract_call_context,
-        model::{Resource, UserRegistrationToken},
-        params::{IncludeCount, extract_pagination, extract_ulid_param},
-        response::{
-            PaginatedOutcome, SingleOutcome, paginated_response_for_count_only,
-            paginated_response_for_page,
-        },
-    },
+use crate::handlers::admin::CreatedJson;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::model::{Resource, UserRegistrationToken};
+use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::response::{
+    PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
+use crate::{AppError, CreatedJsonResult, JsonResult};
 
 /// Payload for `POST /_coauth/admin/user-registration-tokens`.
 #[derive(Deserialize, JsonSchema)]

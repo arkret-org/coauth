@@ -40,14 +40,11 @@ use coauth_i18n::Locale;
 use coauth_templates::Templates;
 use salvo::prelude::*;
 
-use crate::{
-    handlers::{common::DepotExt, make_clock, make_rng, preferred_language},
-    salvo_utils::{
-        InternalError,
-        cookies::CookieJar,
-        csrf::{CsrfExt, CsrfToken},
-    },
-};
+use crate::handlers::common::DepotExt;
+use crate::handlers::{make_clock, make_rng, preferred_language};
+use crate::salvo_utils::InternalError;
+use crate::salvo_utils::cookies::CookieJar;
+use crate::salvo_utils::csrf::{CsrfExt, CsrfToken};
 
 /// Per-request bundle of state every view handler needs.
 pub struct ViewContext {

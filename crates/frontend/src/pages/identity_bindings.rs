@@ -1,12 +1,8 @@
 use dioxus::prelude::*;
 
-use crate::{
-    api::types::{LinkedAccountsOutcome, ProvidersOutcome},
-    components::{
-        loading::LoadingScreen,
-        separator::{Separator, SeparatorKind},
-    },
-};
+use crate::api::types::{LinkedAccountsOutcome, ProvidersOutcome};
+use crate::components::loading::LoadingScreen;
+use crate::components::separator::{Separator, SeparatorKind};
 
 /// Identity bindings page.
 ///

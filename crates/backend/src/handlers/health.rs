@@ -5,9 +5,8 @@
 
 use anyhow::Context as _;
 use coauth_keystore::Keystore;
-use diesel_async::{
-    AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Pool as DieselPool,
-};
+use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use salvo::prelude::*;
 use tracing::{Instrument, info_span};
 

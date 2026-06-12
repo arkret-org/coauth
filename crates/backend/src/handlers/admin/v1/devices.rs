@@ -1,22 +1,21 @@
 //! Cokret device administration endpoints.
 
-use std::collections::{BTreeMap, btree_map::Entry};
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Pagination, RepositoryAccess,
-    audit::{AdminOperation, AdminOperationFilter},
-    oauth::SessionGrantFilter,
-};
-use salvo::{oapi::ToSchema, prelude::*};
+use coauth_data::audit::{AdminOperation, AdminOperationFilter};
+use coauth_data::oauth::SessionGrantFilter;
+use coauth_data::{Pagination, RepositoryAccess};
+use salvo::oapi::ToSchema;
+use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    AppError, JsonResult,
-    handlers::admin::{audit_helper::record_admin_operation, call_context::extract_call_context},
-    services::device_revoke::cascade_revoke_session_grants,
-};
+use crate::handlers::admin::audit_helper::record_admin_operation;
+use crate::handlers::admin::call_context::extract_call_context;
+use crate::services::device_revoke::cascade_revoke_session_grants;
+use crate::{AppError, JsonResult};
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -289,7 +288,8 @@ async fn apply_device_revocation_audit(
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone as _;
-    use coauth_data::{Clock, oauth::NewSessionGrant};
+    use coauth_data::Clock;
+    use coauth_data::oauth::NewSessionGrant;
     use hyper::{Request, StatusCode};
     use oauth_types::scope::Scope;
 

@@ -4,20 +4,17 @@
 //! Template environment setup: registers filters, functions, tests,
 //! and global objects used by the Jinja templates.
 
-use std::{
-    collections::{BTreeMap, HashMap},
-    fmt,
-    str::FromStr,
-    sync::{Arc, atomic::AtomicUsize},
-};
+use std::collections::{BTreeMap, HashMap};
+use std::fmt;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 
 use chrono::Timelike as _;
 use coauth_data::UrlBuilder;
 use coauth_i18n::{Locale, Translator};
-use minijinja::{
-    Error, ErrorKind, State, Value,
-    value::{Kwargs, Object, ViaDeserialize, from_args},
-};
+use minijinja::value::{Kwargs, Object, ViaDeserialize, from_args};
+use minijinja::{Error, ErrorKind, State, Value};
 use url::Url;
 
 /// Populate the given minijinja [`Environment`](minijinja::Environment) with

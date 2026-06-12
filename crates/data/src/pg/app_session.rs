@@ -2,18 +2,20 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_data::{
-    Clock, Page, Pagination, Session, SessionState, User,
-    app_session::{AppSession, AppSessionFilter, AppSessionRepository, AppSessionState},
-    pagination::PaginationDirection,
+use coauth_data::app_session::{
+    AppSession, AppSessionFilter, AppSessionRepository, AppSessionState,
 };
+use coauth_data::pagination::PaginationDirection;
+use coauth_data::{Clock, Page, Pagination, Session, SessionState, User};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use oauth_types::scope::{Scope, ScopeToken};
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{DatabaseError, pg::errors::DatabaseInconsistencyError, schema::oauth_sessions};
+use crate::DatabaseError;
+use crate::pg::errors::DatabaseInconsistencyError;
+use crate::schema::oauth_sessions;
 
 /// An implementation of [`AppSessionRepository`] for a PostgreSQL connection
 pub struct PgAppSessionRepository<'c> {
@@ -234,16 +236,12 @@ impl AppSessionRepository for PgAppSessionRepository<'_> {
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
-    use coauth_data::{
-        Pagination, RepositoryAccess as _, RepositoryFactory as _,
-        app_session::{AppSession, AppSessionFilter},
-        clock::MockClock,
-        oauth::OAuthSessionRepository,
-    };
-    use oauth_types::{
-        requests::GrantType,
-        scope::{OPENID, Scope},
-    };
+    use coauth_data::app_session::{AppSession, AppSessionFilter};
+    use coauth_data::clock::MockClock;
+    use coauth_data::oauth::OAuthSessionRepository;
+    use coauth_data::{Pagination, RepositoryAccess as _, RepositoryFactory as _};
+    use oauth_types::requests::GrantType;
+    use oauth_types::scope::{OPENID, Scope};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 

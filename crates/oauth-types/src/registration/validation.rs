@@ -1,12 +1,14 @@
 //! Verified client metadata and validation error types.
 
-use std::{fmt, ops::Deref};
+use std::fmt;
+use std::ops::Deref;
 
 use serde::Serialize;
 use thiserror::Error;
 use url::Url;
 
-use super::{client_metadata_serde::ClientMetadataSerdeHelper, metadata::ClientMetadata};
+use super::client_metadata_serde::ClientMetadataSerdeHelper;
+use super::metadata::ClientMetadata;
 use crate::response_type::ResponseType;
 
 /// The verified client metadata.

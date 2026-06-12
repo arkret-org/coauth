@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use coauth_data::pagination::{Node, PaginationDirection};
+use coauth_data::user::{UserEmailFilter, UserEmailRepository};
 use coauth_data::{
     BrowserSession, Clock, Page, Pagination, UpstreamOAuthAuthorizationSession, User, UserEmail,
     UserEmailAuthentication, UserEmailAuthenticationCode, UserEmailPatch, UserRegistration, new_id,
-    pagination::{Node, PaginationDirection},
-    user::{UserEmailFilter, UserEmailRepository},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -12,10 +12,8 @@ use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::{
-    DatabaseError,
-    schema::{user_email_authentication_codes, user_email_authentications, user_emails},
-};
+use crate::DatabaseError;
+use crate::schema::{user_email_authentication_codes, user_email_authentications, user_emails};
 
 /// An implementation of [`UserEmailRepository`] for a PostgreSQL connection
 pub struct PgUserEmailRepository<'c> {

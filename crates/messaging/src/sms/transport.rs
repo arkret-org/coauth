@@ -7,13 +7,15 @@
 
 use std::sync::Arc;
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use chrono::Utc;
 use reqwest::{Client, Method};
 use thiserror::Error;
 use url::Url;
 
-use super::{aliyun::AliyunSmsTransport, tencent::TencentSmsTransport};
+use super::aliyun::AliyunSmsTransport;
+use super::tencent::TencentSmsTransport;
 use crate::crypto::{paloud_internal_nonce, sign_paloud_internal_request};
 
 /// Errors that can occur when sending an SMS
@@ -448,10 +450,8 @@ impl SmsTransport {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{body_partial_json, header, header_exists, method, path},
-    };
+    use wiremock::matchers::{body_partial_json, header, header_exists, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
 
