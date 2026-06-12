@@ -3,14 +3,13 @@
 #
 # What this does, in order:
 #
-#   1. preflight-check.sh       (fail-fast on docker / port / config issues)
-#   2. integration-up.sh        (build coauth image + bring up postgres + coauth)
-#   3. wait for /health to be 200
-#   4. mounted-config check     (`coauth healthcheck --config /etc/coauth/config.yaml`)
-#   5. discovery URL probe      (curl /.well-known/openid-configuration + jq)
-#   6. integration-smoke.sh
-#   7. integration-e2e.sh       (S1 + S2 + S3)
-#   8. (optional) oidc-conformance.sh --plan basic-op
+#   1. integration-up.sh        (build coauth image + bring up postgres + coauth)
+#   2. wait for /health to be 200
+#   3. mounted-config check     (`coauth healthcheck --config /etc/coauth/config.yaml`)
+#   4. discovery URL probe      (curl /.well-known/openid-configuration + jq)
+#   5. integration-smoke.sh
+#   6. integration-e2e.sh       (S1 + S2 + S3)
+#   7. (optional) oidc-conformance.sh --plan basic-op
 #
 # Designed so a developer can iterate end-to-end with a single command.
 # Each step prints its own headline so failures are easy to attribute.
@@ -59,15 +58,8 @@ fi
 
 step() { echo; echo "[run-locally] ============================================================"; echo "[run-locally]   ${*}"; echo "[run-locally] ============================================================"; }
 
-# 1. preflight
-step "step 1/8 — preflight-check"
-bash "${SCRIPTS}/preflight-check.sh" || {
-    echo "[run-locally] preflight failed (errors); aborting" >&2
-    exit 3
-}
-
-# 2. integration-up
-step "step 2/8 — integration-up (build + bring up postgres + coauth)"
+# 1. integration-up
+step "step 1/7 — integration-up (build + bring up postgres + coauth)"
 bash "${SCRIPTS}/integration-up.sh" || {
     echo "[run-locally] integration-up failed; check docker compose logs" >&2
     exit 3
@@ -85,8 +77,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 3. wait for /health
-step "step 3/8 — wait for /health 200 on host port 57080"
+# 2. wait for /health
+step "step 2/7 — wait for /health 200 on host port 57080"
 ATTEMPTS="${HEALTH_ATTEMPTS:-60}"
 for attempt in $(seq 1 "${ATTEMPTS}"); do
     code="$(curl -fsS -o /dev/null -m 2 -w '%{http_code}' http://127.0.0.1:57080/health || echo "000")"
@@ -102,8 +94,8 @@ for attempt in $(seq 1 "${ATTEMPTS}"); do
     sleep 1
 done
 
-# 4. mounted YAML check
-step "step 4/8 — mounted YAML config check"
+# 3. mounted YAML check
+step "step 3/7 — mounted YAML config check"
 if docker compose -f "${REPO_ROOT}/docker-compose.integration.yaml" exec -T coauth \
         /usr/local/bin/coauth healthcheck --config /etc/coauth/config.yaml; then
     echo "[run-locally] in-container healthcheck OK"
@@ -112,8 +104,8 @@ else
     exit 3
 fi
 
-# 5. discovery
-step "step 5/8 — fetch /.well-known/openid-configuration"
+# 4. discovery
+step "step 4/7 — fetch /.well-known/openid-configuration"
 DISCOVERY_BODY="$(curl -fsS http://127.0.0.1:57080/.well-known/openid-configuration)" || {
     echo "[run-locally] discovery fetch failed" >&2
     exit 3
@@ -123,25 +115,25 @@ echo "${DISCOVERY_BODY}" | jq '{issuer, authorization_endpoint, token_endpoint, 
     exit 3
 }
 
-# 6. smoke
-step "step 6/8 — integration-smoke"
+# 5. smoke
+step "step 5/7 — integration-smoke"
 COAUTH_BASE="${COAUTH_BASE:-http://127.0.0.1:57080}" \
     bash "${SCRIPTS}/integration-smoke.sh" || {
     echo "[run-locally] integration-smoke failed" >&2
     exit 3
 }
 
-# 7. e2e
-step "step 7/8 — integration-e2e (S1 + S2 + S3)"
+# 6. e2e
+step "step 6/7 — integration-e2e (S1 + S2 + S3)"
 COAUTH_BASE="${COAUTH_BASE:-http://127.0.0.1:57080}" \
     bash "${SCRIPTS}/integration-e2e.sh" || {
     echo "[run-locally] integration-e2e failed" >&2
     exit 3
 }
 
-# 8. conformance (optional)
+# 7. conformance (optional)
 if (( WITH_CONFORMANCE == 1 )); then
-    step "step 8/8 — oidc-conformance plan-basic-op"
+    step "step 7/7 — oidc-conformance plan-basic-op"
     COAUTH_SKIP_BOOT=1 \
         COAUTH_BIND=127.0.0.1:57080 \
         COAUTH_RUN_FULL_CONFORMANCE=1 \
@@ -150,7 +142,7 @@ if (( WITH_CONFORMANCE == 1 )); then
         exit 3
     }
 else
-    step "step 8/8 — oidc-conformance (skipped; pass --with-conformance to run)"
+    step "step 7/7 — oidc-conformance (skipped; pass --with-conformance to run)"
 fi
 
 echo

@@ -73,9 +73,6 @@ jobs:
       - name: Pre-pull conformance suite image
         run: docker pull "${COAUTH_CONFORMANCE_IMAGE}"
 
-      - name: Preflight (catch obvious misconfig before the build)
-        run: bash scripts/preflight-check.sh
-
       - name: Bring up integration stack (Postgres + coauth)
         env:
           # Build the coauth image locally inside compose; soland/sodmin

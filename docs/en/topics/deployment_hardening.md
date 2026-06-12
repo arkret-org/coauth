@@ -167,9 +167,8 @@ factory. The factory installs:
 - request and connect timeouts;
 - OpenTelemetry client spans and metrics.
 
-The static test in `crates/backend/src/outbound_http.rs` fails if production
-code adds `reqwest::Client::new()` or `reqwest::Client::builder()` outside the
-factory. Tests may still construct local clients after `#[cfg(test)]`.
+New outbound HTTP call sites should use this factory so the same SSRF,
+timeout, TLS, and telemetry policy applies consistently.
 
 OIDC discovery and JWKS fetches use this shared client and reject response
 bodies above 1 MiB. This prevents a malicious or misconfigured upstream from

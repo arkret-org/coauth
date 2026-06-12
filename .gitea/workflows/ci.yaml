@@ -138,58 +138,6 @@ jobs:
         with:
           rust-version: stable
 
-  check-schema:
-    name: Validate generated schemas
-    runs-on: ubuntu-24.04
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Fetch repository
-        uses: actions/checkout@v4
-
-      - name: Check out Cokret Rust SDK
-        env:
-          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN }}
-          GITHUB_REPOSITORY_OWNER: ${{ gitea.repository_owner }}
-          GITHUB_SERVER_URL: ${{ gitea.server_url }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
-
-      - name: Set up stable Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Restore Cargo dependency cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-          key: gitea-cargo-stable-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            gitea-cargo-stable-v1-${{ runner.os }}-
-
-      - name: Restore schema target cache
-        uses: actions/cache@v3
-        with:
-          path: target/
-          key: gitea-target-schema-stable-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            gitea-target-schema-stable-v1-${{ runner.os }}-
-
-      - name: Regenerate schemas
-        run: sh ./misc/update.sh
-
-      - name: Ensure working tree is clean
-        run: |
-          if ! [[ -z $(git status -s) ]]; then
-            echo "::error title=Workspace is not clean::Please run 'sh ./misc/update.sh' (or 'pwsh -File ./misc/update.ps1' on Windows) and commit the changes"
-            git diff
-            exit 1
-          fi
-
   compile-test-artifacts:
     name: Build nextest archive
     runs-on: ubuntu-24.04

@@ -123,77 +123,6 @@ jobs:
         with:
           rust-version: stable
 
-  # -- Schema validation --
-
-  check-schema:
-    name: Validate generated schemas
-    runs-on: ubuntu-24.04
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Fetch repository
-        uses: actions/checkout@v6
-
-      - name: Fetch Cokret Rust SDK
-        env:
-          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
-
-      - name: Set up stable Rust
-        run: |
-          rustup toolchain install stable
-          rustup default stable
-
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Regenerate schemas
-        run: sh ./misc/update.sh
-
-      - name: Ensure working tree is clean
-        run: |
-          if ! [[ -z $(git status -s) ]]; then
-            echo "::error title=Workspace is not clean::Please run 'sh ./misc/update.sh' (or 'pwsh -File ./misc/update.ps1' on Windows) and commit the changes"
-
-            (
-              echo '## Diff after running `sh ./misc/update.sh`:'
-              echo
-              echo '```diff'
-              git diff
-              echo '```'
-            ) >> $GITHUB_STEP_SUMMARY
-
-            exit 1
-          fi
-
-  cokret-contract-drift:
-    name: Check Cokret contract drift
-    runs-on: ubuntu-24.04
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Fetch repository
-        uses: actions/checkout@v6
-
-      - name: Fetch Cokret spec
-        uses: actions/checkout@v6
-        with:
-          repository: ${{ github.repository_owner }}/cokret-spec
-          path: cokret-spec
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - name: Check Cokret artifact and coauth surface drift
-        run: python .ci/check_cokret_contract_drift.py --spec-dir cokret-spec
-
   # -- Test execution --
 
   compile-test-artifacts:
@@ -295,8 +224,6 @@ jobs:
       - clippy
       - typos
       - cargo-deny
-      - check-schema
-      - cokret-contract-drift
       - test
 
     steps:

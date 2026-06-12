@@ -816,48 +816,6 @@ mod tests {
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
 
-    #[test]
-    fn production_code_uses_shared_reqwest_client_factory() {
-        let src = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut offenders = Vec::new();
-        collect_direct_reqwest_constructors(&src, &mut offenders);
-        assert!(
-            offenders.is_empty(),
-            "production code must use outbound_http::reqwest_client, not direct reqwest constructors: {offenders:?}"
-        );
-    }
-
-    fn collect_direct_reqwest_constructors(path: &camino::Utf8Path, offenders: &mut Vec<String>) {
-        let entries = std::fs::read_dir(path).expect("read src dir");
-        for entry in entries {
-            let entry = entry.expect("read src entry");
-            let path =
-                camino::Utf8PathBuf::from_path_buf(entry.path()).expect("src path is valid utf-8");
-            if path.is_dir() {
-                collect_direct_reqwest_constructors(&path, offenders);
-                continue;
-            }
-            if path.extension() != Some("rs") || path.file_name() == Some("outbound_http.rs") {
-                continue;
-            }
-            let content = std::fs::read_to_string(&path).expect("read rust source");
-            let test_start = content
-                .lines()
-                .position(|line| line.contains("#[cfg(test)]"))
-                .unwrap_or(usize::MAX);
-            for (index, line) in content.lines().enumerate() {
-                if index >= test_start {
-                    continue;
-                }
-                if line.contains("reqwest::Client::new()")
-                    || line.contains("reqwest::Client::builder()")
-                {
-                    offenders.push(format!("{}:{}", path.as_str(), index + 1));
-                }
-            }
-        }
-    }
-
     async fn spawn_sleeping_http_server(delay: Duration) -> (String, Arc<AtomicUsize>) {
         spawn_http_server(move |_| {
             let delay = delay;

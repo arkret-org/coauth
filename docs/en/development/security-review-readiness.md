@@ -31,7 +31,7 @@ The intended external review scope is the v1.0 coauth service:
 | Architecture | `docs/en/development/architecture.md`, `docs/en/observability.md` |
 | Account lifecycle | `docs/en/account-lifecycle.md` |
 | R4 wire changes | `docs/en/upgrade-to-r4.md` |
-| Admin API | `docs/en/topics/admin-api.md`, `crates/backend/tests/admin_contract.rs` |
+| Admin API | `docs/en/topics/admin-api.md`, `crates/admin-types/` |
 | Shared admin DTOs | `crates/admin-types/`, `docs/en/development/admin-types-sodmin-status.md` |
 | Frontend accessibility | `crates/frontend/A11Y.md` |
 | Frontend build/i18n | `crates/frontend/BUILD_CHECKS.md` |
@@ -41,7 +41,7 @@ The intended external review scope is the v1.0 coauth service:
 ## Reviewer Intake Checklist
 
 - Export a read-only source archive from a clean local commit.
-- Include the generated OpenAPI contract from a local run.
+- Include local service run logs and conformance evidence for the relevant API surfaces.
 - Include the local SBOM and SLSA provenance files generated under
   `target/release-artifacts/`.
 - Include the nightly OIDC conformance run URLs for `plan-basic-op.json`,
