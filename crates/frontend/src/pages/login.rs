@@ -5,6 +5,7 @@ use web_sys::wasm_bindgen::JsValue;
 use crate::api::types::{LoginOutcome, ProvidersOutcome};
 use crate::components::layout::Layout;
 use crate::components::loading::LoadingSpinner;
+use crate::components::password_input::PasswordVisibilityToggle;
 use crate::pages::Route;
 
 const PRESERVED_LOGIN_QUERY_PROPERTY: &str = "__coauth_login_query";
@@ -141,6 +142,7 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
 fn LoginForm(providers: ProvidersOutcome) -> Element {
     let mut handle = use_signal(String::new);
     let mut password = use_signal(String::new);
+    let show_password = use_signal(|| false);
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let nav = navigator();
@@ -247,17 +249,20 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
 
                         div { class: "form-field",
                             label { class: "form-label", r#for: LOGIN_PASSWORD_ID, "Password" }
-                            input {
-                                id: LOGIN_PASSWORD_ID,
-                                class: "form-input",
-                                r#type: "password",
-                                autocomplete: "current-password",
-                                required: true,
-                                "aria-invalid": if has_error { "true" } else { "false" },
-                                "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
-                                placeholder: "Password",
-                                value: "{password}",
-                                oninput: move |e| password.set(e.value()),
+                            div { class: "password-input-wrapper",
+                                input {
+                                    id: LOGIN_PASSWORD_ID,
+                                    class: "form-input",
+                                    r#type: if show_password() { "text" } else { "password" },
+                                    autocomplete: "current-password",
+                                    required: true,
+                                    "aria-invalid": if has_error { "true" } else { "false" },
+                                    "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
+                                    placeholder: "Password",
+                                    value: "{password}",
+                                    oninput: move |e| password.set(e.value()),
+                                }
+                                PasswordVisibilityToggle { visible: show_password }
                             }
                         }
 

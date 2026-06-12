@@ -160,7 +160,7 @@ pub fn PasswordCreationDoubleInput(
 }
 
 #[component]
-fn PasswordVisibilityToggle(visible: Signal<bool>) -> Element {
+pub fn PasswordVisibilityToggle(visible: Signal<bool>) -> Element {
     let label = if visible() {
         "Hide password"
     } else {
