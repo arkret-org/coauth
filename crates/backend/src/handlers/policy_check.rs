@@ -231,9 +231,9 @@ pub(crate) async fn build_policy_check_response(
         .map(PolicyObligation::to_wire)
         .collect();
     let reason_code = if decision.reason_code.is_empty() {
-        None
+        "ok".to_owned()
     } else {
-        Some(decision.reason_code.clone())
+        decision.reason_code.clone()
     };
 
     // Step 4 — canonical transcript + detached signature. The transcript
@@ -247,8 +247,8 @@ pub(crate) async fn build_policy_check_response(
         auth_state_digest: &frontier.auth_state_digest,
         policy_frontier_digest: &frontier.policy_frontier_digest,
         membership_frontier_digest: &frontier.membership_frontier_digest,
-        reason_code: reason_code.as_deref(),
-        expires_at: Some(&expires_at_str),
+        reason_code: reason_code.as_str(),
+        expires_at: expires_at_str.as_str(),
         obligations: &obligations_wire,
     };
     let signer = PolicySigner::new(key_store, policy_server_did);
@@ -272,14 +272,16 @@ pub(crate) async fn build_policy_check_response(
     emit_audit_record(&transcript, &signature);
 
     Ok(PolicyCheckOutcome {
+        request_id: request.request_id.clone(),
         decision: decision.decision,
         bound_to,
+        reason_code,
+        expires_at,
         auth_state_digest: frontier.auth_state_digest,
         policy_frontier_digest: frontier.policy_frontier_digest,
         membership_frontier_digest: frontier.membership_frontier_digest,
         signature,
-        reason_code,
-        expires_at: Some(expires_at),
+        next_retry_at: None,
         obligations: obligations_wire,
     })
 }
@@ -380,14 +382,15 @@ mod tests {
             request_id: "req-1".into(),
             realm_id: realm(),
             actor_id: Did::new("did:web:alice.example").unwrap(),
+            device_id: None,
             action: "ck.message.create".into(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
                 service_did: Did::new("did:web:soland.example").unwrap(),
                 service_type: "principal_server".into(),
+                source_ip_digest: Some(Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap()),
+                signed_transport: true,
             },
-            source_ip_digest: Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
-            signed_transport: serde_json::json!({"signature": "stub"}),
             event_preview: serde_json::Value::Null,
             auth_context: serde_json::Value::Null,
         }
@@ -495,9 +498,7 @@ mod tests {
             request.request_canonical_digest
         );
 
-        let expires_at = response
-            .expires_at
-            .expect("signed response should carry expires_at");
+        let expires_at = response.expires_at;
         let expires_at_str = format_canonical_rfc3339(expires_at);
         assert_eq!(
             serde_json::to_value(expires_at).unwrap(),
@@ -511,8 +512,8 @@ mod tests {
             auth_state_digest: &response.auth_state_digest,
             policy_frontier_digest: &response.policy_frontier_digest,
             membership_frontier_digest: &response.membership_frontier_digest,
-            reason_code: response.reason_code.as_deref(),
-            expires_at: Some(&expires_at_str),
+            reason_code: response.reason_code.as_str(),
+            expires_at: expires_at_str.as_str(),
             obligations: &response.obligations,
         };
         let canonical = PolicySigner::canonical_transcript_bytes(&transcript)

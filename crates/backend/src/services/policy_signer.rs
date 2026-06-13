@@ -149,10 +149,8 @@ pub struct DecisionTranscript<'a> {
     pub auth_state_digest: &'a Hash,
     pub policy_frontier_digest: &'a Hash,
     pub membership_frontier_digest: &'a Hash,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason_code: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<&'a str>,
+    pub reason_code: &'a str,
+    pub expires_at: &'a str,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     pub obligations: &'a [serde_json::Value],
 }
@@ -231,8 +229,8 @@ mod tests {
             auth_state_digest: &auth,
             policy_frontier_digest: &pol,
             membership_frontier_digest: &mem,
-            reason_code: Some("ok"),
-            expires_at: Some("2026-05-21T00:01:00Z"),
+            reason_code: "ok",
+            expires_at: "2026-05-21T00:01:00Z",
             obligations: &obligations,
         };
         let a = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();
@@ -262,8 +260,8 @@ mod tests {
             auth_state_digest: &h,
             policy_frontier_digest: &h,
             membership_frontier_digest: &h,
-            reason_code: Some("ok"),
-            expires_at: None,
+            reason_code: "ok",
+            expires_at: "2026-05-21T00:01:00Z",
             obligations: &obligations,
         };
         let allow_bytes = PolicySigner::canonical_transcript_bytes(&transcript).unwrap();

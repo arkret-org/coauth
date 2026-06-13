@@ -418,14 +418,15 @@ mod tests {
             request_id: "req-1".into(),
             realm_id: RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap(),
             actor_id: Did::new(actor.to_owned()).unwrap(),
+            device_id: None,
             action: action.to_owned(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
                 service_did: Did::new("did:web:soland.example").unwrap(),
                 service_type: "principal_server".into(),
+                source_ip_digest: Some(Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap()),
+                signed_transport: true,
             },
-            source_ip_digest: Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
-            signed_transport: serde_json::json!({"signature": "stub"}),
             event_preview: Value::Null,
             auth_context: Value::Null,
         }
