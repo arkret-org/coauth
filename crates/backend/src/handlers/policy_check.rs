@@ -349,7 +349,7 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
         action = %transcript.bound_to.action,
         request_canonical_digest = transcript.bound_to.request_canonical_digest.as_str(),
         policy_server_id = transcript.bound_to.policy_server_id.as_str(),
-        reason_code = transcript.reason_code.unwrap_or(""),
+        reason_code = transcript.reason_code,
         canonical_transcript = %canonical_str,
         signature_kid = %signature.kid,
         signature_sig = %signature.sig,

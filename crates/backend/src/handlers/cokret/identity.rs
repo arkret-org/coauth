@@ -1,64 +1,18 @@
 use coauth_data::RepositoryAccess;
+use cokret_core::Did;
+use cokret_core::http::{
+    DirectoryDescribeOutcome, IdentityDescribeOutcome, IdentityDocumentViewOutcome,
+};
+use cokret_core::model::{
+    DidDocumentRef, DirectoryDescription, DirectoryHandleResolutionOutcome,
+    DirectoryResolveHandleRequestBody, IdentityDescription, IdentityDocumentView,
+    IdentityResolveOutcome, IdentityResolveRequestBody,
+};
 use salvo::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use super::*;
 use crate::handlers::common::DepotExt;
-
-#[derive(Debug, Serialize)]
-struct IdentityDescribeOutcome {
-    service_did: String,
-    registry_mode: &'static str,
-    supported_receipts: Vec<String>,
-    protocol_version: &'static str,
-    profiles: Vec<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    identity_registry: Option<IdentityRegistryDescriptor>,
-}
-
-#[derive(Debug, Serialize)]
-struct IdentityResolveOutcome {
-    did_document: DidDocument,
-    key_log_head: Option<String>,
-    seq: Option<u64>,
-    receipts: Option<Vec<serde_json::Value>>,
-    method_evidence: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize)]
-struct IdentityDocumentView {
-    did_document: DidDocument,
-    head_event_digest: Option<String>,
-    seq: Option<u64>,
-    receipts: Option<Vec<serde_json::Value>>,
-}
-
-#[derive(Debug, Serialize)]
-struct DirectoryDescribeOutcome {
-    service_did: String,
-    resource_types: Vec<&'static str>,
-    discovery_profiles: Vec<&'static str>,
-    restricted_query_proof: bool,
-}
-
-#[derive(Debug, Serialize)]
-struct ResolveHandleOutcome {
-    did: String,
-    handle: String,
-    verified: bool,
-    claims: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ResolveIdentityRequestBody {
-    did: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ResolveHandleRequestBody {
-    handle: String,
-    expected_did: Option<String>,
-}
 
 #[handler]
 pub async fn identity_describe(
@@ -66,20 +20,19 @@ pub async fn identity_describe(
 ) -> Result<Json<IdentityDescribeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
-    let identity_registry = delegated_identity_registry_descriptor(&cokret_config);
+    let registry_mode = if delegated_identity_registry_descriptor(&cokret_config).is_some() {
+        "delegated_resolver"
+    } else {
+        "local_bindings"
+    };
 
-    Ok(Json(IdentityDescribeOutcome {
-        service_did: service_did_for(&url_builder, &cokret_config),
-        registry_mode: if identity_registry.is_some() {
-            "delegated_resolver"
-        } else {
-            "local_bindings"
-        },
+    Ok(Json(IdentityDescribeOutcome(IdentityDescription {
+        service_did: parse_did_field("service_did", service_did_for(&url_builder, &cokret_config))?,
+        registry_mode: registry_mode.to_owned(),
         supported_receipts: Vec::new(),
-        protocol_version: COKRET_PROTOCOL_VERSION,
+        protocol_version: COKRET_PROTOCOL_VERSION.to_owned(),
         profiles: Vec::new(),
-        identity_registry,
-    }))
+    })))
 }
 
 #[handler]
@@ -87,7 +40,7 @@ pub async fn identity_resolve(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<IdentityResolveOutcome>, CokretRouteError> {
-    let body: ResolveIdentityRequestBody = req
+    let body: IdentityResolveRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
@@ -109,7 +62,7 @@ pub async fn identity_resolve(
             &cokret_config,
             &key_store,
             &mut repo,
-            &body.did,
+            body.did.as_str(),
         )
         .await
         .map_err(map_did_resolve_error)?;
@@ -118,11 +71,11 @@ pub async fn identity_resolve(
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(IdentityResolveOutcome {
-        did_document: resolution.document,
+        did_document: did_document_ref(resolution.document)?,
         key_log_head: None,
         seq: None,
-        receipts: None,
-        method_evidence: Some(resolution.method_evidence),
+        receipts: Vec::new(),
+        method_evidence: resolution.method_evidence,
     }))
 }
 
@@ -130,10 +83,11 @@ pub async fn identity_resolve(
 pub async fn identity_document(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityDocumentView>, CokretRouteError> {
+) -> Result<Json<IdentityDocumentViewOutcome>, CokretRouteError> {
     let did = req
         .query::<String>("did")
         .ok_or_else(|| CokretRouteError::BadRequest("missing did query parameter".into()))?;
+    let did = parse_did_field("did", did)?;
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
@@ -149,7 +103,7 @@ pub async fn identity_document(
             &cokret_config,
             &key_store,
             &mut repo,
-            &did,
+            did.as_str(),
         )
         .await
         .map_err(map_did_resolve_error)?;
@@ -157,12 +111,12 @@ pub async fn identity_document(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(IdentityDocumentView {
-        did_document: resolution.document,
+    Ok(Json(IdentityDocumentViewOutcome(IdentityDocumentView {
+        did_document: did_document_ref(resolution.document)?,
         head_event_digest: None,
         seq: None,
-        receipts: None,
-    }))
+        receipts: Vec::new(),
+    })))
 }
 
 #[handler]
@@ -172,20 +126,20 @@ pub async fn directory_describe(
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
 
-    Ok(Json(DirectoryDescribeOutcome {
-        service_did: service_did_for(&url_builder, &cokret_config),
-        resource_types: vec!["actor", "handle"],
+    Ok(Json(DirectoryDescribeOutcome(DirectoryDescription {
+        service_did: parse_did_field("service_did", service_did_for(&url_builder, &cokret_config))?,
+        resource_types: vec!["actor".to_owned(), "handle".to_owned()],
         discovery_profiles: Vec::new(),
-        restricted_query_proof: false,
-    }))
+        restricted_query_proof: Some(false),
+    })))
 }
 
 #[handler]
 pub async fn directory_resolve_handle(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ResolveHandleOutcome>, CokretRouteError> {
-    let body: ResolveHandleRequestBody = req
+) -> Result<Json<DirectoryHandleResolutionOutcome>, CokretRouteError> {
+    let body: DirectoryResolveHandleRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
@@ -230,13 +184,34 @@ pub async fn directory_resolve_handle(
 
     let verified = body
         .expected_did
-        .as_deref()
-        .is_none_or(|expected| expected == did);
+        .as_ref()
+        .is_none_or(|expected| expected.as_str() == did);
 
-    Ok(Json(ResolveHandleOutcome {
-        did,
+    Ok(Json(DirectoryHandleResolutionOutcome {
+        did: parse_did_field("did", did)?,
         handle: user_handle(&url_builder, &user),
         verified,
-        claims: Vec::new(),
+        claims: json!([]),
+        audience: body.audience,
+        member_delivery_binding: None,
+        handle_claim: None,
+        as_of: None,
+        source_refs: Vec::new(),
+        policy_revision: None,
+        stale: false,
+        divergent: false,
+        via_services: Vec::new(),
     }))
+}
+
+fn parse_did_field(field: &str, value: String) -> Result<Did, CokretRouteError> {
+    Did::new(value)
+        .map_err(|error| CokretRouteError::BadRequest(format!("invalid {field}: {error}")))
+}
+
+fn did_document_ref(document: DidDocument) -> Result<DidDocumentRef, CokretRouteError> {
+    let did = parse_did_field("did_document.id", document.id.clone())?;
+    let document = serde_json::to_value(document)
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+    Ok(DidDocumentRef { did, document })
 }
