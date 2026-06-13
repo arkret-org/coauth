@@ -1505,4 +1505,38 @@ mod tests {
             "OIDC browser exchange must allow the DPoP header; got {allow_headers}",
         );
     }
+
+    #[tokio::test]
+    async fn oidc_exchange_post_error_keeps_browser_cors_headers() {
+        let service = salvo::Service::new(build_account_api_router(Router::new()));
+        let response =
+            TestClient::post("http://127.0.0.1:8698/_coauth/gate/account/auth/oidc/exchange")
+                .add_header("Origin", "http://127.0.0.1:8080", true)
+                .add_header("Content-Type", "application/json", true)
+                .add_header("DPoP", "malformed-proof", true)
+                .body(
+                    serde_json::json!({
+                        "authorization_code": "stale-code",
+                        "code_verifier": "verifier",
+                        "redirect_uri": "http://127.0.0.1:8080/auth/callback",
+                        "issuer": "https://offline.invalid",
+                        "token_endpoint": "https://offline.invalid/oauth/token",
+                        "userinfo_endpoint": "https://offline.invalid/oauth/userinfo",
+                        "client_id": "yougen",
+                        "device_id": "ck:device:01964137-0000-7000-8000-000000000001"
+                    })
+                    .to_string(),
+                )
+                .send(&service)
+                .await;
+
+        assert_eq!(
+            response
+                .headers()
+                .get(ACCESS_CONTROL_ALLOW_ORIGIN)
+                .and_then(|value| value.to_str().ok()),
+            Some("*"),
+            "OIDC browser exchange POST errors must remain visible to browser callers",
+        );
+    }
 }
