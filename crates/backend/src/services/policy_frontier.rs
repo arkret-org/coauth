@@ -168,20 +168,27 @@ impl FrontierSource for SolandFrontierSource {
             // the matching slot below instead of duplicating
             // `frontier_root`. See `soland/src/routing/events/event_log.rs`
             // around `events_frontier` for the response builder.
+            // Spec-canonical federation-peer frontier path is the
+            // version-less `/_cokret/peer/events/frontier`. We join with
+            // a leading slash so the absolute path replaces any existing
+            // path on `principal_server_url` rather than being resolved
+            // relative to it (URL relative-resolution would otherwise
+            // truncate the last base segment).
             let mut url = base
-                .join("api/v1/events/frontier")
+                .join("/_cokret/peer/events/frontier")
                 .map_err(|e| FrontierError::Http(format!("invalid frontier URL: {e}")))?;
 
-            // soland scopes by query params: peer_role=federation_peer
-            // plus the realm id so receivers only see the visible
-            // events for the realm being evaluated. We build the query
-            // string manually because the `query` builder method on
-            // `reqwest::RequestBuilder` requires the `serde_urlencoded`
-            // dep which isn't enabled in coauth-backend's reqwest
-            // feature set.
+            // soland scopes by realm id so receivers only see the
+            // visible events for the realm being evaluated. The
+            // federation-peer role is conveyed by the route itself plus
+            // the signed peer request headers (validate_peer_request on
+            // the soland side), not a query parameter. We build the
+            // query string manually because the `query` builder method
+            // on `reqwest::RequestBuilder` requires the
+            // `serde_urlencoded` dep which isn't enabled in
+            // coauth-backend's reqwest feature set.
             {
                 let mut pairs = url.query_pairs_mut();
-                pairs.append_pair("peer_role", "federation_peer");
                 pairs.append_pair("realm_id", realm_id.as_str());
             }
 

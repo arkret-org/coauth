@@ -400,7 +400,7 @@ pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, CokretRouteE
 }
 
 pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
-    url_builder.absolute_url("/api/v1").to_string()
+    url_builder.absolute_url("/_cokret").to_string()
 }
 
 pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {

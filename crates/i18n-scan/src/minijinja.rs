@@ -230,6 +230,14 @@ fn visit_expr<'a>(ctx: &mut Context, expr: &'a Expr<'a>) -> Result<(), minijinja
             visit_expr(ctx, &bo.right)
         }
 
+        Expr::Compare(cmp) => {
+            visit_expr(ctx, &cmp.expr)?;
+            for op in &cmp.ops {
+                visit_expr(ctx, &op.expr)?;
+            }
+            Ok(())
+        }
+
         Expr::IfExpr(ie) => {
             visit_expr(ctx, &ie.test_expr)?;
             visit_expr(ctx, &ie.true_expr)?;

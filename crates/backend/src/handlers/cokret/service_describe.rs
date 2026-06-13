@@ -246,7 +246,7 @@ fn identity_registry_resolver_descriptor(
             "local_bindings"
         },
         endpoint: url_builder
-            .absolute_url("/api/v1/identity/resolve")
+            .absolute_url("/_cokret/root/identity/resolve")
             .to_string(),
         delegated_resolver,
     }

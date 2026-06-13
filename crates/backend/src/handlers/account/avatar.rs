@@ -100,7 +100,7 @@ pub async fn upload_avatar(
 
     // Build the avatar URL
     let base = url_builder.http_base();
-    let avatar_url = format!("{}api/v1/viewer/avatar/{}", base.as_str(), user_id);
+    let avatar_url = format!("{}_coauth/self/viewer/avatar/{}", base.as_str(), user_id);
 
     // Update user profile with the new avatar URL
     let patch = coauth_data::UserProfilePatch {
