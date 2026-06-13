@@ -96,10 +96,9 @@ broken_intra_doc_links = "deny"
 # isolation would land us with two side-by-side versions and break any
 # trait bound like `OutputSizeUser::OutputSize: ArrayLength<u8>`. The
 # `#[deprecated]` warnings on `digest::generic_array::*` are expected
-# until the upstream RustCrypto migration ships — tracked in
-# `_improve_todos.md` C.4 (last verified: cargo tree -i generic-array
-# shows 13+ transitive consumers all on 0.14). Revisit once `sha2 0.11`
-# is stable on crates.io.
+# until the upstream RustCrypto migration ships (last verified: cargo tree
+# -i generic-array shows 13+ transitive consumers all on 0.14). Revisit
+# once `sha2 0.11` is stable on crates.io.
 
 # --- Front-end (Dioxus WASM) dependencies ---
 

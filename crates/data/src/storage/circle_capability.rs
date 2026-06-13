@@ -1,8 +1,8 @@
 //! Circle capability grant repository.
 
 use async_trait::async_trait;
-use coauth_admin_types::circle_capability_admin::{CircleCapabilityAction, CircleCapabilityGrant};
 use coauth_data::Clock;
+use coauth_data::circle_capability::{CircleCapabilityAction, CircleCapabilityGrant};
 use rand_core::RngCore;
 
 use crate::repository_impl;

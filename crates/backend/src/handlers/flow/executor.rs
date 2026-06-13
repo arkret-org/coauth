@@ -1,16 +1,13 @@
 use std::net::IpAddr;
 
+use coauth_data::CaptchaConfig;
 use coauth_data::flow::{
     FlowDefinition, FlowSession, FlowStageBinding, StageChallenge, StageKind, StageOutcome,
     StageSubmission, StageValidationError,
 };
-use coauth_data::{CaptchaConfig, CaptchaService};
-use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
 use tracing::warn;
-
-use crate::outbound_http::RequestBuilderExt as _;
 
 #[derive(Debug, Error)]
 pub enum FlowPlannerError {
@@ -182,24 +179,6 @@ pub struct CaptchaVerifyContext<'a> {
     pub remote_ip: Option<IpAddr>,
 }
 
-const RECAPTCHA_VERIFY_URL: &str = "https://www.google.com/recaptcha/api/siteverify";
-const HCAPTCHA_VERIFY_URL: &str = "https://api.hcaptcha.com/siteverify";
-const CF_TURNSTILE_VERIFY_URL: &str = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-
-#[derive(Serialize)]
-struct CaptchaApiRequest<'a> {
-    secret: &'a str,
-    response: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    remoteip: Option<IpAddr>,
-}
-
-#[derive(serde::Deserialize)]
-struct CaptchaApiResponse {
-    success: bool,
-    hostname: Option<String>,
-}
-
 /// Validate a stage response and produce an outcome.
 async fn validate_response(
     stage: &StageKind,
@@ -302,78 +281,59 @@ async fn validate_response(
                 };
             }
 
-            // Server-side verification against the CAPTCHA provider API
-            if let Some(ctx) = captcha_ctx
-                && let Some(config) = ctx.captcha_config
+            // Server-side verification. Delegate to the single shared
+            // `captcha::verify_token` entry point so the flow path enforces the
+            // same hostname binding and fail-closed semantics as the REST
+            // paths (hostname mismatch is a hard failure, not a warning; a
+            // supplied token with no configured provider is rejected).
+            let Some(ctx) = captcha_ctx else {
+                // No verification context wired in — cannot validate the token,
+                // so fail closed rather than silently accepting it.
+                return StageOutcome::Retry {
+                    errors: vec![StageValidationError {
+                        field: Some("token".into()),
+                        message: "CAPTCHA verification is unavailable".into(),
+                        code: "captcha_error".into(),
+                    }],
+                };
+            };
+
+            match crate::handlers::captcha::verify_token(
+                ctx.remote_ip,
+                ctx.http_client,
+                ctx.site_hostname,
+                ctx.captcha_config,
+                Some(token),
+            )
+            .await
             {
-                let verify_url = match config.service {
-                    CaptchaService::RecaptchaV2 => RECAPTCHA_VERIFY_URL,
-                    CaptchaService::HCaptcha => HCAPTCHA_VERIFY_URL,
-                    CaptchaService::CloudflareTurnstile => CF_TURNSTILE_VERIFY_URL,
-                };
-
-                let api_req = CaptchaApiRequest {
-                    secret: &config.secret_key,
-                    response: token,
-                    remoteip: ctx.remote_ip,
-                };
-
-                match ctx
-                    .http_client
-                    .post(verify_url)
-                    .form(&api_req)
-                    .send_traced()
-                    .await
-                {
-                    Ok(resp) => match resp.json::<CaptchaApiResponse>().await {
-                        Ok(body) if body.success => {
-                            // Optionally verify hostname
-                            if let Some(hostname) = &body.hostname
-                                && hostname != ctx.site_hostname
-                            {
-                                warn!(
-                                    expected = ctx.site_hostname,
-                                    got = hostname.as_str(),
-                                    "CAPTCHA hostname mismatch"
-                                );
-                            }
-                            // Verification passed — fall through to
-                            // Continue
-                        }
-                        Ok(_) => {
-                            return StageOutcome::Retry {
-                                errors: vec![StageValidationError {
-                                    field: Some("token".into()),
-                                    message: "CAPTCHA verification failed".into(),
-                                    code: "captcha_failed".into(),
-                                }],
-                            };
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "CAPTCHA provider returned invalid response");
-                            return StageOutcome::Retry {
-                                errors: vec![StageValidationError {
-                                    field: Some("token".into()),
-                                    message: "CAPTCHA verification error".into(),
-                                    code: "captcha_error".into(),
-                                }],
-                            };
-                        }
-                    },
-                    Err(e) => {
-                        warn!(error = %e, "Failed to contact CAPTCHA provider");
-                        return StageOutcome::Retry {
-                            errors: vec![StageValidationError {
-                                field: Some("token".into()),
-                                message: "CAPTCHA verification error".into(),
-                                code: "captcha_error".into(),
-                            }],
-                        };
+                Ok(()) => StageOutcome::Continue,
+                Err(
+                    err @ (crate::handlers::captcha::Error::InvalidCaptcha(_)
+                    | crate::handlers::captcha::Error::HostnameMismatch { .. }
+                    | crate::handlers::captcha::Error::NoCaptchaConfigured
+                    | crate::handlers::captcha::Error::MissingCaptchaResponse),
+                ) => {
+                    warn!(error = %err, "CAPTCHA verification rejected");
+                    StageOutcome::Retry {
+                        errors: vec![StageValidationError {
+                            field: Some("token".into()),
+                            message: "CAPTCHA verification failed".into(),
+                            code: "captcha_failed".into(),
+                        }],
+                    }
+                }
+                Err(err) => {
+                    warn!(error = %err, "CAPTCHA verification error");
+                    StageOutcome::Retry {
+                        errors: vec![StageValidationError {
+                            field: Some("token".into()),
+                            message: "CAPTCHA verification error".into(),
+                            code: "captcha_error".into(),
+                        }],
                     }
                 }
             }
-
-            StageOutcome::Continue
         }
         (StageKind::Prompt { fields }, StageSubmission::Prompt { data }) => {
             let mut errors = vec![];

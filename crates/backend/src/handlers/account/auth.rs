@@ -433,7 +433,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             //   - bind the grant `cnf.jkt` to a DPoP proof carried on the actual exchange request
             //     (not the kickoff one).
             //   - enforce policy on scopes the caller may request.
-            // Tracked in `_improve_todos.md` C.4 (TODO scaffold).
+            //   (TODO scaffold — pre-production checklist above.)
             //
             // Subject parity with the OIDC bridge: the grant subject (and
             // `viewer.did`) MUST be the soland-minted `did:webvh:…` principal

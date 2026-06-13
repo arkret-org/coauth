@@ -350,20 +350,21 @@ impl UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_> {
         }
 
         if let Some(sub) = filter.sub_claim() {
-            // Filter by the "sub" field in id_token_claims JSONB column
-            // Using the ->> operator: id_token_claims->>'sub' = sub
-            query = query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&format!(
-                "id_token_claims->>'sub' = '{}'",
-                sub.replace('\'', "''")
-            )));
+            // Filter by the "sub" field in id_token_claims JSONB column using a
+            // bound parameter (never string-interpolated) to keep the claim
+            // value out of the SQL text.
+            query = query.filter(
+                diesel::dsl::sql::<diesel::sql_types::Bool>("id_token_claims->>'sub' = ")
+                    .bind::<diesel::sql_types::Text, _>(sub),
+            );
         }
 
         if let Some(sid) = filter.sid_claim() {
-            // Filter by the "sid" field in id_token_claims JSONB column
-            query = query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&format!(
-                "id_token_claims->>'sid' = '{}'",
-                sid.replace('\'', "''")
-            )));
+            // Filter by the "sid" field in id_token_claims JSONB column.
+            query = query.filter(
+                diesel::dsl::sql::<diesel::sql_types::Bool>("id_token_claims->>'sid' = ")
+                    .bind::<diesel::sql_types::Text, _>(sid),
+            );
         }
 
         // Apply pagination
@@ -411,17 +412,17 @@ impl UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_> {
         }
 
         if let Some(sub) = filter.sub_claim() {
-            query = query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&format!(
-                "id_token_claims->>'sub' = '{}'",
-                sub.replace('\'', "''")
-            )));
+            query = query.filter(
+                diesel::dsl::sql::<diesel::sql_types::Bool>("id_token_claims->>'sub' = ")
+                    .bind::<diesel::sql_types::Text, _>(sub),
+            );
         }
 
         if let Some(sid) = filter.sid_claim() {
-            query = query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&format!(
-                "id_token_claims->>'sid' = '{}'",
-                sid.replace('\'', "''")
-            )));
+            query = query.filter(
+                diesel::dsl::sql::<diesel::sql_types::Bool>("id_token_claims->>'sid' = ")
+                    .bind::<diesel::sql_types::Text, _>(sid),
+            );
         }
 
         let count: i64 = query.count().get_result(self.conn).await?;

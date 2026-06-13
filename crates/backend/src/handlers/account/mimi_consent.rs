@@ -296,8 +296,7 @@ pub fn cascade_any_revoke(
 /// RISK: silent no-op means downstream caches (teabay, floria) keep
 ///   stale grant state until their own TTLs expire. Acceptable while
 ///   no downstream actually consumes this signal; flip to a hard
-///   failure once `services::cross_account_bus` lands.
-/// Tracked in `_improve_todos.md` C.4 (TODO scaffold).
+///   failure once `services::cross_account_bus` lands (TODO scaffold).
 pub fn broadcast_cache_invalidation_for_any_revoke(
     holder_did: &str,
     consent_id: &str,

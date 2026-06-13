@@ -132,7 +132,10 @@ pub use self::accountability::{
     AccountabilitySubjectRevocation,
 };
 pub use self::audit::{AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType};
-pub use self::circle_capability::{CircleCapabilityGrantRepository, NewCircleCapabilityGrant};
+pub use self::circle_capability::{
+    CircleCapabilityAction, CircleCapabilityGrant, CircleCapabilityGrantRepository,
+    NewCircleCapabilityGrant, ParseCircleCapabilityActionError, RiskTier,
+};
 pub use self::clock::{Clock, SystemClock};
 pub use self::flow::{
     FlowDefinition, FlowDesignation, FlowSession, FlowSessionStatus, FlowStageBinding,

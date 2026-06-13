@@ -12,12 +12,21 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use coauth_config::{RateLimiterConfiguration, RateLimitingConfig};
 use coauth_data::{User, UserEmailAuthentication, UserPhoneAuthentication};
 use salvo::rate_limiter::{CelledQuota, RateGuard, SlidingGuard};
 use tokio::sync::Mutex;
 use ulid::Ulid;
+
+/// Hard upper bound on the number of distinct keys a single [`KeyedLimiter`]
+/// may track at once. The per-key keys (source IP / email / phone / session
+/// ULID) are attacker-controllable, so without a cap an adversary rotating
+/// keys could grow the guard map without bound (a DoS on the anti-abuse
+/// component itself). When the cap is reached we evict the least-recently-seen
+/// entries before inserting a new key.
+const MAX_KEYED_GUARDS: usize = 100_000;
 
 // ---------------------------------------------------------------------------
 // Error types (unchanged public API)
@@ -132,8 +141,19 @@ impl RequesterFingerprint {
 /// the map mutex across the verify call gives us the atomic
 /// read-modify-write semantics rate limiting requires.
 struct KeyedLimiter<K: Clone + Eq + Hash + Send + Sync + 'static> {
-    guards: Mutex<HashMap<K, SlidingGuard>>,
+    guards: Mutex<HashMap<K, GuardEntry>>,
     quota: CelledQuota,
+    /// The quota period as a `std::time::Duration`, precomputed for lazy
+    /// eviction. A guard whose window has fully elapsed (no activity for at
+    /// least one full period) is equivalent to a fresh guard, so evicting it
+    /// is behaviour-preserving while reclaiming the memory.
+    period: Duration,
+}
+
+/// A guard plus the last time it was touched, used for lazy TTL eviction.
+struct GuardEntry {
+    guard: SlidingGuard,
+    last_seen: Instant,
 }
 
 impl<K: Clone + Eq + Hash + Send + Sync + 'static> KeyedLimiter<K> {
@@ -154,14 +174,50 @@ impl<K: Clone + Eq + Hash + Send + Sync + 'static> KeyedLimiter<K> {
         Some(Self {
             guards: Mutex::new(HashMap::new()),
             quota,
+            period: Duration::from_secs_f64(period_secs),
         })
     }
 
     /// Check whether `key` is allowed. Returns `true` if within limits.
+    ///
+    /// Before verifying, expired guards (untouched for at least one full quota
+    /// period) are evicted so the map does not grow without bound under
+    /// attacker-controlled keys. If the map is at capacity and the key is new,
+    /// the least-recently-seen entries are dropped to make room.
     async fn check(&self, key: &K) -> bool {
         let mut map = self.guards.lock().await;
-        let guard = map.entry(key.clone()).or_default();
-        guard.verify(&self.quota).await
+        let now = Instant::now();
+
+        // Lazy TTL eviction: any guard not seen for a full period has a
+        // fully-elapsed window and is equivalent to a fresh guard, so removing
+        // it changes no rate-limiting decision.
+        map.retain(|_, entry| now.duration_since(entry.last_seen) < self.period);
+
+        // Capacity cap: if we are about to insert a brand-new key but the map
+        // is full, drop the oldest entries first. Existing keys never trigger
+        // this branch (they update in place).
+        if map.len() >= MAX_KEYED_GUARDS && !map.contains_key(key) {
+            Self::evict_oldest(&mut map);
+        }
+
+        let entry = map.entry(key.clone()).or_insert_with(|| GuardEntry {
+            guard: SlidingGuard::default(),
+            last_seen: now,
+        });
+        entry.last_seen = now;
+        entry.guard.verify(&self.quota).await
+    }
+
+    /// Drop roughly the oldest 10% of entries by `last_seen` to make room when
+    /// the capacity cap is hit. Removing a 10% slab amortises the O(n) scan
+    /// cost across many insertions rather than scanning on every call.
+    fn evict_oldest(map: &mut HashMap<K, GuardEntry>) {
+        let target = map.len() / 10 + 1;
+        let mut seen: Vec<Instant> = map.values().map(|e| e.last_seen).collect();
+        // Find the `target`-th oldest timestamp as the eviction cutoff.
+        seen.sort_unstable();
+        let cutoff = seen[target.min(seen.len() - 1)];
+        map.retain(|_, entry| entry.last_seen > cutoff);
     }
 }
 

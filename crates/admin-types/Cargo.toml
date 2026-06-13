@@ -17,11 +17,14 @@ workspace = true
 default = []
 # Enable JSON Schema + salvo OpenAPI derives. Backends turn this on so
 # `#[salvo::endpoint]` can populate the OpenAPI document; pure clients
-# (e.g. sodmin) leave it off to avoid pulling salvo + schemars.
-schema = ["dep:schemars", "dep:salvo"]
+# (e.g. sodmin) leave it off to avoid pulling salvo + schemars. The
+# feature is forwarded to `coauth-data` so the re-exported shared domain
+# types (Circle capability grants) get the same derives.
+schema = ["dep:schemars", "dep:salvo", "coauth-data/schema"]
 
 [dependencies]
 chrono = {workspace = true,features = ["serde"]}
+coauth-data = {workspace = true}
 salvo = {workspace = true,optional = true}
 schemars = {workspace = true,optional = true}
 serde = {workspace = true,features = ["derive"]}

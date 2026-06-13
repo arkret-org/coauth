@@ -21,6 +21,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use diesel::QueryableByName;
@@ -39,6 +40,47 @@ use webauthn_rs::{Webauthn, WebauthnBuilder};
 
 /// Type alias for the boxed dynamic service used by handlers.
 pub type WebauthnServiceHandle = Arc<dyn WebauthnService>;
+
+/// Server-side lifetime of an in-progress WebAuthn challenge. A ceremony that
+/// is started but never finished (abandoned tab, dropped connection) leaves its
+/// state behind; without an expiry the entry would persist until process
+/// restart and the challenge nonce would have no server-side validity bound.
+const CHALLENGE_TTL: Duration = Duration::from_secs(600);
+
+/// A pending ceremony state plus the instant it was created, for TTL eviction.
+struct PendingChallenge<S> {
+    state: S,
+    created_at: Instant,
+}
+
+impl<S> PendingChallenge<S> {
+    fn new(state: S) -> Self {
+        Self {
+            state,
+            created_at: Instant::now(),
+        }
+    }
+}
+
+/// Insert a fresh challenge state for `account_id`, evicting any entries that
+/// have outlived [`CHALLENGE_TTL`] in the same pass so abandoned ceremonies do
+/// not accumulate.
+fn insert_challenge<S>(map: &mut HashMap<Ulid, PendingChallenge<S>>, account_id: Ulid, state: S) {
+    let now = Instant::now();
+    map.retain(|_, entry| now.duration_since(entry.created_at) < CHALLENGE_TTL);
+    map.insert(account_id, PendingChallenge::new(state));
+}
+
+/// Remove and return the challenge state for `account_id`, treating an entry
+/// older than [`CHALLENGE_TTL`] as already expired (returns `None`).
+fn take_challenge<S>(map: &mut HashMap<Ulid, PendingChallenge<S>>, account_id: Ulid) -> Option<S> {
+    let entry = map.remove(&account_id)?;
+    if entry.created_at.elapsed() < CHALLENGE_TTL {
+        Some(entry.state)
+    } else {
+        None
+    }
+}
 
 /// Persisted credential row (`webauthn_credentials`).
 #[derive(Clone, Debug)]
@@ -120,8 +162,8 @@ pub trait WebauthnService: Send + Sync {
 pub struct PgWebauthnService {
     webauthn: Arc<Webauthn>,
     pool: DieselPool<AsyncPgConnection>,
-    register_states: Mutex<HashMap<Ulid, PasskeyRegistration>>,
-    auth_states: Mutex<HashMap<Ulid, PasskeyAuthentication>>,
+    register_states: Mutex<HashMap<Ulid, PendingChallenge<PasskeyRegistration>>>,
+    auth_states: Mutex<HashMap<Ulid, PendingChallenge<PasskeyAuthentication>>>,
 }
 
 impl PgWebauthnService {
@@ -253,7 +295,7 @@ impl WebauthnService for PgWebauthnService {
             exclude_opt,
         )?;
 
-        self.register_states.lock().await.insert(account_id, state);
+        insert_challenge(&mut *self.register_states.lock().await, account_id, state);
         Ok(challenge)
     }
 
@@ -264,11 +306,7 @@ impl WebauthnService for PgWebauthnService {
         label: Option<String>,
         now: DateTime<Utc>,
     ) -> Result<WebauthnCredentialRecord, WebauthnError> {
-        let state = self
-            .register_states
-            .lock()
-            .await
-            .remove(&account_id)
+        let state = take_challenge(&mut *self.register_states.lock().await, account_id)
             .ok_or(WebauthnError::NoChallenge(account_id))?;
 
         let passkey = self
@@ -321,7 +359,7 @@ impl WebauthnService for PgWebauthnService {
         }
 
         let (challenge, state) = self.webauthn.start_passkey_authentication(&passkeys)?;
-        self.auth_states.lock().await.insert(account_id, state);
+        insert_challenge(&mut *self.auth_states.lock().await, account_id, state);
         Ok(challenge)
     }
 
@@ -331,11 +369,7 @@ impl WebauthnService for PgWebauthnService {
         assertion: &PublicKeyCredential,
         now: DateTime<Utc>,
     ) -> Result<CredentialID, WebauthnError> {
-        let state = self
-            .auth_states
-            .lock()
-            .await
-            .remove(&account_id)
+        let state = take_challenge(&mut *self.auth_states.lock().await, account_id)
             .ok_or(WebauthnError::NoChallenge(account_id))?;
 
         let result = self

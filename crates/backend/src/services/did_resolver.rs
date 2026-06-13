@@ -94,8 +94,8 @@ pub enum DidResolveError {
 
 /// Hard upper bound on the size of a fetched DID document. Anything
 /// larger is treated as hostile (the caller may be trying to exhaust
-/// memory via a slowloris-style response). 10 MiB matches the
-/// `_improve_todos.md` A.2 guidance.
+/// memory via a slowloris-style response). 10 MiB is a deliberately
+/// generous ceiling for any legitimate DID document.
 pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
 
 #[async_trait]

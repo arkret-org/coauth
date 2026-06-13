@@ -23,7 +23,7 @@ use ulid::Ulid;
 use super::{RouteError, make_rng};
 use crate::app_state::DepotExt as _;
 use crate::handlers::flow::{
-    CaptchaVerifyContext, FlowExecutor, FlowPlan, flow_session_store_write,
+    CaptchaVerifyContext, FlowExecutor, FlowPlan, evict_flow_sessions, flow_session_store_write,
 };
 
 // ---------------------------------------------------------------------------
@@ -423,9 +423,11 @@ pub async fn start_flow(req: &mut Request) -> Result<Json<FlowOutcome>, RouteErr
 
     let response = build_response(&plan, &session, challenge, None);
 
-    // Store in memory
+    // Store in memory. Evict expired (and, if at capacity, oldest) sessions
+    // first so this unauthenticated endpoint cannot grow the map without bound.
     {
         let mut store = flow_session_store_write().await;
+        evict_flow_sessions(&mut store);
         store.insert(session_id, (plan, session));
     }
 
@@ -442,6 +444,16 @@ pub async fn get_flow_session(req: &mut Request) -> Result<Json<FlowOutcome>, Ro
     let id = parse_flow_session_id(req)?;
 
     let mut store = flow_session_store_write().await;
+
+    // Enforce the session TTL: an expired non-terminal session is treated as
+    // gone — remove it and report NotFound rather than continuing to serve it.
+    if let Some((_, session)) = store.get(&id) {
+        if !session.status.is_terminal() && session.expires_at <= Utc::now() {
+            store.remove(&id);
+            return Err(RouteError::NotFound);
+        }
+    }
+
     let (plan, session) = store.get_mut(&id).ok_or(RouteError::NotFound)?;
 
     if session.status.is_terminal() {
@@ -483,6 +495,16 @@ pub async fn respond_flow(
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
     let mut store = flow_session_store_write().await;
+
+    // Enforce the session TTL before accepting a response: an expired
+    // non-terminal session is treated as gone and may not be advanced.
+    if let Some((_, session)) = store.get(&id) {
+        if !session.status.is_terminal() && session.expires_at <= Utc::now() {
+            store.remove(&id);
+            return Err(RouteError::NotFound);
+        }
+    }
+
     let (plan, session) = store.get_mut(&id).ok_or(RouteError::NotFound)?;
 
     if session.status.is_terminal() {

@@ -2,8 +2,10 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use coauth_admin_types::circle_capability_admin::{CircleCapabilityAction, CircleCapabilityGrant};
-use coauth_data::circle_capability::{CircleCapabilityGrantRepository, NewCircleCapabilityGrant};
+use coauth_data::circle_capability::{
+    CircleCapabilityAction, CircleCapabilityGrant, CircleCapabilityGrantRepository,
+    NewCircleCapabilityGrant,
+};
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -177,7 +179,7 @@ impl CircleCapabilityGrantRepository for PgCircleCapabilityGrantRepository<'_> {
 
 #[cfg(test)]
 mod tests {
-    use coauth_admin_types::circle_capability_admin::CircleCapabilityAction;
+    use coauth_data::circle_capability::CircleCapabilityAction;
     use coauth_data::clock::MockClock;
     use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
     use rand_chacha::ChaChaRng;

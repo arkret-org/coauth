@@ -106,7 +106,7 @@ pub async fn query_consent_cell(
     // CATEGORY: P1 / external-integration.
     // RISK: probing an unimplemented URL today returns `Unknown` which
     //   the consent gate is documented to treat as fail-open (see
-    //   module comment). Tracked in `_improve_todos.md` C.4.
+    //   module comment).
     let cell_id = build_cell_id(consent_id);
     let path = format!("_soland/admin/cells/{}", urlencoding::encode_path(&cell_id));
     let url = match base.join(&path) {
