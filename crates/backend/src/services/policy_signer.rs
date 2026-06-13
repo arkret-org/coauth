@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 `ck.self.policy.check` decision signer.
+//! Round 4 `ck.self.policy.query.check` decision signer.
 //!
 //! Pulls the preferred service signing key out of the keystore, signs a
 //! canonical-JSON transcript (RFC 8785 / `cokret_core::canonical`), and
@@ -52,7 +52,7 @@ pub enum PolicySignerError {
     Sign,
 }
 
-/// Detached signer for `ck.self.policy.check` decisions.
+/// Detached signer for `ck.self.policy.query.check` decisions.
 ///
 /// Constructed once per request from the shared [`Keystore`] +
 /// `policy_server_did` (the coauth service DID). The signer is stateless
@@ -130,7 +130,7 @@ impl<'a> PolicySigner<'a> {
     }
 }
 
-/// Canonical-JSON transcript bound to a single `ck.self.policy.check`
+/// Canonical-JSON transcript bound to a single `ck.self.policy.query.check`
 /// decision. Field order is fixed by the struct, but the canonical
 /// serializer in `cokret_core::canonical` sorts object keys
 /// lexicographically before emitting bytes — so reordering fields here
