@@ -8,7 +8,7 @@ use coauth_config::{HttpBindConfig, HttpResource, HttpTlsConfig, UnixOrTcp};
 use coauth_data::UrlBuilder;
 use coauth_templates::Templates;
 use headers::{CacheControl, HeaderMapExt as _, UserAgent};
-use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
+use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderName, USER_AGENT};
 use http::{HeaderValue, Method, StatusCode, Version};
 use listenfd::ListenFd;
 use opentelemetry_http::HeaderExtractor;
@@ -436,7 +436,12 @@ fn public_oidc_browser_cors() -> impl Handler {
     Cors::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers([ACCEPT, AUTHORIZATION, CONTENT_TYPE])
+        .allow_headers([
+            ACCEPT,
+            AUTHORIZATION,
+            CONTENT_TYPE,
+            HeaderName::from_static("dpop"),
+        ])
         .into_handler()
 }
 
@@ -770,7 +775,11 @@ fn build_account_api_router(router: Router) -> Router {
                         .post(auth::oidc_browser_bridge_session),
                 )
                 .push(Router::with_path("oidc/exchange/describe").get(auth::oidc_exchange_describe))
-                .push(Router::with_path("oidc/exchange").post(auth::oidc_code_exchange))
+                .push(
+                    Router::with_path("oidc/exchange")
+                        .options(oidc_preflight_handler)
+                        .post(auth::oidc_code_exchange),
+                )
                 .push(
                     Router::with_path("passkey")
                         .push(
@@ -1365,11 +1374,13 @@ mod tests {
     use coauth_config::HttpBindConfig;
     use coauth_data::UrlBuilder;
     use http::StatusCode;
-    use http::header::CONTENT_TYPE;
+    use http::header::{ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
     use salvo::prelude::Router;
     use salvo::test::{ResponseExt, TestClient};
 
-    use super::{absolute_redirect_location, build_admin_router, build_listeners};
+    use super::{
+        absolute_redirect_location, build_account_api_router, build_admin_router, build_listeners,
+    };
 
     #[test]
     fn bind_error_mentions_requested_address() {
@@ -1460,5 +1471,38 @@ mod tests {
             assert!(body.contains("/_coauth/admin/user-sessions:"), "{body}");
             assert!(!body.contains("Pasion Admin API"), "{body}");
         }
+    }
+
+    #[tokio::test]
+    async fn oidc_exchange_preflight_allows_dpop_header() {
+        let service = salvo::Service::new(build_account_api_router(Router::new()));
+        let response =
+            TestClient::options("http://127.0.0.1:8698/_coauth/gate/account/auth/oidc/exchange")
+                .add_header("Origin", "http://127.0.0.1:8080", true)
+                .add_header("Access-Control-Request-Method", "POST", true)
+                .add_header("Access-Control-Request-Headers", "content-type,dpop", true)
+                .send(&service)
+                .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::NO_CONTENT));
+        assert_eq!(
+            response
+                .headers()
+                .get(ACCESS_CONTROL_ALLOW_ORIGIN)
+                .and_then(|value| value.to_str().ok()),
+            Some("*")
+        );
+        let allow_headers = response
+            .headers()
+            .get(ACCESS_CONTROL_ALLOW_HEADERS)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        assert!(
+            allow_headers
+                .split(',')
+                .any(|header| header.trim() == "dpop"),
+            "OIDC browser exchange must allow the DPoP header; got {allow_headers}",
+        );
     }
 }
