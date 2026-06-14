@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Requests for the [Client Credentials flow].
+//! Requests for the [Client Credentials strand].
 //!
-//! [Client Credentials flow]: https://www.rfc-editor.org/rfc/rfc6749#section-4.4
+//! [Client Credentials strand]: https://www.rfc-editor.org/rfc/rfc6749#section-4.4
 
 use chrono::{DateTime, Utc};
 use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse, ClientCredentialsGrant};

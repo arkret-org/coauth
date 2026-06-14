@@ -14,7 +14,7 @@ pub mod password_write;
 pub mod prompt;
 pub mod user_write;
 
-use coauth_data::flow::{StageKind, StageOutcome, StageSubmission};
+use coauth_data::strand::{StageKind, StageOutcome, StageSubmission};
 use coauth_data::{BoxRepository, Clock};
 use rand_core::RngCore;
 use thiserror::Error;

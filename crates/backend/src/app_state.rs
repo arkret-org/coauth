@@ -248,7 +248,7 @@ pub async fn inject_app_state(
     // C35.0: when `[cokret.starid]` is configured, build a single
     // `StaridResolver` per request from the shared http_client. The
     // handle is `Option<StaridRegistryHandle>` in the depot — handlers
-    // that need it (today: the onboarding `user_write` flow stage) read
+    // that need it (today: the onboarding `user_write` strand stage) read
     // via `DepotExt::starid_registry()` and skip the wire-up when it
     // returns `None`. The async did_resolver still works without a
     // handle: it falls back to the local `did:web:coauth.invalid:…`
@@ -262,7 +262,7 @@ pub async fn inject_app_state(
             Err(err) => {
                 tracing::warn!(
                     %err,
-                    "starid registry unavailable (base_url={}); onboarding flows will fall back to the local did:web derivation",
+                    "starid registry unavailable (base_url={}); onboarding strands will fall back to the local did:web derivation",
                     starid_config.base_url,
                 );
             }

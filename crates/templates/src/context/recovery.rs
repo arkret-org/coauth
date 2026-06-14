@@ -1,4 +1,4 @@
-//! Account recovery flow template contexts.
+//! Account recovery strand template contexts.
 
 use std::collections::BTreeMap;
 

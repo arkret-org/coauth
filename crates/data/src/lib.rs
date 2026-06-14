@@ -9,7 +9,7 @@
 //! - **Accounts** — [`AccountContactPoint`], [`AccountIdentityBinding`]
 //! - **Users** — [`User`], [`BrowserSession`], [`Password`], [`UserEmail`], [`UserRegistration`],
 //!   [`UserRecoveryTicket`]
-//! - **Flows** — [`FlowDefinition`], [`FlowStageBinding`], [`StageKind`], [`FlowSession`],
+//! - **Strands** — [`StrandDefinition`], [`StrandStageBinding`], [`StageKind`], [`StrandSession`],
 //!   [`StageChallenge`], [`StageSubmission`], [`StageOutcome`]
 //! - **OAuth** — [`Client`], [`Session`], [`AuthorizationGrant`], [`AccessToken`],
 //!   [`RefreshToken`], [`DeviceCodeGrant`]
@@ -48,9 +48,9 @@ pub mod circle_capability;
 /// Clock abstraction for testability (`SystemClock` in production, mock clock
 /// in tests).
 pub mod clock;
-/// Flow engine data model — multi-step user interaction definitions, stage
+/// Strand engine data model — multi-step user interaction definitions, stage
 /// bindings, and runtime session tracking.
-pub mod flow;
+pub mod strand;
 /// Persisted notification request, delivery, and audit event models.
 pub mod notification;
 /// OAuth client and session models.
@@ -137,8 +137,8 @@ pub use self::circle_capability::{
     NewCircleCapabilityGrant, ParseCircleCapabilityActionError, RiskTier,
 };
 pub use self::clock::{Clock, SystemClock};
-pub use self::flow::{
-    FlowDefinition, FlowDesignation, FlowSession, FlowSessionStatus, FlowStageBinding,
+pub use self::strand::{
+    StrandDefinition, StrandDesignation, StrandSession, StrandSessionStatus, StrandStageBinding,
     IdentificationField, PromptField, PromptFieldType, StageChallenge, StageKind, StageOutcome,
     StageSubmission, StageValidationError,
 };

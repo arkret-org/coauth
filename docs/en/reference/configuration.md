@@ -193,7 +193,7 @@ COAUTH_ACCOUNT__BOOTSTRAP_ADMIN_TOKEN=bootstrap-secret
 ## `captcha`
 
 CAPTCHA protection for login, recovery, registration, or other abuse-sensitive
- flows.
+ strands.
 
 ```yaml
 captcha:

@@ -8,7 +8,7 @@
 //! - [`oauth`] — OAuth / OpenID Connect endpoints (token, authorization, discovery, userinfo, etc.)
 //! - [`rest`] — REST API endpoints for the account management frontend (JSON)
 //! - [`spa`] — SPA shell handler (serves the Dioxus frontend HTML wrapper)
-//! - [`upstream_oauth`] — Upstream SSO / federated identity provider flows
+//! - [`upstream_oauth`] — Upstream SSO / federated identity provider strands
 //! - [`passwords`] — Password hashing and verification utilities
 //!
 //! All user-facing pages are rendered by the Dioxus frontend
@@ -77,8 +77,8 @@ pub mod cokret;
 pub mod common;
 /// Public inbound webhooks for email delivery providers.
 pub mod email_webhooks;
-/// Flow execution engine for multi-step user interaction flows.
-pub mod flow;
+/// Strand execution engine for multi-step user interaction strands.
+pub mod strand;
 /// Health-check endpoint (`/health`).
 pub mod health;
 /// OAuth and OpenID Connect protocol endpoints.

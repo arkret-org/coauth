@@ -368,7 +368,7 @@ realm classes explicit. Every admin route belongs to one of them:
   binding, OAuth client, registration token, upstream-link, password,
   session-grant management. Operators who hold capabilities here can
   alter who the principal *is*.
-- **Collaboration Realm** — Spaces, Flows, Circles, membership, content
+- **Collaboration Realm** — Spaces, Strands, Circles, membership, content
   policy. Operators who hold capabilities here govern what the principal
   *does together with other principals*. The six CKP-0007
   `ck.circle.*` capability actions live in this class.

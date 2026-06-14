@@ -4,7 +4,7 @@
 //! from the repository and verifying the HMAC (RFC 6238).
 
 use coauth_data::BoxRepository;
-use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::strand::{StageOutcome, StageValidationError};
 use tracing::warn;
 use ulid::Ulid;
 
@@ -34,12 +34,12 @@ pub async fn execute(
         .and_then(|v| v.as_str())
         .ok_or_else(|| {
             StageExecutionError::Internal(anyhow::anyhow!(
-                "missing user_id in flow context — identification stage must run first"
+                "missing user_id in strand context — identification stage must run first"
             ))
         })?;
 
     let user_id: Ulid = user_id_str.parse().map_err(|e| {
-        StageExecutionError::Internal(anyhow::anyhow!("invalid user_id in flow context: {e}"))
+        StageExecutionError::Internal(anyhow::anyhow!("invalid user_id in strand context: {e}"))
     })?;
 
     // Validate code format: exactly 6 ASCII digits.
@@ -116,7 +116,7 @@ pub async fn execute(
         });
     }
 
-    // Mark MFA as validated in the flow context.
+    // Mark MFA as validated in the strand context.
     if let Some(ctx) = context.as_object_mut() {
         ctx.insert("mfa_validated".into(), serde_json::json!(true));
     }

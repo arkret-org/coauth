@@ -1,9 +1,9 @@
 //! Identification stage side effects.
 //!
 //! Looks up a user by handle or email address and stores the resolved
-//! `user_id` in the flow context for subsequent stages.
+//! `user_id` in the strand context for subsequent stages.
 
-use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::strand::{StageOutcome, StageValidationError};
 use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 
 use super::StageExecutionError;
@@ -12,7 +12,7 @@ use super::StageExecutionError;
 ///
 /// Tries to find the user by handle first, then by email if the
 /// identifier contains an `@` sign.  On success the user's `id` and
-/// `handle` are written into the flow context.
+/// `handle` are written into the strand context.
 pub async fn execute(
     repo: &mut BoxRepository,
     _clock: &dyn Clock,

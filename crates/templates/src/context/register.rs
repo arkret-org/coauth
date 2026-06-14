@@ -1,4 +1,4 @@
-//! Registration flow template contexts, including multi-step registration
+//! Registration strand template contexts, including multi-step registration
 //! (email verification, display name, registration token).
 
 use std::collections::BTreeMap;

@@ -9,7 +9,7 @@
 ## Prerequisites
 
 - PostgreSQL 14+ (primary) — `coauth-backend` uses Diesel migrations.
-- Optional: OIDC upstream provider (Keycloak, Auth0, Azure AD, etc.) for `ck.account.oidc_*` flows.
+- Optional: OIDC upstream provider (Keycloak, Auth0, Azure AD, etc.) for `ck.account.oidc_*` strands.
 - Optional: HSM / KMS for signing keys (production).
 - Rust toolchain matching workspace MSRV (see root `Cargo.toml`).
 

@@ -1,7 +1,7 @@
 //! Derive a deterministic starid `update_key` from a webauthn-rs `Passkey`.
 //!
 //! Produces a per-credential, device-bound key that starid stores on the
-//! DID's `updateKeys` slot. The flow is:
+//! DID's `updateKeys` slot. The strand is:
 //!
 //! 1. Browser finishes a `WebAuthn` registration ceremony (`PgWebauthnService::register_finish`)
 //!    producing a [`Passkey`].

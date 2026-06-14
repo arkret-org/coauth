@@ -1,4 +1,4 @@
-//! View handlers for the password-login flow.
+//! View handlers for the password-login strand.
 //!
 //! Historically a single 891-line `login.rs`. Split into focused
 //! submodules — see `_tasks.md` T21:

@@ -1,4 +1,4 @@
-//! REST API endpoints for upstream OAuth link flow.
+//! REST API endpoints for upstream OAuth link strand.
 //!
 //! These endpoints replace the server-rendered HTML handlers in
 //! `upstream_oauth::link`, providing JSON responses for the Dioxus SPA.

@@ -15,7 +15,7 @@ remote artifacts.
 ### [`release-branch` workflow]
 
 Do not run this workflow for the local readiness pass. It creates remote
-release-branch state and tags in the upstream release flow.
+release-branch state and tags in the upstream release strand.
 
 The next major/minor pre-version is computed from the current version on the main branch, so it works as follows:
 
@@ -28,7 +28,7 @@ Local evidence does not require a release branch or pull request.
 ### [`release-bump` workflow]
 
 Do not run this workflow for the local readiness pass. It exists for the
-upstream remote release flow and can create version/tag state that is
+upstream remote release strand and can create version/tag state that is
 outside the scope of this workspace.
 
 This workflow has three meaningful inputs:

@@ -1,6 +1,6 @@
 //! Admin DTOs for the soland applets/agents/directory surfaces.
 //!
-//! Round-26 introduced a full mutation flow (F1 / F2 / F3) for the
+//! Round-26 introduced a full mutation strand (F1 / F2 / F3) for the
 //! applet, agent, and directory admin surfaces. The shared lifecycle is
 //! `Pending → Approved → Suspended (soft-revoke) → Revoked (terminal)`,
 //! with re-approval allowed from any non-Approved state.

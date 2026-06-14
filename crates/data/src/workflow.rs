@@ -6,7 +6,7 @@ use crate::Ulid;
 pub use crate::pg::workflow::PgWorkflowRepository;
 pub use crate::storage::workflow::*;
 
-/// A persisted workflow instance coordinating a multi-step business flow.
+/// A persisted workflow instance coordinating a multi-step business strand.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowInstance {
     /// Stable unique identifier for the workflow.

@@ -795,7 +795,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_skip_confirmation() {
         // Same test as test_register, but checks that we get straight to the
-        // registration flow skipping the confirmation
+        // registration strand skipping the confirmation
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else { return; };
         let state = TestState::from_pool(pool.clone()).await.unwrap();

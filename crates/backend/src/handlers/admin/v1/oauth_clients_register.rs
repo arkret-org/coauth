@@ -48,7 +48,7 @@ pub struct AdminClientRegistrationRequestBody {
     #[serde(default)]
     pub client_name: Option<String>,
 
-    /// Allowed redirect URIs for the authorisation code flow.
+    /// Allowed redirect URIs for the authorisation code strand.
     /// Required for non-machine clients.
     #[serde(default)]
     pub redirect_uris: Vec<String>,
@@ -142,7 +142,7 @@ fn parse_grant_type(value: &str) -> Result<GrantType, AppError> {
         "client_credentials" => Ok(GrantType::ClientCredentials),
         "implicit" => Ok(GrantType::Implicit),
         "password" => Ok(GrantType::Password),
-        // RFC 8628 device flow — accept canonical name.
+        // RFC 8628 device strand — accept canonical name.
         "urn:ietf:params:oauth:grant-type:device_code" => Ok(GrantType::DeviceCode),
         other => Err(AppError::bad_request(format!(
             "unsupported grant_type: {other}"
@@ -218,7 +218,7 @@ fn validate_redirect_uris(raw: &[String]) -> Result<Vec<Url>, AppError> {
 
 /// Pure-function counterpart of the redirect requirement logic in
 /// [`register`]. Returns `Err` if the supplied grant types include a
-/// flow that needs a `redirect_uri` but none were supplied.
+/// strand that needs a `redirect_uri` but none were supplied.
 fn ensure_redirect_for_grants(grants: &[GrantType], redirect_uris: &[Url]) -> Result<(), AppError> {
     let needs_redirect = grants
         .iter()

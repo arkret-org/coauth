@@ -334,7 +334,7 @@ pub trait OAuthSessionRepository: Send + Sync {
     }
 
     /// Create a new [`Session`] for a [`Client`] using the client credentials
-    /// flow
+    /// strand
     ///
     /// Returns the newly created [`Session`]
     ///

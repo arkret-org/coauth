@@ -1,6 +1,6 @@
 //! `WeCom` (企业微信) OAuth specific request implementations.
 //!
-//! `WeCom` uses a non-standard OAuth flow:
+//! `WeCom` uses a non-standard OAuth strand:
 //! - First obtain a corp `access_token` using corpid + corpsecret
 //! - Then use the authorization code to get user identity (userid)
 //! - Optionally fetch full user profile

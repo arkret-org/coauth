@@ -1,4 +1,4 @@
-//! REST API endpoints for OAuth approval and device-code flows.
+//! REST API endpoints for OAuth approval and device-code strands.
 //!
 //! These endpoints are consumed by the Dioxus SPA frontend and return JSON
 //! responses. They replace the server-rendered HTML approval pages.

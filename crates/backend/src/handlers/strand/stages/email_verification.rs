@@ -2,16 +2,16 @@
 //!
 //! Verifies a one-time code against a stored [`UserEmailAuthentication`]
 //! record.  On success the authentication is marked as completed and
-//! `email_verified` is set in the flow context.
+//! `email_verified` is set in the strand context.
 
-use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::strand::{StageOutcome, StageValidationError};
 use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 
 use super::StageExecutionError;
 
 /// Execute the email verification stage.
 ///
-/// Expects `email_authentication_id` to already be present in the flow
+/// Expects `email_authentication_id` to already be present in the strand
 /// context (set by an earlier stage that initiated the verification).
 pub async fn execute(
     repo: &mut BoxRepository,
@@ -26,7 +26,7 @@ pub async fn execute(
         .and_then(|v| v.as_str())
         .ok_or_else(|| {
             StageExecutionError::Internal(anyhow::anyhow!(
-                "missing email_authentication_id in flow context"
+                "missing email_authentication_id in strand context"
             ))
         })?;
 

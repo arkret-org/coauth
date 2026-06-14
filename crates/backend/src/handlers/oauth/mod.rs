@@ -5,7 +5,7 @@
 
 //! OAuth and OpenID Connect protocol endpoint handlers.
 //!
-//! This module implements the server-side of the OAuth / OIDC flows:
+//! This module implements the server-side of the OAuth / OIDC strands:
 //!
 //! - [`authorization`] — Authorization endpoint (authorization code grant)
 //! - [`token`] — Token endpoint (exchange codes / credentials for tokens)

@@ -1,19 +1,19 @@
-//! Flow engine data model types.
+//! Strand engine data model types.
 //!
-//! A "flow" is a multi-step user interaction such as registration, account
-//! recovery, password change, MFA enrollment, or OAuth consent.  Each flow is
+//! A "strand" is a multi-step user interaction such as registration, account
+//! recovery, password change, MFA enrollment, or OAuth consent.  Each strand is
 //! composed of an ordered sequence of "stages", where every stage defines what
 //! to show the user (a **challenge**) and what to accept back (a **response**).
 //!
-//! At runtime a [`FlowSession`] tracks the user's progress through the stages,
+//! At runtime a [`StrandSession`] tracks the user's progress through the stages,
 //! accumulating context data that later stages can reference.
 //!
-//! NOTE: the "Flow" in this module is coauth's **internal authentication-flow
+//! NOTE: the "Strand" in this module is coauth's **internal authentication-strand
 //! engine** (registration / recovery / MFA / OAuth consent). It is unrelated
-//! to the Cokret protocol `ck:flow:` collaboration object — these types never
+//! to the Cokret protocol `ck:strand:` collaboration object — these types never
 //! touch the Cokret wire, and the protocol's `stage`/`state`/`status` axis
 //! rules do not govern them. The name collision is purely nominal; do not
-//! conflate `FlowSession` here with a protocol Flow durable object.
+//! conflate `StrandSession` here with a protocol Strand durable object.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -22,49 +22,49 @@ use serde_json::Value;
 use crate::Ulid;
 
 // ---------------------------------------------------------------------------
-// Flow designation
+// Strand designation
 // ---------------------------------------------------------------------------
 
-/// The purpose/designation of a flow — determines when it is triggered.
+/// The purpose/designation of a strand — determines when it is triggered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FlowDesignation {
-    /// User registration flow.
+pub enum StrandDesignation {
+    /// User registration strand.
     Registration,
-    /// Account recovery / password reset flow.
+    /// Account recovery / password reset strand.
     Recovery,
-    /// Password change flow (authenticated).
+    /// Password change strand (authenticated).
     PasswordChange,
-    /// Authentication / login flow.
+    /// Authentication / login strand.
     Authentication,
-    /// OAuth authorization consent flow.
+    /// OAuth authorization consent strand.
     Authorization,
-    /// MFA device enrollment flow.
+    /// MFA device enrollment strand.
     Enrollment,
-    /// User profile / settings flow.
+    /// User profile / settings strand.
     StageConfiguration,
 }
 
 // ---------------------------------------------------------------------------
-// Flow definition
+// Strand definition
 // ---------------------------------------------------------------------------
 
-/// A flow definition — a named sequence of stages for a specific purpose.
+/// A strand definition — a named sequence of stages for a specific purpose.
 ///
-/// Flow definitions are configuration-time objects.  They describe *what*
+/// Strand definitions are configuration-time objects.  They describe *what*
 /// should happen (which stages, in which order) but do not carry any runtime
-/// state — that lives in [`FlowSession`].
+/// state — that lives in [`StrandSession`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlowDefinition {
+pub struct StrandDefinition {
     /// Unique identifier.
     pub id: Ulid,
     /// URL-friendly identifier, e.g., `"default-registration"`.
     pub slug: String,
     /// Human-readable title shown in admin UIs.
     pub title: String,
-    /// What this flow is used for.
-    pub designation: FlowDesignation,
-    /// Whether the flow is currently active.
+    /// What this strand is used for.
+    pub designation: StrandDesignation,
+    /// Whether the strand is currently active.
     pub enabled: bool,
     /// Optional template override key. When set, the template engine
     /// looks for templates under this key instead of the default.
@@ -193,10 +193,10 @@ pub enum PromptFieldType {
 }
 
 // ---------------------------------------------------------------------------
-// Flow-stage binding
+// Strand-stage binding
 // ---------------------------------------------------------------------------
 
-/// Binds a stage to a flow with ordering and an optional policy expression.
+/// Binds a stage to a strand with ordering and an optional policy expression.
 ///
 /// The planner iterates these bindings in [`order`](Self::order) to build the
 /// list of stages the user must complete.  If
@@ -204,14 +204,14 @@ pub enum PromptFieldType {
 /// [`policy_expression`](Self::policy_expression) is evaluated at plan time to
 /// decide whether the stage should be included.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlowStageBinding {
+pub struct StrandStageBinding {
     /// Unique identifier.
     pub id: Ulid,
-    /// The flow this binding belongs to.
-    pub flow_id: Ulid,
+    /// The strand this binding belongs to.
+    pub strand_id: Ulid,
     /// The stage configuration.
     pub stage: StageKind,
-    /// Execution order within the flow (lower = earlier).
+    /// Execution order within the strand (lower = earlier).
     pub order: i32,
     /// Whether to evaluate [`policy_expression`](Self::policy_expression) at
     /// plan time.
@@ -225,24 +225,24 @@ pub struct FlowStageBinding {
 }
 
 // ---------------------------------------------------------------------------
-// Flow session (runtime state)
+// Strand session (runtime state)
 // ---------------------------------------------------------------------------
 
-/// Runtime session tracking a user's progress through a flow.
+/// Runtime session tracking a user's progress through a strand.
 ///
-/// Created when a user begins a flow and updated as they advance through
+/// Created when a user begins a strand and updated as they advance through
 /// stages.  The [`context`](Self::context) field accumulates data that later
 /// stages can read (e.g., the identified user, a pending email address).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlowSession {
+pub struct StrandSession {
     /// Unique identifier.
     pub id: Ulid,
-    /// The flow definition this session is executing.
-    pub flow_id: Ulid,
+    /// The strand definition this session is executing.
+    pub strand_id: Ulid,
     /// The current stage binding index (0-based).
     pub current_stage_index: usize,
     /// Session lifecycle status.
-    pub status: FlowSessionStatus,
+    pub status: StrandSessionStatus,
     /// Accumulated context data shared between stages.
     pub context: Value,
     /// IP address of the user who initiated the session.
@@ -259,21 +259,21 @@ pub struct FlowSession {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
-/// Flow session lifecycle status.
+/// Strand session lifecycle status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FlowSessionStatus {
-    /// Flow is in progress.
+pub enum StrandSessionStatus {
+    /// Strand is in progress.
     InProgress,
-    /// Flow completed successfully.
+    /// Strand completed successfully.
     Completed,
-    /// Flow was cancelled or abandoned.
+    /// Strand was cancelled or abandoned.
     Cancelled,
-    /// Flow expired before completion.
+    /// Strand expired before completion.
     Expired,
 }
 
-impl FlowSessionStatus {
+impl StrandSessionStatus {
     /// Returns `true` if the status represents a terminal (final) state.
     #[must_use]
     pub fn is_terminal(self) -> bool {
@@ -343,8 +343,8 @@ pub enum StageChallenge {
         /// Whether the token is required or optional.
         required: bool,
     },
-    /// Terminal challenge — the flow is done, redirect the user.
-    FlowDone {
+    /// Terminal challenge — the strand is done, redirect the user.
+    StrandDone {
         /// URL to redirect to, if any.
         redirect_to: Option<String>,
     },
@@ -427,7 +427,7 @@ pub enum StageOutcome {
         /// The validation errors to display.
         errors: Vec<StageValidationError>,
     },
-    /// The flow is done.
+    /// The strand is done.
     Done {
         /// URL to redirect to after completion, if any.
         redirect_to: Option<String>,
@@ -454,40 +454,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn flow_session_status_is_terminal() {
+    fn strand_session_status_is_terminal() {
         assert!(
-            !FlowSessionStatus::InProgress.is_terminal(),
+            !StrandSessionStatus::InProgress.is_terminal(),
             "InProgress should not be terminal"
         );
         assert!(
-            FlowSessionStatus::Completed.is_terminal(),
+            StrandSessionStatus::Completed.is_terminal(),
             "Completed should be terminal"
         );
         assert!(
-            FlowSessionStatus::Cancelled.is_terminal(),
+            StrandSessionStatus::Cancelled.is_terminal(),
             "Cancelled should be terminal"
         );
         assert!(
-            FlowSessionStatus::Expired.is_terminal(),
+            StrandSessionStatus::Expired.is_terminal(),
             "Expired should be terminal"
         );
     }
 
     #[test]
-    fn flow_designation_roundtrips_through_json() {
-        let designation = FlowDesignation::Registration;
+    fn strand_designation_roundtrips_through_json() {
+        let designation = StrandDesignation::Registration;
         let json = serde_json::to_string(&designation).unwrap();
         assert_eq!(json, "\"registration\"");
-        let back: FlowDesignation = serde_json::from_str(&json).unwrap();
+        let back: StrandDesignation = serde_json::from_str(&json).unwrap();
         assert_eq!(back, designation);
     }
 
     #[test]
-    fn flow_session_status_roundtrips_through_json() {
-        let status = FlowSessionStatus::InProgress;
+    fn strand_session_status_roundtrips_through_json() {
+        let status = StrandSessionStatus::InProgress;
         let json = serde_json::to_string(&status).unwrap();
         assert_eq!(json, "\"in_progress\"");
-        let back: FlowSessionStatus = serde_json::from_str(&json).unwrap();
+        let back: StrandSessionStatus = serde_json::from_str(&json).unwrap();
         assert_eq!(back, status);
     }
 

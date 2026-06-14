@@ -44,7 +44,7 @@ pub enum PostAuthContextInner {
         grant: Box<DeviceCodeGrant>,
     },
 
-    /// Proceed to password change flow.
+    /// Proceed to password change strand.
     ChangePassword,
 
     /// Link an upstream OAuth provider account.

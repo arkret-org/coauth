@@ -8,7 +8,7 @@ release.
 
 The intended external review scope is the v1.0 coauth service:
 
-- OIDC/OAuth flows: authorization code, device authorization, refresh,
+- OIDC/OAuth strands: authorization code, device authorization, refresh,
   dynamic client registration, introspection, discovery, JWKS, PKCE, DPoP, and
   mTLS conformance plans.
 - Account lifecycle: password auth, recovery, email/phone verification,

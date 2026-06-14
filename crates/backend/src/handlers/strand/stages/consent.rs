@@ -1,21 +1,21 @@
 //! Consent stage side effects.
 //!
 //! Records the user's consent decision.  When consent is granted the
-//! `consent_granted` flag is set in the flow context so downstream stages
-//! (e.g. token issuance) can observe it.  When rejected the flow is
+//! `consent_granted` flag is set in the strand context so downstream stages
+//! (e.g. token issuance) can observe it.  When rejected the strand is
 //! terminated immediately.
 
-use coauth_data::flow::StageOutcome;
+use coauth_data::strand::StageOutcome;
 
 use super::StageExecutionError;
 
 /// Execute the consent stage.
 ///
 /// * `granted` – `true` if the user accepted the consent prompt.
-/// * `context` – mutable reference to the flow session context.
+/// * `context` – mutable reference to the strand session context.
 ///
 /// When the user grants consent, `consent_granted: true` is stored in the
-/// context and the flow continues.  When rejected, the flow ends with no
+/// context and the strand continues.  When rejected, the strand ends with no
 /// redirect (the client may display its own rejection UI).
 pub async fn execute(
     granted: bool,

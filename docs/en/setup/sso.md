@@ -3,7 +3,7 @@
 The authentication service supports using an upstream OpenID Connect provider to authenticate its users.
 Multiple providers can be configured, and can be used in conjunction with the local password database authentication.
 
-Any OIDC compliant provider should work with the service as long as it supports the authorization code flow.
+Any OIDC compliant provider should work with the service as long as it supports the authorization code strand.
 
 **Note that the service does not support other SSO protocols such as SAML**, and there is no plan to support them in the future.
 A deployment which requires SAML or LDAP-based authentication should use a service like [Dex](https://github.com/dexidp/dex) to bridge between the SAML provider and the authentication service.
@@ -110,7 +110,7 @@ Multiple authentication methods can be configured at the same time, in which cas
 This is true if both the local password database and an upstream provider are configured, or if multiple upstream providers are configured.
 In such cases, the `human_name` parameter of the provider configuration is used to display a human-readable name for the provider, and the `brand_name` parameter is used to show a logo for well-known providers.
 
-If there is only one upstream provider configured and the local password database is disabled ([`passwords.enabled`](../reference/configuration.md#passwords) is set to `false`), the authentication service will automatically trigger an authorization flow with this provider.
+If there is only one upstream provider configured and the local password database is disabled ([`passwords.enabled`](../reference/configuration.md#passwords) is set to `false`), the authentication service will automatically trigger an authorization strand with this provider.
 
 ## Backchannel logout
 
@@ -128,7 +128,7 @@ Possible values are:
  - `logout_browser_only`: Only log out the coauth 'browser session' started by this OIDC session
  - `logout_all`: Log out all sessions started by this OIDC session, including coauth 'browser sessions' and client sessions
 
-One important caveat is that `logout_all` will log out all sessions started by this upstream OIDC session, including 'remote' ones done through the Device Code flow.
+One important caveat is that `logout_all` will log out all sessions started by this upstream OIDC session, including 'remote' ones done through the Device Code strand.
 Concretely, this means that if QR-code login is used to log in on a phone from a laptop, when coauth receives a backchannel logout request from the upstream provider for the laptop, coauth will also log out the session on the phone.
 
 ## Sample configurations

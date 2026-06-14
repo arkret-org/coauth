@@ -125,7 +125,7 @@ pub enum ClientCredentials {
     },
 
     /// QQ Connect: `client_id` and `client_secret` sent in the request body.
-    /// The actual token exchange uses a QQ-specific flow handled separately.
+    /// The actual token exchange uses a QQ-specific strand handled separately.
     QQConnect {
         /// The unique ID for the client (QQ `AppID`).
         client_id: String,
@@ -135,7 +135,7 @@ pub enum ClientCredentials {
     },
 
     /// Feishu (Lark): uses `app_access_token` as Bearer auth for token
-    /// exchange. The actual token exchange uses a Feishu-specific flow
+    /// exchange. The actual token exchange uses a Feishu-specific strand
     /// handled separately.
     Feishu {
         /// The unique ID for the client (Feishu `app_id`).
@@ -145,7 +145,7 @@ pub enum ClientCredentials {
         client_secret: String,
     },
 
-    /// Lark (international Feishu): same flow as Feishu with different
+    /// Lark (international Feishu): same strand as Feishu with different
     /// endpoints.
     Lark {
         /// The unique ID for the client (Lark `app_id`).

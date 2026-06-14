@@ -29,7 +29,7 @@ pub struct UpstreamOAuthProviderParams {
     /// A brand identifier, e.g. "apple" or "google"
     pub brand_name: Option<String>,
 
-    /// The scope to request during the authorization flow
+    /// The scope to request during the authorization strand
     pub scope: Scope,
 
     /// The token endpoint authentication method

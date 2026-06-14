@@ -57,7 +57,7 @@ pub enum AdminOperation {
     UserPasswordSet,
     /// A user's admin flag was modified.
     UserAdminSet,
-    /// A user's profile or state was updated through the unified patch flow.
+    /// A user's profile or state was updated through the unified patch strand.
     UserUpdated,
     /// An email address was added to a user account.
     UserEmailAdded,

@@ -41,7 +41,7 @@ pub struct CokretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_registry: Option<IdentityRegistryConfig>,
 
-    /// `starid` registry endpoint used by onboarding / recovery flows to
+    /// `starid` registry endpoint used by onboarding / recovery strands to
     /// mint and verify managed `did:webvh` identifiers for principals.
     /// When omitted, principal-DID minting falls back to the local
     /// `did:web` derivation in [`crate::services::did_resolver`].

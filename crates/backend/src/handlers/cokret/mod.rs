@@ -508,7 +508,7 @@ pub(crate) fn password_login_session_grant_target(
             });
         }
 
-        // The local admin audience is allowed for OIDC bridge flows, but
+        // The local admin audience is allowed for OIDC bridge strands, but
         // not for password login session grants — there is no principal
         // server to bind the grant to.
         if audience == required_audience_for(url_builder, cokret_config) {

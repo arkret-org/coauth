@@ -36,7 +36,7 @@ Expected sodmin follow-up:
   `risk_action_examples` instead of opaque JSON values.
 - Confirm the admin bridge does not own user login credentials; interactive
   login remains on the account-auth endpoints documented in
-  `crates/frontend/LOGIN_FLOW.md`.
+  `crates/frontend/LOGIN_STRAND.md`.
 
 ## Local Evidence
 
@@ -44,7 +44,7 @@ Expected sodmin follow-up:
 - `crates/admin-types/src/bridge_admin.rs`
 - `crates/backend/src/handlers/admin/v1/accounts.rs`
 - `docs/en/topics/admin-api.md`
-- `crates/frontend/LOGIN_FLOW.md`
+- `crates/frontend/LOGIN_STRAND.md`
 
 ## Acceptance For Closing The Cross-Repo Pairing
 

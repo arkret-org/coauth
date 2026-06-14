@@ -1,14 +1,14 @@
-//! Flow execution engine.
+//! Strand execution engine.
 //!
-//! Provides a framework for executing multi-step user interaction flows
+//! Provides a framework for executing multi-step user interaction strands
 //! (registration, recovery, authentication, etc.) as composable stage
-//! sequences, inspired by authentik's flow architecture.
+//! sequences, inspired by authentik's strand architecture.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use chrono::Utc;
-use coauth_data::flow::FlowSession;
+use coauth_data::strand::StrandSession;
 use tokio::sync::RwLock;
 use ulid::Ulid;
 
@@ -18,47 +18,47 @@ mod executor;
 pub mod stages;
 
 pub use self::defaults::{
-    default_authentication_flow, default_authorization_flow, default_enrollment_flow,
-    default_password_change_flow, default_recovery_flow, default_registration_flow,
+    default_authentication_strand, default_authorization_strand, default_enrollment_strand,
+    default_password_change_strand, default_recovery_strand, default_registration_strand,
 };
-pub use self::executor::{CaptchaVerifyContext, FlowExecutor, FlowPlan, FlowPlannerError};
+pub use self::executor::{CaptchaVerifyContext, StrandExecutor, StrandPlan, StrandPlannerError};
 
 // ---------------------------------------------------------------------------
 // Shared in-memory session store
 // ---------------------------------------------------------------------------
 
-/// In-memory store for active flow sessions.
+/// In-memory store for active strand sessions.
 ///
-/// Maps `session_id -> (FlowPlan, FlowSession)`.  This is intentionally
+/// Maps `session_id -> (StrandPlan, StrandSession)`.  This is intentionally
 /// simple — a proper database-backed store will replace this once
-/// `FlowSession` gets a repository implementation.
+/// `StrandSession` gets a repository implementation.
 ///
-/// This is shared between `rest/flow.rs` (the flow API endpoints) and the
+/// This is shared between `rest/strand.rs` (the strand API endpoints) and the
 /// legacy handler integration (registration, recovery, password change).
-static FLOW_SESSION_STORE: LazyLock<RwLock<HashMap<Ulid, (FlowPlan, FlowSession)>>> =
+static STRAND_SESSION_STORE: LazyLock<RwLock<HashMap<Ulid, (StrandPlan, StrandSession)>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
-/// Hard upper bound on the number of concurrent in-memory flow sessions.
+/// Hard upper bound on the number of concurrent in-memory strand sessions.
 ///
-/// `start_flow` is reachable unauthenticated, so without a cap an attacker
+/// `start_strand` is reachable unauthenticated, so without a cap an attacker
 /// could grow this map without bound (a slow-DoS on process memory). When the
 /// cap is reached we evict expired sessions first, then the oldest sessions.
-const MAX_FLOW_SESSIONS: usize = 50_000;
+const MAX_STRAND_SESSIONS: usize = 50_000;
 
-/// Get a write lock on the flow session store.
-pub(crate) async fn flow_session_store_write()
--> tokio::sync::RwLockWriteGuard<'static, HashMap<Ulid, (FlowPlan, FlowSession)>> {
-    FLOW_SESSION_STORE.write().await
+/// Get a write lock on the strand session store.
+pub(crate) async fn strand_session_store_write()
+-> tokio::sync::RwLockWriteGuard<'static, HashMap<Ulid, (StrandPlan, StrandSession)>> {
+    STRAND_SESSION_STORE.write().await
 }
 
 /// Drop expired sessions from `store`, then — if still at or above the
 /// capacity cap — evict the oldest sessions by `expires_at` until back under
 /// the cap. Call this under the write lock before inserting a new session.
-pub(crate) fn evict_flow_sessions(store: &mut HashMap<Ulid, (FlowPlan, FlowSession)>) {
+pub(crate) fn evict_strand_sessions(store: &mut HashMap<Ulid, (StrandPlan, StrandSession)>) {
     let now = Utc::now();
     store.retain(|_, (_, session)| session.expires_at > now);
 
-    if store.len() >= MAX_FLOW_SESSIONS {
+    if store.len() >= MAX_STRAND_SESSIONS {
         let mut expiries: Vec<_> = store.values().map(|(_, s)| s.expires_at).collect();
         expiries.sort_unstable();
         // Evict the oldest ~10% slab to amortise the O(n) scan across many

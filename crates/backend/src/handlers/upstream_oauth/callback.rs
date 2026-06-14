@@ -225,8 +225,8 @@ fn non_standard_upstream_oauth_allowed_from_env(value: Option<&str>) -> bool {
 }
 
 /// Emit a structured audit record for each callback that took the
-/// non-standard provider path. Used by SIEM / ops to flag flows where
-/// the identity payload came from a userinfo-only flow rather than a
+/// non-standard provider path. Used by SIEM / ops to flag strands where
+/// the identity payload came from a userinfo-only strand rather than a
 /// signed ID token (no JWT signature, no `nonce` binding, no audience
 /// check) so that downstream policy can apply extra scrutiny.
 ///
@@ -246,7 +246,7 @@ fn audit_non_standard_token_source(
         non_standard_token_source = true,
         session_had_nonce,
         nonce_verifiable = false,
-        "Upstream OAuth callback completed via non-standard (userinfo-only) flow; \
+        "Upstream OAuth callback completed via non-standard (userinfo-only) strand; \
          identity is bound to TLS chain only — no signed ID token / nonce check possible"
     );
 }
@@ -313,7 +313,7 @@ pub async fn handler(
             provider.id = %provider.id,
             provider.kind = provider_kind,
             env = ALLOW_NON_STANDARD_UPSTREAM_OAUTH_ENV,
-            "Rejected non-standard upstream OAuth callback because userinfo-only identity flows are disabled by default"
+            "Rejected non-standard upstream OAuth callback because userinfo-only identity strands are disabled by default"
         );
         return Err(RouteError::NonStandardProviderDisabled { provider_kind });
     }
@@ -686,7 +686,7 @@ pub async fn handler(
             client_secret,
         } => {
             // SECURITY: WeCom uses hard-coded HTTPS endpoints in
-            // `wecom.rs`; no upstream-overridable URL flows through
+            // `wecom.rs`; no upstream-overridable URL strands through
             // here, but we still surface the audit marker so the
             // callback is visibly tied to a non-standard provider.
             // 1. Get corp access_token
@@ -752,7 +752,7 @@ pub async fn handler(
             (None, None, context.build(), userinfo)
         }
 
-        // ── Standard OIDC flow ──────────────────────────────────────
+        // ── Standard OIDC strand ──────────────────────────────────────
         _ => {
             let token_response = crate::oidc_client::requests::token::request_access_token(
                 &client,

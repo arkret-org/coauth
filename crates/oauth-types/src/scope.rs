@@ -88,7 +88,7 @@ pub const COKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:cokret:admin:*
 /// admin subset of the 14 personal-agent capability actions
 /// (provision / pause / resume / deactivate / grant.attach / grant.detach
 /// / rotate_key + sidecar_thread.* lifecycle hooks). Issued by coauth as
-/// part of the accountability_grant flow; consumed by soland's agent
+/// part of the accountability_grant strand; consumed by soland's agent
 /// runtime authn path. Phase P2 (B-A / `_before_todos.md` §1.4).
 pub const CK_AGENT_MANAGE: ScopeToken = ScopeToken::from_static("ck.agent.manage");
 

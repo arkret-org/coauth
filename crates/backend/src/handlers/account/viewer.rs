@@ -283,8 +283,8 @@ pub async fn get_security_summary(
 #[derive(Serialize, ToSchema)]
 pub struct WorkflowInboxItem {
     pub session_id: String,
-    pub flow_slug: String,
-    pub flow_title: String,
+    pub strand_slug: String,
+    pub strand_title: String,
     pub current_stage: String,
     pub started_at: String,
 }
@@ -298,11 +298,11 @@ pub struct WorkflowInboxOutcome {
 
 // ── GET /_coauth/self/viewer/workflow-inbox ────────────────────────
 
-/// Returns the list of pending flow sessions for the current user.
+/// Returns the list of pending strand sessions for the current user.
 ///
-/// Flow sessions are currently in-memory and do not have a user-id
+/// Strand sessions are currently in-memory and do not have a user-id
 /// association, so this endpoint always returns an empty list. Once
-/// persistent flow sessions with user ownership are implemented, this
+/// persistent strand sessions with user ownership are implemented, this
 /// will return actual pending items.
 #[endpoint]
 pub async fn get_workflow_inbox(
@@ -326,7 +326,7 @@ pub async fn get_workflow_inbox(
 
     repo.cancel().await?;
 
-    // Placeholder: flow sessions are in-memory and not user-associated yet.
+    // Placeholder: strand sessions are in-memory and not user-associated yet.
     let pending: Vec<WorkflowInboxItem> = Vec::new();
     let total = pending.len();
 

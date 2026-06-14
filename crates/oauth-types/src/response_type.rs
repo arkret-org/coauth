@@ -36,11 +36,11 @@ pub struct InvalidResponseType;
 )]
 #[non_exhaustive]
 pub enum ResponseTypeToken {
-    /// `code` — authorization code flow.
+    /// `code` — authorization code strand.
     Code,
-    /// `id_token` — implicit flow returning an ID token.
+    /// `id_token` — implicit strand returning an ID token.
     IdToken,
-    /// `token` — implicit flow returning an access token.
+    /// `token` — implicit strand returning an access token.
     Token,
     /// Unrecognized token preserved verbatim.
     Unknown(String),

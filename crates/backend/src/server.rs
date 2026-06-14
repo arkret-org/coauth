@@ -664,7 +664,7 @@ fn build_oauth_router(router: Router) -> Router {
 
 fn build_account_api_router(router: Router) -> Router {
     use crate::handlers::account::{
-        agents, approval, auth, avatar, bootstrap_admin_status, emails, flow, invite_accept,
+        agents, approval, auth, avatar, bootstrap_admin_status, emails, strand, invite_accept,
         invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
         recovery, register, sessions, site_config, upstream_oauth, users, viewer,
     };
@@ -883,14 +883,14 @@ fn build_account_api_router(router: Router) -> Router {
                 .get(upstream_oauth::get_link)
                 .post(upstream_oauth::post_link),
         )
-        // Flow engine
+        // Strand engine
         .push(
-            Router::with_path("self/flow")
-                .push(Router::with_path("{slug}/start").post(flow::start_flow))
+            Router::with_path("self/strand")
+                .push(Router::with_path("{slug}/start").post(strand::start_strand))
                 .push(
                     Router::with_path("session/{id}")
-                        .get(flow::get_flow_session)
-                        .push(Router::with_path("respond").post(flow::respond_flow)),
+                        .get(strand::get_strand_session)
+                        .push(Router::with_path("respond").post(strand::respond_strand)),
                 ),
         )
         // CKP-0008 personal-agent controller approval. Internal

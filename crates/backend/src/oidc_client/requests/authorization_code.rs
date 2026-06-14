@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Requests for the [Authorization Code flow].
+//! Requests for the [Authorization Code strand].
 //!
-//! [Authorization Code flow]: https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
+//! [Authorization Code strand]: https://openid.net/specs/openid-connect-core-1_0.html#CodeStrandAuth
 
 use std::collections::HashSet;
 
@@ -190,7 +190,7 @@ impl AuthorizationRequestData {
 }
 
 /// The data necessary to validate a response from the Token endpoint in the
-/// Authorization Code flow.
+/// Authorization Code strand.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorizationValidationData {
     /// A unique identifier for the request.
@@ -199,7 +199,7 @@ pub struct AuthorizationValidationData {
     /// A string to mitigate replay attacks.
     ///
     /// Present when the `openid` scope was requested (i.e. when operating
-    /// in OpenID Connect mode). `None` for plain OAuth flows.
+    /// in OpenID Connect mode). `None` for plain OAuth strands.
     pub nonce: Option<String>,
 
     /// The URI where the end-user will be redirected after authorization.
@@ -248,7 +248,7 @@ fn build_authorization_request(
         response_mode,
     } = authorization_data;
 
-    // Check whether this is an OpenID Connect flow (has the `openid` scope).
+    // Check whether this is an OpenID Connect strand (has the `openid` scope).
     let is_openid = scope.contains(&OPENID);
 
     // Generate a random CSRF "state" token.

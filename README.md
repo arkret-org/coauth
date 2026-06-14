@@ -64,7 +64,7 @@ The `trust_domain` value enters the canonical transcript of every
 invalidates all previously-issued `principal_signing` /
 `recovery_unlock` / `device_quorum` / `trusted_recovery_service`
 proofs. Operators MUST roll fresh proofs through the device-lifecycle
-recovery flow as part of the rotation.
+recovery strand as part of the rotation.
 
 ## OOB invite code form (Round R2/R3 — T15)
 

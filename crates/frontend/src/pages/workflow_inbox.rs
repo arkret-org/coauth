@@ -7,7 +7,7 @@ use crate::components::separator::{Separator, SeparatorKind};
 /// Workflow inbox page.
 ///
 /// Fetches `GET /_coauth/self/viewer/workflow-inbox` and displays a list of
-/// pending flow sessions the user needs to act on.
+/// pending strand sessions the user needs to act on.
 #[component]
 pub fn WorkflowInbox() -> Element {
     let data = use_resource(|| async {
@@ -33,9 +33,9 @@ pub fn WorkflowInbox() -> Element {
                         for item in inbox.pending.iter() {
                             div { key: "{item.session_id}", class: "flex flex-col gap-1",
                                 Separator { kind: SeparatorKind::Section }
-                                h4 { class: "text-md font-semibold", "{item.flow_title}" }
+                                h4 { class: "text-md font-semibold", "{item.strand_title}" }
                                 p { class: "text-sm text-secondary",
-                                    "Flow: {item.flow_slug} — Stage: {item.current_stage}"
+                                    "Strand: {item.strand_slug} — Stage: {item.current_stage}"
                                 }
                                 p { class: "text-sm text-secondary",
                                     "Started: {item.started_at}"

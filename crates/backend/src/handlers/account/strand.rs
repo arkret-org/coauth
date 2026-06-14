@@ -1,14 +1,14 @@
-//! REST API endpoints for the flow engine.
+//! REST API endpoints for the strand engine.
 //!
-//! These endpoints expose the flow engine over HTTP, allowing clients to start
-//! flows, query the current challenge, and submit stage responses.
+//! These endpoints expose the strand engine over HTTP, allowing clients to start
+//! strands, query the current challenge, and submit stage responses.
 //!
 //! Session state is stored in-memory for now; a proper repository-backed store
-//! will replace this once `FlowSession` has a database repository.
+//! will replace this once `StrandSession` has a database repository.
 
 use chrono::Utc;
-use coauth_data::flow::{
-    AuthenticatorType as DomainAuthenticatorType, FlowSession, FlowSessionStatus,
+use coauth_data::strand::{
+    AuthenticatorType as DomainAuthenticatorType, StrandSession, StrandSessionStatus,
     IdentificationField as DomainIdentificationField, PromptField as DomainPromptField,
     PromptFieldType as DomainPromptFieldType, StageChallenge as DomainStageChallenge, StageOutcome,
     StageSubmission as DomainStageSubmission, StageValidationError as DomainStageValidationError,
@@ -22,17 +22,17 @@ use ulid::Ulid;
 
 use super::{RouteError, make_rng};
 use crate::app_state::DepotExt as _;
-use crate::handlers::flow::{
-    CaptchaVerifyContext, FlowExecutor, FlowPlan, evict_flow_sessions, flow_session_store_write,
+use crate::handlers::strand::{
+    CaptchaVerifyContext, StrandExecutor, StrandPlan, evict_strand_sessions, strand_session_store_write,
 };
 
 // ---------------------------------------------------------------------------
 // Request / response types
 // ---------------------------------------------------------------------------
 
-/// Envelope returned for every flow endpoint.
+/// Envelope returned for every strand endpoint.
 ///
-/// This is intentionally separate from the data-model flow types. The flow
+/// This is intentionally separate from the data-model strand types. The strand
 /// engine continues using domain enums from `coauth_data`, while the REST
 /// API exposes a stable schema DTO that can be documented via `OpenAPI`.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
@@ -127,7 +127,7 @@ impl From<DomainPromptField> for PromptField {
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum FlowChallenge {
+pub enum StrandChallenge {
     Identification {
         user_fields: Vec<IdentificationField>,
         password_stage: bool,
@@ -158,12 +158,12 @@ pub enum FlowChallenge {
     EnrollmentToken {
         required: bool,
     },
-    FlowDone {
+    StrandDone {
         redirect_to: Option<String>,
     },
 }
 
-impl From<DomainStageChallenge> for FlowChallenge {
+impl From<DomainStageChallenge> for StrandChallenge {
     fn from(value: DomainStageChallenge) -> Self {
         match value {
             DomainStageChallenge::Identification {
@@ -197,19 +197,19 @@ impl From<DomainStageChallenge> for FlowChallenge {
             DomainStageChallenge::EnrollmentToken { required } => {
                 Self::EnrollmentToken { required }
             }
-            DomainStageChallenge::FlowDone { redirect_to } => Self::FlowDone { redirect_to },
+            DomainStageChallenge::StrandDone { redirect_to } => Self::StrandDone { redirect_to },
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct FlowValidationError {
+pub struct StrandValidationError {
     pub field: Option<String>,
     pub message: String,
     pub code: String,
 }
 
-impl From<DomainStageValidationError> for FlowValidationError {
+impl From<DomainStageValidationError> for StrandValidationError {
     fn from(value: DomainStageValidationError) -> Self {
         Self {
             field: value.field,
@@ -220,26 +220,26 @@ impl From<DomainStageValidationError> for FlowValidationError {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct FlowOutcome {
+pub struct StrandOutcome {
     /// The session identifier (ULID).
     pub session_id: String,
-    /// The slug of the flow being executed.
-    pub flow_slug: String,
+    /// The slug of the strand being executed.
+    pub strand_slug: String,
     /// The current stage challenge to present to the user.
-    pub challenge: FlowChallenge,
+    pub challenge: StrandChallenge,
     /// Zero-based index of the current stage.
     pub stage_index: usize,
-    /// Total number of stages in the flow.
+    /// Total number of stages in the strand.
     pub total_stages: usize,
     /// Validation errors, if the last response was rejected.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub errors: Option<Vec<FlowValidationError>>,
+    pub errors: Option<Vec<StrandValidationError>>,
 }
 
-/// Request body for `POST /_coauth/self/flow/session/:id/respond`.
+/// Request body for `POST /_coauth/self/strand/session/:id/respond`.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum FlowStageRequestBody {
+pub enum StrandStageRequestBody {
     Identification {
         uid_field: String,
         password: Option<String>,
@@ -274,42 +274,42 @@ pub enum FlowStageRequestBody {
     },
 }
 
-impl From<FlowStageRequestBody> for DomainStageSubmission {
-    fn from(value: FlowStageRequestBody) -> Self {
+impl From<StrandStageRequestBody> for DomainStageSubmission {
+    fn from(value: StrandStageRequestBody) -> Self {
         match value {
-            FlowStageRequestBody::Identification {
+            StrandStageRequestBody::Identification {
                 uid_field,
                 password,
             } => Self::Identification {
                 uid_field,
                 password,
             },
-            FlowStageRequestBody::EmailVerification { code } => Self::EmailVerification { code },
-            FlowStageRequestBody::PasswordWrite {
+            StrandStageRequestBody::EmailVerification { code } => Self::EmailVerification { code },
+            StrandStageRequestBody::PasswordWrite {
                 current_password,
                 new_password,
             } => Self::PasswordWrite {
                 current_password,
                 new_password,
             },
-            FlowStageRequestBody::UserWrite {
+            StrandStageRequestBody::UserWrite {
                 handle,
                 display_name,
             } => Self::UserWrite {
                 handle,
                 display_name,
             },
-            FlowStageRequestBody::Captcha { token } => Self::Captcha { token },
-            FlowStageRequestBody::Consent { granted } => Self::Consent { granted },
-            FlowStageRequestBody::Prompt { data } => Self::Prompt { data },
-            FlowStageRequestBody::AuthenticatorValidate {
+            StrandStageRequestBody::Captcha { token } => Self::Captcha { token },
+            StrandStageRequestBody::Consent { granted } => Self::Consent { granted },
+            StrandStageRequestBody::Prompt { data } => Self::Prompt { data },
+            StrandStageRequestBody::AuthenticatorValidate {
                 authenticator_type,
                 code,
             } => Self::AuthenticatorValidate {
                 authenticator_type: authenticator_type.into(),
                 code,
             },
-            FlowStageRequestBody::EnrollmentToken { token } => Self::EnrollmentToken { token },
+            StrandStageRequestBody::EnrollmentToken { token } => Self::EnrollmentToken { token },
         }
     }
 }
@@ -317,54 +317,54 @@ impl From<FlowStageRequestBody> for DomainStageSubmission {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RespondInput {
     /// The stage response submitted by the client.
-    pub response: FlowStageRequestBody,
+    pub response: StrandStageRequestBody,
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Resolve a flow definition + bindings from a slug using the built-in
+/// Resolve a strand definition + bindings from a slug using the built-in
 /// defaults.  Returns `None` if the slug does not match any known default
-/// flow.
-fn resolve_flow_by_slug(
+/// strand.
+fn resolve_strand_by_slug(
     slug: &str,
     rng: &mut (dyn rand_core::RngCore + Send),
 ) -> Option<(
-    coauth_data::flow::FlowDefinition,
-    Vec<coauth_data::flow::FlowStageBinding>,
+    coauth_data::strand::StrandDefinition,
+    Vec<coauth_data::strand::StrandStageBinding>,
 )> {
     match slug {
-        "default-registration" => Some(crate::handlers::flow::defaults::default_registration_flow(
+        "default-registration" => Some(crate::handlers::strand::defaults::default_registration_strand(
             rng,
         )),
-        "default-recovery" => Some(crate::handlers::flow::defaults::default_recovery_flow(rng)),
+        "default-recovery" => Some(crate::handlers::strand::defaults::default_recovery_strand(rng)),
         "default-password-change" => {
-            Some(crate::handlers::flow::defaults::default_password_change_flow(rng))
+            Some(crate::handlers::strand::defaults::default_password_change_strand(rng))
         }
         "default-authentication" => {
-            Some(crate::handlers::flow::defaults::default_authentication_flow(rng))
+            Some(crate::handlers::strand::defaults::default_authentication_strand(rng))
         }
         "default-authorization" => Some(
-            crate::handlers::flow::defaults::default_authorization_flow(rng),
+            crate::handlers::strand::defaults::default_authorization_strand(rng),
         ),
-        "default-enrollment" => Some(crate::handlers::flow::defaults::default_enrollment_flow(
+        "default-enrollment" => Some(crate::handlers::strand::defaults::default_enrollment_strand(
             rng,
         )),
         _ => None,
     }
 }
 
-/// Build a [`FlowOutcome`] from a plan, session, and challenge.
+/// Build a [`StrandOutcome`] from a plan, session, and challenge.
 fn build_response(
-    plan: &FlowPlan,
-    session: &FlowSession,
+    plan: &StrandPlan,
+    session: &StrandSession,
     challenge: DomainStageChallenge,
     errors: Option<Vec<DomainStageValidationError>>,
-) -> FlowOutcome {
-    FlowOutcome {
+) -> StrandOutcome {
+    StrandOutcome {
         session_id: session.id.to_string(),
-        flow_slug: plan.flow.slug.clone(),
+        strand_slug: plan.strand.slug.clone(),
         challenge: challenge.into(),
         stage_index: session.current_stage_index,
         total_stages: plan.stages.len(),
@@ -372,7 +372,7 @@ fn build_response(
     }
 }
 
-fn parse_flow_session_id(req: &Request) -> Result<Ulid, RouteError> {
+fn parse_strand_session_id(req: &Request) -> Result<Ulid, RouteError> {
     req.param::<String>("id")
         .ok_or_else(|| RouteError::BadRequest("missing session id".into()))?
         .parse()
@@ -380,34 +380,34 @@ fn parse_flow_session_id(req: &Request) -> Result<Ulid, RouteError> {
 }
 
 // ---------------------------------------------------------------------------
-// POST /_coauth/self/flow/:slug/start
+// POST /_coauth/self/strand/:slug/start
 // ---------------------------------------------------------------------------
 
-/// Start a new flow session for the given flow slug.
+/// Start a new strand session for the given strand slug.
 ///
-/// Creates a `FlowSession`, plans the flow, and returns the first stage
+/// Creates a `StrandSession`, plans the strand, and returns the first stage
 /// challenge.
 #[endpoint]
-pub async fn start_flow(req: &mut Request) -> Result<Json<FlowOutcome>, RouteError> {
+pub async fn start_strand(req: &mut Request) -> Result<Json<StrandOutcome>, RouteError> {
     let slug: String = req
         .param::<String>("slug")
-        .ok_or_else(|| RouteError::BadRequest("missing flow slug".into()))?;
+        .ok_or_else(|| RouteError::BadRequest("missing strand slug".into()))?;
 
     let mut rng = make_rng();
 
-    let (flow_def, bindings) =
-        resolve_flow_by_slug(&slug, &mut *rng).ok_or_else(|| RouteError::NotFound)?;
+    let (strand_def, bindings) =
+        resolve_strand_by_slug(&slug, &mut *rng).ok_or_else(|| RouteError::NotFound)?;
 
-    let plan = FlowExecutor::plan(flow_def, bindings);
+    let plan = StrandExecutor::plan(strand_def, bindings);
 
     let now = Utc::now();
     let session_id = new_id(now, &mut *rng);
 
-    let session = FlowSession {
+    let session = StrandSession {
         id: session_id,
-        flow_id: plan.flow.id,
+        strand_id: plan.strand.id,
         current_stage_index: 0,
-        status: FlowSessionStatus::InProgress,
+        status: StrandSessionStatus::InProgress,
         context: Value::Object(serde_json::Map::new()),
         ip_address: None,
         user_agent: None,
@@ -418,7 +418,7 @@ pub async fn start_flow(req: &mut Request) -> Result<Json<FlowOutcome>, RouteErr
     };
 
     let mut session = session;
-    let challenge = FlowExecutor::current_challenge(&plan, &mut session)
+    let challenge = StrandExecutor::current_challenge(&plan, &mut session)
         .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
     let response = build_response(&plan, &session, challenge, None);
@@ -426,8 +426,8 @@ pub async fn start_flow(req: &mut Request) -> Result<Json<FlowOutcome>, RouteErr
     // Store in memory. Evict expired (and, if at capacity, oldest) sessions
     // first so this unauthenticated endpoint cannot grow the map without bound.
     {
-        let mut store = flow_session_store_write().await;
-        evict_flow_sessions(&mut store);
+        let mut store = strand_session_store_write().await;
+        evict_strand_sessions(&mut store);
         store.insert(session_id, (plan, session));
     }
 
@@ -435,15 +435,15 @@ pub async fn start_flow(req: &mut Request) -> Result<Json<FlowOutcome>, RouteErr
 }
 
 // ---------------------------------------------------------------------------
-// GET /_coauth/self/flow/session/:id
+// GET /_coauth/self/strand/session/:id
 // ---------------------------------------------------------------------------
 
-/// Get the current challenge for an existing flow session.
+/// Get the current challenge for an existing strand session.
 #[endpoint]
-pub async fn get_flow_session(req: &mut Request) -> Result<Json<FlowOutcome>, RouteError> {
-    let id = parse_flow_session_id(req)?;
+pub async fn get_strand_session(req: &mut Request) -> Result<Json<StrandOutcome>, RouteError> {
+    let id = parse_strand_session_id(req)?;
 
-    let mut store = flow_session_store_write().await;
+    let mut store = strand_session_store_write().await;
 
     // Enforce the session TTL: an expired non-terminal session is treated as
     // gone — remove it and report NotFound rather than continuing to serve it.
@@ -457,15 +457,15 @@ pub async fn get_flow_session(req: &mut Request) -> Result<Json<FlowOutcome>, Ro
     let (plan, session) = store.get_mut(&id).ok_or(RouteError::NotFound)?;
 
     if session.status.is_terminal() {
-        // Return a FlowDone challenge for completed sessions
-        let challenge = DomainStageChallenge::FlowDone {
+        // Return a StrandDone challenge for completed sessions
+        let challenge = DomainStageChallenge::StrandDone {
             redirect_to: Some("/account".into()),
         };
         let response = build_response(plan, session, challenge, None);
         return Ok(Json(response));
     }
 
-    let challenge = FlowExecutor::current_challenge(plan, session)
+    let challenge = StrandExecutor::current_challenge(plan, session)
         .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
     let response = build_response(plan, session, challenge, None);
@@ -474,27 +474,27 @@ pub async fn get_flow_session(req: &mut Request) -> Result<Json<FlowOutcome>, Ro
 }
 
 // ---------------------------------------------------------------------------
-// POST /_coauth/self/flow/session/:id/respond
+// POST /_coauth/self/strand/session/:id/respond
 // ---------------------------------------------------------------------------
 
 /// Submit a response to the current stage challenge.
 ///
-/// On success, advances to the next stage (or completes the flow) and
+/// On success, advances to the next stage (or completes the strand) and
 /// returns the new challenge.  On validation failure, returns the current
 /// challenge again with error details.
 #[endpoint]
-pub async fn respond_flow(
+pub async fn respond_strand(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<FlowOutcome>, RouteError> {
-    let id = parse_flow_session_id(req)?;
+) -> Result<Json<StrandOutcome>, RouteError> {
+    let id = parse_strand_session_id(req)?;
 
     let input: RespondInput = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let mut store = flow_session_store_write().await;
+    let mut store = strand_session_store_write().await;
 
     // Enforce the session TTL before accepting a response: an expired
     // non-terminal session is treated as gone and may not be advanced.
@@ -509,7 +509,7 @@ pub async fn respond_flow(
 
     if session.status.is_terminal() {
         return Err(RouteError::BadRequest(
-            "flow session is no longer active".into(),
+            "strand session is no longer active".into(),
         ));
     }
 
@@ -534,7 +534,7 @@ pub async fn respond_flow(
     });
 
     // Process the response through the executor
-    let (outcome, updated_context) = FlowExecutor::process_response(
+    let (outcome, updated_context) = StrandExecutor::process_response(
         plan,
         session,
         input.response.into(),
@@ -550,20 +550,20 @@ pub async fn respond_flow(
     match outcome {
         StageOutcome::Continue => {
             // Advance to the next stage
-            if FlowExecutor::has_next_stage(plan, session) {
+            if StrandExecutor::has_next_stage(plan, session) {
                 session.current_stage_index += 1;
 
-                let challenge = FlowExecutor::current_challenge(plan, session)
+                let challenge = StrandExecutor::current_challenge(plan, session)
                     .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
                 let response = build_response(plan, session, challenge, None);
                 Ok(Json(response))
             } else {
-                // Flow is done
-                session.status = FlowSessionStatus::Completed;
+                // Strand is done
+                session.status = StrandSessionStatus::Completed;
                 session.completed_at = Some(Utc::now());
 
-                let challenge = DomainStageChallenge::FlowDone {
+                let challenge = DomainStageChallenge::StrandDone {
                     redirect_to: Some("/account".into()),
                 };
                 // Stage index points past the last stage to indicate completion
@@ -574,18 +574,18 @@ pub async fn respond_flow(
         }
         StageOutcome::Retry { errors } => {
             // Re-display the current challenge with validation errors
-            let challenge = FlowExecutor::current_challenge(plan, session)
+            let challenge = StrandExecutor::current_challenge(plan, session)
                 .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
             let response = build_response(plan, session, challenge, Some(errors));
             Ok(Json(response))
         }
         StageOutcome::Done { redirect_to } => {
-            // The stage itself decided the flow is done (e.g. consent denied)
-            session.status = FlowSessionStatus::Completed;
+            // The stage itself decided the strand is done (e.g. consent denied)
+            session.status = StrandSessionStatus::Completed;
             session.completed_at = Some(Utc::now());
 
-            let challenge = DomainStageChallenge::FlowDone { redirect_to };
+            let challenge = DomainStageChallenge::StrandDone { redirect_to };
             session.current_stage_index = plan.stages.len();
             let response = build_response(plan, session, challenge, None);
             Ok(Json(response))

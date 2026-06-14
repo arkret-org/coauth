@@ -21,7 +21,7 @@ paths = [
     # but if a developer adds a CI-only override we still want to scan it.
 
     # Test fixtures intentionally embed synthetic key material so the OAuth
-    # / OIDC flows have something to sign and verify against.
+    # / OIDC strands have something to sign and verify against.
     '''.*/(tests|test|testing|fixtures|fixture|testdata)/.*''',
     '''crates/jose/.*''',
     '''crates/keystore/.*''',

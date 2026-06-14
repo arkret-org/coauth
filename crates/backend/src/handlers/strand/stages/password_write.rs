@@ -1,11 +1,11 @@
 //! Password write stage side effects.
 //!
 //! Validates and records a new password for the user identified in the
-//! flow context.  Full password hashing integration (via
+//! strand context.  Full password hashing integration (via
 //! `PasswordManager`) is deferred to a later integration step — this
 //! module validates the inputs and records that a password was set.
 
-use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::strand::{StageOutcome, StageValidationError};
 use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 use rand_core::RngCore;
 
@@ -13,10 +13,10 @@ use super::StageExecutionError;
 
 /// Execute the password write stage.
 ///
-/// Reads `user_id` from the flow context (set by the identification
+/// Reads `user_id` from the strand context (set by the identification
 /// stage) and validates the password inputs.  Actual hashing and
 /// storage via `UserPasswordRepository` will be wired in when the
-/// `PasswordManager` is integrated into the flow engine.
+/// `PasswordManager` is integrated into the strand engine.
 pub async fn execute(
     repo: &mut BoxRepository,
     _rng: &mut (dyn RngCore + Send),
@@ -31,7 +31,7 @@ pub async fn execute(
         .get("user_id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| {
-            StageExecutionError::Internal(anyhow::anyhow!("missing user_id in flow context"))
+            StageExecutionError::Internal(anyhow::anyhow!("missing user_id in strand context"))
         })?;
 
     let user_id: ulid::Ulid = user_id_str

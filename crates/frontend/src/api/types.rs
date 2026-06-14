@@ -611,9 +611,9 @@ pub struct StepOutcome {
     pub next_step: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
-    /// Set when the registration was started as part of another flow
+    /// Set when the registration was started as part of another strand
     /// (e.g. an OAuth authorization grant continuation). The frontend
-    /// uses this to resume the original flow after the account is created.
+    /// uses this to resume the original strand after the account is created.
     #[serde(default)]
     pub post_auth_action: Option<serde_json::Value>,
 }
@@ -736,8 +736,8 @@ pub struct LinkedAccountsOutcome {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct WorkflowInboxItem {
     pub session_id: String,
-    pub flow_slug: String,
-    pub flow_title: String,
+    pub strand_slug: String,
+    pub strand_title: String,
     pub current_stage: String,
     pub started_at: String,
 }

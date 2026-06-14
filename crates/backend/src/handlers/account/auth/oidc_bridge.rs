@@ -81,7 +81,7 @@ pub struct AuthBridgeOAuthDescriptor {
     pub browser_bridge_session_path: &'static str,
     pub exchange_describe_path: &'static str,
     pub exchange_path: &'static str,
-    pub supported_flows: Vec<&'static str>,
+    pub supported_strands: Vec<&'static str>,
     pub redirect_uri_modes: Vec<&'static str>,
     pub client_selection_mode: &'static str,
 }
@@ -121,7 +121,7 @@ pub struct AuthBridgeAdminDescriptor {
 // `coauth_admin_types::integration_manifest_admin` in C34.2 so the sodmin
 // admin SPA decodes them through the same typed shape — the prior shim
 // was missing the `examples` field entirely, silently dropping the
-// multi-step compose-flow example block on every call. The endpoint
+// multi-step compose-strand example block on every call. The endpoint
 // below now returns the shared `IntegrationManifest` directly.
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
@@ -674,7 +674,7 @@ pub async fn oidc_code_exchange(
         // a `TrustedIssuerPolicy` for this issuer, validate the upstream
         // id_token against the policy set and emit a tracing event with the
         // typed `MappedUpstreamIdentity`. Failures are advisory at this stage
-        // — the existing `find_by_subject` flow remains the source of truth.
+        // — the existing `find_by_subject` strand remains the source of truth.
         if let (Ok(trusted_issuers), Some(id_token)) = (
             depot.get::<TrustedIssuerPolicySet>("upstream_oidc_trusted_issuers"),
             federated_exchange.token_response.id_token.as_deref(),
@@ -1822,7 +1822,7 @@ pub async fn auth_bridge_describe(
             browser_bridge_session_path: "/_coauth/gate/account/auth/oidc/browser-bridge/session",
             exchange_describe_path: "/_coauth/gate/account/auth/oidc/exchange/describe",
             exchange_path: "/_coauth/gate/account/auth/oidc/exchange",
-            supported_flows: vec!["authorization_code_pkce_browser"],
+            supported_strands: vec!["authorization_code_pkce_browser"],
             redirect_uri_modes: vec!["browser_origin_callback", "native_urn_callback"],
             client_selection_mode: "public_authorization_code_client_with_exact_redirect_match",
         },
@@ -1946,7 +1946,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             },
         ],
         examples: serde_json::json!({
-            "compose_flow": {
+            "compose_strand": {
                 "step_1": {
                     "service": "coauth",
                     "path": "/_coauth/gate/account/auth/oidc/browser-bridge/session",

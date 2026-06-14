@@ -80,7 +80,7 @@ pub struct DpopClaims {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ath: Option<String>,
     /// Server-issued challenge nonce; we accept whatever the proof
-    /// carries but don't currently mandate it (RFC 9449 §8 nonce flow is
+    /// carries but don't currently mandate it (RFC 9449 §8 nonce strand is
     /// optional).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nonce: Option<String>,

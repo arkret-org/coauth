@@ -145,7 +145,7 @@ Handler 层负责 HTTP 协议的适配——解析请求、校验参数、映射
 ### 用户门户 API（/_coauth/self/viewer/*, /_coauth/gate/account/auth/*, /_coauth/gate/account/email-auth/*, etc.）
 用户自服务端点，由 Dioxus 前端消费。
 
-### 工作流 API（/_coauth/self/flow/*）
+### 工作流 API（/_coauth/self/strand/*）
 流程引擎端点，支持多步交互流程（注册、恢复、MFA 等）。
 
 ### 管理运营 API（/_coauth/admin/*）

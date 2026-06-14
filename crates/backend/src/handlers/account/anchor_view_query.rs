@@ -8,7 +8,7 @@
 //!
 //! Per the Move/Anchor/Lattice spec (`cokret-spec` 2026-05-08, §3 + §6),
 //! every issued Move must reference an Anchor that the issuer was working
-//! from. coauth's anchorer flow therefore needs:
+//! from. coauth's anchorer strand therefore needs:
 //!
 //! - the *latest leaf* `anchor_id` (ck:anchor:sha256:<hex>) — used for `UnsignedMove.anchor_ref`,
 //! - a fresh `hlc` (`<unix-ms>-<logical>-<node>`) — used for `UnsignedMove.hlc`,
@@ -193,7 +193,7 @@ fn pick_latest_leaf(leaves: &[AnchorLeafWire]) -> Option<&AnchorLeafWire> {
 /// - `node` must be 8 lowercase hex chars,
 /// - total length 30 with `-` at indices 12 and 21.
 ///
-/// The logical counter is fixed at `0` (anchorer flow is single-issuer and
+/// The logical counter is fixed at `0` (anchorer strand is single-issuer and
 /// not expected to emit two Moves within the same millisecond); the node id
 /// is derived from a fresh random 32-bit value so two parallel anchorers
 /// can't collide.

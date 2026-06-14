@@ -2,12 +2,12 @@
 //!
 //! Validates an enrollment/invitation token against the
 //! [`UserRegistrationTokenRepository`].  When the token is valid the
-//! `enrollment_token_id` is stored in the flow context so downstream
+//! `enrollment_token_id` is stored in the strand context so downstream
 //! stages can reference it (e.g. to associate the new user with the
 //! invitation).
 
 use chrono::Utc;
-use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::strand::{StageOutcome, StageValidationError};
 use coauth_data::{BoxRepository, RepositoryAccess};
 
 use super::StageExecutionError;
@@ -18,7 +18,7 @@ use super::StageExecutionError;
 /// [`UserRegistrationTokenRepository::find_by_token`].  If the token
 /// exists and passes validity checks (not expired, not revoked, usage
 /// limit not exceeded) the token's ID is stored in the context under
-/// `enrollment_token_id` and the flow continues.
+/// `enrollment_token_id` and the strand continues.
 ///
 /// When `required` is `true` and the token is empty, the stage returns
 /// a validation error.  When `required` is `false` and the token is

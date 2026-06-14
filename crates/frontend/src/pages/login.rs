@@ -201,7 +201,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                             get_query_param("kind").zip(get_query_param("id"));
                                         clear_preserved_login_query();
 
-                                        // Check if this login is part of an OAuth authorization flow
+                                        // Check if this login is part of an OAuth authorization strand
                                         if let Some((kind, id)) = continuation {
                                             if kind == "continue_authorization_grant" {
                                                 nav.push(Route::OAuthApproval { grant_id: id });
@@ -300,7 +300,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                 // Propagate the current page's query string (e.g.
                                 // ?kind=continue_authorization_grant&id=...) to the
                                 // upstream authorize URL so that after the upstream
-                                // flow completes, coauth can continue the original
+                                // strand completes, coauth can continue the original
                                 // OAuth grant and redirect back to the originating
                                 // client.
                                 let query = current_query_string();

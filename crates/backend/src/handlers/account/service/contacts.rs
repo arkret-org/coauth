@@ -9,8 +9,8 @@
 //!
 //! The contact verification workflow currently uses direct repository calls for
 //! state tracking. It will be progressively migrated to use
-//! `WorkflowRepository` for unified workflow state management. The flow engine
-//! (`crate::handlers::flow`) can already orchestrate contact verification as a
+//! `WorkflowRepository` for unified workflow state management. The strand engine
+//! (`crate::handlers::strand`) can already orchestrate contact verification as a
 //! workflow.
 
 use anyhow::Error as AnyhowError;
@@ -61,7 +61,7 @@ pub struct StartedEmailVerification {
     pub authentication: UserEmailAuthentication,
 }
 
-/// Begin an email verification flow for an existing user session.
+/// Begin an email verification strand for an existing user session.
 ///
 /// Creates a [`UserEmailAuthentication`] record and schedules a verification
 /// code notification.

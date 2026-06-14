@@ -1,8 +1,8 @@
-//! Declarative flow definition parser.
+//! Declarative strand definition parser.
 //!
-//! Provides [`FlowDefinitionFile`], a YAML-friendly representation of a
-//! [`FlowDefinition`] together with its [`FlowStageBinding`] list.  This
-//! allows flows to be defined in configuration files rather than purely in
+//! Provides [`StrandDefinitionFile`], a YAML-friendly representation of a
+//! [`StrandDefinition`] together with its [`StrandStageBinding`] list.  This
+//! allows strands to be defined in configuration files rather than purely in
 //! code.
 //!
 //! # Example YAML
@@ -24,24 +24,24 @@
 //! ```
 
 use chrono::Utc;
-use coauth_data::flow::{
-    AuthenticatorType, FlowDefinition, FlowDesignation, FlowStageBinding, IdentificationField,
+use coauth_data::strand::{
+    AuthenticatorType, StrandDefinition, StrandDesignation, StrandStageBinding, IdentificationField,
     PromptField, StageKind,
 };
 use coauth_data::new_id;
 use serde::Deserialize;
 
-/// A declarative flow definition file that can be parsed from YAML (or JSON).
+/// A declarative strand definition file that can be parsed from YAML (or JSON).
 ///
-/// After parsing, call [`into_flow`](Self::into_flow) to obtain the domain
-/// types ([`FlowDefinition`] + [`Vec<FlowStageBinding>`]).
+/// After parsing, call [`into_strand`](Self::into_strand) to obtain the domain
+/// types ([`StrandDefinition`] + [`Vec<StrandStageBinding>`]).
 #[derive(Debug, Clone, Deserialize)]
-pub struct FlowDefinitionFile {
+pub struct StrandDefinitionFile {
     /// URL-friendly slug, e.g., `"default-registration"`.
     pub slug: String,
     /// Human-readable title shown in admin UIs.
     pub title: String,
-    /// Flow designation — determines when the flow is triggered.
+    /// Strand designation — determines when the strand is triggered.
     pub designation: String,
     /// Optional template override key. When set, the template engine
     /// looks for templates under this key instead of the default.
@@ -51,7 +51,7 @@ pub struct FlowDefinitionFile {
     pub stages: Vec<StageDefinition>,
 }
 
-/// A single stage within a declarative flow definition.
+/// A single stage within a declarative strand definition.
 ///
 /// Uses `#[serde(tag = "type")]` so the YAML/JSON `type` field selects the
 /// variant, matching the `snake_case` naming of [`StageKind`].
@@ -102,8 +102,8 @@ pub enum StageDefinition {
     },
 }
 
-impl FlowDefinitionFile {
-    /// Parse a YAML string into a [`FlowDefinitionFile`].
+impl StrandDefinitionFile {
+    /// Parse a YAML string into a [`StrandDefinitionFile`].
     ///
     /// # Errors
     ///
@@ -115,28 +115,28 @@ impl FlowDefinitionFile {
 
     /// Convert this declarative definition into domain types.
     ///
-    /// Fresh ULIDs are generated for the [`FlowDefinition`] and each
-    /// [`FlowStageBinding`] using the provided RNG.
-    pub fn into_flow(
+    /// Fresh ULIDs are generated for the [`StrandDefinition`] and each
+    /// [`StrandStageBinding`] using the provided RNG.
+    pub fn into_strand(
         self,
         rng: &mut (dyn rand_core::RngCore + Send),
-    ) -> (FlowDefinition, Vec<FlowStageBinding>) {
+    ) -> (StrandDefinition, Vec<StrandStageBinding>) {
         let now = Utc::now();
-        let flow_id = new_id(now, rng);
+        let strand_id = new_id(now, rng);
 
         let designation = match self.designation.as_str() {
-            "registration" => FlowDesignation::Registration,
-            "recovery" => FlowDesignation::Recovery,
-            "password_change" => FlowDesignation::PasswordChange,
-            "authentication" => FlowDesignation::Authentication,
-            "authorization" => FlowDesignation::Authorization,
-            "enrollment" => FlowDesignation::Enrollment,
-            "stage_configuration" => FlowDesignation::StageConfiguration,
-            other => panic!("unknown flow designation: {other}"),
+            "registration" => StrandDesignation::Registration,
+            "recovery" => StrandDesignation::Recovery,
+            "password_change" => StrandDesignation::PasswordChange,
+            "authentication" => StrandDesignation::Authentication,
+            "authorization" => StrandDesignation::Authorization,
+            "enrollment" => StrandDesignation::Enrollment,
+            "stage_configuration" => StrandDesignation::StageConfiguration,
+            other => panic!("unknown strand designation: {other}"),
         };
 
-        let flow = FlowDefinition {
-            id: flow_id,
+        let strand = StrandDefinition {
+            id: strand_id,
             slug: self.slug,
             title: self.title,
             designation,
@@ -151,9 +151,9 @@ impl FlowDefinitionFile {
             .into_iter()
             .map(|stage_def| {
                 let (stage, order) = stage_def.into_stage_kind();
-                FlowStageBinding {
+                StrandStageBinding {
                     id: new_id(now, rng),
-                    flow_id,
+                    strand_id,
                     stage,
                     order,
                     evaluate_on_plan: false,
@@ -163,7 +163,7 @@ impl FlowDefinitionFile {
             })
             .collect();
 
-        (flow, bindings)
+        (strand, bindings)
     }
 }
 
@@ -241,7 +241,7 @@ impl StageDefinition {
 
 #[cfg(test)]
 mod tests {
-    use coauth_data::flow::FlowDesignation;
+    use coauth_data::strand::StrandDesignation;
     use rand_core::SeedableRng;
 
     use super::*;
@@ -251,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_registration_flow_yaml() {
+    fn parse_registration_strand_yaml() {
         let yaml = r"
 slug: default-registration
 title: Default Registration
@@ -268,7 +268,7 @@ stages:
     max_attempts: 5
 ";
 
-        let file = FlowDefinitionFile::parse(yaml).expect("valid YAML");
+        let file = StrandDefinitionFile::parse(yaml).expect("valid YAML");
         assert_eq!(file.slug, "default-registration");
         assert_eq!(file.title, "Default Registration");
         assert_eq!(file.designation, "registration");
@@ -276,7 +276,7 @@ stages:
     }
 
     #[test]
-    fn into_flow_produces_correct_domain_types() {
+    fn into_strand_produces_correct_domain_types() {
         let yaml = r"
 slug: test-recovery
 title: Test Recovery
@@ -298,13 +298,13 @@ stages:
     require_current: false
 ";
 
-        let file = FlowDefinitionFile::parse(yaml).expect("valid YAML");
+        let file = StrandDefinitionFile::parse(yaml).expect("valid YAML");
         let mut rng = test_rng();
-        let (flow, bindings) = file.into_flow(&mut rng);
+        let (strand, bindings) = file.into_strand(&mut rng);
 
-        assert_eq!(flow.slug, "test-recovery");
-        assert_eq!(flow.designation, FlowDesignation::Recovery);
-        assert!(flow.enabled);
+        assert_eq!(strand.slug, "test-recovery");
+        assert_eq!(strand.designation, StrandDesignation::Recovery);
+        assert!(strand.enabled);
         assert_eq!(bindings.len(), 3);
 
         assert!(matches!(
@@ -321,8 +321,8 @@ stages:
         assert_eq!(bindings[1].order, 20);
         assert_eq!(bindings[2].order, 30);
 
-        // All bindings should reference the flow.
-        assert!(bindings.iter().all(|b| b.flow_id == flow.id));
+        // All bindings should reference the strand.
+        assert!(bindings.iter().all(|b| b.strand_id == strand.id));
     }
 
     #[test]
@@ -336,11 +336,11 @@ stages:
     order: 5
 ";
 
-        let file = FlowDefinitionFile::parse(yaml).expect("valid YAML");
+        let file = StrandDefinitionFile::parse(yaml).expect("valid YAML");
         let mut rng = test_rng();
-        let (flow, bindings) = file.into_flow(&mut rng);
+        let (strand, bindings) = file.into_strand(&mut rng);
 
-        assert_eq!(flow.designation, FlowDesignation::Authentication);
+        assert_eq!(strand.designation, StrandDesignation::Authentication);
         assert_eq!(bindings.len(), 1);
         assert!(matches!(bindings[0].stage, StageKind::Captcha));
         assert_eq!(bindings[0].order, 5);
@@ -363,11 +363,11 @@ stages:
     max_attempts: 5
 ";
 
-        let file = FlowDefinitionFile::parse(yaml).expect("valid YAML");
+        let file = StrandDefinitionFile::parse(yaml).expect("valid YAML");
         let mut rng = test_rng();
-        let (flow, bindings) = file.into_flow(&mut rng);
+        let (strand, bindings) = file.into_strand(&mut rng);
 
-        let mut ids = vec![flow.id];
+        let mut ids = vec![strand.id];
         for b in &bindings {
             ids.push(b.id);
         }

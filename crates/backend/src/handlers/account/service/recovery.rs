@@ -2,9 +2,9 @@
 //!
 //! The recovery workflow currently uses `UserRecoveryRepository` for state
 //! tracking. It will be progressively migrated to use `WorkflowRepository`
-//! for unified workflow state management. The flow engine
-//! (`crate::handlers::flow`) can already orchestrate recovery as a
-//! `default-recovery` flow.
+//! for unified workflow state management. The strand engine
+//! (`crate::handlers::strand`) can already orchestrate recovery as a
+//! `default-recovery` strand.
 
 use std::net::IpAddr;
 use std::str::FromStr;

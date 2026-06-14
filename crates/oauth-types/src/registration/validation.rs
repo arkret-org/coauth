@@ -31,13 +31,13 @@ impl VerifiedClientMetadata {
         Self { inner }
     }
 
-    /// Array of redirection URIs for use in redirect-based flows such as the
-    /// [authorization code flow].
+    /// Array of redirection URIs for use in redirect-based strands such as the
+    /// [authorization code strand].
     ///
     /// All the URIs used by the client in an authorization request's
     /// `redirect_uri` field must appear in this list.
     ///
-    /// [authorization code flow]: https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
+    /// [authorization code strand]: https://openid.net/specs/openid-connect-core-1_0.html#CodeStrandAuth
     #[must_use]
     pub fn redirect_uris(&self) -> &[Url] {
         self.redirect_uris.as_deref().unwrap_or(&[])

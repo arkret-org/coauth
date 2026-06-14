@@ -1,4 +1,4 @@
-//! Integration tests for the password-login flow.
+//! Integration tests for the password-login strand.
 //!
 //! Was the larger half of the original `views/login.rs`. Wrapping the
 //! body in a single `mod tests` keeps the original 4-space indentation

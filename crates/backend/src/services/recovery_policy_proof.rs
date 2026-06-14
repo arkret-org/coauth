@@ -5,7 +5,7 @@
 //! REC-1 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — recovery-policy
 //! `proof_kind` enum guard.
 //!
-//! coauth's first-class recovery flow today is the password-reset / email-OOB
+//! coauth's first-class recovery strand today is the password-reset / email-OOB
 //! ticket loop in [`crate::handlers::account::recovery`] — it does NOT
 //! participate in the CKP recovery-policy / recovery-receipt binding
 //! described in `spec/v1/artifacts/schemas/recovery-policy.schema.json`.

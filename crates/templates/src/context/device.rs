@@ -1,4 +1,4 @@
-//! Device code flow and device naming template contexts.
+//! Device code strand and device naming template contexts.
 
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};

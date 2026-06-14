@@ -49,7 +49,7 @@ pub async fn get(
     let providers = load_enabled_upstream_providers(&mut repo).await?;
 
     // If password-based login is disabled, and there is only one upstream provider,
-    // we can directly start an authorization flow
+    // we can directly start an authorization strand
     if !site_config.password_registration_enabled && providers.len() == 1 {
         let provider = providers.into_iter().next().unwrap();
 

@@ -1,8 +1,8 @@
 use std::net::IpAddr;
 
 use coauth_data::CaptchaConfig;
-use coauth_data::flow::{
-    FlowDefinition, FlowSession, FlowStageBinding, StageChallenge, StageKind, StageOutcome,
+use coauth_data::strand::{
+    StrandDefinition, StrandSession, StrandStageBinding, StageChallenge, StageKind, StageOutcome,
     StageSubmission, StageValidationError,
 };
 use serde_json::Value;
@@ -10,52 +10,52 @@ use thiserror::Error;
 use tracing::warn;
 
 #[derive(Debug, Error)]
-pub enum FlowPlannerError {
-    #[error("flow not found: {0}")]
-    FlowNotFound(String),
+pub enum StrandPlannerError {
+    #[error("strand not found: {0}")]
+    StrandNotFound(String),
 
-    #[error("flow session expired")]
+    #[error("strand session expired")]
     SessionExpired,
 
-    #[error("flow session already completed")]
+    #[error("strand session already completed")]
     AlreadyCompleted,
 
-    #[error("no more stages in flow")]
+    #[error("no more stages in strand")]
     NoMoreStages,
 
     #[error(transparent)]
     Repository(#[from] coauth_data::RepositoryError),
 }
 
-/// A planned flow — the ordered list of stage bindings to execute.
-pub struct FlowPlan {
-    pub flow: FlowDefinition,
-    pub stages: Vec<FlowStageBinding>,
+/// A planned strand — the ordered list of stage bindings to execute.
+pub struct StrandPlan {
+    pub strand: StrandDefinition,
+    pub stages: Vec<StrandStageBinding>,
 }
 
-/// The flow executor manages progression through a flow's stages.
-pub struct FlowExecutor;
+/// The strand executor manages progression through a strand's stages.
+pub struct StrandExecutor;
 
-impl FlowExecutor {
-    /// Plan a flow: determine which stages should run based on context.
-    /// For now, all stages in the flow are included (no policy evaluation).
+impl StrandExecutor {
+    /// Plan a strand: determine which stages should run based on context.
+    /// For now, all stages in the strand are included (no policy evaluation).
     #[must_use]
-    pub fn plan(flow: FlowDefinition, bindings: Vec<FlowStageBinding>) -> FlowPlan {
+    pub fn plan(strand: StrandDefinition, bindings: Vec<StrandStageBinding>) -> StrandPlan {
         let mut stages = bindings;
         stages.sort_by_key(|b| b.order);
-        FlowPlan { flow, stages }
+        StrandPlan { strand, stages }
     }
 
-    /// Get the challenge for the current stage of a flow session.
+    /// Get the challenge for the current stage of a strand session.
     ///
     /// Before returning the challenge, this advances past any stages whose
     /// requirements are already satisfied by the session context (auto-skip).
     pub fn current_challenge(
-        plan: &FlowPlan,
-        session: &mut FlowSession,
-    ) -> Result<StageChallenge, FlowPlannerError> {
+        plan: &StrandPlan,
+        session: &mut StrandSession,
+    ) -> Result<StageChallenge, StrandPlannerError> {
         if session.status.is_terminal() {
-            return Err(FlowPlannerError::AlreadyCompleted);
+            return Err(StrandPlannerError::AlreadyCompleted);
         }
 
         // Auto-skip stages that are already satisfied by the context.
@@ -71,7 +71,7 @@ impl FlowExecutor {
         let binding = plan
             .stages
             .get(session.current_stage_index)
-            .ok_or(FlowPlannerError::NoMoreStages)?;
+            .ok_or(StrandPlannerError::NoMoreStages)?;
 
         Ok(challenge_for_stage(&binding.stage, &session.context))
     }
@@ -79,19 +79,19 @@ impl FlowExecutor {
     /// Process a response for the current stage and determine the outcome.
     /// Returns the outcome and the updated context.
     pub async fn process_response(
-        plan: &FlowPlan,
-        session: &FlowSession,
+        plan: &StrandPlan,
+        session: &StrandSession,
         response: StageSubmission,
         captcha_ctx: Option<&CaptchaVerifyContext<'_>>,
-    ) -> Result<(StageOutcome, Value), FlowPlannerError> {
+    ) -> Result<(StageOutcome, Value), StrandPlannerError> {
         if session.status.is_terminal() {
-            return Err(FlowPlannerError::AlreadyCompleted);
+            return Err(StrandPlannerError::AlreadyCompleted);
         }
 
         let binding = plan
             .stages
             .get(session.current_stage_index)
-            .ok_or(FlowPlannerError::NoMoreStages)?;
+            .ok_or(StrandPlannerError::NoMoreStages)?;
 
         let mut context = session.context.clone();
         let outcome = validate_response(&binding.stage, &response, &mut context, captcha_ctx).await;
@@ -99,9 +99,9 @@ impl FlowExecutor {
         Ok((outcome, context))
     }
 
-    /// Check if the flow has more stages after the current one.
+    /// Check if the strand has more stages after the current one.
     #[must_use]
-    pub fn has_next_stage(plan: &FlowPlan, session: &FlowSession) -> bool {
+    pub fn has_next_stage(plan: &StrandPlan, session: &StrandSession) -> bool {
         session.current_stage_index + 1 < plan.stages.len()
     }
 }
@@ -282,7 +282,7 @@ async fn validate_response(
             }
 
             // Server-side verification. Delegate to the single shared
-            // `captcha::verify_token` entry point so the flow path enforces the
+            // `captcha::verify_token` entry point so the strand path enforces the
             // same hostname binding and fail-closed semantics as the REST
             // paths (hostname mismatch is a hard failure, not a warning; a
             // supplied token with no configured provider is rejected).

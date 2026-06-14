@@ -248,7 +248,7 @@ pub async fn register_finish(
     // passkey's COSE public key and hand it to starid. First-passkey
     // path mints the DID; subsequent passkeys would rotate the key
     // via `rotate_principal_did_for_credential` (driven by the
-    // device-rotation flow once the binding lookup lands — out of
+    // device-rotation strand once the binding lookup lands — out of
     // scope here, this handler only owns the *first* enrolment hook
     // since the binding row write happens elsewhere).
     let starid_registry = depot.starid_registry();

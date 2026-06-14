@@ -1,9 +1,9 @@
 //! Prompt stage side effects.
 //!
 //! Validates that all required fields are present in the submitted data
-//! and stores the collected values in the flow context under `prompt_data`.
+//! and stores the collected values in the strand context under `prompt_data`.
 
-use coauth_data::flow::{PromptField, StageOutcome, StageValidationError};
+use coauth_data::strand::{PromptField, StageOutcome, StageValidationError};
 use serde_json::Value;
 
 use super::StageExecutionError;
@@ -11,7 +11,7 @@ use super::StageExecutionError;
 /// Execute the prompt stage.
 ///
 /// Checks that every required field has a non-empty value in the submitted
-/// `data` object.  On success the data is stored in the flow context as
+/// `data` object.  On success the data is stored in the strand context as
 /// `prompt_data`.
 pub async fn execute(
     data: &Value,

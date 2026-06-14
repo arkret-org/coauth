@@ -29,7 +29,7 @@ pub mod telemetry;
 pub mod totp;
 pub mod util;
 
-/// HTTP request handlers, service modules, and flow engine.
+/// HTTP request handlers, service modules, and strand engine.
 #[allow(
     // Some salvo handlers need that
     clippy::unused_async,

@@ -1,6 +1,6 @@
 //! `WeChat` Open Platform OAuth specific request implementations.
 //!
-//! `WeChat` uses a non-standard OAuth flow:
+//! `WeChat` uses a non-standard OAuth strand:
 //! - Uses `appid` instead of `client_id`, `secret` instead of `client_secret`
 //! - Token response includes `openid` and `unionid` directly
 //! - UserInfo requires `openid` as a query parameter

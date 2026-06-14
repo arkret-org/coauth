@@ -81,7 +81,7 @@ pub struct AddAccountDidBindingRequestBody {
 
     /// Solved CAPTCHA token. Verified when the deployment has a CAPTCHA
     /// provider configured (`site.captcha`) so admin-on-behalf-of-user
-    /// or self-service binding flows can be abuse-gated. Optional and
+    /// or self-service binding strands can be abuse-gated. Optional and
     /// ignored when no provider is configured.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub captcha_token: Option<String>,

@@ -1,6 +1,6 @@
 //! HTTP adapter for the `starid` `did:webvh` registry.
 //!
-//! Onboarding and recovery flows in coauth call into this adapter to mint
+//! Onboarding and recovery strands in coauth call into this adapter to mint
 //! and re-mint a managed `did:webvh` for the principal account, and to
 //! verify control-proofs supplied by the device on subsequent privileged
 //! operations. It is a thin wrapper over starid's private WebVH DID
@@ -32,7 +32,7 @@ use crate::outbound_http;
 /// Error returned by [`StaridResolver`] HTTP calls.
 ///
 /// The variants mirror starid's `ApiFault` shape so callers can map
-/// failures back to onboarding-flow error codes without having to parse
+/// failures back to onboarding-strand error codes without having to parse
 /// raw JSON.
 #[derive(Debug, Error)]
 pub enum StaridError {
@@ -150,7 +150,7 @@ pub trait StaridRegistry: Send + Sync {
     /// Re-mint the principal DID during account recovery. Today this is
     /// implemented as a fresh inception under a new SCID — the device's
     /// new update-key replaces the old one and the previous DID is
-    /// deactivated upstream by the recovery flow.
+    /// deactivated upstream by the recovery strand.
     ///
     /// The recovery contract is captured separately in coauth's
     /// `_todos.md`; this method exists so onboarding and recovery share
@@ -179,7 +179,7 @@ pub trait StaridRegistry: Send + Sync {
     /// document patch that replaces `verificationMethod.key-1` with
     /// `new_update_key`.
     ///
-    /// Onboarding flow: when a new passkey is enrolled on an account
+    /// Onboarding strand: when a new passkey is enrolled on an account
     /// that already has a starid-minted DID, coauth calls this to swap
     /// the device key. starid validates that the request is signed by
     /// (or carries proof of) the *previous* `update_key`, so the rotation
@@ -347,7 +347,7 @@ impl StaridRegistry for StaridResolver {
         update_key: &str,
     ) -> Result<StaridMintResult, StaridError> {
         // Recovery currently mints a fresh inception. The prior DID is
-        // deactivated by the recovery flow's caller via
+        // deactivated by the recovery strand's caller via
         // `POST /_starid/root/webvh/dids/{did}/deactivate` (out of scope for
         // this adapter — recovery owns the prior-DID lookup).
         //

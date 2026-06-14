@@ -1,6 +1,6 @@
-# Default registration flow definition.
+# Default registration strand definition.
 #
-# This flow collects basic user information and then verifies the user's
+# This strand collects basic user information and then verifies the user's
 # email address before completing registration.
 
 slug: default-registration

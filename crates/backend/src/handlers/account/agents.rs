@@ -10,7 +10,7 @@
 //! Authentication: this endpoint accepts the soland / sodmin static
 //! bearer token configured under
 //! `cokret.principal_servers[].session_grant_introspection_bearer` —
-//! the same trust anchor used elsewhere for server-to-server flows.
+//! the same trust anchor used elsewhere for server-to-server strands.
 //! Browser sessions and end-user OAuth tokens are NOT accepted.
 //!
 //! Persistence: coauth stores the accountability grant, writes a signed

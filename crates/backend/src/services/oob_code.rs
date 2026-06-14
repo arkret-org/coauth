@@ -88,7 +88,7 @@ pub const NON_ENUMERABLE_PAD: Duration = Duration::from_millis(50);
 
 /// Configurable OOB code form. Deployments default to
 /// `OfflineVerifiable`; switching to `Lookup` enables the short-code +
-/// 3-strike flow at the cost of needing server-side rate limiting.
+/// 3-strike strand at the cost of needing server-side rate limiting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum OobCodeKind {

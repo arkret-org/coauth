@@ -56,7 +56,7 @@ impl SessionState {
     }
 }
 
-/// Persistent personal session issued outside the OAuth flow.
+/// Persistent personal session issued outside the OAuth strand.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PersonalSession {
     pub id: Ulid,

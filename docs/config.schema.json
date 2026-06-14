@@ -1328,7 +1328,7 @@
           ]
         },
         "starid": {
-          "description": "`starid` registry endpoint used by onboarding / recovery flows to\nmint and verify managed `did:webvh` identifiers for principals.\nWhen omitted, principal-DID minting falls back to the local\n`did:web` derivation in [`crate::services::did_resolver`].",
+          "description": "`starid` registry endpoint used by onboarding / recovery strands to\nmint and verify managed `did:webvh` identifiers for principals.\nWhen omitted, principal-DID minting falls back to the local\n`did:web` derivation in [`crate::services::did_resolver`].",
           "anyOf": [
             {
               "$ref": "#/definitions/StaridConfig"
@@ -3512,44 +3512,44 @@
           "const": "private_key_jwt"
         },
         {
-          "description": "`sign_in_with_apple`: Apple-specific authentication flow",
+          "description": "`sign_in_with_apple`: Apple-specific authentication strand",
           "type": "string",
           "const": "sign_in_with_apple"
         },
         {
-          "description": "`qq_connect`: QQ Connect OAuth flow",
+          "description": "`qq_connect`: QQ Connect OAuth strand",
           "type": "string",
           "const": "q_q_connect"
         },
         {
-          "description": "`feishu`: Feishu (Lark China) OAuth flow",
+          "description": "`feishu`: Feishu (Lark China) OAuth strand",
           "type": "string",
           "const": "feishu"
         },
         {
-          "description": "`lark`: Lark (international Feishu) OAuth flow",
+          "description": "`lark`: Lark (international Feishu) OAuth strand",
           "type": "string",
           "const": "lark"
         },
         {
-          "description": "`dingtalk`: `DingTalk` OAuth flow",
+          "description": "`dingtalk`: `DingTalk` OAuth strand",
           "type": "string",
           "const": "ding_talk"
         },
         {
-          "description": "`wechat`: `WeChat` Open Platform OAuth flow",
+          "description": "`wechat`: `WeChat` Open Platform OAuth strand",
           "type": "string",
           "const": "we_chat"
         },
         {
-          "description": "`wecom`: `WeCom` (Enterprise `WeChat`) OAuth flow",
+          "description": "`wecom`: `WeCom` (Enterprise `WeChat`) OAuth strand",
           "type": "string",
           "const": "we_com"
         }
       ]
     },
     "SignInWithApple": {
-      "description": "Additional parameters required for Apple's authentication flow",
+      "description": "Additional parameters required for Apple's authentication strand",
       "type": "object",
       "properties": {
         "private_key_file": {
@@ -3601,7 +3601,7 @@
       ]
     },
     "PkceMethod": {
-      "description": "Controls whether Proof Key for Code Exchange is used during the\nauthorization code flow",
+      "description": "Controls whether Proof Key for Code Exchange is used during the\nauthorization code strand",
       "oneOf": [
         {
           "description": "Use PKCE if the provider supports it.\n\nFalls back to no PKCE when provider discovery is disabled.",
@@ -3997,7 +3997,7 @@
           "type": "boolean"
         },
         "registration_email_delivery_bypass_allowed": {
-          "description": "Allow registration flows to bypass delivery of verification email in\ndev/test deployments (default: `false`). Verification/recovery policy\nremains in coauth; soland only provides DID/webvh primitives.",
+          "description": "Allow registration strands to bypass delivery of verification email in\ndev/test deployments (default: `false`). Verification/recovery policy\nremains in coauth; soland only provides DID/webvh primitives.",
           "type": "boolean"
         },
         "password_change_allowed": {

@@ -48,22 +48,22 @@ pub struct NotificationRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NotificationRequestSource {
-    /// Triggered by an email-authentication flow.
+    /// Triggered by an email-authentication strand.
     UserEmailAuthentication {
         /// The originating email-authentication session.
         user_email_authentication_id: Ulid,
     },
-    /// Triggered by a phone-authentication flow.
+    /// Triggered by a phone-authentication strand.
     UserPhoneAuthentication {
         /// The originating phone-authentication session.
         user_phone_authentication_id: Ulid,
     },
-    /// Triggered by an account-recovery flow.
+    /// Triggered by an account-recovery strand.
     UserRecoverySession {
         /// The originating recovery session.
         user_recovery_session_id: Ulid,
     },
-    /// Triggered by a workflow instance outside the legacy auth flows.
+    /// Triggered by a workflow instance outside the legacy auth strands.
     WorkflowInstance {
         /// The originating workflow instance.
         workflow_instance_id: Ulid,

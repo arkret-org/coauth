@@ -18,7 +18,7 @@ Admin APIs expose account status as one of:
 These states are surfaced on the admin account record and are intended
 for operator action, audit views, and UI gating.
 
-## Third-party invite claim flow
+## Third-party invite claim strand
 
 Round R4 invite claims use the `ck.schema.invite.v1`
 `third_party_invite` shape. Plaintext 3PID values, such as email

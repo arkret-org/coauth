@@ -11,7 +11,7 @@
 //! server (`soland`). The previous task added the read+gate helper in
 //! `consent_cell_query`; this handler is the call-site that uses it.
 //!
-//! ## Flow
+//! ## Strand
 //!
 //! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
 //!    /_coauth/self/account/invites/relay` along with `(target_principal_url, target_holder_did,

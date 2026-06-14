@@ -55,7 +55,7 @@ During rotation:
 2. Restart one `coauth` replica and verify `/_cokret/describe`
    advertises the new value.
 3. Roll the remaining replicas.
-4. Reissue reset proofs through the device recovery flow. The affected
+4. Reissue reset proofs through the device recovery strand. The affected
    proof families are `principal_signing`, `recovery_unlock`,
    `device_quorum`, and `trusted_recovery_service`.
 5. Publish fresh cross-signing generations after the new proofs are

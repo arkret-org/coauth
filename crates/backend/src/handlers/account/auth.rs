@@ -1,4 +1,4 @@
-//! REST API endpoints for authentication flows (login, logout, providers).
+//! REST API endpoints for authentication strands (login, logout, providers).
 //!
 //! These endpoints are consumed by the Dioxus SPA frontend and return JSON
 //! responses. Session cookies are set/cleared as side effects.
@@ -420,7 +420,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             //   directly from a password login without the canonical
             //   OIDC `authorize -> token` ceremony. It bypasses
             //   per-grant scope negotiation, PKCE binding, and the
-            //   proof-of-possession flow that real deployments
+            //   proof-of-possession strand that real deployments
             //   require. Acceptable for the bring-up phase because it
             //   keeps the development loop short, but MUST be replaced
             //   before any external relying party trusts these grants. The

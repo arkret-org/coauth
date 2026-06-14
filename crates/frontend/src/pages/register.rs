@@ -821,14 +821,14 @@ pub fn RegisterFinish(id: String) -> Element {
 
     match finish_result.read().as_ref() {
         Some(Ok(resp)) if resp.status == "success" => {
-            // Check if there is a pending OAuth authorization flow to resume.
+            // Check if there is a pending OAuth authorization strand to resume.
             // The backend returns `post_auth_action` from the registration
             // record if registration was started from an OAuth grant; for
             // password registration we fall back to sessionStorage values
-            // saved by the manual register flow.
+            // saved by the manual register strand.
             let mut redirected = false;
 
-            // 1. API-returned post_auth_action (set during upstream OIDC registration flows)
+            // 1. API-returned post_auth_action (set during upstream OIDC registration strands)
             if let Some(action) = resp.post_auth_action.as_ref() {
                 let kind = action.get("kind").and_then(|v| v.as_str());
                 let id = action.get("id").and_then(|v| v.as_str()).map(String::from);

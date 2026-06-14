@@ -14,7 +14,7 @@ coauth.
 At time of writing, the authentication service is meant to be run on a
 standalone domain name (e.g. `auth.example.com`), and Soland on another
 (e.g. `soland.example.com`). The auth domain is user-facing as part of the
-authentication flow.
+authentication strand.
 
 An example setup could look like this:
 

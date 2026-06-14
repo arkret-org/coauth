@@ -55,31 +55,31 @@ pub enum TokenAuthMethod {
     /// `private_key_jwt`: signed `client_assertion` using an asymmetric key
     PrivateKeyJwt,
 
-    /// `sign_in_with_apple`: Apple-specific authentication flow
+    /// `sign_in_with_apple`: Apple-specific authentication strand
     SignInWithApple,
 
-    /// `qq_connect`: QQ Connect OAuth flow
+    /// `qq_connect`: QQ Connect OAuth strand
     QQConnect,
 
-    /// `feishu`: Feishu (Lark China) OAuth flow
+    /// `feishu`: Feishu (Lark China) OAuth strand
     Feishu,
 
-    /// `lark`: Lark (international Feishu) OAuth flow
+    /// `lark`: Lark (international Feishu) OAuth strand
     Lark,
 
-    /// `dingtalk`: `DingTalk` OAuth flow
+    /// `dingtalk`: `DingTalk` OAuth strand
     DingTalk,
 
-    /// `wechat`: `WeChat` Open Platform OAuth flow
+    /// `wechat`: `WeChat` Open Platform OAuth strand
     WeChat,
 
-    /// `wecom`: `WeCom` (Enterprise `WeChat`) OAuth flow
+    /// `wecom`: `WeCom` (Enterprise `WeChat`) OAuth strand
     WeCom,
 }
 
 // ── Sign In With Apple ──
 
-/// Additional parameters required for Apple's authentication flow
+/// Additional parameters required for Apple's authentication strand
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SignInWithApple {
     /// The private key file used to sign the `id_token`

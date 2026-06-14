@@ -3,12 +3,12 @@
 //! # Scope
 //!
 //! The scope of this crate is to support the OIDC and OAuth features
-//! needed by the Cokret/Soland auth flows.
+//! needed by the Cokret/Soland auth strands.
 //!
 //! # OpenID Connect and OAuth Features
 //!
 //! - Grant Types:
-//!   - [Authorization Code](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)
+//!   - [Authorization Code](https://openid.net/specs/openid-connect-core-1_0.html#CodeStrandAuth)
 //!   - [Client Credentials](https://www.rfc-editor.org/rfc/rfc6749#section-4.4)
 //!   - [Device Code](https://www.rfc-editor.org/rfc/rfc8628) (TBD)
 //!   - [Refresh Token](https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokens)

@@ -1,10 +1,10 @@
 //! User write stage side effects.
 //!
 //! Creates a new user account or validates that the chosen handle is
-//! available.  Stores the new user's `id` and `handle` in the flow
+//! available.  Stores the new user's `id` and `handle` in the strand
 //! context so subsequent stages can reference them.
 //!
-//! Round 37.4 (rip-and-replace of C35.0): the user-creation flow no
+//! Round 37.4 (rip-and-replace of C35.0): the user-creation strand no
 //! longer mints a `did:webvh` at this stage. The starid wire-in is
 //! deferred to the first passkey enrolment
 //! (`services::onboarding_starid::mint_principal_did_for_first_credential`,
@@ -16,7 +16,7 @@
 //! Accounts that never enrol a passkey simply stay on the local
 //! `did:web:coauth.invalid:…` derivation.
 
-use coauth_data::flow::{StageOutcome, StageValidationError};
+use coauth_data::strand::{StageOutcome, StageValidationError};
 use coauth_data::{BoxRepository, Clock, RepositoryAccess};
 use rand_core::RngCore;
 

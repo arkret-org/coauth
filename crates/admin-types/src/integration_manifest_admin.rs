@@ -13,7 +13,7 @@
 //!
 //! Wire-drift caught: the sodmin shim was **missing the `examples` field
 //! entirely** — the backend has been emitting a JSON object that
-//! describes the multi-step compose flow (oidc browser bridge →
+//! describes the multi-step compose strand (oidc browser bridge →
 //! exchange → soland session-grant → push register-device), and the
 //! sodmin decoder silently dropped it on the floor every call. The
 //! shared shape now decodes it as `serde_json::Value` so the SPA can
@@ -47,7 +47,7 @@ pub struct IntegrationManifest {
     pub dependencies: Vec<IntegrationManifestDependency>,
     #[serde(default)]
     pub surfaces: Vec<IntegrationManifestSurface>,
-    /// Compose-flow examples (multi-service step graph). The backend
+    /// Compose-strand examples (multi-service step graph). The backend
     /// emits this as a free-form JSON object so the SPA can render it
     /// without locking the schema down before the compose contract
     /// stabilizes — but **the field has to be on the wire shape** so it
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn manifest_decodes_backend_wire_payload_with_examples() {
         // Mirrors what `oidc_bridge::integration_describe` actually emits
-        // — including the multi-step compose-flow `examples` block that
+        // — including the multi-step compose-strand `examples` block that
         // the prior sodmin shim was silently dropping on the floor.
         let wire = r#"{
             "contract": "cokret.rest.integration_manifest.v1",
@@ -143,7 +143,7 @@ mod tests {
                 }
             ],
             "examples": {
-                "compose_flow": {
+                "compose_strand": {
                     "step_1": {"service": "coauth", "path": "/_coauth/gate/account/auth/oidc/browser-bridge/session", "method": "POST"},
                     "step_2": {"service": "coauth", "path": "/_coauth/gate/account/auth/oidc/exchange", "method": "POST"}
                 }
@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(m.surfaces[0].name, "auth_bridge");
         // The previously-dropped `examples` field — now visible.
         assert!(m.examples.is_object());
-        assert!(m.examples.get("compose_flow").is_some());
+        assert!(m.examples.get("compose_strand").is_some());
         assert_eq!(m.todos.len(), 1);
     }
 

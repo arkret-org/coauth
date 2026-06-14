@@ -12,7 +12,7 @@ stores it in an encrypted cookie.
 
 ### OAuth sessions
 
-OAuth sessions are created after a client completes an authorization flow. They
+OAuth sessions are created after a client completes an authorization strand. They
 bind together:
 
 - the authorized user, when the grant is user-backed
