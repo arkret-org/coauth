@@ -12,8 +12,11 @@ use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use ulid::Ulid;
+
 use crate::handlers::admin::audit_helper::record_admin_operation;
 use crate::handlers::admin::call_context::extract_call_context;
+use crate::handlers::admin::params::extract_ulid_param;
 use crate::services::device_revoke::cascade_revoke_session_grants;
 use crate::{AppError, JsonResult};
 
@@ -120,6 +123,59 @@ impl DeviceDraft {
 pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<DeviceListResBody> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
+
+    let devices = aggregate_devices(&mut repo, None).await?;
+
+    Ok(Json(DeviceListResBody {
+        data: devices
+            .into_values()
+            .map(DeviceDraft::into_record)
+            .collect(),
+    }))
+}
+
+/// List the devices owned by a single account.
+///
+/// Reuses the same session-grant aggregation as the flat
+/// `/_coauth/admin/devices` inventory, restricting the result to devices
+/// whose owning account ULID matches the `{id}` path parameter.
+#[endpoint]
+#[tracing::instrument(name = "handler.admin.v1.accounts.devices.list", skip_all)]
+pub async fn list_account_devices(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<DeviceListResBody> {
+    let ctx = extract_call_context(req, depot).await?;
+    let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
+    let account_id = extract_ulid_param(req)?;
+
+    // 404 if the account does not exist, mirroring the other
+    // accounts/{id}/* sub-routes.
+    if repo.user().lookup(account_id).await?.is_none() {
+        return Err(AppError::not_found(format!(
+            "Account ID {account_id} not found"
+        )));
+    }
+
+    let devices = aggregate_devices(&mut repo, Some(account_id)).await?;
+
+    Ok(Json(DeviceListResBody {
+        data: devices
+            .into_values()
+            .map(DeviceDraft::into_record)
+            .collect(),
+    }))
+}
+
+/// Aggregate device drafts from active session grants.
+///
+/// When `account_filter` is `Some`, only devices owned by that account ULID
+/// are retained. The owning account is resolved via the browser session
+/// behind each session grant, exactly as the flat inventory does.
+async fn aggregate_devices(
+    repo: &mut coauth_data::BoxRepository,
+    account_filter: Option<Ulid>,
+) -> Result<BTreeMap<String, DeviceDraft>, coauth_data::RepositoryError> {
     let mut devices = BTreeMap::<String, DeviceDraft>::new();
     let mut after = None;
 
@@ -142,6 +198,20 @@ pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<Device
                 continue;
             };
 
+            // Resolve the owning account once per grant so we can both
+            // filter and populate the draft.
+            let owner = repo
+                .browser_session()
+                .lookup(grant.browser_session_id)
+                .await?
+                .map(|browser_session| browser_session.user.id);
+
+            if let Some(wanted) = account_filter
+                && owner != Some(wanted)
+            {
+                continue;
+            }
+
             let entry = match devices.entry(device_id.clone()) {
                 Entry::Occupied(entry) => entry.into_mut(),
                 Entry::Vacant(entry) => entry.insert(DeviceDraft::new(device_id)),
@@ -153,12 +223,9 @@ pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<Device
             );
 
             if entry.account_id.is_none()
-                && let Some(browser_session) = repo
-                    .browser_session()
-                    .lookup(grant.browser_session_id)
-                    .await?
+                && let Some(owner) = owner
             {
-                entry.account_id = Some(browser_session.user.id.to_string());
+                entry.account_id = Some(owner.to_string());
             }
         }
 
@@ -167,14 +234,9 @@ pub async fn list_devices(req: &mut Request, depot: &Depot) -> JsonResult<Device
         }
     }
 
-    apply_device_revocation_audit(&mut repo, &mut devices).await?;
+    apply_device_revocation_audit(repo, &mut devices).await?;
 
-    Ok(Json(DeviceListResBody {
-        data: devices
-            .into_values()
-            .map(DeviceDraft::into_record)
-            .collect(),
-    }))
+    Ok(devices)
 }
 
 #[endpoint]
@@ -235,6 +297,89 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
         device: DeviceRecord {
             id: device_id,
             account_id: None,
+            display_name: None,
+            risk_level: DeviceRiskLevel::Unknown,
+            mfa_state: DeviceMfaState::Unknown,
+            registered_at: None,
+            revoked_at: Some(outcome.revoked_at),
+        },
+        revoked_session_grants: outcome.revoked_session_grants,
+    }))
+}
+
+/// Revoke a single device belonging to a specific account.
+///
+/// Same cascade as the flat `/_coauth/admin/devices/{id}/revoke` endpoint,
+/// but scoped under `accounts/{id}`: the account ULID is validated and
+/// recorded in the audit log alongside the device id. The device id is the
+/// `{device_id}` path parameter (the account is `{id}`).
+#[endpoint]
+#[tracing::instrument(name = "handler.admin.v1.accounts.devices.revoke", skip_all)]
+pub async fn revoke_account_device(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<DeviceRevokeOutcome> {
+    let account_id = extract_ulid_param(req)?;
+    let device_id = req
+        .param::<String>("device_id")
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| AppError::bad_request("missing device id"))?;
+    let body: RevokeDeviceRequestBody = req.parse_json().await.map_err(AppError::internal)?;
+    let reason = body.reason.trim().to_owned();
+    if reason.is_empty() {
+        return Err(AppError::bad_request("reason is required"));
+    }
+
+    let ctx = extract_call_context(req, depot).await?;
+    let crate::handlers::admin::call_context::CallContext {
+        mut repo,
+        clock,
+        user: admin_user,
+        ..
+    } = ctx;
+    if admin_user.is_none() {
+        return Err(AppError::forbidden(
+            "device revocation requires an authenticated admin user for audit",
+        ));
+    }
+    if repo.user().lookup(account_id).await?.is_none() {
+        return Err(AppError::not_found(format!(
+            "Account ID {account_id} not found"
+        )));
+    }
+    let mut rng = crate::handlers::account::make_rng();
+
+    // Same atomic cascade as the flat endpoint: device-revoke audit entry +
+    // every active session grant for the device, committed together.
+    let outcome = cascade_revoke_session_grants(&mut repo, &*clock, &device_id)
+        .await
+        .map_err(AppError::internal)?;
+
+    record_admin_operation(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        admin_user.as_ref(),
+        AdminOperation::Other("device.revoke".to_owned()),
+        "device",
+        None,
+        serde_json::json!({
+            "account_id": account_id.to_string(),
+            "device_id": device_id,
+            "reason": reason,
+            "approval_proof_present": body.approval_proof.is_some(),
+            "revoked_session_grants": outcome.revoked_session_grants,
+            "revoked_at": outcome.revoked_at,
+        }),
+    )
+    .await?;
+    repo.save().await?;
+
+    Ok(Json(DeviceRevokeOutcome {
+        device: DeviceRecord {
+            id: device_id,
+            account_id: Some(account_id.to_string()),
             display_name: None,
             risk_level: DeviceRiskLevel::Unknown,
             mfa_state: DeviceMfaState::Unknown,

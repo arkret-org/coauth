@@ -1005,6 +1005,14 @@ fn build_admin_router(router: Router) -> Router {
                                 ),
                         )
                         .push(
+                            Router::with_path("devices")
+                                .get(devices::list_account_devices)
+                                .push(
+                                    Router::with_path("{device_id}/revoke")
+                                        .post(devices::revoke_account_device),
+                                ),
+                        )
+                        .push(
                             Router::with_path("passkeys")
                                 .push(
                                     Router::with_path("register/start")
@@ -1431,6 +1439,10 @@ mod tests {
         assert!(json["paths"]["/_coauth/admin/accounts/{id}/lock"].is_object());
         assert!(json["paths"]["/_coauth/admin/accounts/{id}/disable"].is_object());
         assert!(json["paths"]["/_coauth/admin/accounts/{id}/dids"].is_object());
+        assert!(json["paths"]["/_coauth/admin/accounts/{id}/devices"].is_object());
+        assert!(
+            json["paths"]["/_coauth/admin/accounts/{id}/devices/{device_id}/revoke"].is_object()
+        );
         assert!(json["paths"]["/_coauth/admin/devices"].is_object());
         assert!(json["paths"]["/_coauth/admin/devices/{id}/revoke"].is_object());
         assert!(json["paths"]["/_coauth/admin/claims"].is_object());
