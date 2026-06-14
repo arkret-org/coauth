@@ -805,7 +805,9 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["grant"]["audience"], grant.audience);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
     assert!(body["grant"].get("grant_jwt").is_none());
-    assert!(body["grant"].get("session_public_key").is_none());
+    // Server-to-server introspection MUST expose session_public_key so the
+    // Principal Server can verify RFC 9421 PoP presentations (SPEC-CR-001).
+    assert_eq!(body["grant"]["session_public_key"], grant.session_public_key);
 
     let response = state
         .request(

@@ -187,6 +187,11 @@ struct SessionGrantIntrospectionGrant {
     expires_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
     revocation_ref: String,
+    // Server-to-server only: the Principal Server validating this grant needs
+    // the session signing key to verify RFC 9421 PoP presentations on
+    // `/_cokret/self/*` (api-conventions.md §3.2). The account-facing
+    // `SessionGrantRecord` deliberately keeps this hidden.
+    session_public_key: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -491,6 +496,7 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospection
         expires_at: grant.expires_at,
         revoked_at: grant.revoked_at,
         revocation_ref: format!("ck:session:{}", grant.browser_session_id),
+        session_public_key: grant.session_public_key.clone(),
     }
 }
 
