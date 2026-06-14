@@ -3,7 +3,7 @@ use cokret_core::Did;
 use cokret_core::http::{
     DirectoryDescribeOutcome, IdentityDescribeOutcome, IdentityDocumentViewOutcome,
 };
-use cokret_core::model::{
+use cokret_core::models::{
     DidDocumentRef, DirectoryDescription, DirectoryHandleResolutionOutcome,
     DirectoryResolveHandleRequestBody, IdentityDescription, IdentityDocumentView,
     IdentityResolveOutcome, IdentityResolveRequestBody,
