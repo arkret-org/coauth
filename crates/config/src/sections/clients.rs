@@ -19,22 +19,6 @@ use url::Url;
 
 use super::{ClientSecret, ClientSecretRaw, ConfigurationSection};
 
-// ── JWKS Variant ──
-
-/// Represents either an inline JWKS or a remote JWKS URI reference
-#[derive(JsonSchema, Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum JwksOrJwksUri {
-    Jwks(PublicJsonWebKeySet),
-    JwksUri(Url),
-}
-
-impl From<PublicJsonWebKeySet> for JwksOrJwksUri {
-    fn from(jwks: PublicJsonWebKeySet) -> Self {
-        Self::Jwks(jwks)
-    }
-}
-
 // ── Client Auth Method ──
 
 /// Supported token endpoint authentication methods for configured clients
