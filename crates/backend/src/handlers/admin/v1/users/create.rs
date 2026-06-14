@@ -287,6 +287,8 @@ pub async fn evaluate_batch_invite_gate(
         Some(principal_url),
         &gate.target_holder_did,
         &gate.consent_id,
+        &gate.peer_did,
+        &gate.scope,
         http_client,
     )
     .await;
@@ -494,7 +496,7 @@ mod consent_gate_tests {
     //! routes the three outcomes correctly given the principal-server
     //! response.
     use coauth_config::CokretConfig;
-    use wiremock::matchers::{method, path_regex};
+    use wiremock::matchers::{method, path_regex, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -515,6 +517,21 @@ mod consent_gate_tests {
         }
     }
 
+    fn active_cell(peer: &str, scope: &str) -> serde_json::Value {
+        serde_json::json!({
+            "ok": true,
+            "cell_id": format!("ck:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "holder_did": "did:web:holder",
+            "peer_did": peer,
+            "consent_scope": scope,
+            "state": "active",
+            "updated_at": "2026-05-01T00:00:00Z",
+            "active_grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "revoked_dots": [],
+        })
+    }
+
     /// No gate metadata at all → Allow (legacy registration-token path).
     #[tokio::test]
     async fn batch_invite_gate_allows_when_metadata_absent() {
@@ -532,11 +549,12 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-allow",
-                "tags": ["peer=did:web:peer;scope=invite"],
-            })))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(query_param("peer", "did:web:peer"))
+            .and(query_param("consent_scope", "invite"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(active_cell("did:web:peer", "invite")),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -557,9 +575,9 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
-            .expect(1)
+            .expect(2)
             .mount(&server)
             .await;
 
@@ -580,7 +598,7 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
@@ -602,11 +620,9 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-other",
-                "tags": ["peer=did:web:other;scope=invite"],
-            })))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(2)
             .mount(&server)
             .await;
 

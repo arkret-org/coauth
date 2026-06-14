@@ -3,6 +3,7 @@
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
+use cokret_core::{AccountRegisterRequestBody, DeviceId, Did};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use oauth_types::errors::{ClientError, ClientErrorCode};
@@ -223,40 +224,11 @@ fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
     ]
 }
 
-#[derive(Serialize)]
-struct SolandAccountRegisterRequestBody<'a> {
-    did: &'a str,
-    handle: String,
-    display_name: Option<&'a str>,
-    device_id: Option<&'a str>,
-}
-
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
-    // Account registration is soland's product-plane endpoint
-    // (`/_soland/self/account/register`); the previously-joined
-    // `/_cokret/gate/account/register` path never existed in soland's
-    // routing (gate/account only carries session-grants + agent-key-pair)
-    // and 404'd on every call.
-    base.join("/_soland/self/account/register")
+    base.join("/_cokret/gate/account/register")
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
-}
-
-fn soland_account_handle_for_did(did: &str) -> String {
-    let tail = did.rsplit(':').next().unwrap_or("coauth");
-    let local = tail
-        .chars()
-        .filter_map(|ch| {
-            let ch = ch.to_ascii_lowercase();
-            (ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')).then_some(ch)
-        })
-        .collect::<String>();
-    if local.is_empty() {
-        "@coauth".to_owned()
-    } else {
-        format!("@coauth-{local}")
-    }
 }
 
 /// Resolve the `principal_did` for `user` against the targeted principal
@@ -318,11 +290,17 @@ pub(super) async fn ensure_soland_account_registered(
         return Ok(());
     };
     let endpoint = soland_account_register_endpoint(principal_endpoint)?;
-    let body = SolandAccountRegisterRequestBody {
-        did: principal_did,
-        handle: soland_account_handle_for_did(principal_did),
-        display_name,
-        device_id,
+    let body = AccountRegisterRequestBody {
+        principal_id: Did::new(principal_did.to_owned())
+            .map_err(|error| format!("principal DID is invalid: {error}"))?,
+        display_name: display_name.map(ToOwned::to_owned),
+        device_id: device_id
+            .map(|value| {
+                DeviceId::new(value.to_owned())
+                    .map_err(|error| format!("device_id is invalid for account register: {error}"))
+            })
+            .transpose()?,
+        proof: None,
     };
     let response =
         outbound_http::send_with_policy(outbound_http::soland_policy("account_register"), || {
@@ -2043,28 +2021,15 @@ mod tests {
     }
 
     #[test]
-    fn soland_account_register_endpoint_uses_origin_root_api_path() {
+    fn soland_account_register_endpoint_uses_cokret_gate_path() {
         let endpoint = soland_account_register_endpoint("https://local.host/base/path").unwrap();
 
-        // Soland's real account-register route lives on the product plane;
+        // The standard account-register route lives at the service root;
         // the join must also discard any base path on the endpoint URL.
         assert_eq!(
             endpoint.as_str(),
-            "https://local.host/_soland/self/account/register"
+            "https://local.host/_cokret/gate/account/register"
         );
-    }
-
-    #[test]
-    fn soland_account_handle_is_stable_and_safe() {
-        assert_eq!(
-            soland_account_handle_for_did("did:web:auth.local.host:users:01KRFA"),
-            "@coauth-01krfa"
-        );
-        assert_eq!(
-            soland_account_handle_for_did("did:web:auth.local.host:users:Bad/Value"),
-            "@coauth-badvalue"
-        );
-        assert_eq!(soland_account_handle_for_did("did:web:@@@"), "@coauth");
     }
 
     #[tokio::test]

@@ -26,7 +26,7 @@
 //! returns `ConsentLookup::Unknown` from the network call so callers can
 //! degrade safely.
 
-use serde::Deserialize;
+use cokret_core::{ConsentCellView, ConsentState as SdkConsentState};
 use tracing::{debug, warn};
 use url::Url;
 
@@ -58,19 +58,6 @@ pub struct ConsentState {
     pub tags: Vec<String>,
 }
 
-/// Wire format expected from the (still-pending) soland cell-read endpoint.
-///
-/// Kept private — callers consume `ConsentLookup`. The shape is conservative:
-/// soland returns the `OrSet` join value as a list of tag strings, plus the
-/// cell id for echo. `granted` is derived from `!tags.is_empty()`.
-#[derive(Debug, Deserialize)]
-struct ConsentCellOutcome {
-    #[serde(default)]
-    cell_id: String,
-    #[serde(default)]
-    tags: Vec<String>,
-}
-
 /// Look up the holder's consent-grant cell on their `server_name`.
 ///
 /// * `principal_server_url` — base URL of the holder's soland deployment. `None` means soland is
@@ -78,12 +65,16 @@ struct ConsentCellOutcome {
 /// * `holder_did` — the cell-owner DID; embedded in the request path so soland can route the read
 ///   to the right principal control Realm.
 /// * `consent_id` — the consent-cell identifier per spec §6.
+/// * `peer_did` / `scope` — the standard self consent resource key. The helper also probes
+///   `scope=any` when `scope` is more specific, preserving the invite-gate wildcard semantics.
 /// * `http_client` — caller-provided client so tests can inject a wiremock server and production
 ///   callers can share the global pool.
 pub async fn query_consent_cell(
     principal_server_url: Option<&Url>,
     holder_did: &str,
     consent_id: &str,
+    peer_did: &str,
+    scope: &str,
     http_client: &reqwest::Client,
 ) -> ConsentLookup {
     let Some(base) = principal_server_url else {
@@ -96,44 +87,110 @@ pub async fn query_consent_cell(
         };
     };
 
-    // TODO(soland-cell-query): soland does not yet expose a public admin
-    // endpoint for reading OrSet cell state. The path below is a forward
-    // compatible guess that mirrors the existing private soland peer-move POST
-    // surface. Once soland adds the read endpoint, update this path and
-    // align the response struct with the official schema.
-    //
-    // STATUS: scaffold — NOT for production.
-    // CATEGORY: P1 / external-integration.
-    // RISK: probing an unimplemented URL today returns `Unknown` which
-    //   the consent gate is documented to treat as fail-open (see
-    //   module comment).
-    let cell_id = build_cell_id(consent_id);
-    let path = format!("_soland/admin/cells/{}", urlencoding::encode_path(&cell_id));
-    let url = match base.join(&path) {
+    let normalized_scope = normalize_scope(scope);
+    let mut scopes = vec![normalized_scope.clone()];
+    if normalized_scope != "any" {
+        scopes.push("any".to_owned());
+    }
+
+    for candidate_scope in scopes {
+        match query_consent_cell_scope(base, holder_did, peer_did, &candidate_scope, http_client)
+            .await
+        {
+            ConsentScopeLookup::Active { cell_id } => {
+                let tag = format!("peer={peer_did};scope={candidate_scope}");
+                debug!(
+                    %cell_id,
+                    consent_id,
+                    peer_did,
+                    scope = candidate_scope,
+                    "consent cell query: active"
+                );
+                return ConsentLookup::Known(ConsentState {
+                    consent_id: consent_id.to_owned(),
+                    granted: true,
+                    tags: vec![tag],
+                });
+            }
+            ConsentScopeLookup::Inactive { cell_id, state } => {
+                debug!(
+                    %cell_id,
+                    ?state,
+                    consent_id,
+                    peer_did,
+                    scope = candidate_scope,
+                    "consent cell query: inactive"
+                );
+                return ConsentLookup::Known(ConsentState {
+                    consent_id: consent_id.to_owned(),
+                    granted: false,
+                    tags: Vec::new(),
+                });
+            }
+            ConsentScopeLookup::Missing => {}
+            ConsentScopeLookup::Unknown { reason } => {
+                return ConsentLookup::Unknown { reason };
+            }
+        }
+    }
+
+    ConsentLookup::Known(ConsentState {
+        consent_id: consent_id.to_owned(),
+        granted: false,
+        tags: Vec::new(),
+    })
+}
+
+#[derive(Debug)]
+enum ConsentScopeLookup {
+    Active {
+        cell_id: String,
+    },
+    Inactive {
+        cell_id: String,
+        state: SdkConsentState,
+    },
+    Missing,
+    Unknown {
+        reason: &'static str,
+    },
+}
+
+async fn query_consent_cell_scope(
+    base: &Url,
+    holder_did: &str,
+    peer_did: &str,
+    scope: &str,
+    http_client: &reqwest::Client,
+) -> ConsentScopeLookup {
+    let path = format!(
+        "_cokret/self/consent/cells/{}",
+        urlencoding::encode_path(holder_did)
+    );
+    let mut url = match base.join(&path) {
         Ok(u) => u,
         Err(error) => {
-            warn!(?error, %cell_id, "failed to build cell-query URL");
-            return ConsentLookup::Unknown {
+            warn!(?error, holder_did, "failed to build consent-cell URL");
+            return ConsentScopeLookup::Unknown {
                 reason: "invalid_principal_server_url",
             };
         }
     };
+    url.query_pairs_mut()
+        .append_pair("peer", peer_did)
+        .append_pair("consent_scope", scope);
 
     let response = match outbound_http::send_with_policy(
         outbound_http::soland_policy("consent_cell_read")
             .with_timeout(std::time::Duration::from_secs(5)),
-        || {
-            http_client
-                .get(url.clone())
-                .header("X-Cokret-Holder-Did", holder_did)
-        },
+        || http_client.get(url.clone()),
     )
     .await
     {
         Ok(r) => r,
         Err(error) => {
             warn!(?error, "consent cell query: HTTP error");
-            return ConsentLookup::Unknown {
+            return ConsentScopeLookup::Unknown {
                 reason: "principal_server_unreachable",
             };
         }
@@ -141,50 +198,64 @@ pub async fn query_consent_cell(
 
     let status = response.status();
     if status == reqwest::StatusCode::NOT_FOUND {
-        // Cell never existed or has been GC'd. Per spec §7 a missing cell is
-        // semantically distinct from "no tags", but for the gate we return
-        // an empty grant; the caller still gets to apply the
-        // `require_consent` policy.
-        return ConsentLookup::Known(ConsentState {
-            consent_id: consent_id.to_owned(),
-            granted: false,
-            tags: Vec::new(),
-        });
+        return ConsentScopeLookup::Missing;
     }
     if !status.is_success() {
         warn!(?status, "consent cell query: non-success status");
-        return ConsentLookup::Unknown {
+        return ConsentScopeLookup::Unknown {
             reason: "principal_server_error",
         };
     }
 
-    let parsed: ConsentCellOutcome = match response.json().await {
+    let parsed: ConsentCellView = match response.json().await {
         Ok(p) => p,
         Err(error) => {
             warn!(?error, "consent cell query: failed to parse response");
-            return ConsentLookup::Unknown {
+            return ConsentScopeLookup::Unknown {
                 reason: "principal_server_response_invalid",
             };
         }
     };
 
-    let granted = !parsed.tags.is_empty();
-    debug!(
-        cell_id = %parsed.cell_id,
-        granted,
-        tag_count = parsed.tags.len(),
-        "consent cell query: success",
-    );
-    ConsentLookup::Known(ConsentState {
-        consent_id: consent_id.to_owned(),
-        granted,
-        tags: parsed.tags,
-    })
+    if !parsed.ok
+        || parsed.holder_did.as_str() != holder_did
+        || parsed.peer_did.as_str() != peer_did
+        || normalize_scope(&parsed.consent_scope) != scope
+    {
+        warn!(
+            cell_id = %parsed.cell_id,
+            response_holder = parsed.holder_did.as_str(),
+            response_peer = parsed.peer_did.as_str(),
+            response_scope = parsed.consent_scope.as_str(),
+            holder_did,
+            peer_did,
+            scope,
+            "consent cell query: response key mismatch"
+        );
+        return ConsentScopeLookup::Unknown {
+            reason: "principal_server_response_invalid",
+        };
+    }
+
+    if parsed.state == SdkConsentState::Active {
+        ConsentScopeLookup::Active {
+            cell_id: parsed.cell_id,
+        }
+    } else {
+        ConsentScopeLookup::Inactive {
+            cell_id: parsed.cell_id,
+            state: parsed.state,
+        }
+    }
 }
 
-/// Build the canonical cell id used in storage and on the wire.
-fn build_cell_id(consent_id: &str) -> String {
-    format!("ck:cell:ck.component.consent.grant.v1:{consent_id}")
+fn normalize_scope(scope: &str) -> String {
+    match scope.trim().to_ascii_lowercase().as_str() {
+        "message" | "messaging" | "dm" => "direct_message".to_owned(),
+        "call" => "voice_call".to_owned(),
+        "" => "direct_message".to_owned(),
+        other => other.to_owned(),
+    }
 }
 
 /// Decide whether an invite should pass the consent gate, given a cell
@@ -277,17 +348,55 @@ mod urlencoding {
 
 #[cfg(test)]
 mod tests {
-    use wiremock::matchers::{method, path_regex};
+    use wiremock::matchers::{method, path_regex, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::handlers::test_utils::setup;
 
+    fn active_cell(scope: &str) -> serde_json::Value {
+        serde_json::json!({
+            "ok": true,
+            "cell_id": format!("ck:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "holder_did": "did:web:holder",
+            "peer_did": "did:web:peer",
+            "consent_scope": scope,
+            "state": "active",
+            "updated_at": "2026-05-01T00:00:00Z",
+            "active_grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "revoked_dots": [],
+        })
+    }
+
+    fn revoked_cell(scope: &str) -> serde_json::Value {
+        serde_json::json!({
+            "ok": true,
+            "cell_id": format!("ck:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "holder_did": "did:web:holder",
+            "peer_did": "did:web:peer",
+            "consent_scope": scope,
+            "state": "revoked",
+            "updated_at": "2026-05-01T00:00:00Z",
+            "active_grant_dots": [],
+            "grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "revoked_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+        })
+    }
+
     #[tokio::test]
     async fn consent_unknown_when_principal_server_url_is_none() {
         setup();
         let client = reqwest::Client::new();
-        let result = query_consent_cell(None, "did:web:holder", "c-123", &client).await;
+        let result = query_consent_cell(
+            None,
+            "did:web:holder",
+            "c-123",
+            "did:web:peer",
+            "invite",
+            &client,
+        )
+        .await;
         match result {
             ConsentLookup::Unknown { reason } => {
                 assert_eq!(reason, "principal_server_url_not_configured");
@@ -303,17 +412,24 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-123",
-                "tags": ["peer=did:web:peer;scope=invite"],
-            })))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(query_param("peer", "did:web:peer"))
+            .and(query_param("consent_scope", "invite"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
             .expect(1)
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
+        let result = query_consent_cell(
+            Some(&base),
+            "did:web:holder",
+            "c-123",
+            "did:web:peer",
+            "invite",
+            &client,
+        )
+        .await;
 
         match result {
             ConsentLookup::Known(state) => {
@@ -326,22 +442,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn consent_unknown_when_cell_response_key_mismatches_request() {
+        setup();
+        let server = MockServer::start().await;
+        let client = reqwest::Client::new();
+        let mut cell = active_cell("invite");
+        cell["peer_did"] = serde_json::Value::String("did:web:other".to_owned());
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(query_param("peer", "did:web:peer"))
+            .and(query_param("consent_scope", "invite"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(cell))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
+        let result = query_consent_cell(
+            Some(&base),
+            "did:web:holder",
+            "c-123",
+            "did:web:peer",
+            "invite",
+            &client,
+        )
+        .await;
+
+        match result {
+            ConsentLookup::Unknown { reason } => {
+                assert_eq!(reason, "principal_server_response_invalid");
+            }
+            other => panic!("expected Unknown, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn consent_revoked_when_response_has_empty_tags() {
         setup();
         let server = MockServer::start().await;
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-123",
-                "tags": [],
-            })))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(revoked_cell("invite")))
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
+        let result = query_consent_cell(
+            Some(&base),
+            "did:web:holder",
+            "c-123",
+            "did:web:peer",
+            "invite",
+            &client,
+        )
+        .await;
 
         match result {
             ConsentLookup::Known(state) => {
@@ -359,13 +516,21 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(Some(&base), "did:web:holder", "c-123", &client).await;
+        let result = query_consent_cell(
+            Some(&base),
+            "did:web:holder",
+            "c-123",
+            "did:web:peer",
+            "invite",
+            &client,
+        )
+        .await;
 
         match result {
             ConsentLookup::Unknown { reason } => {
@@ -382,13 +547,22 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
+            .expect(2)
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(Some(&base), "did:web:holder", "c-404", &client).await;
+        let result = query_consent_cell(
+            Some(&base),
+            "did:web:holder",
+            "c-404",
+            "did:web:peer",
+            "invite",
+            &client,
+        )
+        .await;
 
         match result {
             ConsentLookup::Known(state) => {

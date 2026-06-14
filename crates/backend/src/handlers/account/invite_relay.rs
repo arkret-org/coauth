@@ -186,6 +186,8 @@ pub async fn relay_invite_with(
         Some(principal_url),
         target_holder_did,
         consent_id,
+        peer_did,
+        scope,
         http_client,
     )
     .await;
@@ -301,7 +303,7 @@ pub async fn post_invite_relay(
 
 #[cfg(test)]
 mod tests {
-    use wiremock::matchers::{method, path_regex};
+    use wiremock::matchers::{method, path_regex, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -314,6 +316,21 @@ mod tests {
         })
     }
 
+    fn active_cell(scope: &str) -> serde_json::Value {
+        serde_json::json!({
+            "ok": true,
+            "cell_id": format!("ck:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "holder_did": "did:web:holder",
+            "peer_did": "did:web:inviter",
+            "consent_scope": scope,
+            "state": "active",
+            "updated_at": "2026-05-01T00:00:00Z",
+            "active_grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "revoked_dots": [],
+        })
+    }
+
     /// Allow path: cell returns a matching grant tag → forward succeeds.
     #[tokio::test]
     async fn relay_allows_when_consent_granted() {
@@ -323,11 +340,10 @@ mod tests {
 
         // Cell-query mock: granted with matching peer/scope tag.
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-allow",
-                "tags": ["peer=did:web:inviter;scope=invite"],
-            })))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(query_param("peer", "did:web:inviter"))
+            .and(query_param("consent_scope", "invite"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
             .expect(1)
             .mount(&server)
             .await;
@@ -374,9 +390,9 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
-            .expect(1)
+            .expect(2)
             .mount(&server)
             .await;
 
@@ -416,7 +432,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
@@ -483,11 +499,18 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-allow",
-                "tags": ["peer=did:web:inviter;scope=any"],
-            })))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(query_param("consent_scope", "invite"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(query_param("consent_scope", "any"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("any")))
+            .expect(1)
             .mount(&server)
             .await;
 
@@ -535,11 +558,10 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_soland/admin/cells/.*"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "cell_id": "ck:cell:ck.component.consent.grant.v1:c-allow",
-                "tags": ["peer=did:web:inviter;scope=invite"],
-            })))
+            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(query_param("peer", "did:web:inviter"))
+            .and(query_param("consent_scope", "invite"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
             .expect(1)
             .mount(&server)
             .await;
