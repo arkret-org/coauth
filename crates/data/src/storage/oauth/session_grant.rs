@@ -151,6 +151,22 @@ pub trait SessionGrantRepository: Send + Sync {
         grant: SessionGrant,
     ) -> Result<SessionGrant, Self::Error>;
 
+    /// Atomically consume a grant: set `revoked_at` **only if** it is still
+    /// `NULL`, returning whether this call performed the revocation.
+    ///
+    /// This is the single-use rotation gate (account-lifecycle §4.1). The
+    /// conditional `UPDATE ... WHERE revoked_at IS NULL` row-locks the grant,
+    /// so two concurrent rotations of the same parent contend on that lock;
+    /// exactly one observes the row still active and gets `true`, the other
+    /// re-reads the now-committed `revoked_at` and gets `false`. Returning
+    /// `false` MUST be treated as `grant_already_consumed` — never minting a
+    /// second active child of one parent.
+    async fn revoke_if_active(
+        &mut self,
+        clock: &dyn Clock,
+        id: Ulid,
+    ) -> Result<bool, Self::Error>;
+
     /// Delete session grants whose `expires_at` is strictly before `until`.
     ///
     /// Mirrors the time-cursor cleanup contract used elsewhere
@@ -199,6 +215,12 @@ repository_impl!(SessionGrantRepository:
         clock: &dyn Clock,
         grant: SessionGrant,
     ) -> Result<SessionGrant, Self::Error>;
+
+    async fn revoke_if_active(
+        &mut self,
+        clock: &dyn Clock,
+        id: Ulid,
+    ) -> Result<bool, Self::Error>;
 
     async fn cleanup_expired(
         &mut self,

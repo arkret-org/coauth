@@ -272,6 +272,30 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             .map_err(DatabaseError::to_invalid_operation)
     }
 
+    #[tracing::instrument(name = "db.oauth_session_grant.revoke_if_active", skip_all, err)]
+    async fn revoke_if_active(
+        &mut self,
+        clock: &dyn Clock,
+        id: Ulid,
+    ) -> Result<bool, Self::Error> {
+        let revoked_at = clock.now();
+        // Conditional consume: the `revoked_at IS NULL` predicate makes this a
+        // compare-and-swap. Under READ COMMITTED the UPDATE takes a row lock,
+        // so a concurrent rotation of the same parent blocks here and then
+        // re-evaluates the predicate against the committed row — seeing
+        // `revoked_at` already set and matching 0 rows. Exactly one winner.
+        let rows_affected = diesel::update(
+            oauth_session_grants::table
+                .filter(oauth_session_grants::id.eq(Uuid::from(id)))
+                .filter(oauth_session_grants::revoked_at.is_null()),
+        )
+        .set(oauth_session_grants::revoked_at.eq(Some(revoked_at)))
+        .execute(self.conn)
+        .await?;
+
+        Ok(rows_affected == 1)
+    }
+
     #[tracing::instrument(
         name = "db.oauth_session_grant.cleanup_expired",
         skip_all,

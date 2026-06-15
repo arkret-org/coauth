@@ -587,6 +587,91 @@ mod tests {
         assert_eq!(second_outcome.session_grants, 0);
     }
 
+    /// `revoke_if_active` is the single-use rotation CAS: it consumes a grant
+    /// exactly once. The first call wins (`true` + sets `revoked_at`); a second
+    /// call against the now-consumed grant returns `false` and does NOT move
+    /// the timestamp. This is what makes two concurrent rotations of one parent
+    /// resolve to exactly one winner (account-lifecycle §4.1).
+    #[tokio::test]
+    async fn revoke_if_active_consumes_a_grant_exactly_once() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut rng = ChaChaRng::seed_from_u64(7);
+        let clock = MockClock::default();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, "cas-user".to_owned())
+            .await
+            .unwrap();
+        let browser_session = repo
+            .browser_session()
+            .add(&mut rng, &clock, &user, None)
+            .await
+            .unwrap();
+        let scope = Scope::from_iter([OPENID]);
+        let grant = repo
+            .oauth_session_grant()
+            .add(
+                &mut rng,
+                &clock,
+                NewSessionGrant {
+                    browser_session_id: browser_session.id,
+                    issuer: "did:web:issuer.example",
+                    subject: "did:web:subject.example",
+                    device_id: Some("device-cas"),
+                    audience: "did:web:audience.example",
+                    scope,
+                    grant_jwt: "cas-grant-jwt",
+                    session_public_key: "cas-public-key",
+                    expires_at: clock.now() + Duration::try_hours(1).unwrap(),
+                },
+            )
+            .await
+            .unwrap();
+
+        // First consume wins.
+        let first = repo
+            .oauth_session_grant()
+            .revoke_if_active(&clock, grant.id)
+            .await
+            .unwrap();
+        assert!(first, "first revoke_if_active should consume the grant");
+
+        let after_first = repo
+            .oauth_session_grant()
+            .lookup(grant.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let revoked_at = after_first.revoked_at.expect("grant should be revoked");
+
+        // Second consume loses — the grant is already revoked.
+        let second = repo
+            .oauth_session_grant()
+            .revoke_if_active(&clock, grant.id)
+            .await
+            .unwrap();
+        assert!(!second, "second revoke_if_active must report already-consumed");
+
+        let after_second = repo
+            .oauth_session_grant()
+            .lookup(grant.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            after_second.revoked_at,
+            Some(revoked_at),
+            "a losing CAS must not move revoked_at"
+        );
+    }
+
     /// Test the [`OAuthSessionRepository::list`] and
     /// [`OAuthSessionRepository::count`] methods.
     #[tokio::test]

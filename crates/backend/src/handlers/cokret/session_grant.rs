@@ -871,7 +871,13 @@ pub async fn refresh_session_grant(
         .lookup_by_grant_jwt(&body.grant_jwt)
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-        .ok_or_else(|| CokretRouteError::NotFound)?;
+        .ok_or_else(|| {
+            CokretRouteError::coded(
+                StatusCode::NOT_FOUND,
+                "session_grant_not_found",
+                "no session grant matches the presented grant_jwt",
+            )
+        })?;
 
     // Single-use enforcement: a previously consumed grant can never be rotated
     // again. Re-use of a consumed grant is a credential-compromise signal (the
@@ -881,8 +887,10 @@ pub async fn refresh_session_grant(
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        return Err(CokretRouteError::BadRequest(
-            "grant_already_consumed".to_owned(),
+        return Err(CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            "grant_already_consumed",
+            "session grant already consumed; its rotation chain cannot continue",
         ));
     }
 
@@ -924,7 +932,11 @@ pub async fn refresh_session_grant(
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        return Err(CokretRouteError::BadRequest("session_logged_out".to_owned()));
+        return Err(CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            "session_logged_out",
+            "underlying browser session is logged out; rotation chain cannot be resumed",
+        ));
     }
 
     // 5. Mint a new grant with the same subject + scope + audience. The
@@ -935,8 +947,40 @@ pub async fn refresh_session_grant(
     if let Some(requested) = body.audience.as_deref()
         && requested != prior_grant.audience
     {
-        return Err(CokretRouteError::BadRequest("audience_mismatch".to_owned()));
+        return Err(CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            "audience_mismatch",
+            "session-grant rotation MUST NOT change the bound audience",
+        ));
     }
+
+    // 5. Single-use rotation gate (CAS). Atomically consume the prior grant
+    // BEFORE minting its successor: `revoke_if_active` sets `revoked_at` only
+    // if it is still NULL and reports whether THIS call won. Two concurrent
+    // rotations of the same parent contend on the row lock, so exactly one
+    // wins and the loser is rejected with `grant_already_consumed` — without
+    // this, both could read the parent active and each insert an active child,
+    // violating single-use rotation (account-lifecycle §4.1). Doing the consume
+    // first (rather than after the insert) means the loser never mints a grant
+    // it would have to throw away, and the consume + insert commit atomically
+    // in this one transaction.
+    let consumed = repo
+        .oauth_session_grant()
+        .revoke_if_active(&*clock, prior_grant.id)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+    if !consumed {
+        repo.cancel()
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        return Err(CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            "grant_already_consumed",
+            "session grant already consumed; its rotation chain cannot continue",
+        ));
+    }
+
+    // 6. Mint a new grant with the same subject + scope + audience.
     let audience = prior_grant.audience.clone();
     let scopes: Vec<String> = prior_grant
         .scope
@@ -967,13 +1011,6 @@ pub async fn refresh_session_grant(
     .await
     .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    // 6. Single-use semantics: revoke the prior grant only AFTER the new one is persisted.
-    let revoked_prior = repo
-        .oauth_session_grant()
-        .revoke(&*clock, prior_grant.clone())
-        .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-
     repo.save()
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
@@ -986,7 +1023,8 @@ pub async fn refresh_session_grant(
         audience: new_material.audience,
         scopes: new_material.scopes,
         dpop_jkt: verification.jkt,
-        previous_grant_id: revoked_prior.id.to_string(),
+        // The prior grant was atomically consumed by the CAS above.
+        previous_grant_id: prior_grant.id.to_string(),
     }))
 }
 
@@ -1043,7 +1081,13 @@ pub async fn revoke_session_grant_via_holder_proof(
         .lookup_by_grant_jwt(&body.grant_jwt)
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-        .ok_or(CokretRouteError::NotFound)?;
+        .ok_or_else(|| {
+            CokretRouteError::coded(
+                StatusCode::NOT_FOUND,
+                "session_grant_not_found",
+                "no session grant matches the presented grant_jwt",
+            )
+        })?;
 
     // Proof-of-possession: the caller MUST hold the key the grant is bound to.
     let verifier = DpopVerifier::shared();

@@ -1353,7 +1353,7 @@
           ]
         },
         "session_grant_ttl": {
-          "description": "Lifetime of Cokret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and refreshed through\n`/_coauth/gate/account/session-grants/refresh`. Default: 300 (5 min).",
+          "description": "Lifetime of Cokret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and rotated through\n`/_cokret/gate/account/session-grants/refresh`. Default: 28800 (8h) —\naccess bearers minted from a grant are short-lived (capped Principal-Server\nside), so a multi-hour grant gives a normal working session without\nlong-lived bearers, within the spec ceiling (minutes-to-hours).",
           "type": "integer",
           "format": "uint64",
           "minimum": 60,
@@ -1409,11 +1409,18 @@
           ]
         },
         "verification_service_did": {
-          "description": "Round 4 — DID of the trusted 3PID verification service whose\n`binding_proof` JWTs this coauth deployment will accept on\n`POST /_coauth/self/invites/3pid/verify`. When omitted, the invite\nverifier endpoint returns `503 verifier_not_configured` because\nit has no trusted `iss` to compare against.\n\nOverride at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.",
+          "description": "Round 4 — DID of the trusted 3PID verification service whose\n`binding_proof` JWTs this coauth deployment will accept on\n`POST /_coauth/self/invites/3pid/verify`. When omitted, the invite\nverifier endpoint returns `503 verifier_not_configured` because\nit has no trusted `iss` to compare against.\n\nOverride at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.\n\nDeprecated single-value form. New deployments use\n[`Self::verification_service_dids`]; this field is ignored by the\neffective allowlist.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "verification_service_dids": {
+          "description": "SEC-07a — explicit allowlist of trusted 3PID verification-service\nDIDs whose `binding_proof` JWTs this coauth deployment will accept\non `POST /_coauth/self/invites/3pid/verify`.\n\nPer `spec/v1/zh/sync/third-party-invites.md` §2.1 (Allowlist MUST)\nthe verification service is the trust root of a 3PID invite, so the\nacceptable `verification_service_did` MUST be constrained to an\nexplicit authorization set rather than taken from invite metadata.\nAny `binding_proof.verification_service_did` not in this set MUST be\nrejected (and MUST NOT be admitted merely because the `subject_proof`\nis valid — see §4.3 step 2a).\n\nThe effective set is computed by [`Self::verification_service_allowlist`].",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "audit_signature_fail_closed": {
           "description": "Require signed admin-audit writes to succeed before committing\nsecurity-sensitive admin mutations. Defaults to `false` so existing\ndeployments tolerate missing service signing keys during rollout; set\nto `true` in production once JWKS publication and key rotation are\noperational.",
@@ -1521,12 +1528,12 @@
       "type": "object",
       "properties": {
         "base_url": {
-          "description": "Base URL of the starid deployment, for example\n`https://starid.example.com`. Path segments are ignored — the\nadapter joins `/api/v1/webvh/...` itself.",
+          "description": "Base URL of the starid deployment, for example\n`https://starid.example.com`. Path segments are ignored — the\nadapter joins `/_starid/root/webvh/...` itself.",
           "type": "string",
           "format": "uri"
         },
         "did_host": {
-          "description": "`host` value passed to starid's `POST /api/v1/webvh/dids`. Defaults\nto the host of `base_url` when omitted. Override when starid is\nfronted by a different public-facing hostname than the URL coauth\nreaches it on.",
+          "description": "`host` value passed to starid's `POST /_starid/root/webvh/dids`.\nDefaults to the host of `base_url` when omitted. Override when\nstarid is fronted by a different public-facing hostname than the URL\ncoauth reaches it on.",
           "type": [
             "string",
             "null"
@@ -1538,7 +1545,7 @@
           "default": "accounts"
         },
         "admin_token": {
-          "description": "Optional bearer token for starid's admin endpoints. When set,\nthe adapter prefers `POST /admin/api/v1/dids` over the public\n`POST /api/v1/webvh/dids` — both produce the same DID but the\nadmin route bypasses public-rate-limits.",
+          "description": "Optional bearer token for starid's admin endpoints. When set,\nthe adapter prefers `POST /_starid/local/admin/dids` over the public\n`POST /_starid/root/webvh/dids` — both produce the same DID but the\nadmin route bypasses public-rate-limits.",
           "type": [
             "string",
             "null"
@@ -3492,7 +3499,7 @@
           "const": "none"
         },
         {
-          "description": "`client_secret_basic`: HTTP Basic auth with `client_id` and `client_secret`",
+          "description": "`client_secret_basic`: HTTP Basic auth with `client_id` and\n`client_secret`",
           "type": "string",
           "const": "client_secret_basic"
         },

@@ -82,9 +82,13 @@ passwords:
   minimum_complexity: 3
 cokret:
   principal_server_url: https://local.host/
-  # Lifetime, in seconds, of Cokret session-grant JWTs returned by the
-  # REST auth bridge login/exchange paths. Default: 300 (5 minutes).
-  session_grant_ttl: 300
+  # Lifetime, in seconds, of the DPoP-bound Cokret session-grant JWTs returned
+  # by the REST auth bridge login/exchange paths and rotated through
+  # /_cokret/gate/account/session-grants/refresh. Default: 28800 (8h). The grant
+  # is the device-session refresh credential; the access bearers minted from it
+  # are short-lived (capped Principal-Server side), so a multi-hour grant gives a
+  # normal working session without long-lived bearers. Range [60, 86400].
+  session_grant_ttl: 28800
   # Keep false during rollout; set true in production after service signing
   # keys and JWKS publication are operational.
   audit_signature_fail_closed: false

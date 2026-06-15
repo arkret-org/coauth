@@ -104,6 +104,19 @@ pub enum CokretRouteError {
     #[error("{0}")]
     BadRequest(String),
 
+    /// A protocol failure whose registry error code MUST surface as the
+    /// envelope's top-level `code` (e.g. `grant_already_consumed`,
+    /// `session_logged_out`, `audience_mismatch`, `session_grant_not_found`)
+    /// rather than being collapsed into `bad_json`. This lets conformant
+    /// clients discriminate the failure structurally (account-lifecycle §4.1,
+    /// error-code-registry `codes`) instead of string-matching the message.
+    #[error("{message}")]
+    Coded {
+        status: StatusCode,
+        code: &'static str,
+        message: String,
+    },
+
     /// Caller did not present a usable bearer token. Renders as `401`.
     #[error("{0}")]
     Unauthorized(String),
@@ -112,6 +125,18 @@ pub enum CokretRouteError {
     /// requested operation. Renders as `403`.
     #[error("{0}")]
     Forbidden(String),
+}
+
+impl CokretRouteError {
+    /// Build a [`CokretRouteError::Coded`] carrying a registry error code that
+    /// will surface as the envelope's top-level `code`.
+    pub fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+        Self::Coded {
+            status,
+            code,
+            message: message.into(),
+        }
+    }
 }
 
 impl From<RouteError> for CokretRouteError {
@@ -258,6 +283,11 @@ impl Scribe for CokretRouteError {
             ),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "not found".to_owned()),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "bad_json", message),
+            Self::Coded {
+                status,
+                code,
+                message,
+            } => (status, code, message),
             Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, "unauthorized", message),
             Self::Forbidden(message) => (StatusCode::FORBIDDEN, "forbidden", message),
         };
