@@ -708,9 +708,7 @@ fn build_account_api_router(router: Router) -> Router {
         // PoP verification. It is a spec operation
         // (`ck.gate.account.command.introspect_session_grant`), so it lives under
         // `/_cokret`; the handler self-authorizes via the configured
-        // `session_grant_introspection_bearer` (or an admin scope). The legacy
-        // `/_coauth/.../introspect` mirror below is retained only as a
-        // deprecated alias for already-deployed configs.
+        // `session_grant_introspection_bearer` (or an admin scope).
         .push(
             Router::with_path("gate/account/session-grants/introspect")
                 .post(cokret::introspect_session_grant),
@@ -732,16 +730,12 @@ fn build_account_api_router(router: Router) -> Router {
                 .patch(cokret::patch_primary_handle_preference),
         )
         .push(
-            // Product-private surface: `list` / `{id}/revoke` back the
-            // account-management UI. `introspect` is now a spec operation served
-            // under `/_cokret` above; the mirror here is a DEPRECATED ALIAS kept
-            // only so already-deployed `session_grant_introspection_url` configs
-            // pointing at `/_coauth` keep working — new deployments MUST use the
-            // `/_cokret` path. The DPoP-bound `refresh` / hard-logout `revoke`
+            // Product-private account-management UI surface: `list` and
+            // `{id}/revoke`. `introspect` is the spec operation served under
+            // `/_cokret` above; the DPoP-bound `refresh` / hard-logout `revoke`
             // are protocol operations and live under `/_cokret` only.
             Router::with_path("gate/account/session-grants")
                 .get(cokret::list_session_grants)
-                .push(Router::with_path("introspect").post(cokret::introspect_session_grant))
                 .push(Router::with_path("{id}/revoke").post(cokret::revoke_session_grant)),
         )
         // Viewer
