@@ -592,15 +592,21 @@ pub async fn introspect_session_grant(
     // missing AND both present, rather than silently preferring `id` and
     // ignoring `grant_jwt` — an ambiguous selector should be a hard error so a
     // caller never believes it introspected the JWT it sent.
+    // The body parsed fine; it just fails the `oneOf` selector constraint, so
+    // this is a schema_violation (not bad_json, which means unparseable JSON).
     match (body.id.is_some(), body.grant_jwt.is_some()) {
         (false, false) => {
-            return Err(CokretRouteError::BadRequest(
-                "exactly one of id or grant_jwt is required".to_owned(),
+            return Err(CokretRouteError::coded(
+                StatusCode::BAD_REQUEST,
+                "schema_violation",
+                "exactly one of id or grant_jwt is required",
             ));
         }
         (true, true) => {
-            return Err(CokretRouteError::BadRequest(
-                "id and grant_jwt are mutually exclusive".to_owned(),
+            return Err(CokretRouteError::coded(
+                StatusCode::BAD_REQUEST,
+                "schema_violation",
+                "id and grant_jwt are mutually exclusive",
             ));
         }
         _ => {}
@@ -718,7 +724,7 @@ pub struct PrimaryHandlePreferenceOutcome {
     pub source_claim_digest: Option<String>,
 }
 
-/// `PATCH /api/v1/identity/primary-handle` — self-service holder
+/// `PATCH /_coauth/root/identity/primary-handle` — self-service holder
 /// preference for DID `metadata.primary_handle`.
 ///
 /// Body shape: `{ "primary_handle": "alice:example.com" }` to set, or
@@ -826,7 +832,7 @@ pub struct RefreshSessionGrantOneShotOutcome {
     pub previous_grant_id: String,
 }
 
-/// `POST /api/v1/session-grants/refresh` — exchange a near-expiry
+/// `POST /_cokret/gate/account/session-grants/refresh` — exchange a near-expiry
 /// DPoP-bound session grant for a fresh one. The caller MUST present:
 ///
 /// * A `DPoP` header that proves possession of the same key the existing grant is bound to

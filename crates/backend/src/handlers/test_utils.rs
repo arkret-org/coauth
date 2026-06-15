@@ -469,7 +469,16 @@ impl TestState {
             .push(Router::with_path("/_coauth/root/identity/primary-handle").patch(crate::handlers::cokret::patch_primary_handle_preference))
             .push(Router::with_path("/_cokret/find/directory/describe").get(crate::handlers::cokret::directory_describe))
             .push(Router::with_path("/_cokret/find/directory/resolve-handle").post(crate::handlers::cokret::directory_resolve_handle))
+            // Canonical spec surface (mirrors production server.rs): the
+            // Principal Server calls introspection at the `/_cokret` path. Tests
+            // that exercise the spec contract MUST hit this, not the alias.
             .push(
+                Router::with_path("/_cokret/gate/account/session-grants/introspect")
+                    .post(crate::handlers::cokret::introspect_session_grant),
+            )
+            .push(
+                // Deprecated `/_coauth` alias + the product-private list /
+                // {id}/revoke that back the account-management UI.
                 Router::with_path("/_coauth/gate/account/session-grants")
                     .get(crate::handlers::cokret::list_session_grants)
                     .push(

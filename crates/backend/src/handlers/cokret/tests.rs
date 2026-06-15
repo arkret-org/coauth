@@ -855,26 +855,37 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     let (_browser_session, grant, material, _session_key) =
         seed_persisted_session_grant(&state).await;
 
-    // Both present → 400.
+    // Hits the canonical spec path `/_cokret/gate/account/session-grants/introspect`
+    // (the surface soland calls). The selector check runs before auth, so an
+    // ambiguous selector is a 400 schema_violation regardless of bearer.
+
+    // Both present → 400 schema_violation (the body parsed; it fails the
+    // oneOf selector constraint, which is not bad_json).
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.id,
-                "grant_jwt": material.grant_jwt,
-                "audience": grant.audience,
-            })),
+            Request::post("/_cokret/gate/account/session-grants/introspect").json(
+                serde_json::json!({
+                    "id": grant.id,
+                    "grant_jwt": material.grant_jwt,
+                    "audience": grant.audience,
+                }),
+            ),
         )
         .await;
     response.assert_status(StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["error"]["code"], "schema_violation");
 
-    // Neither present → 400.
+    // Neither present → 400 schema_violation.
     let response = state
         .request(
-            Request::post("/api/v1/session-grants/introspect")
+            Request::post("/_cokret/gate/account/session-grants/introspect")
                 .json(serde_json::json!({ "audience": grant.audience })),
         )
         .await;
     response.assert_status(StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["error"]["code"], "schema_violation");
 }
 
 #[tokio::test]
