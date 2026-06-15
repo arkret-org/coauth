@@ -227,7 +227,7 @@ just build-all
 | `/_cokret/describe` | Cokret service metadata |
 | `/_cokret/root/identity/describe` | Identity-registry contract |
 | `/_cokret/find/directory/resolve-handle` | Handle -> DID resolution |
-| `/_coauth/gate/account/session-grants/introspect` | Principal Server session grant validation |
+| `/_cokret/gate/account/session-grants/introspect` | Principal Server session grant validation (legacy `/_coauth/...` alias retained) |
 | `/_coauth/admin/*` | Admin API for `sodmin` and service automation |
 | `/_coauth/admin/openapi.yaml` | Coauth admin API OpenAPI document |
 | `/.well-known/cokret/openapi.yaml` | Admin API discovery document for `sodmin` |

@@ -372,7 +372,8 @@ pub struct PrincipalServerConfig {
 
     /// Optional static bearer token accepted when this Principal Server calls
     /// coauth's session-grant introspection endpoint
-    /// (`/_coauth/gate/account/session-grants/introspect`). Mirrors
+    /// (`/_cokret/gate/account/session-grants/introspect`; the legacy
+    /// `/_coauth/...` path remains a deprecated alias). Mirrors
     /// `oauth_introspection_bearer` for the session-grant exchange path:
     /// avoids requiring a DB-backed PAT/OAuth-session for the
     /// server-to-server hop, which is awkward in dev when the coauth DB

@@ -1460,7 +1460,7 @@
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint\n(`/_coauth/gate/account/session-grants/introspect`). Mirrors\n`oauth_introspection_bearer` for the session-grant exchange path:\navoids requiring a DB-backed PAT/OAuth-session for the\nserver-to-server hop, which is awkward in dev when the coauth DB\nis reset frequently.",
+          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint\n(`/_cokret/gate/account/session-grants/introspect`; the legacy\n`/_coauth/...` path remains a deprecated alias). Mirrors\n`oauth_introspection_bearer` for the session-grant exchange path:\navoids requiring a DB-backed PAT/OAuth-session for the\nserver-to-server hop, which is awkward in dev when the coauth DB\nis reset frequently.",
           "type": [
             "string",
             "null"

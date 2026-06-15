@@ -839,8 +839,15 @@ pub async fn refresh_session_grant(
 
     // 1. DPoP proof must be present — the refresh endpoint is the canonical proof-of-possession
     //    check.
-    let dpop_header = dpop_header_from_request(req)
-        .ok_or_else(|| CokretRouteError::BadRequest("device_proof_required".to_owned()))?;
+    let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
+        // Holder proof (the device's DPoP) is the authorization for this
+        // operation; its absence is an auth failure, not a malformed body.
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "did_proof_required",
+            "session-grant holder proof (DPoP) required",
+        )
+    })?;
 
     let body: RefreshSessionGrantRequestBody = req
         .parse_json()
@@ -904,10 +911,13 @@ pub async fn refresh_session_grant(
     let verification = verifier
         .verify(&dpop_header, &htm, &htu, now, Some(&body.grant_jwt))
         .await
-        .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
+        .map_err(|error| {
+            CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+        })?;
 
-    DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt)
-        .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
+    DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
+        CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+    })?;
 
     // 4. Resolve the underlying browser session so the new grant lives under the same
     //    authentication context.
@@ -1054,8 +1064,15 @@ pub async fn revoke_session_grant_via_holder_proof(
     let url_builder = depot.url_builder()?;
     let clock = crate::handlers::make_clock();
 
-    let dpop_header = dpop_header_from_request(req)
-        .ok_or_else(|| CokretRouteError::BadRequest("device_proof_required".to_owned()))?;
+    let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
+        // Holder proof (the device's DPoP) is the authorization for this
+        // operation; its absence is an auth failure, not a malformed body.
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "did_proof_required",
+            "session-grant holder proof (DPoP) required",
+        )
+    })?;
     let body: RefreshSessionGrantRequestBody = req
         .parse_json()
         .await
@@ -1098,9 +1115,12 @@ pub async fn revoke_session_grant_via_holder_proof(
     let verification = verifier
         .verify(&dpop_header, &htm, &htu, now, Some(&body.grant_jwt))
         .await
-        .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
-    DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt)
-        .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
+        .map_err(|error| {
+            CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+        })?;
+    DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
+        CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+    })?;
 
     let revoked = if prior_grant.revoked_at.is_none() {
         repo.oauth_session_grant()

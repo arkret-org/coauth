@@ -795,7 +795,11 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["active"], true);
     assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], true);
-    assert_eq!(body["one_time_use_consumed"], true);
+    // Introspection is READ-ONLY: it MUST NOT consume the grant (consumption /
+    // single-use rotation is the refresh endpoint's job). So one_time_use is
+    // never reported as already-consumed here, and a follow-up introspect of
+    // the same grant still sees it active.
+    assert_eq!(body["one_time_use_consumed"], false);
     assert_eq!(body["grant"]["id"], grant.id.to_string());
     assert_eq!(body["grant"]["subject"], grant.subject);
     assert_eq!(body["grant"]["audience"], grant.audience);
@@ -808,6 +812,8 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
         grant.session_public_key
     );
 
+    // A second introspection of the same grant: still active (read-only — the
+    // first call did not revoke it).
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
@@ -818,8 +824,9 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["active"], false);
-    assert_eq!(body["status"], "revoked");
+    assert_eq!(body["active"], true);
+    assert_eq!(body["status"], "active");
+    assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
 
     let response = state
         .request(

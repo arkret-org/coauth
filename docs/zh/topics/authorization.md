@@ -24,10 +24,10 @@ Principal Server 应验证 `ck.session.grant` 来执行下游账号和设备访�
 包含 issuer service DID、subject principal DID、service account ID、可选 device
 ID、audience、scope、expiry、revocation reference 以及 proof block。
 
-session-grant JWT 默认生命周期为 300 秒，可通过配置文件中的
+session-grant JWT 默认生命周期为 28800 秒（8 小时），可通过配置文件中的
 `cokret.session_grant_ttl` 调整。
 
-`POST /_coauth/gate/account/session-grants/introspect` 接受 grant ID 或 signed grant JWT，并可附带
+`POST /_cokret/gate/account/session-grants/introspect` 接受 grant ID 或 signed grant JWT，并可附带
 audience。响应只返回 `active`、标准状态（`active`、`revoked`、`expired`、`locked`、
 `suspended`、`audience_mismatch`、`not_found`）和非敏感元数据，不返回已存储 JWT、
 refresh token、session private key、handle 或 claim payload。
