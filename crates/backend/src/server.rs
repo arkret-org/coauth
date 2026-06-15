@@ -717,10 +717,15 @@ fn build_account_api_router(router: Router) -> Router {
                 .patch(cokret::patch_primary_handle_preference),
         )
         .push(
+            // Product-private surface: `introspect` is consumed by principal
+            // servers (soland `session_grant_introspection_url`); `list` /
+            // `{id}/revoke` back the account-management UI. The DPoP-bound
+            // `refresh` (and hard-logout `revoke`) are protocol operations and
+            // live under `/_cokret` above — they are intentionally NOT mirrored
+            // here.
             Router::with_path("gate/account/session-grants")
                 .get(cokret::list_session_grants)
                 .push(Router::with_path("introspect").post(cokret::introspect_session_grant))
-                .push(Router::with_path("refresh").post(cokret::refresh_session_grant))
                 .push(Router::with_path("{id}/revoke").post(cokret::revoke_session_grant)),
         )
         // Viewer
