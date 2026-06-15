@@ -681,6 +681,18 @@ fn build_account_api_router(router: Router) -> Router {
             Router::with_path("find/directory/resolve-handle")
                 .post(cokret::directory_resolve_handle),
         )
+        // Protocol surface for DPoP-bound session-grant rotation. The grant is
+        // the (minutes-to-hours) refresh credential; an authorized device
+        // proves possession of the key bound into the grant's `cnf.jkt` and
+        // rotates onto a fresh grant without re-running OIDC — this is what
+        // lets a device session live for days while access bearers stay short.
+        // It is a spec operation (service-http-binding session-grants surface),
+        // so it is exposed under `/_cokret` (not the product-private `/_coauth`)
+        // and clients reach it as a protocol path.
+        .push(
+            Router::with_path("gate/account/session-grants/refresh")
+                .post(cokret::refresh_session_grant),
+        )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check));
 
     let mut coauth_router = Router::with_path("/_coauth")
