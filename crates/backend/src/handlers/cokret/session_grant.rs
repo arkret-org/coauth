@@ -968,3 +968,111 @@ pub async fn refresh_session_grant(
         previous_grant_id: revoked_prior.id.to_string(),
     }))
 }
+
+#[derive(Debug, Serialize)]
+pub struct RevokeSessionGrantOutcome {
+    pub revoked: bool,
+    pub browser_session_finished: bool,
+}
+
+/// `POST /_cokret/gate/account/session-grants/revoke` — hard-logout / explicit
+/// revocation of a DPoP-bound session grant (account-lifecycle §4.1).
+///
+/// The caller proves possession of the key bound into the grant's `cnf.jkt`
+/// (same holder proof as rotation), then we:
+/// 1. revoke the presented grant (single-use; its rotation chain cannot
+///    continue because each rotation already revokes its predecessor), and
+/// 2. **finish the underlying browser session**, so no future holder proof —
+///    even with the correct device key — can rotate a fresh grant under it
+///    (`session_logged_out` on `refresh`). Re-authentication is then required.
+#[handler]
+pub async fn revoke_session_grant_via_holder_proof(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<RevokeSessionGrantOutcome>, CokretRouteError> {
+    use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
+
+    let url_builder = depot.url_builder()?;
+    let clock = crate::handlers::make_clock();
+
+    let dpop_header = dpop_header_from_request(req)
+        .ok_or_else(|| CokretRouteError::BadRequest("device_proof_required".to_owned()))?;
+    let body: RefreshSessionGrantRequestBody = req
+        .parse_json()
+        .await
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
+    if body.grant_jwt.trim().is_empty() {
+        return Err(CokretRouteError::BadRequest("missing grant_jwt".to_owned()));
+    }
+
+    let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(body.grant_jwt.as_str())
+        .map_err(|_| CokretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
+    let expected_jkt = jwt
+        .payload()
+        .cnf
+        .as_ref()
+        .map(|cnf| cnf.jkt.clone())
+        .ok_or_else(|| {
+            CokretRouteError::BadRequest("grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned())
+        })?;
+
+    let mut repo = depot.repo().await?;
+    let prior_grant = repo
+        .oauth_session_grant()
+        .lookup_by_grant_jwt(&body.grant_jwt)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .ok_or(CokretRouteError::NotFound)?;
+
+    // Proof-of-possession: the caller MUST hold the key the grant is bound to.
+    let verifier = DpopVerifier::shared();
+    let now = clock.now();
+    let htm = req.method().as_str().to_ascii_uppercase();
+    let public_base = url_builder.http_base();
+    let htu = dpop_htu(&public_base, req);
+    let verification = verifier
+        .verify(&dpop_header, &htm, &htu, now, Some(&body.grant_jwt))
+        .await
+        .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
+    DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt)
+        .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
+
+    let revoked = if prior_grant.revoked_at.is_none() {
+        repo.oauth_session_grant()
+            .revoke(&*clock, prior_grant.clone())
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        true
+    } else {
+        false
+    };
+
+    // Terminate the authentication context so the rotation chain cannot be
+    // resumed by any holder proof (account-lifecycle §4.1). Bind the looked-up
+    // session to an owned value first so the sub-repo borrow is released before
+    // the follow-up `finish` re-borrows `repo`.
+    let active_session = repo
+        .browser_session()
+        .lookup(prior_grant.browser_session_id)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .filter(|session| session.finished_at.is_none());
+    let browser_session_finished = if let Some(session) = active_session {
+        repo.browser_session()
+            .finish(&*clock, session)
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        true
+    } else {
+        false
+    };
+
+    repo.save()
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+
+    Ok(Json(RevokeSessionGrantOutcome {
+        revoked,
+        browser_session_finished,
+    }))
+}

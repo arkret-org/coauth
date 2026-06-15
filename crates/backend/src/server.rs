@@ -693,6 +693,13 @@ fn build_account_api_router(router: Router) -> Router {
             Router::with_path("gate/account/session-grants/refresh")
                 .post(cokret::refresh_session_grant),
         )
+        // Hard-logout / explicit revocation of a DPoP-bound session grant
+        // (account-lifecycle §4.1): revoke the grant + finish the browser
+        // session so the rotation chain cannot be resumed by any holder proof.
+        .push(
+            Router::with_path("gate/account/session-grants/revoke")
+                .post(cokret::revoke_session_grant_via_holder_proof),
+        )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check));
 
     let mut coauth_router = Router::with_path("/_coauth")
