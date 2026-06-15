@@ -14,7 +14,13 @@ use super::ConfigurationSection;
 /// engine agree on the exact byte-form. Validate via
 /// [`validate_trust_domain`].
 const TRUST_DOMAIN_PREFIX: &str = "ck:trust_domain:";
-const SESSION_GRANT_TTL_MICROS: i64 = 5 * 60 * 1_000_000;
+// 8 hours. The session grant is the refresh credential for a device session;
+// the access bearers minted from it are short-lived (capped server-side), so a
+// multi-hour grant gives a normal working-session length WITHOUT long-lived
+// bearers. Stays within the spec ceiling (`conformance-profiles.md`
+// §ck.profile.auth_server.v1: minutes-to-hours, not multi-day) and the
+// configurable [min, max] = [60s, 24h] range below.
+const SESSION_GRANT_TTL_MICROS: i64 = 8 * 60 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
 const SESSION_GRANT_TTL_MAX_SECONDS: i64 = 86_400;
 
@@ -488,10 +494,15 @@ mod tests {
     }
 
     #[test]
-    fn session_grant_ttl_defaults_to_five_minutes() {
+    fn session_grant_ttl_defaults_to_eight_hours() {
+        // The session grant is the refresh credential for a device session;
+        // access bearers minted from it are short-lived (capped server-side).
+        // An 8h default gives a normal working-session length without long-lived
+        // bearers, and stays within the spec ceiling (minutes-to-hours, not
+        // multi-day) and the [60s, 24h] configurable range.
         assert_eq!(
             CokretConfig::default().session_grant_ttl,
-            Duration::try_minutes(5).unwrap()
+            Duration::try_hours(8).unwrap()
         );
     }
 
