@@ -208,7 +208,7 @@ pub const HANDLE_NOT_CANONICAL_CODE: &str = "handle_not_canonical";
 /// form `<lowercase-localpart>:<lowercase-domain>` per spec 7157ee8 §3.1.
 ///
 /// Rejects:
-///   * the legacy `cokret://<host>/users/<localpart>` URI form
+///   * `cokret://<host>/users/<localpart>` URI form
 ///   * `acct:` interop aliases (those belong in `handle_aliases[]`)
 ///   * leading `@` (display form — strip before submitting)
 ///   * bare host strings, `did:` strings, display strings
@@ -237,8 +237,7 @@ pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, Str
     if trimmed.starts_with("cokret://") {
         return Err((
             HANDLE_NOT_CANONICAL_CODE,
-            "legacy cokret:// URI form is no longer canonical; supply a <localpart>:<domain> handle"
-                .to_owned(),
+            "cokret:// URI form is not canonical; supply a <localpart>:<domain> handle".to_owned(),
         ));
     }
     if trimmed.starts_with('@') {

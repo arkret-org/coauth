@@ -1,6 +1,6 @@
 //! Unified helper for writing and verifying admin audit log entries.
 //!
-//! Unsigned audit rows remain accepted for compatibility. Signed writers insert
+//! Signed writers insert
 //! the audit row first, then sign the canonical transcript that includes the
 //! repository-generated row id and created_at timestamp, and finally update the
 //! same row's `audit_signature` column.
@@ -33,9 +33,8 @@ const AUDIT_TRANSCRIPT_SCHEMA_VERSION: u32 = 1;
 pub enum AuditSignatureStatus {
     /// The row has a signature and the current service public key verifies it.
     Verified,
-    /// The row predates signed-audit rollout or was explicitly written
-    /// unsigned.
-    UnsignedLegacy,
+    /// The row was explicitly written unsigned.
+    Unsigned,
     /// The row has a signature, but the signature no longer matches the row.
     Invalid,
     /// The row references a signing key that is not available in this process.
@@ -201,7 +200,7 @@ pub fn verify_admin_operation_signature(
         .as_deref()
         .filter(|value| !value.trim().is_empty())
     else {
-        return AuditSignatureStatus::UnsignedLegacy;
+        return AuditSignatureStatus::Unsigned;
     };
 
     let parsed = match parse_audit_signature(signature_value) {
@@ -243,21 +242,6 @@ pub fn verify_admin_operation_signature(
         return AuditSignatureStatus::KeyUnavailable;
     }
 
-    let legacy_transcript = legacy_transcript_v1_for_log(log);
-    let Ok(legacy_canonical) = canonical_json_bytes(&legacy_transcript) else {
-        return AuditSignatureStatus::Invalid;
-    };
-    for alg in audit_signature_algorithms() {
-        let Ok(verifying_key) = AsymmetricVerifyingKey::from_jwk_and_alg(public_key.params(), &alg)
-        else {
-            continue;
-        };
-        let signature = JoseSignature::new(parsed.signature.clone());
-        if verifying_key.verify(&legacy_canonical, &signature).is_ok() {
-            return AuditSignatureStatus::UnsignedLegacy;
-        }
-    }
-
     AuditSignatureStatus::Invalid
 }
 
@@ -294,31 +278,6 @@ fn transcript_for_log(log: &AdminOperationLog) -> AuditTranscript<'_> {
         details: &log.details,
         ip_address: log.ip_address.map(|ip| ip.to_string()),
         user_agent: log.user_agent.as_deref(),
-    }
-}
-
-/// Compatibility transcript for rows written by the pre-Phase-3 signed helper.
-/// It intentionally excludes repository metadata, so a matching signature is
-/// reported as legacy rather than fully verified.
-#[derive(Debug, Serialize)]
-struct LegacyAuditTranscriptV1<'a> {
-    kind: &'a str,
-    admin_user_id: String,
-    operation: &'a AdminOperation,
-    resource_type: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    resource_id: Option<String>,
-    details: &'a serde_json::Value,
-}
-
-fn legacy_transcript_v1_for_log(log: &AdminOperationLog) -> LegacyAuditTranscriptV1<'_> {
-    LegacyAuditTranscriptV1 {
-        kind: "ck.coauth.audit.admin_operation.v1",
-        admin_user_id: log.admin_user_id.to_string(),
-        operation: &log.operation,
-        resource_type: &log.resource_type,
-        resource_id: log.resource_id.map(|id| id.to_string()),
-        details: &log.details,
     }
 }
 
@@ -450,31 +409,6 @@ mod tests {
         (keystore, log)
     }
 
-    fn legacy_v1_signed_test_log(service_did: &str) -> (Keystore, AdminOperationLog) {
-        use coauth_jose::constraints::Constrainable as _;
-
-        let keystore = test_keystore();
-        let mut log = test_log(None);
-        let canonical =
-            canonical_json_bytes(&legacy_transcript_v1_for_log(&log)).expect("canonical v1");
-        let alg = JsonWebSignatureAlg::EdDsa;
-        let key = keystore
-            .signing_key_for_algorithm(&alg)
-            .expect("test key supports EdDSA");
-        let kid = key.kid().expect("test key has kid");
-        let signer = keystore
-            .signer_for_algorithm(&alg)
-            .expect("test key signer");
-        let mut rng = ChaChaRng::seed_from_u64(11);
-        let raw = signer
-            .try_sign_with_rng(&mut rng, &canonical)
-            .expect("legacy audit signature");
-        let sig_bytes: Box<[u8]> = raw.into();
-        let sig_b64 = Base64UrlUnpadded::encode_string(&sig_bytes);
-        log.audit_signature = Some(format!("{service_did}#{kid}:{sig_b64}"));
-        (keystore, log)
-    }
-
     #[test]
     fn signed_row_verifies() {
         let service_did = "did:web:coauth.example";
@@ -528,24 +462,14 @@ mod tests {
     }
 
     #[test]
-    fn legacy_unsigned_status_is_reported() {
+    fn unsigned_status_is_reported() {
         assert_eq!(
             verify_admin_operation_signature(
                 &test_log(None),
                 &test_keystore(),
                 "did:web:coauth.example"
             ),
-            AuditSignatureStatus::UnsignedLegacy
-        );
-    }
-
-    #[test]
-    fn legacy_v1_signature_status_is_reported_as_legacy() {
-        let service_did = "did:web:coauth.example";
-        let (keystore, log) = legacy_v1_signed_test_log(service_did);
-        assert_eq!(
-            verify_admin_operation_signature(&log, &keystore, service_did),
-            AuditSignatureStatus::UnsignedLegacy
+            AuditSignatureStatus::Unsigned
         );
     }
 

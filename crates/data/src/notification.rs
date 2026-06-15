@@ -63,7 +63,7 @@ pub enum NotificationRequestSource {
         /// The originating recovery session.
         user_recovery_session_id: Ulid,
     },
-    /// Triggered by a workflow instance outside the legacy auth strands.
+    /// Triggered by a workflow instance outside the direct auth strands.
     WorkflowInstance {
         /// The originating workflow instance.
         workflow_instance_id: Ulid,

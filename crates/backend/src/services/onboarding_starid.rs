@@ -240,8 +240,7 @@ mod tests {
     /// When `starid_backend = true` and `[cokret.starid]` is configured,
     /// `DefaultDidResolverService::primary_did_for_user` returns the
     /// deterministic `did:web:<host>:<path_prefix>:<slug>` form (the
-    /// alias of what starid minted), not the legacy
-    /// `did:web:coauth.invalid:…` derivation.
+    /// alias of what starid minted).
     #[tokio::test]
     async fn primary_did_for_user_routes_to_starid_form_when_flag_set() {
         install_crypto_provider();

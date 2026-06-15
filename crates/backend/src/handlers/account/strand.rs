@@ -7,13 +7,13 @@
 //! will replace this once `StrandSession` has a database repository.
 
 use chrono::Utc;
-use coauth_data::strand::{
-    AuthenticatorType as DomainAuthenticatorType, StrandSession, StrandSessionStatus,
-    IdentificationField as DomainIdentificationField, PromptField as DomainPromptField,
-    PromptFieldType as DomainPromptFieldType, StageChallenge as DomainStageChallenge, StageOutcome,
-    StageSubmission as DomainStageSubmission, StageValidationError as DomainStageValidationError,
-};
 use coauth_data::new_id;
+use coauth_data::strand::{
+    AuthenticatorType as DomainAuthenticatorType, IdentificationField as DomainIdentificationField,
+    PromptField as DomainPromptField, PromptFieldType as DomainPromptFieldType,
+    StageChallenge as DomainStageChallenge, StageOutcome, StageSubmission as DomainStageSubmission,
+    StageValidationError as DomainStageValidationError, StrandSession, StrandSessionStatus,
+};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,8 @@ use ulid::Ulid;
 use super::{RouteError, make_rng};
 use crate::app_state::DepotExt as _;
 use crate::handlers::strand::{
-    CaptchaVerifyContext, StrandExecutor, StrandPlan, evict_strand_sessions, strand_session_store_write,
+    CaptchaVerifyContext, StrandExecutor, StrandPlan, evict_strand_sessions,
+    strand_session_store_write,
 };
 
 // ---------------------------------------------------------------------------
@@ -335,22 +336,24 @@ fn resolve_strand_by_slug(
     Vec<coauth_data::strand::StrandStageBinding>,
 )> {
     match slug {
-        "default-registration" => Some(crate::handlers::strand::defaults::default_registration_strand(
+        "default-registration" => {
+            Some(crate::handlers::strand::defaults::default_registration_strand(rng))
+        }
+        "default-recovery" => Some(crate::handlers::strand::defaults::default_recovery_strand(
             rng,
         )),
-        "default-recovery" => Some(crate::handlers::strand::defaults::default_recovery_strand(rng)),
         "default-password-change" => {
             Some(crate::handlers::strand::defaults::default_password_change_strand(rng))
         }
         "default-authentication" => {
             Some(crate::handlers::strand::defaults::default_authentication_strand(rng))
         }
-        "default-authorization" => Some(
-            crate::handlers::strand::defaults::default_authorization_strand(rng),
-        ),
-        "default-enrollment" => Some(crate::handlers::strand::defaults::default_enrollment_strand(
-            rng,
-        )),
+        "default-authorization" => {
+            Some(crate::handlers::strand::defaults::default_authorization_strand(rng))
+        }
+        "default-enrollment" => {
+            Some(crate::handlers::strand::defaults::default_enrollment_strand(rng))
+        }
         _ => None,
     }
 }

@@ -58,7 +58,7 @@ pub struct HandleClaimPayload {
     pub claim_kind: String,
     pub subject: String,
     /// Canonical Cokret handle of the form `<localpart>:<domain>` per
-    /// spec 7157ee8 §3.1 (replaces the legacy `handle_uri` URI form).
+    /// spec 7157ee8 §3.1.
     pub handle: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub handle_aliases: Vec<String>,
@@ -159,7 +159,7 @@ pub(crate) fn issue_handle_claim(
     ensure_subject_is_principal_did(&subject_id)?;
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
-    // `<localpart>:<domain>`; the legacy `cokret://…` URI is retired.
+    // `<localpart>:<domain>`.
     let handle = user_handle(url_builder, user);
     let mut aliases = vec![user_handle_acct_alias(url_builder, user)];
     aliases.extend(user.handle_aliases.iter().cloned());
@@ -261,8 +261,7 @@ pub(crate) fn issue_handle_claim(
 /// downstream digesters to reproduce the hash.
 ///
 /// PROOF-1: spec 7157ee8 §3.2 mandates the transcript covers `handle`
-/// (canonical `<localpart>:<domain>` form). The legacy `handle_uri` shape
-/// is no longer included in the digest input on any code path.
+/// (canonical `<localpart>:<domain>` form).
 #[derive(Debug, Serialize)]
 struct HandleClaimDigestInput<'a> {
     schema: &'a str,

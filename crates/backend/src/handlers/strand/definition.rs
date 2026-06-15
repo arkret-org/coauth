@@ -24,11 +24,11 @@
 //! ```
 
 use chrono::Utc;
-use coauth_data::strand::{
-    AuthenticatorType, StrandDefinition, StrandDesignation, StrandStageBinding, IdentificationField,
-    PromptField, StageKind,
-};
 use coauth_data::new_id;
+use coauth_data::strand::{
+    AuthenticatorType, IdentificationField, PromptField, StageKind, StrandDefinition,
+    StrandDesignation, StrandStageBinding,
+};
 use serde::Deserialize;
 
 /// A declarative strand definition file that can be parsed from YAML (or JSON).

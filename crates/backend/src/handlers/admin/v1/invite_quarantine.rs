@@ -248,9 +248,9 @@ pub async fn resolve_invite_quarantine(
     // re-run the consent gate here — the operator approving the queue
     // row has already vouched for the consent decision.
     //
-    // If `payload` has no recognisable mint params (legacy enqueue
-    // shapes, manual queue inserts), we log a warning and fall through
-    // to the flag-flip-only path. Reject always falls through.
+    // If `payload` has no recognisable mint params (for example manual
+    // queue inserts), we log a warning and fall through to the
+    // flag-flip-only path. Reject always falls through.
     let mut minted_tokens: Vec<SingleOutcome<UserRegistrationToken>> = Vec::new();
     if matches!(body.decision, ResolveDecision::Approve) {
         if let Some(params) = mint_params_from_payload(&record.payload) {
@@ -331,8 +331,7 @@ pub async fn resolve_invite_quarantine(
 /// ```
 ///
 /// Returns `None` when `count` is missing or out of range — the
-/// resolve handler then falls through to the legacy flag-flip-only
-/// behaviour.
+/// resolve handler then falls through to flag-flip-only behaviour.
 fn mint_params_from_payload(payload: &serde_json::Value) -> Option<MintRegistrationTokensParams> {
     let count = payload.get("count")?.as_u64()?;
     if count == 0 || count > 100 {

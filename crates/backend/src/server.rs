@@ -664,9 +664,9 @@ fn build_oauth_router(router: Router) -> Router {
 
 fn build_account_api_router(router: Router) -> Router {
     use crate::handlers::account::{
-        agents, approval, auth, avatar, bootstrap_admin_status, emails, strand, invite_accept,
+        agents, approval, auth, avatar, bootstrap_admin_status, emails, invite_accept,
         invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
-        recovery, register, sessions, site_config, upstream_oauth, users, viewer,
+        recovery, register, sessions, site_config, strand, upstream_oauth, users, viewer,
     };
     use crate::handlers::{cokret, policy_check};
 

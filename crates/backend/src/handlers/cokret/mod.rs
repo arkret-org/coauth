@@ -344,8 +344,8 @@ pub(crate) fn user_did_for(
     )
 }
 
-/// Legacy display form `local@host` used by some logging / display
-/// paths. NOT the canonical handle form — use [`user_handle`]
+/// Display form `local@host` used by logging / display paths.
+/// NOT the canonical handle form — use [`user_handle`]
 /// (spec 7157ee8 §3.1) for `alsoKnownAs` / DID Document / claim emission.
 pub(crate) fn user_handle_display(url_builder: &UrlBuilder, user: &User) -> String {
     format!(
@@ -379,8 +379,8 @@ pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> S
 }
 
 /// Stable wire-level error code returned when a caller passes a non-
-/// canonical handle string (legacy `cokret://` URI, `acct:` alias, or
-/// other malformed input).
+/// canonical handle string (`cokret://` URI, `acct:` alias, or other
+/// malformed input).
 ///
 /// Mirrored by [`coauth_data::user::HANDLE_NOT_CANONICAL_CODE`] — kept in
 /// sync so the audit / HTTP layers can refer to the same constant without
@@ -640,17 +640,12 @@ pub(crate) fn parse_local_user_did_for(
 }
 
 pub(crate) fn parse_local_handle(url_builder: &UrlBuilder, handle: &str) -> Option<String> {
-    // Spec 7157ee8 §3.1 canonical form: `<localpart>:<domain>`. Also
-    // accept the legacy `<localpart>@<domain>` display form for clients
-    // that have not yet migrated. `acct:` prefix is stripped first so
-    // both `acct:alice@host` and bare `alice@host` round-trip the same.
-    let trimmed = handle.trim().trim_start_matches("acct:");
+    // Spec 7157ee8 §3.1 canonical form: `<localpart>:<domain>`.
+    let trimmed = handle.trim();
     let host = url_builder.public_hostname().to_lowercase();
     let colon_suffix = format!(":{host}");
-    let at_suffix = format!("@{host}");
     trimmed
         .strip_suffix(&colon_suffix)
-        .or_else(|| trimmed.strip_suffix(&at_suffix))
         .filter(|h| !h.is_empty())
         .map(ToOwned::to_owned)
 }

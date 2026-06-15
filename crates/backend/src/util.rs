@@ -90,9 +90,8 @@ pub fn handle_valid(handle: &str) -> bool {
 /// (`ck:device:<uuid7>`, `ck:space:<uuid7>`, `ck:cell:<family>:<id>`,
 /// etc.) from external requests.
 ///
-/// Wire-rejection of legacy ULID is intentional — v1 is unreleased so
-/// there is no compatibility burden. Callers that must accept ULID for
-/// some other reason should not use this helper.
+/// ULID bodies are intentionally rejected. Callers that must accept ULID
+/// for some other reason should not use this helper.
 ///
 /// # Examples
 /// ```
@@ -107,7 +106,7 @@ pub fn handle_valid(handle: &str) -> bool {
 ///     "ck:space:0190a3c0-0000-7000-8000-000000000000",
 ///     "device"
 /// ));
-/// // ULID body → false (legacy rejected)
+/// // ULID body -> false
 /// assert!(!is_typed_uuid7(
 ///     "ck:device:01JS0SP000000000000000000",
 ///     "device"

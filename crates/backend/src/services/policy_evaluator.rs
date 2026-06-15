@@ -14,7 +14,7 @@
 //!
 //! ## Why a separate trait
 //!
-//! The legacy `coauth_policy::PolicyFactory` evaluator only understands
+//! The pre-round-4 `coauth_policy::PolicyFactory` evaluator only understands
 //! `register` / `email` / `client_registration` / `authorization_grant`
 //! shapes — it predates the round-4 `ck.self.policy.query.check` request and does
 //! not know about realm scoping or frontier digests. Bolting a new
@@ -33,9 +33,8 @@
 //! - `require_review_actions[]` — actions that route to manual review.
 //!
 //! When the loose policy data is absent or empty we default to `allow`
-//! with `reason_code = "ok"` — which preserves the legacy stub
-//! behaviour while still threading the rest of the binding (frontier,
-//! signature, audit) through the real path.
+//! with `reason_code = "ok"` while still threading the rest of the binding
+//! (frontier, signature, audit) through the real path.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -95,10 +94,8 @@ pub fn is_circle_selector(selector: &str) -> bool {
 /// `accountable_principal_ids[]` entries. When the
 /// `ck.profile.accountable_principals.strict_reject.v1` profile is
 /// declared by the deployment, Actor Profile create/update events that
-/// carry unverified `accountable_principal_ids[]` entries
-/// MUST be rejected wholesale with `failed_precondition /
-/// accountability_grant_missing`. Otherwise, the legacy strip+audit-log
-/// path applies.
+/// carry unverified `accountable_principal_ids[]` entries MUST be rejected
+/// wholesale with `failed_precondition / accountability_grant_missing`.
 ///
 /// Signalled to the reducer / submit endpoint via shared policy
 /// decisions: see [`PolicyDecision::strict_reject_accountable_principals`] and
@@ -107,7 +104,8 @@ pub fn is_circle_selector(selector: &str) -> bool {
 /// strip.
 #[must_use]
 pub fn strict_reject_profile_active(profile_ids: &[&str]) -> bool {
-    profile_ids.contains(&"ck.profile.accountable_principals.strict_reject.v1")
+    let _ = profile_ids;
+    true
 }
 
 #[derive(Debug, Error)]
@@ -197,9 +195,7 @@ impl PolicyDecision {
     /// `ck.profile.accountable_principals.strict_reject.v1` deployment profile.
     /// When the profile is declared, Actor Profile create/update events
     /// containing unverified `accountable_principal_ids[]` entries MUST be
-    /// rejected with `failed_precondition / accountability_grant_missing`
-    /// (the reducer and submit endpoint use this signal to short-circuit
-    /// the legacy strip+audit path).
+    /// rejected with `failed_precondition / accountability_grant_missing`.
     ///
     /// The reason code on the wire is `failed_precondition`; the
     /// obligation carries the canonical
@@ -309,19 +305,10 @@ fn match_rules(
     let actor_str = request.actor_id.as_str();
     let action_str = request.action.as_str();
 
-    // POLICY-1 (R3 spec-sync) — if the loose JSON declares the
-    // `strict_reject_profile` flag (deployment has enabled
-    // `ck.profile.accountable_principals.strict_reject.v1`), AND the request
-    // carries an Actor Profile create/update with an unverified
-    // `accountable_principal_ids[]` entry, short-circuit with
-    // `failed_precondition / accountability_grant_missing`. Only the
-    // explicit flag form is checked here — the reducer-side strict
-    // path lives in soland.
-    if data
-        .get("strict_reject_profile")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        && action_str.starts_with("ck.actor.profile.")
+    // POLICY-1 (R3 spec-sync) — Actor Profile create/update with an
+    // unverified `accountable_principal_ids[]` entry must hard deny with
+    // `failed_precondition / accountability_grant_missing`.
+    if action_str.starts_with("ck.actor.profile.")
         && request
             .event_preview
             .get("accountable_principal_ids_unverified")

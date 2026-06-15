@@ -88,8 +88,7 @@ pub struct AddAccountDidBindingRequestBody {
 }
 
 /// Compact-serialised JWS string + the nonce that was embedded in the
-/// canonical binding statement. We accept both `{"jws": "...", "nonce":
-/// "..."}` and a bare string (legacy admin clients) for ergonomics.
+/// canonical binding statement.
 #[derive(Deserialize, JsonSchema, ToSchema)]
 pub struct ControlProofPayload {
     /// Compact JWS whose attached payload is the canonical binding statement.
@@ -167,8 +166,8 @@ pub async fn add_account_did(
 
     // Phase P2 (B-D): all DID binding writes round-trip through the SDK
     // `Did::new` validator (Round-4 regex `^did:[a-z0-9]+:[^\s]+$`). Reject
-    // legacy / wire-broken DIDs BEFORE invoking the resolver chain so
-    // network I/O never fires on a non-canonical value.
+    // malformed DIDs BEFORE invoking the resolver chain so network I/O
+    // never fires on a non-canonical value.
     let did = normalize_did_for_binding(&body.did)
         .map_err(|error| AppError::bad_request(format!("did_invalid: {error}")))?;
 

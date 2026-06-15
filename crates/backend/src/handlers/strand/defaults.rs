@@ -5,10 +5,10 @@
 //! database.
 
 use chrono::Utc;
-use coauth_data::strand::{
-    StrandDefinition, StrandDesignation, StrandStageBinding, IdentificationField, StageKind,
-};
 use coauth_data::new_id;
+use coauth_data::strand::{
+    IdentificationField, StageKind, StrandDefinition, StrandDesignation, StrandStageBinding,
+};
 
 /// Create the default registration strand:
 /// 1. `UserWrite` — collect username / display name

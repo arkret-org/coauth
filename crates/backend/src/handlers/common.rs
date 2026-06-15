@@ -270,8 +270,7 @@ pub trait DepotExt {
     /// `Some(handle)` when `[cokret.starid]` is configured and the
     /// adapter constructed cleanly during `inject_app_state`. `None`
     /// otherwise — handlers should treat the absence as "starid
-    /// integration disabled" rather than an error, so onboarding can
-    /// degrade to the legacy local-derivation path.
+    /// integration disabled" rather than an error.
     fn starid_registry(&self) -> Option<crate::services::starid_adapter::StaridRegistryHandle>;
     fn webauthn_service(
         &self,

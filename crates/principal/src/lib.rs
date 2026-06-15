@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Cokret Authors. Licensed under the Apache License,
-// Version 2.0; see LICENSE-APACHE for details. Originally developed for the
-// legacy delegated-auth connector.
+// Version 2.0; see LICENSE-APACHE for details.
 
 mod mock;
 mod readonly;

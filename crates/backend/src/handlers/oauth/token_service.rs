@@ -43,7 +43,7 @@ use crate::services::refresh_token_rotation::{
 };
 
 /// Public authorization-code clients must use PKCE. Confidential clients can
-/// still use PKCE, but do not require it for legacy OIDC Core compatibility.
+/// still use PKCE, but do not require it under OIDC Core.
 #[must_use]
 pub(crate) fn authorization_code_pkce_required(client: &Client) -> bool {
     client.grant_types.contains(&GrantType::AuthorizationCode)
@@ -484,9 +484,8 @@ pub async fn exchange_authorization_code(
         //
         // SECURITY: `plain` is rejected for *all* clients (not just
         // `pkce_required` public clients) — see
-        // `required_pkce_method_is_allowed`. A grant that was somehow
-        // recorded with `plain` (e.g. legacy data) is treated as a
-        // bad request rather than allowed through.
+        // `required_pkce_method_is_allowed`. A grant recorded with
+        // `plain` is treated as a bad request rather than allowed through.
         (Some(pkce), Some(verifier)) => {
             if !required_pkce_method_is_allowed(&pkce.challenge_method) {
                 warn!(

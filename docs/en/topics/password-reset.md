@@ -61,8 +61,7 @@ assertion against the new credential challenge. This binds the reset
 to physical possession of the recovery device and prevents a remote
 attacker who phished the email link from completing the reset alone.
 
-For password accounts (legacy / bootstrapping), the binding falls back
-to:
+For password accounts, the binding falls back to:
 
 1. A device-fingerprint hash captured at `/recovery/start`.
 2. A confirmation step that requires the user to authenticate the
@@ -112,7 +111,7 @@ A successful reset:
 | Setting                           | Default | Notes                          |
 | --------------------------------- | ------- | ------------------------------ |
 | `recovery.token_ttl`              | 15m     | Hard cap 60m enforced.         |
-| `recovery.fingerprint_required`   | `true`  | Set `false` only for legacy migrations. |
+| `recovery.fingerprint_required`   | `true`  | Require device-fingerprint binding for password resets. |
 | `recovery.notify_on_request`      | `true`  | Email "we received a reset request" even if no token is sent. |
 | `recovery.max_concurrent_tokens`  | 1       | Older tokens are invalidated on new request. |
 

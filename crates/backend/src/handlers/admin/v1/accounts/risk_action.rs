@@ -80,7 +80,7 @@ pub struct AccountRiskActionExecuteOutcome {
     /// Account state after the mutation was applied.
     account: SingleOutcome<super::AccountRecord>,
 
-    /// Legacy mutation endpoint equivalent to the controlled execute path.
+    /// Mutation endpoint equivalent to the controlled execute path.
     mutation_endpoint: String,
 
     /// Allowed next transitions from this execution state.

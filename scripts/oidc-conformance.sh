@@ -114,10 +114,9 @@ if [[ "${COAUTH_SKIP_BOOT}" != "1" ]]; then
         exit 2
     fi
     COAUTH_LOG="$(mktemp)"
-    # NOTE: the legacy `--no-config` flag does not exist in the server
-    # subcommand. The server reads its config from $COAUTH_CONFIG (or
-    # the default `config.yaml`); pass `--config <path>` if you want a
-    # specific file outside that lookup chain.
+    # The server reads its config from $COAUTH_CONFIG (or the default
+    # `config.yaml`); pass `--config <path>` if you want a specific file
+    # outside that lookup chain.
     "${COAUTH_BINARY}" server --config "${COAUTH_CONFIG}" >"${COAUTH_LOG}" 2>&1 &
     COAUTH_PID=$!
 else

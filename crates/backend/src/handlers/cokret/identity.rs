@@ -51,8 +51,7 @@ pub async fn identity_resolve(
     let did_resolver = depot.did_resolver_service()?;
     let mut repo = depot.repo().await?;
 
-    // coauth no longer fabricates DID documents for its own users — the
-    // legacy `did:web:<coauth-host>:users:<ulid>` form is dead; user
+    // coauth no longer fabricates DID documents for its own users. User
     // principal DIDs are `did:webvh:…` documents hosted by the principal
     // server and resolve through the normal chain below.
     let resolution = did_resolver

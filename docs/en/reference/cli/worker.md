@@ -17,7 +17,7 @@ $ coauth worker -c config.yaml
 The worker process handles asynchronous tasks that do not need to be performed during an HTTP request. These include:
 
 - **Sending emails** — Verification codes, password reset links, and notification emails.
-- **Principal account tasks** — Legacy account lifecycle jobs now run against the local Principal Server abstraction.
+- **Principal account tasks** — Account lifecycle jobs run against the local Principal Server abstraction.
 - **Session cleanup** — Expiring old sessions and tokens according to configured TTL values.
 - **Scheduled maintenance** — Periodic tasks like flushing activity tracking data to the database.
 

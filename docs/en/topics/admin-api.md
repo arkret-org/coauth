@@ -45,7 +45,7 @@ specification at these runtime paths:
 - `GET /_coauth/admin/openapi.yaml` for the Cokret-native admin API contract.
 - `GET /.well-known/cokret/openapi.yaml` for discovery by `sodmin` and
   service automation.
-- `GET /api-doc/admin/openapi.json` for legacy Swagger tooling.
+- `GET /api-doc/admin/openapi.json` for Swagger tooling.
 - `GET /admin-swagger-ui/` for the hosted Swagger UI.
 
 ## Admin bridge discovery examples

@@ -71,8 +71,7 @@ pub struct AdminAccountClaimRecord {
     pub state: String,
 
     /// Source provenance — the inventory endpoint emits the literal
-    /// `"coauth_claim_repository"` so the UI can distinguish records
-    /// that came from the persisted store vs. legacy bridge stubs.
+    /// `"coauth_claim_repository"` so the UI can distinguish persisted records.
     #[serde(default)]
     pub source: String,
 

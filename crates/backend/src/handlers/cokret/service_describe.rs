@@ -144,8 +144,7 @@ pub(crate) struct ServiceDescribeOutcome {
     /// T6.1 — features the service exposes but does NOT promise stable
     /// interop for.
     experimental_features: Vec<&'static str>,
-    /// T6.1 — legacy / external-interop surfaces exposed for compatibility,
-    /// not as part of Cokret v1 conformance.
+    /// T6.1 — external interop surfaces outside Cokret v1 conformance.
     compat_surfaces: Vec<CompatSurfaceDescriptor>,
     /// Mirror of the service's development-mode flag. coauth has no
     /// dedicated dev toggle today, so this is always `false`; if a toggle
@@ -203,9 +202,7 @@ struct VerifiedProfileDescriptor {
     expires_at: Option<String>,
 }
 
-/// T6.1 — compat / external-interop surface entry. `kind` ∈
-/// {`matrix_passthrough`, `mimi_passthrough`, `legacy_alias`,
-/// `external_interop`, `deprecated_alias`}.
+/// T6.1 — external-interop surface entry. `kind` is schema-defined.
 #[derive(Debug, Serialize)]
 struct CompatSurfaceDescriptor {
     name: &'static str,
@@ -356,9 +353,7 @@ pub(crate) fn service_describe_response(
         // primary role is OIDC issuance, so this is kept as "auth_server".
         // The richer multi-role posture is expressed via `service_roles`
         // (T6.3) — consumers that need the full picture MUST read that
-        // array; legacy clients that only key off service_type still get
-        // an answer compatible with the SDK's
-        // `ProfileValidator::for_auth_server`.
+        // array.
         service_type: "auth_server",
         // T6.3 — declare all roles this coauth instance carries. Each
         // role is independent: any subset may be deployed off elsewhere

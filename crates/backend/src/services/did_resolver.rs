@@ -237,9 +237,9 @@ impl DidResolverService for DefaultDidResolverService {
         did: &str,
     ) -> Result<DidResolution, DidResolveError> {
         // coauth no longer fabricates DID documents for its own service DID
-        // or the legacy `did:web:<coauth-host>:users:<ulid>` user form —
-        // there is no DID hosting on coauth, so a locally-built document
-        // would describe an identifier nothing serves. Both now resolve
+        // or unhosted user forms. There is no DID hosting on coauth, so a
+        // locally-built document would describe an identifier nothing serves.
+        // Both now resolve
         // through the regular method chain below (and 404 like any other
         // unhosted `did:web`). The `did:web:coauth.invalid:accounts:…`
         // branch stays: that is an internal alias under an RFC2606

@@ -32,8 +32,8 @@ pub struct SessionGrantMaterial {
     pub scopes: Vec<String>,
     /// RFC 7638 JWK SHA-256 thumbprint (base64url) of the DPoP proof the
     /// grant is bound to, when issuance happened on a request that
-    /// carried a `DPoP` header. `None` for legacy paths (e.g. internal
-    /// admin minting, debug seeds without a `dpop_jwk`).
+    /// carried a `DPoP` header. `None` for unbound minting paths such as
+    /// internal admin minting or debug seeds without a `dpop_jwk`.
     pub dpop_jkt: Option<String>,
 }
 

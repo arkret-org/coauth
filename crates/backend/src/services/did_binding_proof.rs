@@ -204,9 +204,8 @@ const MAX_FRESHNESS_SECS: i64 = 5 * 60;
 /// existing error variant so the wire surface stays stable).
 ///
 /// Phase P2 (B-D): all DID binding writes MUST round-trip through this
-/// helper so coauth never persists a legacy-shape DID. The SDK validator
-/// is the single source of truth — coauth does not maintain its own
-/// regex.
+/// helper. The SDK validator is the single source of truth — coauth does
+/// not maintain its own regex.
 pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofError> {
     let trimmed = did.trim();
     if trimmed.is_empty() {

@@ -174,9 +174,8 @@ pub async fn post_verify_invite(
     // deployment's own service DID). The latter is derived from the
     // resolver so it tracks any deployment override; the former MUST
     // come from configuration.
-    // SEC-07a — the trusted `iss` set comes from the explicit allowlist
-    // (legacy single value folded in). Empty == no verifier configured →
-    // fail closed.
+    // SEC-07a — the trusted `iss` set comes from the explicit allowlist.
+    // Empty == no verifier configured -> fail closed.
     let expected_iss_allowlist = cokret_config.verification_service_allowlist();
     if expected_iss_allowlist.is_empty() {
         warn!(

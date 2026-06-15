@@ -220,8 +220,7 @@ impl FrontierSource for SolandFrontierSource {
             // soland's response envelope places the typed federation
             // peer response under `events_frontier`; the inner shape
             // is `EventsFrontierFederationPeerState`. We probe
-            // defensively so a soland that hasn't migrated yet (or a
-            // mock that returns the legacy envelope) still produces a
+            // defensively so malformed or incomplete responses produce a
             // signed sentinel rather than a 500.
             let frontier_root = body
                 .get("events_frontier")

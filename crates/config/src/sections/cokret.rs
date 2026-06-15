@@ -154,11 +154,9 @@ pub struct CokretConfig {
     ///
     /// Override at runtime via `COAUTH_VERIFICATION_SERVICE_DID`.
     ///
-    /// **Deprecated single-value form** — retained for backward
-    /// compatibility. New deployments SHOULD use
-    /// [`Self::verification_service_dids`]. When set, this value is
-    /// folded into the effective allowlist (see
-    /// [`Self::verification_service_allowlist`]) as a single member.
+    /// Deprecated single-value form. New deployments use
+    /// [`Self::verification_service_dids`]; this field is ignored by the
+    /// effective allowlist.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_service_did: Option<String>,
 
@@ -174,10 +172,7 @@ pub struct CokretConfig {
     /// rejected (and MUST NOT be admitted merely because the `subject_proof`
     /// is valid — see §4.3 step 2a).
     ///
-    /// The legacy single-value [`Self::verification_service_did`] (when
-    /// non-empty) is merged into this set, so an old single-value config
-    /// behaves as a one-element allowlist. The effective set is computed by
-    /// [`Self::verification_service_allowlist`].
+    /// The effective set is computed by [`Self::verification_service_allowlist`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub verification_service_dids: Vec<String>,
 
@@ -244,14 +239,11 @@ impl CokretConfig {
     }
 
     /// SEC-07a — effective allowlist of trusted 3PID verification-service
-    /// DIDs, merging the deprecated single-value
-    /// [`Self::verification_service_did`] (when non-empty) with the
-    /// multi-value [`Self::verification_service_dids`].
+    /// DIDs from the multi-value [`Self::verification_service_dids`].
     ///
     /// Empty/whitespace-only entries are dropped and duplicates are
-    /// collapsed, so an old single-value config and the new list form both
-    /// yield the same de-duplicated membership set. An empty result means
-    /// no verifier is configured and the verify endpoint MUST fail closed
+    /// collapsed. An empty result means no verifier is configured and the
+    /// verify endpoint MUST fail closed
     /// (`503 verifier_not_configured`).
     #[must_use]
     pub fn verification_service_allowlist(&self) -> Vec<String> {
@@ -262,9 +254,6 @@ impl CokretConfig {
                 out.push(trimmed.to_owned());
             }
         };
-        if let Some(single) = self.verification_service_did.as_deref() {
-            push(single);
-        }
         for did in &self.verification_service_dids {
             push(did);
         }
@@ -515,17 +504,12 @@ mod tests {
     }
 
     #[test]
-    fn verification_allowlist_folds_legacy_single_value() {
-        // SEC-07a backward compatibility: an old single-value config
-        // behaves as a one-element allowlist.
+    fn verification_allowlist_ignores_deprecated_single_value() {
         let config = CokretConfig {
             verification_service_did: Some("did:web:verifier.example".to_owned()),
             ..CokretConfig::default()
         };
-        assert_eq!(
-            config.verification_service_allowlist(),
-            vec!["did:web:verifier.example".to_owned()]
-        );
+        assert!(config.verification_service_allowlist().is_empty());
     }
 
     #[test]
@@ -533,8 +517,8 @@ mod tests {
         let config = CokretConfig {
             verification_service_did: Some("did:web:a.example".to_owned()),
             verification_service_dids: vec![
-                "did:web:a.example".to_owned(), // dup of legacy single value
-                "  ".to_owned(),                // whitespace dropped
+                "did:web:a.example".to_owned(),
+                "  ".to_owned(), // whitespace dropped
                 "did:web:b.example".to_owned(),
             ],
             ..CokretConfig::default()

@@ -216,7 +216,7 @@ mod tests {
             assert_eq!(s, back);
         }
         assert!(AdminAccountStatus::from_wire("nope").is_none());
-        // The legacy non-spec `disabled` value is no longer accepted.
+        // The removed non-spec `disabled` value is not accepted.
         assert!(AdminAccountStatus::from_wire("disabled").is_none());
     }
 

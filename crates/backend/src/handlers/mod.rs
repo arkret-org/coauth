@@ -77,8 +77,6 @@ pub mod cokret;
 pub mod common;
 /// Public inbound webhooks for email delivery providers.
 pub mod email_webhooks;
-/// Strand execution engine for multi-step user interaction strands.
-pub mod strand;
 /// Health-check endpoint (`/health`).
 pub mod health;
 /// OAuth and OpenID Connect protocol endpoints.
@@ -93,6 +91,8 @@ pub mod policy_check;
 pub mod post_auth;
 /// SPA shell serving (renders the Dioxus frontend HTML wrapper).
 pub mod spa;
+/// Strand execution engine for multi-step user interaction strands.
+pub mod strand;
 /// Upstream (federated) OAuth / OIDC provider integration.
 pub mod upstream_oauth;
 /// Canonical SSR prelude for server-rendered view handlers (round 25).

@@ -48,9 +48,6 @@ pub mod circle_capability;
 /// Clock abstraction for testability (`SystemClock` in production, mock clock
 /// in tests).
 pub mod clock;
-/// Strand engine data model — multi-step user interaction definitions, stage
-/// bindings, and runtime session tracking.
-pub mod strand;
 /// Persisted notification request, delivery, and audit event models.
 pub mod notification;
 /// OAuth client and session models.
@@ -67,6 +64,9 @@ pub mod queue;
 mod site_config;
 /// Storage repository abstractions and pagination helpers.
 pub mod storage;
+/// Strand engine data model — multi-step user interaction definitions, stage
+/// bindings, and runtime session tracking.
+pub mod strand;
 pub(crate) mod tokens;
 pub mod upstream_oauth;
 mod url_builder;
@@ -137,11 +137,6 @@ pub use self::circle_capability::{
     NewCircleCapabilityGrant, ParseCircleCapabilityActionError, RiskTier,
 };
 pub use self::clock::{Clock, SystemClock};
-pub use self::strand::{
-    StrandDefinition, StrandDesignation, StrandSession, StrandSessionStatus, StrandStageBinding,
-    IdentificationField, PromptField, PromptFieldType, StageChallenge, StageKind, StageOutcome,
-    StageSubmission, StageValidationError,
-};
 pub use self::notification::{
     NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDeliveryStatus, NotificationDestination, NotificationEventActor,
@@ -158,6 +153,11 @@ pub use self::policy_data::PolicyData;
 pub use self::post_auth_action::{AccountAction, PostAuthAction};
 pub use self::site_config::{
     CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,
+};
+pub use self::strand::{
+    IdentificationField, PromptField, PromptFieldType, StageChallenge, StageKind, StageOutcome,
+    StageSubmission, StageValidationError, StrandDefinition, StrandDesignation, StrandSession,
+    StrandSessionStatus, StrandStageBinding,
 };
 pub use self::tokens::{
     AccessToken, AccessTokenState, RefreshToken, RefreshTokenChainRevokeOutcome, RefreshTokenState,

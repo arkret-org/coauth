@@ -12,10 +12,9 @@
 //! therefore exposes only `record` and read accessors; there is no patch
 //! API by design.
 //!
-//! Spec 7157ee8 (R3.1) renamed the persisted handle column from
-//! `canonical_handle_uri` (legacy `cokret://<host>/users/<localpart>`
-//! URI) to `handle` (canonical `<localpart>:<domain>` form) — see
-//! migration `20260527000200_handle_canonicalize_rename`.
+//! Spec 7157ee8 (R3.1) stores the canonical `<localpart>:<domain>` handle
+//! in the `handle` column — see migration
+//! `20260527000200_handle_canonicalize_rename`.
 
 use async_trait::async_trait;
 use coauth_data::Clock;
@@ -72,7 +71,7 @@ impl NewHandleAuditEvent {
     /// Set the canonical `<localpart>:<domain>` handle affected.
     ///
     /// Spec 7157ee8 §3.1 — the wire form is the colon-joined canonical
-    /// shape (replacing the legacy `cokret://…` URI used pre-R3.1).
+    /// shape.
     #[must_use]
     pub fn with_handle(mut self, handle: impl Into<String>) -> Self {
         self.handle = Some(handle.into());

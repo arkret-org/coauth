@@ -143,9 +143,8 @@ pub struct BatchInviteRequestBody {
     /// and rejects / quarantines the batch when the holder has not granted
     /// the requesting peer.
     ///
-    /// Legacy callers that don't address a specific holder DID omit this
-    /// field; the gate is then a no-op (preserves the historical
-    /// "registration-tokens only" behaviour).
+    /// Requests that do not address a specific holder DID omit this field;
+    /// the gate is then a no-op for local registration-token minting.
     #[serde(default)]
     consent_gate: Option<BatchInviteConsentGate>,
 }
@@ -386,8 +385,8 @@ pub async fn batch_invite(
     // invite addresses a specific holder DID we must query the holder's
     // consent-grant cell on their server_name (`soland`) before
     // proceeding. The gate is opt-in via `BatchInviteConsentGate` —
-    // legacy callers that just want bulk registration tokens omit the
-    // metadata and skip the network round-trip entirely.
+    // callers that just want bulk registration tokens omit the metadata
+    // and skip the network round-trip entirely.
     //
     // For per-recipient relay (the path that forwards an inviter-signed
     // payload), see `account::invite_relay::post_invite_relay`. This
@@ -532,7 +531,7 @@ mod consent_gate_tests {
         })
     }
 
-    /// No gate metadata at all → Allow (legacy registration-token path).
+    /// No gate metadata at all -> Allow local registration-token minting.
     #[tokio::test]
     async fn batch_invite_gate_allows_when_metadata_absent() {
         setup();

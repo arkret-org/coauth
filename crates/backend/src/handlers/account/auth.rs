@@ -42,10 +42,9 @@ pub(crate) struct DpopSessionBinding {
 /// Extract a DPoP proof from the "kickoff" request — i.e. the initial
 /// auth-side request that mints a session grant (login or
 /// `oidc/exchange`). When no `DPoP` header is present we return
-/// `Ok(None)` so the grant is issued unbound (legacy clients keep
-/// working); when the header is present but malformed we surface the
-/// failure so the caller can emit `invalid_dpop_proof` rather than
-/// silently degrade.
+/// `Ok(None)` so the grant is issued unbound; when the header is present
+/// but malformed we surface the failure so the caller can emit
+/// `invalid_dpop_proof` rather than silently degrade.
 ///
 /// On these kickoff endpoints we do NOT require an `ath` claim — there
 /// is no access token to bind to yet; the proof's `jkt` becomes the

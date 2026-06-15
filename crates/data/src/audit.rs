@@ -33,8 +33,8 @@ pub struct AdminOperationLog {
     pub created_at: DateTime<Utc>,
     /// Optional detached signature over the canonical-JSON row transcript,
     /// produced with the coauth service signing key. `None` is valid for
-    /// legacy rows and rollout/fail-open deployments; readers surface that as
-    /// `unsigned_legacy` rather than rejecting the row.
+    /// rollout/fail-open deployments; readers surface that as `unsigned`
+    /// rather than rejecting the row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audit_signature: Option<String>,
 }
@@ -121,7 +121,7 @@ pub struct HandleAuditEvent {
     /// The kind of event recorded.
     pub event_type: HandleAuditEventType,
     /// Canonical `<localpart>:<domain>` handle affected by the event
-    /// (spec 7157ee8 §3.1 — replaces the legacy `cokret://…` URI form).
+    /// (spec 7157ee8 §3.1).
     pub handle: Option<String>,
     /// Interop aliases (e.g. `acct:<local>@<host>`) recorded with the event.
     pub handle_aliases: Vec<String>,

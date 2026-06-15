@@ -114,9 +114,7 @@ resource id, details, IP address, user agent, and schema version. Admin audit
 read/export surfaces return `signature_status`:
 
 - `verified` — the row verifies against the current service JWKS.
-- `unsigned_legacy` — the row predates the current signed-audit transcript,
-  carries only the earlier weak transcript, or was allowed during rollout
-  fail-open mode.
+- `unsigned` — the row was allowed during rollout fail-open mode.
 - `invalid` — the signature is present but no longer matches the row.
 - `key_unavailable` — the row references a service DID/kid that this process
   cannot verify.
@@ -133,8 +131,7 @@ audit retention window has elapsed; otherwise historical rows will move from
 signal: preserve the database snapshot, compare the exported row JSON with the
 operator system of record, and do not delete the row to silence the alert.
 Exports should carry the same `signature_status` field as the admin audit feed
-so offline auditors can distinguish legacy unsigned rows from failed
-verification.
+so offline auditors can distinguish unsigned rows from failed verification.
 
 ### Rollback
 

@@ -2,8 +2,8 @@ use std::net::IpAddr;
 
 use coauth_data::CaptchaConfig;
 use coauth_data::strand::{
-    StrandDefinition, StrandSession, StrandStageBinding, StageChallenge, StageKind, StageOutcome,
-    StageSubmission, StageValidationError,
+    StageChallenge, StageKind, StageOutcome, StageSubmission, StageValidationError,
+    StrandDefinition, StrandSession, StrandStageBinding,
 };
 use serde_json::Value;
 use thiserror::Error;

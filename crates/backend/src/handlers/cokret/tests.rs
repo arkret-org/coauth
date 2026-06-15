@@ -157,7 +157,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert!(
         !supported_schema_profiles.contains(&serde_json::json!("ck.schema.v1")),
-        "the legacy `ck.schema.v1` placeholder MUST NOT be advertised"
+        "the removed `ck.schema.v1` placeholder MUST NOT be advertised"
     );
     let supported_operations = body["supported_operations"].as_array().unwrap();
     assert!(
@@ -332,11 +332,7 @@ fn describe_separates_claim_levels() {
         assert!(
             matches!(
                 kind,
-                "matrix_passthrough"
-                    | "mimi_passthrough"
-                    | "legacy_alias"
-                    | "external_interop"
-                    | "deprecated_alias"
+                "matrix_passthrough" | "mimi_passthrough" | "external_interop" | "deprecated_alias"
             ),
             "unknown compat_surface kind {kind}"
         );
@@ -807,7 +803,10 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert!(body["grant"].get("grant_jwt").is_none());
     // Server-to-server introspection MUST expose session_public_key so the
     // Principal Server can verify RFC 9421 PoP presentations (SPEC-CR-001).
-    assert_eq!(body["grant"]["session_public_key"], grant.session_public_key);
+    assert_eq!(
+        body["grant"]["session_public_key"],
+        grant.session_public_key
+    );
 
     let response = state
         .request(
@@ -1009,13 +1008,9 @@ fn parse_local_handle_round_trips_local_user_handle() {
         Some(user.localpart.clone())
     );
 
-    // Legacy `<localpart>@<domain>` display form — still accepted
-    // for backward-compatible clients.
+    // Removed `<localpart>@<domain>` display form.
     let display = user_handle_display(&url_builder, &user);
-    assert_eq!(
-        parse_local_handle(&url_builder, &display),
-        Some(user.localpart.clone())
-    );
+    assert_eq!(parse_local_handle(&url_builder, &display), None);
 
     assert_eq!(
         parse_local_handle(&url_builder, "alice@elsewhere.example"),
