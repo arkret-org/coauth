@@ -498,7 +498,7 @@ fn session_grant_is_signed_for_the_user_did() {
     assert_eq!(payload.device_id, None);
     assert_eq!(
         payload.expires_at - payload.not_before,
-        Duration::try_minutes(5).unwrap()
+        Duration::try_hours(8).unwrap()
     );
     assert_eq!(payload.proof.kind, "ck.session.grant.proof.v1");
     assert_eq!(payload.proof.alg, "EdDSA");

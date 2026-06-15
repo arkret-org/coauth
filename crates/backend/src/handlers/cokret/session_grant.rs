@@ -645,31 +645,46 @@ pub async fn introspect_session_grant(
     if proof_required {
         status = verify_session_grant_introspection_proof(&grant, body.proof.as_ref(), clock.now());
     }
-    let active = status == SessionGrantIntrospectionStatus::Active;
+    let mut active = status == SessionGrantIntrospectionStatus::Active;
+
+    // The grant's authentication context (browser session) being logged out
+    // MUST make the grant read inactive here, even if this grant row was not
+    // individually revoked — otherwise a grant rotated out just before logout
+    // could keep introspecting `active` until self-expiry. Auth Server fail
+    // closed per account-lifecycle §4.1.
+    if active {
+        let logged_out = repo
+            .browser_session()
+            .lookup(grant.browser_session_id)
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+            .map_or(true, |session| session.finished_at.is_some());
+        if logged_out {
+            status = SessionGrantIntrospectionStatus::Revoked;
+            active = false;
+        }
+    }
+
     let grant_record = (status != SessionGrantIntrospectionStatus::NotFound
         && status != SessionGrantIntrospectionStatus::AudienceMismatch)
         .then(|| introspection_grant_record(&grant));
 
-    let one_time_use_consumed = active;
-    if active {
-        repo.oauth_session_grant()
-            .revoke(&*clock, grant.clone())
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        repo.save()
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-    } else {
-        repo.cancel()
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-    }
+    // Introspection is READ-ONLY. The session grant is the (minutes-to-hours,
+    // multi-day-via-rotation) refresh credential: the legitimate device
+    // re-exchanges it for fresh short bearers, each presenting a fresh holder
+    // proof, so it MUST remain valid within its TTL. Consumption/rotation is the
+    // `session-grants/refresh` endpoint's job (revoke-old + issue-new), NOT
+    // introspection's — revoking here made the grant single-use at the first
+    // Principal Server exchange and silently broke the refresh chain.
+    repo.cancel()
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(SessionGrantIntrospectionOutcome {
         active,
         status,
         proof_required,
-        one_time_use_consumed,
+        one_time_use_consumed: false,
         grant: grant_record,
     }))
 }
@@ -912,11 +927,17 @@ pub async fn refresh_session_grant(
         return Err(CokretRouteError::BadRequest("session_logged_out".to_owned()));
     }
 
-    // 5. Mint a new grant with the same subject + scope + audience.
-    let audience = body
-        .audience
-        .clone()
-        .unwrap_or_else(|| prior_grant.audience.clone());
+    // 5. Mint a new grant with the same subject + scope + audience. The
+    // audience MUST NOT change across rotation: a client holding a grant for
+    // one Principal Server must not be able to rotate it into a grant for a
+    // different audience (which it could then exchange there). Ignore any
+    // client-supplied audience; reject an explicit mismatch defensively.
+    if let Some(requested) = body.audience.as_deref()
+        && requested != prior_grant.audience
+    {
+        return Err(CokretRouteError::BadRequest("audience_mismatch".to_owned()));
+    }
+    let audience = prior_grant.audience.clone();
     let scopes: Vec<String> = prior_grant
         .scope
         .iter()

@@ -69,8 +69,11 @@ pub struct CokretConfig {
     /// Lifetime of Cokret session grants, in seconds.
     ///
     /// These are the DPoP-bound JWT grants returned by the REST auth bridge
-    /// login/exchange paths and refreshed through
-    /// `/_coauth/gate/account/session-grants/refresh`. Default: 300 (5 min).
+    /// login/exchange paths and rotated through
+    /// `/_cokret/gate/account/session-grants/refresh`. Default: 28800 (8h) —
+    /// access bearers minted from a grant are short-lived (capped Principal-Server
+    /// side), so a multi-hour grant gives a normal working session without
+    /// long-lived bearers, within the spec ceiling (minutes-to-hours).
     #[schemars(with = "u64", range(min = 60, max = 86400))]
     #[serde(
         default = "default_session_grant_ttl",
