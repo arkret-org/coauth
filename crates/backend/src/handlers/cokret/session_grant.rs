@@ -858,14 +858,16 @@ pub async fn refresh_session_grant(
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| CokretRouteError::NotFound)?;
 
-    // Single-use enforcement: a previously consumed grant can never be
-    // refreshed again.
+    // Single-use enforcement: a previously consumed grant can never be rotated
+    // again. Re-use of a consumed grant is a credential-compromise signal (the
+    // wire code is `grant_already_consumed`; this protocol rotates DPoP-bound
+    // session grants, not OAuth refresh tokens — see account-lifecycle §4.1).
     if prior_grant.revoked_at.is_some() {
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
         return Err(CokretRouteError::BadRequest(
-            "refresh_token_already_consumed".to_owned(),
+            "grant_already_consumed".to_owned(),
         ));
     }
 
