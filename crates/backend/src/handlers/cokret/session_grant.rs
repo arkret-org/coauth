@@ -897,6 +897,19 @@ pub async fn refresh_session_grant(
             ))
         })?;
 
+    // The browser session is the authentication context the grant chain hangs
+    // off. Logout finishes it (sets `finished_at`) but does NOT eagerly revoke
+    // outstanding grants — so without this check a logged-out device that still
+    // holds the DPoP key could keep rotating its grant and stay signed in
+    // forever, defeating logout. Refuse rotation once the session is finished:
+    // re-authentication (a fresh browser session) is then required.
+    if browser_session.finished_at.is_some() {
+        repo.cancel()
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        return Err(CokretRouteError::BadRequest("session_logged_out".to_owned()));
+    }
+
     // 5. Mint a new grant with the same subject + scope + audience.
     let audience = body
         .audience
