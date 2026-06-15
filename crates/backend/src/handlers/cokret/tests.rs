@@ -843,6 +843,40 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["grant"], serde_json::Value::Null);
 }
 
+/// `id` and `grant_jwt` are an exactly-one selector: rejecting both-missing
+/// AND both-present, rather than silently preferring `id`.
+#[tokio::test]
+async fn session_grant_introspection_rejects_ambiguous_selector() {
+    setup();
+    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let state = TestState::from_pool(pool.clone()).await.unwrap();
+    let (_browser_session, grant, material, _session_key) =
+        seed_persisted_session_grant(&state).await;
+
+    // Both present → 400.
+    let response = state
+        .request(
+            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
+                "id": grant.id,
+                "grant_jwt": material.grant_jwt,
+                "audience": grant.audience,
+            })),
+        )
+        .await;
+    response.assert_status(StatusCode::BAD_REQUEST);
+
+    // Neither present → 400.
+    let response = state
+        .request(
+            Request::post("/api/v1/session-grants/introspect")
+                .json(serde_json::json!({ "audience": grant.audience })),
+        )
+        .await;
+    response.assert_status(StatusCode::BAD_REQUEST);
+}
+
 #[tokio::test]
 async fn session_grant_http_revoke_updates_followup_introspection() {
     setup();

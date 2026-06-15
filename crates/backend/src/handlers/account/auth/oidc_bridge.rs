@@ -1835,7 +1835,7 @@ pub async fn auth_bridge_describe(
             logout_path: "/_coauth/gate/account/auth/logout",
             providers_path: "/_coauth/gate/account/auth/providers",
             session_grants_path: "/_cokret/gate/account/session-grants",
-            session_grants_introspect_path: "/_coauth/gate/account/session-grants/introspect",
+            session_grants_introspect_path: "/_cokret/gate/account/session-grants/introspect",
             session_grant_scope: cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
         },
         admin: AuthBridgeAdminDescriptor {

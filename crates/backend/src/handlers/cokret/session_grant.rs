@@ -588,10 +588,22 @@ pub async fn introspect_session_grant(
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
 
-    if body.id.is_none() && body.grant_jwt.is_none() {
-        return Err(CokretRouteError::BadRequest(
-            "missing id or grant_jwt".to_owned(),
-        ));
+    // Exactly one of `id` / `grant_jwt` identifies the grant. Reject both
+    // missing AND both present, rather than silently preferring `id` and
+    // ignoring `grant_jwt` — an ambiguous selector should be a hard error so a
+    // caller never believes it introspected the JWT it sent.
+    match (body.id.is_some(), body.grant_jwt.is_some()) {
+        (false, false) => {
+            return Err(CokretRouteError::BadRequest(
+                "exactly one of id or grant_jwt is required".to_owned(),
+            ));
+        }
+        (true, true) => {
+            return Err(CokretRouteError::BadRequest(
+                "id and grant_jwt are mutually exclusive".to_owned(),
+            ));
+        }
+        _ => {}
     }
 
     let _ = require_session_grant_caller(req, depot).await?;
