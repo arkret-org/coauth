@@ -713,6 +713,27 @@ fn build_account_api_router(router: Router) -> Router {
             Router::with_path("gate/account/session-grants/introspect")
                 .post(cokret::introspect_session_grant),
         )
+        // Canonical Account Authority session-grant issuance
+        // (service-surface.md §2.5.1): the single client-visible bridge from a
+        // standard auth result (OIDC code exchange) into a device-bound
+        // `ck.session.grant`. Body = SDK `SessionGrantRequestBody`,
+        // `proof.proof_kind=oidc_code_exchange`. Replaces the deleted
+        // `/_coauth/.../auth/oidc/exchange` bridge.
+        .push(
+            Router::with_path("gate/account/session-grants")
+                .options(oidc_preflight_handler)
+                .post(cokret::issue_session_grant_endpoint),
+        )
+        // Single client hard-logout (account-lifecycle §4.1): Bearer
+        // ck.session.grant + DPoP holder proof terminate the grant rotation
+        // chain + browser session (Auth-side). The Principal-side termination
+        // is soland's; when coauth fronts the Account Authority the Principal
+        // Server drives that leg.
+        .push(
+            Router::with_path("gate/account/logout")
+                .options(oidc_preflight_handler)
+                .post(cokret::logout),
+        )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check));
 
     let mut coauth_router = Router::with_path("/_coauth")
@@ -793,21 +814,19 @@ fn build_account_api_router(router: Router) -> Router {
             Router::with_path("gate/account/integration/describe").get(auth::integration_describe),
         )
         // Auth (login, logout, providers, registration, recovery)
+        //
+        // The product-private OIDC bridge endpoints (`bridge/describe`,
+        // `oidc/browser-bridge/session`, `oidc/exchange/describe`,
+        // `oidc/exchange`) were removed (account-lifecycle §4.1,
+        // service-surface.md §2.5.1). Clients now run standard OIDC discovery
+        // + authorize against the issuer and submit the code to the canonical
+        // `POST /_cokret/gate/account/session-grants`
+        // (`proof.proof_kind=oidc_code_exchange`). Passkey + standard OIDC
+        // (`/authorize`, `/oauth/token`, `/.well-known/openid-configuration`)
+        // are unchanged.
         .push(
             Router::with_path("gate/account/auth")
-                .push(Router::with_path("bridge/describe").get(auth::auth_bridge_describe))
                 .push(Router::with_path("login").post(auth::login))
-                .push(
-                    Router::with_path("oidc/browser-bridge/session")
-                        .options(oidc_preflight_handler)
-                        .post(auth::oidc_browser_bridge_session),
-                )
-                .push(Router::with_path("oidc/exchange/describe").get(auth::oidc_exchange_describe))
-                .push(
-                    Router::with_path("oidc/exchange")
-                        .options(oidc_preflight_handler)
-                        .post(auth::oidc_code_exchange),
-                )
                 .push(
                     Router::with_path("passkey")
                         .push(
@@ -1514,10 +1533,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn oidc_exchange_preflight_allows_dpop_header() {
+    async fn session_grants_preflight_allows_dpop_header() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
         let response =
-            TestClient::options("http://127.0.0.1:8698/_coauth/gate/account/auth/oidc/exchange")
+            TestClient::options("http://127.0.0.1:8698/_cokret/gate/account/session-grants")
                 .add_header("Origin", "http://127.0.0.1:8080", true)
                 .add_header("Access-Control-Request-Method", "POST", true)
                 .add_header("Access-Control-Request-Headers", "content-type,dpop", true)
@@ -1542,28 +1561,36 @@ mod tests {
             allow_headers
                 .split(',')
                 .any(|header| header.trim() == "dpop"),
-            "OIDC browser exchange must allow the DPoP header; got {allow_headers}",
+            "canonical session-grant issuance must allow the DPoP header; got {allow_headers}",
         );
     }
 
     #[tokio::test]
-    async fn oidc_exchange_post_error_keeps_browser_cors_headers() {
+    async fn session_grants_post_error_keeps_browser_cors_headers() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
         let response =
-            TestClient::post("http://127.0.0.1:8698/_coauth/gate/account/auth/oidc/exchange")
+            TestClient::post("http://127.0.0.1:8698/_cokret/gate/account/session-grants")
                 .add_header("Origin", "http://127.0.0.1:8080", true)
                 .add_header("Content-Type", "application/json", true)
                 .add_header("DPoP", "malformed-proof", true)
                 .body(
                     serde_json::json!({
-                        "authorization_code": "stale-code",
-                        "code_verifier": "verifier",
-                        "redirect_uri": "http://127.0.0.1:8080/auth/callback",
-                        "issuer": "https://offline.invalid",
-                        "token_endpoint": "https://offline.invalid/oauth/token",
-                        "userinfo_endpoint": "https://offline.invalid/oauth/userinfo",
-                        "client_id": "yougen",
-                        "device_id": "ck:device:01964137-0000-7000-8000-000000000001"
+                        "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
+                        "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
+                        "proof": {
+                            "proof_kind": "oidc_code_exchange",
+                            "challenge": "0123456789abcdef0123",
+                            "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                            "audience": "https://soland.example.com/api",
+                            "signature": "unused-for-oidc",
+                            "issuer": "https://offline.invalid",
+                            "client_id": "yougen",
+                            "redirect_uri": "http://127.0.0.1:8080/auth/callback",
+                            "state": "ck-state-0123456789abcdef",
+                            "nonce": "ck-nonce-0123456789abcdef",
+                            "authorization_code": "stale-code",
+                            "code_verifier": "0123456789012345678901234567890123456789012"
+                        }
                     })
                     .to_string(),
                 )
@@ -1576,7 +1603,7 @@ mod tests {
                 .get(ACCESS_CONTROL_ALLOW_ORIGIN)
                 .and_then(|value| value.to_str().ok()),
             Some("*"),
-            "OIDC browser exchange POST errors must remain visible to browser callers",
+            "canonical session-grant issuance POST errors must remain visible to browser callers",
         );
     }
 }

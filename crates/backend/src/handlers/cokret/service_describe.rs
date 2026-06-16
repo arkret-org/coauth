@@ -1,5 +1,9 @@
 use coauth_config::{CokretConfig, IdentityRegistryKind};
 use coauth_data::{RepositoryAccess, UrlBuilder};
+use cokret_core::{
+    AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
+    SessionGrantProofKind,
+};
 use salvo::prelude::*;
 use serde::Serialize;
 
@@ -83,21 +87,13 @@ struct OAuthClientHintDescriptor {
     token_endpoint_auth_method: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct AuthMetadata {
-    oauth_issuer: String,
-    openid_configuration: String,
-    issuer_did: String,
-    supported_auth_methods: Vec<&'static str>,
-    token_endpoint_auth_methods: Vec<&'static str>,
-    supported_grant_types: Vec<&'static str>,
-    did_binding_methods: Vec<&'static str>,
-    required_audience: String,
-    admin_audience: String,
-    session_grant_scope: &'static str,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    oidc_clients: Vec<OAuthClientHintDescriptor>,
-}
+// `auth_metadata` is now the SDK-canonical `cokret_core::AuthMetadata`
+// (wave 0). coauth-proprietary fields that have no first-class slot on the
+// strong type — `issuer_did`, `token_endpoint_auth_methods`,
+// `supported_grant_types`, `required_audience`, `admin_audience`,
+// `session_grant_scope`, `oidc_clients` — are carried through the type's
+// `extra` (`additionalProperties: true`) flatten map so they round-trip on
+// the wire exactly as before without resurrecting a hand-rolled struct.
 
 /// Plaintext boundary declaration (`service-describe.schema.json`
 /// `plaintext_visibility`, a `required` field). coauth is an auth/OIDC
@@ -326,6 +322,127 @@ fn build_verified_profile_descriptors(
         .collect()
 }
 
+/// Build the SDK-canonical `auth_metadata` block for coauth's describe.
+///
+/// coauth is the deployment's Auth Server / Account Authority. It advertises
+/// one `oidc` auth method (its own issuer + discovery) whose `grant_exchange`
+/// is `oidc_code_exchange` — the canonical
+/// `POST /_cokret/gate/account/session-grants` proof branch. When the
+/// deployment fronts principal servers, it also publishes the
+/// `account_authority` block so clients derive every `/_cokret/gate/account/*`
+/// request from `gate_account_base`.
+///
+/// Proprietary fields with no first-class slot on `AuthMetadata` are inserted
+/// into `extra` so they keep serializing at the top level of the
+/// `auth_metadata` object.
+fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> AuthMetadata {
+    use serde_json::json;
+
+    let issuer = url_builder.oidc_issuer().to_string();
+    let openid_configuration = url_builder.oidc_discovery().to_string();
+    let admin_audience = required_audience_for(url_builder, cokret_config);
+    let gate_account_base = url_builder
+        .absolute_url("/_cokret/gate/account")
+        .to_string();
+    let origin = url_builder.http_base().to_string();
+    let origin = origin.strip_suffix('/').unwrap_or(&origin).to_owned();
+
+    let mut extra = std::collections::BTreeMap::new();
+    extra.insert("issuer_did".to_owned(), json!(issuer_did_for(url_builder, cokret_config)));
+    extra.insert(
+        "token_endpoint_auth_methods".to_owned(),
+        json!(["private_key_jwt", "client_secret_basic", "client_secret_post"]),
+    );
+    extra.insert(
+        "supported_grant_types".to_owned(),
+        json!(["authorization_code", "refresh_token", "device_code"]),
+    );
+    extra.insert(
+        "required_audience".to_owned(),
+        json!(required_audience_for(url_builder, cokret_config)),
+    );
+    extra.insert("admin_audience".to_owned(), json!(admin_audience));
+    extra.insert(
+        "session_grant_scope".to_owned(),
+        json!(PRINCIPAL_SERVER_SESSION_BIND_SCOPE),
+    );
+
+    AuthMetadata {
+        mode: if cokret_config.principal_servers.is_empty() {
+            "development".to_owned()
+        } else {
+            "production".to_owned()
+        },
+        account_authority: Some(AccountAuthority {
+            origin,
+            gate_account_base,
+        }),
+        methods: vec![AuthMethod {
+            method: AuthMethodKind::Oidc,
+            issuer: Some(issuer.clone()),
+            provider: None,
+            openid_configuration: Some(openid_configuration.clone()),
+            client_id: None,
+            scopes: vec!["openid".to_owned(), "profile".to_owned()],
+            grant_exchange: AuthGrantExchange {
+                proof_kind: SessionGrantProofKind::OidcCodeExchange,
+            },
+        }],
+        // Legacy aliases for older clients that read the flat fields.
+        auth_server_url: Some(issuer.clone()),
+        oauth_issuer: Some(issuer),
+        openid_configuration: Some(openid_configuration),
+        supported_auth_methods: vec![
+            "password".to_owned(),
+            "oidc".to_owned(),
+            "device_pairing".to_owned(),
+            "recovery_challenge".to_owned(),
+        ],
+        did_binding_methods: vec![
+            "did_controller_key".to_owned(),
+            "device_key".to_owned(),
+            "passkey".to_owned(),
+            "oidc_binding_proof".to_owned(),
+            "vc_presentation".to_owned(),
+        ],
+        read: None,
+        extra,
+    }
+}
+
+/// Inject the discovered authorization-code OIDC clients into `auth_metadata`.
+/// Carried through `extra.oidc_clients` so the strong type stays canonical.
+fn set_auth_metadata_oidc_clients(
+    auth_metadata: &mut AuthMetadata,
+    clients: Vec<OAuthClientHintDescriptor>,
+) {
+    if clients.is_empty() {
+        auth_metadata.extra.remove("oidc_clients");
+        return;
+    }
+    auth_metadata.extra.insert(
+        "oidc_clients".to_owned(),
+        serde_json::to_value(clients).unwrap_or(serde_json::Value::Null),
+    );
+    // Populate the first client's id onto the advertised oidc method so
+    // clients that read `methods[].client_id` get a concrete value.
+    if let Some(first_client_id) = auth_metadata
+        .extra
+        .get("oidc_clients")
+        .and_then(|value| value.as_array())
+        .and_then(|array| array.first())
+        .and_then(|client| client.get("client_id"))
+        .and_then(|id| id.as_str())
+        .map(ToOwned::to_owned)
+        && let Some(method) = auth_metadata
+            .methods
+            .iter_mut()
+            .find(|method| matches!(method.method, AuthMethodKind::Oidc))
+    {
+        method.client_id = Some(first_client_id);
+    }
+}
+
 pub(crate) fn service_describe_response(
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
@@ -517,34 +634,7 @@ pub(crate) fn service_describe_response(
             cokret_config,
         ),
         service_boundary: service_boundary_descriptor(),
-        auth_metadata: AuthMetadata {
-            oauth_issuer: url_builder.oidc_issuer().to_string(),
-            openid_configuration: url_builder.oidc_discovery().to_string(),
-            issuer_did: issuer_did_for(url_builder, cokret_config),
-            supported_auth_methods: vec![
-                "password",
-                "oidc",
-                "device_pairing",
-                "recovery_challenge",
-            ],
-            token_endpoint_auth_methods: vec![
-                "private_key_jwt",
-                "client_secret_basic",
-                "client_secret_post",
-            ],
-            supported_grant_types: vec!["authorization_code", "refresh_token", "device_code"],
-            did_binding_methods: vec![
-                "did_controller_key",
-                "device_key",
-                "passkey",
-                "oidc_binding_proof",
-                "vc_presentation",
-            ],
-            required_audience: required_audience_for(url_builder, cokret_config),
-            admin_audience,
-            session_grant_scope: PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
-            oidc_clients: Vec::new(),
-        },
+        auth_metadata: build_auth_metadata(url_builder, cokret_config),
         limits: ServiceLimitsDescriptor {
             max_body_bytes: 1_048_576,
             max_page_size: 100,
@@ -607,6 +697,6 @@ pub async fn server_describe(
         &cokret_config,
         verified_profiles_loaded.as_ref(),
     );
-    response.auth_metadata.oidc_clients = oidc_clients;
+    set_auth_metadata_oidc_clients(&mut response.auth_metadata, oidc_clients);
     Ok(Json(response))
 }

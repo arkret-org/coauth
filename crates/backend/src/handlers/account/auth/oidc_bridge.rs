@@ -1,6 +1,14 @@
-//! OIDC browser-bridge and exchange surfaces for the account API.
+//! OIDC authorization-code → `ck.session.grant` exchange core.
+//!
+//! This module is the Account Authority's OIDC proof validator. It used to
+//! also serve the product-private `/_coauth/.../auth/oidc/{browser-bridge,
+//! exchange}` bridge endpoints; those are removed (account-lifecycle §4.1,
+//! service-surface.md §2.5.1). The canonical entry point is now the spec
+//! operation `POST /_cokret/gate/account/session-grants` with
+//! `proof.proof_kind = "oidc_code_exchange"` — see
+//! [`crate::handlers::cokret::session_grant::issue_session_grant`], which
+//! calls [`exchange_oidc_code_for_session_grant`] here.
 
-use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use cokret_core::{AccountRegisterRequestBody, DeviceId, Did};
@@ -9,19 +17,11 @@ use mime::APPLICATION_JSON;
 use oauth_types::errors::{ClientError, ClientErrorCode};
 use oauth_types::requests::{
     AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
-    GrantType,
 };
-use salvo::oapi::ToSchema;
 use salvo::prelude::*;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest as _, Sha256};
-use ulid::Ulid;
 
-use super::{
-    DepotExt, LoginOutcome, NodeType, RouteError, SessionGrantKind, SessionGrantOneShotInfo,
-    SessionGrantPrincipalServerInfo, ViewerInfo, make_clock, make_rng,
-};
-use crate::handlers::cokret;
+use super::{DepotExt, DpopSessionBinding, RouteError, make_clock, make_rng};
+use crate::handlers::cokret::{self, SessionGrantMaterial};
 use crate::oidc_client::requests::discovery;
 use crate::oidc_client::types::client_credentials::ClientCredentials;
 use crate::outbound_http::{self, RequestBuilderExt as _};
@@ -29,157 +29,82 @@ use crate::services::soland_webvh;
 use crate::services::upstream_oidc::UpstreamOidcExchangeMode;
 use crate::services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token};
 
-#[derive(Deserialize, ToSchema)]
-pub struct OidcCodeExchangeRequestBody {
-    pub authorization_code: String,
-    pub code_verifier: String,
-    pub redirect_uri: String,
-    pub issuer: String,
-    pub token_endpoint: String,
-    pub userinfo_endpoint: String,
-    pub client_id: String,
-    #[serde(default)]
-    pub login_hint: String,
-    pub device_id: String,
-    #[serde(default)]
-    pub principal_audience: Option<String>,
-    #[serde(default)]
-    pub state: Option<String>,
-    #[serde(default)]
-    pub expected_state: Option<String>,
-    #[serde(default)]
-    pub expected_nonce: Option<String>,
-}
-
-#[derive(Deserialize, ToSchema)]
-pub struct OidcBrowserBridgeSessionRequestBody {
-    pub redirect_uri: String,
-    #[serde(default)]
-    pub login_hint: String,
-    pub device_id: String,
-    #[serde(default)]
-    pub principal_audience: Option<String>,
-    #[serde(default)]
-    pub client_id_hint: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct AuthBridgeDescribeOutcome {
-    pub contract: &'static str,
-    pub version: &'static str,
-    pub api_base_path: &'static str,
-    pub oauth: AuthBridgeOAuthDescriptor,
-    pub passkey: AuthBridgePasskeyDescriptor,
-    pub cokret: AuthBridgeCokretDescriptor,
-    pub admin: AuthBridgeAdminDescriptor,
-    pub todos: Vec<&'static str>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct AuthBridgeOAuthDescriptor {
-    pub discovery_path: &'static str,
-    pub browser_bridge_session_path: &'static str,
-    pub exchange_describe_path: &'static str,
-    pub exchange_path: &'static str,
-    pub supported_strands: Vec<&'static str>,
-    pub redirect_uri_modes: Vec<&'static str>,
-    pub client_selection_mode: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct AuthBridgePasskeyDescriptor {
-    pub register_start_path: &'static str,
-    pub register_finish_path: &'static str,
-    pub auth_start_path: &'static str,
-    pub auth_finish_path: &'static str,
-    pub account_hint_fields: Vec<&'static str>,
-    pub finish_response: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct AuthBridgeCokretDescriptor {
-    pub login_path: &'static str,
-    pub logout_path: &'static str,
-    pub providers_path: &'static str,
-    pub session_grants_path: &'static str,
-    pub session_grants_introspect_path: &'static str,
-    pub session_grant_scope: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct AuthBridgeAdminDescriptor {
-    pub accounts_path: &'static str,
-    pub account_detail_path_template: &'static str,
-    pub account_dids_path_template: &'static str,
-    pub risk_action_path_template: &'static str,
-    pub risk_action_current_path_template: &'static str,
-    pub risk_action_history_path_template: &'static str,
-}
-
-// `IntegrationManifestResponse` (and the nested `IntegrationManifestDependency`
-// / `IntegrationManifestSurface`) used to live inline here. They moved to
-// `coauth_admin_types::integration_manifest_admin` in C34.2 so the sodmin
-// admin SPA decodes them through the same typed shape — the prior shim
-// was missing the `examples` field entirely, silently dropping the
-// multi-step compose-strand example block on every call. The endpoint
-// below now returns the shared `IntegrationManifest` directly.
+// `IntegrationManifest` (and the nested `IntegrationManifestDependency`
+// / `IntegrationManifestSurface`) live in
+// `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
+// decodes them through the same typed shape. The `integration_describe`
+// endpoint below returns the shared `IntegrationManifest` directly.
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
-#[derive(Serialize, ToSchema)]
-pub struct OidcBrowserBridgeSessionOutcome {
-    pub contract: &'static str,
-    pub version: &'static str,
-    pub authorize_url: String,
-    pub callback_uri: String,
-    pub issuer: String,
-    pub authorization_endpoint: String,
-    pub token_endpoint: String,
-    pub userinfo_endpoint: String,
-    pub client_id: String,
-    pub state: String,
-    pub nonce: String,
+
+/// Typed input for the canonical OIDC authorization-code exchange. Mirrors the
+/// `oidc_code_exchange` branch of
+/// `service-operation-dtos.schema.json#/$defs/SessionGrantRequestBody` — the
+/// `token_endpoint` / `userinfo_endpoint` are NOT supplied by the client;
+/// the Account Authority derives them from the issuer's OIDC discovery
+/// document.
+pub(crate) struct OidcCodeExchangeInput {
+    /// `proof.authorization_code`.
+    pub authorization_code: String,
+    /// `proof.code_verifier` (PKCE S256).
     pub code_verifier: String,
-    pub code_challenge: String,
-    pub code_challenge_method: &'static str,
-    pub principal_audience: String,
-    pub todo: &'static str,
+    /// `proof.redirect_uri`.
+    pub redirect_uri: String,
+    /// `proof.issuer`.
+    pub issuer: String,
+    /// `proof.client_id`.
+    pub client_id: String,
+    /// `proof.state` — bound to the authorization request.
+    pub state: String,
+    /// `proof.nonce` — bound to the authorization request and id_token.
+    pub nonce: String,
+    /// `body.device_id` — the protocol device id (`ck:device:<uuidv7>`) the
+    /// grant is bound to via `cnf.jkt`.
+    pub device_id: String,
+    /// `body.principal_id` — the principal DID the client expects the grant
+    /// to be bound to. The exchange independently mints / resolves the
+    /// principal DID for the authenticated user and rejects a mismatch with
+    /// `proof_invalid` (principal binding failure).
+    pub expected_principal_id: String,
+    /// `proof.audience` — the requested principal-server audience.
+    pub requested_audience: Option<String>,
 }
 
-#[derive(Serialize, ToSchema)]
-pub struct OidcExchangeDescribeOutcome {
-    pub contract: &'static str,
-    pub version: &'static str,
-    pub exchange_path: &'static str,
-    pub upstream_boundary_mode: &'static str,
-    pub upstream_modes_supported: Vec<&'static str>,
-    pub required_fields: Vec<&'static str>,
-    pub validation_layers: Vec<&'static str>,
-    pub failure_codes: Vec<&'static str>,
-    pub example_request: serde_json::Value,
-    pub todos: Vec<&'static str>,
+/// Successful OIDC exchange result. The caller (the canonical session-grant
+/// handler) turns this into a `SessionGrantOutcome`.
+pub(crate) struct OidcExchangeSuccess {
+    pub principal_did: String,
+    pub device_id: String,
+    pub session_grant: SessionGrantMaterial,
+    pub persisted_grant_id: String,
 }
 
-fn pkce_s256_challenge(code_verifier: &str) -> String {
-    Base64UrlUnpadded::encode_string(&Sha256::digest(code_verifier.as_bytes()))
+/// Typed failure of the OIDC exchange, carrying the registry error code the
+/// HTTP layer surfaces as the envelope `code`. Binding failures (state,
+/// nonce, redirect_uri, principal, device, audience) map to `proof_invalid`.
+pub(crate) struct OidcExchangeError {
+    pub code: &'static str,
+    pub message: String,
 }
 
-fn expected_nonce_value(expected_nonce: Option<&str>) -> Option<&str> {
-    expected_nonce
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
+impl OidcExchangeError {
+    fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+
+    fn proof_invalid(message: impl Into<String>) -> Self {
+        Self::new("proof_invalid", message)
+    }
 }
 
-fn validate_expected_nonce(
-    grant_nonce: Option<&str>,
-    expected_nonce: Option<&str>,
-) -> Result<bool, String> {
-    let Some(expected_nonce) = expected_nonce_value(expected_nonce) else {
-        return Ok(false);
-    };
+fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> Result<(), String> {
     let returned_nonce = grant_nonce.unwrap_or_default();
     if returned_nonce == expected_nonce {
-        return Ok(true);
+        return Ok(());
     }
     Err(format!(
         "authorization_code nonce mismatch: expected {expected_nonce} but grant carried {}",
@@ -191,7 +116,7 @@ fn validate_expected_nonce(
     ))
 }
 
-fn is_protocol_device_id(value: &str) -> bool {
+pub(crate) fn is_protocol_device_id(value: &str) -> bool {
     let Some(uuid) = value.strip_prefix("ck:device:") else {
         return false;
     };
@@ -331,244 +256,116 @@ fn login_hint_matches_user(
         || login_hint == cokret::user_handle(url_builder, user)
 }
 
-/// OIDC authorization-code exchange bridge that now validates the incoming
-/// authorization code against coauth's local OAuth authorization-grant store
-/// before minting a temporary audience-bound Cokret session grant.
-#[endpoint]
-pub async fn oidc_code_exchange(
+/// Account Authority OIDC authorization-code → `ck.session.grant` exchange.
+///
+/// This is the core that the canonical
+/// `POST /_cokret/gate/account/session-grants`
+/// (`proof.proof_kind = "oidc_code_exchange"`) handler calls. It:
+///
+/// 1. resolves the issuer's live OIDC discovery metadata (local coauth issuer
+///    or a configured federated upstream) and derives `token_endpoint` /
+///    `userinfo_endpoint` from it,
+/// 2. exchanges `authorization_code` + `code_verifier` at the `token_endpoint`,
+/// 3. validates issuer / state / nonce / redirect_uri / id_token nonce /
+///    principal binding / device binding (`cnf.jkt` from the DPoP holder key) /
+///    audience, and
+/// 4. mints + persists a device-bound `ck.session.grant`.
+///
+/// Binding failures surface as `proof_invalid`; transport / discovery failures
+/// surface as their own registry codes.
+pub(crate) async fn exchange_oidc_code_for_session_grant(
     req: &mut Request,
     depot: &Depot,
-    res: &mut Response,
-) -> Result<(), RouteError> {
+    dpop_binding: Option<DpopSessionBinding>,
+    input: OidcCodeExchangeInput,
+) -> Result<OidcExchangeSuccess, OidcExchangeError> {
     let mut rng = make_rng();
     let clock = make_clock();
-    let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
-    let key_store = depot.key_store()?;
-    let encrypter = depot.encrypter()?;
-    let upstream_oidc = depot.upstream_oidc_service()?;
-    let principal_server = depot.principal_server()?;
+    let url_builder = depot
+        .url_builder()
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let cokret_config = depot
+        .cokret_config()
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let key_store = depot
+        .key_store()
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let encrypter = depot
+        .encrypter()
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let upstream_oidc = depot
+        .upstream_oidc_service()
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
     let http_client = depot
         .get::<reqwest::Client>("http_client")
         .cloned()
-        .map_err(|_| {
-            RouteError::Internal(Box::new(std::io::Error::other(
-                "http_client not found in depot",
-            )))
-        })?;
+        .map_err(|_| OidcExchangeError::new("internal_error", "http_client not found in depot"))?;
     let service_activity_tracker = depot
         .get::<crate::handlers::ActivityTracker>("activity_tracker")
         .cloned()
         .map_err(|_| {
-            RouteError::Internal(Box::new(std::io::Error::other(
-                "activity_tracker not found in depot",
-            )))
+            OidcExchangeError::new("internal_error", "activity_tracker not found in depot")
         })?;
-    let mut repo = depot.repo().await?;
+    let mut repo = depot
+        .repo()
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
-    // Extract DPoP proof (RFC 9449) if the client presented one. The
-    // proof binds the upcoming session grant to the device's
-    // proof-of-possession key. Failures here are fatal — a malformed
-    // proof must not silently fall back to an unbound grant.
-    let dpop_binding = match super::extract_dpop_binding_for_kickoff(req, &url_builder).await {
-        Ok(jkt) => jkt,
-        Err(error) => {
-            res.status_code(StatusCode::BAD_REQUEST);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_dpop_proof"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![error.to_string()],
-            }));
-            return Ok(());
-        }
+    // The DPoP holder proof is what binds the issued grant to the device key
+    // (`cnf.jkt`). It is mandatory for an OIDC-issued session grant — without
+    // it there is no device binding to validate.
+    let Some(dpop_binding) = dpop_binding else {
+        return Err(OidcExchangeError::proof_invalid(
+            "OIDC session grants require a valid DPoP holder proof for device binding",
+        ));
     };
 
-    let input: OidcCodeExchangeRequestBody = req
-        .parse_json()
-        .await
-        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
-
+    // --- structural validation of the proof / body fields ---------------
     if input.code_verifier.trim().is_empty() {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("pkce_required"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![
-                "code_verifier is required and the authorization_code must have been issued with PKCE"
-                    .to_owned(),
-            ],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::proof_invalid(
+            "code_verifier is required and the authorization_code must have been issued with PKCE",
+        ));
     }
-
     if input.authorization_code.trim().is_empty()
         || input.redirect_uri.trim().is_empty()
         || input.issuer.trim().is_empty()
-        || input.token_endpoint.trim().is_empty()
-        || input.userinfo_endpoint.trim().is_empty()
         || input.client_id.trim().is_empty()
+        || input.state.trim().is_empty()
+        || input.nonce.trim().is_empty()
         || input.device_id.trim().is_empty()
     {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_request"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![
-                "authorization_code, redirect_uri, issuer, token_endpoint, userinfo_endpoint, client_id, and device_id are required"
-                    .to_owned(),
-            ],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::proof_invalid(
+            "authorization_code, redirect_uri, issuer, client_id, state, nonce, and device_id are required for oidc_code_exchange",
+        ));
     }
     let device_id = input.device_id.trim().to_owned();
     if !is_protocol_device_id(&device_id) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_device_id"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec!["device_id must be a ck:device:<uuidv7> protocol identifier".to_owned()],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::proof_invalid(
+            "device_id must be a ck:device:<uuidv7> protocol identifier",
+        ));
     }
 
-    let redirect_uri = if let Ok(uri) = url::Url::parse(input.redirect_uri.trim()) {
-        uri
-    } else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_redirect_uri"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec!["redirect_uri must be a valid absolute URI".to_owned()],
-        }));
-        return Ok(());
-    };
-    let issuer = if let Ok(uri) = url::Url::parse(input.issuer.trim()) {
-        uri
-    } else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_issuer"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec!["issuer must be a valid absolute URI".to_owned()],
-        }));
-        return Ok(());
-    };
-    let token_endpoint = if let Ok(uri) = url::Url::parse(input.token_endpoint.trim()) {
-        uri
-    } else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_token_endpoint"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec!["token_endpoint must be a valid absolute URI".to_owned()],
-        }));
-        return Ok(());
-    };
-    let userinfo_endpoint = if let Ok(uri) = url::Url::parse(input.userinfo_endpoint.trim()) {
-        uri
-    } else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_userinfo_endpoint"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec!["userinfo_endpoint must be a valid absolute URI".to_owned()],
-        }));
-        return Ok(());
-    };
-    let expected_issuer = url_builder.oidc_issuer();
+    let redirect_uri = url::Url::parse(input.redirect_uri.trim())
+        .map_err(|_| OidcExchangeError::proof_invalid("redirect_uri must be a valid absolute URI"))?;
+    let issuer = url::Url::parse(input.issuer.trim())
+        .map_err(|_| OidcExchangeError::proof_invalid("issuer must be a valid absolute URI"))?;
 
-    if let Some(expected_state) = input.expected_state.as_deref() {
-        let returned_state = input.state.as_deref().unwrap_or_default();
-        if returned_state.is_empty() {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_state"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "callback state is required when expected_state is supplied".to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
-        if returned_state != expected_state {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_state"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
-                    "callback state mismatch: expected {expected_state} but received {returned_state}"
-                )],
-            }));
-            return Ok(());
-        }
-    }
+    let enabled_upstream_providers = repo
+        .upstream_oauth_provider()
+        .all_enabled()
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let exchange_mode = upstream_oidc
+        .exchange_mode_for_issuer(
+            &url_builder,
+            &enabled_upstream_providers,
+            &issuer,
+            input.client_id.trim(),
+        )
+        .map_err(OidcExchangeError::proof_invalid)?;
 
-    let enabled_upstream_providers = repo.upstream_oauth_provider().all_enabled().await?;
-    let exchange_mode = match upstream_oidc.exchange_mode_for_issuer(
-        &url_builder,
-        &enabled_upstream_providers,
-        &issuer,
-        input.client_id.trim(),
-    ) {
-        Ok(mode) => mode,
-        Err(message) => {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_issuer"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![message],
-            }));
-            return Ok(());
-        }
-    };
-
-    if matches!(exchange_mode, UpstreamOidcExchangeMode::LocalCoauth) {
-        if issuer.scheme() != token_endpoint.scheme()
-            || issuer.domain() != token_endpoint.domain()
-            || issuer.port_or_known_default() != token_endpoint.port_or_known_default()
-        {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_discovery_binding"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "local issuer and token_endpoint must resolve to the same origin for local OIDC exchange"
-                        .to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
-        if issuer.scheme() != userinfo_endpoint.scheme()
-            || issuer.domain() != userinfo_endpoint.domain()
-            || issuer.port_or_known_default() != userinfo_endpoint.port_or_known_default()
-        {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_discovery_binding"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![
-                    "local issuer and userinfo_endpoint must resolve to the same origin for local OIDC exchange"
-                        .to_owned(),
-                ],
-            }));
-            return Ok(());
-        }
-    }
-
+    // Resolve the issuer's live discovery document and derive the
+    // token / userinfo endpoints from it (the client never supplies them).
     let discovery_result = match &exchange_mode {
         UpstreamOidcExchangeMode::LocalCoauth => {
             if issuer.scheme() == "https" {
@@ -585,34 +382,40 @@ pub async fn oidc_code_exchange(
                 discovery::insecure_discover(&http_client, issuer.as_str()).await
             }
             UpstreamOAuthProviderDiscoveryMode::Disabled => {
-                res.render(Json(LoginOutcome {
-                    status: "error",
-                    error: Some("invalid_discovery_binding"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![
-                        "federated OIDC exchange requires discovery-enabled upstream provider metadata"
-                            .to_owned(),
-                    ],
-                }));
-                return Ok(());
+                return Err(OidcExchangeError::new(
+                    "invalid_discovery_binding",
+                    "federated OIDC exchange requires discovery-enabled upstream provider metadata",
+                ));
             }
         },
     };
-    let discovered_metadata = match discovery_result {
-        Ok(metadata) => metadata,
-        Err(error) => {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_discovery_binding"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
-                    "OIDC exchange could not fetch live discovery metadata for issuer={issuer}: {error}"
-                )],
-            }));
-            return Ok(());
-        }
+    let discovered_metadata = discovery_result.map_err(|error| {
+        OidcExchangeError::new(
+            "invalid_discovery_binding",
+            format!(
+                "OIDC exchange could not fetch live discovery metadata for issuer={issuer}: {error}"
+            ),
+        )
+    })?;
+
+    // Endpoints come from discovery (with federated provider overrides), then
+    // are validated against the issuer/provider binding the same way the old
+    // bridge validated the client-supplied endpoints.
+    let (token_endpoint, userinfo_endpoint) = match &exchange_mode {
+        UpstreamOidcExchangeMode::LocalCoauth => (
+            discovered_metadata.token_endpoint().clone(),
+            discovered_metadata.userinfo_endpoint().clone(),
+        ),
+        UpstreamOidcExchangeMode::Federated { provider } => (
+            provider
+                .token_endpoint_override
+                .clone()
+                .unwrap_or_else(|| discovered_metadata.token_endpoint().clone()),
+            provider
+                .userinfo_endpoint_override
+                .clone()
+                .unwrap_or_else(|| discovered_metadata.userinfo_endpoint().clone()),
+        ),
     };
     if let Err(message) = upstream_oidc.validate_exchange_endpoints(
         &url_builder,
@@ -621,22 +424,16 @@ pub async fn oidc_code_exchange(
         &token_endpoint,
         &userinfo_endpoint,
     ) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_discovery_binding"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![message],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::new("invalid_discovery_binding", message));
     }
 
+    // ─── Federated branch ───────────────────────────────────────────────
     if let UpstreamOidcExchangeMode::Federated { provider } = exchange_mode {
         let jwks_uri = provider
             .jwks_uri_override
             .clone()
             .unwrap_or_else(|| discovered_metadata.jwks_uri().clone());
-        let federated_exchange = match upstream_oidc
+        let federated_exchange = upstream_oidc
             .exchange_federated_authorization_code(
                 &http_client,
                 &key_store,
@@ -653,126 +450,80 @@ pub async fn oidc_code_exchange(
                 &mut rng,
             )
             .await
-        {
-            Ok(exchange) => exchange,
-            Err(error) => {
-                res.render(Json(LoginOutcome {
-                    status: "error",
-                    error: Some("invalid_authorization_code"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![format!("federated upstream OIDC exchange failed: {error}")],
-                }));
-                return Ok(());
-            }
-        };
-        // Trusted-issuer mapping (round 25): if the deployment has registered
-        // a `TrustedIssuerPolicy` for this issuer, validate the upstream
-        // id_token against the policy set and emit a tracing event with the
-        // typed `MappedUpstreamIdentity`. Failures are advisory at this stage
-        // — the existing `find_by_subject` strand remains the source of truth.
+            .map_err(|error| {
+                OidcExchangeError::new(
+                    "invalid_authorization_code",
+                    format!("federated upstream OIDC exchange failed: {error}"),
+                )
+            })?;
+
+        // Trusted-issuer mapping (advisory): emit a typed mapping event when a
+        // policy is configured; the `find_by_subject` strand stays the source
+        // of truth.
         if let (Ok(trusted_issuers), Some(id_token)) = (
             depot.get::<TrustedIssuerPolicySet>("upstream_oidc_trusted_issuers"),
             federated_exchange.token_response.id_token.as_deref(),
         ) && !trusted_issuers.is_empty()
         {
             match map_upstream_id_token(issuer.as_str(), id_token, trusted_issuers, clock.now()) {
-                Ok(mapped) => {
-                    tracing::debug!(
-                        target: "coauth.upstream_oidc_mapping",
-                        issuer = %issuer,
-                        sub = %mapped.sub,
-                        role = %mapped.role,
-                        "trusted-issuer mapping applied",
-                    );
-                }
-                Err(error) => {
-                    tracing::warn!(
-                        target: "coauth.upstream_oidc_mapping",
-                        issuer = %issuer,
-                        error = %error,
-                        "trusted-issuer mapping failed",
-                    );
-                }
+                Ok(mapped) => tracing::debug!(
+                    target: "coauth.upstream_oidc_mapping",
+                    issuer = %issuer, sub = %mapped.sub, role = %mapped.role,
+                    "trusted-issuer mapping applied",
+                ),
+                Err(error) => tracing::warn!(
+                    target: "coauth.upstream_oidc_mapping",
+                    issuer = %issuer, error = %error, "trusted-issuer mapping failed",
+                ),
             }
         }
 
         let upstream_subject = federated_exchange.userinfo.sub.clone();
-        let Some(upstream_link) = repo
+        let upstream_link = repo
             .upstream_oauth_link()
             .find_by_subject(&provider, upstream_subject.as_str())
-            .await?
-        else {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("upstream_link_required"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
-                    "federated upstream subject={} is not linked to a local account for provider={}",
-                    upstream_subject,
-                    provider
-                        .human_name
-                        .as_deref()
-                        .unwrap_or(provider.client_id.as_str())
-                )],
-            }));
-            return Ok(());
-        };
-        let Some(user_id) = upstream_link.user_id else {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("upstream_link_required"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
-                    "federated upstream subject={} has an unassociated upstream link; complete account linking before oidc/exchange",
-                    upstream_subject
-                )],
-            }));
-            return Ok(());
-        };
-        let Some(user) = repo.user().lookup(user_id).await? else {
-            return Err(RouteError::Internal(Box::new(std::io::Error::other(
+            .await
+            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+            .ok_or_else(|| {
+                OidcExchangeError::new(
+                    "upstream_link_required",
+                    format!(
+                        "federated upstream subject={} is not linked to a local account for provider={}",
+                        upstream_subject,
+                        provider.human_name.as_deref().unwrap_or(provider.client_id.as_str())
+                    ),
+                )
+            })?;
+        let user_id = upstream_link.user_id.ok_or_else(|| {
+            OidcExchangeError::new(
+                "upstream_link_required",
                 format!(
-                    "federated upstream link={} points to missing user={user_id}",
-                    upstream_link.id
+                    "federated upstream subject={upstream_subject} has an unassociated upstream link; complete account linking before issuing a grant"
                 ),
-            ))));
-        };
+            )
+        })?;
+        let user = repo
+            .user()
+            .lookup(user_id)
+            .await
+            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+            .ok_or_else(|| {
+                OidcExchangeError::new(
+                    "internal_error",
+                    format!(
+                        "federated upstream link={} points to missing user={user_id}",
+                        upstream_link.id
+                    ),
+                )
+            })?;
         if !user.is_valid() {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("account_unavailable"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
+            return Err(OidcExchangeError::new(
+                "account_unavailable",
+                format!(
                     "linked local account username={} is locked or deactivated",
                     user.localpart
-                )],
-            }));
-            return Ok(());
-        }
-        if !input.login_hint.trim().is_empty()
-            && !login_hint_matches_user(
-                &url_builder,
-                &cokret_config,
-                &user,
-                input.login_hint.trim(),
-            )
-        {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_login_hint"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
-                    "login_hint={} does not match linked local account username={}",
-                    input.login_hint.trim(),
-                    user.localpart
-                )],
-            }));
-            return Ok(());
+                ),
+            ));
         }
 
         let user_agent = req
@@ -783,25 +534,16 @@ pub async fn oidc_code_exchange(
         let browser_session = repo
             .browser_session()
             .add(&mut rng, &*clock, &user, user_agent)
-            .await?;
-        let grant_target = match upstream_oidc.session_grant_target_for_requested_audience(
-            &url_builder,
-            &cokret_config,
-            input.principal_audience.as_deref(),
-        ) {
-            Ok(target) => target,
-            Err(message) => {
-                res.render(Json(LoginOutcome {
-                    status: "error",
-                    error: Some("invalid_audience"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![message],
-                }));
-                return Ok(());
-            }
-        };
-        let principal_did = match ensure_principal_did_for_user(
+            .await
+            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+        let grant_target = upstream_oidc
+            .session_grant_target_for_requested_audience(
+                &url_builder,
+                &cokret_config,
+                input.requested_audience.as_deref(),
+            )
+            .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
+        let principal_did = ensure_principal_did_for_user(
             &mut repo,
             &mut rng,
             &clock,
@@ -813,20 +555,11 @@ pub async fn oidc_code_exchange(
             &grant_target.audience,
         )
         .await
-        {
-            Ok(did) => did,
-            Err(message) => {
-                res.render(Json(LoginOutcome {
-                    status: "error",
-                    error: Some("principal_did_minting_failed"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![message],
-                }));
-                return Ok(());
-            }
-        };
-        if let Err(message) = ensure_soland_account_registered(
+        .map_err(|message| OidcExchangeError::new("principal_did_minting_failed", message))?;
+
+        validate_expected_principal(&principal_did, &input.expected_principal_id)?;
+
+        ensure_soland_account_registered(
             &http_client,
             grant_target.principal_server_endpoint.as_deref(),
             &principal_did,
@@ -834,196 +567,88 @@ pub async fn oidc_code_exchange(
             Some(device_id.as_str()),
         )
         .await
-        {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("principal_account_registration_failed"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![message],
-            }));
-            return Ok(());
-        }
-        let Some(dpop_binding) = dpop_binding.clone() else {
-            res.status_code(StatusCode::BAD_REQUEST);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_dpop_proof"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec!["OIDC session grants require a valid DPoP proof".to_owned()],
-            }));
-            return Ok(());
-        };
+        .map_err(|message| {
+            OidcExchangeError::new("principal_account_registration_failed", message)
+        })?;
+
         let session_grant = cokret::issue_session_grant_for_audience(
             &*clock,
             &url_builder,
             &cokret_config,
             &key_store,
             &browser_session,
-            dpop_binding.public_jwk,
+            dpop_binding.public_jwk.clone(),
             grant_target.audience.clone(),
             principal_session_grant_scopes(&device_id),
             Some(&principal_did),
-            Some(dpop_binding.jkt),
+            Some(dpop_binding.jkt.clone()),
         )
-        .map_err(|error| RouteError::Internal(Box::new(error)))?;
-
-        let persisted_session_grant = cokret::persist_session_grant(
+        .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
+        let persisted = cokret::persist_session_grant(
             &mut repo,
             &mut rng,
             &*clock,
             &browser_session,
             &session_grant,
         )
-        .await?;
-        repo.save().await?;
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+        repo.save()
+            .await
+            .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
-        let display_name = match principal_server.query_user(&user.localpart).await {
-            Ok(info) => info.displayname,
-            Err(_) => None,
-        };
-
-        res.render(Json(LoginOutcome {
-            status: "success",
-            error: None,
-            viewer: Some(ViewerInfo {
-                id: NodeType::User.serialize(user.id),
-                handle: user.localpart.clone(),
-                did: principal_did,
-                federated_handle: cokret::user_handle(&url_builder, &user),
-                principal_id: principal_server.principal_id(&user.localpart),
-                display_name,
-            }),
-            session_grant: Some(SessionGrantOneShotInfo {
-                kind: SessionGrantKind::PrincipalSession,
-                id: persisted_session_grant.id.to_string(),
-                grant_jwt: session_grant.grant_jwt,
-                session_public_key: session_grant.session_public_key,
-                expires_at: session_grant.expires_at,
-                audience: session_grant.audience,
-                scopes: session_grant.scopes,
-                principal_server: grant_target
-                    .principal_server_name
-                    .zip(grant_target.principal_server_endpoint)
-                    .map(|(name, endpoint)| SessionGrantPrincipalServerInfo { name, endpoint }),
-            }),
-            warnings: vec![
-                "oidc_exchange_mode=federated".to_owned(),
-                format!("device_id={device_id}"),
-                format!("redirect_uri={}", redirect_uri),
-                format!("issuer={issuer}"),
-                format!("token_endpoint={token_endpoint}"),
-                format!("userinfo_endpoint={userinfo_endpoint}"),
-                format!("client_id={}", provider.client_id),
-                format!("upstream_provider_id={}", provider.id),
-                format!("upstream_link_id={}", upstream_link.id),
-                format!("upstream_subject={upstream_subject}"),
-                format!("browser_session_id={}", browser_session.id),
-                format!(
-                    "upstream_oauth_scope={}",
-                    federated_exchange
-                        .token_response
-                        .scope
-                        .as_ref()
-                        .map_or_else(|| "missing".to_owned(), ToString::to_string)
-                ),
-                "authorization_code_exchanged_via_federated_token_endpoint=true".to_owned(),
-                "oauth_access_token_validated_via_federated_userinfo=true".to_owned(),
-                format!(
-                    "oauth_userinfo_response_signed={}",
-                    federated_exchange.userinfo_response_signed
-                ),
-                format!(
-                    "oauth_refresh_token_issued={}",
-                    federated_exchange.token_response.refresh_token.is_some()
-                ),
-                format!(
-                    "oauth_id_token_issued={}",
-                    federated_exchange.token_response.id_token.is_some()
-                ),
-                format!(
-                    "oauth_id_token_subject={}",
-                    federated_exchange
-                        .id_token_subject
-                        .as_deref()
-                        .unwrap_or("missing")
-                ),
-                format!("oauth_userinfo_subject={upstream_subject}"),
-                format!("callback_state_checked={}", input.expected_state.is_some()),
-            ],
-        }));
-        return Ok(());
+        let _ = &service_activity_tracker;
+        let _ = &grant_target;
+        return Ok(OidcExchangeSuccess {
+            principal_did,
+            device_id,
+            session_grant,
+            persisted_grant_id: persisted.id.to_string(),
+        });
     }
 
-    let Some(authz_grant) = repo
+    // ─── Local coauth issuer branch ─────────────────────────────────────
+    let authz_grant = repo
         .oauth_authorization_grant()
         .find_by_code(input.authorization_code.trim())
-        .await?
-    else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![
-                "authorization_code was not issued by this coauth OAuth authorization server"
-                    .to_owned(),
-            ],
-        }));
-        return Ok(());
-    };
-    let Some(authz_code) = authz_grant.code.as_ref() else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![
-                "authorization_code grant does not contain an authorization_code payload"
-                    .to_owned(),
-            ],
-        }));
-        return Ok(());
-    };
-    let Some(pkce) = authz_code.pkce.as_ref() else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("pkce_required"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![
-                "authorization_code was not issued with PKCE; browser OIDC exchange requires S256 PKCE"
-                    .to_owned(),
-            ],
-        }));
-        return Ok(());
-    };
-    if let Err(error) = pkce.verify(input.code_verifier.trim()) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_code_verifier"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "PKCE verifier did not match authorization_code challenge: {error}"
-            )],
-        }));
-        return Ok(());
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .ok_or_else(|| {
+            OidcExchangeError::new(
+                "invalid_authorization_code",
+                "authorization_code was not issued by this coauth OAuth authorization server",
+            )
+        })?;
+    let authz_code = authz_grant.code.as_ref().ok_or_else(|| {
+        OidcExchangeError::new(
+            "invalid_authorization_code",
+            "authorization_code grant does not contain an authorization_code payload",
+        )
+    })?;
+    let pkce = authz_code.pkce.as_ref().ok_or_else(|| {
+        OidcExchangeError::proof_invalid(
+            "authorization_code was not issued with PKCE; OIDC exchange requires S256 PKCE",
+        )
+    })?;
+    pkce.verify(input.code_verifier.trim()).map_err(|error| {
+        OidcExchangeError::proof_invalid(format!(
+            "PKCE verifier did not match authorization_code challenge: {error}"
+        ))
+    })?;
+
+    // State binding: the proof's `state` MUST equal the state coauth recorded
+    // on the authorization grant when the authorize request was issued.
+    if let Some(expected_state) = authz_grant.state.as_deref() {
+        if input.state.trim() != expected_state {
+            return Err(OidcExchangeError::proof_invalid(format!(
+                "callback state mismatch: authorization_code was issued for state={expected_state} but proof carried {}",
+                input.state.trim()
+            )));
+        }
     }
-    if let Err(warning) = validate_expected_nonce(
-        authz_grant.nonce.as_deref(),
-        input.expected_nonce.as_deref(),
-    ) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_nonce"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![warning],
-        }));
-        return Ok(());
-    }
+    // Nonce binding (id_token nonce equivalent for the local issuer).
+    validate_returned_nonce(authz_grant.nonce.as_deref(), input.nonce.trim())
+        .map_err(OidcExchangeError::proof_invalid)?;
 
     let exchangeable_oauth_session_id = match &authz_grant.stage {
         coauth_data::AuthorizationGrantStage::Fulfilled { session_id, .. } => Some(*session_id),
@@ -1031,97 +656,59 @@ pub async fn oidc_code_exchange(
     };
 
     if authz_grant.redirect_uri != redirect_uri {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_redirect_uri"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "authorization_code was issued for redirect_uri={} rather than {}",
-                authz_grant.redirect_uri, redirect_uri
-            )],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "authorization_code was issued for redirect_uri={} rather than {}",
+            authz_grant.redirect_uri, redirect_uri
+        )));
     }
 
-    if let Some(expected_login_hint) = authz_grant.login_hint.as_deref()
-        && !input.login_hint.trim().is_empty()
-        && expected_login_hint != input.login_hint.trim()
-    {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_login_hint"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "authorization_code was issued for login_hint={} rather than {}",
-                expected_login_hint,
-                input.login_hint.trim()
-            )],
-        }));
-        return Ok(());
-    }
-
-    let Some(oauth_client) = repo.oauth_client().lookup(authz_grant.client_id).await? else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "authorization_code references missing oauth_client={}",
-                authz_grant.client_id
-            )],
-        }));
-        return Ok(());
-    };
+    let oauth_client = repo
+        .oauth_client()
+        .lookup(authz_grant.client_id)
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .ok_or_else(|| {
+            OidcExchangeError::new(
+                "invalid_authorization_code",
+                format!(
+                    "authorization_code references missing oauth_client={}",
+                    authz_grant.client_id
+                ),
+            )
+        })?;
     if oauth_client
         .resolve_redirect_uri(&Some(redirect_uri.clone()))
         .is_err()
     {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_redirect_uri"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "authorization_code client={} no longer allows redirect_uri={}",
-                oauth_client.client_id, redirect_uri
-            )],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "authorization_code client={} no longer allows redirect_uri={}",
+            oauth_client.client_id, redirect_uri
+        )));
     }
     if oauth_client.client_id != input.client_id.trim() {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_client"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
+        return Err(OidcExchangeError::new(
+            "invalid_client",
+            format!(
                 "authorization_code was issued for client_id={} rather than {}",
                 oauth_client.client_id,
                 input.client_id.trim()
-            )],
-        }));
-        return Ok(());
+            ),
+        ));
     }
     if oauth_client.token_endpoint_auth_method.as_ref()
         != Some(&OAuthClientAuthenticationMethod::None)
     {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_client"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "authorization_code client_id={} requires token_endpoint_auth_method={}; the browser OIDC bridge only supports public clients with token_endpoint_auth_method=none",
+        return Err(OidcExchangeError::new(
+            "invalid_client",
+            format!(
+                "authorization_code client_id={} requires token_endpoint_auth_method={}; the OIDC bridge only supports public clients with token_endpoint_auth_method=none",
                 oauth_client.client_id,
                 oauth_client
                     .token_endpoint_auth_method
-                    .as_ref().map_or_else(|| "missing".to_owned(), ToString::to_string)
-            )],
-        }));
-        return Ok(());
+                    .as_ref()
+                    .map_or_else(|| "missing".to_owned(), ToString::to_string)
+            ),
+        ));
     }
 
     let oauth_code_grant = OAuthAuthorizationCodeGrant {
@@ -1129,7 +716,7 @@ pub async fn oidc_code_exchange(
         redirect_uri: Some(redirect_uri.clone()),
         code_verifier: Some(input.code_verifier.trim().to_owned()),
     };
-    let oauth_token_request = AccessTokenRequest::AuthorizationCode(oauth_code_grant.clone());
+    let oauth_token_request = AccessTokenRequest::AuthorizationCode(oauth_code_grant);
     let local_token_credentials = ClientCredentials::None {
         client_id: oauth_client.client_id.clone(),
     };
@@ -1142,19 +729,22 @@ pub async fn oidc_code_exchange(
             clock.now(),
             &mut rng,
         )
-        .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    // Release the repository session before making a nested HTTP request
-    // back into coauth. The local token endpoint needs its own repo access.
-    repo.cancel().await?;
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    // Release the repository session before the nested HTTP request back into
+    // coauth's own token endpoint, which needs its own repo access.
+    repo.cancel()
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
     let oauth_token_http_response = oauth_token_http_request
         .send_traced()
         .await
-        .map_err(|error| RouteError::Internal(Box::new(error)))?;
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
     if !oauth_token_http_response.status().is_success() {
         let status = oauth_token_http_response.status();
         let token_error = oauth_token_http_response.json::<ClientError>().await;
         if status.is_server_error() {
-            return Err(RouteError::Internal(Box::new(std::io::Error::other(
+            return Err(OidcExchangeError::new(
+                "internal_error",
                 match token_error {
                     Ok(error) => {
                         format!("local OAuth token endpoint returned server_error: {error:?}")
@@ -1163,21 +753,19 @@ pub async fn oidc_code_exchange(
                         "local OAuth token endpoint returned {status} and its error body could not be decoded: {error}"
                     ),
                 },
-            ))));
+            ));
         }
-        match token_error {
+        return match token_error {
             Ok(error) => {
                 let error_description = error
                     .error_description
                     .as_deref()
-                    .unwrap_or(
-                        "local OAuth token endpoint rejected the authorization_code exchange",
-                    )
+                    .unwrap_or("local OAuth token endpoint rejected the authorization_code exchange")
                     .to_owned();
                 let lower_description = error_description.to_ascii_lowercase();
                 let (code, error_kind) = match error.error {
                     ClientErrorCode::InvalidGrant if lower_description.contains("pkce") => (
-                        "invalid_code_verifier",
+                        "proof_invalid",
                         format!("pkce verification failed: {error_description}"),
                     ),
                     ClientErrorCode::InvalidGrant => {
@@ -1189,78 +777,79 @@ pub async fn oidc_code_exchange(
                     ClientErrorCode::InvalidRequest => ("invalid_request", error_description),
                     _ => ("invalid_authorization_code", error_description),
                 };
-                res.render(Json(LoginOutcome {
-                    status: "error",
-                    error: Some(code),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![format!(
-                        "local OAuth token endpoint rejected the authorization_code exchange: {error_kind}"
-                    )],
-                }));
-                return Ok(());
-            }
-            Err(error) => {
-                return Err(RouteError::Internal(Box::new(std::io::Error::other(
+                Err(OidcExchangeError::new(
+                    code,
                     format!(
-                        "local OAuth token endpoint returned {status} and its error body could not be decoded: {error}"
+                        "local OAuth token endpoint rejected the authorization_code exchange: {error_kind}"
                     ),
-                ))));
+                ))
             }
-        }
+            Err(error) => Err(OidcExchangeError::new(
+                "internal_error",
+                format!(
+                    "local OAuth token endpoint returned {status} and its error body could not be decoded: {error}"
+                ),
+            )),
+        };
     }
     let oauth_token_reply: AccessTokenResponse = oauth_token_http_response
         .json()
         .await
-        .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    let mut repo = depot.repo().await?;
+        .map_err(|error| OidcExchangeError::new("internal_error", error.to_string()))?;
+    let mut repo = depot
+        .repo()
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
     let oauth_session_id = exchangeable_oauth_session_id.ok_or_else(|| {
-        RouteError::Internal(Box::new(std::io::Error::other(
+        OidcExchangeError::new(
+            "internal_error",
             "authorization_code exchanged successfully without a fulfilled oauth session id",
-        )))
+        )
     })?;
-    let Some(oauth_session) = repo.oauth_session().lookup(oauth_session_id).await? else {
-        return Err(RouteError::Internal(Box::new(std::io::Error::other(
-            format!(
-                "authorization_code exchange succeeded but oauth_session={oauth_session_id} could not be loaded",
-            ),
-        ))));
-    };
+    let oauth_session = repo
+        .oauth_session()
+        .lookup(oauth_session_id)
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .ok_or_else(|| {
+            OidcExchangeError::new(
+                "internal_error",
+                format!(
+                    "authorization_code exchange succeeded but oauth_session={oauth_session_id} could not be loaded"
+                ),
+            )
+        })?;
     if oauth_session.client_id != authz_grant.client_id {
-        return Err(RouteError::Internal(Box::new(std::io::Error::other(
+        return Err(OidcExchangeError::new(
+            "internal_error",
             format!(
                 "authorization_code exchange succeeded with mismatched client binding: grant client={} session client={}",
                 authz_grant.client_id, oauth_session.client_id
             ),
-        ))));
+        ));
     }
 
-    let Some(user_session_id) = oauth_session.user_session_id else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec!["authorization_code is not bound to a browser user session".to_owned()],
-        }));
-        return Ok(());
-    };
-
-    let Some(browser_session) = repo.browser_session().lookup(user_session_id).await? else {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "authorization_code references missing browser_session={user_session_id}"
-            )],
-        }));
-        return Ok(());
-    };
+    let user_session_id = oauth_session.user_session_id.ok_or_else(|| {
+        OidcExchangeError::new(
+            "invalid_authorization_code",
+            "authorization_code is not bound to a browser user session",
+        )
+    })?;
+    let browser_session = repo
+        .browser_session()
+        .lookup(user_session_id)
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
+        .ok_or_else(|| {
+            OidcExchangeError::new(
+                "invalid_authorization_code",
+                format!("authorization_code references missing browser_session={user_session_id}"),
+            )
+        })?;
     let expected_subject =
         cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user);
+    let expected_issuer = url_builder.oidc_issuer();
     let oauth_introspection = match crate::handlers::oauth::introspection_service::introspect_token(
         &mut repo,
         &clock,
@@ -1280,102 +869,70 @@ pub async fn oidc_code_exchange(
             | crate::handlers::oauth::introspection_service::IntrospectionError::CantLoadUser(_)
             | crate::handlers::oauth::introspection_service::IntrospectionError::CantLoadOAuthClient(_),
         ) => {
-            return Err(RouteError::Internal(Box::new(std::io::Error::other(
+            return Err(OidcExchangeError::new(
+                "internal_error",
                 "fresh OAuth token could not be introspected because local session state could not be loaded",
-            ))));
+            ));
         }
         Err(error) => {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_authorization_code"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
-                    "fresh OAuth access token failed local introspection: {error}"
-                )],
-            }));
-            return Ok(());
+            return Err(OidcExchangeError::new(
+                "invalid_authorization_code",
+                format!("fresh OAuth access token failed local introspection: {error}"),
+            ));
         }
     };
     if !oauth_introspection.active {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![
-                "fresh OAuth access token was minted but not reported active by local introspection"
-                    .to_owned(),
-            ],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::new(
+            "invalid_authorization_code",
+            "fresh OAuth access token was minted but not reported active by local introspection",
+        ));
     }
     if oauth_introspection.iss.as_deref() != Some(expected_issuer.as_str()) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_discovery_binding"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
+        return Err(OidcExchangeError::new(
+            "invalid_discovery_binding",
+            format!(
                 "fresh OAuth access token issuer mismatch: expected {} but introspection returned {}",
                 expected_issuer,
                 oauth_introspection.iss.as_deref().unwrap_or("missing")
-            )],
-        }));
-        return Ok(());
+            ),
+        ));
     }
     if oauth_introspection.sub.as_deref() != Some(expected_subject.as_str()) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "fresh OAuth access token subject mismatch: expected {} but introspection returned {}",
-                expected_subject,
-                oauth_introspection.sub.as_deref().unwrap_or("missing")
-            )],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "fresh OAuth access token subject mismatch: expected {} but introspection returned {}",
+            expected_subject,
+            oauth_introspection.sub.as_deref().unwrap_or("missing")
+        )));
     }
     let expected_oauth_client_id = oauth_session.client_id.to_string();
     if oauth_introspection.client_id.as_deref() != Some(expected_oauth_client_id.as_str()) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_client"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
+        return Err(OidcExchangeError::new(
+            "invalid_client",
+            format!(
                 "fresh OAuth access token client mismatch: expected {} but introspection returned {}",
                 expected_oauth_client_id,
                 oauth_introspection.client_id.as_deref().unwrap_or("missing")
-            )],
-        }));
-        return Ok(());
+            ),
+        ));
     }
     let expected_oauth_session_id = oauth_session_id.to_string();
     if oauth_introspection.cokret_session_id.as_deref() != Some(expected_oauth_session_id.as_str())
     {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
+        return Err(OidcExchangeError::new(
+            "invalid_authorization_code",
+            format!(
                 "fresh OAuth access token session mismatch: expected {} but introspection returned {}",
                 expected_oauth_session_id,
-                oauth_introspection
-                    .cokret_session_id
-                    .as_deref()
-                    .unwrap_or("missing")
-            )],
-        }));
-        return Ok(());
+                oauth_introspection.cokret_session_id.as_deref().unwrap_or("missing")
+            ),
+        ));
     }
-    // Release the repository session before validating userinfo through the
-    // local HTTP endpoint, which also needs repo-backed token/session access.
-    repo.cancel().await?;
-    let (oauth_userinfo, userinfo_response_signed) = match upstream_oidc
+    // Release the repo before validating userinfo through the local HTTP
+    // endpoint, which also needs repo-backed token/session access.
+    repo.cancel()
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    let (oauth_userinfo, _userinfo_response_signed) = upstream_oidc
         .fetch_local_oidc_userinfo(
             &http_client,
             &key_store,
@@ -1386,83 +943,49 @@ pub async fn oidc_code_exchange(
             oauth_client.userinfo_signed_response_alg.as_ref(),
         )
         .await
-    {
-        Ok(reply) => reply,
-        Err(error) => {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_authorization_code"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![format!(
-                    "fresh OAuth access token failed local userinfo validation: {error}"
-                )],
-            }));
-            return Ok(());
-        }
-    };
-    let mut repo = depot.repo().await?;
+        .map_err(|error| {
+            OidcExchangeError::new(
+                "invalid_authorization_code",
+                format!("fresh OAuth access token failed local userinfo validation: {error}"),
+            )
+        })?;
+    let mut repo = depot
+        .repo()
+        .await
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
     if oauth_userinfo.sub != expected_subject {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "fresh OAuth userinfo subject mismatch: expected {} but userinfo returned {}",
-                expected_subject, oauth_userinfo.sub
-            )],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "fresh OAuth userinfo subject mismatch: expected {} but userinfo returned {}",
+            expected_subject, oauth_userinfo.sub
+        )));
     }
     if oauth_userinfo.principal_did.as_deref() != Some(expected_subject.as_str()) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
-                "fresh OAuth userinfo principal_did mismatch: expected {} but userinfo returned {}",
-                expected_subject,
-                oauth_userinfo.principal_did.as_deref().unwrap_or("missing")
-            )],
-        }));
-        return Ok(());
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "fresh OAuth userinfo principal_did mismatch: expected {} but userinfo returned {}",
+            expected_subject,
+            oauth_userinfo.principal_did.as_deref().unwrap_or("missing")
+        )));
     }
     if oauth_userinfo.session_id.as_deref() != Some(expected_oauth_session_id.as_str()) {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_authorization_code"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![format!(
+        return Err(OidcExchangeError::new(
+            "invalid_authorization_code",
+            format!(
                 "fresh OAuth userinfo session mismatch: expected {} but userinfo returned {}",
                 expected_oauth_session_id,
                 oauth_userinfo.session_id.as_deref().unwrap_or("missing")
-            )],
-        }));
-        return Ok(());
+            ),
+        ));
     }
 
-    let grant_target = match upstream_oidc.session_grant_target_for_requested_audience(
-        &url_builder,
-        &cokret_config,
-        input.principal_audience.as_deref(),
-    ) {
-        Ok(target) => target,
-        Err(message) => {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_audience"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![message],
-            }));
-            return Ok(());
-        }
-    };
+    let grant_target = upstream_oidc
+        .session_grant_target_for_requested_audience(
+            &url_builder,
+            &cokret_config,
+            input.requested_audience.as_deref(),
+        )
+        .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
     let user = &browser_session.user;
-    let principal_did = match ensure_principal_did_for_user(
+    let principal_did = ensure_principal_did_for_user(
         &mut repo,
         &mut rng,
         &clock,
@@ -1474,20 +997,11 @@ pub async fn oidc_code_exchange(
         &grant_target.audience,
     )
     .await
-    {
-        Ok(did) => did,
-        Err(message) => {
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("principal_did_minting_failed"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![message],
-            }));
-            return Ok(());
-        }
-    };
-    if let Err(message) = ensure_soland_account_registered(
+    .map_err(|message| OidcExchangeError::new("principal_did_minting_failed", message))?;
+
+    validate_expected_principal(&principal_did, &input.expected_principal_id)?;
+
+    ensure_soland_account_registered(
         &http_client,
         grant_target.principal_server_endpoint.as_deref(),
         &principal_did,
@@ -1495,27 +1009,8 @@ pub async fn oidc_code_exchange(
         Some(device_id.as_str()),
     )
     .await
-    {
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("principal_account_registration_failed"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec![message],
-        }));
-        return Ok(());
-    }
-    let Some(dpop_binding) = dpop_binding.clone() else {
-        res.status_code(StatusCode::BAD_REQUEST);
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_dpop_proof"),
-            viewer: None,
-            session_grant: None,
-            warnings: vec!["OIDC session grants require a valid DPoP proof".to_owned()],
-        }));
-        return Ok(());
-    };
+    .map_err(|message| OidcExchangeError::new("principal_account_registration_failed", message))?;
+
     let session_grant = cokret::issue_session_grant_for_audience(
         &clock,
         &url_builder,
@@ -1528,326 +1023,50 @@ pub async fn oidc_code_exchange(
         Some(&principal_did),
         Some(dpop_binding.jkt),
     )
-    .map_err(|error| RouteError::Internal(Box::new(error)))?;
-
-    let persisted_session_grant = cokret::persist_session_grant(
+    .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
+    let persisted = cokret::persist_session_grant(
         &mut repo,
         &mut rng,
         &clock,
         &browser_session,
         &session_grant,
     )
-    .await?;
-    repo.save().await?;
-
-    let display_name = match principal_server.query_user(&user.localpart).await {
-        Ok(info) => info.displayname,
-        Err(_) => None,
-    };
-
-    res.render(Json(LoginOutcome {
-        status: "success",
-        error: None,
-        viewer: Some(ViewerInfo {
-            id: NodeType::User.serialize(user.id),
-            handle: user.localpart.clone(),
-            did: principal_did,
-            federated_handle: cokret::user_handle(&url_builder, user),
-            principal_id: principal_server.principal_id(&user.localpart),
-            display_name,
-        }),
-        session_grant: Some(SessionGrantOneShotInfo {
-            kind: SessionGrantKind::PrincipalSession,
-            id: persisted_session_grant.id.to_string(),
-            grant_jwt: session_grant.grant_jwt,
-            session_public_key: session_grant.session_public_key,
-            expires_at: session_grant.expires_at,
-            audience: session_grant.audience,
-            scopes: session_grant.scopes,
-            principal_server: grant_target
-                .principal_server_name
-                .zip(grant_target.principal_server_endpoint)
-                .map(|(name, endpoint)| SessionGrantPrincipalServerInfo { name, endpoint }),
-        }),
-        warnings: vec![
-            "oidc_exchange_mode=local_coauth".to_owned(),
-            format!("device_id={device_id}"),
-            format!("redirect_uri={}", redirect_uri),
-            format!("issuer={issuer}"),
-            format!("token_endpoint={token_endpoint}"),
-            format!("userinfo_endpoint={userinfo_endpoint}"),
-            format!("client_id={}", oauth_client.client_id),
-            format!("oauth_session_id={oauth_session_id}"),
-            format!("oauth_client_id={}", oauth_client.client_id),
-            format!("browser_session_id={user_session_id}"),
-            format!(
-                "oauth_scope={}",
-                oauth_token_reply
-                    .scope
-                    .as_ref()
-                    .map_or_else(|| "missing".to_owned(), ToString::to_string)
-            ),
-            "authorization_code_exchanged_via_local_http_token_endpoint=true".to_owned(),
-            "oauth_access_token_issued=true".to_owned(),
-            "oauth_access_token_introspected_locally=true".to_owned(),
-            "oauth_access_token_validated_via_local_userinfo=true".to_owned(),
-            format!("oauth_userinfo_response_signed={userinfo_response_signed}"),
-            format!(
-                "oauth_refresh_token_issued={}",
-                oauth_token_reply.refresh_token.is_some()
-            ),
-            format!(
-                "oauth_id_token_issued={}",
-                oauth_token_reply.id_token.is_some()
-            ),
-            format!(
-                "oauth_introspection_subject={}",
-                oauth_introspection.sub.as_deref().unwrap_or("missing")
-            ),
-            format!("oauth_userinfo_subject={}", oauth_userinfo.sub),
-            format!("callback_state_checked={}", input.expected_state.is_some()),
-            format!(
-                "callback_nonce_checked={}",
-                expected_nonce_value(input.expected_nonce.as_deref()).is_some()
-            ),
-        ],
-    }));
-    Ok(())
-}
-
-#[endpoint]
-pub async fn oidc_browser_bridge_session(
-    req: &mut Request,
-    depot: &Depot,
-) -> Result<Json<OidcBrowserBridgeSessionOutcome>, RouteError> {
-    let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
-    let input: OidcBrowserBridgeSessionRequestBody = req
-        .parse_json()
+    .await
+    .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
+    repo.save()
         .await
-        .map_err(|_| RouteError::BadRequest("invalid browser bridge session payload".to_owned()))?;
+        .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
-    if input.redirect_uri.trim().is_empty() || input.device_id.trim().is_empty() {
-        return Err(RouteError::BadRequest(
-            "redirect_uri and device_id are required".to_owned(),
-        ));
-    }
-    if !is_protocol_device_id(input.device_id.trim()) {
-        return Err(RouteError::BadRequest(
-            "device_id must be a ck:device:<uuidv7> protocol identifier".to_owned(),
-        ));
-    }
-
-    let principal_audience = input
-        .principal_audience
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| cokret::required_audience_for(&url_builder, &cokret_config));
-    let client_id = if let Some(hint) = input
-        .client_id_hint
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-    {
-        hint
-    } else {
-        let redirect_url = url::Url::parse(input.redirect_uri.trim()).map_err(|err| {
-            RouteError::BadRequest(format!("redirect_uri is not a valid URL: {err}"))
-        })?;
-        let mut repo = depot.repo().await?;
-        let candidates = repo.oauth_client().all_static().await?;
-        repo.cancel().await?;
-        let redirect_lookup = Some(redirect_url);
-        candidates
-            .into_iter()
-            .filter(|client| {
-                client
-                    .grant_types
-                    .iter()
-                    .any(|grant_type| matches!(grant_type, GrantType::AuthorizationCode))
-            })
-            .filter(|client| {
-                client.token_endpoint_auth_method.as_ref()
-                    == Some(&OAuthClientAuthenticationMethod::None)
-            })
-            .find(|client| client.resolve_redirect_uri(&redirect_lookup).is_ok())
-            .map(|client| client.client_id)
-            .ok_or_else(|| {
-                RouteError::BadRequest(format!(
-                    "no public authorization_code OAuth client is registered with a redirect_uri matching {}; pass client_id_hint or register a static client",
-                    input.redirect_uri.trim()
-                ))
-            })?
-    };
-    let state = format!("ck-state-{}", Ulid::new().to_string().to_lowercase());
-    let nonce = format!("ck-nonce-{}", Ulid::new().to_string().to_lowercase());
-    let code_verifier = format!(
-        "ck-pkce-verifier-{}",
-        Ulid::new().to_string().to_lowercase()
-    );
-    let code_challenge = pkce_s256_challenge(&code_verifier);
-    let mut authorize_url = url_builder.oauth_authorization_endpoint();
-    {
-        let mut query = authorize_url.query_pairs_mut();
-        query.append_pair("response_type", "code");
-        query.append_pair("client_id", client_id.as_str());
-        query.append_pair("redirect_uri", input.redirect_uri.trim());
-        query.append_pair("scope", "openid profile");
-        query.append_pair("state", state.as_str());
-        query.append_pair("nonce", nonce.as_str());
-        if !input.login_hint.trim().is_empty() {
-            query.append_pair("login_hint", input.login_hint.trim());
-        }
-        query.append_pair("code_challenge_method", "S256");
-        query.append_pair("code_challenge", code_challenge.as_str());
-        query.append_pair("resource", principal_audience.as_str());
-    }
-
-    Ok(Json(OidcBrowserBridgeSessionOutcome {
-        contract: "cokret.rest.oidc_browser_bridge_session.v1",
-        version: "2026-05-17-validated",
-        authorize_url: authorize_url.to_string(),
-        callback_uri: input.redirect_uri.trim().to_owned(),
-        issuer: url_builder.oidc_issuer().to_string(),
-        authorization_endpoint: url_builder.oauth_authorization_endpoint().to_string(),
-        token_endpoint: url_builder.oauth_token_endpoint().to_string(),
-        userinfo_endpoint: url_builder.oidc_userinfo_endpoint().to_string(),
-        client_id,
-        state,
-        nonce,
-        code_verifier,
-        code_challenge,
-        code_challenge_method: "S256",
-        principal_audience,
-        todo: "stateless_preflight: client must submit state as expected_state and may submit nonce as expected_nonce during exchange.",
-    }))
+    let _ = &grant_target;
+    Ok(OidcExchangeSuccess {
+        principal_did,
+        device_id,
+        session_grant,
+        persisted_grant_id: persisted.id.to_string(),
+    })
 }
 
-#[endpoint]
-pub async fn oidc_exchange_describe() -> Result<Json<OidcExchangeDescribeOutcome>, RouteError> {
-    Ok(Json(OidcExchangeDescribeOutcome {
-        contract: "cokret.rest.oidc_exchange.v1",
-        version: "2026-05-17-validated",
-        exchange_path: "/_coauth/gate/account/auth/oidc/exchange",
-        upstream_boundary_mode: "local_coauth_or_federated_oidc_token_plus_userinfo_validation",
-        upstream_modes_supported: vec![
-            "local_coauth",
-            "local_http_token_exchange",
-            "local_oauth_introspection",
-            "local_userinfo_http_validation",
-            "federated",
-            "federated_upstream_token_endpoint",
-            "federated_userinfo_http_validation",
-            "federated_upstream_link_binding",
-        ],
-        required_fields: vec![
-            "authorization_code",
-            "code_verifier",
-            "redirect_uri",
-            "issuer",
-            "token_endpoint",
-            "userinfo_endpoint",
-            "client_id",
-            "device_id",
-        ],
-        validation_layers: vec![
-            "callback_state_gate_if_expected_state_present",
-            "live_discovery_metadata_match",
-            "local_authorization_code_binding",
-            "pkce_required_for_authorization_code",
-            "local_authorization_code_nonce_binding_if_expected_nonce_present",
-            "public_client_only_for_browser_bridge",
-            "local_http_oauth_token_exchange",
-            "local_oauth_introspection_active_check",
-            "local_userinfo_subject_principal_session_binding",
-            "federated_configured_provider_issuer_match",
-            "federated_token_endpoint_exchange",
-            "federated_userinfo_subject_validation",
-            "federated_upstream_link_to_local_account",
-            "login_hint_to_linked_local_account_if_supplied",
-            "configured_principal_audience_match",
-            "cokret_session_grant_issuance",
-        ],
-        failure_codes: vec![
-            "invalid_redirect_uri",
-            "invalid_issuer",
-            "invalid_discovery_binding",
-            "invalid_client_id",
-            "invalid_device_id",
-            "pkce_required",
-            "invalid_code_verifier",
-            "invalid_state",
-            "invalid_nonce",
-            "invalid_authorization_code",
-            "invalid_userinfo_binding",
-            "upstream_link_required",
-            "account_unavailable",
-            "invalid_audience",
-            "session_grant_denied",
-        ],
-        example_request: serde_json::json!({
-            "authorization_code": "ck-auth-code-from-callback",
-            "code_verifier": "ck-pkce-verifier-01k...",
-            "redirect_uri": "http://localhost:8080/auth/callback",
-            "issuer": "https://coauth.example",
-            "token_endpoint": "https://coauth.example/oauth/token",
-            "userinfo_endpoint": "https://coauth.example/oauth/userinfo",
-            "client_id": "yougen",
-            "login_hint": "did:web:alice.example",
-            "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
-            "principal_audience": "https://soland.example",
-            "state": "ck-state-01k...",
-            "expected_state": "ck-state-01k...",
-            "expected_nonce": "ck-nonce-01k..."
-        }),
-        todos: vec![],
-    }))
-}
-
-#[endpoint]
-pub async fn auth_bridge_describe(
-    depot: &Depot,
-) -> Result<Json<AuthBridgeDescribeOutcome>, RouteError> {
-    let _ = depot.url_builder()?;
-
-    Ok(Json(AuthBridgeDescribeOutcome {
-        contract: "cokret.rest.auth_bridge.v1",
-        version: "2026-05-17-validated",
-        api_base_path: "/_coauth",
-        oauth: AuthBridgeOAuthDescriptor {
-            discovery_path: "/.well-known/openid-configuration",
-            browser_bridge_session_path: "/_coauth/gate/account/auth/oidc/browser-bridge/session",
-            exchange_describe_path: "/_coauth/gate/account/auth/oidc/exchange/describe",
-            exchange_path: "/_coauth/gate/account/auth/oidc/exchange",
-            supported_strands: vec!["authorization_code_pkce_browser"],
-            redirect_uri_modes: vec!["browser_origin_callback", "native_urn_callback"],
-            client_selection_mode: "public_authorization_code_client_with_exact_redirect_match",
-        },
-        passkey: AuthBridgePasskeyDescriptor {
-            register_start_path: "/_coauth/gate/account/auth/passkey/register/start",
-            register_finish_path: "/_coauth/gate/account/auth/passkey/register/finish",
-            auth_start_path: "/_coauth/gate/account/auth/passkey/auth/start",
-            auth_finish_path: "/_coauth/gate/account/auth/passkey/auth/finish",
-            account_hint_fields: vec!["account_id", "handle", "login_hint", "display_name"],
-            finish_response: "credential_id_only_session_grant_followup",
-        },
-        cokret: AuthBridgeCokretDescriptor {
-            login_path: "/_coauth/gate/account/auth/login",
-            logout_path: "/_coauth/gate/account/auth/logout",
-            providers_path: "/_coauth/gate/account/auth/providers",
-            session_grants_path: "/_cokret/gate/account/session-grants",
-            session_grants_introspect_path: "/_cokret/gate/account/session-grants/introspect",
-            session_grant_scope: cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE,
-        },
-        admin: AuthBridgeAdminDescriptor {
-            accounts_path: "/_coauth/admin/accounts",
-            account_detail_path_template: "/_coauth/admin/accounts/{account_id}",
-            account_dids_path_template: "/_coauth/admin/accounts/{account_id}/dids",
-            risk_action_path_template: "/_coauth/admin/accounts/{account_id}/risk-action",
-            risk_action_current_path_template: "/_coauth/admin/accounts/{account_id}/risk-action/current",
-            risk_action_history_path_template: "/_coauth/admin/accounts/{account_id}/risk-action/history",
-        },
-        todos: vec![],
-    }))
+/// Principal binding check: the principal DID the Account Authority resolved /
+/// minted for the authenticated user MUST equal the `principal_id` the client
+/// asserted in the request body. A mismatch is a `proof_invalid` binding
+/// failure — the client tried to bind the OIDC authentication to a DID it does
+/// not actually own.
+fn validate_expected_principal(
+    resolved_principal_did: &str,
+    expected_principal_id: &str,
+) -> Result<(), OidcExchangeError> {
+    let expected = expected_principal_id.trim();
+    if expected.is_empty() {
+        return Err(OidcExchangeError::proof_invalid(
+            "principal_id is required for oidc_code_exchange",
+        ));
+    }
+    if expected != resolved_principal_did {
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "principal binding mismatch: request principal_id={expected} but the authenticated user resolves to {resolved_principal_did}"
+        )));
+    }
+    Ok(())
 }
 
 #[endpoint]
@@ -1864,7 +1083,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 service: "soland".to_owned(),
                 purpose: "principal_server_session_exchange".to_owned(),
                 required_contract: "cokret.rest.principal_bridge.v1".to_owned(),
-                discovery_path: "/_coauth/gate/account/auth/bridge/describe".to_owned(),
+                discovery_path: "/_cokret/describe".to_owned(),
                 mode: "remote_service_contract".to_owned(),
             },
             IntegrationManifestDependency {
@@ -1877,36 +1096,12 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
         ],
         surfaces: vec![
             IntegrationManifestSurface {
-                name: "auth_bridge".to_owned(),
-                method: "GET".to_owned(),
-                path: "/_coauth/gate/account/auth/bridge/describe".to_owned(),
-                contract: "cokret.rest.auth_bridge.v1".to_owned(),
-                stability: "validated".to_owned(),
-                todo: "covers browser bridge discovery, local/federated exchange, and principal session-grant handoff.".to_owned(),
-            },
-            IntegrationManifestSurface {
-                name: "oidc_browser_bridge_session".to_owned(),
+                name: "session_grants".to_owned(),
                 method: "POST".to_owned(),
-                path: "/_coauth/gate/account/auth/oidc/browser-bridge/session".to_owned(),
-                contract: "cokret.rest.oidc_browser_bridge_session.v1".to_owned(),
+                path: "/_cokret/gate/account/session-grants".to_owned(),
+                contract: "ck.gate.account.command.issue_session_grant".to_owned(),
                 stability: "validated".to_owned(),
-                todo: "stateless preflight returns state, nonce, and S256 PKCE material for exchange validation.".to_owned(),
-            },
-            IntegrationManifestSurface {
-                name: "oidc_exchange_describe".to_owned(),
-                method: "GET".to_owned(),
-                path: "/_coauth/gate/account/auth/oidc/exchange/describe".to_owned(),
-                contract: "cokret.rest.oidc_exchange.v1".to_owned(),
-                stability: "validated".to_owned(),
-                todo: "publishes validation layers and failure taxonomy for local and federated exchange.".to_owned(),
-            },
-            IntegrationManifestSurface {
-                name: "oidc_exchange".to_owned(),
-                method: "POST".to_owned(),
-                path: "/_coauth/gate/account/auth/oidc/exchange".to_owned(),
-                contract: "cokret.rest.oidc_exchange.v1".to_owned(),
-                stability: "validated".to_owned(),
-                todo: "validates state, PKCE, nonce, discovery binding, code exchange, userinfo, and session-grant audience.".to_owned(),
+                todo: "canonical Account Authority grant issuance; proof.proof_kind=oidc_code_exchange exchanges the OIDC authorization code, validates issuer/state/nonce/redirect_uri/principal/device/audience, and mints the device-bound ck.session.grant.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "passkey_auth".to_owned(),
@@ -1944,22 +1139,25 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
         examples: serde_json::json!({
             "compose_strand": {
                 "step_1": {
-                    "service": "coauth",
-                    "path": "/_coauth/gate/account/auth/oidc/browser-bridge/session",
-                    "method": "POST"
+                    "service": "principal_server",
+                    "path": "/_cokret/describe",
+                    "method": "GET",
+                    "note": "read auth_metadata.account_authority + methods[].oidc"
                 },
                 "step_2": {
-                    "service": "coauth",
-                    "path": "/_coauth/gate/account/auth/oidc/exchange",
-                    "method": "POST"
+                    "service": "oidc_issuer",
+                    "path": "{methods[].oidc.openid_configuration}",
+                    "method": "GET",
+                    "note": "standard OIDC discovery -> PKCE authorize -> callback code"
                 },
                 "step_3": {
-                    "service": "soland",
+                    "service": "account_authority",
                     "path": "/_cokret/gate/account/session-grants",
-                    "method": "POST"
+                    "method": "POST",
+                    "note": "proof.proof_kind=oidc_code_exchange"
                 },
                 "step_4": {
-                    "service": "soland",
+                    "service": "principal_server",
                     "path": "/_cokret/edge/push/register-device",
                     "method": "POST"
                 }
@@ -1999,21 +1197,27 @@ mod tests {
     }
 
     #[test]
-    fn expected_nonce_validation_is_optional_and_exact() {
-        assert_eq!(validate_expected_nonce(Some("nonce"), None), Ok(false));
-        assert_eq!(
-            validate_expected_nonce(Some("nonce"), Some("   ")),
-            Ok(false)
-        );
-        assert_eq!(
-            validate_expected_nonce(Some("nonce"), Some("nonce")),
-            Ok(true)
-        );
-        let error = validate_expected_nonce(Some("other"), Some("nonce")).unwrap_err();
-        assert!(error.contains("expected nonce"));
+    fn returned_nonce_validation_is_exact() {
+        assert!(validate_returned_nonce(Some("nonce"), "nonce").is_ok());
+        let error = validate_returned_nonce(Some("other"), "nonce").unwrap_err();
+        assert!(error.contains("nonce mismatch"));
         assert!(error.contains("other"));
-        let error = validate_expected_nonce(None, Some("nonce")).unwrap_err();
+        let error = validate_returned_nonce(None, "nonce").unwrap_err();
         assert!(error.contains("missing"));
+    }
+
+    #[test]
+    fn expected_principal_binding_is_exact() {
+        assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", "did:webvh:scid:host:webvh:01k").is_ok());
+        let error = validate_expected_principal("did:webvh:scid:host:webvh:01k", "")
+            .err()
+            .unwrap();
+        assert_eq!(error.code, "proof_invalid");
+        let error = validate_expected_principal("did:webvh:a", "did:webvh:b")
+            .err()
+            .unwrap();
+        assert_eq!(error.code, "proof_invalid");
+        assert!(error.message.contains("principal binding mismatch"));
     }
 
     #[test]
@@ -2028,8 +1232,12 @@ mod tests {
         );
     }
 
+    /// The canonical Account Authority grant endpoint rejects an
+    /// `oidc_code_exchange` proof that arrives without a DPoP holder proof:
+    /// the grant has no device key to bind to (`proof_invalid`). Exercised
+    /// against the real router so the route wiring is covered too.
     #[tokio::test]
-    async fn oidc_exchange_rejects_callback_state_mismatch_before_discovery() {
+    async fn session_grant_oidc_exchange_requires_dpop_holder_proof() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -2038,62 +1246,30 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/_coauth/gate/account/auth/oidc/exchange").json(serde_json::json!({
-                    "authorization_code": "stale-code",
-                    "code_verifier": "verifier",
-                    "redirect_uri": "http://localhost:8080/auth/callback",
-                    "issuer": "https://offline.invalid",
-                    "token_endpoint": "https://offline.invalid/oauth/token",
-                    "userinfo_endpoint": "https://offline.invalid/oauth/userinfo",
-                    "client_id": "yougen",
+                Request::post("/_cokret/gate/account/session-grants").json(serde_json::json!({
+                    "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
                     "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
-                    "state": "returned-state",
-                    "expected_state": "expected-state"
+                    "proof": {
+                        "proof_kind": "oidc_code_exchange",
+                        "challenge": "0123456789abcdef0123",
+                        "request_canonical_digest": format!("sha256:{}", "0".repeat(64)),
+                        "audience": "https://soland.example.com/api",
+                        "signature": "unused-for-oidc",
+                        "issuer": "https://offline.invalid",
+                        "client_id": "yougen",
+                        "redirect_uri": "http://localhost:8080/auth/callback",
+                        "state": "ck-state-0123456789abcdef",
+                        "nonce": "ck-nonce-0123456789abcdef",
+                        "authorization_code": "stale-code",
+                        "code_verifier": "0123456789012345678901234567890123456789012"
+                    }
                 })),
             )
             .await;
 
-        response.assert_status(StatusCode::OK);
+        // No DPoP header -> proof_invalid (device binding cannot be established).
+        response.assert_status(StatusCode::BAD_REQUEST);
         let body: serde_json::Value = response.json();
-        assert_eq!(body["status"], "error");
-        assert_eq!(body["error"], "invalid_state");
-        assert!(
-            body["warnings"][0]
-                .as_str()
-                .unwrap()
-                .contains("callback state mismatch")
-        );
-    }
-
-    #[tokio::test]
-    async fn oidc_browser_bridge_session_uses_configured_default_principal_audience() {
-        setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
-            return;
-        };
-        let state = TestState::from_pool(pool.clone()).await.unwrap();
-        let expected_audience =
-            cokret::required_audience_for(&state.url_builder, &state.cokret_config);
-
-        let response = state
-            .request(
-                Request::post("/_coauth/gate/account/auth/oidc/browser-bridge/session").json(
-                    serde_json::json!({
-                        "redirect_uri": "http://localhost:8080/auth/callback",
-                        "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
-                        "client_id_hint": "yougen"
-                    }),
-                ),
-            )
-            .await;
-
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        assert_eq!(body["version"], "2026-05-17-validated");
-        assert_eq!(body["principal_audience"], expected_audience);
-        assert_ne!(body["principal_audience"], "TODO_PRINCIPAL_AUDIENCE");
-        assert_eq!(body["code_challenge_method"], "S256");
-        assert!(body["state"].as_str().unwrap().starts_with("ck-state-"));
-        assert!(body["nonce"].as_str().unwrap().starts_with("ck-nonce-"));
+        assert_eq!(body["error"]["code"], "proof_invalid");
     }
 }

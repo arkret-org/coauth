@@ -446,21 +446,17 @@ impl TestState {
                 Router::with_path("/_coauth/gate/account/integration/describe")
                     .get(crate::handlers::account::auth::integration_describe),
             )
+            // Canonical Account Authority surface (mirrors production
+            // server.rs): session-grant issuance (OIDC code exchange) +
+            // single hard-logout. The deleted `/_coauth/.../auth/oidc/*`
+            // bridge routes are gone.
             .push(
-                Router::with_path("/_coauth/gate/account/auth/bridge/describe")
-                    .get(crate::handlers::account::auth::auth_bridge_describe),
+                Router::with_path("/_cokret/gate/account/session-grants")
+                    .post(crate::handlers::cokret::issue_session_grant_endpoint),
             )
             .push(
-                Router::with_path("/_coauth/gate/account/auth/oidc/browser-bridge/session")
-                    .post(crate::handlers::account::auth::oidc_browser_bridge_session),
-            )
-            .push(
-                Router::with_path("/_coauth/gate/account/auth/oidc/exchange/describe")
-                    .get(crate::handlers::account::auth::oidc_exchange_describe),
-            )
-            .push(
-                Router::with_path("/_coauth/gate/account/auth/oidc/exchange")
-                    .post(crate::handlers::account::auth::oidc_code_exchange),
+                Router::with_path("/_cokret/gate/account/logout")
+                    .post(crate::handlers::cokret::logout),
             )
             .push(Router::with_path("/_cokret/describe").get(crate::handlers::cokret::server_describe))
             .push(Router::with_path("/_cokret/root/identity/describe").get(crate::handlers::cokret::identity_describe))

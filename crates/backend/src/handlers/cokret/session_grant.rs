@@ -1179,3 +1179,293 @@ pub async fn revoke_session_grant_via_holder_proof(
         browser_session_finished,
     }))
 }
+
+// ── Canonical Account Authority session-grant issuance ─────────────
+//
+// `POST /_cokret/gate/account/session-grants` — the single client-visible
+// bridge from a standard authentication result into a Cokret
+// `ck.session.grant` (service-surface.md §2.5.1). The request body is the
+// SDK-canonical `SessionGrantRequestBody`; the proof's `proof_kind` selects
+// the validator. coauth implements the `oidc_code_exchange` branch (the
+// former `/_coauth/.../auth/oidc/exchange` bridge logic, now moved here):
+// the Account Authority exchanges `authorization_code` + `code_verifier` at
+// the issuer token_endpoint and validates issuer / state / nonce /
+// redirect_uri / id_token nonce / principal binding / device binding
+// (`cnf.jkt`) / audience before minting the device-bound grant.
+
+/// `POST /_cokret/gate/account/session-grants` — canonical session-grant
+/// issuance. Returns the SDK `SessionGrantOutcome`.
+#[handler]
+pub async fn issue_session_grant_endpoint(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<cokret_core::SessionGrantOutcome>, CokretRouteError> {
+    use crate::handlers::account::auth::extract_dpop_binding_for_kickoff;
+    use crate::handlers::account::auth::oidc_bridge::{
+        OidcCodeExchangeInput, exchange_oidc_code_for_session_grant,
+    };
+
+    let url_builder = depot.url_builder()?;
+
+    // Holder proof (DPoP) extraction. A present-but-malformed proof is a hard
+    // rejection: an OIDC-issued grant MUST be device-bound (`cnf.jkt`).
+    let dpop_binding = extract_dpop_binding_for_kickoff(req, &url_builder)
+        .await
+        .map_err(|error| {
+            CokretRouteError::coded(
+                StatusCode::BAD_REQUEST,
+                "proof_invalid",
+                format!("invalid DPoP holder proof: {error}"),
+            )
+        })?;
+
+    let body: cokret_core::SessionGrantRequestBody = req
+        .parse_json()
+        .await
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+
+    match body.proof.proof_kind {
+        cokret_core::SessionGrantProofKind::OidcCodeExchange => {
+            let proof = &body.proof;
+            let input = OidcCodeExchangeInput {
+                authorization_code: proof.authorization_code.clone().unwrap_or_default(),
+                code_verifier: proof.code_verifier.clone().unwrap_or_default(),
+                redirect_uri: proof.redirect_uri.clone().unwrap_or_default(),
+                issuer: proof.issuer.clone().unwrap_or_default(),
+                client_id: proof.client_id.clone().unwrap_or_default(),
+                state: proof.state.clone().unwrap_or_default(),
+                nonce: proof.nonce.clone().unwrap_or_default(),
+                device_id: body
+                    .device_id
+                    .as_ref()
+                    .map(|id| id.as_str().to_owned())
+                    .unwrap_or_default(),
+                expected_principal_id: body.principal_id.as_str().to_owned(),
+                // The proof carries the requested audience; the grant target
+                // resolver intersects it with the configured principal servers.
+                requested_audience: Some(proof.audience.clone()),
+            };
+
+            let success = exchange_oidc_code_for_session_grant(req, depot, dpop_binding, input)
+                .await
+                .map_err(map_oidc_exchange_error)?;
+
+            let device_id = cokret_core::DeviceId::new(success.device_id.clone()).map_err(|e| {
+                CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    format!("issued grant carried a non-protocol device_id: {e}"),
+                ))
+            })?;
+            let principal_id = cokret_core::Did::new(success.principal_did.clone()).map_err(|e| {
+                CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                    format!("issued grant carried a non-DID principal_id: {e}"),
+                ))
+            })?;
+
+            Ok(Json(cokret_core::SessionGrantOutcome {
+                principal_id,
+                device_id: Some(device_id),
+                session_grant: success.session_grant.grant_jwt.clone(),
+                expires_at: success.session_grant.expires_at_timestamp,
+                granted_scope: success.session_grant.scopes.clone(),
+                scope_details: serde_json::json!({
+                    "grant_id": success.persisted_grant_id,
+                    "session_public_key": success.session_grant.session_public_key,
+                    "audience": success.session_grant.audience,
+                }),
+            }))
+        }
+        other => Err(CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            "unsupported_proof_kind",
+            format!(
+                "this Account Authority only issues session grants via oidc_code_exchange; proof_kind={other:?} is not implemented here"
+            ),
+        )),
+    }
+}
+
+fn map_oidc_exchange_error(
+    error: crate::handlers::account::auth::oidc_bridge::OidcExchangeError,
+) -> CokretRouteError {
+    let status = match error.code {
+        "internal_error" => StatusCode::INTERNAL_SERVER_ERROR,
+        "principal_did_minting_failed" | "principal_account_registration_failed" => {
+            StatusCode::BAD_GATEWAY
+        }
+        _ => StatusCode::BAD_REQUEST,
+    };
+    CokretRouteError::coded(status, error.code, error.message)
+}
+
+// ── Single client hard-logout (account-lifecycle §4.1) ─────────────
+//
+// `POST /_cokret/gate/account/logout` — the client-visible hard-logout entry
+// point. The client presents `Authorization: Bearer <ck.session.grant>` plus
+// a DPoP holder proof; this terminates the Auth-side grant rotation chain +
+// browser session (the same machinery as
+// `session-grants/logout`). When coauth is also the Account Authority host it
+// internally drives this Auth-side termination; the Principal-side
+// (local account/device session + to-device drop) is performed by the
+// Principal Server (soland) either via its own `/logout` handling or by the
+// Account Authority front forwarding here. Either way the grant-chain +
+// browser-session termination is reachable through this single endpoint.
+
+/// `POST /_cokret/gate/account/logout` — single hard-logout. Internally
+/// performs the Auth-side grant-chain + browser-session termination and
+/// returns the SDK `AccountLogoutOutcome`.
+#[handler]
+pub async fn logout(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<cokret_core::AccountLogoutOutcome>, CokretRouteError> {
+    let outcome = terminate_auth_side_session(req, depot).await?;
+    Ok(Json(cokret_core::AccountLogoutOutcome {
+        ok: true,
+        // `revoked` reflects whether the presented grant was still active when
+        // the logout arrived; the browser-session termination is the
+        // durability-critical step (account-lifecycle §4.1 step 2).
+        revoked: outcome.revoked || outcome.browser_session_finished,
+    }))
+}
+
+/// Auth-side hard-logout primitive: revoke the presented grant and finish the
+/// underlying browser session so its rotation chain cannot be resumed. Shared
+/// by the single `/logout` entry point and the lower-level
+/// `session-grants/logout` op. Authorization is the DPoP holder proof bound to
+/// the grant's `cnf.jkt` — the same proof-of-possession the rotation chain
+/// uses.
+async fn terminate_auth_side_session(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<RevokeSessionGrantOutcome, CokretRouteError> {
+    use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
+
+    let url_builder = depot.url_builder()?;
+    let clock = crate::handlers::make_clock();
+
+    let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "did_proof_required",
+            "session-grant holder proof (DPoP) required for logout",
+        )
+    })?;
+
+    // The grant JWT is presented as the Authorization Bearer (account-lifecycle
+    // §4.1) so the same request both authenticates and identifies the grant
+    // chain to terminate.
+    let grant_jwt = bearer_session_grant(req)?;
+
+    let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(grant_jwt.as_str())
+        .map_err(|_| CokretRouteError::BadRequest("bearer grant_jwt is not parseable".to_owned()))?;
+    let expected_jkt = jwt
+        .payload()
+        .cnf
+        .as_ref()
+        .map(|cnf| cnf.jkt.clone())
+        .ok_or_else(|| {
+            CokretRouteError::BadRequest(
+                "bearer grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned(),
+            )
+        })?;
+
+    let mut repo = depot.repo().await?;
+    let prior_grant = repo
+        .oauth_session_grant()
+        .lookup_by_grant_jwt(&grant_jwt)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+
+    let Some(prior_grant) = prior_grant else {
+        // Idempotent: a hard logout for a grant the Auth Server never minted
+        // (or already pruned) is not an error — the chain is already gone.
+        repo.cancel()
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        return Ok(RevokeSessionGrantOutcome {
+            revoked: false,
+            browser_session_finished: false,
+        });
+    };
+
+    // Proof-of-possession: the caller MUST hold the key the grant is bound to.
+    let verifier = DpopVerifier::shared();
+    let now = clock.now();
+    let htm = req.method().as_str().to_ascii_uppercase();
+    let public_base = url_builder.http_base();
+    let htu = dpop_htu(&public_base, req);
+    let verification = verifier
+        .verify(&dpop_header, &htm, &htu, now, Some(&grant_jwt))
+        .await
+        .map_err(|error| {
+            CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+        })?;
+    DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
+        CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+    })?;
+
+    let revoked = if prior_grant.revoked_at.is_none() {
+        repo.oauth_session_grant()
+            .revoke(&*clock, prior_grant.clone())
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        true
+    } else {
+        false
+    };
+
+    // Terminate the authentication context so the rotation chain cannot be
+    // resumed by any holder proof (account-lifecycle §4.1 step 2).
+    let active_session = repo
+        .browser_session()
+        .lookup(prior_grant.browser_session_id)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .filter(|session| session.finished_at.is_none());
+    let browser_session_finished = if let Some(session) = active_session {
+        repo.browser_session()
+            .finish(&*clock, session)
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        true
+    } else {
+        false
+    };
+
+    repo.save()
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+
+    Ok(RevokeSessionGrantOutcome {
+        revoked,
+        browser_session_finished,
+    })
+}
+
+/// Extract the `ck.session.grant` JWT from the `Authorization: Bearer` header.
+fn bearer_session_grant(req: &Request) -> Result<String, CokretRouteError> {
+    let header = req
+        .headers()
+        .get(http::header::AUTHORIZATION)
+        .ok_or_else(|| {
+            CokretRouteError::Unauthorized("missing authorization header".to_owned())
+        })?;
+    let value = header
+        .to_str()
+        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+    let token = value
+        .strip_prefix("Bearer ")
+        .or_else(|| value.strip_prefix("bearer "))
+        .ok_or_else(|| {
+            CokretRouteError::Unauthorized(
+                "authorization header must carry the ck.session.grant as a Bearer token".to_owned(),
+            )
+        })?
+        .trim();
+    if token.is_empty() {
+        return Err(CokretRouteError::Unauthorized(
+            "empty bearer session grant".to_owned(),
+        ));
+    }
+    Ok(token.to_owned())
+}

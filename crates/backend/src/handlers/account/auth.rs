@@ -10,10 +10,7 @@ use std::sync::LazyLock;
 
 use coauth_data::UrlBuilder;
 use coauth_jose::jwk::PublicJsonWebKey;
-pub use oidc_bridge::{
-    auth_bridge_describe, integration_describe, oidc_browser_bridge_session, oidc_code_exchange,
-    oidc_exchange_describe,
-};
+pub use oidc_bridge::integration_describe;
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
 pub use passkey::{
