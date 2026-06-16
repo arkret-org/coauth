@@ -63,10 +63,13 @@ pub(crate) struct OidcCodeExchangeInput {
     /// grant is bound to via `cnf.jkt`.
     pub device_id: String,
     /// `body.principal_id` — the principal DID the client expects the grant
-    /// to be bound to. The exchange independently mints / resolves the
-    /// principal DID for the authenticated user and rejects a mismatch with
-    /// `proof_invalid` (principal binding failure).
-    pub expected_principal_id: String,
+    /// to be bound to. Optional for first sign-in (② contract D5): when the
+    /// client does not yet know its principal DID it omits this, and the
+    /// Account Authority derives + returns the DID it minted/resolved. When
+    /// present, the exchange independently mints / resolves the principal DID
+    /// for the authenticated user and rejects a mismatch with `proof_invalid`
+    /// (principal binding failure).
+    pub expected_principal_id: Option<String>,
     /// `proof.audience` — the requested principal-server audience.
     pub requested_audience: Option<String>,
 }
@@ -557,7 +560,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         .await
         .map_err(|message| OidcExchangeError::new("principal_did_minting_failed", message))?;
 
-        validate_expected_principal(&principal_did, &input.expected_principal_id)?;
+        validate_expected_principal(&principal_did, input.expected_principal_id.as_deref())?;
 
         ensure_soland_account_registered(
             &http_client,
@@ -999,7 +1002,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     .await
     .map_err(|message| OidcExchangeError::new("principal_did_minting_failed", message))?;
 
-    validate_expected_principal(&principal_did, &input.expected_principal_id)?;
+    validate_expected_principal(&principal_did, input.expected_principal_id.as_deref())?;
 
     ensure_soland_account_registered(
         &http_client,
@@ -1046,21 +1049,27 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     })
 }
 
-/// Principal binding check: the principal DID the Account Authority resolved /
-/// minted for the authenticated user MUST equal the `principal_id` the client
-/// asserted in the request body. A mismatch is a `proof_invalid` binding
-/// failure — the client tried to bind the OIDC authentication to a DID it does
-/// not actually own.
+/// Principal binding check: when the client asserts a `principal_id` in the
+/// request body, the principal DID the Account Authority resolved / minted for
+/// the authenticated user MUST equal it. A mismatch is a `proof_invalid`
+/// binding failure — the client tried to bind the OIDC authentication to a DID
+/// it does not actually own.
+///
+/// First sign-in (② contract D5) omits `principal_id` because the client does
+/// not yet know its DID; in that case there is nothing to bind against and the
+/// caller uses the AA-derived DID returned in `SessionGrantOutcome.principal_id`.
 fn validate_expected_principal(
     resolved_principal_did: &str,
-    expected_principal_id: &str,
+    expected_principal_id: Option<&str>,
 ) -> Result<(), OidcExchangeError> {
-    let expected = expected_principal_id.trim();
-    if expected.is_empty() {
-        return Err(OidcExchangeError::proof_invalid(
-            "principal_id is required for oidc_code_exchange",
-        ));
-    }
+    // Treat a present-but-blank `principal_id` the same as omitted: the client
+    // has nothing to bind, so the AA-derived DID stands.
+    let Some(expected) = expected_principal_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
     if expected != resolved_principal_did {
         return Err(OidcExchangeError::proof_invalid(format!(
             "principal binding mismatch: request principal_id={expected} but the authenticated user resolves to {resolved_principal_did}"
@@ -1208,12 +1217,23 @@ mod tests {
 
     #[test]
     fn expected_principal_binding_is_exact() {
-        assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", "did:webvh:scid:host:webvh:01k").is_ok());
-        let error = validate_expected_principal("did:webvh:scid:host:webvh:01k", "")
-            .err()
-            .unwrap();
-        assert_eq!(error.code, "proof_invalid");
-        let error = validate_expected_principal("did:webvh:a", "did:webvh:b")
+        // Matching client assertion → ok.
+        assert!(
+            validate_expected_principal(
+                "did:webvh:scid:host:webvh:01k",
+                Some("did:webvh:scid:host:webvh:01k")
+            )
+            .is_ok()
+        );
+        // First sign-in (② D5): omitted / blank principal_id is allowed — the
+        // AA-derived DID stands, nothing to bind against.
+        assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", None).is_ok());
+        assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", Some("")).is_ok());
+        assert!(
+            validate_expected_principal("did:webvh:scid:host:webvh:01k", Some("   ")).is_ok()
+        );
+        // A present-but-mismatched assertion is still a hard binding failure.
+        let error = validate_expected_principal("did:webvh:a", Some("did:webvh:b"))
             .err()
             .unwrap();
         assert_eq!(error.code, "proof_invalid");

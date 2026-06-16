@@ -192,6 +192,12 @@ struct SessionGrantIntrospectionGrant {
     // `/_cokret/self/*` (api-conventions.md §3.2). The account-facing
     // `SessionGrantRecord` deliberately keeps this hidden.
     session_public_key: String,
+    // RFC 9449 §6 confirmation thumbprint (`cnf.jkt`) the grant is DPoP-bound
+    // to. The Principal Server needs this to verify the per-request DPoP proof
+    // accompanying each `/_cokret/self/*` call (② contract D4). `None` for grants
+    // minted on an unbound path (admin / debug seed without a `dpop_jkt`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cnf_jkt: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -478,6 +484,13 @@ pub async fn revoke_session_grant(
 }
 
 fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectionGrant {
+    // `cnf.jkt` is not stored as its own column — it lives inside the signed
+    // grant payload. Parse it back out of the persisted `grant_jwt` (the same
+    // way the refresh / logout paths read the prior grant's binding). A grant
+    // minted without DPoP binding has no `cnf`, so this stays `None`.
+    let cnf_jkt = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
+        .ok()
+        .and_then(|jwt| jwt.payload().cnf.as_ref().map(|cnf| cnf.jkt.clone()));
     SessionGrantIntrospectionGrant {
         id: grant.id.to_string(),
         issuer: grant.issuer.clone(),
@@ -497,6 +510,7 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospection
         revoked_at: grant.revoked_at,
         revocation_ref: format!("ck:session:{}", grant.browser_session_id),
         session_public_key: grant.session_public_key.clone(),
+        cnf_jkt,
     }
 }
 
@@ -1240,7 +1254,14 @@ pub async fn issue_session_grant_endpoint(
                     .as_ref()
                     .map(|id| id.as_str().to_owned())
                     .unwrap_or_default(),
-                expected_principal_id: body.principal_id.as_str().to_owned(),
+                // Optional at first sign-in (② contract D5): the client may
+                // omit `principal_id`; the AA derives the DID and returns it in
+                // `SessionGrantOutcome.principal_id`. When present it is the
+                // binding the exchange must match exactly.
+                expected_principal_id: body
+                    .principal_id
+                    .as_ref()
+                    .map(|id| id.as_str().to_owned()),
                 // The proof carries the requested audience; the grant target
                 // resolver intersects it with the configured principal servers.
                 requested_audience: Some(proof.audience.clone()),

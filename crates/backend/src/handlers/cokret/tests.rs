@@ -811,6 +811,9 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
         body["grant"]["session_public_key"],
         grant.session_public_key
     );
+    // This grant was seeded without a DPoP binding (`issue_session_grant`
+    // passes no `dpop_jkt`), so it has no `cnf` and `cnf_jkt` is omitted.
+    assert!(body["grant"].get("cnf_jkt").is_none());
 
     // A second introspection of the same grant: still active (read-only — the
     // first call did not revoke it).
@@ -841,6 +844,76 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["active"], false);
     assert_eq!(body["status"], "audience_mismatch");
     assert_eq!(body["grant"], serde_json::Value::Null);
+}
+
+/// ② contract D4: a DPoP-bound grant MUST surface its `cnf.jkt` to the
+/// Principal Server through introspection so it can verify the per-request DPoP
+/// proof. The thumbprint is not a stored column — it is read back out of the
+/// signed grant JWT — so this exercises the full persist → introspect round-trip.
+#[tokio::test]
+async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant() {
+    setup();
+    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let state = TestState::from_pool(pool.clone()).await.unwrap();
+
+    let mut rng = state.rng();
+    let mut repo = state.repository().await.unwrap();
+    let user = repo
+        .user()
+        .add(&mut rng, &*state.clock, "alice".to_owned())
+        .await
+        .unwrap();
+    let browser_session = repo
+        .browser_session()
+        .add(&mut rng, &*state.clock, &user, Some("Mozilla/5.0".to_owned()))
+        .await
+        .unwrap();
+    let session_key = PrivateKey::generate_ed25519(&mut rng);
+    let bound_jkt = "test-dpop-jkt-thumbprint".to_owned();
+    let material = issue_session_grant_for_audience(
+        &*state.clock,
+        &state.url_builder,
+        &state.cokret_config,
+        &state.key_store,
+        &browser_session,
+        test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
+        required_audience_for(&state.url_builder, &state.cokret_config),
+        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        None,
+        Some(bound_jkt.clone()),
+    )
+    .unwrap();
+    let grant = persist_session_grant(
+        &mut repo,
+        &mut rng,
+        &*state.clock,
+        &browser_session,
+        &material,
+    )
+    .await
+    .unwrap();
+    repo.save().await.unwrap();
+
+    let challenge = format!("introspect-{}", grant.id);
+    let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
+    let response = state
+        .request(
+            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
+                "grant_jwt": material.grant_jwt,
+                "audience": grant.audience,
+                "proof": {
+                    "challenge": challenge,
+                    "proof_jwt": proof_jwt,
+                }
+            })),
+        )
+        .await;
+    response.assert_status(StatusCode::OK);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["active"], true);
+    assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
 }
 
 /// `id` and `grant_jwt` are an exactly-one selector: rejecting both-missing
