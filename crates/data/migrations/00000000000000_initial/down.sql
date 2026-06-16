@@ -3,6 +3,8 @@ DROP TABLE IF EXISTS account_claims CASCADE;
 DROP TABLE IF EXISTS account_security_events CASCADE;
 DROP TABLE IF EXISTS accountability_grants CASCADE;
 DROP TABLE IF EXISTS accountability_subject_revocations CASCADE;
+DROP TABLE IF EXISTS agent_key_authorizations CASCADE;
+DROP TABLE IF EXISTS agent_session_proof_replay CASCADE;
 DROP TABLE IF EXISTS admin_operation_logs CASCADE;
 DROP TABLE IF EXISTS circle_capability_grants CASCADE;
 DROP TABLE IF EXISTS handle_audit_log CASCADE;

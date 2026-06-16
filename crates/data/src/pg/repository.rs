@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use coauth_data::account::AccountRepository;
 use coauth_data::accountability::AccountabilityGrantRepository;
+use coauth_data::agent_key::AgentKeyAuthorizationRepository;
 use coauth_data::app_session::AppSessionRepository;
 use coauth_data::audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository};
 use coauth_data::circle_capability::CircleCapabilityGrantRepository;
@@ -36,6 +37,7 @@ use tracing::Instrument;
 use crate::DatabaseError;
 use crate::account::PgAccountRepository;
 use crate::accountability::PgAccountabilityGrantRepository;
+use crate::agent_key::PgAgentKeyAuthorizationRepository;
 use crate::app_session::PgAppSessionRepository;
 use crate::audit::PgAuditRepository;
 use crate::circle_capability::PgCircleCapabilityGrantRepository;
@@ -193,6 +195,12 @@ impl RepositoryAccess for PgRepository {
         &'c mut self,
     ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
         Box::new(PgAccountabilityGrantRepository::new(&mut self.conn))
+    }
+
+    fn agent_key_authorization<'c>(
+        &'c mut self,
+    ) -> Box<dyn AgentKeyAuthorizationRepository<Error = Self::Error> + 'c> {
+        Box::new(PgAgentKeyAuthorizationRepository::new(&mut self.conn))
     }
 
     fn circle_capability_grant<'c>(

@@ -5,6 +5,7 @@ use thiserror::Error;
 use super::notification_template::NotificationTemplateRepository;
 use crate::account::AccountRepository;
 use crate::accountability::AccountabilityGrantRepository;
+use crate::agent_key::AgentKeyAuthorizationRepository;
 use crate::app_session::AppSessionRepository;
 use crate::audit::AuditRepository;
 use crate::circle_capability::CircleCapabilityGrantRepository;
@@ -122,6 +123,11 @@ pub trait RepositoryAccess: Send {
     fn accountability_grant<'c>(
         &'c mut self,
     ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c>;
+
+    /// Get an [`AgentKeyAuthorizationRepository`]
+    fn agent_key_authorization<'c>(
+        &'c mut self,
+    ) -> Box<dyn AgentKeyAuthorizationRepository<Error = Self::Error> + 'c>;
 
     /// Get a [`CircleCapabilityGrantRepository`].
     fn circle_capability_grant<'c>(
@@ -278,6 +284,7 @@ mod impls {
     use super::RepositoryAccess;
     use crate::account::AccountRepository;
     use crate::accountability::AccountabilityGrantRepository;
+    use crate::agent_key::AgentKeyAuthorizationRepository;
     use crate::app_session::AppSessionRepository;
     use crate::audit::AuditRepository;
     use crate::circle_capability::CircleCapabilityGrantRepository;
@@ -352,6 +359,15 @@ mod impls {
         ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
                 self.inner.accountability_grant(),
+                &mut self.mapper,
+            ))
+        }
+
+        fn agent_key_authorization<'c>(
+            &'c mut self,
+        ) -> Box<dyn AgentKeyAuthorizationRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.agent_key_authorization(),
                 &mut self.mapper,
             ))
         }
@@ -604,6 +620,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn AccountabilityGrantRepository<Error = Self::Error> + 'c> {
             (**self).accountability_grant()
+        }
+
+        fn agent_key_authorization<'c>(
+            &'c mut self,
+        ) -> Box<dyn AgentKeyAuthorizationRepository<Error = Self::Error> + 'c> {
+            (**self).agent_key_authorization()
         }
 
         fn circle_capability_grant<'c>(

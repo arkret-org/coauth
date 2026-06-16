@@ -1295,14 +1295,243 @@ pub async fn issue_session_grant_endpoint(
                 }),
             }))
         }
+        cokret_core::SessionGrantProofKind::AgentKeyProof => {
+            // CKP-0008 §4.6: independent agent_key_proof validator. MUST NOT
+            // fall back to any human proof validator. The DPoP holder proof is
+            // still required so the issued grant is device/runtime-bound
+            // (`cnf.jkt`), exactly like the OIDC branch.
+            let binding = dpop_binding.ok_or_else(|| {
+                CokretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    "did_proof_required",
+                    "agent_key_proof session grant requires a DPoP holder proof",
+                )
+            })?;
+            issue_agent_key_proof_session_grant(req, depot, binding, &body).await
+        }
         other => Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
             "unsupported_proof_kind",
             format!(
-                "this Account Authority only issues session grants via oidc_code_exchange; proof_kind={other:?} is not implemented here"
+                "this Account Authority only issues session grants via oidc_code_exchange or agent_key_proof; proof_kind={other:?} is not implemented here"
             ),
         )),
     }
+}
+
+/// CKP-0008 §4.6 agent runtime authentication branch. Validates the
+/// `agent_key_proof`, intersects scope, and mints a ≤ 15-minute device-bound
+/// session grant. Returns the SDK `SessionGrantOutcome` with the
+/// `scope_details` overlay. Human-approval and fail-closed rejections surface
+/// as structured errors.
+async fn issue_agent_key_proof_session_grant(
+    _req: &mut Request,
+    depot: &Depot,
+    dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
+    body: &cokret_core::SessionGrantRequestBody,
+) -> Result<Json<cokret_core::SessionGrantOutcome>, CokretRouteError> {
+    use crate::handlers::account::agents::{
+        AgentSessionProofError, validate_agent_session_proof,
+    };
+
+    let url_builder = depot.url_builder()?;
+    let cokret_config = depot.cokret_config()?;
+    let key_store = depot.key_store()?;
+    let clock = crate::handlers::make_clock();
+    let mut rng = crate::handlers::make_rng();
+
+    let mut repo = depot.repo().await?;
+    let authorization = match validate_agent_session_proof(
+        &mut repo,
+        &mut rng,
+        &*clock,
+        &url_builder,
+        &cokret_config,
+        body,
+    )
+    .await
+    {
+        Ok(authorization) => authorization,
+        Err(AgentSessionProofError::Rejection(rejection)) => {
+            repo.cancel().await.ok();
+            let status = rejection.http_status();
+            return Err(CokretRouteError::coded(status, rejection.code(), rejection.code()));
+        }
+        Err(AgentSessionProofError::HumanApprovalRequired(approval)) => {
+            repo.cancel().await.ok();
+            // CKP-0008 §4.6: structured claim_required — agent runtime is never
+            // shown CAPTCHA/OTP. The reason_code + approval_request_id ride the
+            // message so the conformant runtime can route the controller to the
+            // out-of-band approval surface.
+            return Err(CokretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                cokret_core::error::ERROR_CODE_CLAIM_REQUIRED,
+                serde_json::json!({
+                    "reason_code": "human_approval_required",
+                    "approval_request_id": approval.approval_request_id,
+                })
+                .to_string(),
+            ));
+        }
+    };
+
+    // Controller lifecycle gate: a deactivated / suspended controller fails
+    // closed (CKP-0008 §4.6). Resolve the controller's local user record when
+    // the DID maps to a coauth-hosted account. Bind the lookup to an owned
+    // value so the sub-repo borrow is released before `repo.cancel()`.
+    let controller_blocked = if let Some(user_id) =
+        parse_local_user_did_for(&url_builder, &cokret_config, &authorization.controller_did)
+    {
+        let user = repo
+            .user()
+            .lookup(user_id)
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        user.is_some_and(|user| user.locked_at.is_some() || user.deactivated_at.is_some())
+    } else {
+        false
+    };
+    if controller_blocked {
+        repo.cancel().await.ok();
+        return Err(CokretRouteError::coded(
+            StatusCode::FORBIDDEN,
+            cokret_core::error::ERROR_CODE_AGENT_DEACTIVATED,
+            "accountable controller is deactivated or suspended",
+        ));
+    }
+
+    // The agent runtime authenticates with its own key, not a human browser
+    // session, so there is no browser-session anchor to persist against. The
+    // grant is a self-validating signed `ck.session.grant` JWT bound to the
+    // runtime's DPoP key with the capped agent TTL; soland verifies the coauth
+    // issuer signature and rechecks agent status inside the revocation
+    // freshness window (CKP-0008 §4.11 natural-expiry path), bounded by the
+    // ≤ 15-minute TTL.
+    let _ = &mut repo;
+    repo.cancel().await.ok();
+
+    let audience = body.proof.audience.clone();
+    let now = clock.now();
+    let expires_at = now + authorization.ttl;
+
+    let material = mint_agent_session_grant(
+        &url_builder,
+        &cokret_config,
+        &key_store,
+        &authorization.agent_principal_id,
+        audience,
+        authorization.granted_scope.clone(),
+        dpop_binding.jkt.clone(),
+        now,
+        expires_at,
+    )
+    .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+
+    let _ = &mut rng;
+
+    let principal_id = cokret_core::Did::new(authorization.agent_principal_id.clone())
+        .map_err(|e| {
+            CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "agent principal is not a valid DID: {e}"
+            )))
+        })?;
+
+    let mut scope_details = authorization.scope_details;
+    scope_details["session_public_key"] =
+        serde_json::Value::String(material.session_public_key.clone());
+    scope_details["audience"] = serde_json::Value::String(material.audience.clone());
+
+    Ok(Json(cokret_core::SessionGrantOutcome {
+        principal_id,
+        device_id: None,
+        session_grant: material.grant_jwt,
+        expires_at: material.expires_at_timestamp,
+        granted_scope: material.scopes,
+        scope_details,
+    }))
+}
+
+/// Mint a signed agent `ck.session.grant` JWT bound to the agent principal as
+/// subject and the runtime's DPoP key (`cnf.jkt`). No browser session is
+/// involved; `session_id` / `browser_session_id` carry the agent principal so
+/// the payload shape stays uniform, and `revocation_ref` is keyed by the agent
+/// principal for the soland-side freshness recheck.
+#[allow(clippy::too_many_arguments)]
+fn mint_agent_session_grant(
+    url_builder: &UrlBuilder,
+    cokret_config: &CokretConfig,
+    key_store: &Keystore,
+    agent_principal_id: &str,
+    audience: String,
+    scopes: Vec<String>,
+    dpop_jkt: String,
+    now: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+) -> Result<SessionGrantMaterial, SessionGrantError> {
+    let issuer = issuer_did_for(url_builder, cokret_config);
+    let cnf = Some(SessionGrantConfirmation {
+        jkt: dpop_jkt.clone(),
+    });
+    let claims = SessionGrantPayloadClaims {
+        kind: "ck.session.grant".to_owned(),
+        issuer: issuer.clone(),
+        subject: agent_principal_id.to_owned(),
+        service_account_id: agent_principal_id.to_owned(),
+        session_public_key: String::new(),
+        audience: audience.clone(),
+        scopes: scopes.clone(),
+        not_before: now,
+        expires_at,
+        revocation_ref: format!("ck:agent_session:{agent_principal_id}"),
+        device_id: None,
+        session_id: agent_principal_id.to_owned(),
+        browser_session_id: agent_principal_id.to_owned(),
+        cnf: cnf.clone(),
+    };
+    let payload_digest = session_grant_claims_hash(&claims)?;
+
+    let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
+    let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
+    let payload = SessionGrantPayload {
+        kind: claims.kind,
+        issuer: claims.issuer,
+        subject: claims.subject,
+        service_account_id: claims.service_account_id,
+        session_public_key: claims.session_public_key,
+        audience: claims.audience,
+        scopes: claims.scopes,
+        not_before: claims.not_before,
+        expires_at: claims.expires_at,
+        revocation_ref: claims.revocation_ref,
+        device_id: claims.device_id,
+        session_id: claims.session_id,
+        browser_session_id: claims.browser_session_id,
+        cnf: claims.cnf,
+        proof: SessionGrantProof {
+            kind: "ck.session.grant.proof.v1".to_owned(),
+            alg: alg.to_string(),
+            key_id: key_id.clone(),
+            canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
+            payload_digest_alg: "sha-256".to_owned(),
+            payload_digest,
+        },
+    };
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
+    let signer = key_store.signer_for_algorithm(&alg)?;
+    let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
+
+    Ok(SessionGrantMaterial {
+        grant_jwt,
+        session_public_key: String::new(),
+        expires_at: expires_at.to_rfc3339(),
+        expires_at_timestamp: expires_at,
+        issuer,
+        subject: agent_principal_id.to_owned(),
+        device_id: None,
+        audience,
+        scopes,
+        dpop_jkt: Some(dpop_jkt),
+    })
 }
 
 fn map_oidc_exchange_error(

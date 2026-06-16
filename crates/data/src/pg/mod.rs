@@ -15,6 +15,8 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 pub mod account;
 /// PostgreSQL accountability grant repositories.
 pub mod accountability;
+/// PostgreSQL agent key authorization + agent-key-proof replay repositories.
+pub mod agent_key;
 /// Shared helpers for PostgreSQL advisory locks.
 pub mod advisory_lock;
 /// PostgreSQL app session repositories.

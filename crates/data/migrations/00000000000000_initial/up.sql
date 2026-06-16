@@ -74,6 +74,55 @@ CREATE TABLE public.accountability_subject_revocations (
     updated_at timestamp with time zone NOT NULL
 );
 
+-- CKP-0008 §4.5: durable accepted agent key authorizations. Column order
+-- tracks event-payload.schema.json#/$defs/agent_key_authorize_payload
+-- (agent_principal_id, key_id, verification_method, accountable_principal_id,
+-- audience, issued_at, expires_at) so the fan-out payload soland writes as
+-- `ck.agent.key.authorize` stays field-aligned with the spec.
+CREATE TABLE public.agent_key_authorizations (
+    id uuid NOT NULL,
+    authorized_event_id text NOT NULL,
+    agent_principal_id text NOT NULL,
+    key_id text NOT NULL,
+    verification_method text NOT NULL,
+    public_key_multibase text NOT NULL,
+    accountable_principal_id text NOT NULL,
+    agent_key_scope text NOT NULL,
+    audience text[] NOT NULL,
+    issued_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    pairing_request_id text NOT NULL,
+    request_canonical_digest text NOT NULL,
+    revoked_at timestamp with time zone,
+    revoked_reason text,
+    raw_payload_digest text NOT NULL,
+    soland_fanout_state text NOT NULL,
+    soland_fanout_idempotency_key text NOT NULL,
+    soland_fanout_payload jsonb NOT NULL,
+    soland_fanout_attempt integer DEFAULT 0 NOT NULL,
+    soland_fanout_next_retry_at timestamp with time zone,
+    soland_fanout_dead_letter_reason text,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL
+);
+
+-- CKP-0008 §4.6: single-consumption replay table for agent_key_proof session
+-- grants. Each accepted proof challenge is consumed exactly once; rows survive
+-- past the proof `expires_at` by a grace window so a replay inside the window
+-- is still rejected. A sweeper prunes rows past `prune_after`.
+CREATE TABLE public.agent_session_proof_replay (
+    id uuid NOT NULL,
+    agent_principal_id text NOT NULL,
+    verification_method text NOT NULL,
+    challenge text NOT NULL,
+    request_canonical_digest text NOT NULL,
+    audience text NOT NULL,
+    consumed_at timestamp with time zone NOT NULL,
+    proof_expires_at timestamp with time zone NOT NULL,
+    prune_after timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
 CREATE TABLE public.admin_operation_logs (
     id uuid NOT NULL,
     admin_user_id uuid NOT NULL,
@@ -788,6 +837,24 @@ ALTER TABLE ONLY public.accountability_subject_revocations
 ALTER TABLE ONLY public.accountability_subject_revocations
     ADD CONSTRAINT accountability_subject_revocations_subject_kind_subject_id_key UNIQUE (subject_kind, subject_id);
 
+ALTER TABLE ONLY public.agent_key_authorizations
+    ADD CONSTRAINT agent_key_authorizations_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.agent_key_authorizations
+    ADD CONSTRAINT agent_key_authorizations_key_id_key UNIQUE (key_id);
+
+ALTER TABLE ONLY public.agent_key_authorizations
+    ADD CONSTRAINT agent_key_authorizations_authorized_event_id_key UNIQUE (authorized_event_id);
+
+ALTER TABLE ONLY public.agent_key_authorizations
+    ADD CONSTRAINT agent_key_authorizations_soland_fanout_idempotency_key_key UNIQUE (soland_fanout_idempotency_key);
+
+ALTER TABLE ONLY public.agent_session_proof_replay
+    ADD CONSTRAINT agent_session_proof_replay_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.agent_session_proof_replay
+    ADD CONSTRAINT agent_session_proof_replay_challenge_key UNIQUE (agent_principal_id, verification_method, challenge);
+
 ALTER TABLE ONLY public.admin_operation_logs
     ADD CONSTRAINT admin_operation_logs_pkey PRIMARY KEY (id);
 
@@ -1018,6 +1085,12 @@ CREATE INDEX accountability_grants_controller_active_idx ON public.accountabilit
 CREATE INDEX accountability_grants_revoked_idx ON public.accountability_grants USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
 
 CREATE INDEX accountability_subject_revocations_subject_idx ON public.accountability_subject_revocations USING btree (subject_kind, subject_id, revoked_at);
+
+CREATE INDEX agent_key_authorizations_agent_active_idx ON public.agent_key_authorizations USING btree (agent_principal_id, issued_at) WHERE (revoked_at IS NULL);
+
+CREATE INDEX agent_key_authorizations_revoked_idx ON public.agent_key_authorizations USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
+
+CREATE INDEX agent_session_proof_replay_prune_idx ON public.agent_session_proof_replay USING btree (prune_after);
 
 CREATE INDEX admin_operation_logs_created_idx ON public.admin_operation_logs USING btree (created_at);
 

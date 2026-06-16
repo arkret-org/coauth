@@ -724,6 +724,16 @@ fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(cokret::issue_session_grant_endpoint),
         )
+        // CKP-0008 §4.5 runtime key pairing
+        // (`ck.gate.account.command.pair_agent_key`): the agent runtime submits
+        // its locally-generated public key + proof-of-possession; coauth
+        // validates the PoP, writes a durable agent key authorization, and fans
+        // `ck.agent.key.authorize` out to soland.
+        .push(
+            Router::with_path("gate/account/agent-key-pair")
+                .options(oidc_preflight_handler)
+                .post(agents::post_agent_key_pair),
+        )
         // Single client hard-logout (account-lifecycle §4.1): Bearer
         // ck.session.grant + DPoP holder proof terminate the grant rotation
         // chain + browser session (Auth-side). The Principal-side termination

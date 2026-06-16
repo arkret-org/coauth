@@ -91,6 +91,50 @@ diesel::table! {
 }
 
 diesel::table! {
+    agent_key_authorizations (id) {
+        id -> Uuid,
+        authorized_event_id -> Text,
+        agent_principal_id -> Text,
+        key_id -> Text,
+        verification_method -> Text,
+        public_key_multibase -> Text,
+        accountable_principal_id -> Text,
+        agent_key_scope -> Text,
+        audience -> Array<Text>,
+        issued_at -> Timestamptz,
+        expires_at -> Timestamptz,
+        pairing_request_id -> Text,
+        request_canonical_digest -> Text,
+        revoked_at -> Nullable<Timestamptz>,
+        revoked_reason -> Nullable<Text>,
+        raw_payload_digest -> Text,
+        soland_fanout_state -> Text,
+        soland_fanout_idempotency_key -> Text,
+        soland_fanout_payload -> Jsonb,
+        soland_fanout_attempt -> Int4,
+        soland_fanout_next_retry_at -> Nullable<Timestamptz>,
+        soland_fanout_dead_letter_reason -> Nullable<Text>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    agent_session_proof_replay (id) {
+        id -> Uuid,
+        agent_principal_id -> Text,
+        verification_method -> Text,
+        challenge -> Text,
+        request_canonical_digest -> Text,
+        audience -> Text,
+        consumed_at -> Timestamptz,
+        proof_expires_at -> Timestamptz,
+        prune_after -> Timestamptz,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     circle_capability_grants (id) {
         id -> Uuid,
         subject -> Text,

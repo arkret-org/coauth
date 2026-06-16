@@ -106,6 +106,8 @@ mod utils;
 pub mod account;
 /// Accountability grant repositories.
 pub mod accountability;
+/// Agent key authorization + agent-key-proof replay repositories (CKP-0008).
+pub mod agent_key;
 /// App session repositories.
 pub mod app_session;
 /// Audit log repositories.
