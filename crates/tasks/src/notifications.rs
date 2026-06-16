@@ -211,7 +211,19 @@ pub(crate) async fn send_email_authentication_code(
         return Ok(());
     }
 
-    let code = format!("{:06}", rng.next_u32() % 1_000_000);
+    // Under the dev/test email-delivery bypass, mint a deterministic code so an
+    // e2e harness can self-register a password account without scraping SMTP or
+    // logs. This mirrors the fixed `123456` the webvh registration path already
+    // returns in-band as `dev_code` (handlers/account/register.rs::post_webvh_email).
+    // Production deployments leave the bypass off and keep the random code.
+    let code = if state
+        .site_config()
+        .registration_email_delivery_bypass_allowed
+    {
+        "123456".to_owned()
+    } else {
+        format!("{:06}", rng.next_u32() % 1_000_000)
+    };
     let code = repo
         .user_email()
         .add_authentication_code(

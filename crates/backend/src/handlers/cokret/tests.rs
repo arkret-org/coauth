@@ -867,7 +867,12 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         .unwrap();
     let browser_session = repo
         .browser_session()
-        .add(&mut rng, &*state.clock, &user, Some("Mozilla/5.0".to_owned()))
+        .add(
+            &mut rng,
+            &*state.clock,
+            &user,
+            Some("Mozilla/5.0".to_owned()),
+        )
         .await
         .unwrap();
     let session_key = PrivateKey::generate_ed25519(&mut rng);

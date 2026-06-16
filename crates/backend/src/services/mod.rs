@@ -1,5 +1,6 @@
 pub mod account_claims;
 pub mod cross_signing_publish;
+pub mod device_enrollment_authority;
 pub mod device_revoke;
 pub mod did_binding_proof;
 pub mod did_resolver;

@@ -128,6 +128,8 @@ fn OAuthApprovalForm(data: ApprovalDataOutcome, grant_id: String) -> Element {
                 div { class: "approval-actions",
                     button {
                         class: "btn btn-primary btn-block",
+                        // Stable hook for e2e (cotest oidc-login-flow.spec.ts).
+                        "data-testid": "coauth-oauth-approve",
                         disabled: submitting(),
                         onclick: {
                             let gid = grant_id.clone();

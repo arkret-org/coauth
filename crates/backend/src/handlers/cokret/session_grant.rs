@@ -944,11 +944,19 @@ pub async fn refresh_session_grant(
         .verify(&dpop_header, &htm, &htu, now, Some(&body.grant_jwt))
         .await
         .map_err(|error| {
-            CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+            CokretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                "invalid_signature",
+                error.to_string(),
+            )
         })?;
 
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
-        CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "invalid_signature",
+            error.to_string(),
+        )
     })?;
 
     // 4. Resolve the underlying browser session so the new grant lives under the same
@@ -1081,11 +1089,11 @@ pub struct RevokeSessionGrantOutcome {
 ///
 /// The caller proves possession of the key bound into the grant's `cnf.jkt`
 /// (same holder proof as rotation), then we:
-/// 1. revoke the presented grant (single-use; its rotation chain cannot
-///    continue because each rotation already revokes its predecessor), and
-/// 2. **finish the underlying browser session**, so no future holder proof —
-///    even with the correct device key — can rotate a fresh grant under it
-///    (`session_logged_out` on `refresh`). Re-authentication is then required.
+/// 1. revoke the presented grant (single-use; its rotation chain cannot continue because each
+///    rotation already revokes its predecessor), and
+/// 2. **finish the underlying browser session**, so no future holder proof — even with the correct
+///    device key — can rotate a fresh grant under it (`session_logged_out` on `refresh`).
+///    Re-authentication is then required.
 #[handler]
 pub async fn revoke_session_grant_via_holder_proof(
     req: &mut Request,
@@ -1148,10 +1156,18 @@ pub async fn revoke_session_grant_via_holder_proof(
         .verify(&dpop_header, &htm, &htu, now, Some(&body.grant_jwt))
         .await
         .map_err(|error| {
-            CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+            CokretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                "invalid_signature",
+                error.to_string(),
+            )
         })?;
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
-        CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "invalid_signature",
+            error.to_string(),
+        )
     })?;
 
     let revoked = if prior_grant.revoked_at.is_none() {
@@ -1258,10 +1274,7 @@ pub async fn issue_session_grant_endpoint(
                 // omit `principal_id`; the AA derives the DID and returns it in
                 // `SessionGrantOutcome.principal_id`. When present it is the
                 // binding the exchange must match exactly.
-                expected_principal_id: body
-                    .principal_id
-                    .as_ref()
-                    .map(|id| id.as_str().to_owned()),
+                expected_principal_id: body.principal_id.as_ref().map(|id| id.as_str().to_owned()),
                 // The proof carries the requested audience; the grant target
                 // resolver intersects it with the configured principal servers.
                 requested_audience: Some(proof.audience.clone()),
@@ -1276,11 +1289,12 @@ pub async fn issue_session_grant_endpoint(
                     format!("issued grant carried a non-protocol device_id: {e}"),
                 ))
             })?;
-            let principal_id = cokret_core::Did::new(success.principal_did.clone()).map_err(|e| {
-                CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                    format!("issued grant carried a non-DID principal_id: {e}"),
-                ))
-            })?;
+            let principal_id =
+                cokret_core::Did::new(success.principal_did.clone()).map_err(|e| {
+                    CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        format!("issued grant carried a non-DID principal_id: {e}"),
+                    ))
+                })?;
 
             Ok(Json(cokret_core::SessionGrantOutcome {
                 principal_id,
@@ -1330,9 +1344,7 @@ async fn issue_agent_key_proof_session_grant(
     dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
     body: &cokret_core::SessionGrantRequestBody,
 ) -> Result<Json<cokret_core::SessionGrantOutcome>, CokretRouteError> {
-    use crate::handlers::account::agents::{
-        AgentSessionProofError, validate_agent_session_proof,
-    };
+    use crate::handlers::account::agents::{AgentSessionProofError, validate_agent_session_proof};
 
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
@@ -1355,7 +1367,11 @@ async fn issue_agent_key_proof_session_grant(
         Err(AgentSessionProofError::Rejection(rejection)) => {
             repo.cancel().await.ok();
             let status = rejection.http_status();
-            return Err(CokretRouteError::coded(status, rejection.code(), rejection.code()));
+            return Err(CokretRouteError::coded(
+                status,
+                rejection.code(),
+                rejection.code(),
+            ));
         }
         Err(AgentSessionProofError::HumanApprovalRequired(approval)) => {
             repo.cancel().await.ok();
@@ -1429,8 +1445,8 @@ async fn issue_agent_key_proof_session_grant(
 
     let _ = &mut rng;
 
-    let principal_id = cokret_core::Did::new(authorization.agent_principal_id.clone())
-        .map_err(|e| {
+    let principal_id =
+        cokret_core::Did::new(authorization.agent_principal_id.clone()).map_err(|e| {
             CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "agent principal is not a valid DID: {e}"
             )))
@@ -1606,8 +1622,9 @@ async fn terminate_auth_side_session(
     // chain to terminate.
     let grant_jwt = bearer_session_grant(req)?;
 
-    let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(grant_jwt.as_str())
-        .map_err(|_| CokretRouteError::BadRequest("bearer grant_jwt is not parseable".to_owned()))?;
+    let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(grant_jwt.as_str()).map_err(|_| {
+        CokretRouteError::BadRequest("bearer grant_jwt is not parseable".to_owned())
+    })?;
     let expected_jkt = jwt
         .payload()
         .cnf
@@ -1648,10 +1665,18 @@ async fn terminate_auth_side_session(
         .verify(&dpop_header, &htm, &htu, now, Some(&grant_jwt))
         .await
         .map_err(|error| {
-            CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+            CokretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                "invalid_signature",
+                error.to_string(),
+            )
         })?;
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
-        CokretRouteError::coded(StatusCode::UNAUTHORIZED, "invalid_signature", error.to_string())
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "invalid_signature",
+            error.to_string(),
+        )
     })?;
 
     let revoked = if prior_grant.revoked_at.is_none() {
@@ -1697,9 +1722,7 @@ fn bearer_session_grant(req: &Request) -> Result<String, CokretRouteError> {
     let header = req
         .headers()
         .get(http::header::AUTHORIZATION)
-        .ok_or_else(|| {
-            CokretRouteError::Unauthorized("missing authorization header".to_owned())
-        })?;
+        .ok_or_else(|| CokretRouteError::Unauthorized("missing authorization header".to_owned()))?;
     let value = header
         .to_str()
         .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;

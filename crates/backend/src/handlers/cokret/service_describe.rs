@@ -348,10 +348,17 @@ fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -
     let origin = origin.strip_suffix('/').unwrap_or(&origin).to_owned();
 
     let mut extra = std::collections::BTreeMap::new();
-    extra.insert("issuer_did".to_owned(), json!(issuer_did_for(url_builder, cokret_config)));
+    extra.insert(
+        "issuer_did".to_owned(),
+        json!(issuer_did_for(url_builder, cokret_config)),
+    );
     extra.insert(
         "token_endpoint_auth_methods".to_owned(),
-        json!(["private_key_jwt", "client_secret_basic", "client_secret_post"]),
+        json!([
+            "private_key_jwt",
+            "client_secret_basic",
+            "client_secret_post"
+        ]),
     );
     extra.insert(
         "supported_grant_types".to_owned(),

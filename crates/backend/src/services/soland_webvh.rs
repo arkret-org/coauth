@@ -117,6 +117,12 @@ pub struct InceptionInput<'a> {
     /// Optional verification-method fragment (`#<frag>`). Defaults to
     /// `did-key-1` to match soland's documented default.
     pub did_key_fragment: Option<&'a str>,
+    /// Device-enrollment-authority DID (`did:key:z…`) written into the minted
+    /// DID document as the `CokretDeviceEnrollmentAuthority` service
+    /// `serviceEndpoint`. This designates the authority allowed to attest
+    /// `service_attested` `ck.device.authorize` events for this principal
+    /// (decision 0002 / device-lifecycle §5.4).
+    pub enrollment_authority_did: &'a str,
 }
 
 /// Prepare a `did:webvh` inception entry for soland's embedded provider.
@@ -158,6 +164,7 @@ pub fn prepare_inception<R: RngCore + ?Sized>(
         &did_public_key_multibase,
         input.also_known_as,
         &service_endpoint,
+        input.enrollment_authority_did,
     );
     let entry_skeleton = json!({
         "versionId": format!("0-{WEBVH_SCID_PLACEHOLDER}"),
@@ -288,6 +295,7 @@ pub async fn ensure_principal_did_minted(
     principal_endpoint: &Url,
     registration_bearer: Option<&str>,
     also_known_as: &[String],
+    enrollment_authority_did: &str,
 ) -> Result<String, SolandWebvhError> {
     if let Some(existing) = repo
         .principal_did()
@@ -305,6 +313,7 @@ pub async fn ensure_principal_did_minted(
         also_known_as,
         version_time: clock.now(),
         did_key_fragment: None,
+        enrollment_authority_did,
     };
     let prepared = prepare_inception(rng, &input)?;
 
@@ -349,6 +358,7 @@ fn embedded_webvh_document_value(
     did_public_key_multibase: &str,
     also_known_as: &[String],
     service_endpoint: &str,
+    enrollment_authority_did: &str,
 ) -> Value {
     json!({
         "@context": ["https://www.w3.org/ns/did/v1"],
@@ -362,11 +372,18 @@ fn embedded_webvh_document_value(
         "authentication": [did_key_id],
         "assertionMethod": [did_key_id],
         "alsoKnownAs": also_known_as,
-        "service": [{
-            "id": format!("{did}#soland"),
-            "type": "CokretPrincipalServer",
-            "serviceEndpoint": service_endpoint,
-        }],
+        "service": [
+            {
+                "id": format!("{did}#soland"),
+                "type": "CokretPrincipalServer",
+                "serviceEndpoint": service_endpoint,
+            },
+            {
+                "id": format!("{did}#enrollment-authority"),
+                "type": cokret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY,
+                "serviceEndpoint": enrollment_authority_did,
+            },
+        ],
     })
 }
 
@@ -624,6 +641,7 @@ mod tests {
                 .unwrap()
                 .with_timezone(&Utc),
             did_key_fragment: None,
+            enrollment_authority_did: "did:key:z6MkEnrollmentAuthorityTestKey00000000000000",
         };
         prepare_inception(&mut rng, &input).expect("prepare ok")
     }
@@ -698,6 +716,35 @@ mod tests {
     }
 
     #[test]
+    fn document_carries_enrollment_authority_service() {
+        let prepared = run_prepare(11);
+        let services = prepared
+            .log_entry
+            .pointer("/state/service")
+            .and_then(Value::as_array)
+            .expect("state.service array");
+        let entry = services
+            .iter()
+            .find(|svc| {
+                svc.get("type").and_then(Value::as_str)
+                    == Some(cokret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
+            })
+            .expect("enrollment-authority service entry present");
+        assert_eq!(
+            entry.get("serviceEndpoint").and_then(Value::as_str),
+            Some("did:key:z6MkEnrollmentAuthorityTestKey00000000000000"),
+        );
+        let id = entry.get("id").and_then(Value::as_str).unwrap_or_default();
+        assert!(
+            id.ends_with("#enrollment-authority"),
+            "service id must use the #enrollment-authority fragment, got {id}"
+        );
+        // The signed proof MUST still verify with the extra service entry in
+        // the canonical document.
+        verify_proof_like_soland(&prepared.log_entry).expect("soland-shape verify with service");
+    }
+
+    #[test]
     fn rejects_endpoint_without_dot() {
         let mut rng = ChaCha20Rng::seed_from_u64(0);
         let endpoint = Url::parse("http://localhost:8080/").unwrap();
@@ -707,6 +754,7 @@ mod tests {
             also_known_as: &[],
             version_time: Utc::now(),
             did_key_fragment: None,
+            enrollment_authority_did: "did:key:z6MkEnrollmentAuthorityTestKey00000000000000",
         };
         let err = prepare_inception(&mut rng, &input).unwrap_err();
         assert!(matches!(err, SolandWebvhError::EndpointHostInvalid));
@@ -722,6 +770,7 @@ mod tests {
             also_known_as: &[],
             version_time: Utc::now(),
             did_key_fragment: None,
+            enrollment_authority_did: "did:key:z6MkEnrollmentAuthorityTestKey00000000000000",
         };
         let err = prepare_inception(&mut rng, &input).unwrap_err();
         assert!(matches!(err, SolandWebvhError::InvalidLocalId));
@@ -746,6 +795,7 @@ mod tests {
             also_known_as: &[],
             version_time: Utc::now(),
             did_key_fragment: None,
+            enrollment_authority_did: "did:key:z6MkEnrollmentAuthorityTestKey00000000000000",
         };
         let prepared = prepare_inception(&mut rng, &input).unwrap();
         assert_eq!(prepared.method_authority, "local.host");

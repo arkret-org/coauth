@@ -975,11 +975,14 @@ fn verify_proof_signature(
 ) -> Result<(), AgentAuthRejection> {
     let key_bytes = cokret::identity::binding::decode_multicodec_ed25519(public_key_multibase)
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let verifying = VerifyingKey::from_bytes(&key_bytes).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let verifying =
+        VerifyingKey::from_bytes(&key_bytes).map_err(|_| AgentAuthRejection::ProofInvalid)?;
 
-    let message = canonical_json_bytes(signed_fields).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let message =
+        canonical_json_bytes(signed_fields).map_err(|_| AgentAuthRejection::ProofInvalid)?;
 
-    let signature_bytes = base64_decode_flexible(signature_b64).ok_or(AgentAuthRejection::ProofInvalid)?;
+    let signature_bytes =
+        base64_decode_flexible(signature_b64).ok_or(AgentAuthRejection::ProofInvalid)?;
     if signature_bytes.len() != 64 {
         return Err(AgentAuthRejection::ProofInvalid);
     }
@@ -1088,8 +1091,12 @@ pub async fn post_agent_key_pair(
         request_canonical_digest: &pop.request_canonical_digest,
         verification_method: &body.verification_method,
     };
-    verify_proof_signature(&public_key.public_key_multibase, &signed_fields, &pop.signature)
-        .map_err(AgentAuthRejection::into_app_error)?;
+    verify_proof_signature(
+        &public_key.public_key_multibase,
+        &signed_fields,
+        &pop.signature,
+    )
+    .map_err(AgentAuthRejection::into_app_error)?;
 
     // The accountable controller for this agent: derive from the active
     // accountability grant coauth issued at provisioning. Without one, the key
@@ -1108,7 +1115,10 @@ pub async fn post_agent_key_pair(
 
     let accountable_grants = repo
         .accountability_grant()
-        .list_active_for_subject(AccountabilitySubjectKind::AgentPrincipalId, &agent_principal_id)
+        .list_active_for_subject(
+            AccountabilitySubjectKind::AgentPrincipalId,
+            &agent_principal_id,
+        )
         .await?;
     let Some(accountability) = accountable_grants.into_iter().next() else {
         repo.cancel().await.ok();
@@ -1406,7 +1416,11 @@ pub async fn validate_agent_session_proof(
     if !is_allowed_session_grant_audience(url_builder, cokret_config, &proof.audience) {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    if !proof.request_canonical_digest.as_str().starts_with("sha256:") {
+    if !proof
+        .request_canonical_digest
+        .as_str()
+        .starts_with("sha256:")
+    {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
 
@@ -1494,7 +1508,9 @@ pub async fn validate_agent_session_proof(
         // out-of-band, the agent runtime never renders a UI for it.
         let approval_request_id = new_prefixed_uuid7("");
         return Err(AgentSessionProofError::HumanApprovalRequired(
-            AgentHumanApprovalRequired { approval_request_id },
+            AgentHumanApprovalRequired {
+                approval_request_id,
+            },
         ));
     }
 

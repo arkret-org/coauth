@@ -269,6 +269,9 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                         button {
                             class: "btn btn-primary btn-block",
                             r#type: "submit",
+                            // Stable hook for e2e (cotest oidc-login-flow.spec.ts);
+                            // the button carries no id otherwise.
+                            "data-testid": "coauth-login-submit",
                             disabled: submitting(),
                             "aria-busy": if submitting() { "true" } else { "false" },
                             if submitting() {

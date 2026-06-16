@@ -9,6 +9,14 @@
 //! [`crate::handlers::cokret::session_grant::issue_session_grant`], which
 //! calls [`exchange_oidc_code_for_session_grant`] here.
 
+// `IntegrationManifest` (and the nested `IntegrationManifestDependency`
+// / `IntegrationManifestSurface`) live in
+// `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
+// decodes them through the same typed shape. The `integration_describe`
+// endpoint below returns the shared `IntegrationManifest` directly.
+use coauth_admin_types::{
+    IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
+};
 use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use cokret_core::{AccountRegisterRequestBody, DeviceId, Did};
@@ -28,15 +36,6 @@ use crate::outbound_http::{self, RequestBuilderExt as _};
 use crate::services::soland_webvh;
 use crate::services::upstream_oidc::UpstreamOidcExchangeMode;
 use crate::services::upstream_oidc_mapping::{TrustedIssuerPolicySet, map_upstream_id_token};
-
-// `IntegrationManifest` (and the nested `IntegrationManifestDependency`
-// / `IntegrationManifestSurface`) live in
-// `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
-// decodes them through the same typed shape. The `integration_describe`
-// endpoint below returns the shared `IntegrationManifest` directly.
-use coauth_admin_types::{
-    IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
-};
 
 /// Typed input for the canonical OIDC authorization-code exchange. Mirrors the
 /// `oidc_code_exchange` branch of
@@ -191,6 +190,10 @@ pub(super) async fn ensure_principal_did_for_user(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     let also_known_as = vec![cokret::user_handle(url_builder, user)];
+    let enrollment_authority_did =
+        crate::services::device_enrollment_authority::enrollment_authority()
+            .did()
+            .to_owned();
     soland_webvh::ensure_principal_did_minted(
         repo,
         &mut **rng,
@@ -202,6 +205,7 @@ pub(super) async fn ensure_principal_did_for_user(
         &principal_server.endpoint,
         registration_bearer,
         &also_known_as,
+        &enrollment_authority_did,
     )
     .await
     .map_err(|error| format!("principal DID minting failed: {error}"))
@@ -265,13 +269,11 @@ fn login_hint_matches_user(
 /// `POST /_cokret/gate/account/session-grants`
 /// (`proof.proof_kind = "oidc_code_exchange"`) handler calls. It:
 ///
-/// 1. resolves the issuer's live OIDC discovery metadata (local coauth issuer
-///    or a configured federated upstream) and derives `token_endpoint` /
-///    `userinfo_endpoint` from it,
+/// 1. resolves the issuer's live OIDC discovery metadata (local coauth issuer or a configured
+///    federated upstream) and derives `token_endpoint` / `userinfo_endpoint` from it,
 /// 2. exchanges `authorization_code` + `code_verifier` at the `token_endpoint`,
-/// 3. validates issuer / state / nonce / redirect_uri / id_token nonce /
-///    principal binding / device binding (`cnf.jkt` from the DPoP holder key) /
-///    audience, and
+/// 3. validates issuer / state / nonce / redirect_uri / id_token nonce / principal binding / device
+///    binding (`cnf.jkt` from the DPoP holder key) / audience, and
 /// 4. mints + persists a device-bound `ck.session.grant`.
 ///
 /// Binding failures surface as `proof_invalid`; transport / discovery failures
@@ -348,8 +350,9 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         ));
     }
 
-    let redirect_uri = url::Url::parse(input.redirect_uri.trim())
-        .map_err(|_| OidcExchangeError::proof_invalid("redirect_uri must be a valid absolute URI"))?;
+    let redirect_uri = url::Url::parse(input.redirect_uri.trim()).map_err(|_| {
+        OidcExchangeError::proof_invalid("redirect_uri must be a valid absolute URI")
+    })?;
     let issuer = url::Url::parse(input.issuer.trim())
         .map_err(|_| OidcExchangeError::proof_invalid("issuer must be a valid absolute URI"))?;
 
@@ -763,7 +766,9 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 let error_description = error
                     .error_description
                     .as_deref()
-                    .unwrap_or("local OAuth token endpoint rejected the authorization_code exchange")
+                    .unwrap_or(
+                        "local OAuth token endpoint rejected the authorization_code exchange",
+                    )
                     .to_owned();
                 let lower_description = error_description.to_ascii_lowercase();
                 let (code, error_kind) = match error.error {
@@ -914,7 +919,10 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             format!(
                 "fresh OAuth access token client mismatch: expected {} but introspection returned {}",
                 expected_oauth_client_id,
-                oauth_introspection.client_id.as_deref().unwrap_or("missing")
+                oauth_introspection
+                    .client_id
+                    .as_deref()
+                    .unwrap_or("missing")
             ),
         ));
     }
@@ -926,7 +934,10 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             format!(
                 "fresh OAuth access token session mismatch: expected {} but introspection returned {}",
                 expected_oauth_session_id,
-                oauth_introspection.cokret_session_id.as_deref().unwrap_or("missing")
+                oauth_introspection
+                    .cokret_session_id
+                    .as_deref()
+                    .unwrap_or("missing")
             ),
         ));
     }
@@ -1229,9 +1240,7 @@ mod tests {
         // AA-derived DID stands, nothing to bind against.
         assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", None).is_ok());
         assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", Some("")).is_ok());
-        assert!(
-            validate_expected_principal("did:webvh:scid:host:webvh:01k", Some("   ")).is_ok()
-        );
+        assert!(validate_expected_principal("did:webvh:scid:host:webvh:01k", Some("   ")).is_ok());
         // A present-but-mismatched assertion is still a hard binding failure.
         let error = validate_expected_principal("did:webvh:a", Some("did:webvh:b"))
             .err()
@@ -1265,8 +1274,8 @@ mod tests {
         let state = TestState::from_pool(pool.clone()).await.unwrap();
 
         let response = state
-            .request(
-                Request::post("/_cokret/gate/account/session-grants").json(serde_json::json!({
+            .request(Request::post("/_cokret/gate/account/session-grants").json(
+                serde_json::json!({
                     "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
                     "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
                     "proof": {
@@ -1283,8 +1292,8 @@ mod tests {
                         "authorization_code": "stale-code",
                         "code_verifier": "0123456789012345678901234567890123456789012"
                     }
-                })),
-            )
+                }),
+            ))
             .await;
 
         // No DPoP header -> proof_invalid (device binding cannot be established).

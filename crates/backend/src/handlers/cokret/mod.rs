@@ -1,9 +1,11 @@
+mod device_authorize;
 mod did_document;
 mod handle_claim;
 mod identity;
 mod service_describe;
 mod session_grant;
 
+pub use device_authorize::*;
 pub use did_document::*;
 pub use handle_claim::*;
 pub use identity::*;
