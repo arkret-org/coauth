@@ -211,10 +211,26 @@ pub(super) async fn ensure_principal_did_for_user(
     .map_err(|error| format!("principal DID minting failed: {error}"))
 }
 
+/// Canonical registration handle (`<localpart>:<domain>`) for the principal
+/// server identified by `audience` (its `did:web:` service DID). The handle
+/// domain MUST be the principal server's own domain — which also matches the
+/// account's webvh DID domain — NOT the OIDC issuer host (`auth.<domain>`),
+/// or the Principal Server would reject the domain mismatch. Returns `None`
+/// when the audience is not a `did:web:` DID, in which case the Principal
+/// Server falls back to a synthetic bootstrap localpart (no published handle).
+pub(super) fn registration_handle_for_audience(audience: &str, localpart: &str) -> Option<String> {
+    let domain = audience.strip_prefix("did:web:")?.replace(':', ".");
+    if domain.is_empty() {
+        return None;
+    }
+    Some(format!("{}:{}", localpart.to_ascii_lowercase(), domain))
+}
+
 pub(super) async fn ensure_soland_account_registered(
     http_client: &reqwest::Client,
     principal_endpoint: Option<&str>,
     principal_did: &str,
+    handle: Option<&str>,
     display_name: Option<&str>,
     device_id: Option<&str>,
 ) -> Result<(), String> {
@@ -225,6 +241,7 @@ pub(super) async fn ensure_soland_account_registered(
     let body = AccountRegisterRequestBody {
         principal_id: Did::new(principal_did.to_owned())
             .map_err(|error| format!("principal DID is invalid: {error}"))?,
+        handle: handle.map(ToOwned::to_owned),
         display_name: display_name.map(ToOwned::to_owned),
         device_id: device_id
             .map(|value| {
@@ -565,10 +582,13 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
         validate_expected_principal(&principal_did, input.expected_principal_id.as_deref())?;
 
+        let account_handle =
+            registration_handle_for_audience(&grant_target.audience, &user.localpart);
         ensure_soland_account_registered(
             &http_client,
             grant_target.principal_server_endpoint.as_deref(),
             &principal_did,
+            account_handle.as_deref(),
             user.display_name.as_deref(),
             Some(device_id.as_str()),
         )
@@ -1015,10 +1035,12 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
     validate_expected_principal(&principal_did, input.expected_principal_id.as_deref())?;
 
+    let account_handle = registration_handle_for_audience(&grant_target.audience, &user.localpart);
     ensure_soland_account_registered(
         &http_client,
         grant_target.principal_server_endpoint.as_deref(),
         &principal_did,
+        account_handle.as_deref(),
         user.display_name.as_deref(),
         Some(device_id.as_str()),
     )

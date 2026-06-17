@@ -468,10 +468,15 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     return Ok(());
                 }
             };
+            let account_handle = oidc_bridge::registration_handle_for_audience(
+                &grant_target.audience,
+                &user.localpart,
+            );
             if let Err(message) = oidc_bridge::ensure_soland_account_registered(
                 &http_client,
                 grant_target.principal_server_endpoint.as_deref(),
                 &principal_did,
+                account_handle.as_deref(),
                 display_name.as_deref(),
                 None,
             )
