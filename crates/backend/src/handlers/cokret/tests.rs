@@ -1204,11 +1204,11 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
 
-    let hint = HandleClaimDeliveryBindingHint {
-        recipient_service_did: "did:web:soland.example".to_owned(),
-        recipient_service_type: Some("principal_server".to_owned()),
-        binding_source: "organization_policy".to_owned(),
-        delivery_modes: vec!["events".to_owned()],
+    let hint = cokret_core::DeliveryBindingHint {
+        recipient_service_did: cokret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: cokret_core::RecipientServiceType::PrincipalServer,
+        binding_source: cokret_core::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [cokret_core::DeliveryMode::Events].into_iter().collect(),
         service_acceptance_ref: None,
         policy_event_ref: None,
     };
@@ -1222,12 +1222,19 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         &key_store,
         &user,
         subject_did,
-        HandleClaimKind::HandleBinding,
+        cokret_core::HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
         hint.clone(),
     )
     .expect("handle claim must mint with the test keystore");
-    assert_eq!(material.payload.subject, subject_did);
+    assert_eq!(
+        material
+            .payload
+            .subject
+            .as_ref()
+            .map(cokret_core::Did::as_str),
+        Some(subject_did)
+    );
 
     let canonical = user_handle(&url_builder, &user);
     let acct = user_handle_acct_alias(&url_builder, &user);
@@ -1236,26 +1243,35 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     assert_eq!(material.payload.schema, "ck.schema.handle_claim.v1");
     let payload_value = serde_json::to_value(&material.payload).unwrap();
     assert!(payload_value.get("type").is_none());
-    assert_eq!(material.payload.handle, canonical);
+    let handle = material.payload.handle.as_ref().unwrap();
+    assert_eq!(handle.canonical(), canonical);
     assert!(
-        material.payload.handle.contains(':'),
+        handle.canonical().contains(':'),
         "handle MUST be the canonical `<localpart>:<domain>` form"
     );
     assert!(
-        !material.payload.handle.starts_with("cokret://"),
+        !handle.canonical().starts_with("cokret://"),
         "handle MUST NOT carry the retired cokret:// URI form"
     );
     assert!(
-        !material.payload.handle.starts_with("acct:"),
+        !handle.canonical().starts_with("acct:"),
         "handle MUST NOT be an acct: alias"
     );
     assert!(
         material.payload.handle_aliases.contains(&acct),
         "handle_aliases MUST carry the acct: interop form"
     );
-    assert_eq!(material.payload.audience, "did:web:space.example");
     assert_eq!(
-        material.payload.member_delivery_binding.binding_source,
+        material.payload.audience.as_deref(),
+        Some("did:web:space.example")
+    );
+    assert_eq!(
+        material
+            .payload
+            .member_delivery_binding
+            .as_ref()
+            .unwrap()
+            .binding_source,
         hint.binding_source
     );
     // `claim_digest` moved off the spec-aligned payload onto the
@@ -1264,10 +1280,18 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     assert!(payload_value.get("claim_digest").is_none());
     assert!(material.expires_at > now);
     assert_eq!(material.payload.proofs.len(), 1);
-    assert_eq!(material.payload.proofs[0].audience, "did:web:space.example");
+    assert_eq!(
+        material.payload.proofs[0].audience,
+        Some(cokret_core::Audience::Single(
+            "did:web:space.example".to_owned()
+        ))
+    );
     assert_eq!(material.payload.proofs[0].jws, material.claim_jwt);
     // HC-COAUTH-1 — coauth only stamps allow-listed claim_kind values.
-    assert_eq!(material.payload.claim_kind, "handle_binding");
+    assert_eq!(
+        material.payload.claim_kind,
+        Some(cokret_core::HandleClaimKind::HandleBinding)
+    );
 }
 
 #[test]
@@ -1281,11 +1305,11 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
 
-    let hint = HandleClaimDeliveryBindingHint {
-        recipient_service_did: "did:web:soland.example".to_owned(),
-        recipient_service_type: Some("principal_server".to_owned()),
-        binding_source: "organization_policy".to_owned(),
-        delivery_modes: vec!["events".to_owned()],
+    let hint = cokret_core::DeliveryBindingHint {
+        recipient_service_did: cokret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: cokret_core::RecipientServiceType::PrincipalServer,
+        binding_source: cokret_core::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [cokret_core::DeliveryMode::Events].into_iter().collect(),
         service_acceptance_ref: None,
         policy_event_ref: None,
     };
@@ -1297,10 +1321,13 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
         &key_store,
         &user,
         "did:webvh:zQmExampleScid:soland.example:webvh:01arz3ndektsv4rrffq69g5fav",
-        HandleClaimKind::OrganizationHandle,
+        cokret_core::HandleClaimKind::OrganizationHandle,
         "did:web:space.example".to_owned(),
         hint,
     )
     .expect("organization_handle claim_kind must be accepted");
-    assert_eq!(material.payload.claim_kind, "organization_handle");
+    assert_eq!(
+        material.payload.claim_kind,
+        Some(cokret_core::HandleClaimKind::OrganizationHandle)
+    );
 }

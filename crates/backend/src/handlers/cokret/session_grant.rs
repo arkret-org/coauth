@@ -9,6 +9,14 @@ use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
+use cokret_core::{
+    SessionGrantIntrospectGrant as SessionGrantIntrospectionGrant,
+    SessionGrantIntrospectOutcome as SessionGrantIntrospectionOutcome,
+    SessionGrantIntrospectRequestBody as SessionGrantIntrospectionRequestBody,
+    SessionGrantIntrospectStatus as SessionGrantIntrospectionStatus,
+    SessionGrantIntrospectionProof, SessionGrantLogoutOutcome, SessionGrantLogoutRequestBody,
+    SessionGrantRefreshOutcome, SessionGrantRefreshRequestBody,
+};
 use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::{CryptoRngCore, RngCore};
 use salvo::prelude::*;
@@ -135,20 +143,6 @@ struct SessionGrantRevokeOutcome {
     grant: SessionGrantRecord,
 }
 
-#[derive(Debug, Deserialize)]
-struct SessionGrantIntrospectionRequestBody {
-    id: Option<String>,
-    grant_jwt: Option<String>,
-    audience: Option<String>,
-    proof: Option<SessionGrantIntrospectionProofInput>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SessionGrantIntrospectionProofInput {
-    challenge: String,
-    proof_jwt: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SessionGrantIntrospectionProofClaims {
     #[serde(rename = "type")]
@@ -159,55 +153,6 @@ pub(crate) struct SessionGrantIntrospectionProofClaims {
     pub(crate) challenge: String,
     pub(crate) issued_at: DateTime<Utc>,
     pub(crate) expires_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum SessionGrantIntrospectionStatus {
-    Active,
-    Revoked,
-    Expired,
-    Locked,
-    Suspended,
-    AudienceMismatch,
-    ProofRequired,
-    InvalidProof,
-    NotFound,
-}
-
-#[derive(Debug, Serialize)]
-struct SessionGrantIntrospectionGrant {
-    id: String,
-    issuer: String,
-    subject: String,
-    service_account_id: String,
-    device_id: Option<String>,
-    audience: String,
-    scopes: Vec<String>,
-    expires_at: DateTime<Utc>,
-    revoked_at: Option<DateTime<Utc>>,
-    revocation_ref: String,
-    // Server-to-server only: the Principal Server validating this grant needs
-    // the session signing key to verify RFC 9421 PoP presentations on
-    // `/_cokret/self/*` (api-conventions.md §3.2). The account-facing
-    // `SessionGrantRecord` deliberately keeps this hidden.
-    session_public_key: String,
-    // RFC 9449 §6 confirmation thumbprint (`cnf.jkt`) the grant is DPoP-bound
-    // to. The Principal Server needs this to verify the per-request DPoP proof
-    // accompanying each `/_cokret/self/*` call (② contract D4). `None` for grants
-    // minted on an unbound path (admin / debug seed without a `dpop_jkt`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    cnf_jkt: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct SessionGrantIntrospectionOutcome {
-    active: bool,
-    status: SessionGrantIntrospectionStatus,
-    proof_required: bool,
-    one_time_use_consumed: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    grant: Option<SessionGrantIntrospectionGrant>,
 }
 
 impl From<SessionGrant> for SessionGrantRecord {
@@ -554,7 +499,7 @@ pub(crate) fn session_grant_jwt_hash(grant_jwt: &str) -> String {
 
 fn verify_session_grant_introspection_proof(
     grant: &SessionGrant,
-    proof: Option<&SessionGrantIntrospectionProofInput>,
+    proof: Option<&SessionGrantIntrospectionProof>,
     now: DateTime<Utc>,
 ) -> SessionGrantIntrospectionStatus {
     let Some(proof) = proof else {
@@ -824,28 +769,6 @@ pub async fn patch_primary_handle_preference(
 // and `debug_issue_dpop_grant` is the cotest harness seam that mints a
 // fully signed grant without going through OIDC.
 
-#[derive(Debug, Deserialize)]
-pub struct RefreshSessionGrantRequestBody {
-    /// The session grant currently associated with the device. Single-use
-    /// — after a successful refresh the old grant is revoked.
-    pub grant_jwt: String,
-    /// Optional audience override; defaults to the grant's audience.
-    #[serde(default)]
-    pub audience: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RefreshSessionGrantOneShotOutcome {
-    pub grant_id: String,
-    pub grant_jwt: String,
-    pub session_public_key: String,
-    pub expires_at: String,
-    pub audience: String,
-    pub scopes: Vec<String>,
-    pub dpop_jkt: String,
-    pub previous_grant_id: String,
-}
-
 /// `POST /_cokret/gate/account/session-grants/refresh` — exchange a near-expiry
 /// DPoP-bound session grant for a fresh one. The caller MUST present:
 ///
@@ -860,7 +783,7 @@ pub struct RefreshSessionGrantOneShotOutcome {
 pub async fn refresh_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RefreshSessionGrantOneShotOutcome>, CokretRouteError> {
+) -> Result<Json<SessionGrantRefreshOutcome>, CokretRouteError> {
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
@@ -881,7 +804,7 @@ pub async fn refresh_session_grant(
         )
     })?;
 
-    let body: RefreshSessionGrantRequestBody = req
+    let body: SessionGrantRefreshRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
@@ -1065,23 +988,17 @@ pub async fn refresh_session_grant(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(RefreshSessionGrantOneShotOutcome {
+    Ok(Json(SessionGrantRefreshOutcome {
         grant_id: persisted.id.to_string(),
         grant_jwt: new_material.grant_jwt,
         session_public_key: new_material.session_public_key,
-        expires_at: new_material.expires_at,
+        expires_at: new_material.expires_at_timestamp,
         audience: new_material.audience,
         scopes: new_material.scopes,
         dpop_jkt: verification.jkt,
         // The prior grant was atomically consumed by the CAS above.
         previous_grant_id: prior_grant.id.to_string(),
     }))
-}
-
-#[derive(Debug, Serialize)]
-pub struct RevokeSessionGrantOutcome {
-    pub revoked: bool,
-    pub browser_session_finished: bool,
 }
 
 /// `POST /_cokret/gate/account/session-grants/revoke` — hard-logout / explicit
@@ -1098,7 +1015,7 @@ pub struct RevokeSessionGrantOutcome {
 pub async fn revoke_session_grant_via_holder_proof(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<RevokeSessionGrantOutcome>, CokretRouteError> {
+) -> Result<Json<SessionGrantLogoutOutcome>, CokretRouteError> {
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
@@ -1113,7 +1030,7 @@ pub async fn revoke_session_grant_via_holder_proof(
             "session-grant holder proof (DPoP) required",
         )
     })?;
-    let body: RefreshSessionGrantRequestBody = req
+    let body: SessionGrantLogoutRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
@@ -1204,7 +1121,7 @@ pub async fn revoke_session_grant_via_holder_proof(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(Json(RevokeSessionGrantOutcome {
+    Ok(Json(SessionGrantLogoutOutcome {
         revoked,
         browser_session_finished,
     }))
@@ -1603,7 +1520,7 @@ pub async fn logout(
 async fn terminate_auth_side_session(
     req: &mut Request,
     depot: &Depot,
-) -> Result<RevokeSessionGrantOutcome, CokretRouteError> {
+) -> Result<SessionGrantLogoutOutcome, CokretRouteError> {
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
@@ -1649,7 +1566,7 @@ async fn terminate_auth_side_session(
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-        return Ok(RevokeSessionGrantOutcome {
+        return Ok(SessionGrantLogoutOutcome {
             revoked: false,
             browser_session_finished: false,
         });
@@ -1711,7 +1628,7 @@ async fn terminate_auth_side_session(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
-    Ok(RevokeSessionGrantOutcome {
+    Ok(SessionGrantLogoutOutcome {
         revoked,
         browser_session_finished,
     })

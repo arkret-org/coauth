@@ -1,76 +1,18 @@
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::CokretConfig;
 use coauth_data::{Clock, UrlBuilder, User};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
-use serde::{Deserialize, Serialize};
+use cokret_core::{
+    Audience, DeliveryBindingHint as HandleClaimDeliveryBindingHint, Did, Handle,
+    HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind, Hash, PayloadProof,
+    proof_kind,
+};
 
 use super::*;
-
-/// Member delivery binding embedded in a `handle_claim`. Shape mirrors
-/// `member-delivery-binding-candidate.schema.json#member_delivery_binding`
-/// (commit 0a5ab85). `binding_source` MUST be one of the five values
-/// enumerated below — `did_document_default` is forbidden because handle-
-/// resolved candidates and DID Document fallback are independent
-/// materialisation paths.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HandleClaimDeliveryBindingHint {
-    pub recipient_service_did: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub recipient_service_type: Option<String>,
-    pub binding_source: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub delivery_modes: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_acceptance_ref: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub policy_event_ref: Option<String>,
-}
-
-/// Detached-JWS proof attached to a `handle_claim`. Lightweight mirror of
-/// `event-envelope.schema.json#/$defs/proof`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HandleClaimProof {
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub alg: String,
-    pub verification_method: String,
-    pub canonicalization: String,
-    pub payload_digest_alg: String,
-    pub payload_digest: String,
-    pub created_at: DateTime<Utc>,
-    pub audience: String,
-    pub jws: String,
-}
-
-/// Canonical `handle_claim` payload signed by coauth's audience-bound
-/// session-grant signing key. Shape aligned with
-/// `ck.schema.handle_claim.v1` so a downstream directory can verify and
-/// consume the claim without private field rewrites.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HandleClaimPayload {
-    pub schema: String,
-    /// R3.2 — `ck.schema.handle_claim.v1` `claim_kind`. coauth only emits
-    /// the allow-listed values (`handle_binding` / `organization_handle`);
-    /// the removed `service_handle` value is rejected at issuance time by
-    /// [`crate::services::handle_subject_validator::ensure_claim_kind_supported`].
-    pub claim_kind: String,
-    pub subject: String,
-    /// Canonical Cokret handle of the form `<localpart>:<domain>` per
-    /// spec 7157ee8 §3.1.
-    pub handle: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub handle_aliases: Vec<String>,
-    pub issuer: String,
-    pub issuer_service_did: String,
-    pub binding_state: String,
-    pub audience: String,
-    pub member_delivery_binding: HandleClaimDeliveryBindingHint,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
-    pub proofs: Vec<HandleClaimProof>,
-}
 
 /// Output of [`issue_handle_claim`]. Carries the signed JWT, the raw
 /// payload (so the caller can persist or echo it), and the wire-level
@@ -88,31 +30,19 @@ pub struct HandleClaimMaterial {
 /// be stored as long-lived bearer credentials.
 pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 
-/// R3.2 — the `claim_kind` coauth's handle-claim issuer stamps on the
-/// emitted `ck.schema.handle_claim.v1` payload.
-///
-/// Modelled as an enum so the removed `service_handle` value can never be
-/// *named* by an in-process caller (fail-closed at the type level), while
-/// [`issue_handle_claim`] still runs the runtime
-/// [`crate::services::handle_subject_validator::ensure_claim_kind_supported`]
-/// allow-list check for defence in depth against future drift. Matches the
-/// SDK `HandleClass::{UserHandle, OrganizationHandle}` enum, serialised as
-/// the `ck.schema.handle_claim.v1` `claim_kind` snake-case strings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HandleClaimKind {
-    /// A holder-bound user handle (`HandleClass::UserHandle`).
-    HandleBinding,
-    /// An organization-assigned handle (`HandleClass::OrganizationHandle`).
-    OrganizationHandle,
+fn handle_claim_kind_wire(kind: HandleClaimKind) -> &'static str {
+    match kind {
+        HandleClaimKind::HandleBinding => "handle_binding",
+        HandleClaimKind::OrganizationHandle => "organization_handle",
+    }
 }
 
-impl HandleClaimKind {
-    pub(crate) const fn as_wire(self) -> &'static str {
-        match self {
-            Self::HandleBinding => "handle_binding",
-            Self::OrganizationHandle => "organization_handle",
-        }
-    }
+fn did_for_handle_claim(value: impl Into<String>) -> Result<Did, SessionGrantError> {
+    Did::new(value).map_err(|error| SessionGrantError::Other(error.into()))
+}
+
+fn hash_for_handle_claim(value: impl Into<String>) -> Result<Hash, SessionGrantError> {
+    Hash::new(value).map_err(|error| SessionGrantError::Other(error.into()))
 }
 
 /// Mint a handle-claim JWT bound to `audience`. The claim's
@@ -150,17 +80,19 @@ pub(crate) fn issue_handle_claim(
     // [`HandleClaimKind`] enum already prevents an in-process caller from
     // naming `service_handle`; this re-checks the wire string so the deny
     // also covers any future code path that bypasses the enum.
-    ensure_claim_kind_supported(claim_kind.as_wire())?;
+    ensure_claim_kind_supported(handle_claim_kind_wire(claim_kind))?;
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
     // `ck:actor:` / `ck:account:` typed id or a service DID. Validating
     // here keeps the issuer honest about whatever the caller passed and
     // lets the same reason code surface as soland / the SDK.
     ensure_subject_is_principal_did(&subject_id)?;
+    let subject = did_for_handle_claim(subject_id.clone())?;
+    let issuer_service = did_for_handle_claim(issuer_service_did.clone())?;
 
     // Spec 7157ee8 §3.1 — canonical handle wire form is
     // `<localpart>:<domain>`.
-    let handle = user_handle(url_builder, user);
+    let handle = Handle::parse(&user_handle(url_builder, user))?;
     let mut aliases = vec![user_handle_acct_alias(url_builder, user)];
     aliases.extend(user.handle_aliases.iter().cloned());
     // De-duplicate while preserving first-seen order.
@@ -175,17 +107,23 @@ pub(crate) fn issue_handle_claim(
     // payload.
     let payload_no_proofs = HandleClaimPayload {
         schema: "ck.schema.handle_claim.v1".to_owned(),
-        claim_kind: claim_kind.as_wire().to_owned(),
-        subject: subject_id.clone(),
-        handle,
+        handle: Some(handle),
         handle_aliases: aliases.clone(),
-        issuer: issuer_service_did.clone(),
-        issuer_service_did: issuer_service_did.clone(),
-        binding_state: "verified".to_owned(),
-        audience: audience.clone(),
-        member_delivery_binding: member_delivery_binding.clone(),
-        created_at: now,
-        expires_at,
+        subject: Some(subject),
+        issuer: Some(issuer_service_did.clone()),
+        issuer_service_did: Some(issuer_service),
+        binding_state: Some(HandleBindingState::Verified),
+        claim_kind: Some(claim_kind),
+        visibility: None,
+        audience: Some(audience.clone()),
+        challenge: None,
+        claim_scope: BTreeMap::new(),
+        member_delivery_binding: Some(member_delivery_binding.clone()),
+        claims: Vec::new(),
+        created_at: Some(now),
+        expires_at: Some(expires_at),
+        verified_at: None,
+        source_refs: Vec::new(),
         proofs: Vec::new(),
     };
     // PROOF-1 (spec 7157ee8 §3.2): the signing transcript MUST cover the
@@ -193,38 +131,24 @@ pub(crate) fn issue_handle_claim(
     // input mirrors the wire shape of `HandleClaimPayload` exactly so
     // downstream verifiers can reproduce the hash from the on-the-wire
     // claim without renaming.
-    let claim_digest = canonical_json_sha256(&HandleClaimDigestInput {
-        schema: &payload_no_proofs.schema,
-        claim_kind: &payload_no_proofs.claim_kind,
-        subject: &payload_no_proofs.subject,
-        handle: &payload_no_proofs.handle,
-        handle_aliases: &payload_no_proofs.handle_aliases,
-        issuer: &payload_no_proofs.issuer,
-        issuer_service_did: &payload_no_proofs.issuer_service_did,
-        binding_state: &payload_no_proofs.binding_state,
-        audience: &payload_no_proofs.audience,
-        member_delivery_binding: &payload_no_proofs.member_delivery_binding,
-        created_at: payload_no_proofs.created_at,
-        expires_at: payload_no_proofs.expires_at,
-    })?;
+    let claim_digest = canonical_json_sha256(&payload_no_proofs)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
     let verification_method = format!("{issuer_service_did}#{key_id}");
-    let proof_payload_digest = claim_digest.clone();
+    let proof_payload_digest = hash_for_handle_claim(claim_digest.clone())?;
 
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
     let signer = key_store.signer_for_algorithm(&alg)?;
     let unsigned_payload = HandleClaimPayload {
-        proofs: vec![HandleClaimProof {
-            kind: "ck.handle.claim.proof.v1".to_owned(),
+        proofs: vec![PayloadProof {
+            kind: proof_kind::DETACHED_JWS.to_owned(),
             alg: alg.to_string(),
             verification_method: verification_method.clone(),
-            canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
-            payload_digest_alg: "sha-256".to_owned(),
             payload_digest: proof_payload_digest.clone(),
             created_at: now,
-            audience: audience.clone(),
+            domain: None,
+            audience: Some(Audience::Single(audience.clone())),
             // Placeholder — overwritten with the detached JWS below.
             jws: String::new(),
         }],
@@ -233,15 +157,14 @@ pub(crate) fn issue_handle_claim(
     let claim_jwt = Jwt::sign(header, unsigned_payload.clone(), &*signer)?.into_string();
 
     let final_payload = HandleClaimPayload {
-        proofs: vec![HandleClaimProof {
-            kind: "ck.handle.claim.proof.v1".to_owned(),
+        proofs: vec![PayloadProof {
+            kind: proof_kind::DETACHED_JWS.to_owned(),
             alg: alg.to_string(),
             verification_method,
-            canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
-            payload_digest_alg: "sha-256".to_owned(),
             payload_digest: proof_payload_digest,
             created_at: now,
-            audience: audience.clone(),
+            domain: None,
+            audience: Some(Audience::Single(audience.clone())),
             jws: claim_jwt.clone(),
         }],
         ..payload_no_proofs
@@ -253,27 +176,4 @@ pub(crate) fn issue_handle_claim(
         claim_digest,
         expires_at,
     })
-}
-
-/// Helper struct used to canonicalise the *digest input* — i.e. the
-/// payload minus the `proofs[]` field. Sorting and
-/// shape must match the wire shape of `HandleClaimPayload` for
-/// downstream digesters to reproduce the hash.
-///
-/// PROOF-1: spec 7157ee8 §3.2 mandates the transcript covers `handle`
-/// (canonical `<localpart>:<domain>` form).
-#[derive(Debug, Serialize)]
-struct HandleClaimDigestInput<'a> {
-    schema: &'a str,
-    claim_kind: &'a str,
-    subject: &'a str,
-    handle: &'a str,
-    handle_aliases: &'a Vec<String>,
-    issuer: &'a str,
-    issuer_service_did: &'a str,
-    binding_state: &'a str,
-    audience: &'a str,
-    member_delivery_binding: &'a HandleClaimDeliveryBindingHint,
-    created_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
 }
