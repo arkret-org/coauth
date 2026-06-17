@@ -128,6 +128,13 @@ fn decode_base64_any(input: &str) -> Option<Vec<u8>> {
         .ok()
 }
 
+/// Truncate to whole seconds so the SDK serializes `created_at`/`not_before` in
+/// the canonical `YYYY-MM-DDTHH:MM:SSZ` form the principal server enforces
+/// (`validate_timestamp_canonical` rejects fractional seconds).
+fn truncate_to_seconds(when: DateTime<Utc>) -> DateTime<Utc> {
+    DateTime::from_timestamp(when.timestamp(), 0).unwrap_or(when)
+}
+
 /// Generate a fresh HLC string (`<unix_ms>-<logical>-<node>`) in the
 /// 26-char form the SDK `Hlc` validator accepts.
 fn fresh_hlc(now: DateTime<Utc>, rng: &mut (dyn rand_core::RngCore + Send)) -> Hlc {
@@ -303,7 +310,7 @@ pub async fn device_authorize_endpoint(
         )))
     })?;
 
-    let not_before = body.not_before.unwrap_or_else(|| clock.now());
+    let not_before = truncate_to_seconds(body.not_before.unwrap_or_else(|| clock.now()));
 
     let payload = DeviceAuthorizePayload {
         principal_id: principal_id.clone(),
@@ -332,7 +339,7 @@ pub async fn device_authorize_endpoint(
         )))
     })?;
 
-    let now = clock.now();
+    let now = truncate_to_seconds(clock.now());
     let mut event = Event {
         event_id: EventId::new(cokret_core::identifiers::new_prefixed_uuid7("ck:event:")).map_err(
             |error| {
