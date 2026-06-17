@@ -681,16 +681,24 @@ pub async fn load_policy_factory_dynamic_data(
 }
 
 /// Create the local principal account facade used by account/profile strands.
+///
+/// Backed by coauth's own Postgres (`users`) via `repository_factory` — see
+/// [`crate::services::principal_facade::DbPrincipalServerAdmin`]. Replaces the
+/// former in-memory mock, which lost all state on restart.
 #[must_use]
 pub fn principal_server_connection_from_config(
     site_config: &SiteConfig,
+    repository_factory: BoxRepositoryFactory,
 ) -> (Arc<dyn PrincipalServerAdmin>, ConnectorRegistry) {
     let registry = ConnectorRegistry::new();
 
-    let stub: Arc<dyn PrincipalServerAdmin> = Arc::new(
-        coauth_principal::MockPrincipalServerAdmin::new(site_config.server_name.clone()),
+    let admin: Arc<dyn PrincipalServerAdmin> = Arc::new(
+        crate::services::principal_facade::DbPrincipalServerAdmin::new(
+            site_config.server_name.clone(),
+            repository_factory,
+        ),
     );
-    (stub, registry)
+    (admin, registry)
 }
 
 #[cfg(test)]

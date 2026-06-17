@@ -23,7 +23,7 @@ use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey
 use coauth_messaging::NotificationCenter;
 use coauth_messaging::email::{Mailer, Transport as MailTransport};
 use coauth_policy::PolicyFactory;
-use coauth_principal::{MockPrincipalServerAdmin, PrincipalServerAdmin};
+use coauth_principal::PrincipalServerAdmin;
 use coauth_tasks::QueueWorker;
 use coauth_templates::{SiteConfigExt, Templates};
 use cookie_store::{CookieStore, RawCookie};
@@ -52,6 +52,7 @@ use crate::salvo_utils::cookies::{CookieJar, CookieManager};
 use crate::services::account_claims::account_claims_service;
 use crate::services::did_resolver::default_did_resolver_service;
 use crate::services::invite_quarantine::invite_quarantine_service;
+use crate::services::principal_facade::DbPrincipalServerAdmin;
 use crate::services::risk_action_proposals::risk_action_proposals_service;
 use crate::services::risk_action_state::default_risk_action_state_service;
 use crate::services::upstream_oidc::default_upstream_oidc_service;
@@ -118,7 +119,7 @@ pub(crate) struct TestState {
     pub metadata_cache: MetadataCache,
     pub encrypter: Encrypter,
     pub url_builder: UrlBuilder,
-    pub principal_server_admin: Arc<MockPrincipalServerAdmin>,
+    pub principal_server_admin: Arc<DbPrincipalServerAdmin>,
     pub policy_factory: Arc<PolicyFactory>,
     pub password_manager: PasswordManager,
     pub site_config: SiteConfig,
@@ -291,8 +292,10 @@ impl TestState {
         let policy_factory =
             policy_factory(&site_config.server_name, serde_json::json!({})).await?;
 
-        let principal_server_admin =
-            Arc::new(MockPrincipalServerAdmin::new(&site_config.server_name));
+        let principal_server_admin = Arc::new(DbPrincipalServerAdmin::new(
+            site_config.server_name.clone(),
+            PgRepositoryFactory::new(pool.clone()).boxed(),
+        ));
 
         let clock = Arc::new(MockClock::default());
         let rng = Arc::new(Mutex::new(ChaChaRng::seed_from_u64(42)));

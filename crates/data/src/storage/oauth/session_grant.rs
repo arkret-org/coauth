@@ -161,11 +161,7 @@ pub trait SessionGrantRepository: Send + Sync {
     /// re-reads the now-committed `revoked_at` and gets `false`. Returning
     /// `false` MUST be treated as `grant_already_consumed` — never minting a
     /// second active child of one parent.
-    async fn revoke_if_active(
-        &mut self,
-        clock: &dyn Clock,
-        id: Ulid,
-    ) -> Result<bool, Self::Error>;
+    async fn revoke_if_active(&mut self, clock: &dyn Clock, id: Ulid) -> Result<bool, Self::Error>;
 
     /// Delete session grants whose `expires_at` is strictly before `until`.
     ///

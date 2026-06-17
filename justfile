@@ -4,6 +4,14 @@
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
+# Stable local device-enrollment-authority seed (decision 0002, B model).
+# Without a fixed seed coauth generates a random enrollment key every start, so
+# every restart orphans the `CokretDeviceEnrollmentAuthority` did:key already
+# pinned into existing principals' DID documents (device enrollment then fails
+# `device_enrollment_authority_not_designated`). This is a DEV-ONLY key; set a
+# real secret seed in production.
+export COAUTH_DEVICE_ENROLLMENT_KEY_SEED := "wgGYluck4bZVA5oa9khVpSriHgrcV81H4iPu6rqtRRY="
+
 # Default recipe: show available commands
 default:
     @just --list

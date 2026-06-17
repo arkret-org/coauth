@@ -153,8 +153,10 @@ impl Options {
 
         let http_client = coauth_backend::reqwest_client();
 
-        let (principal_server_admin, connector_registry) =
-            principal_server_connection_from_config(&site_config);
+        let (principal_server_admin, connector_registry) = principal_server_connection_from_config(
+            &site_config,
+            PgRepositoryFactory::new(pool.clone()).boxed(),
+        );
 
         if !self.no_worker {
             let notifications =

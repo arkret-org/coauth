@@ -1395,3 +1395,4 @@ ALTER TABLE ONLY public.workflow_events
 ALTER TABLE ONLY public.workflow_steps
     ADD CONSTRAINT workflow_steps_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;
 
+

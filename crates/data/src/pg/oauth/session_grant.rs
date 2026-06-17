@@ -273,11 +273,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
     }
 
     #[tracing::instrument(name = "db.oauth_session_grant.revoke_if_active", skip_all, err)]
-    async fn revoke_if_active(
-        &mut self,
-        clock: &dyn Clock,
-        id: Ulid,
-    ) -> Result<bool, Self::Error> {
+    async fn revoke_if_active(&mut self, clock: &dyn Clock, id: Ulid) -> Result<bool, Self::Error> {
         let revoked_at = clock.now();
         // Conditional consume: the `revoked_at IS NULL` predicate makes this a
         // compare-and-swap. Under READ COMMITTED the UPDATE takes a row lock,

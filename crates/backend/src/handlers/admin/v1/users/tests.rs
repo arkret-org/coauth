@@ -127,61 +127,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_add_user_reserved() {
-        setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
-            return;
-        };
-        let mut state = TestState::from_pool(pool.clone()).await.unwrap();
-        let token = state.token_with_scope("urn:coauth:admin").await;
-
-        // Reserve a username on the PrincipalServer and try to add it
-        state.principal_server_admin.reserve_handle("bob").await;
-
-        let request =
-            Request::post("/_coauth/admin/users")
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "username": "bob",
-                }));
-
-        let response = state.request(request).await;
-
-        let body: serde_json::Value = response.json();
-        assert_eq!(
-            body["errors"][0]["title"],
-            "Username is reserved by the PrincipalServer"
-        );
-
-        // But we can force it with the skip_principal_server_check flag
-        let request =
-            Request::post("/_coauth/admin/users")
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "username": "bob",
-                    "skip_principal_server_check": true,
-                }));
-
-        let response = state.request(request).await;
-        response.assert_status(StatusCode::CREATED);
-
-        let body: serde_json::Value = response.json();
-        let id = body["data"]["id"].as_str().unwrap();
-        assert_eq!(body["data"]["attributes"]["username"], "bob");
-
-        // Check that the user was created in the database
-        let mut repo = state.repository().await.unwrap();
-        let user = repo
-            .user()
-            .lookup(id.parse().unwrap())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(user.localpart, "bob");
-    }
-
-    #[tokio::test]
     async fn test_list_users() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {

@@ -659,53 +659,6 @@ mod tests {
         assert!(response.body().contains("This username is already taken"));
     }
 
-    /// When the username is already reserved on the principal_server, it should give
-    /// an error
-    #[tokio::test]
-    async fn test_register_user_reserved() {
-        setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
-            return;
-        };
-        let state = TestState::from_pool(pool.clone()).await.unwrap();
-        let cookies = CookieHelper::new();
-
-        // Render the registration page and get the CSRF token
-        let request = Request::get("/register/password").empty();
-        let request = cookies.with_cookies(request);
-        let response = state.request(request).await;
-        cookies.save_cookies(&response);
-        response.assert_status(StatusCode::OK);
-        response.assert_header_value(CONTENT_TYPE, "text/html; charset=utf-8");
-        // Extract the CSRF token from the response body
-        let csrf_token = response
-            .body()
-            .split("name=\"csrf\" value=\"")
-            .nth(1)
-            .unwrap()
-            .split('\"')
-            .next()
-            .unwrap();
-
-        // Reserve "john" on the PrincipalServer
-        state.principal_server_admin.reserve_handle("john").await;
-
-        // Submit the registration form
-        let request = Request::post("/register/password").form(serde_json::json!({
-            "csrf": csrf_token,
-            "username": "john",
-            "email": "john@example.com",
-            "password": "hunter2",
-            "password_confirm": "hunter2",
-            "accept_terms": "on",
-        }));
-        let request = cookies.with_cookies(request);
-        let response = state.request(request).await;
-        cookies.save_cookies(&response);
-        response.assert_status(StatusCode::OK);
-        assert!(response.body().contains("This username is already taken"));
-    }
-
     /// Test registration without email when email is not required
     #[tokio::test]
     async fn test_register_without_email_when_not_required() {

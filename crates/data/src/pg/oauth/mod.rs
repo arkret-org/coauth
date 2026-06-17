@@ -657,7 +657,10 @@ mod tests {
             .revoke_if_active(&clock, grant.id)
             .await
             .unwrap();
-        assert!(!second, "second revoke_if_active must report already-consumed");
+        assert!(
+            !second,
+            "second revoke_if_active must report already-consumed"
+        );
 
         let after_second = repo
             .oauth_session_grant()

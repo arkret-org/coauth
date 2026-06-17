@@ -28,14 +28,32 @@ use cokret_signatures::{SignEventOptions, sign_event};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::CokretRouteError;
+use super::{CokretRouteError, SessionGrantPayload};
 use crate::handlers::common::DepotExt;
-use crate::salvo_utils::user_authorization::UserAuthorization;
 use crate::services::device_enrollment_authority::enrollment_authority;
 
 const DEVICE_AUTHORIZE_KIND: &str = "ck.device.authorize";
 const ENROLLMENT_AUTHORITY_SERVICE_FRAGMENT: &str = "#enrollment-authority";
 const ENROLLMENT_BINDING_KIND: &str = "service_attested";
+
+/// Extract the `Authorization: Bearer <token>` value (the caller's
+/// `ck.session.grant`), or a 401.
+fn bearer_token_from_request(req: &Request) -> Result<String, CokretRouteError> {
+    let header = req
+        .headers()
+        .get(http::header::AUTHORIZATION)
+        .ok_or_else(|| CokretRouteError::Unauthorized("missing authorization header".to_owned()))?;
+    let value = header
+        .to_str()
+        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+    value
+        .strip_prefix("Bearer ")
+        .or_else(|| value.strip_prefix("bearer "))
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))
+}
 
 /// Request body for `POST /_cokret/gate/account/device-authorize`.
 #[derive(Debug, Deserialize)]
@@ -152,64 +170,115 @@ pub async fn device_authorize_endpoint(
     req: &mut Request,
     depot: &mut Depot,
 ) -> Result<Json<DeviceAuthorizeOutcome>, CokretRouteError> {
-    use oauth_types::scope::OPENID;
+    use coauth_data::RepositoryAccess;
+    use coauth_jose::jwt::Jwt;
+
+    use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let cokret_config = depot.cokret_config()?;
+    let url_builder = depot.url_builder()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
-    // 1. End-user bearer → session → user. This is the human access-token path (userinfo-style),
-    //    distinct from the server-to-server `require_session_grant_caller`.
-    let user_authorization = UserAuthorization::<()>::extract_from_request(req)
-        .await
-        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization".to_owned()))?;
+    // 1. Durable-session auth: the caller presents its `ck.session.grant` (`Authorization: Bearer`)
+    //    plus a `DPoP` holder proof bound to the grant's `cnf.jkt`. This is the same
+    //    proof-of-possession path as session-grant refresh / logout (device-lifecycle §5.4 holder
+    //    proof), NOT the short-lived OAuth access token: device enrollment is retried on every
+    //    connect for the whole life of the session, and the access token may already have expired
+    //    on a later boot while the durable grant is still valid. The grant `subject` IS the
+    //    principal DID, and the DB lookup below proves coauth issued it.
+    let grant_jwt = bearer_token_from_request(req)?;
+    let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "did_proof_required",
+            "session-grant holder proof (DPoP) required",
+        )
+    })?;
 
     let body: DeviceAuthorizeRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
 
-    let mut repo = depot.repo().await?;
-    let session = user_authorization
-        .protected(&mut repo, &clock, &[&OPENID])
-        .await
-        .map_err(|_| CokretRouteError::Unauthorized("invalid or expired session".to_owned()))?;
-    let Some(user_id) = session.user_id else {
-        return Err(CokretRouteError::Unauthorized(
-            "session is not bound to a user".to_owned(),
-        ));
-    };
-    let user = repo
-        .user()
-        .lookup(user_id)
-        .await
-        .map_err(CokretRouteError::from)?
-        .ok_or_else(|| CokretRouteError::Unauthorized("unknown user".to_owned()))?;
+    // Read `cnf.jkt` from the grant payload; the persisted row is the source of
+    // truth (no JWT signature check here — the DB lookup authenticates it).
+    let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(grant_jwt.as_str())
+        .map_err(|_| CokretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
+    let grant_payload = jwt.payload().clone();
+    let expected_jkt = grant_payload
+        .cnf
+        .as_ref()
+        .map(|cnf| cnf.jkt.clone())
+        .ok_or_else(|| {
+            CokretRouteError::BadRequest("grant_jwt is not DPoP-bound (cnf.jkt missing)".to_owned())
+        })?;
 
-    // 2. Resolve the user's principal DID for the targeted principal server.
-    let audience = sole_principal_audience(&cokret_config)?;
-    let principal_did_row = repo
-        .principal_did()
-        .get_for_user_and_audience(&user, &audience)
+    let mut repo = depot.repo().await?;
+    let grant_row = repo
+        .oauth_session_grant()
+        .lookup_by_grant_jwt(&grant_jwt)
         .await
-        .map_err(CokretRouteError::from)?
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| {
             CokretRouteError::coded(
-                StatusCode::CONFLICT,
-                "principal_did_not_minted",
-                "no principal DID has been minted for this user yet",
+                StatusCode::UNAUTHORIZED,
+                "session_grant_not_found",
+                "no session grant matches the presented bearer",
             )
         })?;
+    if grant_row.revoked_at.is_some() {
+        repo.cancel().await.ok();
+        return Err(CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "grant_already_consumed",
+            "session grant has been revoked",
+        ));
+    }
     repo.cancel().await.ok();
 
-    let principal_id = Did::new(principal_did_row.did.clone()).map_err(|error| {
-        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "stored principal DID is invalid: {error}"
-        )))
+    // 2. Proof-of-possession: the caller MUST hold the key the grant is bound to.
+    let verifier = DpopVerifier::shared();
+    let dpop_now = clock.now();
+    let htm = req.method().as_str().to_ascii_uppercase();
+    let public_base = url_builder.http_base();
+    let htu = dpop_htu(&public_base, req);
+    let verification = verifier
+        .verify(&dpop_header, &htm, &htu, dpop_now, Some(&grant_jwt))
+        .await
+        .map_err(|error| {
+            CokretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                "invalid_signature",
+                error.to_string(),
+            )
+        })?;
+    DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            "invalid_signature",
+            error.to_string(),
+        )
     })?;
 
-    // 3. This session's device id (client-supplied; soland projects the
-    //    device_public_key under it, matching the id the session/recovery uses).
+    // 3. The principal DID is the grant subject. Bind the event proof to the configured principal
+    //    server and require the grant to target it.
+    let principal_id = Did::new(grant_payload.subject.clone()).map_err(|error| {
+        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "grant subject is not a valid principal DID: {error}"
+        )))
+    })?;
+    let audience = sole_principal_audience(&cokret_config)?;
+    if grant_payload.audience != audience {
+        return Err(CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            "audience_mismatch",
+            "session grant was not issued for this principal server",
+        ));
+    }
+
+    // 3. This session's device id (client-supplied; soland projects the device_public_key under it,
+    //    matching the id the session/recovery uses).
     let device_id = cokret_core::DeviceId::new(body.device_id.clone()).map_err(|error| {
         CokretRouteError::BadRequest(format!("device_id must be a ck:device id: {error}"))
     })?;
@@ -300,8 +369,8 @@ pub async fn device_authorize_endpoint(
 
     // 5. Sign the proof with the persistent enrollment key; the VM maps to `executed_by`
     //    (device-lifecycle §5.4). Bind the proof to the target principal server
-    //    (`domain`/`audience` = its service DID) so the submitting client's
-    //    domain-binding check passes and the binding is audience-scoped.
+    //    (`domain`/`audience` = its service DID) so the submitting client's domain-binding check
+    //    passes and the binding is audience-scoped.
     let signer = authority.signer();
     sign_event(
         &mut event,

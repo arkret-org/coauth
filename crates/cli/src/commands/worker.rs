@@ -62,7 +62,10 @@ impl Options {
         }
 
         // ── Principal account facade ───────────────────────────────────
-        let (principal_conn, _registry) = principal_server_connection_from_config(&site_cfg);
+        let (principal_conn, _registry) = principal_server_connection_from_config(
+            &site_cfg,
+            PgRepositoryFactory::new(db_pool.clone()).boxed(),
+        );
 
         drop(app_cfg);
 

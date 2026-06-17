@@ -160,8 +160,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
     ) -> Result<AgentKeyAuthorization, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
-        tracing::Span::current()
-            .record("agent_key_authorization.id", tracing::field::display(id));
+        tracing::Span::current().record("agent_key_authorization.id", tracing::field::display(id));
 
         let row = InsertableAgentKeyAuthorization {
             id: Uuid::from(id),
@@ -237,7 +236,11 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(name = "db.agent_key_authorization.list_active_for_agent", skip_all, err)]
+    #[tracing::instrument(
+        name = "db.agent_key_authorization.list_active_for_agent",
+        skip_all,
+        err
+    )]
     async fn list_active_for_agent(
         &mut self,
         agent_principal_id: &str,
@@ -278,7 +281,11 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         Ok(count)
     }
 
-    #[tracing::instrument(name = "db.agent_key_authorization.consume_proof_challenge", skip_all, err)]
+    #[tracing::instrument(
+        name = "db.agent_key_authorization.consume_proof_challenge",
+        skip_all,
+        err
+    )]
     async fn consume_proof_challenge(
         &mut self,
         rng: &mut (dyn RngCore + Send),
@@ -317,7 +324,11 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         Ok(inserted == 1)
     }
 
-    #[tracing::instrument(name = "db.agent_key_authorization.prune_expired_replay", skip_all, err)]
+    #[tracing::instrument(
+        name = "db.agent_key_authorization.prune_expired_replay",
+        skip_all,
+        err
+    )]
     async fn prune_expired_replay(&mut self, clock: &dyn Clock) -> Result<usize, Self::Error> {
         let now = clock.now();
         let count = diesel::delete(
