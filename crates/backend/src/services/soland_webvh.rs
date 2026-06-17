@@ -200,6 +200,11 @@ pub fn prepare_inception<R: RngCore + ?Sized>(
         "update_key_id": "update-key-1",
         "also_known_as": input.also_known_as,
         "version_time": version_time,
+        // The principal server must reflect the CokretDeviceEnrollmentAuthority
+        // service in its reconstructed inception document, or the SCID + log
+        // proof it recomputes will not verify (the document we signed includes
+        // this service). See soland did.rs embedded_webvh_register.
+        "device_enrollment_authority_did": input.enrollment_authority_did,
         "proof": proof,
     });
 
