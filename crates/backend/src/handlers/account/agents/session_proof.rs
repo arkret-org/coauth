@@ -4,6 +4,8 @@
 //! This is the independent validator the session-grant endpoint calls; it MUST
 //! NOT fall back to the password / OIDC / passkey validators.
 
+use std::collections::BTreeSet;
+
 use coauth_config::CokretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::agent_key::NewAgentSessionProofReplay;
@@ -24,6 +26,11 @@ const AGENT_PROOF_REPLAY_GRACE: chrono::Duration = chrono::Duration::minutes(5);
 /// §3.6.1: default SHOULD be ≤ 15 minutes). coauth caps the agent branch to
 /// this regardless of the (human-oriented) `cokret.session_grant_ttl`.
 pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
+
+const AGENT_KEY_SCOPE_ACCOUNT: &str = "account";
+const AGENT_KEY_SCOPE_REALM: &str = "realm";
+const AGENT_KEY_SCOPE_APPLET: &str = "applet";
+const AGENT_KEY_SCOPE_LIMITED: &str = "limited";
 
 /// Outcome of validating an `agent_key_proof` session-grant request.
 pub struct AgentSessionAuthorization {
@@ -217,15 +224,13 @@ pub async fn validate_agent_session_proof(
         ));
     }
 
-    // Scope intersection: requested scope MUST NOT be broader than the
-    // authorized key scope. coauth holds the key-scope tier; soland's
-    // capability evaluator narrows further per-resource at the resource edge.
-    // Here we keep only requested scopes (the agent's session scope is the
-    // intersection of requested ∩ authorized; an empty request is denied).
-    let granted_scope: Vec<String> = body.requested_scope.clone();
-    if granted_scope.is_empty() {
-        return Err(AgentAuthRejection::ProofInvalid.into());
-    }
+    // coauth enforces the key-tier ceiling here. soland's resource-edge
+    // capability evaluator still narrows per-resource by capability grant and
+    // Realm policy before accepting reads or writes.
+    let granted_scope = intersect_requested_scope_with_agent_key_scope(
+        authorization.agent_key_scope.as_str(),
+        &body.requested_scope,
+    )?;
 
     // scope_details overlay: echo the requested narrowing + resolved
     // participation entries (the controller-approved effective participation).
@@ -255,4 +260,176 @@ pub async fn validate_agent_session_proof(
         scope_details,
         ttl,
     })
+}
+
+fn intersect_requested_scope_with_agent_key_scope(
+    agent_key_scope: &str,
+    requested_scope: &[String],
+) -> Result<Vec<String>, AgentAuthRejection> {
+    let normalized = normalize_requested_scope(requested_scope);
+    if normalized.is_empty() {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+
+    if normalized
+        .iter()
+        .any(|token| !scope_token_allowed_by_agent_key_scope(agent_key_scope, token))
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+
+    Ok(normalized)
+}
+
+fn normalize_requested_scope(scope: &[String]) -> Vec<String> {
+    scope
+        .iter()
+        .map(|token| token.trim())
+        .filter(|token| !token.is_empty())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn scope_token_allowed_by_agent_key_scope(agent_key_scope: &str, token: &str) -> bool {
+    match agent_key_scope {
+        AGENT_KEY_SCOPE_LIMITED => limited_agent_scope_token_allowed(token),
+        AGENT_KEY_SCOPE_APPLET => applet_agent_scope_token_allowed(token),
+        AGENT_KEY_SCOPE_REALM => realm_agent_scope_token_allowed(token),
+        AGENT_KEY_SCOPE_ACCOUNT => account_agent_scope_token_allowed(token),
+        _ => false,
+    }
+}
+
+fn limited_agent_scope_token_allowed(token: &str) -> bool {
+    matches!(
+        token,
+        "ck.self.events.query.describe"
+            | "ck.self.events.command.submit"
+            | "ck.self.events.resource.get"
+            | "ck.self.events.query.resolve"
+            | "ck.self.events.query.scan"
+            | "ck.self.events.stream.subscribe"
+            | "ck.self.events.query.frontier"
+            | "ck.message.create"
+            | "ck.reaction.add"
+    )
+}
+
+fn applet_agent_scope_token_allowed(token: &str) -> bool {
+    limited_agent_scope_token_allowed(token)
+        || matches!(
+            token,
+            "ck.applet.query.describe"
+                | "ck.applet.resource.get"
+                | "ck.applet.command.invoke"
+                | "ck.applet.action.request"
+        )
+}
+
+fn realm_agent_scope_token_allowed(token: &str) -> bool {
+    if token.starts_with("ck.account.")
+        || token.starts_with("ck.admin.")
+        || token.starts_with("ck.self.agent.")
+        || token.starts_with("ck.gate.")
+    {
+        return false;
+    }
+
+    limited_agent_scope_token_allowed(token)
+        || token.starts_with("ck.message.")
+        || token.starts_with("ck.reaction.")
+        || token.starts_with("ck.strand.")
+        || token.starts_with("ck.space.")
+        || token.starts_with("ck.blob.")
+        || token.starts_with("ck.call.")
+        || token.starts_with("ck.morph.")
+        || token.starts_with("ck.relation.")
+}
+
+fn account_agent_scope_token_allowed(token: &str) -> bool {
+    if token.starts_with("ck.admin.")
+        || token.starts_with("ck.gate.")
+        || token.starts_with("ck.self.agent.")
+    {
+        return false;
+    }
+
+    token.starts_with("ck.self.events.")
+        || token.starts_with("ck.self.account.")
+        || token.starts_with("ck.account.")
+        || realm_agent_scope_token_allowed(token)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn limited_agent_key_scope_dedupes_and_allows_runtime_scope() {
+        let scope = intersect_requested_scope_with_agent_key_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &[
+                " ck.self.events.command.submit ".to_owned(),
+                "ck.message.create".to_owned(),
+                "ck.self.events.command.submit".to_owned(),
+                "ck.reaction.add".to_owned(),
+            ],
+        )
+        .expect("limited runtime scope should be accepted");
+
+        assert_eq!(
+            scope,
+            vec![
+                "ck.message.create".to_owned(),
+                "ck.reaction.add".to_owned(),
+                "ck.self.events.command.submit".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn limited_agent_key_scope_rejects_admin_or_control_surface() {
+        let err = intersect_requested_scope_with_agent_key_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &["ck.self.agent.command.deactivate".to_owned()],
+        )
+        .expect_err("limited key must not mint control-plane scope");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+    }
+
+    #[test]
+    fn realm_agent_key_scope_rejects_account_surface() {
+        let err = intersect_requested_scope_with_agent_key_scope(
+            AGENT_KEY_SCOPE_REALM,
+            &["ck.account.status".to_owned()],
+        )
+        .expect_err("realm key must not mint account-surface scope");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+    }
+
+    #[test]
+    fn unknown_agent_key_scope_rejects_fail_closed() {
+        let err = intersect_requested_scope_with_agent_key_scope(
+            "delegated-root",
+            &["ck.self.events.query.scan".to_owned()],
+        )
+        .expect_err("unknown key tiers must fail closed");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+    }
+
+    #[test]
+    fn empty_requested_scope_rejects_after_normalization() {
+        let err = intersect_requested_scope_with_agent_key_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &[" ".to_owned(), String::new()],
+        )
+        .expect_err("empty scope must fail closed");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+    }
 }

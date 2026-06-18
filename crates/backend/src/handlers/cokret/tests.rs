@@ -7,6 +7,7 @@ use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg}
 use coauth_jose::jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{JsonWebKeySet, PrivateKey};
+use cokret_core::SessionGrantIntrospectStatus as SessionGrantIntrospectionStatus;
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;

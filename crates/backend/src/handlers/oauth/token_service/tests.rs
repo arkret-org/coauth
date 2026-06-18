@@ -8,7 +8,7 @@ use chrono::Duration;
 use coauth_data::clock::MockClock;
 use coauth_data::oauth::{LocalizedClientMetadata, NewSessionGrant};
 use coauth_data::{
-    Client, PgRepositoryFactory, RefreshToken, RefreshTokenState, RepositoryFactory as _,
+    Client, Clock, PgRepositoryFactory, RefreshToken, RefreshTokenState, RepositoryFactory as _,
     SiteConfig, TokenType,
 };
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};

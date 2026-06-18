@@ -27,17 +27,18 @@ use crate::AppError;
 // paused agents — existing tokens must         fail closed within the
 // configured window even before reducer         convergence catches up.
 //
-// Full reducer/persistence wiring of these deferred endpoints is in soland
-// (the principal server is the persistence authority). coauth keeps the
-// wire-level error matrix for `agent_key_pair` / `issue_session_grant`'s
-// agent branch as reserved internal helpers until the routes are implemented.
-// Do not expose these operations in discovery, docs, or sodmin before routed
-// handlers land.
+// Full reducer/persistence wiring is in soland (the principal server is the
+// persistence authority). coauth owns the gate endpoints and the wire-level
+// error matrix for `agent_key_pair` / the `agent_key_proof` session-grant
+// branch, then relies on soland projection state for pairing lifetime, agent
+// lifecycle, accepted runtime keys, and accountability-grant coverage.
 //
-// TODO(R3.1): wire up the actual `POST /_cokret/gate/account/agent-key-pair`
-// and agent-branch session-grant handlers. The error matrix below is the bound
-// surface; the internal lookups (pairing request lifetime, agent state,
-// accountability grant existence) are implemented in soland.
+// Session revocation strategy: agent runtime grants are stateless, short-lived
+// signed JWTs rather than durable browser-session rows. coauth caps the grant
+// TTL to 15 minutes; soland rechecks lifecycle/revocation state at the resource
+// edge during the freshness window, and normal projection gates reject after
+// convergence. Do not introduce a second coauth-local revocation table without
+// changing this strategy explicitly.
 // ─────────────────────────────────────────────────────────────────────────
 
 /// Wire-level rejection reasons for the `ck.gate.account.command.pair_agent_key`
@@ -126,8 +127,9 @@ impl AgentAuthRejection {
 
 /// AUTH-3 — revocation freshness window. When an agent is paused, any
 /// outstanding session tokens MUST fail closed within this window even
-/// before the reducer fan-out catches up. Default 30 s per spec discussion
-/// (the full ceiling tunable lives on the deployment config and is
+/// before the reducer fan-out catches up. Default 30 s per spec discussion,
+/// always bounded by the capped agent-session TTL under the natural-expiry
+/// strategy (the full ceiling tunable lives on the deployment config and is
 /// surfaced under `ck.profile.agent_runtime.v1` in a follow-up).
 // TODO(R3.1): plumb a deployment-config override
 // (`cokret.agent_runtime.revocation_freshness_window_seconds`) so SREs

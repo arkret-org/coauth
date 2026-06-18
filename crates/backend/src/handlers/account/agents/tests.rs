@@ -8,10 +8,11 @@ mod agent_auth_error_matrix_tests {
         accountability_capabilities_digest, normalize_capabilities,
     };
     use super::super::error_matrix::{
-        AgentAuthRejection, enforce_agent_lifecycle_gate, enforce_paused_revocation_freshness,
-        enforce_verification_method_binding,
+        AgentAuthRejection, PAUSED_REVOCATION_FRESHNESS_WINDOW, enforce_agent_lifecycle_gate,
+        enforce_paused_revocation_freshness, enforce_verification_method_binding,
     };
     use super::super::proof::{ProofSignedFields, base64_decode_flexible, verify_proof_signature};
+    use super::super::session_proof::AGENT_SESSION_MAX_TTL;
 
     #[test]
     fn verification_method_mismatch_fires_before_proof_validator() {
@@ -61,6 +62,15 @@ mod agent_auth_error_matrix_tests {
         let after_window = paused_at + chrono::Duration::seconds(31);
         enforce_paused_revocation_freshness(paused_at, after_window)
             .expect("must release once window has elapsed");
+    }
+
+    #[test]
+    fn auth3_natural_expiry_window_is_bounded_by_agent_session_ttl() {
+        assert_eq!(AGENT_SESSION_MAX_TTL, chrono::Duration::minutes(15));
+        assert!(
+            PAUSED_REVOCATION_FRESHNESS_WINDOW <= AGENT_SESSION_MAX_TTL,
+            "freshness recheck window must never outlive the stateless agent grant"
+        );
     }
 
     #[test]
