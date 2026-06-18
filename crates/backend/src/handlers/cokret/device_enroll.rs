@@ -1,5 +1,6 @@
-//! `POST /_cokret/gate/account/device-authorize` — restricted enrollment
-//! signing oracle (decision 0002 B model, device-lifecycle §5.4).
+//! `POST /_cokret/gate/account/device-enroll`
+//! (`ck.gate.account.command.enroll_device`) — managed-DID `service_attested`
+//! device enrollment (device-lifecycle §5.4, key-management §5.0.6).
 //!
 //! coauth signs exactly one shape: a `service_attested` `ck.device.authorize`
 //! for **the calling user's own device**, under the user's principal DID. It
@@ -21,12 +22,12 @@
 
 use chrono::{DateTime, Utc};
 use cokret_core::{
-    Audience, DeviceAuthorizePayload, DeviceEnrollmentAuthorityBinding, DeviceOrPrincipalRef, Did,
-    Event, EventId, EventRequirements, Hlc, RealmId, ed25519_pubkey_to_did_key_multibase,
+    AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
+    DeviceEnrollmentAuthorityBinding, DeviceOrPrincipalRef, Did, Event, EventId, EventRequirements,
+    Hlc, RealmId, ed25519_pubkey_to_did_key_multibase,
 };
 use cokret_signatures::{SignEventOptions, sign_event};
 use salvo::prelude::*;
-use serde::{Deserialize, Serialize};
 
 use super::{CokretRouteError, SessionGrantPayload};
 use crate::handlers::common::DepotExt;
@@ -53,39 +54,6 @@ fn bearer_token_from_request(req: &Request) -> Result<String, CokretRouteError> 
         .filter(|token| !token.is_empty())
         .map(str::to_owned)
         .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))
-}
-
-/// Request body for `POST /_cokret/gate/account/device-authorize`.
-#[derive(Debug, Deserialize)]
-pub struct DeviceAuthorizeRequestBody {
-    /// This session's `device_id` (`ck:device:<uuid>`). The enrollment authority
-    /// signs the `ck.device.authorize` for exactly this id so the projected
-    /// `device_public_key` lands under the same id the session (and recovery)
-    /// looks up.
-    pub device_id: String,
-    /// The device's 32-byte Ed25519 public key, encoded as multibase
-    /// (`z<base58btc(0xed01||key)>`) or standard/URL-safe base64.
-    pub device_public_key: String,
-    /// The principal's current device-stream `actor_seq`, as observed by the
-    /// client from soland. coauth does not re-derive it.
-    pub actor_seq: u64,
-    /// Optional `not_before` (RFC3339). Defaults to now.
-    #[serde(default)]
-    pub not_before: Option<DateTime<Utc>>,
-}
-
-/// Response: the signed `ck.device.authorize` Event, ready for the client to
-/// submit to soland `/_cokret/self/events`.
-#[derive(Debug, Serialize)]
-pub struct DeviceAuthorizeOutcome {
-    /// The principal DID the device was authorized under.
-    pub principal_id: String,
-    /// The derived self-certifying device id.
-    pub device_id: String,
-    /// The enrollment authority DID (`executed_by` / `authorized_by`).
-    pub authority_did: String,
-    /// The fully-signed Event envelope.
-    pub event: Event,
 }
 
 /// Decode `device_public_key` (multibase or base64) into the raw 32-byte key.
@@ -166,17 +134,18 @@ fn sole_principal_audience(
         _ => Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
             "ambiguous_principal_server",
-            "multiple principal servers configured; device-authorize cannot pick one",
+            "multiple principal servers configured; device-enroll cannot pick one",
         )),
     }
 }
 
-/// `POST /_cokret/gate/account/device-authorize`.
+/// `POST /_cokret/gate/account/device-enroll`
+/// (`ck.gate.account.command.enroll_device`).
 #[handler]
-pub async fn device_authorize_endpoint(
+pub async fn device_enroll_endpoint(
     req: &mut Request,
     depot: &mut Depot,
-) -> Result<Json<DeviceAuthorizeOutcome>, CokretRouteError> {
+) -> Result<Json<AccountDeviceEnrollOutcome>, CokretRouteError> {
     use coauth_data::RepositoryAccess;
     use coauth_jose::jwt::Jwt;
 
@@ -203,7 +172,7 @@ pub async fn device_authorize_endpoint(
         )
     })?;
 
-    let body: DeviceAuthorizeRequestBody = req
+    let body: AccountDeviceEnrollRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
@@ -285,10 +254,9 @@ pub async fn device_authorize_endpoint(
     }
 
     // 3. This session's device id (client-supplied; soland projects the device_public_key under it,
-    //    matching the id the session/recovery uses).
-    let device_id = cokret_core::DeviceId::new(body.device_id.clone()).map_err(|error| {
-        CokretRouteError::BadRequest(format!("device_id must be a ck:device id: {error}"))
-    })?;
+    //    matching the id the session/recovery uses). Already a typed `DeviceId`
+    //    (validated on deserialize) from the SDK request body.
+    let device_id = body.device_id.clone();
     let device_public_key = decode_device_public_key(&body.device_public_key)?;
     let device_public_key_multibase = ed25519_pubkey_to_did_key_multibase(&device_public_key);
 
@@ -335,7 +303,7 @@ pub async fn device_authorize_endpoint(
 
     let content = serde_json::to_value(&payload).map_err(|error| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "failed to serialize device-authorize payload: {error}"
+            "failed to serialize device-enroll payload: {error}"
         )))
     })?;
 
@@ -390,14 +358,14 @@ pub async fn device_authorize_endpoint(
     )
     .map_err(|error| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
-            "failed to sign device-authorize event: {error}"
+            "failed to sign device-enroll event: {error}"
         )))
     })?;
 
-    Ok(Json(DeviceAuthorizeOutcome {
-        principal_id: principal_id.into_string(),
-        device_id: device_id.as_str().to_owned(),
-        authority_did: authority_did.into_string(),
-        event,
+    Ok(Json(AccountDeviceEnrollOutcome {
+        principal_id,
+        device_id,
+        authority_did,
+        authorized_event: event,
     }))
 }

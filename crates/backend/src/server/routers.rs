@@ -183,16 +183,17 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(agents::post_agent_key_pair),
         )
-        // Decision 0002 / device-lifecycle §5.4 — restricted enrollment
-        // signing oracle. An authenticated end user posts their device public
-        // key; coauth signs a `service_attested` `ck.device.authorize` under
-        // the user's principal DID with the persistent enrollment key and
-        // returns the Event for the client to submit to soland. coauth does
-        // not contact soland.
+        // ck.gate.account.command.enroll_device (device-lifecycle §5.4 /
+        // key-management §5.0.6) — managed-DID service_attested enrollment.
+        // An authenticated end user posts their device public key; coauth
+        // signs a `service_attested` `ck.device.authorize` under the user's
+        // principal DID with the persistent enrollment key and returns the
+        // Event for the client to submit to soland. coauth does not contact
+        // soland.
         .push(
-            Router::with_path("gate/account/device-authorize")
+            Router::with_path("gate/account/device-enroll")
                 .options(oidc_preflight_handler)
-                .post(cokret::device_authorize_endpoint),
+                .post(cokret::device_enroll_endpoint),
         )
         // Single client hard-logout (account-lifecycle §4.1): Bearer
         // ck.session.grant + DPoP holder proof terminate the grant rotation
