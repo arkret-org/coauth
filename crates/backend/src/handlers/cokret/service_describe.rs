@@ -12,7 +12,9 @@ use crate::handlers::common::DepotExt;
 
 #[derive(Debug, Serialize)]
 struct SupportedBinding {
-    binding: &'static str,
+    // `service-describe.schema.json#/properties/supported_bindings/items`
+    // requires `kind` (the historical `binding` key is not schema-valid).
+    kind: &'static str,
     base_url: String,
 }
 
@@ -147,27 +149,48 @@ pub(crate) struct ServiceDescribeOutcome {
     /// is added later the `verified_profiles=[]` invariant MUST be
     /// re-enforced.
     development_mode: bool,
+    /// Required by `service-describe.schema.json` (`anyOf`:
+    /// `rate_limit_policy` or `rate_limit_policy_id`). coauth's
+    /// per-endpoint budgets are enforced by the `Limiter` middleware; the
+    /// describe surface advertises an unspecified policy (generic abuse
+    /// protection only) rather than pinning numbers that drift from config.
+    rate_limit_policy: cokret_core::RateLimitPolicy,
 
-    // --- coauth-proprietary extension fields. NOTE: these are not part of
-    //     `service-describe.schema.json`; a strict validator with
-    //     `additionalProperties:false` would reject them unless they are
-    //     adopted into the schema or moved under the `x_*` extension
-    //     namespace. Kept here as the service's richer self-description;
-    //     promoting them is a spec-maintainer decision. ---
+    // --- coauth-proprietary extension fields. These are NOT part of
+    //     `service-describe.schema.json` (top-level `additionalProperties:
+    //     false`), so each is serialized under the `x_coauth_*` extension
+    //     namespace, which the schema's `^x_[a-z][a-z0-9_]*$`
+    //     patternProperties allow. Kept as the service's richer
+    //     self-description. ---
     /// T6.3 — explicit Cokret v1 role declaration. A coauth instance can
     /// simultaneously act as `auth_server` (OIDC token issuer),
     /// `identity_resolver` (DID / handle resolution proxy), and
     /// `account_registry` (internal service-account management).
+    #[serde(rename = "x_coauth_service_roles")]
     service_roles: Vec<&'static str>,
+    #[serde(rename = "x_coauth_supported_reducer_profiles")]
     supported_reducer_profiles: Vec<&'static str>,
+    #[serde(rename = "x_coauth_supported_schema_profiles")]
     supported_schema_profiles: Vec<&'static str>,
+    #[serde(rename = "x_coauth_admin_audience")]
     admin_audience: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        rename = "x_coauth_principal_servers",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
     principal_servers: Vec<PrincipalServerDescriptor>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        rename = "x_coauth_principal_server_delegation_targets",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
     principal_server_delegation_targets: Vec<PrincipalServerDescriptor>,
+    #[serde(rename = "x_coauth_identity_registry_resolver")]
     identity_registry_resolver: IdentityRegistryResolverDescriptor,
+    #[serde(rename = "x_coauth_service_boundary")]
     service_boundary: ServiceBoundaryDescriptor,
+    #[serde(rename = "x_coauth_standard_error_envelope")]
     standard_error_envelope: StandardErrorEnvelopeDescriptor,
 }
 
@@ -513,7 +536,7 @@ pub(crate) fn service_describe_response(
         // under. Older `ck.schema.v1` is no longer published.
         supported_schema_profiles: vec!["ck.schema.core.v1", "ck.schema.service_describe.v1"],
         supported_bindings: vec![SupportedBinding {
-            binding: COKRET_HTTP_BINDING,
+            kind: COKRET_HTTP_BINDING,
             base_url: url_builder.http_base().to_string(),
         }],
         supported_operations: vec![
@@ -633,6 +656,7 @@ pub(crate) fn service_describe_response(
             },
         ],
         development_mode: false,
+        rate_limit_policy: cokret_core::RateLimitPolicy::unspecified(),
         admin_audience: admin_audience.clone(),
         principal_servers: principal_servers.clone(),
         principal_server_delegation_targets: principal_servers,
