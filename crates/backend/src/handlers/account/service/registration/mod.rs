@@ -17,21 +17,13 @@ mod workflow;
 mod tests;
 
 use admin_bootstrap::{PrepareAdminBootstrapError, prepare_admin_bootstrap};
-pub use finish::{
-    check_registration_finish_eligibility, complete_registration, finish_registration,
-    load_registration_finish_preparation, prepare_registration_completion,
+pub(crate) use finish::finish_registration;
+pub(crate) use operations::{
+    begin_password_registration, change_registration_email, resend_registration_verification,
+    submit_registration_display_name, submit_registration_email_code,
+    submit_registration_phone_code,
 };
-pub use operations::{
-    begin_password_registration, change_registration_email,
-    resend_pending_registration_verification, resend_registration_verification,
-    set_registration_display_name, start_password_registration, submit_registration_display_name,
-    submit_registration_email_code, submit_registration_phone_code, verify_registration_email_code,
-    verify_registration_phone_code,
-};
-pub use progress::{
-    attach_registration_token, load_registration_display_name_step, load_registration_email_step,
-    load_registration_progress, load_registration_status, load_registration_token_step,
-};
+pub(crate) use progress::{load_registration_progress, load_registration_status};
 pub use types::{
     AttachRegistrationTokenError, BeginPasswordRegistrationError, BeginPasswordRegistrationIssue,
     BeginPasswordRegistrationRequestBody, BeginPasswordRegistrationResult,
@@ -53,4 +45,4 @@ pub use types::{
     StartedPasswordRegistration, VerifyRegistrationEmailCodeError,
     VerifyRegistrationPhoneCodeError,
 };
-pub use workflow::{completed_registration_steps, next_registration_step};
+pub(crate) use workflow::next_registration_step;

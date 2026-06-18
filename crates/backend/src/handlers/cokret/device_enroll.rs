@@ -254,8 +254,8 @@ pub async fn device_enroll_endpoint(
     }
 
     // 3. This session's device id (client-supplied; soland projects the device_public_key under it,
-    //    matching the id the session/recovery uses). Already a typed `DeviceId`
-    //    (validated on deserialize) from the SDK request body.
+    //    matching the id the session/recovery uses). Already a typed `DeviceId` (validated on
+    //    deserialize) from the SDK request body.
     let device_id = body.device_id.clone();
     let device_public_key = decode_device_public_key(&body.device_public_key)?;
     let device_public_key_multibase = ed25519_pubkey_to_did_key_multibase(&device_public_key);
