@@ -223,6 +223,12 @@ async fn issue_agent_key_proof_session_grant(
     let now = clock.now();
     let expires_at = now + authorization.ttl;
 
+    let session_public_key = serde_json::to_string(&dpop_binding.public_jwk).map_err(|error| {
+        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(error))
+    })?;
+    let mut token_scope_details = authorization.scope_details.clone();
+    token_scope_details["audience"] = serde_json::Value::String(audience.clone());
+
     let material = mint_agent_session_grant(
         &url_builder,
         &cokret_config,
@@ -231,6 +237,8 @@ async fn issue_agent_key_proof_session_grant(
         audience,
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
+        session_public_key,
+        token_scope_details.clone(),
         now,
         expires_at,
     )
@@ -245,10 +253,9 @@ async fn issue_agent_key_proof_session_grant(
             )))
         })?;
 
-    let mut scope_details = authorization.scope_details;
+    let mut scope_details = token_scope_details;
     scope_details["session_public_key"] =
         serde_json::Value::String(material.session_public_key.clone());
-    scope_details["audience"] = serde_json::Value::String(material.audience.clone());
 
     Ok(Json(cokret_core::SessionGrantOutcome {
         principal_id,

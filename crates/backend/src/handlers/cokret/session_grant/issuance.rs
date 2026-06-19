@@ -81,6 +81,8 @@ pub(crate) fn issue_session_grant_for_audience(
         session_id: browser_session.id.to_string(),
         browser_session_id: browser_session.id.to_string(),
         cnf: cnf.clone(),
+        proof_kind: None,
+        scope_details: serde_json::Value::Null,
     };
     let payload_digest = session_grant_claims_hash(&claims)?;
 
@@ -101,6 +103,8 @@ pub(crate) fn issue_session_grant_for_audience(
         session_id: claims.session_id,
         browser_session_id: claims.browser_session_id,
         cnf: claims.cnf,
+        proof_kind: claims.proof_kind,
+        scope_details: claims.scope_details,
         proof: SessionGrantProof {
             kind: "ck.session.grant.proof.v1".to_owned(),
             alg: alg.to_string(),
@@ -180,6 +184,8 @@ pub(crate) fn mint_agent_session_grant(
     audience: String,
     scopes: Vec<String>,
     dpop_jkt: String,
+    session_public_key: String,
+    scope_details: serde_json::Value,
     now: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -192,7 +198,7 @@ pub(crate) fn mint_agent_session_grant(
         issuer: issuer.clone(),
         subject: agent_principal_id.to_owned(),
         service_account_id: agent_principal_id.to_owned(),
-        session_public_key: String::new(),
+        session_public_key: session_public_key.clone(),
         audience: audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
@@ -202,6 +208,8 @@ pub(crate) fn mint_agent_session_grant(
         session_id: agent_principal_id.to_owned(),
         browser_session_id: agent_principal_id.to_owned(),
         cnf: cnf.clone(),
+        proof_kind: Some(cokret_core::SessionGrantProofKind::AgentKeyProof),
+        scope_details,
     };
     let payload_digest = session_grant_claims_hash(&claims)?;
 
@@ -222,6 +230,8 @@ pub(crate) fn mint_agent_session_grant(
         session_id: claims.session_id,
         browser_session_id: claims.browser_session_id,
         cnf: claims.cnf,
+        proof_kind: claims.proof_kind,
+        scope_details: claims.scope_details,
         proof: SessionGrantProof {
             kind: "ck.session.grant.proof.v1".to_owned(),
             alg: alg.to_string(),
@@ -237,7 +247,7 @@ pub(crate) fn mint_agent_session_grant(
 
     Ok(SessionGrantMaterial {
         grant_jwt,
-        session_public_key: String::new(),
+        session_public_key,
         expires_at: expires_at.to_rfc3339(),
         expires_at_timestamp: expires_at,
         issuer,

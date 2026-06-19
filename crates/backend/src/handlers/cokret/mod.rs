@@ -605,6 +605,8 @@ fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGr
         session_id: payload.session_id.clone(),
         browser_session_id: payload.browser_session_id.clone(),
         cnf: payload.cnf.clone(),
+        proof_kind: payload.proof_kind,
+        scope_details: payload.scope_details.clone(),
     }
 }
 

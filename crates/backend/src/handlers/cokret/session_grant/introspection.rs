@@ -3,11 +3,11 @@ use coauth_data::{SessionGrant, User};
 use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::Jwt;
 use cokret_core::{
-    SessionGrantIntrospectGrant as SessionGrantIntrospectionGrant,
+    FreshnessState, SessionGrantIntrospectGrant as SessionGrantIntrospectionGrant,
     SessionGrantIntrospectOutcome as SessionGrantIntrospectionOutcome,
     SessionGrantIntrospectRequestBody as SessionGrantIntrospectionRequestBody,
     SessionGrantIntrospectStatus as SessionGrantIntrospectionStatus,
-    SessionGrantIntrospectionProof,
+    SessionGrantIntrospectionProof, SessionGrantProofKind,
 };
 use salvo::prelude::*;
 use sha2::Digest as _;
@@ -21,9 +21,12 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospection
     // grant payload. Parse it back out of the persisted `grant_jwt` (the same
     // way the refresh / logout paths read the prior grant's binding). A grant
     // minted without DPoP binding has no `cnf`, so this stays `None`.
-    let cnf_jkt = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
+    let parsed_payload = Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
         .ok()
-        .and_then(|jwt| jwt.payload().cnf.as_ref().map(|cnf| cnf.jkt.clone()));
+        .map(|jwt| jwt.payload().clone());
+    let cnf_jkt = parsed_payload
+        .as_ref()
+        .and_then(|payload| payload.cnf.as_ref().map(|cnf| cnf.jkt.clone()));
     SessionGrantIntrospectionGrant {
         id: grant.id.to_string(),
         issuer: grant.issuer.clone(),
@@ -44,7 +47,74 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospection
         revocation_ref: format!("ck:session:{}", grant.browser_session_id),
         session_public_key: grant.session_public_key.clone(),
         cnf_jkt,
+        proof_kind: parsed_payload
+            .as_ref()
+            .and_then(|payload| payload.proof_kind),
+        scope_details: parsed_payload
+            .as_ref()
+            .map(|payload| payload.scope_details.clone())
+            .unwrap_or(serde_json::Value::Null),
+        freshness_state: None,
     }
+}
+
+fn stateless_agent_introspection(
+    grant_jwt: &str,
+    key_store: &coauth_keystore::Keystore,
+    audience: Option<&str>,
+    now: DateTime<Utc>,
+) -> Option<SessionGrantIntrospectionOutcome> {
+    let jwt = Jwt::<SessionGrantPayload>::try_from(grant_jwt).ok()?;
+    if jwt.verify_with_jwks(&key_store.public_jwks()).is_err() {
+        return None;
+    }
+    let payload = jwt.payload();
+    if payload.proof_kind != Some(SessionGrantProofKind::AgentKeyProof) {
+        return None;
+    }
+    if audience.is_some_and(|audience| audience != payload.audience) {
+        return Some(SessionGrantIntrospectionOutcome {
+            active: false,
+            status: SessionGrantIntrospectionStatus::AudienceMismatch,
+            proof_required: false,
+            one_time_use_consumed: false,
+            grant: None,
+        });
+    }
+
+    let status = if payload.expires_at <= now {
+        SessionGrantIntrospectionStatus::Expired
+    } else {
+        SessionGrantIntrospectionStatus::Active
+    };
+    let active = status == SessionGrantIntrospectionStatus::Active;
+    let grant = (status != SessionGrantIntrospectionStatus::AudienceMismatch).then(|| {
+        SessionGrantIntrospectionGrant {
+            id: session_grant_jwt_hash(grant_jwt),
+            issuer: payload.issuer.clone(),
+            subject: payload.subject.clone(),
+            service_account_id: payload.service_account_id.clone(),
+            device_id: payload.device_id.clone(),
+            audience: payload.audience.clone(),
+            scopes: payload.scopes.clone(),
+            expires_at: payload.expires_at,
+            revoked_at: None,
+            revocation_ref: payload.revocation_ref.clone(),
+            session_public_key: payload.session_public_key.clone(),
+            cnf_jkt: payload.cnf.as_ref().map(|cnf| cnf.jkt.clone()),
+            proof_kind: payload.proof_kind,
+            scope_details: payload.scope_details.clone(),
+            freshness_state: active.then_some(FreshnessState::Fresh),
+        }
+    });
+
+    Some(SessionGrantIntrospectionOutcome {
+        active,
+        status,
+        proof_required: false,
+        one_time_use_consumed: false,
+        grant,
+    })
 }
 
 pub(crate) fn introspection_status(
@@ -163,6 +233,7 @@ pub async fn introspect_session_grant(
     let clock = crate::handlers::make_clock();
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
+    let key_store = depot.key_store()?;
     let mut repo = depot.repo().await?;
 
     let grant = if let Some(id) = body.id.as_deref() {
@@ -182,6 +253,19 @@ pub async fn introspect_session_grant(
     };
 
     let Some(grant) = grant else {
+        if let Some(grant_jwt) = body.grant_jwt.as_deref()
+            && let Some(outcome) = stateless_agent_introspection(
+                grant_jwt,
+                &key_store,
+                body.audience.as_deref(),
+                clock.now(),
+            )
+        {
+            repo.cancel()
+                .await
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+            return Ok(Json(outcome));
+        }
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;

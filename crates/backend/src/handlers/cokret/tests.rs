@@ -922,6 +922,75 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
 }
 
+#[tokio::test]
+async fn session_grant_http_introspection_accepts_stateless_agent_grant() {
+    setup();
+    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+    let bearer = "agent-session-grant-introspection";
+    state.cokret_config = config_with_static_session_grant_bearer(bearer);
+
+    let mut rng = ChaChaRng::seed_from_u64(0xa9e17);
+    let session_key = PrivateKey::generate_ed25519(&mut rng);
+    let session_public_key =
+        serde_json::to_string(&test_session_public_jwk(&session_key, "agent-session-key")).unwrap();
+    let audience = "did:web:local.host".to_owned();
+    let now = state.clock.now();
+    let scope_details = serde_json::json!({
+        "agent_principal_id": "did:web:agent.example",
+        "controller_did": "did:web:alice.example",
+        "audience": audience.clone(),
+        "resources": {
+            "realm_refs": ["ck:realm:team"],
+        },
+    });
+    let material = mint_agent_session_grant(
+        &state.url_builder,
+        &state.cokret_config,
+        &state.key_store,
+        "did:web:agent.example",
+        audience.clone(),
+        vec!["ck.agent.action:message.send".to_owned()],
+        "agent-runtime-dpop-jkt".to_owned(),
+        session_public_key.clone(),
+        scope_details.clone(),
+        now,
+        now + Duration::try_minutes(15).unwrap(),
+    )
+    .unwrap();
+
+    let response = state
+        .request(
+            Request::post("/_cokret/gate/account/session-grants/introspect")
+                .bearer(bearer)
+                .json(serde_json::json!({
+                    "grant_jwt": material.grant_jwt,
+                    "audience": audience,
+                })),
+        )
+        .await;
+
+    response.assert_status(StatusCode::OK);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["active"], true);
+    assert_eq!(body["status"], "active");
+    assert_eq!(body["proof_required"], false);
+    assert_eq!(body["grant"]["subject"], "did:web:agent.example");
+    assert_eq!(body["grant"]["device_id"], serde_json::Value::Null);
+    assert_eq!(body["grant"]["proof_kind"], "agent_key_proof");
+    assert_eq!(body["grant"]["scope_details"], scope_details);
+    assert_eq!(body["grant"]["freshness_state"], "fresh");
+    assert_eq!(body["grant"]["cnf_jkt"], "agent-runtime-dpop-jkt");
+    assert_eq!(body["grant"]["session_public_key"], session_public_key);
+    assert!(
+        body["grant"]["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("sha256:"))
+    );
+}
+
 /// `id` and `grant_jwt` are an exactly-one selector: rejecting both-missing
 /// AND both-present, rather than silently preferring `id`.
 #[tokio::test]

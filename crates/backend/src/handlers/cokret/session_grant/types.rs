@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
+use cokret_core::SessionGrantProofKind;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct SessionGrantMaterial {
@@ -50,6 +52,10 @@ pub struct SessionGrantPayload {
     /// any follow-up proof to recompute the same thumbprint.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cnf: Option<SessionGrantConfirmation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_kind: Option<SessionGrantProofKind>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub scope_details: Value,
     pub proof: SessionGrantProof,
 }
 
@@ -92,6 +98,10 @@ pub(crate) struct SessionGrantPayloadClaims {
     pub(crate) browser_session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cnf: Option<SessionGrantConfirmation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) proof_kind: Option<SessionGrantProofKind>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub(crate) scope_details: Value,
 }
 
 #[derive(Debug, Serialize)]
