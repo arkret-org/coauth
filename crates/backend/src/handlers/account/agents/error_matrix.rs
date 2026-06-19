@@ -6,7 +6,8 @@
 
 use chrono::{DateTime, Utc};
 use cokret_core::error::{
-    ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_PAIRING_REQUEST_EXPIRED,
+    ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_CAPABILITY_DENIED,
+    ERROR_CODE_PAIRING_REQUEST_EXPIRED, ERROR_CODE_POLICY_UNAVAILABLE, ERROR_CODE_POLICY_VIOLATION,
     ERROR_CODE_PROOF_INVALID, ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
     REASON_ACCOUNTABILITY_GRANT_MISSING,
 };
@@ -75,6 +76,15 @@ pub enum AgentAuthRejection {
     /// `ck.self.agent.command.provision` / `ck.self.agent.command.resume` per
     /// `operations↔error mapping` §0.8.
     AccountabilityGrantMissing,
+    /// `capability_denied` — an active capability/accountability grant did not
+    /// cover the requested agent session scope or resource selector.
+    CapabilityDenied,
+    /// `policy_violation` — Realm policy rejected the requested agent session
+    /// scope or narrowed it to an empty effective set.
+    PolicyViolation,
+    /// `policy_unavailable` — coauth could not obtain an authoritative Realm
+    /// policy projection for a resource-scoped agent session grant.
+    PolicyUnavailable,
 }
 
 impl AgentAuthRejection {
@@ -93,6 +103,9 @@ impl AgentAuthRejection {
             // `failed_precondition` HTTP rejection with `reason` carrying
             // this canonical string (see operations↔error mapping §0.8).
             Self::AccountabilityGrantMissing => REASON_ACCOUNTABILITY_GRANT_MISSING,
+            Self::CapabilityDenied => ERROR_CODE_CAPABILITY_DENIED,
+            Self::PolicyViolation => ERROR_CODE_POLICY_VIOLATION,
+            Self::PolicyUnavailable => ERROR_CODE_POLICY_UNAVAILABLE,
         }
     }
 
@@ -105,8 +118,12 @@ impl AgentAuthRejection {
             Self::VerificationMethodPrincipalMismatch
             | Self::PairingRequestExpired
             | Self::ProofInvalid => http::StatusCode::UNAUTHORIZED,
-            Self::AgentPaused | Self::AgentDeactivated => http::StatusCode::FORBIDDEN,
+            Self::AgentPaused
+            | Self::AgentDeactivated
+            | Self::CapabilityDenied
+            | Self::PolicyViolation => http::StatusCode::FORBIDDEN,
             Self::AccountabilityGrantMissing => http::StatusCode::BAD_REQUEST,
+            Self::PolicyUnavailable => http::StatusCode::SERVICE_UNAVAILABLE,
         }
     }
 
