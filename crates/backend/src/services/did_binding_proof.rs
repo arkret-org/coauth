@@ -87,7 +87,9 @@ use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::services::did_resolver::{DidResolveError, DidResolverService};
+use crate::services::did_resolver::{
+    DidResolution, DidResolutionIdentityFactRejection, DidResolveError, DidResolverService,
+};
 
 pub const DID_BINDING_CONTROL_PROOF_SCHEMA: &str = "ck.schema.did_binding_control_proof.v1";
 
@@ -136,6 +138,9 @@ pub enum DidBindingProofError {
 
     #[error("DID document has no verificationMethod entries")]
     NoVerificationKey,
+
+    #[error("DID resolver result is not acceptable as a full identity fact: {0:?}")]
+    ResolverNotFullIdentityFact(DidResolutionIdentityFactRejection),
 
     #[error("control_proof JWS header is missing a verificationMethod kid")]
     MissingVerificationMethod,
@@ -221,6 +226,15 @@ pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofErr
     Ok(trimmed.to_owned())
 }
 
+fn ensure_full_identity_fact_resolution(
+    resolution: &DidResolution,
+) -> Result<(), DidResolutionIdentityFactRejection> {
+    match resolution.identity_fact_rejection() {
+        Some(rejection) => Err(rejection),
+        None => Ok(()),
+    }
+}
+
 /// Validate a `control_proof` JWS against the resolved DID document and
 /// the requested binding statement.
 ///
@@ -300,6 +314,8 @@ pub async fn validate_control_proof(
             account_did,
         )
         .await?;
+    ensure_full_identity_fact_resolution(&resolution)
+        .map_err(DidBindingProofError::ResolverNotFullIdentityFact)?;
 
     let verification_methods = &resolution.document.verification_method;
     if verification_methods.is_empty() {
@@ -620,6 +636,9 @@ pub enum VerificationProofError {
     Resolve(#[from] DidResolveError),
     #[error("DID document has no verificationMethod entries")]
     NoVerificationKey,
+
+    #[error("DID resolver result is not acceptable as a full identity fact: {0:?}")]
+    ResolverNotFullIdentityFact(DidResolutionIdentityFactRejection),
     #[error("JWS header is missing a verificationMethod kid")]
     MissingVerificationMethod,
     #[error("JWS alg must be EdDSA, got {0}")]
@@ -744,6 +763,8 @@ pub async fn verify_verification_service_proof(
             &claims.iss,
         )
         .await?;
+    ensure_full_identity_fact_resolution(&resolution)
+        .map_err(VerificationProofError::ResolverNotFullIdentityFact)?;
 
     let verification_methods = &resolution.document.verification_method;
     if verification_methods.is_empty() {
@@ -774,6 +795,53 @@ mod tests {
             iat,
             exp: iat + chrono::Duration::seconds(MAX_FRESHNESS_SECS),
         }
+    }
+
+    fn resolution_with_identity_fact_rejection(
+        rejection: DidResolutionIdentityFactRejection,
+    ) -> DidResolution {
+        DidResolution {
+            document: crate::handlers::cokret::DidDocument {
+                id: "did:webvh:ztest:resolver.example:users:alice".to_owned(),
+                also_known_as: Vec::new(),
+                verification_method: Vec::new(),
+                authentication: Vec::new(),
+                assertion_method: Vec::new(),
+                service: Vec::new(),
+                metadata: None,
+            },
+            source: crate::services::did_resolver::DidResolutionSource::DelegatedResolver,
+            verified_local_binding: false,
+            method_evidence: serde_json::json!({"resolver_state": "webvh_cache_only_degraded"}),
+            identity_fact_rejection: Some(rejection),
+        }
+    }
+
+    #[test]
+    fn degraded_resolution_cannot_back_full_identity_or_verification_facts() {
+        let resolution = resolution_with_identity_fact_rejection(
+            DidResolutionIdentityFactRejection::CacheOnlyDegraded,
+        );
+
+        let binding_err = ensure_full_identity_fact_resolution(&resolution)
+            .map_err(DidBindingProofError::ResolverNotFullIdentityFact)
+            .expect_err("degraded resolver must not back DID binding proof success");
+        assert!(matches!(
+            binding_err,
+            DidBindingProofError::ResolverNotFullIdentityFact(
+                DidResolutionIdentityFactRejection::CacheOnlyDegraded
+            )
+        ));
+
+        let verification_err = ensure_full_identity_fact_resolution(&resolution)
+            .map_err(VerificationProofError::ResolverNotFullIdentityFact)
+            .expect_err("degraded resolver must not back verification-service proof success");
+        assert!(matches!(
+            verification_err,
+            VerificationProofError::ResolverNotFullIdentityFact(
+                DidResolutionIdentityFactRejection::CacheOnlyDegraded
+            )
+        ));
     }
 
     #[test]

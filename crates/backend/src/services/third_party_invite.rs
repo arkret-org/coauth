@@ -679,6 +679,7 @@ async fn verify_subject_proof(
                 "could not resolve inviter DID: {e}"
             ))
         })?;
+    ensure_subject_proof_identity_fact(&resolution)?;
 
     let keys: Vec<_> = resolution
         .document
@@ -701,6 +702,18 @@ async fn verify_subject_proof(
     Ok(claims.clone())
 }
 
+fn ensure_subject_proof_identity_fact(
+    resolution: &crate::services::did_resolver::DidResolution,
+) -> Result<(), InviteVerificationError> {
+    if let Some(rejection) = resolution.identity_fact_rejection() {
+        return Err(InviteVerificationError::SubjectProofInvalid(format!(
+            "did_resolver_not_full_identity_fact: {}",
+            rejection.as_str()
+        )));
+    }
+    Ok(())
+}
+
 /// Map a verification-service-proof error onto the public
 /// [`InviteVerificationError`] enum. `proof_expired` is split out so
 /// the handler can return `410 Gone` instead of `401`.
@@ -710,6 +723,12 @@ fn map_verification_service_error(
     use crate::services::did_binding_proof::VerificationProofError as E;
     match err {
         E::Expired(msg) => InviteVerificationError::ProofExpired(msg),
+        E::ResolverNotFullIdentityFact(rejection) => {
+            InviteVerificationError::VerificationProofInvalid(format!(
+                "did_resolver_not_full_identity_fact: {}",
+                rejection.as_str()
+            ))
+        }
         other => InviteVerificationError::VerificationProofInvalid(other.to_string()),
     }
 }
@@ -986,6 +1005,46 @@ mod tests {
     fn subject_proof_kind_constant_is_stable() {
         // Tripwire: any rename of the kind discriminator is a wire break.
         assert_eq!(SUBJECT_PROOF_KIND, "ck.invite.subject_proof.v1");
+    }
+
+    #[test]
+    fn degraded_resolution_cannot_back_invite_capability_proofs() {
+        let resolution = crate::services::did_resolver::DidResolution {
+            document: crate::handlers::cokret::DidDocument {
+                id: "did:webvh:ztest:resolver.example:users:alice".to_owned(),
+                also_known_as: Vec::new(),
+                verification_method: Vec::new(),
+                authentication: Vec::new(),
+                assertion_method: Vec::new(),
+                service: Vec::new(),
+                metadata: None,
+            },
+            source: crate::services::did_resolver::DidResolutionSource::DelegatedResolver,
+            verified_local_binding: false,
+            method_evidence: serde_json::json!({"resolver_state": "webvh_cache_only_degraded"}),
+            identity_fact_rejection: Some(
+                crate::services::did_resolver::DidResolutionIdentityFactRejection::CacheOnlyDegraded,
+            ),
+        };
+
+        let subject_err = ensure_subject_proof_identity_fact(&resolution)
+            .expect_err("degraded resolver must not back subject proof success");
+        assert!(matches!(
+            subject_err,
+            InviteVerificationError::SubjectProofInvalid(ref msg)
+                if msg.contains("cache_only_degraded")
+        ));
+
+        let verification_err = map_verification_service_error(
+            crate::services::did_binding_proof::VerificationProofError::ResolverNotFullIdentityFact(
+                crate::services::did_resolver::DidResolutionIdentityFactRejection::CacheOnlyDegraded,
+            ),
+        );
+        assert!(matches!(
+            verification_err,
+            InviteVerificationError::VerificationProofInvalid(ref msg)
+                if msg.contains("cache_only_degraded")
+        ));
     }
 }
 

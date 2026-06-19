@@ -309,6 +309,12 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
         | DidBindingProofError::NonceReplayed => {
             AppError::bad_request(format!("control_proof_invalid: {error}"))
         }
+        DidBindingProofError::ResolverNotFullIdentityFact(rejection) => {
+            AppError::bad_request(format!(
+                "control_proof_invalid: did_resolver_not_full_identity_fact: {}",
+                rejection.as_str()
+            ))
+        }
         DidBindingProofError::Resolve(inner) => {
             AppError::bad_request(format!("did_resolver_failed: {inner}"))
         }
