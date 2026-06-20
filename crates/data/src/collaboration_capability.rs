@@ -182,6 +182,13 @@ impl CapabilityCategory {
 pub struct CollaborationCapabilityGrant {
     /// ULID of the grant row itself.
     pub id: String,
+    /// Standard protocol grant id materialized by the soland fan-out.
+    pub capability_grant_id: String,
+    /// Standard `ck.capability.grant` event id queued for soland ingestion.
+    pub grant_event_id: String,
+    /// Standard `ck.capability.revoke` event id, when revocation is queued.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revoke_event_id: Option<String>,
     /// Subject (account or DID) that holds the grant.
     pub subject: String,
     /// Realm the grant is scoped to.
@@ -201,6 +208,10 @@ pub struct CollaborationCapabilityGrant {
     /// Optional revocation timestamp; `None` = non-revoked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revoked_at: Option<DateTime<Utc>>,
+    /// Canonical digest of the queued grant fan-out payload.
+    pub grant_raw_payload_digest: String,
+    /// Idempotency key used for the grant fan-out job.
+    pub grant_fanout_idempotency_key: String,
 }
 
 #[cfg(test)]

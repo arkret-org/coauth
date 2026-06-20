@@ -153,6 +153,9 @@ CREATE TABLE public.circle_capability_grants (
 
 CREATE TABLE public.collaboration_capability_grants (
     id uuid NOT NULL,
+    capability_grant_id text NOT NULL,
+    grant_event_id text NOT NULL,
+    revoke_event_id text,
     subject text NOT NULL,
     realm_id text NOT NULL,
     action text NOT NULL,
@@ -161,6 +164,8 @@ CREATE TABLE public.collaboration_capability_grants (
     granted_by text NOT NULL,
     granted_at timestamp with time zone NOT NULL,
     revoked_at timestamp with time zone,
+    grant_raw_payload_digest text NOT NULL,
+    grant_fanout_idempotency_key text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
@@ -1123,6 +1128,12 @@ CREATE INDEX circle_capability_grants_revoked_idx ON public.circle_capability_gr
 
 CREATE UNIQUE INDEX collaboration_capability_grants_active_fingerprint_idx ON public.collaboration_capability_grants USING btree (subject, realm_id, action) WHERE (revoked_at IS NULL);
 
+CREATE UNIQUE INDEX collaboration_capability_grants_capability_grant_id_idx ON public.collaboration_capability_grants USING btree (capability_grant_id);
+
+CREATE UNIQUE INDEX collaboration_capability_grants_grant_event_id_idx ON public.collaboration_capability_grants USING btree (grant_event_id);
+
+CREATE UNIQUE INDEX collaboration_capability_grants_revoke_event_id_idx ON public.collaboration_capability_grants USING btree (revoke_event_id) WHERE (revoke_event_id IS NOT NULL);
+
 CREATE INDEX collaboration_capability_grants_active_realm_subject_idx ON public.collaboration_capability_grants USING btree (realm_id, subject, granted_at) WHERE (revoked_at IS NULL);
 
 CREATE INDEX collaboration_capability_grants_revoked_idx ON public.collaboration_capability_grants USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
@@ -1417,4 +1428,3 @@ ALTER TABLE ONLY public.workflow_events
 
 ALTER TABLE ONLY public.workflow_steps
     ADD CONSTRAINT workflow_steps_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;
-

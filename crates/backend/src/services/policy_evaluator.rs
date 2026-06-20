@@ -640,6 +640,9 @@ mod tests {
     fn collaboration_grant(action: CollaborationCapabilityAction) -> CollaborationCapabilityGrant {
         CollaborationCapabilityGrant {
             id: "01HY0000000000000000000000".to_owned(),
+            capability_grant_id: "ck:grant:01904100-0000-7000-8000-000000000010".to_owned(),
+            grant_event_id: "ck:event:01904100-0000-7000-8000-000000000011".to_owned(),
+            revoke_event_id: None,
             subject: "did:web:alice.example".to_owned(),
             realm_id: "ck:realm:01904100-0000-7000-8000-000000000001".to_owned(),
             action,
@@ -648,6 +651,10 @@ mod tests {
             granted_by: "user:admin".to_owned(),
             granted_at: Utc::now(),
             revoked_at: None,
+            grant_raw_payload_digest: format!("sha256:{}", "a".repeat(64)),
+            grant_fanout_idempotency_key:
+                "coauth:collaboration_capability_grant:01904100-0000-7000-8000-000000000010"
+                    .to_owned(),
         }
     }
 

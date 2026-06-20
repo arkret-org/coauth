@@ -152,6 +152,9 @@ diesel::table! {
 diesel::table! {
     collaboration_capability_grants (id) {
         id -> Uuid,
+        capability_grant_id -> Text,
+        grant_event_id -> Text,
+        revoke_event_id -> Nullable<Text>,
         subject -> Text,
         realm_id -> Text,
         action -> Text,
@@ -160,6 +163,8 @@ diesel::table! {
         granted_by -> Text,
         granted_at -> Timestamptz,
         revoked_at -> Nullable<Timestamptz>,
+        grant_raw_payload_digest -> Text,
+        grant_fanout_idempotency_key -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }

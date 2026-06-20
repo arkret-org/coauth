@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::collaboration_capability::{
     CollaborationCapabilityAction, CollaborationCapabilityGrant,
-    CollaborationCapabilityGrantRepository, NewCollaborationCapabilityGrant,
+    CollaborationCapabilityGrantRepository, CollaborationCapabilityRevokeFanout,
+    NewCollaborationCapabilityGrant,
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
@@ -33,6 +34,9 @@ impl<'c> PgCollaborationCapabilityGrantRepository<'c> {
 #[diesel(table_name = collaboration_capability_grants)]
 struct CollaborationCapabilityGrantRow {
     id: Uuid,
+    capability_grant_id: String,
+    grant_event_id: String,
+    revoke_event_id: Option<String>,
     subject: String,
     realm_id: String,
     action: String,
@@ -41,6 +45,8 @@ struct CollaborationCapabilityGrantRow {
     granted_by: String,
     granted_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
+    grant_raw_payload_digest: String,
+    grant_fanout_idempotency_key: String,
 }
 
 impl TryFrom<CollaborationCapabilityGrantRow> for CollaborationCapabilityGrant {
@@ -60,6 +66,9 @@ impl TryFrom<CollaborationCapabilityGrantRow> for CollaborationCapabilityGrant {
 
         Ok(Self {
             id: id.to_string(),
+            capability_grant_id: value.capability_grant_id,
+            grant_event_id: value.grant_event_id,
+            revoke_event_id: value.revoke_event_id,
             subject: value.subject,
             realm_id: value.realm_id,
             action,
@@ -68,6 +77,8 @@ impl TryFrom<CollaborationCapabilityGrantRow> for CollaborationCapabilityGrant {
             granted_by: value.granted_by,
             granted_at: value.granted_at,
             revoked_at: value.revoked_at,
+            grant_raw_payload_digest: value.grant_raw_payload_digest,
+            grant_fanout_idempotency_key: value.grant_fanout_idempotency_key,
         })
     }
 }
@@ -76,6 +87,8 @@ impl TryFrom<CollaborationCapabilityGrantRow> for CollaborationCapabilityGrant {
 #[diesel(table_name = collaboration_capability_grants)]
 struct InsertableCollaborationCapabilityGrant {
     id: Uuid,
+    capability_grant_id: String,
+    grant_event_id: String,
     subject: String,
     realm_id: String,
     action: String,
@@ -83,6 +96,8 @@ struct InsertableCollaborationCapabilityGrant {
     approval_evidence_ref: Option<String>,
     granted_by: String,
     granted_at: DateTime<Utc>,
+    grant_raw_payload_digest: String,
+    grant_fanout_idempotency_key: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -102,6 +117,8 @@ impl CollaborationCapabilityGrantRepository for PgCollaborationCapabilityGrantRe
         let id = new_id(now, rng);
         let row = InsertableCollaborationCapabilityGrant {
             id: Uuid::from(id),
+            capability_grant_id: params.capability_grant_id,
+            grant_event_id: params.grant_event_id,
             subject: params.subject,
             realm_id: params.realm_id,
             action: params.action.to_string(),
@@ -109,6 +126,8 @@ impl CollaborationCapabilityGrantRepository for PgCollaborationCapabilityGrantRe
             approval_evidence_ref: params.approval_evidence_ref,
             granted_by: params.granted_by,
             granted_at: now,
+            grant_raw_payload_digest: params.grant_raw_payload_digest,
+            grant_fanout_idempotency_key: params.grant_fanout_idempotency_key,
             created_at: now,
             updated_at: now,
         };
@@ -120,6 +139,9 @@ impl CollaborationCapabilityGrantRepository for PgCollaborationCapabilityGrantRe
 
         Ok(CollaborationCapabilityGrant {
             id: id.to_string(),
+            capability_grant_id: row.capability_grant_id,
+            grant_event_id: row.grant_event_id,
+            revoke_event_id: None,
             subject: row.subject,
             realm_id: row.realm_id,
             action: params.action,
@@ -128,6 +150,8 @@ impl CollaborationCapabilityGrantRepository for PgCollaborationCapabilityGrantRe
             granted_by: row.granted_by,
             granted_at: row.granted_at,
             revoked_at: None,
+            grant_raw_payload_digest: row.grant_raw_payload_digest,
+            grant_fanout_idempotency_key: row.grant_fanout_idempotency_key,
         })
     }
 
@@ -180,6 +204,7 @@ impl CollaborationCapabilityGrantRepository for PgCollaborationCapabilityGrantRe
         &mut self,
         clock: &dyn Clock,
         grant_id: &str,
+        fanout: CollaborationCapabilityRevokeFanout,
     ) -> Result<Option<CollaborationCapabilityGrant>, Self::Error> {
         let Ok(id) = grant_id.parse::<Ulid>() else {
             return Ok(None);
@@ -193,6 +218,7 @@ impl CollaborationCapabilityGrantRepository for PgCollaborationCapabilityGrantRe
                 .filter(collaboration_capability_grants::revoked_at.is_null()),
         )
         .set((
+            collaboration_capability_grants::revoke_event_id.eq(Some(fanout.revoke_event_id)),
             collaboration_capability_grants::revoked_at.eq(Some(now)),
             collaboration_capability_grants::updated_at.eq(now),
         ))
@@ -221,12 +247,16 @@ mod tests {
 
     fn sample(label: &str) -> NewCollaborationCapabilityGrant {
         NewCollaborationCapabilityGrant {
+            capability_grant_id: format!("ck:grant:{label}"),
+            grant_event_id: format!("ck:event:{label}"),
             subject: format!("did:web:{label}.example"),
             realm_id: format!("ck:realm:{label}"),
             action: CollaborationCapabilityAction::PinAdd,
             expires_at: None,
             approval_evidence_ref: None,
             granted_by: "did:web:admin.example".to_owned(),
+            grant_raw_payload_digest: format!("sha256:{}", "a".repeat(64)),
+            grant_fanout_idempotency_key: format!("coauth:collaboration_capability_grant:{label}"),
         }
     }
 
@@ -257,7 +287,13 @@ mod tests {
         assert!(active.iter().any(|row| row.id == grant.id));
         let revoked = repo
             .collaboration_capability_grant()
-            .revoke_by_id(&clock, &grant.id)
+            .revoke_by_id(
+                &clock,
+                &grant.id,
+                CollaborationCapabilityRevokeFanout {
+                    revoke_event_id: format!("ck:event:{label}-revoke"),
+                },
+            )
             .await
             .unwrap()
             .expect("active grant can be revoked");

@@ -143,8 +143,8 @@ pub use self::circle_capability::{
 pub use self::clock::{Clock, SystemClock};
 pub use self::collaboration_capability::{
     CapabilityCategory, CollaborationCapabilityAction, CollaborationCapabilityGrant,
-    CollaborationCapabilityGrantRepository, NewCollaborationCapabilityGrant,
-    ParseCollaborationCapabilityActionError,
+    CollaborationCapabilityGrantRepository, CollaborationCapabilityRevokeFanout,
+    NewCollaborationCapabilityGrant, ParseCollaborationCapabilityActionError,
 };
 pub use self::notification::{
     NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,

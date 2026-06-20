@@ -13,6 +13,10 @@ use crate::repository_impl;
 /// Parameters used to create a durable collaboration capability grant.
 #[derive(Debug, Clone)]
 pub struct NewCollaborationCapabilityGrant {
+    /// Standard protocol grant id that soland will materialize.
+    pub capability_grant_id: String,
+    /// Standard `ck.capability.grant` event id for reducer ingestion.
+    pub grant_event_id: String,
     /// Subject (account or DID) that receives the grant.
     pub subject: String,
     /// Realm the grant is scoped to.
@@ -25,6 +29,17 @@ pub struct NewCollaborationCapabilityGrant {
     pub approval_evidence_ref: Option<String>,
     /// Admin/service actor that created the grant.
     pub granted_by: String,
+    /// Canonical digest of the queued fan-out payload.
+    pub grant_raw_payload_digest: String,
+    /// Idempotency key used for soland fan-out.
+    pub grant_fanout_idempotency_key: String,
+}
+
+/// Parameters recorded when revocation queues a standard revoke event.
+#[derive(Debug, Clone)]
+pub struct CollaborationCapabilityRevokeFanout {
+    /// Standard `ck.capability.revoke` event id.
+    pub revoke_event_id: String,
 }
 
 /// Repository for durable collaboration capability grants.
@@ -58,6 +73,7 @@ pub trait CollaborationCapabilityGrantRepository: Send + Sync {
         &mut self,
         clock: &dyn Clock,
         grant_id: &str,
+        fanout: CollaborationCapabilityRevokeFanout,
     ) -> Result<Option<CollaborationCapabilityGrant>, Self::Error>;
 }
 
@@ -79,5 +95,6 @@ repository_impl!(CollaborationCapabilityGrantRepository:
         &mut self,
         clock: &dyn Clock,
         grant_id: &str,
+        fanout: CollaborationCapabilityRevokeFanout,
     ) -> Result<Option<CollaborationCapabilityGrant>, Self::Error>;
 );
