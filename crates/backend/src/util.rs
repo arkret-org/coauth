@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use anyhow::Context;
 use coauth_config::{
-    AccountConfig, BrandingConfig, CaptchaConfig, DatabaseConfig, EmailConfig, EmailProviderConfig,
-    EmailSmtpMode, ExperimentalConfig, HttpConfig, PasswordsConfig, PolicyConfig, PolicyEngine,
-    SmsConfig, SmsProviderConfig, TemplatesConfig,
+    AccountConfig, BrandingConfig, CaptchaConfig, CokretConfig, DatabaseConfig, EmailConfig,
+    EmailProviderConfig, EmailSmtpMode, ExperimentalConfig, HttpConfig, PasswordsConfig,
+    PolicyConfig, PolicyEngine, SmsConfig, SmsProviderConfig, TemplatesConfig,
 };
 use coauth_data::{
     BoxRepositoryFactory, RepositoryAccess, RepositoryFactory, SessionExpirationConfig,
@@ -689,6 +689,8 @@ pub async fn load_policy_factory_dynamic_data(
 pub fn principal_server_connection_from_config(
     site_config: &SiteConfig,
     repository_factory: BoxRepositoryFactory,
+    cokret_config: CokretConfig,
+    http_client: reqwest::Client,
 ) -> (Arc<dyn PrincipalServerAdmin>, ConnectorRegistry) {
     let registry = ConnectorRegistry::new();
 
@@ -696,6 +698,8 @@ pub fn principal_server_connection_from_config(
         crate::services::principal_facade::DbPrincipalServerAdmin::new(
             site_config.server_name.clone(),
             repository_factory,
+            cokret_config,
+            http_client,
         ),
     );
     (admin, registry)

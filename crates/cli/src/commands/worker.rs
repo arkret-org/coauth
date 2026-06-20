@@ -65,6 +65,8 @@ impl Options {
         let (principal_conn, _registry) = principal_server_connection_from_config(
             &site_cfg,
             PgRepositoryFactory::new(db_pool.clone()).boxed(),
+            app_cfg.cokret.clone(),
+            coauth_backend::reqwest_client(),
         );
 
         drop(app_cfg);

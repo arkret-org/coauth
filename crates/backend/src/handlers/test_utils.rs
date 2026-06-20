@@ -295,6 +295,8 @@ impl TestState {
         let principal_server_admin = Arc::new(DbPrincipalServerAdmin::new(
             site_config.server_name.clone(),
             PgRepositoryFactory::new(pool.clone()).boxed(),
+            CokretConfig::default(),
+            crate::reqwest_client(),
         ));
 
         let clock = Arc::new(MockClock::default());

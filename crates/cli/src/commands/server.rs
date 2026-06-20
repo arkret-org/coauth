@@ -156,6 +156,8 @@ impl Options {
         let (principal_server_admin, connector_registry) = principal_server_connection_from_config(
             &site_config,
             PgRepositoryFactory::new(pool.clone()).boxed(),
+            config.cokret.clone(),
+            http_client.clone(),
         );
 
         if !self.no_worker {
