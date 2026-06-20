@@ -249,6 +249,7 @@ pub(super) async fn ensure_soland_account_registered(
                     .map_err(|error| format!("device_id is invalid for account register: {error}"))
             })
             .transpose()?,
+        policy_evidence: None,
         proof: None,
     };
     let response =

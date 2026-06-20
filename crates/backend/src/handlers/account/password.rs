@@ -11,7 +11,8 @@ use super::{
 };
 use crate::handlers::account::service::password::{ChangePasswordError, change_password};
 use crate::handlers::account::service::recovery::{
-    CompleteAccountRecoveryError, ResendAccountRecoveryByTicketError, complete_account_recovery,
+    AccountRecoveryCompletion, AccountRecoveryTrustBoundary, CompleteAccountRecoveryError,
+    ResendAccountRecoveryByTicketError, complete_account_recovery,
     resend_account_recovery_by_ticket,
 };
 
@@ -27,6 +28,54 @@ pub struct SetPasswordInput {
 #[derive(Serialize, ToSchema)]
 pub struct SetPasswordOutcome {
     pub status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust_boundary: Option<PasswordRecoveryTrustBoundaryOutcome>,
+}
+
+impl SetPasswordOutcome {
+    fn status(status: &'static str) -> Self {
+        Self {
+            status,
+            trust_boundary: None,
+        }
+    }
+
+    fn recovered(completion: AccountRecoveryCompletion) -> Self {
+        Self {
+            status: "ALLOWED",
+            trust_boundary: Some(completion.trust_boundary.into()),
+        }
+    }
+
+    fn device_trust_recovery_required() -> Self {
+        Self {
+            status: "DEVICE_TRUST_RECOVERY_REQUIRED",
+            trust_boundary: Some(AccountRecoveryTrustBoundary::password_only().into()),
+        }
+    }
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct PasswordRecoveryTrustBoundaryOutcome {
+    pub recovery_credential_kind: &'static str,
+    pub account_password_reset: bool,
+    pub device_trust_reset: bool,
+    pub cross_signing_reset: bool,
+    pub trusted_recovery_service_used: bool,
+    pub device_trust_recovery_required: bool,
+}
+
+impl From<AccountRecoveryTrustBoundary> for PasswordRecoveryTrustBoundaryOutcome {
+    fn from(value: AccountRecoveryTrustBoundary) -> Self {
+        Self {
+            recovery_credential_kind: value.recovery_credential_kind,
+            account_password_reset: value.account_password_reset,
+            device_trust_reset: value.device_trust_reset,
+            cross_signing_reset: value.cross_signing_reset,
+            trusted_recovery_service_used: value.trusted_recovery_service_used,
+            device_trust_recovery_required: value.device_trust_recovery_required,
+        }
+    }
 }
 
 #[endpoint]
@@ -70,28 +119,26 @@ pub async fn set_password(
     )
     .await
     {
-        Ok(()) => Ok(Json(SetPasswordOutcome { status: "ALLOWED" })),
-        Err(ChangePasswordError::PasswordDisabled) => Ok(Json(SetPasswordOutcome {
-            status: "PASSWORD_CHANGES_DISABLED",
-        })),
-        Err(ChangePasswordError::PasswordTooWeak) => Ok(Json(SetPasswordOutcome {
-            status: "INVALID_NEW_PASSWORD",
-        })),
-        Err(ChangePasswordError::UserNotFound) => Ok(Json(SetPasswordOutcome {
-            status: "NOT_FOUND",
-        })),
-        Err(ChangePasswordError::PasswordChangesDisabled) => Ok(Json(SetPasswordOutcome {
-            status: "PASSWORD_CHANGES_DISABLED",
-        })),
-        Err(ChangePasswordError::NoCurrentPassword) => Ok(Json(SetPasswordOutcome {
-            status: "NO_CURRENT_PASSWORD",
-        })),
+        Ok(()) => Ok(Json(SetPasswordOutcome::status("ALLOWED"))),
+        Err(ChangePasswordError::PasswordDisabled) => Ok(Json(SetPasswordOutcome::status(
+            "PASSWORD_CHANGES_DISABLED",
+        ))),
+        Err(ChangePasswordError::PasswordTooWeak) => {
+            Ok(Json(SetPasswordOutcome::status("INVALID_NEW_PASSWORD")))
+        }
+        Err(ChangePasswordError::UserNotFound) => Ok(Json(SetPasswordOutcome::status("NOT_FOUND"))),
+        Err(ChangePasswordError::PasswordChangesDisabled) => Ok(Json(SetPasswordOutcome::status(
+            "PASSWORD_CHANGES_DISABLED",
+        ))),
+        Err(ChangePasswordError::NoCurrentPassword) => {
+            Ok(Json(SetPasswordOutcome::status("NO_CURRENT_PASSWORD")))
+        }
         Err(ChangePasswordError::CurrentPasswordRequired) => Err(RouteError::BadRequest(
             "current_password required for non-admins".into(),
         )),
-        Err(ChangePasswordError::WrongPassword) => Ok(Json(SetPasswordOutcome {
-            status: "WRONG_PASSWORD",
-        })),
+        Err(ChangePasswordError::WrongPassword) => {
+            Ok(Json(SetPasswordOutcome::status("WRONG_PASSWORD")))
+        }
         Err(ChangePasswordError::Password(error)) => Err(RouteError::Internal(error.into())),
         Err(ChangePasswordError::Repository(error)) => Err(error.into()),
     }
@@ -165,6 +212,24 @@ pub async fn get_recovery_ticket_status(
 pub struct SetPasswordByRecoveryInput {
     pub ticket: String,
     pub new_password: String,
+    #[serde(default)]
+    pub requested_trust_boundary: PasswordRecoveryTrustBoundaryRequest,
+}
+
+#[derive(Default, Deserialize, ToSchema)]
+pub struct PasswordRecoveryTrustBoundaryRequest {
+    #[serde(default)]
+    pub device_trust_reset: bool,
+    #[serde(default)]
+    pub cross_signing_reset: bool,
+    #[serde(default)]
+    pub trusted_recovery_service: bool,
+}
+
+impl PasswordRecoveryTrustBoundaryRequest {
+    fn requires_identity_recovery(&self) -> bool {
+        self.device_trust_reset || self.cross_signing_reset || self.trusted_recovery_service
+    }
 }
 
 #[endpoint]
@@ -176,6 +241,10 @@ pub async fn set_password_by_recovery(
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
+
+    if input.requested_trust_boundary.requires_identity_recovery() {
+        return Ok(Json(SetPasswordOutcome::device_trust_recovery_required()));
+    }
 
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
@@ -196,34 +265,34 @@ pub async fn set_password_by_recovery(
     )
     .await
     {
-        Ok(()) => Ok(Json(SetPasswordOutcome { status: "ALLOWED" })),
-        Err(CompleteAccountRecoveryError::PasswordDisabled) => Ok(Json(SetPasswordOutcome {
-            status: "PASSWORD_CHANGES_DISABLED",
-        })),
-        Err(CompleteAccountRecoveryError::PasswordTooWeak) => Ok(Json(SetPasswordOutcome {
-            status: "INVALID_NEW_PASSWORD",
-        })),
-        Err(CompleteAccountRecoveryError::TicketNotFound) => Ok(Json(SetPasswordOutcome {
-            status: "NO_SUCH_RECOVERY_TICKET",
-        })),
+        Ok(completion) => Ok(Json(SetPasswordOutcome::recovered(completion))),
+        Err(CompleteAccountRecoveryError::PasswordDisabled) => Ok(Json(
+            SetPasswordOutcome::status("PASSWORD_CHANGES_DISABLED"),
+        )),
+        Err(CompleteAccountRecoveryError::PasswordTooWeak) => {
+            Ok(Json(SetPasswordOutcome::status("INVALID_NEW_PASSWORD")))
+        }
+        Err(CompleteAccountRecoveryError::TicketNotFound) => {
+            Ok(Json(SetPasswordOutcome::status("NO_SUCH_RECOVERY_TICKET")))
+        }
         Err(CompleteAccountRecoveryError::SessionNotFound) => Err(RouteError::Internal(Box::new(
             std::io::Error::other("Could not load recovery session"),
         ))),
-        Err(CompleteAccountRecoveryError::AlreadyConsumed) => Ok(Json(SetPasswordOutcome {
-            status: "RECOVERY_TICKET_ALREADY_USED",
-        })),
-        Err(CompleteAccountRecoveryError::TicketExpired) => Ok(Json(SetPasswordOutcome {
-            status: "EXPIRED_RECOVERY_TICKET",
-        })),
+        Err(CompleteAccountRecoveryError::AlreadyConsumed) => Ok(Json(SetPasswordOutcome::status(
+            "RECOVERY_TICKET_ALREADY_USED",
+        ))),
+        Err(CompleteAccountRecoveryError::TicketExpired) => {
+            Ok(Json(SetPasswordOutcome::status("EXPIRED_RECOVERY_TICKET")))
+        }
         Err(CompleteAccountRecoveryError::EmailNotFound) => Err(RouteError::Internal(Box::new(
             std::io::Error::other("Unknown email for recovery ticket"),
         ))),
         Err(CompleteAccountRecoveryError::UserNotFound) => Err(RouteError::Internal(Box::new(
             std::io::Error::other("Invalid user for recovery ticket"),
         ))),
-        Err(CompleteAccountRecoveryError::AccountLocked) => Ok(Json(SetPasswordOutcome {
-            status: "ACCOUNT_LOCKED",
-        })),
+        Err(CompleteAccountRecoveryError::AccountLocked) => {
+            Ok(Json(SetPasswordOutcome::status("ACCOUNT_LOCKED")))
+        }
         Err(CompleteAccountRecoveryError::Password(error)) => {
             Err(RouteError::Internal(error.into()))
         }
@@ -313,6 +382,7 @@ mod tests {
     use hyper::{Request, StatusCode};
     use ulid::Ulid;
 
+    use super::*;
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
     async fn create_recovery_ticket(
@@ -364,6 +434,54 @@ mod tests {
 
     fn has_database_url() -> bool {
         std::env::var_os("DATABASE_URL").is_some()
+    }
+
+    #[test]
+    fn recovery_success_outcome_serializes_password_only_trust_boundary() {
+        let outcome = SetPasswordOutcome::recovered(AccountRecoveryCompletion::password_only());
+        let body = serde_json::to_value(outcome).unwrap();
+        let boundary = &body["trust_boundary"];
+
+        assert_eq!(body["status"], "ALLOWED");
+        assert_eq!(
+            boundary["recovery_credential_kind"],
+            "email_recovery_ticket"
+        );
+        assert_eq!(boundary["account_password_reset"], true);
+        assert_eq!(boundary["device_trust_reset"], false);
+        assert_eq!(boundary["cross_signing_reset"], false);
+        assert_eq!(boundary["trusted_recovery_service_used"], false);
+        assert_eq!(boundary["device_trust_recovery_required"], true);
+    }
+
+    #[test]
+    fn requested_trust_boundary_flags_require_identity_recovery() {
+        assert!(
+            !PasswordRecoveryTrustBoundaryRequest::default().requires_identity_recovery(),
+            "plain password recovery stays account-password scoped"
+        );
+
+        assert!(
+            PasswordRecoveryTrustBoundaryRequest {
+                device_trust_reset: true,
+                ..Default::default()
+            }
+            .requires_identity_recovery()
+        );
+        assert!(
+            PasswordRecoveryTrustBoundaryRequest {
+                cross_signing_reset: true,
+                ..Default::default()
+            }
+            .requires_identity_recovery()
+        );
+        assert!(
+            PasswordRecoveryTrustBoundaryRequest {
+                trusted_recovery_service: true,
+                ..Default::default()
+            }
+            .requires_identity_recovery()
+        );
     }
 
     #[tokio::test]
@@ -423,5 +541,58 @@ mod tests {
             body["progress_url"],
             format!("/recover/progress/{}", session.id)
         );
+    }
+
+    #[tokio::test]
+    async fn set_password_by_recovery_rejects_device_trust_scope_without_consuming_ticket() {
+        if !has_database_url() {
+            return;
+        }
+
+        setup();
+        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let state = TestState::from_pool(pool).await.unwrap();
+
+        let (session, ticket) =
+            create_recovery_ticket(&state, "carol@example.com".to_owned()).await;
+
+        let response = state
+            .request(
+                Request::post("/_coauth/gate/account/password-recovery/set").json(
+                    serde_json::json!({
+                        "ticket": ticket,
+                        "new_password": "Correct Horse Battery Staple 42!",
+                        "requested_trust_boundary": {
+                            "device_trust_reset": true
+                        }
+                    }),
+                ),
+            )
+            .await;
+
+        response.assert_status(StatusCode::OK);
+        let body: serde_json::Value = response.json();
+        assert_eq!(body["status"], "DEVICE_TRUST_RECOVERY_REQUIRED");
+        assert_eq!(body["trust_boundary"]["device_trust_reset"], false);
+        assert_eq!(body["trust_boundary"]["cross_signing_reset"], false);
+        assert_eq!(
+            body["trust_boundary"]["trusted_recovery_service_used"],
+            false
+        );
+
+        let mut repo = state.repository().await.unwrap();
+        let stored = repo
+            .user_recovery()
+            .lookup_session(session.id)
+            .await
+            .unwrap()
+            .expect("recovery session still present");
+        assert!(
+            stored.consumed_at.is_none(),
+            "blocked device-trust request must not consume the recovery ticket"
+        );
+        repo.cancel().await.unwrap();
     }
 }

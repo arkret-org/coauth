@@ -335,6 +335,11 @@ pub fn PasswordRecovery() -> Element {
                                             "Password recovery is not available.".to_owned(),
                                         ));
                                     }
+                                    SetPasswordStatus::DeviceTrustRecoveryRequired => {
+                                        error.set(Some(
+                                            "Password recovery cannot reset device trust. Use the device recovery flow for trusted devices.".to_owned(),
+                                        ));
+                                    }
                                     _ => error.set(Some(
                                         "An error occurred while resetting your password.".to_owned(),
                                     )),

@@ -297,6 +297,8 @@ pub struct BootstrapAdminStatus {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SetPasswordPayload {
     pub status: SetPasswordStatus,
+    #[serde(default)]
+    pub trust_boundary: Option<PasswordRecoveryTrustBoundary>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -312,6 +314,17 @@ pub enum SetPasswordStatus {
     ExpiredRecoveryTicket,
     NoSuchRecoveryTicket,
     RecoveryTicketAlreadyUsed,
+    DeviceTrustRecoveryRequired,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct PasswordRecoveryTrustBoundary {
+    pub recovery_credential_kind: String,
+    pub account_password_reset: bool,
+    pub device_trust_reset: bool,
+    pub cross_signing_reset: bool,
+    pub trusted_recovery_service_used: bool,
+    pub device_trust_recovery_required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

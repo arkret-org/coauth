@@ -130,6 +130,44 @@ enum LoadAccountRecoveryTicketError {
     Repository(#[from] RepositoryError),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AccountRecoveryCompletion {
+    pub trust_boundary: AccountRecoveryTrustBoundary,
+}
+
+impl AccountRecoveryCompletion {
+    #[must_use]
+    pub fn password_only() -> Self {
+        Self {
+            trust_boundary: AccountRecoveryTrustBoundary::password_only(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AccountRecoveryTrustBoundary {
+    pub recovery_credential_kind: &'static str,
+    pub account_password_reset: bool,
+    pub device_trust_reset: bool,
+    pub cross_signing_reset: bool,
+    pub trusted_recovery_service_used: bool,
+    pub device_trust_recovery_required: bool,
+}
+
+impl AccountRecoveryTrustBoundary {
+    #[must_use]
+    pub fn password_only() -> Self {
+        Self {
+            recovery_credential_kind: "email_recovery_ticket",
+            account_password_reset: true,
+            device_trust_reset: false,
+            cross_signing_reset: false,
+            trusted_recovery_service_used: false,
+            device_trust_recovery_required: true,
+        }
+    }
+}
+
 pub async fn start_account_recovery(
     mut repo: BoxRepository,
     limiter: &Limiter,
@@ -272,7 +310,7 @@ pub async fn complete_account_recovery(
     ticket_string: &str,
     new_password: Zeroizing<String>,
     recovery_allowed: bool,
-) -> Result<(), CompleteAccountRecoveryError> {
+) -> Result<AccountRecoveryCompletion, CompleteAccountRecoveryError> {
     if !password_manager.is_enabled() || !recovery_allowed {
         return Err(CompleteAccountRecoveryError::PasswordDisabled);
     }
@@ -324,6 +362,10 @@ pub async fn complete_account_recovery(
         return Err(CompleteAccountRecoveryError::AccountLocked);
     }
 
+    let user_id = user.id;
+    let session_id = session.id;
+    let ticket_id = ticket.id;
+
     let (version, hash) = password_manager
         .hash(make_rng_from(rng), new_password)
         .await
@@ -339,7 +381,21 @@ pub async fn complete_account_recovery(
 
     repo.save().await?;
 
-    Ok(())
+    let completion = AccountRecoveryCompletion::password_only();
+    tracing::info!(
+        target: "account_recovery_audit",
+        user_id = %user_id,
+        recovery_session_id = %session_id,
+        recovery_ticket_id = %ticket_id,
+        recovery_credential_kind = completion.trust_boundary.recovery_credential_kind,
+        account_password_reset = completion.trust_boundary.account_password_reset,
+        device_trust_reset = completion.trust_boundary.device_trust_reset,
+        cross_signing_reset = completion.trust_boundary.cross_signing_reset,
+        trusted_recovery_service_used = completion.trust_boundary.trusted_recovery_service_used,
+        "account recovery completed within password-only trust boundary",
+    );
+
+    Ok(completion)
 }
 
 #[must_use]
@@ -376,4 +432,22 @@ async fn load_account_recovery_ticket(
 fn make_rng_from(rng: &mut (dyn CryptoRngCore + Send)) -> rand_chacha::ChaChaRng {
     use rand_chacha::rand_core::SeedableRng;
     rand_chacha::ChaChaRng::from_rng(rng).expect("seeding ChaChaRng should not fail")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn password_recovery_completion_keeps_device_trust_out_of_scope() {
+        let completion = AccountRecoveryCompletion::password_only();
+        let boundary = completion.trust_boundary;
+
+        assert_eq!(boundary.recovery_credential_kind, "email_recovery_ticket");
+        assert!(boundary.account_password_reset);
+        assert!(!boundary.device_trust_reset);
+        assert!(!boundary.cross_signing_reset);
+        assert!(!boundary.trusted_recovery_service_used);
+        assert!(boundary.device_trust_recovery_required);
+    }
 }
