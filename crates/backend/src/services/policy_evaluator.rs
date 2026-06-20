@@ -60,6 +60,7 @@ use crate::services::policy_frontier::Frontier;
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
 const CANDIDATE_JOIN_POLICY_REVIEW_ACTION: &str = "ck.realm.join.review";
+const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ck.profile.candidate.join_policy.v1";
 
 /// CKP-0010 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — call /
 /// media capability actions registered in
@@ -307,13 +308,6 @@ fn match_rules(
     let actor_str = request.actor_id.as_str();
     let action_str = request.action.as_str();
 
-    if action_str == CANDIDATE_JOIN_POLICY_REVIEW_ACTION {
-        return PolicyDecision::hard_deny(
-            cokret_core::error::ERROR_CODE_UNSUPPORTED_FEATURE,
-            policy_version.to_owned(),
-        );
-    }
-
     // POLICY-1 (R3 spec-sync) — Actor Profile create/update with an
     // unverified `accountable_principal_ids[]` entry must hard deny with
     // `failed_precondition / accountability_grant_missing`.
@@ -353,6 +347,12 @@ fn match_rules(
         Some(circle) => [circle, realm_scope],
         None => [realm_scope, realm_scope],
     };
+
+    if let Some(decision) =
+        capability_action_gate_decision(data, &scopes, action_str, policy_version)
+    {
+        return decision;
+    }
 
     for scope in scopes {
         if value_contains_str(scope.get("deny_actors"), actor_str) {
@@ -412,6 +412,81 @@ fn match_rules(
     let _recognised_call_action = is_recognised_call_capability_action(action_str);
 
     PolicyDecision::allow(policy_version.to_owned())
+}
+
+fn capability_action_gate_decision(
+    data: &Value,
+    scopes: &[&Value],
+    action: &str,
+    policy_version: &str,
+) -> Option<PolicyDecision> {
+    if action.starts_with("ck.actor.profile.") {
+        return None;
+    }
+    if is_candidate_join_policy_action(action) {
+        return Some(unsupported_feature(policy_version));
+    }
+
+    let descriptor = match cokret_core::schema::embedded_capability_action(action) {
+        Ok(Some(descriptor)) => descriptor,
+        Ok(None) => return Some(unsupported_feature(policy_version)),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                action = %action,
+                "policy_evaluator: capability action registry unavailable, fail-closed"
+            );
+            return Some(PolicyDecision::hard_deny(
+                "policy_evaluator_error",
+                policy_version.to_owned(),
+            ));
+        }
+    };
+
+    if descriptor.profile.as_deref() == Some(CANDIDATE_JOIN_POLICY_PROFILE) {
+        return Some(unsupported_feature(policy_version));
+    }
+    if let Some(profile) = descriptor.profile.as_deref()
+        && !profile_declared_for_policy(data, scopes, profile)
+    {
+        return Some(unsupported_feature(policy_version));
+    }
+    None
+}
+
+fn unsupported_feature(policy_version: &str) -> PolicyDecision {
+    PolicyDecision::hard_deny(
+        cokret_core::error::ERROR_CODE_UNSUPPORTED_FEATURE,
+        policy_version.to_owned(),
+    )
+}
+
+fn is_candidate_join_policy_action(action: &str) -> bool {
+    action == CANDIDATE_JOIN_POLICY_REVIEW_ACTION
+        || action == "realm.join_policy"
+        || action.starts_with("realm.join_policy.")
+        || action == "member.application"
+        || action.starts_with("member.application.")
+        || action == "ck.member.application"
+        || action.starts_with("ck.member.application.")
+}
+
+fn profile_declared_for_policy(data: &Value, scopes: &[&Value], profile: &str) -> bool {
+    policy_scope_declares_profile(data, profile)
+        || scopes
+            .iter()
+            .any(|scope| policy_scope_declares_profile(scope, profile))
+}
+
+fn policy_scope_declares_profile(scope: &Value, profile: &str) -> bool {
+    [
+        "enabled_profile_refs",
+        "claimed_profiles",
+        "active_profiles",
+        "profiles",
+    ]
+    .into_iter()
+    .any(|field| profile_list_contains(scope.get(field), profile))
 }
 
 fn strict_reject_enabled(data: &Value) -> bool {
@@ -532,6 +607,61 @@ mod tests {
     }
 
     #[test]
+    fn candidate_join_policy_profile_action_cannot_be_enabled_by_profile_claim() {
+        let data = serde_json::json!({
+            "enabled_profile_refs": ["ck.profile.candidate.join_policy.v1"],
+            "require_review_actions": ["ck.realm.join.review"]
+        });
+        let r = req("did:web:alice.example", "ck.realm.join.review");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
+        assert_eq!(d.reason_code, "unsupported_feature");
+    }
+
+    #[test]
+    fn bare_candidate_member_application_actions_fail_closed() {
+        let data = serde_json::json!({});
+        let r = req("did:web:alice.example", "member.application.review");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
+        assert_eq!(d.reason_code, "unsupported_feature");
+    }
+
+    #[test]
+    fn unknown_capability_action_fails_closed() {
+        let data = serde_json::json!({});
+        let r = req("did:web:alice.example", "ck.not_registered.action");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
+        assert_eq!(d.reason_code, "unsupported_feature");
+    }
+
+    #[test]
+    fn profile_capability_action_requires_declared_profile() {
+        let r = req("did:web:alice.example", "ck.pin.add");
+
+        let denied = match_rules(
+            &serde_json::json!({}),
+            &r,
+            &frontier(FreshnessState::Fresh),
+            "default",
+        );
+        assert!(matches!(denied.decision, AuthzDecision::HardDeny));
+        assert_eq!(denied.reason_code, "unsupported_feature");
+
+        let allowed = match_rules(
+            &serde_json::json!({
+                "enabled_profile_refs": ["ck.profile.pinned_items.v1"]
+            }),
+            &r,
+            &frontier(FreshnessState::Fresh),
+            "v",
+        );
+        assert!(matches!(allowed.decision, AuthzDecision::Allow));
+        assert_eq!(allowed.reason_code, "ok");
+    }
+
+    #[test]
     fn deny_actor_matches() {
         let data = serde_json::json!({
             "deny_actors": ["did:web:mallory.example"]
@@ -555,9 +685,9 @@ mod tests {
     #[test]
     fn require_review_action_matches() {
         let data = serde_json::json!({
-            "require_review_actions": ["ck.member.application"]
+            "require_review_actions": ["ck.invite.create"]
         });
-        let r = req("did:web:alice.example", "ck.member.application");
+        let r = req("did:web:alice.example", "ck.invite.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::RequireReview));
         assert_eq!(d.reason_code, "policy_review_required");
