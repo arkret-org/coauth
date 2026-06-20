@@ -33,7 +33,7 @@ use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
 use cokret_core::canonical::canonical_json_bytes;
-use cokret_core::{AuthzDecision, Hash, PolicyCheckBoundTo, PolicyCheckSignature};
+use cokret_core::{AuthzDecision, FreshnessState, Hash, PolicyCheckBoundTo, PolicyCheckSignature};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
 use serde::Serialize;
@@ -146,6 +146,7 @@ pub struct DecisionTranscript<'a> {
     pub request_id: &'a str,
     pub decision: &'a AuthzDecision,
     pub bound_to: &'a PolicyCheckBoundTo,
+    pub freshness_state: &'a FreshnessState,
     pub auth_state_digest: &'a Hash,
     pub policy_frontier_digest: &'a Hash,
     pub membership_frontier_digest: &'a Hash,
@@ -226,6 +227,7 @@ mod tests {
             request_id: "req-1",
             decision: &AuthzDecision::Allow,
             bound_to: &bound,
+            freshness_state: &FreshnessState::Fresh,
             auth_state_digest: &auth,
             policy_frontier_digest: &pol,
             membership_frontier_digest: &mem,
@@ -257,6 +259,7 @@ mod tests {
             request_id: "req-1",
             decision: &AuthzDecision::Allow,
             bound_to: &bound,
+            freshness_state: &FreshnessState::Fresh,
             auth_state_digest: &h,
             policy_frontier_digest: &h,
             membership_frontier_digest: &h,

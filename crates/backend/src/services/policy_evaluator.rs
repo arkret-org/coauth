@@ -45,7 +45,8 @@ use chrono::{DateTime, Utc};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
 use cokret_core::{
     AuthzDecision, CAP_ACTION_CALL_JOIN, CAP_ACTION_CALL_MODERATE, CAP_ACTION_CALL_RECORD,
-    CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, PolicyCheckRequestBody,
+    CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, FreshnessState,
+    PolicyCheckRequestBody,
 };
 use serde_json::Value;
 use thiserror::Error;
@@ -257,7 +258,7 @@ impl PolicyEvaluator for RuleEvaluator {
     fn evaluate<'a>(
         &'a self,
         request: &'a PolicyCheckRequestBody,
-        _frontier: &'a Frontier,
+        frontier: &'a Frontier,
     ) -> Pin<Box<dyn Future<Output = Result<PolicyDecision, EvaluatorError>> + Send + 'a>> {
         Box::pin(async move {
             let work = async {
@@ -289,7 +290,7 @@ impl PolicyEvaluator for RuleEvaluator {
             };
 
             let policy_version = rules.id.to_string();
-            let decision = match_rules(&rules.data, request, &policy_version);
+            let decision = match_rules(&rules.data, request, frontier, &policy_version);
             Ok(decision)
         })
     }
@@ -300,6 +301,7 @@ impl PolicyEvaluator for RuleEvaluator {
 fn match_rules(
     data: &Value,
     request: &PolicyCheckRequestBody,
+    frontier: &Frontier,
     policy_version: &str,
 ) -> PolicyDecision {
     let actor_str = request.actor_id.as_str();
@@ -362,7 +364,27 @@ fn match_rules(
                 policy_version: policy_version.to_owned(),
             };
         }
+    }
 
+    if freshness_requires_fail_closed(frontier.freshness_state, action_str) {
+        return PolicyDecision {
+            decision: AuthzDecision::HardDeny,
+            reason_code: "revocation_freshness_unknown".to_owned(),
+            obligations: vec![PolicyObligation {
+                kind: "freshness_diagnostic".to_owned(),
+                expires_at: None,
+                payload: serde_json::json!({
+                    "freshness_state": frontier.freshness_state,
+                    "auth_state_digest": frontier.auth_state_digest,
+                    "policy_frontier_digest": frontier.policy_frontier_digest,
+                    "membership_frontier_digest": frontier.membership_frontier_digest,
+                }),
+            }],
+            policy_version: policy_version.to_owned(),
+        };
+    }
+
+    for scope in scopes {
         if value_contains_str(scope.get("require_review_actions"), action_str) {
             return PolicyDecision {
                 decision: AuthzDecision::RequireReview,
@@ -382,6 +404,24 @@ fn match_rules(
     let _recognised_call_action = is_recognised_call_capability_action(action_str);
 
     PolicyDecision::allow(policy_version.to_owned())
+}
+
+fn freshness_requires_fail_closed(freshness_state: FreshnessState, action: &str) -> bool {
+    match freshness_state {
+        FreshnessState::Fresh => false,
+        FreshnessState::Stale | FreshnessState::Unknown => !is_local_pending_action(action),
+    }
+}
+
+fn is_local_pending_action(action: &str) -> bool {
+    matches!(
+        action,
+        "ck.message.create"
+            | "ck.reaction.add"
+            | "ck.read_cursor.advance"
+            | "ck.strand.move"
+            | "ck.strand.reorder"
+    )
 }
 
 fn value_contains_str(haystack: Option<&Value>, needle: &str) -> bool {
@@ -419,11 +459,22 @@ mod tests {
         }
     }
 
+    fn frontier(freshness_state: FreshnessState) -> Frontier {
+        let h = Hash::new(format!("sha256:{}", "f".repeat(64))).unwrap();
+        Frontier {
+            auth_state_digest: h.clone(),
+            policy_frontier_digest: h.clone(),
+            membership_frontier_digest: h,
+            freshness_state,
+            policy_version: Some("test".to_owned()),
+        }
+    }
+
     #[test]
     fn empty_rules_yield_allow() {
         let data = serde_json::json!({});
         let r = req("did:web:alice.example", "ck.message.create");
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
         assert_eq!(d.reason_code, "ok");
     }
@@ -434,7 +485,7 @@ mod tests {
             "deny_actors": ["did:web:mallory.example"]
         });
         let r = req("did:web:mallory.example", "ck.message.create");
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "policy_violation");
     }
@@ -445,7 +496,7 @@ mod tests {
             "deny_actions": ["ck.invite.create"]
         });
         let r = req("did:web:alice.example", "ck.invite.create");
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
     }
 
@@ -455,9 +506,28 @@ mod tests {
             "require_review_actions": ["ck.member.application"]
         });
         let r = req("did:web:alice.example", "ck.member.application");
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::RequireReview));
         assert_eq!(d.reason_code, "policy_review_required");
+    }
+
+    #[test]
+    fn unknown_freshness_fails_closed_for_high_risk_action() {
+        let data = serde_json::json!({});
+        let r = req("did:web:alice.example", "ck.capability.revoke");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Unknown), "v");
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
+        assert_eq!(d.reason_code, "revocation_freshness_unknown");
+        assert_eq!(d.obligations[0].kind, "freshness_diagnostic");
+    }
+
+    #[test]
+    fn unknown_freshness_keeps_local_pending_actions_out_of_high_risk_bucket() {
+        let data = serde_json::json!({});
+        let r = req("did:web:alice.example", "ck.message.create");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Unknown), "v");
+        assert!(matches!(d.decision, AuthzDecision::Allow));
+        assert_eq!(d.reason_code, "ok");
     }
 
     #[test]
@@ -474,7 +544,7 @@ mod tests {
             }
         });
         let r = req("did:web:alice.example", "ck.message.create");
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
     }
 
@@ -494,7 +564,7 @@ mod tests {
             "deny_actions": ["ck.call.join"]
         });
         let r = req("did:web:alice.example", "ck.call.join");
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "policy_violation");
     }
@@ -522,7 +592,7 @@ mod tests {
         });
         let mut r = req("did:web:alice.example", "ck.call.record");
         r.auth_context = serde_json::json!({ "circle_id": circle_id });
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
     }
 
@@ -533,7 +603,7 @@ mod tests {
         });
         let mut r = req("did:web:alice.example", "ck.actor.profile.update");
         r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "failed_precondition");
         assert_eq!(d.obligations.len(), 1);
@@ -545,7 +615,7 @@ mod tests {
         let data = serde_json::json!({});
         let mut r = req("did:web:alice.example", "ck.actor.profile.update");
         r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
-        let d = match_rules(&data, &r, "v");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
     }
 

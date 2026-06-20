@@ -37,11 +37,15 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use cokret_core::{Hash, RealmId};
+use chrono::{DateTime, Utc};
+use cokret_core::{FreshnessState, Hash, RealmId};
 use thiserror::Error;
 use url::Url;
 
 use crate::outbound_http;
+
+const FRESHNESS_REQUIRED_MS: i64 = 180_000;
+const CLOCK_SKEW_TOLERANCE_MS: i64 = 60_000;
 
 #[derive(Debug, Error)]
 pub enum FrontierError {
@@ -68,6 +72,7 @@ pub struct Frontier {
     pub auth_state_digest: Hash,
     pub policy_frontier_digest: Hash,
     pub membership_frontier_digest: Hash,
+    pub freshness_state: FreshnessState,
     /// Optional `policy_version` echo. When absent the evaluator
     /// substitutes `"v1"`.
     pub policy_version: Option<String>,
@@ -89,6 +94,7 @@ impl Frontier {
             auth_state_digest: empty.clone(),
             policy_frontier_digest: empty.clone(),
             membership_frontier_digest: empty,
+            freshness_state: FreshnessState::Unknown,
             policy_version: None,
         }
     }
@@ -217,25 +223,53 @@ impl FrontierSource for SolandFrontierSource {
                 .await
                 .map_err(|e| FrontierError::Http(format!("frontier body parse: {e}")))?;
 
-            // soland's response envelope places the typed federation
-            // peer response under `events_frontier`; the inner shape
-            // is `EventsFrontierFederationPeerState`. We probe
-            // defensively so malformed or incomplete responses produce a
-            // signed sentinel rather than a 500.
-            let frontier_root = body
-                .get("events_frontier")
-                .and_then(|v| v.get("frontier_root"))
+            // soland's response envelope normally places the typed federation
+            // peer response under `events_frontier`; older local mocks return
+            // the frontier object directly. Probe both shapes defensively so
+            // malformed or incomplete responses produce a signed sentinel
+            // rather than a 500.
+            let frontier_body = body.get("events_frontier").unwrap_or(&body);
+            let frontier_root = frontier_body
+                .get("frontier_root")
                 .and_then(|v| v.as_str())
                 .ok_or(FrontierError::MissingField("frontier_root"))?;
 
             let h = Hash::new(frontier_root.to_owned()).map_err(|_| FrontierError::InvalidShape)?;
+            let freshness_state = frontier_freshness_state(frontier_body, Utc::now());
             Ok(Frontier {
                 auth_state_digest: h.clone(),
                 policy_frontier_digest: h.clone(),
                 membership_frontier_digest: h,
+                freshness_state,
                 policy_version: Some("v1".to_owned()),
             })
         })
+    }
+}
+
+fn frontier_freshness_state(
+    frontier_body: &serde_json::Value,
+    now: DateTime<Utc>,
+) -> FreshnessState {
+    let Some(observed_at) = frontier_body
+        .get("observed_at")
+        .and_then(|value| value.as_str())
+    else {
+        return FreshnessState::Unknown;
+    };
+    let Ok(observed_at) =
+        DateTime::parse_from_rfc3339(observed_at).map(|ts| ts.with_timezone(&Utc))
+    else {
+        return FreshnessState::Unknown;
+    };
+    let age_ms = now.signed_duration_since(observed_at).num_milliseconds();
+    if age_ms < -CLOCK_SKEW_TOLERANCE_MS {
+        return FreshnessState::Unknown;
+    }
+    if age_ms <= FRESHNESS_REQUIRED_MS {
+        FreshnessState::Fresh
+    } else {
+        FreshnessState::Stale
     }
 }
 
@@ -284,6 +318,12 @@ mod tests {
         RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap()
     }
 
+    fn fixed_now() -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::parse_from_rfc3339("2026-06-20T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc)
+    }
+
     #[tokio::test]
     async fn static_source_returns_configured_frontier() {
         let frontier = Frontier::empty();
@@ -298,6 +338,7 @@ mod tests {
         let source = SolandFrontierSource::new(None, reqwest::Client::new());
         let got = source.fetch(&realm()).await.unwrap();
         assert_eq!(got, Frontier::empty());
+        assert_eq!(got.freshness_state, FreshnessState::Unknown);
     }
 
     #[test]
@@ -311,6 +352,43 @@ mod tests {
         assert_eq!(
             empty.policy_frontier_digest,
             empty.membership_frontier_digest
+        );
+    }
+
+    #[test]
+    fn observed_frontier_within_required_window_is_fresh() {
+        let body = serde_json::json!({
+            "observed_at": "2026-06-19T23:58:30Z"
+        });
+        assert_eq!(
+            frontier_freshness_state(&body, fixed_now()),
+            FreshnessState::Fresh
+        );
+    }
+
+    #[test]
+    fn observed_frontier_outside_required_window_is_stale() {
+        let body = serde_json::json!({
+            "observed_at": "2026-06-19T23:55:00Z"
+        });
+        assert_eq!(
+            frontier_freshness_state(&body, fixed_now()),
+            FreshnessState::Stale
+        );
+    }
+
+    #[test]
+    fn missing_or_future_frontier_observation_is_unknown() {
+        assert_eq!(
+            frontier_freshness_state(&serde_json::json!({}), fixed_now()),
+            FreshnessState::Unknown
+        );
+        let future = serde_json::json!({
+            "observed_at": "2026-06-20T00:02:00Z"
+        });
+        assert_eq!(
+            frontier_freshness_state(&future, fixed_now()),
+            FreshnessState::Unknown
         );
     }
 }
