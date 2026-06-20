@@ -38,6 +38,7 @@ coauth-i18n = {workspace = true}
 coauth-messaging = {workspace = true}
 coauth-principal = {workspace = true}
 coauth-templates = {workspace = true}
+cokret-core = {workspace = true}
 cron = {workspace = true}
 diesel = {workspace = true}
 diesel-async = {workspace = true}

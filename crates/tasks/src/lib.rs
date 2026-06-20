@@ -33,6 +33,7 @@ pub use crate::new_queue::QueueWorker;
 
 // ── Sub-modules ─────────────────────────────────────────────────────────
 mod cleanup;
+mod collaboration_capability;
 mod email;
 mod new_queue;
 mod notifications;
@@ -173,6 +174,9 @@ fn register_all_handlers(w: &mut QueueWorker) {
     // principal device management
     w.register_handler::<queue::ProvisionUserJob>();
     w.register_handler::<queue::SyncDevicesJob>();
+
+    // Collaboration capability fanout
+    w.register_handler::<queue::CollaborationCapabilityFanoutJob>();
 
     // Notifications & messaging
     w.register_handler::<queue::ProcessNotificationDeliveriesJob>();

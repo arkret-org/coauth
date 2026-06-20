@@ -6,6 +6,8 @@ pub mod registry;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use serde_json::Value;
+
 pub use self::registry::ConnectorRegistry;
 
 /// Describes what operations a connector provider supports.
@@ -203,6 +205,97 @@ impl PrincipalProvisionRequest {
     }
 }
 
+/// Operation for materializing a collaboration capability grant/revoke on a
+/// downstream principal system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrincipalCapabilityFanoutOperation {
+    /// Materialize a standard `ck.capability.grant` event.
+    Grant,
+    /// Materialize a standard `ck.capability.revoke` event.
+    Revoke,
+}
+
+impl PrincipalCapabilityFanoutOperation {
+    /// Wire value used in downstream audit metadata.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Grant => "grant",
+            Self::Revoke => "revoke",
+        }
+    }
+}
+
+/// Request to submit a collaboration capability grant/revoke fan-out payload to
+/// the configured principal system.
+#[derive(Debug, Clone)]
+pub struct PrincipalCapabilityFanoutRequest {
+    operation: PrincipalCapabilityFanoutOperation,
+    idempotency_key: String,
+    capability_grant_id: String,
+    event_id: String,
+    raw_payload_digest: String,
+    payload: Value,
+}
+
+impl PrincipalCapabilityFanoutRequest {
+    /// Create a new collaboration capability fan-out request.
+    #[must_use]
+    pub fn new(
+        operation: PrincipalCapabilityFanoutOperation,
+        idempotency_key: String,
+        capability_grant_id: String,
+        event_id: String,
+        raw_payload_digest: String,
+        payload: Value,
+    ) -> Self {
+        Self {
+            operation,
+            idempotency_key,
+            capability_grant_id,
+            event_id,
+            raw_payload_digest,
+            payload,
+        }
+    }
+
+    /// Fan-out operation.
+    #[must_use]
+    pub const fn operation(&self) -> PrincipalCapabilityFanoutOperation {
+        self.operation
+    }
+
+    /// Idempotency key for downstream delivery.
+    #[must_use]
+    pub fn idempotency_key(&self) -> &str {
+        &self.idempotency_key
+    }
+
+    /// Standard capability grant id.
+    #[must_use]
+    pub fn capability_grant_id(&self) -> &str {
+        &self.capability_grant_id
+    }
+
+    /// Standard capability grant/revoke event id.
+    #[must_use]
+    pub fn event_id(&self) -> &str {
+        &self.event_id
+    }
+
+    /// Canonical digest of [`Self::payload`].
+    #[must_use]
+    pub fn raw_payload_digest(&self) -> &str {
+        &self.raw_payload_digest
+    }
+
+    /// Fan-out payload to submit.
+    #[must_use]
+    pub fn payload(&self) -> &Value {
+        &self.payload
+    }
+}
+
 /// Trait defining account and device synchronization hooks for a downstream
 /// Cokret principal system.
 ///
@@ -345,6 +438,17 @@ pub trait PrincipalServerAdmin: Send + Sync {
         devices: HashSet<String>,
     ) -> Result<(), anyhow::Error>;
 
+    /// Submit a collaboration capability grant/revoke fan-out payload to the
+    /// downstream principal system.
+    async fn submit_collaboration_capability_fanout(
+        &self,
+        _request: &PrincipalCapabilityFanoutRequest,
+    ) -> Result<(), anyhow::Error> {
+        Err(anyhow::anyhow!(
+            "collaboration capability fanout is not implemented by this principal connector"
+        ))
+    }
+
     /// Delete a user in the downstream principal system.
     ///
     /// # Parameters
@@ -480,6 +584,15 @@ where
         devices: HashSet<String>,
     ) -> Result<(), anyhow::Error> {
         self.as_admin().sync_devices(handle, devices).await
+    }
+
+    async fn submit_collaboration_capability_fanout(
+        &self,
+        request: &PrincipalCapabilityFanoutRequest,
+    ) -> Result<(), anyhow::Error> {
+        self.as_admin()
+            .submit_collaboration_capability_fanout(request)
+            .await
     }
 
     async fn delete_user(&self, handle: &str, erase: bool) -> Result<(), anyhow::Error> {

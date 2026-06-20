@@ -23,7 +23,10 @@ use std::collections::HashSet;
 
 use async_trait::async_trait;
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
-use coauth_principal::{PrincipalAccountProfile, PrincipalProvisionRequest, PrincipalServerAdmin};
+use coauth_principal::{
+    PrincipalAccountProfile, PrincipalCapabilityFanoutRequest, PrincipalProvisionRequest,
+    PrincipalServerAdmin,
+};
 
 /// `PrincipalServerAdmin` backed by coauth's own Postgres (`users`).
 pub struct DbPrincipalServerAdmin {
@@ -136,6 +139,21 @@ impl PrincipalServerAdmin for DbPrincipalServerAdmin {
         _handle: &str,
         _devices: HashSet<String>,
     ) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
+    async fn submit_collaboration_capability_fanout(
+        &self,
+        request: &PrincipalCapabilityFanoutRequest,
+    ) -> Result<(), anyhow::Error> {
+        tracing::info!(
+            operation = request.operation().as_str(),
+            idempotency_key = request.idempotency_key(),
+            capability_grant_id = request.capability_grant_id(),
+            event_id = request.event_id(),
+            raw_payload_digest = request.raw_payload_digest(),
+            "accepted collaboration capability fanout in local principal facade"
+        );
         Ok(())
     }
 

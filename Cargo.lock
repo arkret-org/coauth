@@ -1605,6 +1605,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "serde_json",
  "tokio",
 ]
 
@@ -1620,6 +1621,7 @@ dependencies = [
  "coauth-messaging",
  "coauth-principal",
  "coauth-templates",
+ "cokret-core",
  "cron",
  "diesel",
  "diesel-async",

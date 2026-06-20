@@ -14,6 +14,7 @@ use coauth_admin_types::collaboration_capability_admin::{
     RiskTier, collaboration_capability_templates,
 };
 use coauth_config::CokretConfig;
+use coauth_data::queue::{CollaborationCapabilityFanoutJob, QueueJobRepositoryExt as _};
 use coauth_data::{
     CollaborationCapabilityAction, CollaborationCapabilityRevokeFanout,
     NewCollaborationCapabilityGrant, RepositoryAccess,
@@ -31,8 +32,6 @@ use crate::error::AppError;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::cokret::service_did_for;
 use crate::handlers::common::{DepotExt, make_clock, make_rng};
-
-const COLLABORATION_CAPABILITY_FANOUT_QUEUE: &str = "soland-collaboration-capability-fanout";
 
 #[endpoint]
 #[tracing::instrument(
@@ -178,19 +177,16 @@ pub async fn create_handler(
         .await?;
 
     repo.queue_job()
-        .schedule(
+        .schedule_job(
             &mut *rng,
             &*call_context.clock,
-            COLLABORATION_CAPABILITY_FANOUT_QUEUE,
-            grant_fanout_payload,
-            json!({
-                "operation": "grant",
-                "idempotency_key": grant_fanout_idempotency_key,
-                "capability_grant_id": capability_grant_id,
-                "grant_event_id": grant_event_id,
-                "raw_payload_digest": grant_raw_payload_digest,
-                "attempt": 0,
-            }),
+            CollaborationCapabilityFanoutJob::grant(
+                grant_fanout_idempotency_key,
+                capability_grant_id,
+                grant_event_id,
+                grant_raw_payload_digest,
+                grant_fanout_payload,
+            ),
         )
         .await?;
 
@@ -265,19 +261,16 @@ pub async fn revoke_handler(
             );
             let mut rng = make_rng();
             repo.queue_job()
-                .schedule(
+                .schedule_job(
                     &mut *rng,
                     &*clock,
-                    COLLABORATION_CAPABILITY_FANOUT_QUEUE,
-                    revoke_fanout_payload,
-                    json!({
-                        "operation": "revoke",
-                        "idempotency_key": revoke_fanout_idempotency_key,
-                        "capability_grant_id": revoked.capability_grant_id,
-                        "revoke_event_id": revoke_event_id,
-                        "raw_payload_digest": revoke_raw_payload_digest,
-                        "attempt": 0,
-                    }),
+                    CollaborationCapabilityFanoutJob::revoke(
+                        revoke_fanout_idempotency_key,
+                        revoked.capability_grant_id,
+                        revoke_event_id,
+                        revoke_raw_payload_digest,
+                        revoke_fanout_payload,
+                    ),
                 )
                 .await?;
             repo.save().await?;
