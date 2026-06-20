@@ -7,6 +7,7 @@
 //! - `POST   /_coauth/admin/collaboration/capabilities`
 //! - `DELETE /_coauth/admin/collaboration/capabilities/{id}`
 
+use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_admin_types::collaboration_capability_admin::{
     CollaborationCapabilityGrant, CreateCollaborationCapabilityGrant,
@@ -19,12 +20,18 @@ use coauth_data::{
     CollaborationCapabilityAction, CollaborationCapabilityRevokeFanout,
     NewCollaborationCapabilityGrant, RepositoryAccess,
 };
-use cokret_core::canonical::canonical_sha256;
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_jose::constraints::Constrainable as _;
+use coauth_jose::jwt::JsonWebSignatureHeader;
+use coauth_keystore::Keystore;
+use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use cokret_core::identifiers::{EventId, GrantId, new_prefixed_uuid7};
+use rand_core::SeedableRng as _;
 use salvo::http::StatusCode;
 use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
 use serde_json::{Value, json};
+use signature::RandomizedSigner as _;
 use ulid::Ulid;
 
 use crate::JsonResult;
@@ -126,6 +133,7 @@ pub async fn create_handler(
     let cokret_config = depot.cokret_config()?;
     let url_builder = depot.url_builder()?;
     let service_did = service_did_for(&url_builder, &cokret_config);
+    let key_store = depot.key_store()?;
     let capability_grant_id = GrantId::new(new_prefixed_uuid7("ck:grant:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?
         .into_string();
@@ -144,7 +152,9 @@ pub async fn create_handler(
         issued_at,
         &service_did,
         &cokret_config,
+        &key_store,
     );
+    let grant_fanout_payload = grant_fanout_payload?;
     let grant_raw_payload_digest = canonical_sha256(&grant_fanout_payload).map_err(|err| {
         AppError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -240,6 +250,7 @@ pub async fn revoke_handler(
             let cokret_config = depot.cokret_config()?;
             let url_builder = depot.url_builder()?;
             let service_did = service_did_for(&url_builder, &cokret_config);
+            let key_store = depot.key_store()?;
             let revoke_fanout_payload = build_revoke_fanout_payload(
                 &revoke_event_id,
                 &revoked.capability_grant_id,
@@ -247,7 +258,8 @@ pub async fn revoke_handler(
                 revoked.revoked_at.unwrap_or_else(|| clock.now()),
                 &service_did,
                 &cokret_config,
-            );
+                &key_store,
+            )?;
             let revoke_raw_payload_digest =
                 canonical_sha256(&revoke_fanout_payload).map_err(|err| {
                     AppError::new(
@@ -294,7 +306,8 @@ fn build_grant_fanout_payload(
     issued_at: DateTime<Utc>,
     service_did: &str,
     cokret_config: &CokretConfig,
-) -> Value {
+    key_store: &Keystore,
+) -> Result<Value, AppError> {
     let mut grant = json!({
         "id": capability_grant_id,
         "schema": "ck.schema.capability.v1",
@@ -304,14 +317,6 @@ fn build_grant_fanout_payload(
         "actions": [action.as_action_str()],
         "resources": [{ "kind": "realm", "realm_id": realm_id }],
         "issued_at": issued_at,
-        "proofs": [{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": format!("{service_did}#service-signing"),
-            "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "created_at": issued_at,
-            "jws": "queued-for-service-signature"
-        }],
     });
     if let Some(expires_at) = expires_at {
         grant["expires_at"] = json!(expires_at);
@@ -324,7 +329,23 @@ fn build_grant_fanout_payload(
         }]);
     }
 
-    json!({
+    let unsigned_payload = json!({
+        "grant_id": capability_grant_id,
+        "grant": grant,
+    });
+    let proof = sign_fanout_proof(
+        key_store,
+        service_did,
+        "ck.capability.grant",
+        grant_event_id,
+        capability_grant_id,
+        &unsigned_payload,
+        issued_at,
+    )?;
+    let mut signed_grant = unsigned_payload["grant"].clone();
+    signed_grant["proofs"] = json!([proof]);
+
+    Ok(json!({
         "kind": "ck.coauth.collaboration_capability.fanout.v1",
         "operation": "grant",
         "issuer_service_did": service_did,
@@ -333,10 +354,10 @@ fn build_grant_fanout_payload(
         "capability_grant_id": capability_grant_id,
         "payload": {
             "grant_id": capability_grant_id,
-            "grant": grant,
+            "grant": signed_grant,
         },
         "principal_servers": principal_servers(cokret_config),
-    })
+    }))
 }
 
 fn build_revoke_fanout_payload(
@@ -346,21 +367,129 @@ fn build_revoke_fanout_payload(
     revoked_at: DateTime<Utc>,
     service_did: &str,
     cokret_config: &CokretConfig,
-) -> Value {
-    json!({
+    key_store: &Keystore,
+) -> Result<Value, AppError> {
+    let mut revoke_payload = json!({
+        "grant_id": capability_grant_id,
+        "realm_id": realm_id,
+        "revoked_at": revoked_at,
+    });
+    let proof = sign_fanout_proof(
+        key_store,
+        service_did,
+        "ck.capability.revoke",
+        revoke_event_id,
+        capability_grant_id,
+        &revoke_payload,
+        revoked_at,
+    )?;
+    revoke_payload["proofs"] = json!([proof]);
+
+    Ok(json!({
         "kind": "ck.coauth.collaboration_capability.fanout.v1",
         "operation": "revoke",
         "issuer_service_did": service_did,
         "event_kind": "ck.capability.revoke",
         "event_id": revoke_event_id,
         "capability_grant_id": capability_grant_id,
-        "payload": {
-            "grant_id": capability_grant_id,
-            "realm_id": realm_id,
-            "revoked_at": revoked_at,
-        },
+        "payload": revoke_payload,
         "principal_servers": principal_servers(cokret_config),
-    })
+    }))
+}
+
+fn sign_fanout_proof(
+    key_store: &Keystore,
+    service_did: &str,
+    event_kind: &str,
+    event_id: &str,
+    capability_grant_id: &str,
+    payload: &Value,
+    created_at: DateTime<Utc>,
+) -> Result<Value, AppError> {
+    let transcript = json!({
+        "kind": "ck.coauth.collaboration_capability.proof.v1",
+        "event_kind": event_kind,
+        "event_id": event_id,
+        "capability_grant_id": capability_grant_id,
+        "payload": payload,
+    });
+    let transcript_bytes = canonical_json_bytes(&transcript).map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("capability fanout proof canonical transcript: {err}"),
+        )
+    })?;
+    let event_digest = canonical_sha256(&transcript).map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("capability fanout proof digest: {err}"),
+        )
+    })?;
+    let (verification_method, jws) = sign_detached_jws(key_store, service_did, &transcript_bytes)?;
+
+    Ok(json!({
+        "kind": "detached_jws",
+        "alg": "EdDSA",
+        "verification_method": verification_method,
+        "event_digest": event_digest,
+        "created_at": created_at,
+        "jws": jws,
+    }))
+}
+
+fn sign_detached_jws(
+    key_store: &Keystore,
+    service_did: &str,
+    payload_bytes: &[u8],
+) -> Result<(String, String), AppError> {
+    let alg = JsonWebSignatureAlg::EdDsa;
+    let key = key_store.signing_key_for_algorithm(&alg).ok_or_else(|| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "no EdDSA service signing key is configured for capability fanout",
+        )
+    })?;
+    let key_id = key.kid().ok_or_else(|| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "capability fanout signing key is missing kid",
+        )
+    })?;
+    let verification_method = format!("{service_did}#{key_id}");
+    let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(verification_method.clone());
+    let protected =
+        Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).map_err(|err| {
+            AppError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("capability fanout JWS protected header: {err}"),
+            )
+        })?);
+    let payload = Base64UrlUnpadded::encode_string(payload_bytes);
+    let signing_input = format!("{protected}.{payload}");
+    let signer = key_store.signer_for_algorithm(&alg).map_err(|err| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("capability fanout signer: {err}"),
+        )
+    })?;
+    let mut rng = rand_chacha::ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "capability fanout signer RNG failed",
+        )
+    })?;
+    let raw = signer
+        .try_sign_with_rng(&mut rng, signing_input.as_bytes())
+        .map_err(|_| {
+            AppError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "capability fanout detached JWS signing failed",
+            )
+        })?;
+    let signature_bytes: Box<[u8]> = raw.into();
+    let signature = Base64UrlUnpadded::encode_string(&signature_bytes);
+
+    Ok((verification_method, format!("{protected}..{signature}")))
 }
 
 fn principal_servers(cokret_config: &CokretConfig) -> Vec<Value> {
@@ -383,6 +512,9 @@ mod tests {
     use chrono::TimeZone as _;
     use coauth_admin_types::collaboration_capability_admin::CollaborationCapabilityAction;
     use coauth_config::{CokretConfig, PrincipalServerConfig};
+    use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng as _;
 
     use super::*;
 
@@ -413,9 +545,17 @@ mod tests {
         }
     }
 
+    fn key_store() -> Keystore {
+        let mut rng = ChaChaRng::seed_from_u64(42);
+        let eddsa = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid("service-signing");
+        Keystore::new(JsonWebKeySet::new(vec![eddsa]))
+    }
+
     #[test]
     fn grant_fanout_payload_uses_standard_capability_event_shape() {
         let issued_at = Utc.with_ymd_and_hms(2026, 6, 1, 1, 2, 3).unwrap();
+        let key_store = key_store();
         let payload = build_grant_fanout_payload(
             "ck:event:01904100-0000-7000-8000-000000000011",
             "ck:grant:01904100-0000-7000-8000-000000000010",
@@ -427,7 +567,9 @@ mod tests {
             issued_at,
             "did:web:coauth.example",
             &config(),
-        );
+            &key_store,
+        )
+        .unwrap();
 
         assert_eq!(payload["event_kind"], "ck.capability.grant");
         assert_eq!(
@@ -446,11 +588,26 @@ mod tests {
             payload["principal_servers"][0]["did"],
             "did:web:soland.test"
         );
+        let proof = &payload["payload"]["grant"]["proofs"][0];
+        assert_eq!(proof["alg"], "EdDSA");
+        assert_eq!(
+            proof["verification_method"],
+            "did:web:coauth.example#service-signing"
+        );
+        assert_ne!(proof["jws"], "queued-for-service-signature");
+        assert!(proof["jws"].as_str().unwrap().contains(".."));
+        assert!(
+            proof["event_digest"]
+                .as_str()
+                .unwrap()
+                .starts_with("sha256:")
+        );
     }
 
     #[test]
     fn revoke_fanout_payload_uses_standard_revoke_event_shape() {
         let revoked_at = Utc.with_ymd_and_hms(2026, 6, 1, 1, 2, 3).unwrap();
+        let key_store = key_store();
         let payload = build_revoke_fanout_payload(
             "ck:event:01904100-0000-7000-8000-000000000012",
             "ck:grant:01904100-0000-7000-8000-000000000010",
@@ -458,7 +615,9 @@ mod tests {
             revoked_at,
             "did:web:coauth.example",
             &config(),
-        );
+            &key_store,
+        )
+        .unwrap();
 
         assert_eq!(payload["event_kind"], "ck.capability.revoke");
         assert_eq!(
@@ -469,5 +628,9 @@ mod tests {
             payload["payload"]["realm_id"],
             "ck:realm:01904100-0000-7000-8000-000000000001"
         );
+        let proof = &payload["payload"]["proofs"][0];
+        assert_eq!(proof["alg"], "EdDSA");
+        assert_ne!(proof["jws"], "queued-for-service-signature");
+        assert!(proof["jws"].as_str().unwrap().contains(".."));
     }
 }
