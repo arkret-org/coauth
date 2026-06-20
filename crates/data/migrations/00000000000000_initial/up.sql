@@ -151,6 +151,20 @@ CREATE TABLE public.circle_capability_grants (
     updated_at timestamp with time zone NOT NULL
 );
 
+CREATE TABLE public.collaboration_capability_grants (
+    id uuid NOT NULL,
+    subject text NOT NULL,
+    realm_id text NOT NULL,
+    action text NOT NULL,
+    expires_at timestamp with time zone,
+    approval_evidence_ref text,
+    granted_by text NOT NULL,
+    granted_at timestamp with time zone NOT NULL,
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL
+);
+
 CREATE TABLE public.handle_audit_log (
     id uuid NOT NULL,
     user_id uuid,
@@ -861,6 +875,9 @@ ALTER TABLE ONLY public.admin_operation_logs
 ALTER TABLE ONLY public.circle_capability_grants
     ADD CONSTRAINT circle_capability_grants_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.collaboration_capability_grants
+    ADD CONSTRAINT collaboration_capability_grants_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.handle_audit_log
     ADD CONSTRAINT handle_audit_log_pkey PRIMARY KEY (id);
 
@@ -1103,6 +1120,12 @@ CREATE UNIQUE INDEX circle_capability_grants_active_fingerprint_idx ON public.ci
 CREATE INDEX circle_capability_grants_active_realm_subject_idx ON public.circle_capability_grants USING btree (realm_id, subject, granted_at) WHERE (revoked_at IS NULL);
 
 CREATE INDEX circle_capability_grants_revoked_idx ON public.circle_capability_grants USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
+
+CREATE UNIQUE INDEX collaboration_capability_grants_active_fingerprint_idx ON public.collaboration_capability_grants USING btree (subject, realm_id, action) WHERE (revoked_at IS NULL);
+
+CREATE INDEX collaboration_capability_grants_active_realm_subject_idx ON public.collaboration_capability_grants USING btree (realm_id, subject, granted_at) WHERE (revoked_at IS NULL);
+
+CREATE INDEX collaboration_capability_grants_revoked_idx ON public.collaboration_capability_grants USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
 
 CREATE INDEX handle_audit_log_event_idx ON public.handle_audit_log USING btree (event_type, created_at DESC);
 
@@ -1394,5 +1417,4 @@ ALTER TABLE ONLY public.workflow_events
 
 ALTER TABLE ONLY public.workflow_steps
     ADD CONSTRAINT workflow_steps_workflow_instance_id_fkey FOREIGN KEY (workflow_instance_id) REFERENCES public.workflow_instances(id) ON DELETE CASCADE;
-
 

@@ -114,6 +114,8 @@ pub mod app_session;
 pub mod audit;
 /// Circle capability grant repositories.
 pub mod circle_capability;
+/// Collaboration capability grant repositories.
+pub mod collaboration_capability;
 /// Append-only handle audit log repository (T3.2: handle reassignment,
 /// revocation, TTL expiry, DID Document `alsoKnownAs` divergence).
 pub mod handle_audit;

@@ -3,6 +3,7 @@ pub mod accounts;
 pub mod audit_feed;
 pub mod circle_capabilities;
 pub mod claims;
+pub mod collaboration_capabilities;
 pub mod connector_health;
 pub mod devices;
 pub mod invite_quarantine;

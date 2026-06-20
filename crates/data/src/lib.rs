@@ -50,6 +50,8 @@ pub mod circle_capability;
 /// Clock abstraction for testability (`SystemClock` in production, mock clock
 /// in tests).
 pub mod clock;
+/// Durable collaboration capability grants.
+pub mod collaboration_capability;
 /// Persisted notification request, delivery, and audit event models.
 pub mod notification;
 /// OAuth client and session models.
@@ -139,6 +141,11 @@ pub use self::circle_capability::{
     NewCircleCapabilityGrant, ParseCircleCapabilityActionError, RiskTier,
 };
 pub use self::clock::{Clock, SystemClock};
+pub use self::collaboration_capability::{
+    CapabilityCategory, CollaborationCapabilityAction, CollaborationCapabilityGrant,
+    CollaborationCapabilityGrantRepository, NewCollaborationCapabilityGrant,
+    ParseCollaborationCapabilityActionError,
+};
 pub use self::notification::{
     NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDeliveryStatus, NotificationDestination, NotificationEventActor,

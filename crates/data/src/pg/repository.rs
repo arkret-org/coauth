@@ -5,6 +5,7 @@ use coauth_data::agent_key::AgentKeyAuthorizationRepository;
 use coauth_data::app_session::AppSessionRepository;
 use coauth_data::audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository};
 use coauth_data::circle_capability::CircleCapabilityGrantRepository;
+use coauth_data::collaboration_capability::CollaborationCapabilityGrantRepository;
 use coauth_data::notification::{NotificationRepository, NotificationTemplateRepository};
 use coauth_data::oauth::{
     OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -41,6 +42,7 @@ use crate::agent_key::PgAgentKeyAuthorizationRepository;
 use crate::app_session::PgAppSessionRepository;
 use crate::audit::PgAuditRepository;
 use crate::circle_capability::PgCircleCapabilityGrantRepository;
+use crate::collaboration_capability::PgCollaborationCapabilityGrantRepository;
 use crate::notification::{PgNotificationRepository, PgNotificationTemplateRepository};
 use crate::oauth::{
     PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
@@ -207,6 +209,14 @@ impl RepositoryAccess for PgRepository {
         &'c mut self,
     ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
         Box::new(PgCircleCapabilityGrantRepository::new(&mut self.conn))
+    }
+
+    fn collaboration_capability_grant<'c>(
+        &'c mut self,
+    ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c> {
+        Box::new(PgCollaborationCapabilityGrantRepository::new(
+            &mut self.conn,
+        ))
     }
 
     fn upstream_oauth_link<'c>(

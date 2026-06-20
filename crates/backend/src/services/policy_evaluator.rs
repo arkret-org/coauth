@@ -42,6 +42,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use coauth_data::collaboration_capability::{
+    CollaborationCapabilityAction, CollaborationCapabilityGrant,
+};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
 use cokret_core::{
     AuthzDecision, CAP_ACTION_CALL_JOIN, CAP_ACTION_CALL_MODERATE, CAP_ACTION_CALL_RECORD,
@@ -273,25 +276,54 @@ impl PolicyEvaluator for RuleEvaluator {
                     .get()
                     .await
                     .map_err(|e| EvaluatorError::Backend(e.to_string()))?;
-                Ok::<_, EvaluatorError>(rules)
+                let collaboration_grants = if let Ok(action) = request
+                    .action
+                    .as_str()
+                    .parse::<CollaborationCapabilityAction>(
+                ) {
+                    repo.collaboration_capability_grant()
+                        .list_active_for_subject_action(
+                            request.actor_id.as_str(),
+                            request.realm_id.as_str(),
+                            action,
+                        )
+                        .await
+                        .map_err(|e| EvaluatorError::Backend(e.to_string()))?
+                } else {
+                    Vec::new()
+                };
+                Ok::<_, EvaluatorError>((rules, collaboration_grants))
             };
 
-            let rules = match tokio::time::timeout(self.inner_timeout, work).await {
-                Ok(Ok(rules)) => rules,
-                Ok(Err(e)) => return Err(e),
-                Err(_) => return Err(EvaluatorError::Timeout),
-            };
+            let (rules, collaboration_grants) =
+                match tokio::time::timeout(self.inner_timeout, work).await {
+                    Ok(Ok(rules)) => rules,
+                    Ok(Err(e)) => return Err(e),
+                    Err(_) => return Err(EvaluatorError::Timeout),
+                };
 
             let Some(rules) = rules else {
                 // No policy_data row yet → default-allow path. We still
                 // tag `policy_version = "default"` so the audit trail
                 // distinguishes "matched default policy" from "matched
                 // configured allow rule".
-                return Ok(match_rules(&Value::Null, request, frontier, "default"));
+                return Ok(match_rules_with_grants(
+                    &Value::Null,
+                    request,
+                    frontier,
+                    "default",
+                    &collaboration_grants,
+                ));
             };
 
             let policy_version = rules.id.to_string();
-            let decision = match_rules(&rules.data, request, frontier, &policy_version);
+            let decision = match_rules_with_grants(
+                &rules.data,
+                request,
+                frontier,
+                &policy_version,
+                &collaboration_grants,
+            );
             Ok(decision)
         })
     }
@@ -304,6 +336,16 @@ fn match_rules(
     request: &PolicyCheckRequestBody,
     frontier: &Frontier,
     policy_version: &str,
+) -> PolicyDecision {
+    match_rules_with_grants(data, request, frontier, policy_version, &[])
+}
+
+fn match_rules_with_grants(
+    data: &Value,
+    request: &PolicyCheckRequestBody,
+    frontier: &Frontier,
+    policy_version: &str,
+    collaboration_grants: &[CollaborationCapabilityGrant],
 ) -> PolicyDecision {
     let actor_str = request.actor_id.as_str();
     let action_str = request.action.as_str();
@@ -403,6 +445,15 @@ fn match_rules(
         }
     }
 
+    if let Ok(action) = action_str.parse::<CollaborationCapabilityAction>() {
+        if collaboration_grants.iter().any(|grant| {
+            collaboration_grant_matches_request(grant, request, action, chrono::Utc::now())
+        }) {
+            return PolicyDecision::allow(policy_version.to_owned());
+        }
+        return PolicyDecision::hard_deny("capability_denied", policy_version.to_owned());
+    }
+
     // CAP-1 (R3 spec-sync) — `ck.call.{join,screen_share,record,
     // transcribe,moderate}` are recognised capability actions even when
     // no realm rule names them explicitly. Default-allow path; the
@@ -412,6 +463,19 @@ fn match_rules(
     let _recognised_call_action = is_recognised_call_capability_action(action_str);
 
     PolicyDecision::allow(policy_version.to_owned())
+}
+
+fn collaboration_grant_matches_request(
+    grant: &CollaborationCapabilityGrant,
+    request: &PolicyCheckRequestBody,
+    action: CollaborationCapabilityAction,
+    now: DateTime<Utc>,
+) -> bool {
+    grant.revoked_at.is_none()
+        && grant.subject == request.actor_id.as_str()
+        && grant.realm_id == request.realm_id.as_str()
+        && grant.action == action
+        && grant.expires_at.is_none_or(|expires_at| expires_at > now)
 }
 
 fn capability_action_gate_decision(
@@ -573,6 +637,20 @@ mod tests {
         }
     }
 
+    fn collaboration_grant(action: CollaborationCapabilityAction) -> CollaborationCapabilityGrant {
+        CollaborationCapabilityGrant {
+            id: "01HY0000000000000000000000".to_owned(),
+            subject: "did:web:alice.example".to_owned(),
+            realm_id: "ck:realm:01904100-0000-7000-8000-000000000001".to_owned(),
+            action,
+            expires_at: None,
+            approval_evidence_ref: None,
+            granted_by: "user:admin".to_owned(),
+            granted_at: Utc::now(),
+            revoked_at: None,
+        }
+    }
+
     #[test]
     fn empty_rules_yield_allow() {
         let data = serde_json::json!({});
@@ -637,7 +715,7 @@ mod tests {
     }
 
     #[test]
-    fn profile_capability_action_requires_declared_profile() {
+    fn profile_capability_action_requires_declared_profile_and_grant() {
         let r = req("did:web:alice.example", "ck.pin.add");
 
         let denied = match_rules(
@@ -649,7 +727,7 @@ mod tests {
         assert!(matches!(denied.decision, AuthzDecision::HardDeny));
         assert_eq!(denied.reason_code, "unsupported_feature");
 
-        let allowed = match_rules(
+        let missing_grant = match_rules(
             &serde_json::json!({
                 "enabled_profile_refs": ["ck.profile.pinned_items.v1"]
             }),
@@ -657,8 +735,40 @@ mod tests {
             &frontier(FreshnessState::Fresh),
             "v",
         );
+        assert!(matches!(missing_grant.decision, AuthzDecision::HardDeny));
+        assert_eq!(missing_grant.reason_code, "capability_denied");
+
+        let grant = collaboration_grant(CollaborationCapabilityAction::PinAdd);
+        let allowed = match_rules_with_grants(
+            &serde_json::json!({
+                "enabled_profile_refs": ["ck.profile.pinned_items.v1"]
+            }),
+            &r,
+            &frontier(FreshnessState::Fresh),
+            "v",
+            &[grant],
+        );
         assert!(matches!(allowed.decision, AuthzDecision::Allow));
         assert_eq!(allowed.reason_code, "ok");
+    }
+
+    #[test]
+    fn expired_collaboration_capability_grant_denies() {
+        let r = req("did:web:alice.example", "ck.pin.add");
+        let mut grant = collaboration_grant(CollaborationCapabilityAction::PinAdd);
+        grant.expires_at = Some(Utc::now() - chrono::Duration::seconds(1));
+
+        let denied = match_rules_with_grants(
+            &serde_json::json!({
+                "enabled_profile_refs": ["ck.profile.pinned_items.v1"]
+            }),
+            &r,
+            &frontier(FreshnessState::Fresh),
+            "v",
+            &[grant],
+        );
+        assert!(matches!(denied.decision, AuthzDecision::HardDeny));
+        assert_eq!(denied.reason_code, "capability_denied");
     }
 
     #[test]
