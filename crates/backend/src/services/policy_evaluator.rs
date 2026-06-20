@@ -59,6 +59,7 @@ use crate::services::policy_frontier::Frontier;
 /// they are kept as local constants rather than aliased to SDK symbols.
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
+const CANDIDATE_JOIN_POLICY_REVIEW_ACTION: &str = "ck.realm.join.review";
 
 /// CKP-0010 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — call /
 /// media capability actions registered in
@@ -105,8 +106,7 @@ pub fn is_circle_selector(selector: &str) -> bool {
 /// strip.
 #[must_use]
 pub fn strict_reject_profile_active(profile_ids: &[&str]) -> bool {
-    let _ = profile_ids;
-    true
+    profile_ids.contains(&"ck.profile.accountable_principals.strict_reject.v1")
 }
 
 #[derive(Debug, Error)]
@@ -286,7 +286,7 @@ impl PolicyEvaluator for RuleEvaluator {
                 // tag `policy_version = "default"` so the audit trail
                 // distinguishes "matched default policy" from "matched
                 // configured allow rule".
-                return Ok(PolicyDecision::allow("default".to_owned()));
+                return Ok(match_rules(&Value::Null, request, frontier, "default"));
             };
 
             let policy_version = rules.id.to_string();
@@ -307,10 +307,18 @@ fn match_rules(
     let actor_str = request.actor_id.as_str();
     let action_str = request.action.as_str();
 
+    if action_str == CANDIDATE_JOIN_POLICY_REVIEW_ACTION {
+        return PolicyDecision::hard_deny(
+            cokret_core::error::ERROR_CODE_UNSUPPORTED_FEATURE,
+            policy_version.to_owned(),
+        );
+    }
+
     // POLICY-1 (R3 spec-sync) — Actor Profile create/update with an
     // unverified `accountable_principal_ids[]` entry must hard deny with
     // `failed_precondition / accountability_grant_missing`.
-    if action_str.starts_with("ck.actor.profile.")
+    if strict_reject_enabled(data)
+        && action_str.starts_with("ck.actor.profile.")
         && request
             .event_preview
             .get("accountable_principal_ids_unverified")
@@ -406,6 +414,26 @@ fn match_rules(
     PolicyDecision::allow(policy_version.to_owned())
 }
 
+fn strict_reject_enabled(data: &Value) -> bool {
+    data.get("strict_reject_profile")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || profile_list_contains(
+            data.get("enabled_profile_refs"),
+            "ck.profile.accountable_principals.strict_reject.v1",
+        )
+        || profile_list_contains(
+            data.get("claimed_profiles"),
+            "ck.profile.accountable_principals.strict_reject.v1",
+        )
+}
+
+fn profile_list_contains(haystack: Option<&Value>, needle: &str) -> bool {
+    haystack
+        .and_then(Value::as_array)
+        .is_some_and(|items| items.iter().any(|v| v.as_str() == Some(needle)))
+}
+
 fn freshness_requires_fail_closed(freshness_state: FreshnessState, action: &str) -> bool {
     match freshness_state {
         FreshnessState::Fresh => false,
@@ -477,6 +505,30 @@ mod tests {
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
         assert_eq!(d.reason_code, "ok");
+    }
+
+    #[test]
+    fn absent_rules_still_reject_candidate_join_policy_profile_action() {
+        let r = req("did:web:alice.example", "ck.realm.join.review");
+        let d = match_rules(
+            &Value::Null,
+            &r,
+            &frontier(FreshnessState::Fresh),
+            "default",
+        );
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
+        assert_eq!(d.reason_code, "unsupported_feature");
+    }
+
+    #[test]
+    fn candidate_join_policy_profile_action_cannot_be_enabled_by_loose_rules() {
+        let data = serde_json::json!({
+            "require_review_actions": ["ck.realm.join.review"]
+        });
+        let r = req("did:web:alice.example", "ck.realm.join.review");
+        let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
+        assert!(matches!(d.decision, AuthzDecision::HardDeny));
+        assert_eq!(d.reason_code, "unsupported_feature");
     }
 
     #[test]
