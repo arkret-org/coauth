@@ -288,6 +288,53 @@ pub(super) async fn ensure_principal_did_for_user(
     .map_err(|error| format!("principal DID minting failed: {error}"))
 }
 
+/// Mint or load the principal DID in its own transaction.
+///
+/// DID issuance has an external side effect on the principal server. Keep the
+/// local update-key row durable as soon as that side effect succeeds so a later
+/// account-registration or session-grant failure cannot make the next retry
+/// mint a second principal DID for the same user/audience.
+pub(super) async fn ensure_principal_did_for_user_committed(
+    depot: &Depot,
+    rng: &mut coauth_data::BoxRng,
+    clock: &coauth_data::BoxClock,
+    encrypter: &coauth_keystore::Encrypter,
+    http_client: &reqwest::Client,
+    url_builder: &coauth_data::UrlBuilder,
+    cokret_config: &coauth_config::CokretConfig,
+    user: &User,
+    audience: &str,
+) -> Result<String, String> {
+    let mut did_repo = depot
+        .repo()
+        .await
+        .map_err(|error| format!("principal DID repository unavailable: {error}"))?;
+    let principal_did = match ensure_principal_did_for_user(
+        &mut did_repo,
+        rng,
+        clock,
+        encrypter,
+        http_client,
+        url_builder,
+        cokret_config,
+        user,
+        audience,
+    )
+    .await
+    {
+        Ok(principal_did) => principal_did,
+        Err(error) => {
+            did_repo.cancel().await.ok();
+            return Err(error);
+        }
+    };
+    did_repo
+        .save()
+        .await
+        .map_err(|error| format!("principal DID repository commit failed: {error}"))?;
+    Ok(principal_did)
+}
+
 /// Canonical registration handle (`<localpart>:<domain>`) for the configured
 /// principal server endpoint. The handle domain MUST be the principal server's
 /// own host, not the OIDC issuer host (`auth.<domain>`) and not a domain
@@ -656,8 +703,8 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 input.requested_audience.as_deref(),
             )
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
-        let principal_did = ensure_principal_did_for_user(
-            &mut repo,
+        let principal_did = ensure_principal_did_for_user_committed(
+            depot,
             &mut rng,
             &clock,
             &encrypter,
@@ -1111,8 +1158,8 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         )
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
     let user = &browser_session.user;
-    let principal_did = ensure_principal_did_for_user(
-        &mut repo,
+    let principal_did = ensure_principal_did_for_user_committed(
+        depot,
         &mut rng,
         &clock,
         &encrypter,
