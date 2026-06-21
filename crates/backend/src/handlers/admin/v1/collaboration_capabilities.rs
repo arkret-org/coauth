@@ -537,7 +537,6 @@ mod tests {
                 audience: "http://soland.test".to_owned(),
                 endpoint: "http://soland.test".parse().unwrap(),
                 did: Some("did:web:soland.test".to_owned()),
-                oauth_introspection_bearer: None,
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: None,
             }],

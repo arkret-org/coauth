@@ -451,17 +451,17 @@ impl TestState {
                 Router::with_path("/_coauth/gate/account/integration/describe")
                     .get(crate::handlers::account::auth::integration_describe),
             )
-            // Canonical Account Authority surface (mirrors production
-            // server.rs): session-grant issuance (OIDC code exchange) +
-            // single hard-logout. The deleted `/_coauth/.../auth/oidc/*`
-            // bridge routes are gone.
+            // Canonical Account Authority/Auth Server surface (mirrors
+            // production server.rs): session-grant issuance (OIDC code
+            // exchange) plus the Auth-side S2S logout sub-operation. The
+            // deleted `/_coauth/.../auth/oidc/*` bridge routes are gone.
             .push(
                 Router::with_path("/_cokret/gate/account/session-grants")
                     .post(crate::handlers::cokret::issue_session_grant_endpoint),
             )
             .push(
-                Router::with_path("/_cokret/gate/account/logout")
-                    .post(crate::handlers::cokret::logout),
+                Router::with_path("/_cokret/gate/account/auth-sessions/logout")
+                    .post(crate::handlers::cokret::logout_auth_session),
             )
             .push(Router::with_path("/_cokret/describe").get(crate::handlers::cokret::server_describe))
             .push(Router::with_path("/_cokret/root/identity/describe").get(crate::handlers::cokret::identity_describe))

@@ -143,15 +143,14 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(cokret::refresh_session_grant),
         )
-        // Hard-logout of the Auth Server session (account-lifecycle §4.1):
-        // revoke the grant + finish the browser session so the rotation chain
-        // cannot be resumed by any holder proof. Distinct path/schema from the
-        // Principal Server's `session-grants/revoke` (`revoke_session`, bearer +
-        // SessionRevokeRequestBody) — this one is DPoP-holder-proof based.
+        // Auth-side hard logout sub-operation (account-lifecycle §4.1).
+        // This is an internal Account Authority -> Auth Server service call:
+        // the client-visible hard logout endpoint is the Principal/Account
+        // Authority `POST /_cokret/gate/account/logout`, and clients must not
+        // call this path directly.
         .push(
-            Router::with_path("gate/account/session-grants/logout")
-                .options(oidc_preflight_handler)
-                .post(cokret::revoke_session_grant_via_holder_proof),
+            Router::with_path("gate/account/auth-sessions/logout")
+                .post(cokret::logout_auth_session),
         )
         // Server-to-server session-grant introspection (RFC 7662-style): the
         // Principal Server validating a presented grant calls this to learn
@@ -196,16 +195,6 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
             Router::with_path("gate/account/device-enroll")
                 .options(oidc_preflight_handler)
                 .post(cokret::device_enroll_endpoint),
-        )
-        // Single client hard-logout (account-lifecycle §4.1): Bearer
-        // ck.session.grant + DPoP holder proof terminate the grant rotation
-        // chain + browser session (Auth-side). The Principal-side termination
-        // is soland's; when coauth fronts the Account Authority the Principal
-        // Server drives that leg.
-        .push(
-            Router::with_path("gate/account/logout")
-                .options(oidc_preflight_handler)
-                .post(cokret::logout),
         )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check));
 

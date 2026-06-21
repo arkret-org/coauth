@@ -97,6 +97,5 @@ cokret:
     audience: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service
     endpoint: https://local.host/
     did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service
-    oauth_introspection_bearer: ${SOLAND_OAUTH_INTROSPECTION_BEARER}
     session_grant_introspection_bearer: ${SOLAND_SESSION_GRANT_INTROSPECTION_BEARER}
     embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}

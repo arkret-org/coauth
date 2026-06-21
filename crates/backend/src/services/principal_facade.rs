@@ -306,7 +306,6 @@ mod tests {
                 audience: "soland".to_owned(),
                 endpoint: Url::parse("http://127.0.0.1:3322").unwrap(),
                 did: Some("did:web:soland.example".to_owned()),
-                oauth_introspection_bearer: None,
                 session_grant_introspection_bearer: None,
                 embedded_webvh_registration_bearer: Some("secret".to_owned()),
             }],
@@ -376,11 +375,9 @@ impl ConnectorAdmin for DbConnectorAdmin {
 
     async fn verify_token(&self, _token: &str) -> Result<bool, anyhow::Error> {
         // coauth IS the principal authority — there is no separate downstream
-        // principal service whose bearer this would validate. The
-        // server-to-server bearer at the call sites (oauth introspection /
-        // revoke) is checked there against the configured static principal
-        // bearer (`principal_server_static_oauth_bearer_matches`), so this
-        // never honours a token of its own.
+        // principal service whose bearer this would validate. Session-grant
+        // introspection uses its own static Principal Server bearer check, so
+        // this never honours a token of its own.
         Ok(false)
     }
 

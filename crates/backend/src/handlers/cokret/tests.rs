@@ -74,7 +74,6 @@ fn service_describe_exposes_auth_account_boundary_profile() {
             audience: "https://soland.example.com/api".to_owned(),
             endpoint: "https://soland.example.com/cokret".parse().unwrap(),
             did: Some("did:web:soland.example.com".to_owned()),
-            oauth_introspection_bearer: None,
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
         }],
@@ -220,12 +219,36 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> CokretConfig {
             audience: "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned(),
             endpoint: "https://local.host/".parse().unwrap(),
             did: Some("did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned()),
-            oauth_introspection_bearer: None,
             session_grant_introspection_bearer: Some(bearer.to_owned()),
             embedded_webvh_registration_bearer: None,
         }],
         ..CokretConfig::default()
     }
+}
+
+#[test]
+fn service_describe_advertises_auth_session_logout_boundary() {
+    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
+    let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
+    let body = serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
+    let supported_operations = body["supported_operations"].as_array().unwrap();
+
+    assert!(
+        supported_operations.contains(&serde_json::json!(
+            "ck.gate.account.command.logout_auth_session"
+        )),
+        "coauth exposes only the Auth-side hard logout sub-operation"
+    );
+    assert!(
+        !supported_operations.contains(&serde_json::json!(
+            "ck.gate.account.command.logout_session_grant"
+        )),
+        "the removed grant-only logout operation MUST NOT be advertised"
+    );
+    assert!(
+        !supported_operations.contains(&serde_json::json!("ck.gate.account.command.logout")),
+        "the client-visible account logout operation belongs to the Account Authority"
+    );
 }
 
 #[test]

@@ -19,7 +19,7 @@ pub(crate) use issuance::{
 };
 pub use issue::issue_session_grant_endpoint;
 pub use refresh::refresh_session_grant;
-pub use session_logout::{logout, revoke_session_grant_via_holder_proof};
+pub use session_logout::logout_auth_session;
 pub use types::{
     PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome,
     SessionGrantConfirmation, SessionGrantMaterial, SessionGrantPayload, SessionGrantProof,

@@ -195,11 +195,9 @@ async fn require_session_grant_caller(
 
     // Static bearer fallback: a Principal Server may authenticate with a
     // token configured in `cokret.principal_servers[].
-    // session_grant_introspection_bearer`. Mirrors the
-    // `oauth_introspection_bearer` fallback on the OAuth introspection
-    // endpoint and lets a server-to-server caller skip the DB-backed
-    // PAT/OAuth-session lookup. Grants `PrincipalServer` authz only —
-    // never `Admin` — so it cannot revoke session grants.
+    // session_grant_introspection_bearer`. This lets a server-to-server caller
+    // skip the DB-backed PAT/OAuth-session lookup. Grants `PrincipalServer`
+    // authz only — never `Admin` — so it cannot revoke session grants.
     let cokret_config = depot.cokret_config()?;
     if principal_server_static_session_grant_bearer_matches(&cokret_config, token) {
         return Ok(SessionGrantAuthz::PrincipalServer);

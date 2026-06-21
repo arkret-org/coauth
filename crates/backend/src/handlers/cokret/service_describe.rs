@@ -30,11 +30,10 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
     OP_POLICY_CHECK,
     OP_ACCOUNT_ISSUE_SESSION_GRANT,
     "ck.gate.account.command.refresh_session_grant",
-    "ck.gate.account.command.logout_session_grant",
+    "ck.gate.account.command.logout_auth_session",
     "ck.gate.account.command.introspect_session_grant",
     OP_ACCOUNT_AGENT_KEY_PAIR,
     OP_ACCOUNT_DEVICE_ENROLL,
-    "ck.gate.account.command.logout",
 ];
 
 const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ck.session.grant"];
@@ -464,16 +463,6 @@ fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -
                 proof_kind: SessionGrantProofKind::OidcCodeExchange,
             },
         }],
-        // Legacy aliases for older clients that read the flat fields.
-        auth_server_url: Some(issuer.clone()),
-        oauth_issuer: Some(issuer),
-        openid_configuration: Some(openid_configuration),
-        supported_auth_methods: vec![
-            "password".to_owned(),
-            "oidc".to_owned(),
-            "device_pairing".to_owned(),
-            "recovery_challenge".to_owned(),
-        ],
         did_binding_methods: vec![
             "did_controller_key".to_owned(),
             "device_key".to_owned(),
@@ -661,7 +650,8 @@ pub(crate) fn service_describe_response(
         // Listed here explicitly so callers don't treat them as stable
         // interop.
         experimental_features: vec![
-            "session_grant_exchange",
+            "session_grant_issue",
+            "session_grant_introspection",
             "did_webvh_embedded_registration",
             "principal_server_delegation_targets",
         ],
