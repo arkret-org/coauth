@@ -140,6 +140,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // and clients reach it as a protocol path.
         .push(
             Router::with_path("gate/account/session-grants/refresh")
+                .options(oidc_preflight_handler)
                 .post(cokret::refresh_session_grant),
         )
         // Hard-logout of the Auth Server session (account-lifecycle §4.1):
@@ -149,6 +150,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // SessionRevokeRequestBody) — this one is DPoP-holder-proof based.
         .push(
             Router::with_path("gate/account/session-grants/logout")
+                .options(oidc_preflight_handler)
                 .post(cokret::revoke_session_grant_via_holder_proof),
         )
         // Server-to-server session-grant introspection (RFC 7662-style): the

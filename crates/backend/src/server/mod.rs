@@ -401,34 +401,40 @@ mod tests {
     #[tokio::test]
     async fn session_grants_preflight_allows_dpop_header() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
-        let response =
-            TestClient::options("http://127.0.0.1:8698/_cokret/gate/account/session-grants")
+        for path in [
+            "/_cokret/gate/account/session-grants",
+            "/_cokret/gate/account/session-grants/refresh",
+            "/_cokret/gate/account/session-grants/logout",
+        ] {
+            let response = TestClient::options(format!("http://127.0.0.1:8698{path}"))
                 .add_header("Origin", "http://127.0.0.1:8080", true)
                 .add_header("Access-Control-Request-Method", "POST", true)
                 .add_header("Access-Control-Request-Headers", "content-type,dpop", true)
                 .send(&service)
                 .await;
 
-        assert_eq!(response.status_code, Some(StatusCode::NO_CONTENT));
-        assert_eq!(
-            response
+            assert_eq!(response.status_code, Some(StatusCode::NO_CONTENT), "{path}");
+            assert_eq!(
+                response
+                    .headers()
+                    .get(ACCESS_CONTROL_ALLOW_ORIGIN)
+                    .and_then(|value| value.to_str().ok()),
+                Some("*"),
+                "{path}"
+            );
+            let allow_headers = response
                 .headers()
-                .get(ACCESS_CONTROL_ALLOW_ORIGIN)
-                .and_then(|value| value.to_str().ok()),
-            Some("*")
-        );
-        let allow_headers = response
-            .headers()
-            .get(ACCESS_CONTROL_ALLOW_HEADERS)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        assert!(
-            allow_headers
-                .split(',')
-                .any(|header| header.trim() == "dpop"),
-            "canonical session-grant issuance must allow the DPoP header; got {allow_headers}",
-        );
+                .get(ACCESS_CONTROL_ALLOW_HEADERS)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            assert!(
+                allow_headers
+                    .split(',')
+                    .any(|header| header.trim() == "dpop"),
+                "session-grant preflight for {path} must allow the DPoP header; got {allow_headers}",
+            );
+        }
     }
 
     #[tokio::test]
