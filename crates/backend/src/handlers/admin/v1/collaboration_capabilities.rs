@@ -346,7 +346,7 @@ fn build_grant_fanout_payload(
     signed_grant["proofs"] = json!([proof]);
 
     Ok(json!({
-        "kind": "ck.coauth.collaboration_capability.fanout.v1",
+        "kind": "org.cokret.coauth.collaboration_capability.fanout.v1",
         "operation": "grant",
         "issuer_service_did": service_did,
         "event_kind": "ck.capability.grant",
@@ -386,7 +386,7 @@ fn build_revoke_fanout_payload(
     revoke_payload["proofs"] = json!([proof]);
 
     Ok(json!({
-        "kind": "ck.coauth.collaboration_capability.fanout.v1",
+        "kind": "org.cokret.coauth.collaboration_capability.fanout.v1",
         "operation": "revoke",
         "issuer_service_did": service_did,
         "event_kind": "ck.capability.revoke",
@@ -407,7 +407,7 @@ fn sign_fanout_proof(
     created_at: DateTime<Utc>,
 ) -> Result<Value, AppError> {
     let transcript = json!({
-        "kind": "ck.coauth.collaboration_capability.proof.v1",
+        "kind": "org.cokret.coauth.collaboration_capability.proof.v1",
         "event_kind": event_kind,
         "event_id": event_id,
         "capability_grant_id": capability_grant_id,

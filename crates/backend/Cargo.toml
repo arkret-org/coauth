@@ -105,7 +105,7 @@ serde = {workspace = true}
 serde_json = {workspace = true}
 serde_urlencoded = {workspace = true}
 serde_with = {workspace = true}
-serde_yaml = {workspace = true}
+serde_yaml_ng = {workspace = true}
 sha1 = {workspace = true,features = ["oid"]}
 sha2 = {workspace = true}
 signature = {workspace = true}

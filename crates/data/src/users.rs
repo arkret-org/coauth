@@ -1,6 +1,7 @@
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
+use cokret_core::Handle;
 use diesel::pg::Pg;
 use diesel::{Queryable, deserialize, sql_types};
 use rand_core::RngCore;
@@ -200,78 +201,15 @@ impl Node<Ulid> for User {
 /// Error code surfaced when callers supply a non-canonical handle string.
 pub const HANDLE_NOT_CANONICAL_CODE: &str = "invalid_param";
 
-/// Validate that an input string is a canonical Cokret handle of the
-/// form `<lowercase-localpart>:<lowercase-domain>` per spec 7157ee8 §3.1.
-///
-/// Rejects:
-///   * `cokret://<host>/users/<localpart>` URI form
-///   * `acct:` interop aliases (those belong in `handle_aliases[]`)
-///   * leading `@` (display form — strip before submitting)
-///   * bare host strings, `did:` strings, display strings
-///   * uppercase characters in localpart
-///   * an empty localpart or empty domain
-///
-/// Returns the canonical form on success (lowercased exactly as supplied —
-/// the validator does *not* fold uppercase into lowercase on the user's
-/// behalf; callers must canonicalise before submitting).
-///
-/// # Errors
-///
-/// Returns a canonical error code paired with a short reason.
+/// Validate that an input string is already the SDK-canonical Cokret handle.
 pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, String)> {
     let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err((HANDLE_NOT_CANONICAL_CODE, "empty handle".to_owned()));
-    }
-    if trimmed.starts_with("acct:") {
+    let handle =
+        Handle::parse(trimmed).map_err(|error| (HANDLE_NOT_CANONICAL_CODE, error.to_string()))?;
+    if handle.canonical() != trimmed {
         return Err((
             HANDLE_NOT_CANONICAL_CODE,
-            "acct: alias is interop-only; supply a <localpart>:<domain> canonical handle"
-                .to_owned(),
-        ));
-    }
-    if trimmed.starts_with("cokret://") {
-        return Err((
-            HANDLE_NOT_CANONICAL_CODE,
-            "cokret:// URI form is not canonical; supply a <localpart>:<domain> handle".to_owned(),
-        ));
-    }
-    if trimmed.starts_with('@') {
-        return Err((
-            HANDLE_NOT_CANONICAL_CODE,
-            "leading @ is the display form; strip it before submitting".to_owned(),
-        ));
-    }
-    if trimmed.contains('@') {
-        return Err((
-            HANDLE_NOT_CANONICAL_CODE,
-            "canonical handle uses <localpart>:<domain>, not <localpart>@<domain>".to_owned(),
-        ));
-    }
-    let Some((localpart, domain)) = trimmed.split_once(':') else {
-        return Err((
-            HANDLE_NOT_CANONICAL_CODE,
-            "canonical handle must be of the form <localpart>:<domain>".to_owned(),
-        ));
-    };
-    if localpart.is_empty() {
-        return Err((
-            HANDLE_NOT_CANONICAL_CODE,
-            "canonical handle localpart must be non-empty".to_owned(),
-        ));
-    }
-    if domain.is_empty() {
-        return Err((
-            HANDLE_NOT_CANONICAL_CODE,
-            "canonical handle domain must be non-empty".to_owned(),
-        ));
-    }
-    // Reject any uppercase letters in localpart — spec mandates
-    // lowercase localpart for canonical equality.
-    if localpart.chars().any(|c| c.is_ascii_uppercase()) {
-        return Err((
-            HANDLE_NOT_CANONICAL_CODE,
-            "canonical handle localpart must be lowercase".to_owned(),
+            format!("handle must be canonical form {}", handle.canonical()),
         ));
     }
     Ok(trimmed)

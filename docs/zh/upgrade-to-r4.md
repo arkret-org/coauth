@@ -27,8 +27,8 @@ Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
 - **DID 解析** 拒绝不在收紧后的
   `^did:[a-z0-9]+:[^\s]+$` 形态中的 method 名。
 
-完整的未发布 R4 条目见
-[`CHANGELOG.md`](../../CHANGELOG.md)。
+完整的 R4 变更列表以对应构建发布说明和匹配的
+`cokret-spec/spec/v1/` 修订为准。
 
 ## Trust domain 轮换
 

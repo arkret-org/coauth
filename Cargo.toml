@@ -8,12 +8,12 @@ resolver = "3"
 
 [workspace.package]
 version = "0.3.0"
-authors = ["Meldry Team"]
+authors = ["Cokret Team"]
 edition = "2024"
 rust-version = "1.96"
 homepage = "https://cokret.dev/docs/"
 repository = "https://github.com/cokret/coauth/"
-license = "Apache-2.0"
+license = "AGPL-3.0-only"
 publish = false
 
 [workspace.lints.rust]
@@ -295,7 +295,7 @@ pkcs1 = {version = "0.7.5",features = ["std"]}
 pkcs8 = {version = "0.10.2",features = ["std", "pkcs5", "encryption", "pem"]}
 psl = "2.1.212"
 quanta = "0.12.6"
-rand = "0.10"
+rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_core = {version = "0.6.4",features = ["std"]}
 regex = "1.12.4"
@@ -308,7 +308,6 @@ reqwest = {version = "0.13.4",default-features = false,features = [
     "socks",
 ]}
 rsa = {version = "0.9.10",features = ["std", "pem"]}
-ruma-common = "0.19.0"
 rustc-hash = "2.1.2"
 rustls = "0.23.40"
 rustls-pki-types = "1.14.1"
@@ -340,7 +339,7 @@ serde = {version = "1.0.228",features = ["derive"]}
 serde_json = {version = "1.0.150",features = ["preserve_order"]}
 serde_urlencoded = "0.7.1"
 serde_with = {version = "3.21.0",features = ["hex", "chrono"]}
-serde_yaml = "0.9.34"
+serde_yaml_ng = "0.10.0"
 sha1 = "0.10.6"
 sha2 = {version = "0.10.9",features = ["oid"]}
 signature = {version = "2.2.0",features = ["std", "rand_core"]}

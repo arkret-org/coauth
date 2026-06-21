@@ -373,7 +373,7 @@ fn build_agent_key_authorize_fanout_payload(
     });
 
     Ok(serde_json::json!({
-        "kind": "ck.coauth.agent_key_authorize.fanout.v1",
+        "kind": "org.cokret.coauth.agent_key_authorize.fanout.v1",
         "issuer_service_did": service_did,
         "authorized_event_id": authorized_event_id,
         "payload": payload,

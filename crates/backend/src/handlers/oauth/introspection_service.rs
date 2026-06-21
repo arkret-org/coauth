@@ -52,6 +52,9 @@ pub enum IntrospectionError {
     #[error("unknown user {0}")]
     CantLoadUser(Ulid),
 
+    #[error("missing principal DID for user {0}")]
+    MissingPrincipalDid(Ulid),
+
     #[error("unknown OAuth client {0}")]
     CantLoadOAuthClient(Ulid),
 }
@@ -125,10 +128,8 @@ pub async fn introspect_token(
                     return Err(IntrospectionError::InvalidUser(user.id));
                 }
 
-                (
-                    Some(cokret::user_did_for(url_builder, cokret_config, &user)),
-                    Some(user.localpart),
-                )
+                let sub = principal_subject_for_user(repo, cokret_config, &user).await?;
+                (Some(sub), Some(user.localpart))
             } else {
                 (None, None)
             };
@@ -199,10 +200,8 @@ pub async fn introspect_token(
                     return Err(IntrospectionError::InvalidUser(user.id));
                 }
 
-                (
-                    Some(cokret::user_did_for(url_builder, cokret_config, &user)),
-                    Some(user.localpart),
-                )
+                let sub = principal_subject_for_user(repo, cokret_config, &user).await?;
+                (Some(sub), Some(user.localpart))
             } else {
                 (None, None)
             };
@@ -299,7 +298,8 @@ pub async fn introspect_token(
 
             let device_id = cokret::primary_device_id(&session.scope);
             let scope = session.scope;
-            let actor_user_sub = cokret::user_did_for(url_builder, cokret_config, &actor_user);
+            let actor_user_sub =
+                principal_subject_for_user(repo, cokret_config, &actor_user).await?;
 
             IntrospectionResponse {
                 active: true,
@@ -326,4 +326,14 @@ pub async fn introspect_token(
     };
 
     Ok(reply)
+}
+
+async fn principal_subject_for_user(
+    repo: &mut BoxRepository,
+    cokret_config: &CokretConfig,
+    user: &coauth_data::User,
+) -> Result<String, IntrospectionError> {
+    cokret::principal_did_for_user(repo, cokret_config, user)
+        .await?
+        .ok_or(IntrospectionError::MissingPrincipalDid(user.id))
 }

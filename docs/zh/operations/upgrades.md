@@ -8,8 +8,7 @@
 
 适用于同一 major 上的就地升级。
 
-1. 阅读 [`CHANGELOG.md`](../../../CHANGELOG.md) 中目标版本对应的条目，
-   关注 `BREAKING:` 标记。
+1. 阅读目标构建的发布说明，关注 `BREAKING:` 标记。
 2. 用 `pg_dump` 做数据库快照（见 [备份与恢复](backup-restore.md)）。
 3. 在 staging 环境拉取新镜像 / 二进制。
 4. 显式跑迁移：

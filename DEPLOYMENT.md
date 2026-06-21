@@ -1,6 +1,6 @@
 # coauth — Deployment Guide
 
-> Spec target: cokret-spec @ b47ff6ec (R3 sync 2026-05-27)
+> Spec target: cokret-spec @ 5d66aeb (v1 sync 2026-06-21)
 
 ## Overview
 
@@ -18,17 +18,22 @@
 Configuration lives in `config.example.yaml` (committed) — copy to `config.local.yaml` and adjust:
 
 ```yaml
-listen_addr: "0.0.0.0:7080"
-database_url: "postgres://coauth:coauth@localhost:5432/coauth"
-trust_domain: "acme.example"
-oidc:
-  upstream:
-    - provider_id: "primary"
-      issuer: "https://idp.acme.example"
-      client_id: "${OIDC_CLIENT_ID}"
-      client_secret: "${OIDC_CLIENT_SECRET}"
-soland:
-  base_url: "https://soland.acme.example"
+http:
+  listeners:
+  - name: web
+    resources: [discovery, human, oauth, restapi, assets, health]
+    binds:
+    - address: "0.0.0.0:7080"
+  public_base: https://auth.acme.example/
+  issuer: https://auth.acme.example/
+database:
+  uri: ${COAUTH_DATABASE_URI}
+cokret:
+  trust_domain: ck:trust_domain:acme.example
+  principal_servers:
+  - name: soland
+    audience: did:web:soland.acme.example
+    endpoint: https://soland.acme.example/
 ```
 
 Secrets (OIDC client secret, signing keys, DB password) MUST come from environment variables, sealed secrets, or a secrets manager — NEVER committed `.env`.
@@ -47,7 +52,7 @@ diesel setup --database-url "$DATABASE_URL"
 diesel migration run --database-url "$DATABASE_URL"
 ```
 
-Migrations are idempotent and located under `crates/backend/migrations/`.
+Migrations are idempotent and located under `crates/data/migrations/`.
 
 ### Backup / restore
 
@@ -111,13 +116,10 @@ scrape_configs:
 
 ## OIDC conformance
 
-The OIDC adapter is tested against the standard conformance suite. Run locally with:
-
-```sh
-just conformance        # spins up Docker compose + executes
-```
-
-CI runs this automatically via `.github/workflows/oidc-conformance.yaml`.
+The OIDC adapter is tested against the standard conformance suite in CI via
+`.github/workflows/oidc-conformance.yaml`. Local runners should use the
+scripts under `conformance/` and `scripts/`; there is no `just conformance`
+recipe in this workspace.
 
 ## R3 migration notes (b47ff6ec sync)
 

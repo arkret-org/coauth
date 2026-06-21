@@ -198,11 +198,11 @@ fn pick_latest_leaf(leaves: &[AnchorLeafWire]) -> Option<&AnchorLeafWire> {
 /// is derived from a fresh random 32-bit value so two parallel anchorers
 /// can't collide.
 fn fresh_hlc() -> String {
-    use rand::RngExt as _;
+    use rand::RngCore as _;
     let now_ms = chrono::Utc::now().timestamp_millis();
     let unix_ms = (now_ms.max(0) as u64) & 0x0000_FFFF_FFFF_FFFF;
     let mut node_bytes = [0u8; 4];
-    rand::rng().fill(&mut node_bytes[..]);
+    rand::thread_rng().fill_bytes(&mut node_bytes[..]);
     let node = u32::from_be_bytes(node_bytes);
     format!("{unix_ms:012x}-0000-{node:08x}")
 }

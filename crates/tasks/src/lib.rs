@@ -20,7 +20,7 @@ use coauth_data::{
     UrlBuilder,
 };
 use coauth_messaging::NotificationCenter;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use new_queue::QueueRunnerError;
@@ -64,7 +64,7 @@ struct State {
     db_url: String,
     notifier: NotificationCenter,
     wall_clock: Arc<dyn Clock>,
-    principal_connection: Arc<dyn PrincipalServerAdmin>,
+    principal_connection: Arc<dyn ConnectorAdmin>,
     urls: UrlBuilder,
     site_cfg: SiteConfig,
 }
@@ -76,7 +76,7 @@ impl State {
         db_url: String,
         clock: impl Clock + 'static,
         notifier: NotificationCenter,
-        principal: impl PrincipalServerAdmin + 'static,
+        principal: impl ConnectorAdmin + 'static,
         urls: UrlBuilder,
         site_cfg: SiteConfig,
     ) -> Self {
@@ -119,7 +119,7 @@ impl State {
         self.repo_factory.create().await
     }
 
-    pub fn principal_connection(&self) -> &dyn PrincipalServerAdmin {
+    pub fn principal_connection(&self) -> &dyn ConnectorAdmin {
         self.principal_connection.as_ref()
     }
 
@@ -339,7 +339,7 @@ pub async fn init(
     database_url: String,
     clock: impl Clock + 'static,
     notifications: &NotificationCenter,
-    principal: impl PrincipalServerAdmin + 'static,
+    principal: impl ConnectorAdmin + 'static,
     url_builder: UrlBuilder,
     site_config: &SiteConfig,
     cancellation_token: CancellationToken,
@@ -373,7 +373,7 @@ pub async fn init_and_run(
     database_url: String,
     clock: impl Clock + 'static,
     notifications: &NotificationCenter,
-    principal: impl PrincipalServerAdmin + 'static,
+    principal: impl ConnectorAdmin + 'static,
     url_builder: UrlBuilder,
     site_config: &SiteConfig,
     cancellation_token: CancellationToken,

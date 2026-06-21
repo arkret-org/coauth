@@ -3,7 +3,7 @@ use coauth_data::oauth::OAuthDeviceCodeGrantParams;
 use oauth_types::errors::{ClientError, ClientErrorCode};
 use oauth_types::requests::{DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType};
 use oauth_types::scope::ScopeToken;
-use rand::distr::{Alphanumeric, SampleString};
+use rand::distributions::{Alphanumeric, DistString};
 use salvo::Extractible;
 use salvo::prelude::*;
 use thiserror::Error;
@@ -152,9 +152,9 @@ async fn handle_post(
 
     let ip_address = activity_tracker.ip();
 
-    let device_code = Alphanumeric.sample_string(&mut rand::rng(), 32);
+    let device_code = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
     let user_code = Alphanumeric
-        .sample_string(&mut rand::rng(), 6)
+        .sample_string(&mut rand::thread_rng(), 6)
         .to_uppercase();
 
     let device_code = repo

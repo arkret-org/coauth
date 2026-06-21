@@ -15,7 +15,7 @@ use coauth_messaging::NotificationCenter;
 use coauth_messaging::email::{Mailer, SmtpCredentials, SmtpMode, Transport as MailTransport};
 use coauth_messaging::sms::{SmsSender, SmsTransport};
 use coauth_policy::PolicyFactory;
-use coauth_principal::{ConnectorRegistry, PrincipalServerAdmin};
+use coauth_principal::{ConnectorAdmin, ConnectorRegistry};
 use coauth_templates::{SiteConfigExt, Templates};
 use diesel_async::pooled_connection::deadpool::{
     Hook as DieselPoolHook, HookError as DieselPoolHookError, Pool as DieselPool,
@@ -683,7 +683,7 @@ pub async fn load_policy_factory_dynamic_data(
 /// Create the local principal account facade used by account/profile strands.
 ///
 /// Backed by coauth's own Postgres (`users`) via `repository_factory` — see
-/// [`crate::services::principal_facade::DbPrincipalServerAdmin`]. Replaces the
+/// [`crate::services::principal_facade::DbConnectorAdmin`]. Replaces the
 /// former in-memory mock, which lost all state on restart.
 #[must_use]
 pub fn principal_server_connection_from_config(
@@ -691,17 +691,16 @@ pub fn principal_server_connection_from_config(
     repository_factory: BoxRepositoryFactory,
     cokret_config: CokretConfig,
     http_client: reqwest::Client,
-) -> (Arc<dyn PrincipalServerAdmin>, ConnectorRegistry) {
+) -> (Arc<dyn ConnectorAdmin>, ConnectorRegistry) {
     let registry = ConnectorRegistry::new();
 
-    let admin: Arc<dyn PrincipalServerAdmin> = Arc::new(
-        crate::services::principal_facade::DbPrincipalServerAdmin::new(
+    let admin: Arc<dyn ConnectorAdmin> =
+        Arc::new(crate::services::principal_facade::DbConnectorAdmin::new(
             site_config.server_name.clone(),
             repository_factory,
             cokret_config,
             http_client,
-        ),
-    );
+        ));
     (admin, registry)
 }
 

@@ -1,6 +1,6 @@
-//! Database-backed [`PrincipalServerAdmin`] for coauth's account/profile facade.
+//! Database-backed [`ConnectorAdmin`] for coauth's account/profile facade.
 //!
-//! Replaces the in-memory `coauth_principal::MockPrincipalServerAdmin`, whose
+//! Replaces the former in-memory connector mock, whose
 //! non-persistent state lost all accounts on every coauth restart and made the
 //! OIDC token-exchange device upsert fail with "No account found" (a
 //! `session-grants` 500 when logging back into a pre-existing account).
@@ -26,22 +26,22 @@ use async_trait::async_trait;
 use coauth_config::{CokretConfig, PrincipalServerConfig};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
-    PrincipalAccountProfile, PrincipalCapabilityFanoutOperation, PrincipalCapabilityFanoutRequest,
-    PrincipalProvisionRequest, PrincipalServerAdmin,
+    ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
+    PrincipalCapabilityFanoutOperation, PrincipalCapabilityFanoutRequest,
 };
 use serde::Deserialize;
 use serde_json::Value;
 use url::Url;
 
-/// `PrincipalServerAdmin` backed by coauth's own Postgres (`users`).
-pub struct DbPrincipalServerAdmin {
+/// `ConnectorAdmin` backed by coauth's own Postgres (`users`).
+pub struct DbConnectorAdmin {
     server_name: String,
     repository_factory: BoxRepositoryFactory,
     cokret_config: CokretConfig,
     http_client: reqwest::Client,
 }
 
-impl DbPrincipalServerAdmin {
+impl DbConnectorAdmin {
     /// Create a facade rooted at `server_name`, reading accounts through
     /// `repository_factory`.
     #[must_use]
@@ -369,7 +369,7 @@ mod tests {
 }
 
 #[async_trait]
-impl PrincipalServerAdmin for DbPrincipalServerAdmin {
+impl ConnectorAdmin for DbConnectorAdmin {
     fn principal_authority(&self) -> &str {
         self.server_name.as_str()
     }
@@ -384,7 +384,7 @@ impl PrincipalServerAdmin for DbPrincipalServerAdmin {
         Ok(false)
     }
 
-    async fn query_user(&self, handle: &str) -> Result<PrincipalAccountProfile, anyhow::Error> {
+    async fn query_user(&self, handle: &str) -> Result<ConnectorAccountProfile, anyhow::Error> {
         let mut repo = self
             .repository_factory
             .create()
@@ -397,7 +397,7 @@ impl PrincipalServerAdmin for DbPrincipalServerAdmin {
             .map_err(|error| anyhow::anyhow!("user lookup: {error}"))?;
         repo.cancel().await.ok();
         let user = user.ok_or_else(|| anyhow::anyhow!("No account found for {handle}"))?;
-        Ok(PrincipalAccountProfile {
+        Ok(ConnectorAccountProfile {
             displayname: user.display_name.clone(),
             avatar_url: user.avatar_url.clone(),
             deactivated: user.deactivated_at.is_some(),
@@ -429,7 +429,7 @@ impl PrincipalServerAdmin for DbPrincipalServerAdmin {
 
     async fn provision_user(
         &self,
-        _request: &PrincipalProvisionRequest,
+        _request: &ConnectorProvisionRequest,
     ) -> Result<bool, anyhow::Error> {
         Ok(false)
     }

@@ -1,5 +1,6 @@
-// Copyright (c) 2026 Cokret Authors. Licensed under the Apache License,
-// Version 2.0; see LICENSE-APACHE for details.
+// Copyright (c) 2026 Cokret Authors.
+//
+// SPDX-License-Identifier: AGPL-3.0-only
 
 pub mod registry;
 
@@ -24,7 +25,7 @@ pub struct ConnectorCapabilities {
 }
 
 #[derive(Debug)]
-pub struct PrincipalAccountProfile {
+pub struct ConnectorAccountProfile {
     pub displayname: Option<String>,
     pub avatar_url: Option<String>,
     pub deactivated: bool,
@@ -55,7 +56,7 @@ impl<T> FieldUpdate<T> {
     }
 }
 
-pub struct PrincipalProvisionRequest {
+pub struct ConnectorProvisionRequest {
     handle: String,
     sub: String,
     displayname: FieldUpdate<String>,
@@ -64,8 +65,8 @@ pub struct PrincipalProvisionRequest {
     admin: bool,
 }
 
-impl PrincipalProvisionRequest {
-    /// Create a new [`PrincipalProvisionRequest`].
+impl ConnectorProvisionRequest {
+    /// Create a new [`ConnectorProvisionRequest`].
     ///
     /// # Parameters
     ///
@@ -300,10 +301,9 @@ impl PrincipalCapabilityFanoutRequest {
 /// Cokret principal system.
 ///
 /// This trait keeps account-lifecycle call sites testable while
-/// Cokret/Soland integrations use session grants and Principal Server
-/// discovery.
+/// Cokret/Soland integrations use session grants and downstream discovery.
 #[async_trait::async_trait]
-pub trait PrincipalServerAdmin: Send + Sync {
+pub trait ConnectorAdmin: Send + Sync {
     /// Get the principal system authority used for generated account
     /// identifiers.
     fn principal_authority(&self) -> &str;
@@ -340,13 +340,13 @@ pub trait PrincipalServerAdmin: Send + Sync {
     ///
     /// Returns an error if the downstream system is unreachable or the user
     /// does not exist.
-    async fn query_user(&self, handle: &str) -> Result<PrincipalAccountProfile, anyhow::Error>;
+    async fn query_user(&self, handle: &str) -> Result<ConnectorAccountProfile, anyhow::Error>;
 
     /// Provision a user in the downstream principal system.
     ///
     /// # Parameters
     ///
-    /// * `request` - a [`PrincipalProvisionRequest`] containing the details of the user to
+    /// * `request` - a [`ConnectorProvisionRequest`] containing the details of the user to
     ///   provision.
     ///
     /// # Errors
@@ -355,7 +355,7 @@ pub trait PrincipalServerAdmin: Send + Sync {
     /// could not be provisioned.
     async fn provision_user(
         &self,
-        request: &PrincipalProvisionRequest,
+        request: &ConnectorProvisionRequest,
     ) -> Result<bool, anyhow::Error>;
 
     /// Check whether a given handle is available in the downstream principal
@@ -500,21 +500,21 @@ pub trait PrincipalServerAdmin: Send + Sync {
     async fn unset_displayname(&self, handle: &str) -> Result<(), anyhow::Error>;
 }
 
-/// Helper trait: obtain a reference to the inner `PrincipalServerAdmin`
+/// Helper trait: obtain a reference to the inner `ConnectorAdmin`
 /// from a wrapper type. Used to de-duplicate the two blanket impls below.
 trait AsAdmin {
-    type Target: PrincipalServerAdmin + ?Sized;
+    type Target: ConnectorAdmin + ?Sized;
     fn as_admin(&self) -> &Self::Target;
 }
 
-impl<T: PrincipalServerAdmin + ?Sized> AsAdmin for &T {
+impl<T: ConnectorAdmin + ?Sized> AsAdmin for &T {
     type Target = T;
     fn as_admin(&self) -> &T {
         self
     }
 }
 
-impl<T: PrincipalServerAdmin + ?Sized> AsAdmin for Arc<T> {
+impl<T: ConnectorAdmin + ?Sized> AsAdmin for Arc<T> {
     type Target = T;
     fn as_admin(&self) -> &T {
         self.as_ref()
@@ -522,12 +522,12 @@ impl<T: PrincipalServerAdmin + ?Sized> AsAdmin for Arc<T> {
 }
 
 /// Blanket implementation: anything that can produce a `&dyn
-/// PrincipalServerAdmin` via [`AsAdmin`] is itself a valid admin handle.
+/// ConnectorAdmin` via [`AsAdmin`] is itself a valid admin handle.
 #[async_trait::async_trait]
-impl<W> PrincipalServerAdmin for W
+impl<W> ConnectorAdmin for W
 where
     W: AsAdmin + Send + Sync,
-    W::Target: PrincipalServerAdmin,
+    W::Target: ConnectorAdmin,
 {
     fn principal_authority(&self) -> &str {
         self.as_admin().principal_authority()
@@ -537,13 +537,13 @@ where
         self.as_admin().verify_token(token).await
     }
 
-    async fn query_user(&self, handle: &str) -> Result<PrincipalAccountProfile, anyhow::Error> {
+    async fn query_user(&self, handle: &str) -> Result<ConnectorAccountProfile, anyhow::Error> {
         self.as_admin().query_user(handle).await
     }
 
     async fn provision_user(
         &self,
-        request: &PrincipalProvisionRequest,
+        request: &ConnectorProvisionRequest,
     ) -> Result<bool, anyhow::Error> {
         self.as_admin().provision_user(request).await
     }
@@ -615,9 +615,9 @@ where
 /// A connector provider represents an external system that coauth can
 /// provision users into, query state from, and synchronize with.
 ///
-/// [`PrincipalServerAdmin`] is the primary implementation of this trait
+/// [`ConnectorAdmin`] is the primary implementation of this trait
 /// for Cokret/Soland-facing principal connectors.
-pub trait ConnectorProvider: PrincipalServerAdmin {
+pub trait ConnectorProvider: ConnectorAdmin {
     /// A human-readable name for this connector (e.g. "soland").
     fn provider_name(&self) -> &str;
 

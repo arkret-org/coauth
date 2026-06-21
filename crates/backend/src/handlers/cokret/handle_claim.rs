@@ -30,13 +30,6 @@ pub struct HandleClaimMaterial {
 /// be stored as long-lived bearer credentials.
 pub(crate) const HANDLE_CLAIM_TTL_MINUTES: i64 = 5;
 
-fn handle_claim_kind_wire(kind: HandleClaimKind) -> &'static str {
-    match kind {
-        HandleClaimKind::HandleBinding => "handle_binding",
-        HandleClaimKind::OrganizationHandle => "organization_handle",
-    }
-}
-
 fn did_for_handle_claim(value: impl Into<String>) -> Result<Did, SessionGrantError> {
     Did::new(value).map_err(|error| SessionGrantError::Other(error.into()))
 }
@@ -63,9 +56,7 @@ pub(crate) fn issue_handle_claim(
     audience: String,
     member_delivery_binding: HandleClaimDeliveryBindingHint,
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
-    use crate::services::handle_subject_validator::{
-        ensure_claim_kind_supported, ensure_subject_is_principal_did,
-    };
+    use crate::services::handle_subject_validator::ensure_subject_is_principal_did;
 
     let issuer_service_did = service_did_for(url_builder, cokret_config);
     // The subject is the user's MINTED principal DID (`did:webvh:…` hosted
@@ -74,13 +65,6 @@ pub(crate) fn issue_handle_claim(
     // but coauth hosts no DID documents, so that form resolves nowhere and
     // would also mismatch the session-grant subject minted at login.
     let subject_id = subject_did.to_owned();
-
-    // HC-COAUTH-1 (business layer) — fail closed against the removed
-    // `service_handle` (and any other non-allow-listed) `claim_kind`. The
-    // [`HandleClaimKind`] enum already prevents an in-process caller from
-    // naming `service_handle`; this re-checks the wire string so the deny
-    // also covers any future code path that bypasses the enum.
-    ensure_claim_kind_supported(handle_claim_kind_wire(claim_kind))?;
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
     // `ck:actor:` / `ck:account:` typed id or a service DID. Validating

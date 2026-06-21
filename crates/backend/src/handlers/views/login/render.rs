@@ -4,7 +4,7 @@
 
 use coauth_data::{Clock, RepositoryAccess, SiteConfig, oauth::LoginHint};
 use coauth_i18n::Locale;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use coauth_templates::{
     FormState, LoginContext, LoginFormField, PostAuthContext, PostAuthContextInner,
     TemplateContext, Templates,
@@ -23,7 +23,7 @@ use crate::salvo_utils::{InternalError, csrf::CsrfExt};
 pub(super) fn handle_login_hint(
     mut ctx: LoginContext,
     next: &PostAuthContext,
-    _principal_server: &dyn PrincipalServerAdmin,
+    _principal_server: &dyn ConnectorAdmin,
     site_config: &SiteConfig,
 ) -> LoginContext {
     let form_state = ctx.form_state_mut();
@@ -60,7 +60,7 @@ pub(super) async fn render(
     clock: &impl Clock,
     rng: impl Rng,
     templates: &Templates,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     site_config: &SiteConfig,
     res: &mut Response,
 ) -> Result<(), InternalError> {

@@ -107,10 +107,10 @@ impl StrandDefinitionFile {
     ///
     /// # Errors
     ///
-    /// Returns a [`serde_yaml::Error`] if the input is not valid YAML or does
+    /// Returns a [`serde_yaml_ng::Error`] if the input is not valid YAML or does
     /// not match the expected schema.
-    pub fn parse(yaml: &str) -> Result<Self, serde_yaml::Error> {
-        serde_yaml::from_str(yaml)
+    pub fn parse(yaml: &str) -> Result<Self, serde_yaml_ng::Error> {
+        serde_yaml_ng::from_str(yaml)
     }
 
     /// Convert this declarative definition into domain types.

@@ -7,7 +7,7 @@ use coauth_data::{
     BoxRepository, Clock, NotificationChannel, RepositoryAccess, RepositoryError, SiteConfig, User,
     UserEmail, UserProfile, UserProfilePatch,
 };
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use rand_core::RngCore;
 use thiserror::Error;
 
@@ -68,7 +68,7 @@ pub async fn patch_viewer_profile(
     repo: &mut BoxRepository,
     requester: &Requester,
     clock: &dyn Clock,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     patch: UserProfilePatch,
 ) -> Result<User, UserProfileServiceError> {
     let requester_user = requester
@@ -96,7 +96,7 @@ pub async fn patch_viewer_profile(
 
 pub async fn load_viewer_profile(
     repo: &mut BoxRepository,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     user: &User,
 ) -> Result<ViewerProfile, UserProfileServiceError> {
     let principal_id = principal_server.principal_id(&user.localpart);
@@ -228,7 +228,7 @@ pub(crate) fn validate_display_name_patch(
 }
 
 pub(crate) async fn sync_display_name_patch(
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     user: &User,
     patch: Option<Option<String>>,
 ) -> Result<(), UserProfileServiceError> {

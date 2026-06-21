@@ -481,7 +481,7 @@ fn map_upstream_link_workflow_error(error: UpstreamLinkWorkflowError) -> RouteEr
         }
         UpstreamLinkWorkflowError::RequiredAttributeEmpty { .. }
         | UpstreamLinkWorkflowError::RequiredAttributeRender { .. }
-        | UpstreamLinkWorkflowError::PrincipalServerAdmin(_)
+        | UpstreamLinkWorkflowError::ConnectorAdmin(_)
         | UpstreamLinkWorkflowError::Repository(_)
         | UpstreamLinkWorkflowError::Internal(_) => RouteError::Internal(Box::new(error)),
     }

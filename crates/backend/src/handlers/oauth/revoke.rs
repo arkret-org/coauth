@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock};
 use coauth_keystore::Encrypter;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use oauth_types::errors::{ClientError, ClientErrorCode};
 use oauth_types::requests::RevocationRequest;
 use rand_chacha::ChaChaRng;
@@ -128,8 +128,8 @@ async fn handle_post(req: &mut Request, depot: &mut Depot) -> Result<(), RouteEr
         .get::<Encrypter>("encrypter")
         .expect("Encrypter not found in depot");
     let principal_server = depot
-        .get::<Arc<dyn PrincipalServerAdmin>>("principal_server_admin")
-        .expect("PrincipalServerAdmin not found in depot");
+        .get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
+        .expect("ConnectorAdmin not found in depot");
     let repo_factory = depot
         .get::<BoxRepositoryFactory>("box_repository_factory")
         .expect("BoxRepositoryFactory not found in depot");

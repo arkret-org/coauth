@@ -4,7 +4,7 @@ use coauth_data::user::{BrowserSessionRepository, UserRepository};
 use coauth_data::{
     Authentication, BoxRepository, BrowserSession, Client, Clock, RepositoryError, Session,
 };
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
 use ulid::Ulid;
@@ -144,7 +144,7 @@ pub async fn set_oauth_session_human_name(
     mut repo: BoxRepository,
     requester: &Requester,
     _clock: &dyn Clock,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     session_id: Ulid,
     human_name: Option<String>,
 ) -> Result<(), AccountSessionError> {

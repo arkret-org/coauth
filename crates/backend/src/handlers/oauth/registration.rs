@@ -15,7 +15,7 @@ use oauth_types::registration::{
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
 use psl::Psl;
-use rand::distr::{Alphanumeric, SampleString};
+use rand::distributions::{Alphanumeric, DistString};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::prelude::*;
@@ -304,7 +304,7 @@ async fn handle_post(
             | OAuthClientAuthenticationMethod::ClientSecretBasic,
         ) => {
             // Let's generate a random client secret
-            let client_secret = Alphanumeric.sample_string(&mut rand::rng(), 20);
+            let client_secret = Alphanumeric.sample_string(&mut rand::thread_rng(), 20);
             let encrypted_client_secret = encrypter.encrypt_to_string(client_secret.as_bytes())?;
             (Some(client_secret), Some(encrypted_client_secret))
         }

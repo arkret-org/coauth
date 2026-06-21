@@ -390,6 +390,27 @@ pub(crate) fn user_did_for(
     )
 }
 
+pub(crate) async fn principal_did_for_user<R>(
+    repo: &mut R,
+    cokret_config: &CokretConfig,
+    user: &User,
+) -> Result<Option<String>, R::Error>
+where
+    R: RepositoryAccess,
+{
+    for server in &cokret_config.principal_servers {
+        if let Some(row) = repo
+            .principal_did()
+            .get_for_user_and_audience(user, &server.audience)
+            .await?
+        {
+            return Ok(Some(row.did));
+        }
+    }
+
+    Ok(None)
+}
+
 /// Display form `local@host` used by logging / display paths.
 /// NOT the canonical handle form — use [`user_handle`]
 /// (spec 7157ee8 §3.1) for `alsoKnownAs` / DID Document / claim emission.

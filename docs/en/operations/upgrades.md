@@ -10,8 +10,8 @@ deprecated paths after at least one minor release of warning.
 The procedure below works for all in-place upgrades on the same major
 line.
 
-1. **Read the [`CHANGELOG.md`](../../../CHANGELOG.md)** entry for the
-   target version and watch for `BREAKING:` callouts.
+1. **Read the release notes for the target build** and watch for
+   `BREAKING:` callouts.
 2. **Snapshot** the database with `pg_dump` ([backup-restore](backup-restore.md)).
 3. **Pull** the new container image (or download the new binary) onto a
    staging instance.

@@ -1,5 +1,13 @@
 use coauth_config::{CokretConfig, IdentityRegistryKind};
 use coauth_data::{RepositoryAccess, UrlBuilder};
+use cokret_core::generated::profile_requirements::{
+    requirements_for, validate_profile_requirements,
+};
+use cokret_core::models::{
+    OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_DEVICE_ENROLL, OP_ACCOUNT_ISSUE_SESSION_GRANT,
+    OP_DIRECTORY_DESCRIBE, OP_DIRECTORY_RESOLVE_HANDLE, OP_IDENTITY_DESCRIBE_REGISTRY,
+    OP_IDENTITY_GET_DOCUMENT, OP_IDENTITY_RESOLVE, OP_POLICY_CHECK, OP_SERVER_DESCRIBE,
+};
 use cokret_core::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
     SessionGrantProofKind,
@@ -9,6 +17,30 @@ use serde::Serialize;
 
 use super::*;
 use crate::handlers::common::DepotExt;
+
+const CLAIMED_PROFILE_IDS: &[&str] = &["ck.profile.auth_server.v1"];
+
+const SUPPORTED_OPERATIONS: &[&str] = &[
+    OP_SERVER_DESCRIBE,
+    OP_IDENTITY_DESCRIBE_REGISTRY,
+    OP_IDENTITY_RESOLVE,
+    OP_IDENTITY_GET_DOCUMENT,
+    OP_DIRECTORY_DESCRIBE,
+    OP_DIRECTORY_RESOLVE_HANDLE,
+    OP_POLICY_CHECK,
+    OP_ACCOUNT_ISSUE_SESSION_GRANT,
+    "ck.gate.account.command.refresh_session_grant",
+    "ck.gate.account.command.logout_session_grant",
+    "ck.gate.account.command.introspect_session_grant",
+    OP_ACCOUNT_AGENT_KEY_PAIR,
+    OP_ACCOUNT_DEVICE_ENROLL,
+    "ck.gate.account.command.logout",
+];
+
+const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ck.session.grant"];
+
+const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] =
+    &["ck.schema.handle_claim.v1", "ck.schema.service_describe.v1"];
 
 #[derive(Debug, Serialize)]
 struct SupportedBinding {
@@ -304,6 +336,21 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
     }
 }
 
+fn validate_claimed_profiles_against_sdk_requirements() {
+    for profile_id in CLAIMED_PROFILE_IDS {
+        debug_assert!(requirements_for(profile_id).is_some());
+        debug_assert!(
+            validate_profile_requirements(
+                profile_id,
+                SUPPORTED_OPERATIONS,
+                IMPLEMENTED_PROFILE_EVENT_KINDS,
+                IMPLEMENTED_PROFILE_SCHEMAS,
+            )
+            .is_ok()
+        );
+    }
+}
+
 /// G4.T3 — convert the loader's `VerifiedProfileDescriptor` into the wire
 /// shape expected by `ServiceDescribeOutcome.verified_profiles[]`. Also
 /// enforces the local cross-check: any entry whose `profile_id` is not in
@@ -318,7 +365,6 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
 fn build_verified_profile_descriptors(
     loaded: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
 ) -> Vec<VerifiedProfileDescriptor> {
-    const CLAIMED_PROFILE_IDS: &[&str] = &["ck.profile.auth_server.v1"];
     loaded
         .iter()
         .filter_map(|entry| {
@@ -478,6 +524,8 @@ pub(crate) fn service_describe_response(
     cokret_config: &CokretConfig,
     loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
 ) -> ServiceDescribeOutcome {
+    validate_claimed_profiles_against_sdk_requirements();
+
     let principal_servers: Vec<PrincipalServerDescriptor> = cokret_config
         .principal_servers
         .iter()
@@ -539,15 +587,7 @@ pub(crate) fn service_describe_response(
             kind: COKRET_HTTP_BINDING,
             base_url: url_builder.http_base().to_string(),
         }],
-        supported_operations: vec![
-            "ck.server.query.describe",
-            "ck.root.identity.registry.query.describe",
-            "ck.root.identity.query.resolve",
-            "ck.root.identity.document.resource.get",
-            "ck.find.directory.query.describe",
-            "ck.find.directory.query.resolve_handle",
-            "ck.self.policy.query.check",
-        ],
+        supported_operations: SUPPORTED_OPERATIONS.to_vec(),
         // Required `service-describe.schema.json` field: coauth receives no
         // canonical plaintext / reversible derived content, so it declares
         // no plaintext classes.
@@ -598,7 +638,7 @@ pub(crate) fn service_describe_response(
         // delegated identity ops) so cotest's ProfileValidator does
         // not flag a role mismatch.
         claimed_profiles: vec![ClaimedProfileDescriptor {
-            profile_id: "ck.profile.auth_server.v1",
+            profile_id: CLAIMED_PROFILE_IDS[0],
             claim_kind: "self_claimed",
             notes: Some(
                 "Auth-server-shaped profile: issues short-lived audience-bound ck.session.grant, exposes ck.server.query.describe, MAY expose ck.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",

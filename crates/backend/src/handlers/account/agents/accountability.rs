@@ -334,7 +334,7 @@ pub(super) fn accountability_capabilities_digest(
     capabilities: &[String],
 ) -> Result<String, AppError> {
     canonical_digest(&CapabilityDigestInput {
-        kind: "ck.coauth.accountability_grant.capabilities.v1",
+        kind: "org.cokret.coauth.accountability_grant.capabilities.v1",
         agent_principal_id,
         controller_did,
         capabilities,
@@ -365,7 +365,7 @@ fn build_soland_fanout_payload(
         .collect();
 
     Ok(serde_json::json!({
-        "kind": "ck.coauth.accountability_grant.fanout.v1",
+        "kind": "org.cokret.coauth.accountability_grant.fanout.v1",
         "issuer_service_did": service_did,
         "raw_payload_digest": raw_payload_digest,
         "grant": response,

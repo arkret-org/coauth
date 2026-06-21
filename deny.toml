@@ -34,6 +34,7 @@ allow = [
     "0BSD",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
+    "AGPL-3.0-only",
     "BSD-2-Clause",
     "BSD-3-Clause",
     "CDLA-Permissive-2.0",
@@ -81,7 +82,8 @@ skip = [
     # cron depends on an older winnow:
     # https://github.com/zslayton/cron/pull/137
     { name = "winnow", version = "0.6.20" },
-    # Still mainly using rand 0.8
+    # Workspace crates stay on rand 0.8 / rand_core 0.6 while upstream
+    # dependencies transition through newer rand stacks.
     { name = "rand", version = "0.8.5" },
     { name = "rand_chacha", version = "0.3.1" },
     { name = "rand_core", version = "0.6.4" },

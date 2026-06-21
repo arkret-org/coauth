@@ -6,7 +6,7 @@ use coauth_data::{
     BoxRepository, BrowserSession, Clock, RepositoryAccess, RepositoryError, SiteConfig,
     UpstreamOAuthProvider, UrlBuilder, User,
 };
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
 use ulid::Ulid;
@@ -62,7 +62,7 @@ pub async fn login_with_password(
     clock: &dyn Clock,
     password_manager: &PasswordManager,
     limiter: &Limiter,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     site_config: &SiteConfig,
@@ -218,7 +218,7 @@ async fn find_user_by_email_or_by_username(
 
 async fn find_user_by_login_identifier(
     site_config: &SiteConfig,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     repo: &mut BoxRepository,

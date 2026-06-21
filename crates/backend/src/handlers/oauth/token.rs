@@ -6,7 +6,7 @@ use coauth_data::{
 };
 use coauth_keystore::Keystore;
 use coauth_policy::Policy;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use coauth_templates::Templates;
 use oauth_types::errors::{ClientError, ClientErrorCode};
 use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
@@ -261,6 +261,11 @@ impl From<AuthorizationCodeExchangeError> for RouteError {
             }
             AuthorizationCodeExchangeError::Repository(err) => Self::Internal(Box::new(err)),
             AuthorizationCodeExchangeError::Internal(err) => Self::Internal(err),
+            AuthorizationCodeExchangeError::MissingPrincipalDid(user_id) => {
+                Self::Internal(Box::new(std::io::Error::other(format!(
+                    "missing principal DID for user {user_id}"
+                ))))
+            }
         }
     }
 }
@@ -321,6 +326,9 @@ impl From<DeviceCodeExchangeError> for RouteError {
             DeviceCodeExchangeError::ProvisionDeviceFailed(err) => Self::ProvisionDeviceFailed(err),
             DeviceCodeExchangeError::Repository(err) => Self::Internal(Box::new(err)),
             DeviceCodeExchangeError::Internal(err) => Self::Internal(err),
+            DeviceCodeExchangeError::MissingPrincipalDid(user_id) => Self::Internal(Box::new(
+                std::io::Error::other(format!("missing principal DID for user {user_id}")),
+            )),
         }
     }
 }
@@ -372,8 +380,8 @@ async fn handle_post(
         .cloned()
         .unwrap_or_default();
     let principal_server = depot
-        .get::<Arc<dyn PrincipalServerAdmin>>("principal_server_admin")
-        .expect("PrincipalServerAdmin not found in depot");
+        .get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
+        .expect("ConnectorAdmin not found in depot");
     let site_config = depot
         .get::<SiteConfig>("site_config")
         .expect("SiteConfig not found in depot");

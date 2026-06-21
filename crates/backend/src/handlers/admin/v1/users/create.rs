@@ -8,8 +8,8 @@ use chrono::Duration;
 use coauth_config::CokretConfig;
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
 use coauth_data::{BoxClock, BoxRepository};
-use coauth_principal::PrincipalProvisionRequest;
-use rand::distr::{Alphanumeric, SampleString};
+use coauth_principal::ConnectorProvisionRequest;
+use rand::distributions::{Alphanumeric, DistString};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -98,7 +98,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     // attested credential.
 
     principal_server
-        .provision_user(&PrincipalProvisionRequest::new(&user.localpart, &user.sub))
+        .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
@@ -328,7 +328,7 @@ pub async fn mint_registration_tokens(
 
     let mut tokens = Vec::with_capacity(params.count as usize);
     for _ in 0..params.count {
-        let token_string = Alphanumeric.sample_string(&mut rand::rng(), 12);
+        let token_string = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
         let registration_token = repo
             .user_registration_token()
             .add(rng, clock, token_string, params.usage_limit, expires_at)

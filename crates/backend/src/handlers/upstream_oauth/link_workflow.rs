@@ -15,7 +15,7 @@ use coauth_data::{
 };
 use coauth_jose::jwt::Jwt;
 use coauth_policy::{Policy, RegisterInput, RegistrationMethod, Requester as PolicyRequester};
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use minijinja::Environment;
 use rand_core::RngCore;
 use serde_json::{Map as JsonMap, Value as JsonValue};
@@ -77,7 +77,7 @@ pub enum UpstreamLinkWorkflowError {
     HandleUnavailable { handle: String },
 
     #[error("principal server admin call failed")]
-    PrincipalServerAdmin(#[source] AnyhowError),
+    ConnectorAdmin(#[source] AnyhowError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -95,7 +95,7 @@ impl UpstreamLinkWorkflowError {
     }
 
     fn principal_server(error: AnyhowError) -> Self {
-        Self::PrincipalServerAdmin(error)
+        Self::ConnectorAdmin(error)
     }
 }
 
@@ -235,7 +235,7 @@ pub async fn load_upstream_link_state(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     policy: &mut Policy,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -358,7 +358,7 @@ pub async fn submit_upstream_link_action(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     policy: &mut Policy,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -469,7 +469,7 @@ async fn load_upstream_registration_screen(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     policy: &mut Policy,
     site_config: &SiteConfig,
     user_agent: Option<String>,
@@ -617,7 +617,7 @@ enum HandlePreCheckResult {
 async fn pre_check_handle(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     policy: &mut Policy,
     provider: &UpstreamOAuthProvider,
     link: &UpstreamOAuthLink,
@@ -952,7 +952,7 @@ fn resolve_registration_attributes(
 
 async fn validate_registration_action(
     repo: &mut BoxRepository,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     policy: &mut Policy,
     site_config: &SiteConfig,
     ip_address: Option<IpAddr>,

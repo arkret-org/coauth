@@ -7,7 +7,7 @@ use coauth_config::CokretConfig;
 use coauth_data::{AuthorizationGrantStage, BoxRepository, Client, Clock, SiteConfig, UrlBuilder};
 use coauth_i18n::Locale;
 use coauth_keystore::Keystore;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use coauth_templates::{DeviceNameContext, TemplateContext as _, Templates};
 use oauth_types::requests::{AccessTokenResponse, AuthorizationCodeGrant, GrantType};
 use oauth_types::scope;
@@ -40,7 +40,7 @@ pub async fn exchange_authorization_code(
     cokret_config: &CokretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
-    principal_server: &Arc<dyn PrincipalServerAdmin>,
+    principal_server: &Arc<dyn ConnectorAdmin>,
     templates: &Templates,
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), AuthorizationCodeExchangeError> {
@@ -297,12 +297,21 @@ pub async fn exchange_authorization_code(
             browser_session.id = %browser_session.id,
             "Generating ID token because openid scope is present"
         );
+        let principal_did = crate::handlers::cokret::principal_did_for_user(
+            &mut repo,
+            cokret_config,
+            &browser_session.user,
+        )
+        .await?
+        .ok_or(AuthorizationCodeExchangeError::MissingPrincipalDid(
+            browser_session.user.id,
+        ))?;
         Some(
             generate_id_token(
                 rng,
                 clock,
                 url_builder,
-                cokret_config,
+                &principal_did,
                 key_store,
                 client,
                 Some(&authz_grant),

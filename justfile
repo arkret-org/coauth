@@ -67,12 +67,12 @@ frontend-assets:
 
 # Build the backend in release mode
 build:
-    cargo build --release -p coauth
+    cargo build --release -p coauth --features cedar
 
 # Build everything (backend + frontend)
 build-all:
     just frontend-build
-    cargo build --release -p coauth
+    cargo build --release -p coauth --features cedar
 
 # Check the entire workspace for errors
 check:

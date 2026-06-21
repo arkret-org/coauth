@@ -285,23 +285,20 @@ impl UserRecoveryRepository for PgUserRecoveryRepository<'_> {
         // We don't really use the ticket, we just want to make sure we drop it
         let _ = user_recovery_ticket;
 
-        // This should have been checked by the caller
-        if user_recovery_session.consumed_at.is_some() {
-            return Err(DatabaseError::invalid_operation());
-        }
-
         let consumed_at = clock.now();
 
         let rows_affected = diesel::update(
-            user_recovery_sessions::table.find(Uuid::from(user_recovery_session.id)),
+            user_recovery_sessions::table
+                .filter(user_recovery_sessions::id.eq(Uuid::from(user_recovery_session.id)))
+                .filter(user_recovery_sessions::consumed_at.is_null()),
         )
         .set(user_recovery_sessions::consumed_at.eq(Some(consumed_at)))
         .execute(self.conn)
         .await?;
 
-        user_recovery_session.consumed_at = Some(consumed_at);
-
         DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
+
+        user_recovery_session.consumed_at = Some(consumed_at);
 
         Ok(user_recovery_session)
     }

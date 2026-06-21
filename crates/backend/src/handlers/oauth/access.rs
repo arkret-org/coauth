@@ -13,7 +13,7 @@ use coauth_data::{
 };
 use coauth_keystore::Keystore;
 use coauth_policy::{Policy, PolicyFactory};
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use oauth_types::requests::AuthorizationResponse;
 use thiserror::Error;
 use ulid::Ulid;
@@ -103,6 +103,9 @@ pub enum OAuthAccessError {
     #[error("policy violation")]
     PolicyViolation,
 
+    #[error("missing principal DID for user {0}")]
+    MissingPrincipalDid(Ulid),
+
     #[error(transparent)]
     Repository(#[from] RepositoryError),
 
@@ -113,7 +116,7 @@ pub enum OAuthAccessError {
 pub async fn load_authorization_consent(
     mut repo: BoxRepository,
     policy_factory: &PolicyFactory,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     _clock: &dyn Clock,
     browser_session: &BrowserSession,
     grant_id: Ulid,
@@ -228,13 +231,22 @@ pub async fn accept_authorization_consent(
             .browser_session()
             .get_last_authentication(browser_session)
             .await?;
+        let principal_did = crate::handlers::cokret::principal_did_for_user(
+            &mut repo,
+            cokret_config,
+            &browser_session.user,
+        )
+        .await?
+        .ok_or(OAuthAccessError::MissingPrincipalDid(
+            browser_session.user.id,
+        ))?;
 
         params.id_token = Some(
             generate_id_token(
                 rng,
                 clock,
                 url_builder,
-                cokret_config,
+                &principal_did,
                 key_store,
                 &client,
                 Some(&grant),
@@ -280,7 +292,7 @@ pub async fn lookup_device_link(
 pub async fn load_device_consent(
     mut repo: BoxRepository,
     policy_factory: &PolicyFactory,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     clock: &dyn Clock,
     browser_session: &BrowserSession,
     grant_id: Ulid,
@@ -434,7 +446,7 @@ async fn has_policy_violation(
 }
 
 async fn fetch_display_name(
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     username: &str,
 ) -> Option<String> {
     match tokio::time::timeout(

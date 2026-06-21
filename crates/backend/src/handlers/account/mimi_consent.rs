@@ -467,8 +467,8 @@ impl AnchorerSigner {
             Self::from_seed(seed, issuer_did, kid, AnchorerSigningKeyOrigin::Configured)
         } else {
             let mut seed = [0_u8; 32];
-            use rand::RngExt as _;
-            rand::rng().fill(&mut seed[..]);
+            use rand::RngCore as _;
+            rand::thread_rng().fill_bytes(&mut seed[..]);
             tracing::warn!(
                 "COAUTH_COKRET__ANCHORER_SIGNING_KEY not set; using ephemeral \
                  anchorer key (anything signed will be unverifiable across \

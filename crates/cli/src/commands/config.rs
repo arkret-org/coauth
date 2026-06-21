@@ -62,7 +62,7 @@ impl Options {
         let _span = info_span!("cli.config.dump").entered();
 
         let root = RootConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
-        let yaml = serde_yaml::to_string(&root)?;
+        let yaml = serde_yaml_ng::to_string(&root)?;
 
         write_output(&yaml, dest.as_deref()).await?;
         Ok(ExitCode::SUCCESS)
@@ -85,7 +85,7 @@ impl Options {
 
         let mut rng = rand_chacha::ChaChaRng::from_entropy();
         let generated = RootConfig::generate(&mut rng).await?;
-        let yaml = serde_yaml::to_string(&generated)?;
+        let yaml = serde_yaml_ng::to_string(&generated)?;
 
         write_output(&yaml, dest.as_deref()).await?;
         Ok(ExitCode::SUCCESS)

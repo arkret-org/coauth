@@ -79,6 +79,9 @@ pub enum AuthorizationCodeExchangeError {
     #[error("failed to load browser session {0}")]
     NoSuchBrowserSession(Ulid),
 
+    #[error("missing principal DID for user {0}")]
+    MissingPrincipalDid(Ulid),
+
     #[error("failed to load oauth session {0}")]
     NoSuchOAuthSession(Ulid),
 
@@ -205,6 +208,9 @@ pub enum DeviceCodeExchangeError {
 
     #[error("failed to load browser session {0}")]
     NoSuchBrowserSession(Ulid),
+
+    #[error("missing principal DID for user {0}")]
+    MissingPrincipalDid(Ulid),
 
     #[error("failed to provision device")]
     ProvisionDeviceFailed(#[source] anyhow::Error),

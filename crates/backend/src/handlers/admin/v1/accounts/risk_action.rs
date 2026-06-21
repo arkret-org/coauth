@@ -263,7 +263,7 @@ pub(crate) fn risk_action_approval_transcript(
     approved_by: &str,
 ) -> RiskActionApprovalTranscript {
     RiskActionApprovalTranscript {
-        kind: "ck.coauth.account_risk_action.approval.v1",
+        kind: "org.cokret.coauth.account_risk_action.approval.v1",
         proposal_id: proposal_id.to_owned(),
         account_id: account_id.to_string(),
         action: action.to_owned(),

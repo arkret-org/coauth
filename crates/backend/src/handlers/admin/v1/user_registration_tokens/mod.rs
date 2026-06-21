@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::RepositoryAccess;
 use coauth_data::audit::AdminOperation;
 use coauth_data::user::UserRegistrationTokenFilter;
-use rand::distr::{Alphanumeric, SampleString};
+use rand::distributions::{Alphanumeric, DistString};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer};
@@ -55,7 +55,7 @@ pub async fn add_token(
     // Fall back to a randomly generated token string
     let token_str = body
         .token
-        .unwrap_or_else(|| Alphanumeric.sample_string(&mut rand::rng(), 12));
+        .unwrap_or_else(|| Alphanumeric.sample_string(&mut rand::thread_rng(), 12));
 
     // Guard against duplicate token values
     let duplicate = repo

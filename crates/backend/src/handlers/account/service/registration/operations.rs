@@ -6,7 +6,7 @@ use coauth_data::user::{
 };
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, UserRegistration};
 use coauth_policy::PolicyFactory;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use lettre::Address;
 use rand_chacha::rand_core::CryptoRngCore;
 use ulid::Ulid;
@@ -118,7 +118,7 @@ pub async fn begin_password_registration(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     password_manager: &PasswordManager,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     policy_factory: &PolicyFactory,
     limiter: &Limiter,
     request: BeginPasswordRegistrationRequestBody,

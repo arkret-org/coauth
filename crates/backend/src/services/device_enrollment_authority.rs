@@ -144,8 +144,8 @@ fn load_authority() -> EnrollmentAuthority {
     }
 
     let mut seed = [0u8; 32];
-    use rand::RngExt as _;
-    rand::rng().fill(&mut seed[..]);
+    use rand::RngCore as _;
+    rand::thread_rng().fill_bytes(&mut seed[..]);
     tracing::warn!(
         "{ENROLLMENT_KEY_SEED_ENV} not set; using an ephemeral device-enrollment \
          authority key (signed device authorizations will be unverifiable across \

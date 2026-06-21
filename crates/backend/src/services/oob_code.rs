@@ -252,7 +252,7 @@ impl Default for LookupStrikes {
 // ── internals ──────────────────────────────────────────────────
 
 fn generate_restricted_base32(out_len: usize) -> String {
-    use rand::RngExt as _;
+    use rand::RngCore as _;
     debug_assert_eq!(OOB_ALPHABET_BYTES.len(), 31);
     let alphabet = OOB_ALPHABET_BYTES;
     let modulus = alphabet.len() as u32;
@@ -261,11 +261,11 @@ fn generate_restricted_base32(out_len: usize) -> String {
     // symbols. The accepted ceiling is the largest multiple of `modulus`
     // ≤ u32::MAX.
     let ceiling = u32::MAX - (u32::MAX % modulus);
-    let mut rng = rand::rng();
+    let mut rng = rand::thread_rng();
     let mut out = String::with_capacity(out_len);
     let mut buf = [0u8; 4];
     while out.len() < out_len {
-        rng.fill(&mut buf[..]);
+        rng.fill_bytes(&mut buf);
         let v = u32::from_le_bytes(buf);
         if v >= ceiling {
             continue;

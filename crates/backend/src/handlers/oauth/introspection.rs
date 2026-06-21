@@ -4,7 +4,7 @@ use coauth_config::CokretConfig;
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock, UrlBuilder};
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
 use coauth_keystore::Encrypter;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use oauth_types::errors::{ClientError, ClientErrorCode};
 use oauth_types::requests::{IntrospectionRequest, IntrospectionResponse};
 use opentelemetry::metrics::Counter;
@@ -178,8 +178,8 @@ async fn handle_post(
         .get::<Encrypter>("encrypter")
         .expect("Encrypter not found in depot");
     let principal_server = depot
-        .get::<Arc<dyn PrincipalServerAdmin>>("principal_server_admin")
-        .expect("PrincipalServerAdmin not found in depot");
+        .get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
+        .expect("ConnectorAdmin not found in depot");
     let repo_factory = depot
         .get::<BoxRepositoryFactory>("box_repository_factory")
         .expect("BoxRepositoryFactory not found in depot");

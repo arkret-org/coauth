@@ -14,7 +14,7 @@ mod tests {
     use chrono::Duration;
     use coauth_data::RepositoryAccess;
     use coauth_data::user::{UserPasswordRepository, UserRepository};
-    use coauth_principal::{PrincipalProvisionRequest, PrincipalServerAdmin};
+    use coauth_principal::{ConnectorAdmin, ConnectorProvisionRequest};
     use hyper::{Request, StatusCode};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
@@ -522,7 +522,7 @@ mod tests {
             .unwrap();
         state
             .principal_server_admin
-            .provision_user(&PrincipalProvisionRequest::new(&user.localpart, &user.sub))
+            .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
             .await
             .unwrap();
         repo.save().await.unwrap();
@@ -577,7 +577,7 @@ mod tests {
 
         state
             .principal_server_admin
-            .provision_user(&PrincipalProvisionRequest::new(&user.localpart, &user.sub))
+            .provision_user(&ConnectorProvisionRequest::new(&user.localpart, &user.sub))
             .await
             .unwrap();
         state

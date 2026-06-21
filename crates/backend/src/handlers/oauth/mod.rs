@@ -21,7 +21,6 @@
 use std::collections::HashMap;
 
 use chrono::Duration;
-use coauth_config::CokretConfig;
 use coauth_data::{
     AccessToken, Authentication, AuthorizationGrant, BrowserSession, Client, Clock, RefreshToken,
     RepositoryAccess, Session, TokenType, UrlBuilder,
@@ -76,29 +75,22 @@ pub(crate) fn generate_id_token(
     rng: &mut (impl rand_core::RngCore + rand_core::CryptoRng),
     clock: &impl Clock,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    principal_did: &str,
     key_store: &Keystore,
     client: &Client,
     grant: Option<&AuthorizationGrant>,
     session: Option<&Session>,
-    browser_session: &BrowserSession,
+    _browser_session: &BrowserSession,
     access_token: Option<&AccessToken>,
     last_authentication: Option<&Authentication>,
 ) -> Result<String, IdTokenSignatureError> {
     let mut claims = HashMap::new();
     let now = clock.now();
     claims::ISS.insert(&mut claims, url_builder.oidc_issuer().to_string())?;
-    claims::SUB.insert(
-        &mut claims,
-        cokret::user_did_for(url_builder, cokret_config, &browser_session.user),
-    )?;
+    claims::SUB.insert(&mut claims, principal_did.to_owned())?;
     claims.insert(
         cokret::CLAIM_PRINCIPAL_DID.to_owned(),
-        serde_json::Value::String(cokret::user_did_for(
-            url_builder,
-            cokret_config,
-            &browser_session.user,
-        )),
+        serde_json::Value::String(principal_did.to_owned()),
     );
     claims::AUD.insert(&mut claims, client.client_id.clone())?;
     claims::IAT.insert(&mut claims, now)?;
@@ -209,7 +201,8 @@ mod tests {
         let clock = MockClock::default();
         let now = clock.now();
         let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-        let cokret_config = CokretConfig::default();
+        let principal_did =
+            "did:webvh:zQmTestPrincipal:example.com:webvh:01964137000070008000000000000000";
         let mut fixture_rng = ChaChaRng::seed_from_u64(7);
 
         let mut client = Client::samples(now, &mut fixture_rng)
@@ -244,7 +237,7 @@ mod tests {
             &mut signing_rng,
             &clock,
             &url_builder,
-            &cokret_config,
+            principal_did,
             &key_store,
             &client,
             Some(&grant),
@@ -268,17 +261,13 @@ mod tests {
         );
         assert_eq!(
             payload.get("sub").and_then(Value::as_str),
-            Some(
-                cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user).as_str()
-            )
+            Some(principal_did)
         );
         assert_eq!(
             payload
                 .get(cokret::CLAIM_PRINCIPAL_DID)
                 .and_then(Value::as_str),
-            Some(
-                cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user).as_str()
-            )
+            Some(principal_did)
         );
         assert_eq!(
             payload.get("aud").and_then(Value::as_str),

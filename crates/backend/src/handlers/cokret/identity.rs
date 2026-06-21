@@ -129,7 +129,7 @@ pub async fn directory_describe(
         service_did: parse_did_field("service_did", service_did_for(&url_builder, &cokret_config))?,
         resource_types: vec!["actor".to_owned(), "handle".to_owned()],
         discovery_profiles: Vec::new(),
-        restricted_query_proof: Some(false),
+        restricted_query_proof: Some(true),
     })))
 }
 
@@ -144,6 +144,9 @@ pub async fn directory_resolve_handle(
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
+    if !directory_resolve_request_has_disclosure_gate(&body) {
+        return Err(CokretRouteError::NotFound);
+    }
     let Some(handle) = parse_local_handle(&url_builder, &body.handle) else {
         return Err(CokretRouteError::NotFound);
     };
@@ -165,18 +168,9 @@ pub async fn directory_resolve_handle(
     // principal servers in order and take the first minted one. A user
     // who has never bound to a principal server has no resolvable DID
     // yet — fail closed with 404 rather than synthesising an identifier.
-    let mut did = None;
-    for server in &cokret_config.principal_servers {
-        if let Some(minted) = repo
-            .principal_did()
-            .get_for_user_and_audience(&user, &server.audience)
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-        {
-            did = Some(minted.did);
-            break;
-        }
-    }
+    let did = principal_did_for_user(&mut repo, &cokret_config, &user)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     let Some(did) = did else {
         return Err(CokretRouteError::NotFound);
     };
@@ -184,7 +178,10 @@ pub async fn directory_resolve_handle(
     let verified = body
         .expected_did
         .as_ref()
-        .is_none_or(|expected| expected.as_str() == did);
+        .is_some_and(|expected| expected.as_str() == did);
+    if !verified {
+        return Err(CokretRouteError::NotFound);
+    }
 
     Ok(Json(DirectoryHandleResolutionOutcome {
         did: parse_did_field("did", did)?,
@@ -201,6 +198,23 @@ pub async fn directory_resolve_handle(
         divergent: false,
         via_services: Vec::new(),
     }))
+}
+
+fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRequestBody) -> bool {
+    let intent_allowed = body
+        .intent
+        .as_deref()
+        .is_some_and(|intent| matches!(intent, "lookup" | "mention" | "invite" | "member_add"));
+    let challenge_present = body
+        .proof_challenge
+        .as_deref()
+        .is_some_and(|challenge| !challenge.trim().is_empty());
+
+    intent_allowed
+        && body.expected_did.is_some()
+        && body.requester.is_some()
+        && challenge_present
+        && !body.proofs.is_empty()
 }
 
 fn parse_did_field(field: &str, value: String) -> Result<Did, CokretRouteError> {

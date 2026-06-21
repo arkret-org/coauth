@@ -67,7 +67,7 @@ salvo = {workspace = true}
 sentry = {workspace = true}
 sentry-tracing = {workspace = true}
 serde_json = {workspace = true}
-serde_yaml = {workspace = true}
+serde_yaml_ng = {workspace = true}
 tokio = {workspace = true}
 tokio-postgres = {workspace = true}
 tokio-util = {workspace = true}

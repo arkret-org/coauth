@@ -26,11 +26,9 @@ cargo check --workspace
 cargo test  --workspace
 ```
 
-OIDC conformance suite (Docker required):
-
-```sh
-just conformance       # spins up the conformance harness
-```
+Conformance and integration helpers live under `conformance/` and `scripts/`;
+use the CI workflow definitions as the source of truth for the exact command
+line.
 
 Integration stack (coauth + soland + Postgres) via docker-compose:
 
@@ -45,7 +43,7 @@ See [`docs/`](./docs) for service-specific runbooks.
 1. Open an issue describing the change before writing more than ~50 LOC of
    new code, unless the change is a clear bug fix.
 2. Keep commits small and focused. Squash trivial fixups before pushing.
-3. Run `cargo fmt --all` and `cargo clippy --workspace -- -D warnings`
+3. Run `cargo +nightly fmt --all` and `cargo clippy --workspace -- -D warnings`
    locally; CI enforces both.
 4. New protocol behaviour must come with at least one conformance or
    integration test exercising the wire path.
@@ -61,7 +59,7 @@ Signed-off-by: Your Name <you@example.com>
 ```
 
 By signing off you certify that you have the right to submit the change
-under the project's Apache-2.0 license.
+under the project's AGPL-3.0-only license.
 
 ## Security
 
@@ -71,4 +69,4 @@ disclosure process in [`SECURITY.md`](./SECURITY.md) instead.
 ## License
 
 By contributing you agree that your contributions will be licensed under
-the [Apache License 2.0](./LICENSE).
+the project's AGPL-3.0-only license. See [LICENSE](./LICENSE).

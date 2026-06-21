@@ -7,7 +7,7 @@ use coauth_data::user::{
     UserPhoneRepository, UserRegistrationTokenRepository, UserRepository, UserTermsRepository,
 };
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, RepositoryError, UserRegistration};
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use ulid::Ulid;
 
@@ -16,7 +16,7 @@ use super::*;
 pub async fn check_registration_finish_eligibility(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     registration: &UserRegistration,
     browser_session_present: Option<bool>,
     principal_server_check_mode: PrincipalServerCheckMode,
@@ -57,7 +57,7 @@ pub async fn check_registration_finish_eligibility(
 pub async fn load_registration_finish_preparation(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     registration_id: Ulid,
     browser_session_present: Option<bool>,
     principal_server_check_mode: PrincipalServerCheckMode,
@@ -350,7 +350,7 @@ pub async fn finish_registration(
     mut repo: BoxRepository,
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     registration_id: Ulid,
     browser_session_present: Option<bool>,
     principal_server_check_mode: PrincipalServerCheckMode,

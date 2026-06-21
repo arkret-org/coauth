@@ -23,7 +23,7 @@ use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey
 use coauth_messaging::NotificationCenter;
 use coauth_messaging::email::{Mailer, Transport as MailTransport};
 use coauth_policy::PolicyFactory;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use coauth_tasks::QueueWorker;
 use coauth_templates::{SiteConfigExt, Templates};
 use cookie_store::{CookieStore, RawCookie};
@@ -52,7 +52,7 @@ use crate::salvo_utils::cookies::{CookieJar, CookieManager};
 use crate::services::account_claims::account_claims_service;
 use crate::services::did_resolver::default_did_resolver_service;
 use crate::services::invite_quarantine::invite_quarantine_service;
-use crate::services::principal_facade::DbPrincipalServerAdmin;
+use crate::services::principal_facade::DbConnectorAdmin;
 use crate::services::risk_action_proposals::risk_action_proposals_service;
 use crate::services::risk_action_state::default_risk_action_state_service;
 use crate::services::upstream_oidc::default_upstream_oidc_service;
@@ -119,7 +119,7 @@ pub(crate) struct TestState {
     pub metadata_cache: MetadataCache,
     pub encrypter: Encrypter,
     pub url_builder: UrlBuilder,
-    pub principal_server_admin: Arc<DbPrincipalServerAdmin>,
+    pub principal_server_admin: Arc<DbConnectorAdmin>,
     pub policy_factory: Arc<PolicyFactory>,
     pub password_manager: PasswordManager,
     pub site_config: SiteConfig,
@@ -207,7 +207,7 @@ impl Handler for InjectTestState {
         depot.insert("policy_factory", state.policy_factory.clone());
         depot.insert(
             "principal_server_admin",
-            Arc::clone(&state.principal_server_admin) as Arc<dyn PrincipalServerAdmin>,
+            Arc::clone(&state.principal_server_admin) as Arc<dyn ConnectorAdmin>,
         );
         depot.insert("app_version", AppVersion("v0.0.0-test"));
         depot.insert("activity_tracker", state.activity_tracker.clone());
@@ -292,7 +292,7 @@ impl TestState {
         let policy_factory =
             policy_factory(&site_config.server_name, serde_json::json!({})).await?;
 
-        let principal_server_admin = Arc::new(DbPrincipalServerAdmin::new(
+        let principal_server_admin = Arc::new(DbConnectorAdmin::new(
             site_config.server_name.clone(),
             PgRepositoryFactory::new(pool.clone()).boxed(),
             CokretConfig::default(),

@@ -9,7 +9,7 @@ use coauth_data::{
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, Keystore};
 use coauth_policy::{Policy, PolicyFactory};
-use coauth_principal::{ConnectorRegistry, PrincipalServerAdmin};
+use coauth_principal::{ConnectorAdmin, ConnectorRegistry};
 use coauth_templates::Templates;
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
@@ -54,7 +54,7 @@ pub struct AppState {
     pub cookie_manager: CookieManager,
     pub encrypter: Encrypter,
     pub url_builder: UrlBuilder,
-    pub principal_server_admin: Arc<dyn PrincipalServerAdmin>,
+    pub principal_server_admin: Arc<dyn ConnectorAdmin>,
     pub connector_registry: ConnectorRegistry,
     pub policy_factory: Arc<PolicyFactory>,
     pub http_client: reqwest::Client,
@@ -318,7 +318,7 @@ pub trait DepotExt {
     fn get_site_config(&self) -> Option<&SiteConfig>;
     fn get_limiter(&self) -> Option<&Limiter>;
     fn get_policy_factory(&self) -> Option<&Arc<PolicyFactory>>;
-    fn get_principal_server_admin(&self) -> Option<&Arc<dyn PrincipalServerAdmin>>;
+    fn get_principal_server_admin(&self) -> Option<&Arc<dyn ConnectorAdmin>>;
     fn get_connector_registry(&self) -> Option<&ConnectorRegistry>;
     fn get_app_version(&self) -> Option<&AppVersion>;
     fn get_activity_tracker(&self) -> Option<&ActivityTracker>;
@@ -387,8 +387,8 @@ impl DepotExt for Depot {
         self.get::<Arc<PolicyFactory>>("policy_factory").ok()
     }
 
-    fn get_principal_server_admin(&self) -> Option<&Arc<dyn PrincipalServerAdmin>> {
-        self.get::<Arc<dyn PrincipalServerAdmin>>("principal_server_admin")
+    fn get_principal_server_admin(&self) -> Option<&Arc<dyn ConnectorAdmin>> {
+        self.get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
             .ok()
     }
 

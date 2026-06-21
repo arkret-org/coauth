@@ -1,6 +1,6 @@
 # coauth
 
-> **Spec target**: [cokret-spec @ c2848a4](../cokret-spec) (R3.4 sync 2026-05-31)
+> **Spec target**: [cokret-spec @ 5d66aeb](../cokret-spec) (v1 sync 2026-06-21)
 
 ## Pre-commit hook setup
 
@@ -81,16 +81,14 @@ forms. Deployments choose per `auth.oob_code_kind`:
 Both forms run the same 7-trigger non-enumerable failure state machine
 (byte-identical `{"error":"not_found"}` body, ≤50 ms constant-time
 padding) so external observers cannot distinguish "expired" from
-"never existed". See [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]`
-and [`../cokret-spec/CHANGELOG.md`](../cokret-spec/CHANGELOG.md)
-Round R2/R3 entries for the normative source.
+"never existed". The normative source is the v1 spec under
+[`../cokret-spec/spec/v1/`](../cokret-spec/spec/v1/).
 
 ## Round R4 (protocol review closures)
 
-Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) layers
-on top of the R2/R3 trust-domain and OOB-invite work. See
-[`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
-[`../_todos.md`](../_todos.md) for the canonical wire-breaking list.
+Spec round 4 layers on top of the R2/R3 trust-domain and OOB-invite work.
+The canonical wire-breaking list lives in the v1 spec artifacts and prose
+under [`../cokret-spec/spec/v1/`](../cokret-spec/spec/v1/).
 
 - **3PID OOB invite has two wire modes.** Either `offline_token`
   (`token_commitment` + `token_salt_id` + `token_entropy_bits ≥ 128`,
@@ -114,8 +112,8 @@ on top of the R2/R3 trust-domain and OOB-invite work. See
 
 ## Cross-project task tracking
 
-Per-project task lists are consolidated upstream — see
-[`../_todos.md`](../_todos.md) for the active cross-project task plan.
+Per-project task lists are maintained outside this repository. Protocol
+work that affects wire shape is tracked in [`../cokret-spec/spec/v1/`](../cokret-spec/spec/v1/).
 
 ## Integration model
 
@@ -212,8 +210,8 @@ launches the background worker unless disabled with flags.
 git clone https://github.com/cokret/coauth.git
 cd coauth
 
-# Backend binary only
-cargo build --release -p coauth
+# Backend binary only. The default configuration uses the Cedar policy engine.
+cargo build --release -p coauth --features cedar
 
 # Full production build with web assets (requires `just` and `dx`)
 just build-all

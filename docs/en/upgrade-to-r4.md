@@ -29,8 +29,8 @@ Read this page before enabling a build that includes the R4 changes.
 - **DID parsing** rejects method names outside the tightened
   `^did:[a-z0-9]+:[^\s]+$` shape.
 
-See [`CHANGELOG.md`](../../CHANGELOG.md) for the full unreleased R4
-entry.
+Use the release notes attached to the build and the matching
+`cokret-spec/spec/v1/` revision for the complete R4 change list.
 
 ## Trust domain rotation
 

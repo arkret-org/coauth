@@ -7,7 +7,7 @@ use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg}
 use coauth_jose::jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{JsonWebKeySet, PrivateKey};
-use cokret_core::SessionGrantIntrospectStatus as SessionGrantIntrospectionStatus;
+use cokret_core::SessionGrantIntrospectStatus;
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -613,7 +613,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             now,
             Some("https://soland.example.com/api")
         ),
-        SessionGrantIntrospectionStatus::Active
+        SessionGrantIntrospectStatus::Active
     );
     assert_eq!(
         introspection_status(
@@ -622,26 +622,26 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             now,
             Some("https://other.example.com/api")
         ),
-        SessionGrantIntrospectionStatus::AudienceMismatch
+        SessionGrantIntrospectStatus::AudienceMismatch
     );
 
     user.locked_at = Some(now);
     assert_eq!(
         introspection_status(&grant, Some(&user), now, None),
-        SessionGrantIntrospectionStatus::Locked
+        SessionGrantIntrospectStatus::Locked
     );
 
     user.locked_at = None;
     user.deactivated_at = Some(now);
     assert_eq!(
         introspection_status(&grant, Some(&user), now, None),
-        SessionGrantIntrospectionStatus::Suspended
+        SessionGrantIntrospectStatus::Suspended
     );
 
     grant.revoked_at = Some(now);
     assert_eq!(
         introspection_status(&grant, Some(&user), now, None),
-        SessionGrantIntrospectionStatus::Revoked
+        SessionGrantIntrospectStatus::Revoked
     );
 }
 

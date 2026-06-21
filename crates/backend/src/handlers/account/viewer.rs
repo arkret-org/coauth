@@ -155,6 +155,14 @@ pub async fn get_viewer(
             let total = email_edges.len() as i64;
 
             let has_password = profile.has_password;
+            let did = cokret::principal_did_for_user(&mut repo, &cokret_config, user)
+                .await?
+                .ok_or_else(|| {
+                    RouteError::Internal(Box::new(std::io::Error::other(format!(
+                        "missing principal DID for user {}",
+                        user.id
+                    ))))
+                })?;
 
             // Fetch linked upstream OAuth accounts
             let linked_accounts: Vec<LinkedAccount> = load_linked_accounts(&mut repo, user, 100)
@@ -174,7 +182,7 @@ pub async fn get_viewer(
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
                 username: user.localpart.clone(),
-                did: cokret::user_did_for(&url_builder, &cokret_config, user),
+                did,
                 handle: cokret::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,

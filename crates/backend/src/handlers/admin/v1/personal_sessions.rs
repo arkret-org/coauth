@@ -10,7 +10,7 @@ use coauth_data::TokenType;
 use coauth_data::personal::PersonalSessionFilter;
 use coauth_data::personal::session::PersonalSessionOwner;
 use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use oauth_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;

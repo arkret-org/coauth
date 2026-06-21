@@ -14,7 +14,7 @@ use coauth_data::personal::PersonalSessionFilter;
 use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob};
 use coauth_data::user::{UserEmailRepository, UserRepository};
 use coauth_data::{Pagination, RepositoryAccess};
-use coauth_principal::PrincipalProvisionRequest;
+use coauth_principal::ConnectorProvisionRequest;
 use tracing::info;
 
 use crate::State;
@@ -55,7 +55,7 @@ impl RunnableJob for ProvisionUserJob {
             .map(|e| e.email)
             .collect();
 
-        let mut req = PrincipalProvisionRequest::new(user.localpart.clone(), user.sub.clone())
+        let mut req = ConnectorProvisionRequest::new(user.localpart.clone(), user.sub.clone())
             .set_emails(emails);
 
         if let Some(name) = self.display_name_to_set() {

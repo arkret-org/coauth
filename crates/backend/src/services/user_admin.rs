@@ -9,7 +9,7 @@ use coauth_data::{
     AdminUserPatch, BoxRepository, Clock, RepositoryAccess, RepositoryError, UpstreamOAuthLink,
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
 };
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use lettre::address::AddressError;
 use rand_core::RngCore;
 use thiserror::Error;
@@ -65,7 +65,7 @@ pub async fn patch_user(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
-    principal_server: &dyn PrincipalServerAdmin,
+    principal_server: &dyn ConnectorAdmin,
     admin_user: Option<&User>,
     user_id: Ulid,
     patch: AdminUserPatch,

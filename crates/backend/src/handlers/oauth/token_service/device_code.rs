@@ -7,7 +7,7 @@ use coauth_data::{
     BoxRepository, Client, Clock, DeviceCodeGrantState, SiteConfig, TokenType, UrlBuilder,
 };
 use coauth_keystore::Keystore;
-use coauth_principal::PrincipalServerAdmin;
+use coauth_principal::ConnectorAdmin;
 use oauth_types::requests::{AccessTokenResponse, DeviceCodeGrant, GrantType};
 use oauth_types::scope;
 use tracing::{debug, error, warn};
@@ -33,7 +33,7 @@ pub async fn exchange_device_code(
     cokret_config: &CokretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
-    principal_server: &Arc<dyn PrincipalServerAdmin>,
+    principal_server: &Arc<dyn ConnectorAdmin>,
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), DeviceCodeExchangeError> {
     debug!(
@@ -198,11 +198,20 @@ pub async fn exchange_device_code(
             browser_session.id = %browser_session.id,
             "Generating ID token because openid scope is present"
         );
+        let principal_did = crate::handlers::cokret::principal_did_for_user(
+            &mut repo,
+            cokret_config,
+            &browser_session.user,
+        )
+        .await?
+        .ok_or(DeviceCodeExchangeError::MissingPrincipalDid(
+            browser_session.user.id,
+        ))?;
         let id_token = generate_id_token(
             rng,
             clock,
             url_builder,
-            cokret_config,
+            &principal_did,
             key_store,
             client,
             None,

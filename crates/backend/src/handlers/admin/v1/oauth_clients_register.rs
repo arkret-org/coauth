@@ -23,7 +23,7 @@ use coauth_data::audit::AdminOperation;
 use coauth_data::oauth::OAuthClientRepository;
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use oauth_types::requests::GrantType;
-use rand::distr::{Alphanumeric, SampleString};
+use rand::distributions::{Alphanumeric, DistString};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -270,7 +270,7 @@ pub async fn register(
 
     // Generate an opaque client secret for confidential clients.
     let (client_secret, encrypted_client_secret) = if requires_client_secret(&auth_method) {
-        let plain = Alphanumeric.sample_string(&mut rand::rng(), 32);
+        let plain = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
         let encrypted = encrypter
             .encrypt_to_string(plain.as_bytes())
             .map_err(|e| AppError::internal(std::io::Error::other(e.to_string())))?;
@@ -307,7 +307,7 @@ pub async fn register(
     // Generate a registration access token (RFC 7592). Random 32-byte
     // alphanumeric bearer token; not persisted yet — clients receive
     // it once at registration time.
-    let registration_access_token = Alphanumeric.sample_string(&mut rand::rng(), 32);
+    let registration_access_token = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
 
     record_admin_operation(
         &mut repo,

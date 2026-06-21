@@ -108,7 +108,7 @@ within the audit retention window (default 90 days; check your tenant
 SLA).
 
 Signed admin audit rows use transcript schema
-`ck.coauth.audit.admin_operation.v1`. The detached signature binds the
+`org.cokret.coauth.audit.admin_operation.v1`. The detached signature binds the
 repository row id, `created_at`, `admin_user_id`, operation, resource type,
 resource id, details, IP address, user agent, and schema version. Admin audit
 read/export surfaces return `signature_status`:

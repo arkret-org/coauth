@@ -63,7 +63,7 @@ coauth 是 Cokret 的 Auth Server，负责账号认证、OAuth/OIDC、会话授�
 
 | Crate | 说明 |
 |-------|------|
-| `coauth-http` | HTTP 工具 |
+| `coauth-backend::outbound_http` | HTTP 工具 |
 | `coauth-listener` | 网络监听 |
 | `coauth-context` | 上下文工具 |
 | `iana` / `iana-codegen` | IANA 注册表 |
