@@ -814,10 +814,7 @@ html[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
 }
 
 .form-input:focus {
-    /* 激活态统一为双层边框:内层橙色(border + glow),外层蓝色(outline)。
-       outline 放在 :focus 上,使鼠标点击与键盘 Tab 聚焦呈现一致的双层效果。 */
-    outline: 3px solid var(--color-info);
-    outline-offset: 3px;
+    outline: none;
     border-color: var(--color-primary);
     box-shadow: 0 0 0 4px var(--color-primary-glow);
     background-color: var(--color-bg-primary);
