@@ -1,11 +1,9 @@
 //! Embedded `did:webvh` minting against soland's principal-server.
 //!
-//! Soland exposes a private WebVH registration endpoint
-//! ([`soland/src/routing/identity/did.rs`]) to mint a `did:webvh:<scid>:<host>:
-//! webvh:<local_id>` DID under its own authority. Unlike the external starid
-//! adapter — which accepts an opaque `update_key` string and signs the
-//! inception entry server-side — soland's embedded provider requires the
-//! **client** to:
+//! Soland accepts WebVH inception as a protocol DID operation at
+//! `/_cokret/root/identity/submit-did-operation`. Unlike the external starid
+//! adapter, which accepts an opaque `update_key` string and signs the inception
+//! entry server-side, soland's embedded WebVH profile requires the client to:
 //!
 //! 1. generate the DID's verification keypair and a separate update keypair,
 //! 2. construct the inception webvh log entry with `{SCID}` placeholders,
@@ -14,10 +12,9 @@
 //! 5. sign the entry (sans `proof`) under `cryptosuite: eddsa-jcs-2022` with the update key —
 //!    soland verifies that signature in [`verify_webvh_log_proof`].
 //!
-//! This module owns step 1–5. It is intentionally storage-agnostic: it returns
-//! the registration request body, the resulting DID, and the secret seed bytes
-//! for both the DID key and the update key so the caller can persist them
-//! through `Encrypter`. HTTP transport (Phase 3) sits on top.
+//! This module owns step 1–5. It returns a typed DID-operation request, the
+//! resulting DID, and the secret seed bytes for both the DID key and the update
+//! key so the caller can persist them through `Encrypter`.
 //!
 //! The algorithm intentionally mirrors soland's helpers byte-for-byte:
 //! `sha256_multihash_multibase`, `strip_webvh_entry_for_hash`,
@@ -28,7 +25,13 @@
 use chrono::{DateTime, Utc};
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, User};
 use coauth_keystore::Encrypter;
-use ed25519_dalek::{SECRET_KEY_LENGTH, Signer, SigningKey};
+use cokret_core::{
+    Did, DidOperationSubmitOutcome, DidOperationSubmitRequestBody, decode_base58btc,
+    decode_ed25519_multibase,
+};
+use ed25519_dalek::{
+    SECRET_KEY_LENGTH, SIGNATURE_LENGTH, Signature, Signer, SigningKey, Verifier, VerifyingKey,
+};
 use rand_core::RngCore;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -50,12 +53,18 @@ pub enum SolandWebvhError {
     EndpointHostInvalid,
     #[error("local_id failed normalisation (must be 1-64 ascii [a-z0-9._-])")]
     InvalidLocalId,
+    #[error("webvh key fragment failed normalisation")]
+    InvalidKeyFragment,
+    #[error("computed DID failed SDK validation: {0}")]
+    InvalidDid(String),
     #[error("canonical JSON encoding failed: {0}")]
     Canonical(String),
-    #[error("principal-server webvh register request failed: {0}")]
+    #[error("principal-server DID operation submit request failed: {0}")]
     Http(#[from] reqwest::Error),
     #[error("principal-server returned status {status}: {body}")]
-    RegisterRejected { status: u16, body: String },
+    SubmitRejected { status: u16, body: String },
+    #[error("webvh proof rejected: {0}")]
+    InvalidProof(String),
     #[error("update_key encryption failed")]
     Encrypt,
     #[error("storage error: {0}")]
@@ -84,14 +93,20 @@ pub struct PreparedInception {
     /// Final inception webvh log entry, with SCID substituted and proof
     /// attached.
     pub log_entry: Value,
-    /// JSON body for soland's private WebVH registration endpoint.
-    pub registration_body: Value,
+    /// Typed request body for `ck.root.identity.command.submit_did_operation`.
+    pub submit_body: DidOperationSubmitRequestBody,
     /// Multibase ed25519 **public** key for the DID's verification method.
     pub did_public_key_multibase: String,
     /// Multibase ed25519 **public** key for `updateKeys[0]`.
     pub update_public_key_multibase: String,
     /// DID + key fragment, e.g. `did:webvh:...#did-key-1`.
     pub did_key_id: String,
+    /// DID + update-key fragment, e.g. `did:webvh:...#update-key-1`.
+    pub update_key_id: String,
+    /// Protocol document read URL.
+    pub document_url: String,
+    /// Protocol log read URL.
+    pub log_url: String,
     /// 32-byte ed25519 secret seed for the DID key.
     pub did_key_seed: [u8; 32],
     /// 32-byte ed25519 secret seed for the update key — caller must persist
@@ -125,6 +140,41 @@ pub struct InceptionInput<'a> {
     pub enrollment_authority_did: &'a str,
 }
 
+/// Inputs for a client-authored WebVH inception. The client supplies the DID
+/// and update public keys plus the signed log proof; coauth reconstructs the
+/// exact inception entry, verifies the proof locally, and submits the typed DID
+/// operation to soland.
+pub struct SuppliedInceptionInput<'a> {
+    pub principal_endpoint: &'a Url,
+    pub local_id: &'a str,
+    pub also_known_as: &'a [String],
+    pub version_time: &'a str,
+    pub did_public_key_multibase: &'a str,
+    pub update_public_key_multibase: &'a str,
+    pub did_key_fragment: Option<&'a str>,
+    pub update_key_fragment: Option<&'a str>,
+    pub proof: Value,
+    pub enrollment_authority_did: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubmittedInception {
+    pub did: String,
+    pub local_id: String,
+    pub version_id: String,
+    pub submit_body: DidOperationSubmitRequestBody,
+    pub did_key_id: String,
+    pub update_key_id: String,
+    pub did_public_key_multibase: String,
+    pub update_public_key_multibase: String,
+    pub key_log_head: String,
+    pub document_url: String,
+    pub log_url: String,
+    pub provider_id: String,
+    pub did_document: Value,
+    pub did_log: Vec<Value>,
+}
+
 /// Prepare a `did:webvh` inception entry for soland's embedded provider.
 ///
 /// Generates two fresh ed25519 keypairs (DID key + update key), constructs
@@ -150,7 +200,10 @@ pub fn prepare_inception<R: RngCore + ?Sized>(
     let update_public_key_multibase =
         encode_ed25519_pubkey_multibase(&update_signing.verifying_key().to_bytes());
 
-    let did_key_fragment = input.did_key_fragment.unwrap_or("did-key-1");
+    let did_key_fragment = normalize_key_fragment(input.did_key_fragment.unwrap_or("did-key-1"))
+        .ok_or(SolandWebvhError::InvalidKeyFragment)?;
+    let update_key_fragment =
+        normalize_key_fragment("update-key-1").ok_or(SolandWebvhError::InvalidKeyFragment)?;
     let placeholder_did = format_webvh_did(&method_authority, WEBVH_SCID_PLACEHOLDER, &local_id);
     let placeholder_key_id = format!("{placeholder_did}#{did_key_fragment}");
     let service_endpoint = trimmed_endpoint(input.principal_endpoint);
@@ -187,26 +240,15 @@ pub fn prepare_inception<R: RngCore + ?Sized>(
 
     let did = format_webvh_did(&method_authority, &scid, &local_id);
     let did_key_id = format!("{did}#{did_key_fragment}");
+    let update_key_id = format!("{did}#{update_key_fragment}");
     let proof = build_proof(&log_entry, &update_signing, &update_public_key_multibase)?;
     if let Value::Object(map) = &mut log_entry {
         map.insert("proof".to_owned(), Value::Array(vec![proof.clone()]));
     }
-
-    let registration_body = json!({
-        "local_id": local_id,
-        "did_public_key_multibase": did_public_key_multibase,
-        "update_public_key_multibase": update_public_key_multibase,
-        "did_key_id": did_key_fragment,
-        "update_key_id": "update-key-1",
-        "also_known_as": input.also_known_as,
-        "version_time": version_time,
-        // The principal server must reflect the CokretDeviceEnrollmentAuthority
-        // service in its reconstructed inception document, or the SCID + log
-        // proof it recomputes will not verify (the document we signed includes
-        // this service). See soland did.rs embedded_webvh_register.
-        "device_enrollment_authority_did": input.enrollment_authority_did,
-        "proof": proof,
-    });
+    verify_webvh_log_proof(&log_entry).map_err(SolandWebvhError::InvalidProof)?;
+    let submit_body = did_submit_body(&did, 1, log_entry.clone(), &local_id)?;
+    let document_url = identity_document_url(input.principal_endpoint, &did)?;
+    let log_url = identity_log_url(input.principal_endpoint, &did)?;
 
     Ok(PreparedInception {
         did,
@@ -216,12 +258,114 @@ pub fn prepare_inception<R: RngCore + ?Sized>(
         version_time,
         version_id,
         log_entry,
-        registration_body,
+        submit_body,
         did_public_key_multibase,
         update_public_key_multibase,
         did_key_id,
+        update_key_id,
+        document_url,
+        log_url,
         did_key_seed,
         update_key_seed,
+    })
+}
+
+pub fn prepare_supplied_inception(
+    input: &SuppliedInceptionInput<'_>,
+) -> Result<SubmittedInception, SolandWebvhError> {
+    if !valid_multibase_key(input.did_public_key_multibase) {
+        return Err(SolandWebvhError::InvalidProof(
+            "did_public_key_multibase must be a non-empty multibase value".to_owned(),
+        ));
+    }
+    if !valid_multibase_key(input.update_public_key_multibase) {
+        return Err(SolandWebvhError::InvalidProof(
+            "update_public_key_multibase must be a non-empty multibase value".to_owned(),
+        ));
+    }
+    if input.did_public_key_multibase == input.update_public_key_multibase {
+        return Err(SolandWebvhError::InvalidProof(
+            "did and update keys must be separate".to_owned(),
+        ));
+    }
+    DateTime::parse_from_rfc3339(input.version_time)
+        .map_err(|_| SolandWebvhError::InvalidProof("version_time must be RFC3339".to_owned()))?;
+
+    let (method_authority, _https_authority) = authority_pair(input.principal_endpoint)?;
+    let local_id = normalize_local_id(input.local_id).ok_or(SolandWebvhError::InvalidLocalId)?;
+    let did_key_fragment = normalize_key_fragment(input.did_key_fragment.unwrap_or("did-key-1"))
+        .ok_or(SolandWebvhError::InvalidKeyFragment)?;
+    let update_key_fragment =
+        normalize_key_fragment(input.update_key_fragment.unwrap_or("update-key-1"))
+            .ok_or(SolandWebvhError::InvalidKeyFragment)?;
+    let placeholder_did = format_webvh_did(&method_authority, WEBVH_SCID_PLACEHOLDER, &local_id);
+    let placeholder_key_id = format!("{placeholder_did}#{did_key_fragment}");
+    let service_endpoint = trimmed_endpoint(input.principal_endpoint);
+    let enrollment_authority_did = input.enrollment_authority_did.unwrap_or_default();
+    let document_skeleton = if enrollment_authority_did.is_empty() {
+        embedded_webvh_document_value_without_enrollment(
+            &placeholder_did,
+            &placeholder_key_id,
+            input.did_public_key_multibase,
+            input.also_known_as,
+            &service_endpoint,
+        )
+    } else {
+        embedded_webvh_document_value(
+            &placeholder_did,
+            &placeholder_key_id,
+            input.did_public_key_multibase,
+            input.also_known_as,
+            &service_endpoint,
+            enrollment_authority_did,
+        )
+    };
+    let entry_skeleton = json!({
+        "versionId": format!("0-{WEBVH_SCID_PLACEHOLDER}"),
+        "versionTime": input.version_time,
+        "parameters": {
+            "scid": WEBVH_SCID_PLACEHOLDER,
+            "method": WEBVH_METHOD_VERSION,
+            "updateKeys": [input.update_public_key_multibase],
+        },
+        "state": document_skeleton,
+    });
+    let scid = sha256_multihash_multibase(&canonical_bytes(&entry_skeleton)?);
+    let mut log_entry = substitute_scid(&entry_skeleton, &scid);
+    let version_hash = sha256_multihash_multibase(&canonical_bytes(&strip_for_hash(&log_entry))?);
+    let version_id = format!("1-{version_hash}");
+    if let Value::Object(map) = &mut log_entry {
+        map.insert("versionId".to_owned(), Value::String(version_id.clone()));
+        map.insert("proof".to_owned(), Value::Array(vec![input.proof.clone()]));
+    }
+    verify_webvh_log_proof(&log_entry).map_err(SolandWebvhError::InvalidProof)?;
+
+    let did = format_webvh_did(&method_authority, &scid, &local_id);
+    let did_key_id = format!("{did}#{did_key_fragment}");
+    let update_key_id = format!("{did}#{update_key_fragment}");
+    let submit_body = did_submit_body(&did, 1, log_entry.clone(), &local_id)?;
+    let document_url = identity_document_url(input.principal_endpoint, &did)?;
+    let log_url = identity_log_url(input.principal_endpoint, &did)?;
+    let did_document = log_entry
+        .get("state")
+        .cloned()
+        .unwrap_or_else(|| json!({"id": did.clone()}));
+
+    Ok(SubmittedInception {
+        did,
+        local_id,
+        version_id: version_id.clone(),
+        submit_body,
+        did_key_id,
+        update_key_id,
+        did_public_key_multibase: input.did_public_key_multibase.to_owned(),
+        update_public_key_multibase: input.update_public_key_multibase.to_owned(),
+        key_log_head: version_id,
+        document_url,
+        log_url,
+        provider_id: "soland.protocol".to_owned(),
+        did_document,
+        did_log: vec![log_entry],
     })
 }
 
@@ -231,31 +375,37 @@ fn random_seed<R: RngCore + ?Sized>(rng: &mut R) -> [u8; SECRET_KEY_LENGTH] {
     seed
 }
 
-/// POST `prepared.registration_body` to the principal server's
-/// private WebVH registration endpoint and surface any non-2xx as
-/// [`SolandWebvhError::RegisterRejected`]. Soland treats `409 Conflict` as
-/// "already registered" — we map that back to `Ok(())` so an idempotent
-/// caller can recover (the row will already exist in our DB too).
-pub async fn register_against_principal(
+/// POST `prepared.submit_body` to the principal server's protocol DID
+/// operation endpoint and surface any non-2xx response to the caller.
+pub async fn submit_against_principal(
     http_client: &reqwest::Client,
     principal_endpoint: &Url,
     bearer: Option<&str>,
     prepared: &PreparedInception,
-) -> Result<(), SolandWebvhError> {
-    // Soland's embedded webvh provider is a product-plane (`/_soland/…`)
-    // endpoint, not part of the spec'd `/_cokret/…` protocol surface. The
-    // historical `api/v1/…` alias was removed from soland's routing
-    // entirely, so joining it here would 404 every mint.
+) -> Result<DidOperationSubmitOutcome, SolandWebvhError> {
+    submit_did_operation(
+        http_client,
+        principal_endpoint,
+        bearer,
+        &prepared.submit_body,
+    )
+    .await
+}
+
+pub async fn submit_did_operation(
+    http_client: &reqwest::Client,
+    principal_endpoint: &Url,
+    bearer: Option<&str>,
+    body: &DidOperationSubmitRequestBody,
+) -> Result<DidOperationSubmitOutcome, SolandWebvhError> {
     let endpoint = principal_endpoint
-        .join("/_soland/root/identity/webvh/register")
+        .join("/_cokret/root/identity/submit-did-operation")
         .map_err(SolandWebvhError::InvalidEndpoint)?;
     let response = outbound_http::send_with_policy(
-        outbound_http::soland_policy("embedded_webvh_register")
+        outbound_http::soland_policy("identity_submit_did_operation")
             .with_timeout(std::time::Duration::from_secs(15)),
         || {
-            let mut request = http_client
-                .post(endpoint.clone())
-                .json(&prepared.registration_body);
+            let mut request = http_client.post(endpoint.clone()).json(body);
             if let Some(token) = bearer {
                 request = request.bearer_auth(token);
             }
@@ -264,11 +414,14 @@ pub async fn register_against_principal(
     )
     .await?;
     let status = response.status();
-    if status.is_success() || status == reqwest::StatusCode::CONFLICT {
-        return Ok(());
-    }
     let body = response.text().await.unwrap_or_default();
-    Err(SolandWebvhError::RegisterRejected {
+    if status.is_success() {
+        return serde_json::from_str(&body).map_err(|error| SolandWebvhError::SubmitRejected {
+            status: status.as_u16(),
+            body: format!("invalid response body: {error}"),
+        });
+    }
+    Err(SolandWebvhError::SubmitRejected {
         status: status.as_u16(),
         body: body.chars().take(512).collect(),
     })
@@ -279,14 +432,14 @@ pub async fn register_against_principal(
 ///
 /// Idempotent: if `principal_did_update_keys` already has a row for
 /// `(user, audience)`, returns the existing DID without contacting the
-/// principal server. Otherwise generates fresh key material, posts the
-/// inception entry to soland's embedded webvh endpoint, encrypts the
+/// principal server. Otherwise generates fresh key material, submits the
+/// inception entry through soland's DID operation endpoint, encrypts the
 /// update-key seed, and writes the row.
 ///
 /// Errors short-circuit on:
 /// - DB lookup/insert failures (`Storage`),
 /// - canonical-JSON / SCID failures (`Canonical`),
-/// - principal-server transport failures (`Http`) or non-2xx responses (`RegisterRejected`),
+/// - principal-server transport failures (`Http`) or non-2xx responses (`SubmitRejected`),
 /// - update-key encryption failures (`Encrypt`).
 #[allow(clippy::too_many_arguments)]
 pub async fn ensure_principal_did_minted(
@@ -298,7 +451,7 @@ pub async fn ensure_principal_did_minted(
     user: &User,
     audience: &str,
     principal_endpoint: &Url,
-    registration_bearer: Option<&str>,
+    operation_bearer: Option<&str>,
     also_known_as: &[String],
     enrollment_authority_did: &str,
 ) -> Result<String, SolandWebvhError> {
@@ -322,13 +475,7 @@ pub async fn ensure_principal_did_minted(
     };
     let prepared = prepare_inception(rng, &input)?;
 
-    register_against_principal(
-        http_client,
-        principal_endpoint,
-        registration_bearer,
-        &prepared,
-    )
-    .await?;
+    submit_against_principal(http_client, principal_endpoint, operation_bearer, &prepared).await?;
 
     let update_secret_b64 = encrypter
         .encrypt_to_string(&prepared.update_key_seed)
@@ -357,13 +504,12 @@ fn canonical_bytes(value: &Value) -> Result<Vec<u8>, SolandWebvhError> {
         .map_err(|err| SolandWebvhError::Canonical(err.to_string()))
 }
 
-fn embedded_webvh_document_value(
+fn embedded_webvh_document_value_without_enrollment(
     did: &str,
     did_key_id: &str,
     did_public_key_multibase: &str,
     also_known_as: &[String],
     service_endpoint: &str,
-    enrollment_authority_did: &str,
 ) -> Value {
     json!({
         "@context": ["https://www.w3.org/ns/did/v1"],
@@ -382,14 +528,73 @@ fn embedded_webvh_document_value(
                 "id": format!("{did}#soland"),
                 "type": "CokretPrincipalServer",
                 "serviceEndpoint": service_endpoint,
-            },
-            {
-                "id": format!("{did}#enrollment-authority"),
-                "type": cokret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY,
-                "serviceEndpoint": enrollment_authority_did,
-            },
+            }
         ],
     })
+}
+
+fn embedded_webvh_document_value(
+    did: &str,
+    did_key_id: &str,
+    did_public_key_multibase: &str,
+    also_known_as: &[String],
+    service_endpoint: &str,
+    enrollment_authority_did: &str,
+) -> Value {
+    let mut document = embedded_webvh_document_value_without_enrollment(
+        did,
+        did_key_id,
+        did_public_key_multibase,
+        also_known_as,
+        service_endpoint,
+    );
+    if let Some(services) = document.get_mut("service").and_then(Value::as_array_mut) {
+        services.push(json!({
+            "id": format!("{did}#enrollment-authority"),
+            "type": cokret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY,
+            "serviceEndpoint": enrollment_authority_did,
+        }));
+    }
+    document
+}
+
+fn did_submit_body(
+    did: &str,
+    seq: u64,
+    operation: Value,
+    local_id: &str,
+) -> Result<DidOperationSubmitRequestBody, SolandWebvhError> {
+    let typed_did = Did::new(did.to_owned())
+        .map_err(|error| SolandWebvhError::InvalidDid(error.to_string()))?;
+    Ok(DidOperationSubmitRequestBody {
+        did: typed_did,
+        did_method: "did:webvh".to_owned(),
+        seq: Some(seq),
+        prev_event_digest: None,
+        operation,
+        policy_context: json!({
+            "provider_id": "soland.protocol",
+            "profile": "ck.identity.webvh.provider.v1",
+            "local_id": local_id,
+        }),
+        proofs: Vec::new(),
+    })
+}
+
+fn identity_document_url(endpoint: &Url, did: &str) -> Result<String, SolandWebvhError> {
+    let mut url = endpoint
+        .join("/_cokret/root/identity/document")
+        .map_err(SolandWebvhError::InvalidEndpoint)?;
+    url.query_pairs_mut().append_pair("did", did);
+    Ok(url.to_string())
+}
+
+fn identity_log_url(endpoint: &Url, did: &str) -> Result<String, SolandWebvhError> {
+    let mut url = endpoint
+        .join("/_cokret/root/identity/log")
+        .map_err(SolandWebvhError::InvalidEndpoint)?;
+    url.query_pairs_mut().append_pair("did", did);
+    Ok(url.to_string())
 }
 
 fn build_proof(
@@ -413,6 +618,70 @@ fn build_proof(
         "proofPurpose": "assertionMethod",
         "proofValue": proof_value,
     }))
+}
+
+fn verify_webvh_log_proof(entry: &Value) -> Result<(), String> {
+    let proof = entry
+        .get("proof")
+        .and_then(Value::as_array)
+        .and_then(|items| items.first())
+        .and_then(Value::as_object)
+        .ok_or_else(|| "entry must include proof[0]".to_owned())?;
+    if proof.get("type").and_then(Value::as_str) != Some("DataIntegrityProof") {
+        return Err("proof type must be DataIntegrityProof".to_owned());
+    }
+    if proof.get("cryptosuite").and_then(Value::as_str) != Some("eddsa-jcs-2022") {
+        return Err("proof cryptosuite must be eddsa-jcs-2022".to_owned());
+    }
+    let verification_method = proof
+        .get("verificationMethod")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let public_key_multibase = verification_method
+        .rsplit_once('#')
+        .map_or(verification_method, |(_, fragment)| fragment);
+    let update_keys = entry
+        .pointer("/parameters/updateKeys")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+        .unwrap_or_default();
+    if !update_keys.contains(&public_key_multibase) {
+        return Err("proof verificationMethod must reference updateKeys[0]".to_owned());
+    }
+    let public_key = decode_ed25519_multibase(public_key_multibase)
+        .map_err(|error| format!("public key must be base58btc ed25519-pub multibase: {error}"))
+        .and_then(|bytes| {
+            VerifyingKey::from_bytes(&bytes).map_err(|_| "invalid ed25519 public key".to_owned())
+        })?;
+    let signature = decode_webvh_signature(
+        proof
+            .get("proofValue")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    )?;
+    let mut canonical = entry.clone();
+    if let Value::Object(map) = &mut canonical {
+        map.remove("proof");
+    }
+    let payload =
+        cokret_core::canonical::canonical_json_bytes(&canonical).map_err(|e| e.to_string())?;
+    public_key
+        .verify(&payload, &signature)
+        .map_err(|_| "webvh log proof signature is invalid".to_owned())
+}
+
+fn decode_webvh_signature(value: &str) -> Result<Signature, String> {
+    let rest = value
+        .strip_prefix('z')
+        .ok_or_else(|| "proofValue must use base58btc multibase".to_owned())?;
+    let raw = decode_base58btc(rest)
+        .map_err(|error| format!("proofValue base58 decode failed: {error}"))?;
+    if raw.len() != SIGNATURE_LENGTH {
+        return Err("ed25519 proofValue must be 64 bytes".to_owned());
+    }
+    let mut signature_bytes = [0u8; SIGNATURE_LENGTH];
+    signature_bytes.copy_from_slice(&raw);
+    Ok(Signature::from_bytes(&signature_bytes))
 }
 
 fn strip_for_hash(value: &Value) -> Value {
@@ -488,6 +757,20 @@ fn normalize_local_id(value: &str) -> Option<String> {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'));
     valid.then_some(normalized)
+}
+
+fn normalize_key_fragment(value: &str) -> Option<String> {
+    let normalized = value.trim().trim_start_matches('#').to_owned();
+    let valid = !normalized.is_empty()
+        && normalized.len() <= 64
+        && normalized
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'));
+    valid.then_some(normalized)
+}
+
+fn valid_multibase_key(value: &str) -> bool {
+    decode_ed25519_multibase(value).is_ok()
 }
 
 const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -691,33 +974,68 @@ mod tests {
     }
 
     #[test]
-    fn registration_body_matches_soland_schema() {
+    fn submit_body_matches_cokret_protocol() {
         let prepared = run_prepare(3);
-        let body = &prepared.registration_body;
-        assert_eq!(body["local_id"].as_str(), Some(prepared.local_id.as_str()));
+        let body = &prepared.submit_body;
+        assert_eq!(body.did.as_str(), prepared.did.as_str());
+        assert_eq!(body.did_method, "did:webvh");
+        assert_eq!(body.seq, Some(1));
+        assert!(body.prev_event_digest.is_none());
+        assert!(body.proofs.is_empty());
         assert_eq!(
-            body["did_public_key_multibase"].as_str(),
+            body.policy_context["local_id"].as_str(),
+            Some(prepared.local_id.as_str())
+        );
+        assert_eq!(
+            body.operation["state"]["verificationMethod"][0]["publicKeyMultibase"].as_str(),
             Some(prepared.did_public_key_multibase.as_str()),
         );
         assert_eq!(
-            body["update_public_key_multibase"].as_str(),
+            body.operation["parameters"]["updateKeys"][0].as_str(),
             Some(prepared.update_public_key_multibase.as_str()),
         );
         assert_ne!(
-            body["did_public_key_multibase"], body["update_public_key_multibase"],
+            body.operation["state"]["verificationMethod"][0]["publicKeyMultibase"],
+            body.operation["parameters"]["updateKeys"][0],
             "did key and update key must differ",
         );
-        assert_eq!(body["did_key_id"].as_str(), Some("did-key-1"));
-        assert_eq!(body["update_key_id"].as_str(), Some("update-key-1"));
         assert_eq!(
-            body["version_time"].as_str(),
+            body.operation["versionTime"].as_str(),
             Some(prepared.version_time.as_str())
         );
-        assert!(body["proof"].is_object());
+        let proof = &body.operation["proof"][0];
+        assert!(proof.is_object());
+        assert_eq!(proof["cryptosuite"].as_str(), Some("eddsa-jcs-2022"));
+    }
+
+    #[test]
+    fn supplied_inception_reconstructs_submit_body() {
+        let prepared = run_prepare(31);
+        let endpoint = Url::parse("https://local.host:8080/").unwrap();
+        let proof = prepared.log_entry["proof"][0].clone();
+        let also_known_as = ["acct:user@local.host".to_owned()];
+        let supplied = prepare_supplied_inception(&SuppliedInceptionInput {
+            principal_endpoint: &endpoint,
+            local_id: &prepared.local_id,
+            also_known_as: &also_known_as,
+            version_time: &prepared.version_time,
+            did_public_key_multibase: &prepared.did_public_key_multibase,
+            update_public_key_multibase: &prepared.update_public_key_multibase,
+            did_key_fragment: Some("did-key-1"),
+            update_key_fragment: Some("update-key-1"),
+            proof,
+            enrollment_authority_did: Some("did:key:z6MkEnrollmentAuthorityTestKey00000000000000"),
+        })
+        .expect("supplied inception ok");
+
+        assert_eq!(supplied.did, prepared.did);
+        assert_eq!(supplied.key_log_head, prepared.version_id);
         assert_eq!(
-            body["proof"]["cryptosuite"].as_str(),
-            Some("eddsa-jcs-2022")
+            supplied.submit_body.operation,
+            prepared.submit_body.operation
         );
+        assert_eq!(supplied.submit_body.did.as_str(), prepared.did.as_str());
+        verify_webvh_log_proof(&supplied.did_log[0]).expect("proof still verifies");
     }
 
     #[test]

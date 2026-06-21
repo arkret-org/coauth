@@ -219,7 +219,9 @@ pub async fn device_enroll_endpoint(
     repo.cancel().await.ok();
 
     // 2. Proof-of-possession: the caller MUST hold the key the grant is bound to.
-    let verifier = DpopVerifier::shared();
+    let verifier = depot
+        .dpop_verifier()
+        .unwrap_or_else(|_| DpopVerifier::shared());
     let dpop_now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();

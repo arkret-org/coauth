@@ -29,6 +29,7 @@ use crate::handlers::passwords::PasswordManager;
 use crate::handlers::{BoundActivityTracker, Limiter, RequesterFingerprint};
 use crate::salvo_utils::cookies::CookieJar;
 use crate::salvo_utils::{SessionInfo, SessionInfoExt};
+use crate::services::dpop::DpopVerifier;
 
 // ── Requester / Auth ───────────────────────────────────────────
 
@@ -267,6 +268,7 @@ pub trait DepotExt {
     fn did_resolver_service(
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError>;
+    fn dpop_verifier(&self) -> Result<DpopVerifier, RouteError>;
     /// `Some(handle)` when `[cokret.starid]` is configured and the
     /// adapter constructed cleanly during `inject_app_state`. `None`
     /// otherwise — handlers should treat the absence as "starid
@@ -407,6 +409,10 @@ impl DepotExt for Depot {
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError> {
         depot_get(self, "did_resolver_service")
+    }
+
+    fn dpop_verifier(&self) -> Result<DpopVerifier, RouteError> {
+        depot_get(self, "dpop_verifier")
     }
 
     fn starid_registry(&self) -> Option<crate::services::starid_adapter::StaridRegistryHandle> {

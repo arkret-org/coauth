@@ -23,6 +23,7 @@ use crate::handlers::passwords::PasswordManager;
 use crate::handlers::{ActivityTracker, CookieManager, JwksCache, Limiter, MetadataCache};
 use crate::services::account_claims::account_claims_service;
 use crate::services::did_resolver::default_did_resolver_service;
+use crate::services::dpop::{DpopVerifier, RepositoryJtiStore};
 use crate::services::email_webhook::EmailWebhookService;
 use crate::services::invite_quarantine::invite_quarantine_service;
 use crate::services::risk_action_proposals::risk_action_proposals_service;
@@ -205,6 +206,12 @@ pub async fn inject_app_state(
     depot.insert("jwks_cache", JWKS_CACHE.clone());
     depot.insert("site_config", state.site_config.clone());
     depot.insert("limiter", state.limiter.clone());
+    depot.insert(
+        "dpop_verifier",
+        DpopVerifier::with_store(Arc::new(RepositoryJtiStore::new(
+            state.repository_factory.clone(),
+        ))),
+    );
     depot.insert("policy_factory", state.policy_factory.clone());
     depot.insert(
         "principal_server_admin",
@@ -317,6 +324,7 @@ pub trait DepotExt {
     fn get_metadata_cache(&self) -> Option<&MetadataCache>;
     fn get_site_config(&self) -> Option<&SiteConfig>;
     fn get_limiter(&self) -> Option<&Limiter>;
+    fn get_dpop_verifier(&self) -> Option<&DpopVerifier>;
     fn get_policy_factory(&self) -> Option<&Arc<PolicyFactory>>;
     fn get_principal_server_admin(&self) -> Option<&Arc<dyn ConnectorAdmin>>;
     fn get_connector_registry(&self) -> Option<&ConnectorRegistry>;
@@ -381,6 +389,10 @@ impl DepotExt for Depot {
 
     fn get_limiter(&self) -> Option<&Limiter> {
         self.get::<Limiter>("limiter").ok()
+    }
+
+    fn get_dpop_verifier(&self) -> Option<&DpopVerifier> {
+        self.get::<DpopVerifier>("dpop_verifier").ok()
     }
 
     fn get_policy_factory(&self) -> Option<&Arc<PolicyFactory>> {

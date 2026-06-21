@@ -107,7 +107,9 @@ pub async fn refresh_session_grant(
 
     // 3. Verify the DPoP proof against this exact endpoint, with the prior grant_jwt as the bound
     //    access token (so `ath` MUST match).
-    let verifier = DpopVerifier::shared();
+    let verifier = depot
+        .dpop_verifier()
+        .unwrap_or_else(|_| DpopVerifier::shared());
     let now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();

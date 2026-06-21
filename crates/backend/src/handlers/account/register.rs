@@ -35,8 +35,8 @@ use crate::handlers::account::service::registration::{
     submit_registration_email_code, submit_registration_phone_code,
 };
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
-use crate::outbound_http;
 use crate::salvo_utils::SessionInfoExt;
+use crate::services::soland_webvh::{self, SuppliedInceptionInput};
 
 // ── POST /_coauth/gate/account/auth/register ─────────────────────────────────
 
@@ -655,7 +655,7 @@ pub async fn post_webvh_finish(
         return Err(RouteError::NotFound);
     };
     let principal_url = registration_webvh_principal_url(&registration.post_auth_action);
-    let target = resolve_webvh_target(&cokret_config, principal_url.as_deref())
+    let target = resolve_webvh_provider(&cokret_config, principal_url.as_deref())
         .map_err(RouteError::BadRequest)?;
     let (version, password_hash) = password_manager
         .hash(&mut *rng, Zeroizing::new(input.password))
@@ -667,19 +667,33 @@ pub async fn post_webvh_finish(
         .await?;
     repo.save().await?;
 
-    let webvh = register_soland_webvh(
-        http_client,
-        &target,
-        registration.localpart.as_str(),
-        input.did_public_key_multibase.trim(),
-        input.update_public_key_multibase.trim(),
-        input.did_key_id.as_deref().unwrap_or("did-key-1"),
-        input.update_key_id.as_deref().unwrap_or("update-key-1"),
-        webvh_version_time,
-        webvh_proof,
+    let local_id = registration
+        .localpart
+        .trim()
+        .trim_start_matches('@')
+        .to_ascii_lowercase();
+    let also_known_as = [format!("acct:{local_id}")];
+    let webvh = soland_webvh::prepare_supplied_inception(&SuppliedInceptionInput {
+        principal_endpoint: &target.endpoint,
+        local_id: registration.localpart.as_str(),
+        also_known_as: &also_known_as,
+        version_time: webvh_version_time,
+        did_public_key_multibase: input.did_public_key_multibase.trim(),
+        update_public_key_multibase: input.update_public_key_multibase.trim(),
+        did_key_fragment: input.did_key_id.as_deref(),
+        update_key_fragment: input.update_key_id.as_deref(),
+        proof: webvh_proof,
+        enrollment_authority_did: None,
+    })
+    .map_err(|error| RouteError::BadRequest(format!("embedded_webvh_provider_invalid:{error}")))?;
+    soland_webvh::submit_did_operation(
+        &http_client,
+        &target.endpoint,
+        target.bearer.as_deref(),
+        &webvh.submit_body,
     )
     .await
-    .map_err(RouteError::BadRequest)?;
+    .map_err(|error| RouteError::BadRequest(format!("embedded_webvh_provider_error:{error}")))?;
 
     let repo = repo_factory.create().await?;
     let outcome = finish_registration(
@@ -714,14 +728,14 @@ pub async fn post_webvh_finish(
         error: None,
         handle: Some(completed.user.localpart),
         did: webvh.did,
-        did_key_id: webvh.did_key_id,
-        update_key_id: webvh.update_key_id,
-        did_public_key_multibase: webvh.did_public_key_multibase,
-        update_public_key_multibase: webvh.update_public_key_multibase,
-        key_log_head: webvh.key_log_head,
-        document_url: webvh.document_url,
-        log_url: webvh.log_url,
-        provider_id: webvh.provider_id,
+        did_key_id: Some(webvh.did_key_id),
+        update_key_id: Some(webvh.update_key_id),
+        did_public_key_multibase: Some(webvh.did_public_key_multibase),
+        update_public_key_multibase: Some(webvh.update_public_key_multibase),
+        key_log_head: Some(webvh.key_log_head),
+        document_url: Some(webvh.document_url),
+        log_url: Some(webvh.log_url),
+        provider_id: Some(webvh.provider_id),
         did_document: webvh.did_document,
         did_log: webvh.did_log,
     }))
@@ -813,132 +827,38 @@ fn registration_webvh_principal_url(post_auth_action: &Option<Value>) -> Option<
 }
 
 #[derive(Clone)]
-struct WebvhTarget {
+struct WebvhProviderTarget {
     endpoint: Url,
-    bearer: String,
+    bearer: Option<String>,
 }
 
-fn resolve_webvh_target(
+fn resolve_webvh_provider(
     config: &coauth_config::CokretConfig,
     requested: Option<&str>,
-) -> Result<WebvhTarget, String> {
+) -> Result<WebvhProviderTarget, String> {
     let requested = requested.and_then(|value| Url::parse(value).ok());
-    let candidate = config
-        .principal_servers
-        .iter()
-        .filter(|server| {
-            server
-                .embedded_webvh_registration_bearer
-                .as_deref()
-                .map(str::trim)
-                .is_some_and(|value| !value.is_empty())
-        })
-        .find(|server| {
-            requested
-                .as_ref()
-                .is_none_or(|requested| urls_match(requested, &server.endpoint))
-        });
+    let candidate = config.principal_servers.iter().find(|server| {
+        requested
+            .as_ref()
+            .is_none_or(|requested| urls_match(requested, &server.endpoint))
+    });
     let Some(server) = candidate else {
         return Err("embedded_webvh_provider_not_configured".to_owned());
     };
-    // Product-plane endpoint — soland removed all `api/v1/*` aliases, so the
-    // historical join here 404'd (see `soland_webvh::register_against_principal`).
-    let endpoint = server
-        .endpoint
-        .join("/_soland/root/identity/webvh/register")
-        .map_err(|_| "embedded_webvh_provider_url_invalid".to_owned())?;
     let bearer = server
         .embedded_webvh_registration_bearer
-        .clone()
-        .unwrap_or_default();
-    Ok(WebvhTarget { endpoint, bearer })
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    Ok(WebvhProviderTarget {
+        endpoint: server.endpoint.clone(),
+        bearer,
+    })
 }
 
 fn urls_match(left: &Url, right: &Url) -> bool {
     left.as_str().trim_end_matches('/') == right.as_str().trim_end_matches('/')
-}
-
-#[derive(Deserialize)]
-struct SolandEmbeddedWebvhOutcome {
-    pub did: String,
-    #[serde(default)]
-    pub did_key_id: Option<String>,
-    #[serde(default)]
-    pub update_key_id: Option<String>,
-    #[serde(default)]
-    pub did_public_key_multibase: Option<String>,
-    #[serde(default)]
-    pub update_public_key_multibase: Option<String>,
-    #[serde(default)]
-    pub key_log_head: Option<String>,
-    #[serde(default)]
-    pub document_url: Option<String>,
-    #[serde(default)]
-    pub log_url: Option<String>,
-    #[serde(default)]
-    pub provider_id: Option<String>,
-    #[serde(default)]
-    pub did_document: Value,
-    #[serde(default)]
-    pub did_log: Vec<Value>,
-}
-
-async fn register_soland_webvh(
-    http_client: reqwest::Client,
-    target: &WebvhTarget,
-    username: &str,
-    did_public_key_multibase: &str,
-    update_public_key_multibase: &str,
-    did_key_id: &str,
-    update_key_id: &str,
-    webvh_version_time: &str,
-    webvh_proof: Value,
-) -> Result<SolandEmbeddedWebvhOutcome, String> {
-    let local_id = normalize_webvh_local_id(username).unwrap_or_else(|| username.to_owned());
-    let body = json!({
-        "local_id": local_id,
-        "did_public_key_multibase": did_public_key_multibase,
-        "update_public_key_multibase": update_public_key_multibase,
-        "did_key_id": did_key_id,
-        "update_key_id": update_key_id,
-        "also_known_as": [format!("acct:{local_id}")],
-        "version_time": webvh_version_time,
-        "proof": webvh_proof,
-    });
-    let response = outbound_http::send_with_policy(
-        outbound_http::soland_policy("webvh_registration_finish"),
-        || {
-            http_client
-                .post(target.endpoint.clone())
-                .bearer_auth(target.bearer.as_str())
-                .json(&body)
-        },
-    )
-    .await
-    .map_err(|error| format!("embedded_webvh_provider_unreachable:{error}"))?;
-    let status = response.status();
-    let body = response
-        .text()
-        .await
-        .map_err(|error| format!("embedded_webvh_provider_body:{error}"))?;
-    if !status.is_success() {
-        return Err(format!(
-            "embedded_webvh_provider_error:{status}:{}",
-            body.chars().take(256).collect::<String>()
-        ));
-    }
-    serde_json::from_str(&body).map_err(|error| format!("embedded_webvh_provider_json:{error}"))
-}
-
-fn normalize_webvh_local_id(value: &str) -> Option<String> {
-    let normalized = value.trim().trim_start_matches('@').to_ascii_lowercase();
-    let valid = !normalized.is_empty()
-        && normalized.len() <= 64
-        && !normalized.contains("..")
-        && normalized
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'));
-    valid.then_some(normalized)
 }
 
 // ── GET /_coauth/gate/account/auth/register/:id ──────────────────────────────

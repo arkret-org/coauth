@@ -38,6 +38,9 @@ use std::time::Duration as StdDuration;
 use async_trait::async_trait;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use chrono::{DateTime, Duration, Utc};
+use coauth_data::{
+    NewDpopJtiReplay, PgRepositoryFactory, RepositoryAccess as _, RepositoryFactory as _,
+};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwa::AsymmetricVerifyingKey;
 use coauth_jose::jwk::{PublicJsonWebKey, Thumbprint};
@@ -147,6 +150,9 @@ pub enum DpopError {
 
     #[error("DPoP `jkt` `{actual}` does not match the bound token `cnf.jkt` `{expected}`")]
     JktMismatch { expected: String, actual: String },
+
+    #[error("DPoP replay store failed: {0}")]
+    ReplayStore(String),
 }
 
 /// Replay-protection store for DPoP `jti` values (RFC 9449 §4.3).
@@ -200,6 +206,71 @@ impl JtiReplayStore for InMemoryJtiStore {
         guard.insert(jti.to_owned(), expiry);
         Ok(())
     }
+}
+
+/// Database-backed [`JtiReplayStore`] for multi-replica deployments.
+#[derive(Clone)]
+pub struct RepositoryJtiStore {
+    repository_factory: PgRepositoryFactory,
+}
+
+impl RepositoryJtiStore {
+    /// Construct a DPoP replay store backed by the shared PostgreSQL
+    /// repository factory.
+    #[must_use]
+    pub fn new(repository_factory: PgRepositoryFactory) -> Self {
+        Self { repository_factory }
+    }
+}
+
+impl std::fmt::Debug for RepositoryJtiStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RepositoryJtiStore").finish_non_exhaustive()
+    }
+}
+
+#[async_trait]
+impl JtiReplayStore for RepositoryJtiStore {
+    async fn check_and_record(
+        &self,
+        jti: &str,
+        now: DateTime<Utc>,
+        ttl: StdDuration,
+    ) -> Result<(), DpopError> {
+        let expires_at = now + Duration::from_std(ttl).expect("NONCE_TTL fits in chrono::Duration");
+        let jti_digest = dpop_jti_digest(jti);
+        let mut repo = self
+            .repository_factory
+            .create()
+            .await
+            .map_err(|error| DpopError::ReplayStore(error.to_string()))?;
+
+        let inserted = repo
+            .dpop_replay()
+            .consume_jti(NewDpopJtiReplay {
+                jti_digest,
+                seen_at: now,
+                expires_at,
+            })
+            .await
+            .map_err(|error| DpopError::ReplayStore(error.to_string()))?;
+
+        repo.save()
+            .await
+            .map_err(|error| DpopError::ReplayStore(error.to_string()))?;
+
+        if inserted {
+            Ok(())
+        } else {
+            Err(DpopError::JtiReplayed(jti.to_owned()))
+        }
+    }
+}
+
+fn dpop_jti_digest(jti: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(jti.as_bytes());
+    format!("sha256:{}", hex::encode(hasher.finalize()))
 }
 
 /// RFC 9449 DPoP proof verifier. Cheap to clone — holds an `Arc` over a

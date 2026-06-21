@@ -71,7 +71,9 @@ pub async fn revoke_session_grant_via_holder_proof(
         })?;
 
     // Proof-of-possession: the caller MUST hold the key the grant is bound to.
-    let verifier = DpopVerifier::shared();
+    let verifier = depot
+        .dpop_verifier()
+        .unwrap_or_else(|_| DpopVerifier::shared());
     let now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();
@@ -227,7 +229,9 @@ async fn terminate_auth_side_session(
     };
 
     // Proof-of-possession: the caller MUST hold the key the grant is bound to.
-    let verifier = DpopVerifier::shared();
+    let verifier = depot
+        .dpop_verifier()
+        .unwrap_or_else(|_| DpopVerifier::shared());
     let now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();

@@ -52,6 +52,8 @@ pub mod circle_capability;
 pub mod clock;
 /// Durable collaboration capability grants.
 pub mod collaboration_capability;
+/// Durable DPoP proof replay keys.
+pub mod dpop_replay;
 /// Persisted notification request, delivery, and audit event models.
 pub mod notification;
 /// OAuth client and session models.
@@ -146,6 +148,7 @@ pub use self::collaboration_capability::{
     CollaborationCapabilityGrantRepository, CollaborationCapabilityRevokeFanout,
     NewCollaborationCapabilityGrant, ParseCollaborationCapabilityActionError,
 };
+pub use self::dpop_replay::{DpopReplayRepository, NewDpopJtiReplay};
 pub use self::notification::{
     NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDeliveryStatus, NotificationDestination, NotificationEventActor,

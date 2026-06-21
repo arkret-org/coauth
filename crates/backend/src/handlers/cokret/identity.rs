@@ -1,5 +1,8 @@
+use std::time::{Duration, Instant};
+
 use coauth_data::RepositoryAccess;
 use cokret_core::Did;
+use cokret_core::error::ERROR_CODE_RATE_LIMITED;
 use cokret_core::http::{
     DirectoryDescribeOutcome, IdentityDescribeOutcome, IdentityDocumentViewOutcome,
 };
@@ -12,7 +15,10 @@ use salvo::prelude::*;
 use serde_json::json;
 
 use super::*;
-use crate::handlers::common::DepotExt;
+use crate::handlers::RequesterFingerprint;
+use crate::handlers::common::{DepotExt, extract_bound_activity_tracker};
+
+const DIRECTORY_RESOLVE_FAILURE_FLOOR: Duration = Duration::from_millis(25);
 
 #[handler]
 pub async fn identity_describe(
@@ -138,17 +144,34 @@ pub async fn directory_resolve_handle(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<DirectoryHandleResolutionOutcome>, CokretRouteError> {
+    let started_at = Instant::now();
     let body: DirectoryResolveHandleRequestBody = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
+    let limiter = depot.limiter()?;
+    let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let requester = activity_tracker
+        .ip()
+        .map_or(RequesterFingerprint::EMPTY, RequesterFingerprint::new);
+    limiter
+        .check_directory_lookup(requester)
+        .await
+        .map_err(|error| {
+            CokretRouteError::coded(
+                StatusCode::TOO_MANY_REQUESTS,
+                ERROR_CODE_RATE_LIMITED,
+                error.to_string(),
+            )
+        })?;
+
     if !directory_resolve_request_has_disclosure_gate(&body) {
-        return Err(CokretRouteError::NotFound);
+        return Err(directory_resolve_not_found(started_at).await);
     }
     let Some(handle) = parse_local_handle(&url_builder, &body.handle) else {
-        return Err(CokretRouteError::NotFound);
+        return Err(directory_resolve_not_found(started_at).await);
     };
 
     let mut repo = depot.repo().await?;
@@ -158,7 +181,7 @@ pub async fn directory_resolve_handle(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     else {
-        return Err(CokretRouteError::NotFound);
+        return Err(directory_resolve_not_found(started_at).await);
     };
 
     // The handle resolves to the user's MINTED principal DID
@@ -172,7 +195,7 @@ pub async fn directory_resolve_handle(
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     let Some(did) = did else {
-        return Err(CokretRouteError::NotFound);
+        return Err(directory_resolve_not_found(started_at).await);
     };
 
     let verified = body
@@ -180,7 +203,7 @@ pub async fn directory_resolve_handle(
         .as_ref()
         .is_some_and(|expected| expected.as_str() == did);
     if !verified {
-        return Err(CokretRouteError::NotFound);
+        return Err(directory_resolve_not_found(started_at).await);
     }
 
     Ok(Json(DirectoryHandleResolutionOutcome {
@@ -198,6 +221,14 @@ pub async fn directory_resolve_handle(
         divergent: false,
         via_services: Vec::new(),
     }))
+}
+
+async fn directory_resolve_not_found(started_at: Instant) -> CokretRouteError {
+    let elapsed = started_at.elapsed();
+    if elapsed < DIRECTORY_RESOLVE_FAILURE_FLOOR {
+        tokio::time::sleep(DIRECTORY_RESOLVE_FAILURE_FLOOR - elapsed).await;
+    }
+    CokretRouteError::NotFound
 }
 
 fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRequestBody) -> bool {

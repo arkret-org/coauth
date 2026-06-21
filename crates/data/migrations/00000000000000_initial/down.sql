@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS agent_session_proof_replay CASCADE;
 DROP TABLE IF EXISTS admin_operation_logs CASCADE;
 DROP TABLE IF EXISTS circle_capability_grants CASCADE;
 DROP TABLE IF EXISTS collaboration_capability_grants CASCADE;
+DROP TABLE IF EXISTS dpop_jti_replay CASCADE;
 DROP TABLE IF EXISTS handle_audit_log CASCADE;
 DROP TABLE IF EXISTS invite_quarantine_queue CASCADE;
 DROP TABLE IF EXISTS notification_deliveries CASCADE;

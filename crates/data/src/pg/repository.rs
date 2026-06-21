@@ -6,6 +6,7 @@ use coauth_data::app_session::AppSessionRepository;
 use coauth_data::audit::{AuditRepository, HandleAuditRepository, PgHandleAuditRepository};
 use coauth_data::circle_capability::CircleCapabilityGrantRepository;
 use coauth_data::collaboration_capability::CollaborationCapabilityGrantRepository;
+use coauth_data::dpop_replay::DpopReplayRepository;
 use coauth_data::notification::{NotificationRepository, NotificationTemplateRepository};
 use coauth_data::oauth::{
     OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -43,6 +44,7 @@ use crate::app_session::PgAppSessionRepository;
 use crate::audit::PgAuditRepository;
 use crate::circle_capability::PgCircleCapabilityGrantRepository;
 use crate::collaboration_capability::PgCollaborationCapabilityGrantRepository;
+use crate::dpop_replay::PgDpopReplayRepository;
 use crate::notification::{PgNotificationRepository, PgNotificationTemplateRepository};
 use crate::oauth::{
     PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
@@ -217,6 +219,10 @@ impl RepositoryAccess for PgRepository {
         Box::new(PgCollaborationCapabilityGrantRepository::new(
             &mut self.conn,
         ))
+    }
+
+    fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
+        Box::new(PgDpopReplayRepository::new(&mut self.conn))
     }
 
     fn upstream_oauth_link<'c>(

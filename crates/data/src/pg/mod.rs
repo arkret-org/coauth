@@ -27,6 +27,8 @@ pub mod audit;
 pub mod circle_capability;
 /// PostgreSQL collaboration capability grant repository.
 pub mod collaboration_capability;
+/// PostgreSQL DPoP proof replay repository.
+pub mod dpop_replay;
 /// PostgreSQL append-only handle audit log repository (T3.2).
 pub mod handle_audit;
 /// PostgreSQL notification persistence repositories.

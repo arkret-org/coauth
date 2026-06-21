@@ -123,6 +123,15 @@ CREATE TABLE public.agent_session_proof_replay (
     created_at timestamp with time zone NOT NULL
 );
 
+-- RFC 9449 DPoP proof replay cache. `jti_digest` is a SHA-256 digest of
+-- the caller-supplied `jti`, bounded for storage and safe for audit logs.
+CREATE TABLE public.dpop_jti_replay (
+    jti_digest text NOT NULL,
+    seen_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
 CREATE TABLE public.admin_operation_logs (
     id uuid NOT NULL,
     admin_user_id uuid NOT NULL,
@@ -874,6 +883,9 @@ ALTER TABLE ONLY public.agent_session_proof_replay
 ALTER TABLE ONLY public.agent_session_proof_replay
     ADD CONSTRAINT agent_session_proof_replay_challenge_key UNIQUE (agent_principal_id, verification_method, challenge);
 
+ALTER TABLE ONLY public.dpop_jti_replay
+    ADD CONSTRAINT dpop_jti_replay_pkey PRIMARY KEY (jti_digest);
+
 ALTER TABLE ONLY public.admin_operation_logs
     ADD CONSTRAINT admin_operation_logs_pkey PRIMARY KEY (id);
 
@@ -1113,6 +1125,8 @@ CREATE INDEX agent_key_authorizations_agent_active_idx ON public.agent_key_autho
 CREATE INDEX agent_key_authorizations_revoked_idx ON public.agent_key_authorizations USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
 
 CREATE INDEX agent_session_proof_replay_prune_idx ON public.agent_session_proof_replay USING btree (prune_after);
+
+CREATE INDEX dpop_jti_replay_expires_at_idx ON public.dpop_jti_replay USING btree (expires_at);
 
 CREATE INDEX admin_operation_logs_created_idx ON public.admin_operation_logs USING btree (created_at);
 

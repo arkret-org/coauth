@@ -116,6 +116,8 @@ pub mod audit;
 pub mod circle_capability;
 /// Collaboration capability grant repositories.
 pub mod collaboration_capability;
+/// DPoP proof replay repositories.
+pub mod dpop_replay;
 /// Append-only handle audit log repository (T3.2: handle reassignment,
 /// revocation, TTL expiry, DID Document `alsoKnownAs` divergence).
 pub mod handle_audit;

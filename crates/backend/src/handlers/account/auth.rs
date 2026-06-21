@@ -48,12 +48,15 @@ pub(crate) struct DpopSessionBinding {
 /// `cnf.jkt` of the newly issued grant.
 pub(crate) async fn extract_dpop_binding_for_kickoff(
     req: &salvo::Request,
+    depot: &Depot,
     url_builder: &UrlBuilder,
 ) -> Result<Option<DpopSessionBinding>, DpopError> {
     let Some(header) = dpop_header_from_request(req) else {
         return Ok(None);
     };
-    let verifier = DpopVerifier::shared();
+    let verifier = depot
+        .dpop_verifier()
+        .unwrap_or_else(|_| DpopVerifier::shared());
     let now = chrono::Utc::now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();
@@ -198,7 +201,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     // Same DPoP extraction as `oidc_code_exchange`: a present-but-broken
     // proof rejects the login outright, and session-grant issuance below
     // requires a verified proof-bound public key.
-    let dpop_binding = match extract_dpop_binding_for_kickoff(req, &url_builder).await {
+    let dpop_binding = match extract_dpop_binding_for_kickoff(req, depot, &url_builder).await {
         Ok(jkt) => jkt,
         Err(error) => {
             res.status_code(StatusCode::BAD_REQUEST);

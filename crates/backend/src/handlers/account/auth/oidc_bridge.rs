@@ -161,9 +161,9 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
 /// Resolve the `principal_did` for `user` against the targeted principal
 /// server. The audience must correspond to a `PrincipalServerConfig` with
 /// an embedded webvh provider; this mints (or re-uses) a
-/// `did:webvh:<scid>:<principal_host>:webvh:<user_ulid>` against soland's
-/// soland's private WebVH registration endpoint so the DID's authority matches
-/// the host that actually serves its document.
+/// `did:webvh:<scid>:<principal_host>:webvh:<user_ulid>` through soland's
+/// protocol DID operation endpoint so the DID's authority matches the host
+/// that owns the identity registry.
 pub(super) async fn ensure_principal_did_for_user(
     repo: &mut coauth_data::BoxRepository,
     rng: &mut coauth_data::BoxRng,
@@ -184,7 +184,7 @@ pub(super) async fn ensure_principal_did_for_user(
             "no principal-server config matches audience {audience}"
         ));
     };
-    let registration_bearer = principal_server
+    let operation_bearer = principal_server
         .embedded_webvh_registration_bearer
         .as_deref()
         .map(str::trim)
@@ -203,7 +203,7 @@ pub(super) async fn ensure_principal_did_for_user(
         user,
         &principal_server.audience,
         &principal_server.endpoint,
-        registration_bearer,
+        operation_bearer,
         &also_known_as,
         &enrollment_authority_did,
     )

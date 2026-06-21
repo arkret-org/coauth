@@ -10,6 +10,7 @@ use crate::app_session::AppSessionRepository;
 use crate::audit::AuditRepository;
 use crate::circle_capability::CircleCapabilityGrantRepository;
 use crate::collaboration_capability::CollaborationCapabilityGrantRepository;
+use crate::dpop_replay::DpopReplayRepository;
 use crate::notification::NotificationRepository;
 use crate::oauth::{
     OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -139,6 +140,9 @@ pub trait RepositoryAccess: Send {
     fn collaboration_capability_grant<'c>(
         &'c mut self,
     ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c>;
+
+    /// Get a [`DpopReplayRepository`].
+    fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c>;
 
     /// Get an [`UpstreamOAuthLinkRepository`]
     fn upstream_oauth_link<'c>(
@@ -295,6 +299,7 @@ mod impls {
     use crate::audit::AuditRepository;
     use crate::circle_capability::CircleCapabilityGrantRepository;
     use crate::collaboration_capability::CollaborationCapabilityGrantRepository;
+    use crate::dpop_replay::DpopReplayRepository;
     use crate::notification::NotificationRepository;
     use crate::oauth::{
         OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
@@ -395,6 +400,12 @@ mod impls {
                 self.inner.collaboration_capability_grant(),
                 &mut self.mapper,
             ))
+        }
+
+        fn dpop_replay<'c>(
+            &'c mut self,
+        ) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(self.inner.dpop_replay(), &mut self.mapper))
         }
 
         fn upstream_oauth_link<'c>(
@@ -654,6 +665,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c> {
             (**self).collaboration_capability_grant()
+        }
+
+        fn dpop_replay<'c>(
+            &'c mut self,
+        ) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {
+            (**self).dpop_replay()
         }
 
         fn upstream_oauth_link<'c>(

@@ -89,6 +89,12 @@ pub enum DidBindingLimitedError {
     Account(Ulid),
 }
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum DirectoryLookupLimitedError {
+    #[error("Too many directory lookup requests for requester {0}")]
+    Requester(RequesterFingerprint),
+}
+
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 pub enum MfaTotpLimitedError {
     #[error("Too many TOTP attempts for account {0}")]
@@ -245,6 +251,7 @@ struct LimiterInner {
     phone_authentication_per_phone: KeyedLimiter<String>,
     phone_authentication_sms_per_session: KeyedLimiter<Ulid>,
     phone_authentication_attempt_per_session: KeyedLimiter<Ulid>,
+    directory_lookup_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_account: KeyedLimiter<Ulid>,
     mfa_totp_per_account: KeyedLimiter<Ulid>,
@@ -285,6 +292,9 @@ impl LimiterInner {
             )?,
             phone_authentication_attempt_per_session: KeyedLimiter::from_config(
                 &config.phone_authentication.attempt_per_session,
+            )?,
+            directory_lookup_per_requester: KeyedLimiter::from_config(
+                &config.directory_lookup.per_ip,
             )?,
             did_binding_per_requester: KeyedLimiter::from_config(&config.did_binding.per_ip)?,
             did_binding_per_account: KeyedLimiter::from_config(&config.did_binding.per_account)?,
@@ -531,6 +541,27 @@ impl Limiter {
     }
 
     // -----------------------------------------------------------------------
+    // Directory lookup
+    // -----------------------------------------------------------------------
+
+    /// Check whether a public directory lookup may proceed for the requester.
+    pub async fn check_directory_lookup(
+        &self,
+        requester: RequesterFingerprint,
+    ) -> Result<(), DirectoryLookupLimitedError> {
+        if !self
+            .inner
+            .directory_lookup_per_requester
+            .check(&requester)
+            .await
+        {
+            return Err(DirectoryLookupLimitedError::Requester(requester));
+        }
+
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
     // DID binding
     // -----------------------------------------------------------------------
 
@@ -681,6 +712,24 @@ mod tests {
                 .check_phone_authentication_phone(requester, &auth.phone)
                 .await
                 .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_directory_lookup_limiter() {
+        let limiter = Limiter::new(&RateLimitingConfig::default()).unwrap();
+        let requester = RequesterFingerprint::new([203, 0, 113, 10].into());
+
+        for _ in 0..20 {
+            assert!(limiter.check_directory_lookup(requester).await.is_ok());
+        }
+
+        assert!(limiter.check_directory_lookup(requester).await.is_err());
+        assert!(
+            limiter
+                .check_directory_lookup(RequesterFingerprint::new([203, 0, 113, 11].into()))
+                .await
+                .is_ok()
         );
     }
 }

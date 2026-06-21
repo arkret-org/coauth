@@ -30,6 +30,11 @@ pub struct RateLimitingConfig {
     #[serde(default)]
     pub phone_authentication: PhoneAuthenticationRateLimitingConfig,
 
+    /// Directory lookup rate limits. Applies to public handle resolution
+    /// surfaces that can otherwise be abused for account enumeration.
+    #[serde(default)]
+    pub directory_lookup: DirectoryLookupRateLimitingConfig,
+
     /// DID-binding rate limits. Applies to admin-driven attach/remove
     /// of principal DIDs on accounts.
     #[serde(default)]
@@ -62,6 +67,14 @@ pub struct DidBindingRateLimitingConfig {
     /// single target account, regardless of source.
     #[serde(default = "default_did_binding_per_account")]
     pub per_account: RateLimiterConfiguration,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct DirectoryLookupRateLimitingConfig {
+    /// Controls how many directory handle lookups are permitted from a
+    /// single source IP over the sliding window.
+    #[serde(default = "default_directory_lookup_per_ip")]
+    pub per_ip: RateLimiterConfiguration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -276,6 +289,10 @@ impl ConfigurationSection for RateLimitingConfig {
             .into());
         }
 
+        if let Some(error) = error_on_limiter(&self.directory_lookup.per_ip) {
+            return Err(error_on_nested_field(error, "directory_lookup", "per_ip").into());
+        }
+
         if let Some(error) = error_on_limiter(&self.did_binding.per_ip) {
             return Err(error_on_nested_field(error, "did_binding", "per_ip").into());
         }
@@ -406,6 +423,13 @@ fn default_phone_authentication_attempt_per_session() -> RateLimiterConfiguratio
     }
 }
 
+fn default_directory_lookup_per_ip() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(20).unwrap(),
+        per_second: 20.0 / 60.0,
+    }
+}
+
 fn default_mfa_totp_per_account() -> RateLimiterConfiguration {
     // 5 attempts every 15 minutes (900 seconds): the burst is 5 and the
     // replenishment rate is 5 / 900 ≈ 0.00555 actions per second.
@@ -437,6 +461,7 @@ impl Default for RateLimitingConfig {
             account_recovery: AccountRecoveryRateLimitingConfig::default(),
             email_authentication: EmailauthenticationRateLimitingConfig::default(),
             phone_authentication: PhoneAuthenticationRateLimitingConfig::default(),
+            directory_lookup: DirectoryLookupRateLimitingConfig::default(),
             did_binding: DidBindingRateLimitingConfig::default(),
             mfa_totp: MfaTotpRateLimitingConfig::default(),
         }
@@ -456,6 +481,14 @@ impl Default for DidBindingRateLimitingConfig {
         DidBindingRateLimitingConfig {
             per_ip: default_did_binding_per_ip(),
             per_account: default_did_binding_per_account(),
+        }
+    }
+}
+
+impl Default for DirectoryLookupRateLimitingConfig {
+    fn default() -> Self {
+        DirectoryLookupRateLimitingConfig {
+            per_ip: default_directory_lookup_per_ip(),
         }
     }
 }

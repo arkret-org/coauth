@@ -135,6 +135,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    dpop_jti_replay (jti_digest) {
+        jti_digest -> Text,
+        seen_at -> Timestamptz,
+        expires_at -> Timestamptz,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     circle_capability_grants (id) {
         id -> Uuid,
         subject -> Text,

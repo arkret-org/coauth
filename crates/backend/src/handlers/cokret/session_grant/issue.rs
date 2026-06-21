@@ -37,7 +37,7 @@ pub async fn issue_session_grant_endpoint(
 
     // Holder proof (DPoP) extraction. A present-but-malformed proof is a hard
     // rejection: an OIDC-issued grant MUST be device-bound (`cnf.jkt`).
-    let dpop_binding = extract_dpop_binding_for_kickoff(req, &url_builder)
+    let dpop_binding = extract_dpop_binding_for_kickoff(req, depot, &url_builder)
         .await
         .map_err(|error| {
             CokretRouteError::coded(
