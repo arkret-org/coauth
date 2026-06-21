@@ -444,9 +444,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             // service resolves under the principal server's authority.
             let http_client = depot.http_client()?;
             let encrypter = depot.encrypter()?;
-            let mut grant_repo = depot.repo().await?;
-            let principal_did = match oidc_bridge::ensure_principal_did_for_user(
-                &mut grant_repo,
+            let principal_did = match oidc_bridge::ensure_principal_did_for_user_committed(
+                depot,
                 &mut rng,
                 &clock,
                 &encrypter,
@@ -509,6 +508,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             )
             .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
+            let mut grant_repo = depot.repo().await?;
             let persisted_session_grant = cokret::persist_session_grant(
                 &mut grant_repo,
                 &mut rng,
