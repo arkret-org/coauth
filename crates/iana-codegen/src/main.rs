@@ -5,7 +5,8 @@
 //! Code generator that fetches IANA JOSE and OAuth registry CSVs and
 //! emits typed Rust enums into the `coauth-iana` crate.
 
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
+use std::fmt::Display;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use reqwest::Client;
@@ -44,11 +45,7 @@ fn resolve_path(relative: impl AsRef<Utf8Path>) -> Utf8PathBuf {
 
 impl RegistryFile {
     #[tracing::instrument(skip(client))]
-    fn new(
-        registry_name: &'static str,
-        registry_url: &'static str,
-        client: Client,
-    ) -> Self {
+    fn new(registry_name: &'static str, registry_url: &'static str, client: Client) -> Self {
         tracing::info!("Generating file from IANA registry");
         Self {
             client,

@@ -17,10 +17,8 @@
 
 use serde::Deserialize;
 
-use crate::{
-    EnumEntry,
-    traits::{Section, s},
-};
+use crate::EnumEntry;
+use crate::traits::{Section, s};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]

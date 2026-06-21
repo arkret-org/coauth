@@ -9,10 +9,8 @@
 
 use serde::Deserialize;
 
-use crate::{
-    EnumEntry,
-    traits::{Section, s},
-};
+use crate::EnumEntry;
+use crate::traits::{Section, s};
 
 // ── Shared helpers ───────────────────────────────────────────────────
 
@@ -69,9 +67,18 @@ impl EnumEntry for WebEncryptionSignatureAlgorithm {
         "http://www.iana.org/assignments/jose/web-signature-encryption-algorithms.csv";
 
     const SECTIONS: &'static [Section] = &[
-        s("JsonWebSignatureAlg", r#"JSON Web Signature "alg" parameter"#),
-        s("JsonWebEncryptionAlg", r#"JSON Web Encryption "alg" parameter"#),
-        s("JsonWebEncryptionEnc", r#"JSON Web Encryption "enc" parameter"#),
+        s(
+            "JsonWebSignatureAlg",
+            r#"JSON Web Signature "alg" parameter"#,
+        ),
+        s(
+            "JsonWebEncryptionAlg",
+            r#"JSON Web Encryption "alg" parameter"#,
+        ),
+        s(
+            "JsonWebEncryptionEnc",
+            r#"JSON Web Encryption "enc" parameter"#,
+        ),
     ];
 
     fn key(&self) -> Option<&'static str> {
@@ -215,8 +222,14 @@ impl EnumEntry for WebKeyEllipticCurve {
     const URL: &'static str = "http://www.iana.org/assignments/jose/web-key-elliptic-curve.csv";
 
     const SECTIONS: &'static [Section] = &[
-        s("JsonWebKeyEcEllipticCurve", "JSON Web Key EC Elliptic Curve"),
-        s("JsonWebKeyOkpEllipticCurve", "JSON Web Key OKP Elliptic Curve"),
+        s(
+            "JsonWebKeyEcEllipticCurve",
+            "JSON Web Key EC Elliptic Curve",
+        ),
+        s(
+            "JsonWebKeyOkpEllipticCurve",
+            "JSON Web Key OKP Elliptic Curve",
+        ),
     ];
 
     fn key(&self) -> Option<&'static str> {

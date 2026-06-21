@@ -23,7 +23,10 @@ pub fn struct_def(
         writeln!(out, "///")?;
         writeln!(out, "/// Source: <{url}>")?;
     }
-    writeln!(out, "#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]")?;
+    writeln!(
+        out,
+        "#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]"
+    )?;
     if !exhaustive {
         writeln!(out, "#[non_exhaustive]")?;
     }
@@ -52,11 +55,18 @@ pub fn display_impl(
     exhaustive: bool,
 ) -> std::fmt::Result {
     writeln!(out, "impl core::fmt::Display for {} {{", section.key)?;
-    writeln!(out, "    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {{")?;
+    writeln!(
+        out,
+        "    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {{"
+    )?;
     writeln!(out, "        match self {{")?;
 
     for m in members {
-        writeln!(out, r#"            Self::{} => f.write_str("{}"),"#, m.enum_name, m.value)?;
+        writeln!(
+            out,
+            r#"            Self::{} => f.write_str("{}"),"#,
+            m.enum_name, m.value
+        )?;
     }
     if !exhaustive {
         writeln!(out, "            Self::Unknown(v) => f.write_str(v),")?;
@@ -83,17 +93,27 @@ pub fn from_str_impl(
     writeln!(out, "impl core::str::FromStr for {} {{", section.key)?;
     writeln!(out, "    type Err = {err_type};")?;
     writeln!(out)?;
-    writeln!(out, "    fn from_str(s: &str) -> Result<Self, Self::Err> {{")?;
+    writeln!(
+        out,
+        "    fn from_str(s: &str) -> Result<Self, Self::Err> {{"
+    )?;
     writeln!(out, "        match s {{")?;
 
     for m in members {
-        writeln!(out, r#"            "{}" => Ok(Self::{}),"#, m.value, m.enum_name)?;
+        writeln!(
+            out,
+            r#"            "{}" => Ok(Self::{}),"#,
+            m.value, m.enum_name
+        )?;
     }
 
     if exhaustive {
         writeln!(out, "            _ => Err(crate::ParseError::new()),")?;
     } else {
-        writeln!(out, "            other => Ok(Self::Unknown(other.to_owned())),")?;
+        writeln!(
+            out,
+            "            other => Ok(Self::Unknown(other.to_owned())),"
+        )?;
     }
 
     writeln!(out, "        }}")?;
@@ -102,27 +122,33 @@ pub fn from_str_impl(
 }
 
 /// Emit `impl Serialize` and `impl Deserialize` via the string representation.
-pub fn serde_impl(
-    out: &mut std::fmt::Formatter<'_>,
-    section: &Section,
-) -> std::fmt::Result {
+pub fn serde_impl(out: &mut std::fmt::Formatter<'_>, section: &Section) -> std::fmt::Result {
     let name = section.key;
 
     // Deserialize: parse from string
     writeln!(out, "impl<'de> serde::Deserialize<'de> for {name} {{")?;
-    writeln!(out, "    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>")?;
+    writeln!(
+        out,
+        "    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>"
+    )?;
     writeln!(out, "    where")?;
     writeln!(out, "        D: serde::de::Deserializer<'de>,")?;
     writeln!(out, "    {{")?;
     writeln!(out, "        let s = String::deserialize(deserializer)?;")?;
-    writeln!(out, "        core::str::FromStr::from_str(&s).map_err(serde::de::Error::custom)")?;
+    writeln!(
+        out,
+        "        core::str::FromStr::from_str(&s).map_err(serde::de::Error::custom)"
+    )?;
     writeln!(out, "    }}")?;
     writeln!(out, "}}")?;
     writeln!(out)?;
 
     // Serialize: write as string
     writeln!(out, "impl serde::Serialize for {name} {{")?;
-    writeln!(out, "    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>")?;
+    writeln!(
+        out,
+        "    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>"
+    )?;
     writeln!(out, "    where")?;
     writeln!(out, "        S: serde::ser::Serializer,")?;
     writeln!(out, "    {{")?;
@@ -149,18 +175,28 @@ pub fn json_schema_impl(
     let name = section.key;
 
     writeln!(out, "impl schemars::JsonSchema for {name} {{")?;
-    writeln!(out, "    fn schema_name() -> std::borrow::Cow<'static, str> {{")?;
+    writeln!(
+        out,
+        "    fn schema_name() -> std::borrow::Cow<'static, str> {{"
+    )?;
     writeln!(out, "        std::borrow::Cow::Borrowed(\"{name}\")")?;
     writeln!(out, "    }}")?;
     writeln!(out)?;
     writeln!(out, "    #[allow(clippy::too_many_lines)]")?;
-    writeln!(out, "    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {{")?;
+    writeln!(
+        out,
+        "    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {{"
+    )?;
     writeln!(out, "        let variants = vec![")?;
 
     for m in members {
         writeln!(out, "            schemars::json_schema!({{")?;
         if let Some(desc) = &m.description {
-            writeln!(out, "                \"description\": {},", raw_str_literal(desc))?;
+            writeln!(
+                out,
+                "                \"description\": {},",
+                raw_str_literal(desc)
+            )?;
         }
         writeln!(out, "                \"const\": \"{}\",", m.value)?;
         writeln!(out, "            }}),")?;
@@ -169,7 +205,11 @@ pub fn json_schema_impl(
     writeln!(out, "        ];")?;
     writeln!(out)?;
     writeln!(out, "        schemars::json_schema!({{")?;
-    writeln!(out, "            \"description\": {},", raw_str_literal(section.doc))?;
+    writeln!(
+        out,
+        "            \"description\": {},",
+        raw_str_literal(section.doc)
+    )?;
     writeln!(out, "            \"anyOf\": variants,")?;
     writeln!(out, "        }})")?;
     writeln!(out, "    }}")?;

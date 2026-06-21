@@ -138,33 +138,32 @@ pub trait EnumEntry: DeserializeOwned + Send + Sync {
             .await
             .context(format!("can't the CSV body at {csv_url}"))?;
 
-        let parsed_entries: Result<Vec<_>, _> =
-            csv::Reader::from_reader(body_text.as_bytes())
-                .into_deserialize()
-                .filter_map(|record: Result<Self, _>| {
-                    record
-                        .map(|entry| {
-                            // Skip entries marked as TEMPORARY
-                            let is_temporary = entry
-                                .description()
-                                .is_some_and(|desc| desc.contains("TEMPORARY"));
+        let parsed_entries: Result<Vec<_>, _> = csv::Reader::from_reader(body_text.as_bytes())
+            .into_deserialize()
+            .filter_map(|record: Result<Self, _>| {
+                record
+                    .map(|entry| {
+                        // Skip entries marked as TEMPORARY
+                        let is_temporary = entry
+                            .description()
+                            .is_some_and(|desc| desc.contains("TEMPORARY"));
 
-                            if is_temporary {
-                                return None;
-                            }
+                        if is_temporary {
+                            return None;
+                        }
 
-                            entry.key().map(|section_key| {
-                                let member = EnumMember {
-                                    value: entry.name().to_owned(),
-                                    description: entry.description().map(ToOwned::to_owned),
-                                    enum_name: entry.enum_name(),
-                                };
-                                (section_key, member)
-                            })
+                        entry.key().map(|section_key| {
+                            let member = EnumMember {
+                                value: entry.name().to_owned(),
+                                description: entry.description().map(ToOwned::to_owned),
+                                enum_name: entry.enum_name(),
+                            };
+                            (section_key, member)
                         })
-                        .transpose()
-                })
-                .collect();
+                    })
+                    .transpose()
+            })
+            .collect();
 
         Ok(parsed_entries.context(format!("can't parse the CSV at {csv_url}"))?)
     }
