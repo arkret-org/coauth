@@ -197,12 +197,8 @@ impl Node<Ulid> for User {
     }
 }
 
-/// Error code surfaced to API callers when they supply a handle string
-/// that is not in the canonical `<localpart>:<domain>` form.
-///
-/// Stable wire constant — the OIDC bridge / register / handle-claim issuer
-/// surfaces this verbatim in their error envelopes per spec 7157ee8 §3.1.
-pub const HANDLE_NOT_CANONICAL_CODE: &str = "handle_not_canonical";
+/// Error code surfaced when callers supply a non-canonical handle string.
+pub const HANDLE_NOT_CANONICAL_CODE: &str = "invalid_param";
 
 /// Validate that an input string is a canonical Cokret handle of the
 /// form `<lowercase-localpart>:<lowercase-domain>` per spec 7157ee8 §3.1.
@@ -221,7 +217,7 @@ pub const HANDLE_NOT_CANONICAL_CODE: &str = "handle_not_canonical";
 ///
 /// # Errors
 ///
-/// Returns `HANDLE_NOT_CANONICAL_CODE` paired with a short reason.
+/// Returns a canonical error code paired with a short reason.
 pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, String)> {
     let trimmed = value.trim();
     if trimmed.is_empty() {

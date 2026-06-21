@@ -1,4 +1,9 @@
 use coauth_jose::jwt::Jwt;
+use cokret_core::error::{
+    ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_GRANT_ALREADY_CONSUMED,
+    ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+    ERROR_CODE_SESSION_LOGGED_OUT,
+};
 use cokret_core::{SessionGrantRefreshOutcome, SessionGrantRefreshRequestBody};
 use salvo::prelude::*;
 
@@ -43,7 +48,7 @@ pub async fn refresh_session_grant(
         // operation; its absence is an auth failure, not a malformed body.
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "did_proof_required",
+            ERROR_CODE_DID_PROOF_REQUIRED,
             "session-grant holder proof (DPoP) required",
         )
     })?;
@@ -80,7 +85,7 @@ pub async fn refresh_session_grant(
         .ok_or_else(|| {
             CokretRouteError::coded(
                 StatusCode::NOT_FOUND,
-                "session_grant_not_found",
+                ERROR_CODE_SESSION_GRANT_NOT_FOUND,
                 "no session grant matches the presented grant_jwt",
             )
         })?;
@@ -95,7 +100,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
         return Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            "grant_already_consumed",
+            ERROR_CODE_GRANT_ALREADY_CONSUMED,
             "session grant already consumed; its rotation chain cannot continue",
         ));
     }
@@ -113,7 +118,7 @@ pub async fn refresh_session_grant(
         .map_err(|error| {
             CokretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                "invalid_signature",
+                ERROR_CODE_INVALID_SIGNATURE,
                 error.to_string(),
             )
         })?;
@@ -121,7 +126,7 @@ pub async fn refresh_session_grant(
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "invalid_signature",
+            ERROR_CODE_INVALID_SIGNATURE,
             error.to_string(),
         )
     })?;
@@ -151,7 +156,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
         return Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            "session_logged_out",
+            ERROR_CODE_SESSION_LOGGED_OUT,
             "underlying browser session is logged out; rotation chain cannot be resumed",
         ));
     }
@@ -166,7 +171,7 @@ pub async fn refresh_session_grant(
     {
         return Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            "audience_mismatch",
+            ERROR_CODE_AUDIENCE_MISMATCH,
             "session-grant rotation MUST NOT change the bound audience",
         ));
     }
@@ -192,7 +197,7 @@ pub async fn refresh_session_grant(
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
         return Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            "grant_already_consumed",
+            ERROR_CODE_GRANT_ALREADY_CONSUMED,
             "session grant already consumed; its rotation chain cannot continue",
         ));
     }

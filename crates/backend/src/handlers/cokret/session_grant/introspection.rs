@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use coauth_data::{SessionGrant, User};
 use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::Jwt;
+use cokret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use cokret_core::{
     FreshnessState, SessionGrantIntrospectGrant as SessionGrantIntrospectionGrant,
     SessionGrantIntrospectOutcome as SessionGrantIntrospectionOutcome,
@@ -215,14 +216,14 @@ pub async fn introspect_session_grant(
         (false, false) => {
             return Err(CokretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                ERROR_CODE_SCHEMA_VIOLATION,
                 "exactly one of id or grant_jwt is required",
             ));
         }
         (true, true) => {
             return Err(CokretRouteError::coded(
                 StatusCode::BAD_REQUEST,
-                "schema_violation",
+                ERROR_CODE_SCHEMA_VIOLATION,
                 "id and grant_jwt are mutually exclusive",
             ));
         }

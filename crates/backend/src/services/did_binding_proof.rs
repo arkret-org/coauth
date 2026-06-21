@@ -47,19 +47,15 @@
 //!   6. Reject if the embedded binding statement doesn't match the request (`account_did` + nonce
 //!      both match exactly).
 //!
-//! SDK integration: signature verification is performed by the SDK's
-//! pure-Rust `cokret_signatures::PublicKeyMaterial::ed25519_bytes()`
-//! helper (which understands raw / multibase / JWK Ed25519 keys) plus
-//! the underlying `ed25519_dalek` verifier. The compact JWS envelope is
-//! parsed locally (header.payload.signature segments) and the canonical
-//! signing input is recomputed from the wire bytes so that no JWS
-//! library state intervenes between the resolved DID-document JWK and
-//! the verification call. The embedded coauth_jose
-//! `jwt.verify_with_jwks(...)` path has been removed; coauth_jose's JWT
-//! parser is still used to extract the typed `BindingStatementClaims` /
-//! `VerificationServiceProofClaims` payload, but the signature check
-//! itself is now a single SDK-mediated `ed25519_dalek::Verifier::verify`
-//! call against raw key bytes recovered from the OKP JWK.
+//! SDK integration: signature verification is performed by
+//! `cokret_signatures::proof::verify_detached_ed25519_signature`, which
+//! routes Ed25519 checks through the SDK's strict verifier. The compact JWS
+//! envelope is parsed locally (header.payload.signature segments) and the
+//! canonical signing input is recomputed from the wire bytes so no JWS library
+//! state intervenes between the resolved DID-document JWK and the SDK verifier.
+//! The embedded coauth_jose `jwt.verify_with_jwks(...)` path has been removed;
+//! coauth_jose's JWT parser is still used to extract the typed
+//! `BindingStatementClaims` / `VerificationServiceProofClaims` payload.
 //!
 //! ## Verification-service proof
 //!
@@ -82,8 +78,7 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use cokret_core::canonical::canonical_json_bytes;
-use cokret_signatures::proof::PublicKeyMaterial;
-use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
+use cokret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -422,9 +417,7 @@ pub(crate) enum SdkJwsVerifyError {
 /// (`b64url(header) "." b64url(payload)`) is reconstructed from the wire
 /// bytes themselves so no JWS library state intervenes between the
 /// resolved DID-document JWK and the final
-/// `ed25519_dalek::Verifier::verify` call. The raw Ed25519 verifying-key
-/// bytes are extracted from the resolved OKP JWK via the SDK helper
-/// [`cokret_signatures::proof::PublicKeyMaterial::ed25519_bytes`].
+/// `cokret_signatures::proof::verify_detached_ed25519_signature` call.
 pub(crate) fn verify_compact_jws_with_sdk(
     proof_jws: &str,
     verification_methods: &[crate::handlers::cokret::VerificationMethod],
@@ -462,18 +455,6 @@ pub(crate) fn verify_compact_jws_with_sdk(
         .find(|method| method.id == verification_method_id)
         .ok_or_else(|| SdkJwsVerifyError::MethodNotFound(verification_method_id.to_owned()))?;
 
-    let signature_bytes = Base64UrlUnpadded::decode_vec(signature_b64u)
-        .map_err(|err| SdkJwsVerifyError::InvalidShape(format!("invalid sig b64url: {err}")))?;
-    if signature_bytes.len() != 64 {
-        return Err(SdkJwsVerifyError::SignatureMismatch(format!(
-            "Ed25519 signature must be 64 bytes, got {}",
-            signature_bytes.len()
-        )));
-    }
-    let mut sig_arr = [0u8; 64];
-    sig_arr.copy_from_slice(&signature_bytes);
-    let signature = Signature::from_bytes(&sig_arr);
-
     // RFC 7515 §5.2 signing input: ASCII bytes of "<header_b64u>.<payload_b64u>".
     let mut signing_input = String::with_capacity(header_b64u.len() + 1 + payload_b64u.len());
     signing_input.push_str(header_b64u);
@@ -484,15 +465,13 @@ pub(crate) fn verify_compact_jws_with_sdk(
     let jwk_value = serde_json::to_value(&method.public_key_jwk)
         .map_err(|err| SdkJwsVerifyError::UnsupportedJwk(format!("jwk serialize: {err}")))?;
     let material = PublicKeyMaterial::Jwk { value: jwk_value };
-    let key_bytes = material
-        .ed25519_bytes()
-        .map_err(|err| SdkJwsVerifyError::UnsupportedJwk(err.to_string()))?;
-    let verifying = VerifyingKey::from_bytes(&key_bytes)
-        .map_err(|err| SdkJwsVerifyError::UnsupportedJwk(err.to_string()))?;
-
-    verifying
-        .verify(signing_input.as_bytes(), &signature)
-        .map_err(|err| SdkJwsVerifyError::SignatureMismatch(err.to_string()))
+    if verify_detached_ed25519_signature(&material, signing_input.as_bytes(), signature_b64u) {
+        Ok(())
+    } else {
+        Err(SdkJwsVerifyError::SignatureMismatch(
+            "Ed25519 signature did not verify".to_owned(),
+        ))
+    }
 }
 
 /// Verify a compact detached JWS (`protected..signature`) over `payload_bytes`

@@ -1,3 +1,8 @@
+use cokret_core::error::{
+    ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_CLAIM_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
+    ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_POLICY_DENIED,
+    ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_UNSUPPORTED_FEATURE,
+};
 use salvo::prelude::*;
 
 use super::*;
@@ -36,9 +41,9 @@ pub async fn issue_session_grant_endpoint(
         .await
         .map_err(|error| {
             CokretRouteError::coded(
-                StatusCode::BAD_REQUEST,
-                "proof_invalid",
-                format!("invalid DPoP holder proof: {error}"),
+                StatusCode::UNAUTHORIZED,
+                ERROR_CODE_INVALID_SIGNATURE,
+                format!("reason_code=proof_invalid; invalid DPoP holder proof: {error}"),
             )
         })?;
 
@@ -110,17 +115,17 @@ pub async fn issue_session_grant_endpoint(
             let binding = dpop_binding.ok_or_else(|| {
                 CokretRouteError::coded(
                     StatusCode::UNAUTHORIZED,
-                    "did_proof_required",
+                    cokret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
                     "agent_key_proof session grant requires a DPoP holder proof",
                 )
             })?;
             issue_agent_key_proof_session_grant(req, depot, binding, &body).await
         }
         other => Err(CokretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            "unsupported_proof_kind",
+            StatusCode::NOT_IMPLEMENTED,
+            ERROR_CODE_UNSUPPORTED_FEATURE,
             format!(
-                "this Account Authority only issues session grants via oidc_code_exchange or agent_key_proof; proof_kind={other:?} is not implemented here"
+                "reason_code=unsupported_proof_kind; this Account Authority only issues session grants via oidc_code_exchange or agent_key_proof; proof_kind={other:?} is not implemented here"
             ),
         )),
     }
@@ -204,7 +209,7 @@ async fn issue_agent_key_proof_session_grant(
         repo.cancel().await.ok();
         return Err(CokretRouteError::coded(
             StatusCode::FORBIDDEN,
-            cokret_core::error::ERROR_CODE_AGENT_DEACTIVATED,
+            ERROR_CODE_FAILED_PRECONDITION,
             "accountable controller is deactivated or suspended",
         ));
     }
@@ -270,12 +275,34 @@ async fn issue_agent_key_proof_session_grant(
 fn map_oidc_exchange_error(
     error: crate::handlers::account::auth::oidc_bridge::OidcExchangeError,
 ) -> CokretRouteError {
-    let status = match error.code {
-        "internal_error" => StatusCode::INTERNAL_SERVER_ERROR,
-        "principal_did_minting_failed" | "principal_account_registration_failed" => {
-            StatusCode::BAD_GATEWAY
+    let (status, code) = match error.code {
+        "internal_error" => (StatusCode::INTERNAL_SERVER_ERROR, ERROR_CODE_INTERNAL_ERROR),
+        "proof_invalid" | "invalid_authorization_code" | "invalid_client" => {
+            (StatusCode::UNAUTHORIZED, ERROR_CODE_INVALID_SIGNATURE)
         }
-        _ => StatusCode::BAD_REQUEST,
+        "invalid_audience" => (StatusCode::BAD_REQUEST, ERROR_CODE_AUDIENCE_MISMATCH),
+        "invalid_request" => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ERROR_CODE_SCHEMA_VIOLATION,
+        ),
+        "invalid_discovery_binding" => (StatusCode::CONFLICT, ERROR_CODE_FAILED_PRECONDITION),
+        "upstream_link_required" => (StatusCode::FORBIDDEN, ERROR_CODE_CLAIM_REQUIRED),
+        "account_unavailable"
+        | "principal_did_minting_failed"
+        | "principal_account_registration_failed" => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            ERROR_CODE_SERVICE_UNAVAILABLE,
+        ),
+        "session_grant_denied" => (StatusCode::FORBIDDEN, ERROR_CODE_POLICY_DENIED),
+        _ => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ERROR_CODE_SCHEMA_VIOLATION,
+        ),
     };
-    CokretRouteError::coded(status, error.code, error.message)
+    let message = if error.code == code {
+        error.message
+    } else {
+        format!("reason_code={}; {}", error.code, error.message)
+    };
+    CokretRouteError::coded(status, code, message)
 }

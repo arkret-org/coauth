@@ -1230,17 +1230,14 @@ fn parse_local_handle_round_trips_local_user_handle() {
 fn require_canonical_handle_rejects_acct_aliases() {
     let err = require_canonical_handle("acct:alice@example.com").unwrap_err();
     match err {
-        CokretRouteError::BadRequest(message) => {
-            assert!(
-                message.starts_with(HANDLE_NOT_CANONICAL_CODE),
-                "expected code prefix, got {message}"
-            );
+        CokretRouteError::Coded { code, message, .. } => {
+            assert_eq!(code, HANDLE_NOT_CANONICAL_CODE);
             assert!(
                 message.contains("acct:"),
                 "expected acct: in reason, got {message}"
             );
         }
-        other => panic!("expected BadRequest, got {other:?}"),
+        other => panic!("expected Coded, got {other:?}"),
     }
 }
 

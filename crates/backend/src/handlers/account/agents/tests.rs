@@ -11,7 +11,7 @@ mod agent_auth_error_matrix_tests {
         AgentAuthRejection, PAUSED_REVOCATION_FRESHNESS_WINDOW, enforce_agent_lifecycle_gate,
         enforce_paused_revocation_freshness, enforce_verification_method_binding,
     };
-    use super::super::proof::{ProofSignedFields, base64_decode_flexible, verify_proof_signature};
+    use super::super::proof::{ProofSignedFields, verify_proof_signature};
     use super::super::session_proof::AGENT_SESSION_MAX_TTL;
 
     #[test]
@@ -199,16 +199,5 @@ mod agent_auth_error_matrix_tests {
         let err = verify_proof_signature(&multibase, &tampered, &sig_b64)
             .expect_err("tampered audience must reject");
         assert_eq!(err.code(), "proof_invalid");
-    }
-
-    #[test]
-    fn base64_decode_accepts_url_and_standard() {
-        use base64ct::Encoding as _;
-        // 64 zero bytes encoded url-unpadded and standard-padded both decode.
-        let raw = [0u8; 64];
-        let url = base64ct::Base64UrlUnpadded::encode_string(&raw);
-        let std_padded = base64ct::Base64::encode_string(&raw);
-        assert_eq!(base64_decode_flexible(&url).unwrap().len(), 64);
-        assert_eq!(base64_decode_flexible(&std_padded).unwrap().len(), 64);
     }
 }

@@ -6,7 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
-use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
+use cokret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use serde::Serialize;
 
 use super::AgentAuthRejection;
@@ -32,36 +32,16 @@ pub(super) fn verify_proof_signature(
     signed_fields: &ProofSignedFields<'_>,
     signature_b64: &str,
 ) -> Result<(), AgentAuthRejection> {
-    let key_bytes = cokret::identity::binding::decode_multicodec_ed25519(public_key_multibase)
-        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let verifying =
-        VerifyingKey::from_bytes(&key_bytes).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-
     let message =
         canonical_json_bytes(signed_fields).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-
-    let signature_bytes =
-        base64_decode_flexible(signature_b64).ok_or(AgentAuthRejection::ProofInvalid)?;
-    if signature_bytes.len() != 64 {
-        return Err(AgentAuthRejection::ProofInvalid);
+    let public_key = PublicKeyMaterial::Ed25519Multibase {
+        value: public_key_multibase.to_owned(),
+    };
+    if verify_detached_ed25519_signature(&public_key, &message, signature_b64) {
+        Ok(())
+    } else {
+        Err(AgentAuthRejection::ProofInvalid)
     }
-    let mut sig_arr = [0u8; 64];
-    sig_arr.copy_from_slice(&signature_bytes);
-    let signature = Signature::from_bytes(&sig_arr);
-
-    verifying
-        .verify(&message, &signature)
-        .map_err(|_| AgentAuthRejection::ProofInvalid)
-}
-
-/// Decode base64url (preferred) or standard base64, padded or unpadded.
-pub(super) fn base64_decode_flexible(value: &str) -> Option<Vec<u8>> {
-    use base64ct::{Base64, Base64Unpadded, Base64Url, Base64UrlUnpadded, Encoding};
-    Base64UrlUnpadded::decode_vec(value)
-        .or_else(|_| Base64Url::decode_vec(value))
-        .or_else(|_| Base64Unpadded::decode_vec(value))
-        .or_else(|_| Base64::decode_vec(value))
-        .ok()
 }
 
 pub(super) fn canonical_digest(value: &impl Serialize) -> Result<String, AppError> {

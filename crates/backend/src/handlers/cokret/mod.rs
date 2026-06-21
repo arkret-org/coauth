@@ -24,6 +24,10 @@ use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::JwtSignatureError;
 use coauth_keystore::{Keystore, WrongAlgorithmError};
 use cokret_core::ErrorEnvelope;
+use cokret_core::error::{
+    ERROR_CODE_BAD_JSON, ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_INTERNAL_ERROR,
+    ERROR_CODE_INVALID_PARAM, ERROR_CODE_NOT_FOUND, ERROR_CODE_UNAUTHENTICATED,
+};
 use oauth_types::scope::Scope;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -280,18 +284,28 @@ impl Scribe for CokretRouteError {
         let (status, code, message) = match self {
             Self::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
+                ERROR_CODE_INTERNAL_ERROR,
                 "internal server error".to_owned(),
             ),
-            Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "not found".to_owned()),
-            Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "bad_json", message),
+            Self::NotFound => (
+                StatusCode::NOT_FOUND,
+                ERROR_CODE_NOT_FOUND,
+                "not found".to_owned(),
+            ),
+            Self::BadRequest(message) => (StatusCode::BAD_REQUEST, ERROR_CODE_BAD_JSON, message),
             Self::Coded {
                 status,
                 code,
                 message,
             } => (status, code, message),
-            Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, "unauthorized", message),
-            Self::Forbidden(message) => (StatusCode::FORBIDDEN, "forbidden", message),
+            Self::Unauthorized(message) => (
+                StatusCode::UNAUTHORIZED,
+                ERROR_CODE_UNAUTHENTICATED,
+                message,
+            ),
+            Self::Forbidden(message) => {
+                (StatusCode::FORBIDDEN, ERROR_CODE_CAPABILITY_DENIED, message)
+            }
         };
 
         if status == StatusCode::UNAUTHORIZED {
@@ -410,24 +424,21 @@ pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> S
     )
 }
 
-/// Stable wire-level error code returned when a caller passes a non-
-/// canonical handle string (`cokret://` URI, `acct:` alias, or other
-/// malformed input).
-///
-/// Mirrored by [`coauth_data::user::HANDLE_NOT_CANONICAL_CODE`] — kept in
-/// sync so the audit / HTTP layers can refer to the same constant without
-/// an extra dependency.
-pub const HANDLE_NOT_CANONICAL_CODE: &str = "handle_not_canonical";
+/// Stable wire-level error code returned when a caller passes a non-canonical
+/// handle string (`cokret://` URI, `acct:` alias, or other malformed input).
+pub const HANDLE_NOT_CANONICAL_CODE: &str = ERROR_CODE_INVALID_PARAM;
 
 /// Reject any inbound `handle` that is not in the canonical
 /// `<localpart>:<domain>` shape (spec 7157ee8 §3.1). Returns a
-/// [`CokretRouteError::BadRequest`] wrapping the standard error envelope
-/// `code = "handle_not_canonical"`.
+/// [`CokretRouteError::Coded`] wrapping the standard error envelope
+/// `code = "invalid_param"`.
 pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, CokretRouteError> {
     coauth_data::user::validate_canonical_handle(input).map_err(|(_code, message)| {
-        // The error envelope sets `code` from the variant; we embed the
-        // reason text so callers see why their input was rejected.
-        CokretRouteError::BadRequest(format!("{HANDLE_NOT_CANONICAL_CODE}: {message}"))
+        CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            HANDLE_NOT_CANONICAL_CODE,
+            format!("reason_code=handle_not_canonical; {message}"),
+        )
     })
 }
 

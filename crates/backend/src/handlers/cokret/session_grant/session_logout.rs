@@ -1,4 +1,7 @@
 use coauth_jose::jwt::Jwt;
+use cokret_core::error::{
+    ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+};
 use cokret_core::{SessionGrantLogoutOutcome, SessionGrantLogoutRequestBody};
 use salvo::prelude::*;
 
@@ -30,7 +33,7 @@ pub async fn revoke_session_grant_via_holder_proof(
         // operation; its absence is an auth failure, not a malformed body.
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "did_proof_required",
+            ERROR_CODE_DID_PROOF_REQUIRED,
             "session-grant holder proof (DPoP) required",
         )
     })?;
@@ -62,7 +65,7 @@ pub async fn revoke_session_grant_via_holder_proof(
         .ok_or_else(|| {
             CokretRouteError::coded(
                 StatusCode::NOT_FOUND,
-                "session_grant_not_found",
+                ERROR_CODE_SESSION_GRANT_NOT_FOUND,
                 "no session grant matches the presented grant_jwt",
             )
         })?;
@@ -79,14 +82,14 @@ pub async fn revoke_session_grant_via_holder_proof(
         .map_err(|error| {
             CokretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                "invalid_signature",
+                ERROR_CODE_INVALID_SIGNATURE,
                 error.to_string(),
             )
         })?;
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "invalid_signature",
+            ERROR_CODE_INVALID_SIGNATURE,
             error.to_string(),
         )
     })?;
@@ -180,7 +183,7 @@ async fn terminate_auth_side_session(
     let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "did_proof_required",
+            ERROR_CODE_DID_PROOF_REQUIRED,
             "session-grant holder proof (DPoP) required for logout",
         )
     })?;
@@ -235,14 +238,14 @@ async fn terminate_auth_side_session(
         .map_err(|error| {
             CokretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                "invalid_signature",
+                ERROR_CODE_INVALID_SIGNATURE,
                 error.to_string(),
             )
         })?;
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "invalid_signature",
+            ERROR_CODE_INVALID_SIGNATURE,
             error.to_string(),
         )
     })?;

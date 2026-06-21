@@ -6,9 +6,8 @@
 
 use chrono::{DateTime, Utc};
 use cokret_core::error::{
-    ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_CAPABILITY_DENIED,
-    ERROR_CODE_PAIRING_REQUEST_EXPIRED, ERROR_CODE_POLICY_UNAVAILABLE, ERROR_CODE_POLICY_VIOLATION,
-    ERROR_CODE_PROOF_INVALID, ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
+    ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_FAILED_PRECONDITION, ERROR_CODE_INVALID_SIGNATURE,
+    ERROR_CODE_POLICY_UNAVAILABLE, ERROR_CODE_POLICY_VIOLATION,
     REASON_ACCOUNTABILITY_GRANT_MISSING,
 };
 
@@ -92,17 +91,15 @@ impl AgentAuthRejection {
     #[must_use]
     pub fn code(self) -> &'static str {
         match self {
-            Self::VerificationMethodPrincipalMismatch => {
-                ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH
-            }
-            Self::PairingRequestExpired => ERROR_CODE_PAIRING_REQUEST_EXPIRED,
-            Self::ProofInvalid => ERROR_CODE_PROOF_INVALID,
-            Self::AgentDeactivated => ERROR_CODE_AGENT_DEACTIVATED,
-            Self::AgentPaused => ERROR_CODE_AGENT_PAUSED,
+            Self::VerificationMethodPrincipalMismatch
+            | Self::PairingRequestExpired
+            | Self::AgentDeactivated
+            | Self::AgentPaused => ERROR_CODE_FAILED_PRECONDITION,
+            Self::ProofInvalid => ERROR_CODE_INVALID_SIGNATURE,
             // `accountability_grant_missing` is delivered as a
             // `failed_precondition` HTTP rejection with `reason` carrying
             // this canonical string (see operations↔error mapping §0.8).
-            Self::AccountabilityGrantMissing => REASON_ACCOUNTABILITY_GRANT_MISSING,
+            Self::AccountabilityGrantMissing => ERROR_CODE_FAILED_PRECONDITION,
             Self::CapabilityDenied => ERROR_CODE_CAPABILITY_DENIED,
             Self::PolicyViolation => ERROR_CODE_POLICY_VIOLATION,
             Self::PolicyUnavailable => ERROR_CODE_POLICY_UNAVAILABLE,
@@ -138,6 +135,21 @@ impl AgentAuthRejection {
             http::StatusCode::FORBIDDEN => AppError::forbidden(code),
             http::StatusCode::BAD_REQUEST => AppError::bad_request(code),
             other => AppError::new(other, code),
+        }
+    }
+
+    #[must_use]
+    pub fn reason_code(self) -> Option<&'static str> {
+        match self {
+            Self::VerificationMethodPrincipalMismatch => {
+                Some("verification_method_principal_mismatch")
+            }
+            Self::PairingRequestExpired => Some("pairing_request_expired"),
+            Self::ProofInvalid => Some("proof_invalid"),
+            Self::AgentDeactivated => Some("agent_deactivated"),
+            Self::AgentPaused => Some("agent_paused"),
+            Self::AccountabilityGrantMissing => Some(REASON_ACCOUNTABILITY_GRANT_MISSING),
+            Self::CapabilityDenied | Self::PolicyViolation | Self::PolicyUnavailable => None,
         }
     }
 }

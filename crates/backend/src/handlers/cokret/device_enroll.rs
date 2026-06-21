@@ -21,6 +21,11 @@
 //!    full Event JSON.
 
 use chrono::{DateTime, Utc};
+use cokret_core::error::{
+    ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_GRANT_ALREADY_CONSUMED,
+    ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_SERVICE_UNAVAILABLE,
+    ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+};
 use cokret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
     DeviceEnrollmentAuthorityBinding, DeviceOrPrincipalRef, Did, Event, EventId, EventRequirements,
@@ -128,12 +133,12 @@ fn sole_principal_audience(
         [server] => Ok(server.audience.clone()),
         [] => Err(CokretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
-            "no_principal_server",
+            ERROR_CODE_SERVICE_UNAVAILABLE,
             "no principal server is configured for device enrollment",
         )),
         _ => Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            "ambiguous_principal_server",
+            ERROR_CODE_INVALID_PARAM,
             "multiple principal servers configured; device-enroll cannot pick one",
         )),
     }
@@ -167,7 +172,7 @@ pub async fn device_enroll_endpoint(
     let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "did_proof_required",
+            ERROR_CODE_DID_PROOF_REQUIRED,
             "session-grant holder proof (DPoP) required",
         )
     })?;
@@ -199,7 +204,7 @@ pub async fn device_enroll_endpoint(
         .ok_or_else(|| {
             CokretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                "session_grant_not_found",
+                ERROR_CODE_SESSION_GRANT_NOT_FOUND,
                 "no session grant matches the presented bearer",
             )
         })?;
@@ -207,7 +212,7 @@ pub async fn device_enroll_endpoint(
         repo.cancel().await.ok();
         return Err(CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "grant_already_consumed",
+            ERROR_CODE_GRANT_ALREADY_CONSUMED,
             "session grant has been revoked",
         ));
     }
@@ -225,14 +230,14 @@ pub async fn device_enroll_endpoint(
         .map_err(|error| {
             CokretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                "invalid_signature",
+                ERROR_CODE_INVALID_SIGNATURE,
                 error.to_string(),
             )
         })?;
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            "invalid_signature",
+            ERROR_CODE_INVALID_SIGNATURE,
             error.to_string(),
         )
     })?;
@@ -248,7 +253,7 @@ pub async fn device_enroll_endpoint(
     if grant_payload.audience != audience {
         return Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
-            "audience_mismatch",
+            ERROR_CODE_AUDIENCE_MISMATCH,
             "session grant was not issued for this principal server",
         ));
     }

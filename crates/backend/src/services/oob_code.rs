@@ -43,7 +43,6 @@
 
 use std::time::Duration;
 
-use cokret_core::error::ERROR_CODE_EXPIRED_INVITE_TOKEN;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -155,14 +154,12 @@ impl OobInviteFailure {
     /// Internal-only reason code. Logged and stored; never written to
     /// the wire (the wire body is always `{ "error": "not_found" }`).
     ///
-    /// The `Expired` variant maps to the SDK constant
-    /// `ERROR_CODE_EXPIRED_INVITE_TOKEN` so audit consumers can join
-    /// the SDK error catalog. The other six variants use snake_case
-    /// strings stable across the wire-version bump.
+    /// The variants use stable snake_case reason strings for internal audit.
+    /// The public wire surface remains the non-enumerating `not_found` code.
     #[must_use]
     pub fn internal_reason_code(self) -> &'static str {
         match self {
-            OobInviteFailure::Expired => ERROR_CODE_EXPIRED_INVITE_TOKEN,
+            OobInviteFailure::Expired => "expired_invite_token",
             OobInviteFailure::SendFailed => "send_failed",
             OobInviteFailure::CapabilityLoss => "capability_loss",
             OobInviteFailure::InviterLeft => "inviter_left",
