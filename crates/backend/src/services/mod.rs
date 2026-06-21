@@ -14,6 +14,7 @@ pub mod onboarding_starid;
 pub mod oob_code;
 pub mod oob_invite_state;
 pub mod passkey_derive;
+pub mod peer_protocol_client;
 pub mod policy_evaluator;
 pub mod policy_frontier;
 pub mod policy_signer;

@@ -19,9 +19,9 @@
 //! 2. Coauth queries the target's consent cell via `consent_cell_query::query_consent_cell`.
 //! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `require_consent` policy
 //!    bit into an `Allow / ConsentRequired / Quarantine` decision.
-//! 4. On `Allow`, coauth forwards the (already-signed) invite payload to the target principal's
-//!    invite-intake endpoint and returns 200. On `ConsentRequired`, coauth returns 403 with
-//!    `consent_required`. On `Quarantine`, coauth returns 202 with `quarantined`; the actual
+//! 4. On `Allow`, coauth forwards the typed invite-delivery request to the target principal's
+//!    `/_cokret/peer/invites` endpoint and returns 200. On `ConsentRequired`, coauth returns 403
+//!    with `consent_required`. On `Quarantine`, coauth returns 202 with `quarantined`; the actual
 //!    holder-side queue management lives elsewhere (see `TODO(quarantine- inbox)` in
 //!    `users/create.rs`).
 //!
@@ -42,12 +42,15 @@ use super::{DepotExt, RouteError};
 use crate::handlers::account::consent_cell_query::{
     InviteGateDecision, evaluate_invite_gate, query_consent_cell,
 };
-use crate::outbound_http;
+use crate::handlers::cokret;
+use crate::services::peer_protocol_client::{
+    PeerProtocolClient, PeerProtocolClientError, PeerProtocolIdentity,
+};
 
 // ── Request / response shapes ──────────────────────────────────
 
 /// Body of `POST /_coauth/self/account/invites/relay`.
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct InviteRelayRequestBody {
     /// DID of the actor issuing the invite. Recorded in audit but not
     /// trusted as authentication on its own; the bearer cookie / OAuth
@@ -79,12 +82,10 @@ pub struct InviteRelayRequestBody {
     #[serde(default = "default_require_consent")]
     pub require_consent: bool,
 
-    /// Opaque, inviter-signed invite payload to forward to the target on
-    /// `Allow`. Coauth does not inspect or re-sign it. Required when
-    /// `Allow` is the eventual decision; the handler fails the relay (not
-    /// the gate-check) if the payload is missing at forward time.
+    /// Typed v1 invite-delivery body for `POST /_cokret/peer/invites`.
+    /// When omitted, the endpoint runs as a consent gate check only.
     #[serde(default)]
-    pub invite_payload: Option<serde_json::Value>,
+    pub invite_delivery: Option<cokret_core::InviteDeliveryRequest>,
 }
 
 fn default_require_consent() -> bool {
@@ -154,15 +155,9 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, InviteR
     }
 }
 
-/// Core relay logic: query the consent cell, gate the result, forward on
-/// `Allow`. All I/O goes through the supplied `http_client` so tests can
-/// inject a wiremock server.
-///
-/// `forward_target_url` is the URL to POST the invite payload at when the
-/// gate allows. In production this is typically
-/// `{target_principal_url}/_soland/self/invites/intake` or similar. The actual
-/// path is decided by the target principal's API surface; coauth only
-/// needs a fully-qualified URL to POST to.
+/// Core relay logic: query the consent cell, gate the result, forward a typed
+/// v1 invite-delivery request on `Allow`. All I/O goes through supplied clients
+/// so tests can inject a wiremock server.
 ///
 /// Returns `Err(RouteError::BadRequest(...))` only for client-supplied
 /// validation failures (e.g. `target_principal_url` truly missing). Gate
@@ -174,8 +169,8 @@ pub async fn relay_invite_with(
     peer_did: &str,
     scope: &str,
     require_consent: bool,
-    forward_target_url: Option<&Url>,
-    invite_payload: Option<&serde_json::Value>,
+    peer_protocol_client: Option<&PeerProtocolClient<'_>>,
+    invite_delivery: Option<&cokret_core::InviteDeliveryRequest>,
     http_client: &reqwest::Client,
 ) -> Result<RelayOutcome, RouteError> {
     let Some(principal_url) = target_principal_url else {
@@ -200,31 +195,19 @@ pub async fn relay_invite_with(
 
     match decision {
         InviteGateDecision::Allow => {
-            // On Allow, attempt to forward the inviter-signed payload. If
-            // the caller did not supply a forward target, treat that as
-            // success-without-forward (yougen, for example, may want to
-            // call the gate-only path and forward themselves).
-            let Some(target) = forward_target_url else {
+            // Gate-only mode lets callers verify consent without asking
+            // coauth to deliver the invite.
+            let Some(client) = peer_protocol_client else {
                 return Ok(RelayOutcome::Forwarded { forwarded_ok: true });
             };
-            let Some(payload) = invite_payload else {
-                // Allow but no payload = the caller wanted gate-check only.
+            let Some(delivery) = invite_delivery else {
                 return Ok(RelayOutcome::Forwarded { forwarded_ok: true });
             };
 
-            let forwarded_ok = match outbound_http::send_with_policy(
-                outbound_http::soland_policy("invite_forward"),
-                || http_client.post(target.clone()).json(payload),
-            )
-            .await
-            {
-                Ok(r) if r.status().is_success() => true,
-                Ok(r) => {
-                    warn!(status = ?r.status(), "invite forward: non-success status");
-                    false
-                }
+            let forwarded_ok = match client.post_invite_delivery(delivery).await {
+                Ok(_) => true,
                 Err(error) => {
-                    warn!(?error, "invite forward: HTTP error");
+                    warn!(?error, "invite forward: peer invite delivery failed");
                     false
                 }
             };
@@ -260,6 +243,8 @@ pub async fn post_invite_relay(
 
     let cokret_config = depot.cokret_config()?;
     let http_client = depot.http_client()?;
+    let key_store = depot.key_store()?;
+    let url_builder = depot.url_builder()?;
 
     // Body-supplied URL takes precedence over the global config — admins
     // can route to a holder whose principal lives elsewhere.
@@ -268,17 +253,42 @@ pub async fn post_invite_relay(
         .clone()
         .or_else(|| cokret_config.principal_server_url.clone());
 
-    // Forward target: in this scaffolding we use the same principal URL +
-    // a conservative `/_soland/self/invites/intake` path. Real wiring with
-    // soland's invite-intake endpoint is tracked under
-    // `TODO(c10e-invite-intake)`.
-    let forward_target = principal_url.as_ref().and_then(|u| {
-        u.join("_soland/self/invites/intake")
-            .map_err(|error| {
-                warn!(?error, "invite-relay: failed to build forward URL");
-            })
-            .ok()
-    });
+    if let Some(delivery) = params.invite_delivery.as_ref() {
+        delivery
+            .validate_minimal()
+            .map_err(|error| RouteError::BadRequest(format!("invalid_invite_delivery: {error}")))?;
+        if delivery.invite_address.subject_id.as_str() != params.target_holder_did {
+            return Err(RouteError::BadRequest(
+                "invite_delivery_subject_mismatch".to_owned(),
+            ));
+        }
+    }
+
+    let service_did = cokret::service_did_for(&url_builder, &cokret_config);
+    let trust_domain = cokret::trust_domain_for(&url_builder, &cokret_config);
+    let destination_service_did = params
+        .invite_delivery
+        .as_ref()
+        .map(|delivery| {
+            delivery
+                .invite_address
+                .recipient_service_did
+                .as_str()
+                .to_owned()
+        })
+        .unwrap_or_else(|| service_did.clone());
+    let identity = PeerProtocolIdentity {
+        source_service_did: service_did,
+        destination_service_did,
+        source_trust_domain: trust_domain.clone(),
+        destination_trust_domain: trust_domain,
+    };
+    let peer_client =
+        match PeerProtocolClient::new(principal_url.as_ref(), &http_client, &key_store, identity) {
+            Ok(client) => Some(client),
+            Err(PeerProtocolClientError::BaseUrlNotConfigured) => None,
+            Err(error) => return Err(RouteError::Internal(Box::new(error))),
+        };
 
     let outcome = relay_invite_with(
         principal_url.as_ref(),
@@ -287,8 +297,8 @@ pub async fn post_invite_relay(
         &params.inviter_did,
         &params.scope,
         params.require_consent,
-        forward_target.as_ref(),
-        params.invite_payload.as_ref(),
+        peer_client.as_ref(),
+        params.invite_delivery.as_ref(),
         &http_client,
     )
     .await?;
@@ -309,11 +319,38 @@ mod tests {
     use super::*;
     use crate::handlers::test_utils::setup;
 
+    fn test_keystore() -> coauth_keystore::Keystore {
+        use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
+        use rand_chacha::rand_core::SeedableRng as _;
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(9);
+        let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("relay-key");
+        coauth_keystore::Keystore::new(JsonWebKeySet::new(vec![key]))
+    }
+
+    fn peer_identity() -> PeerProtocolIdentity {
+        PeerProtocolIdentity::same_destination(
+            "did:web:auth.example",
+            "ck:trust_domain:auth.example",
+        )
+    }
+
     fn payload() -> serde_json::Value {
         serde_json::json!({
-            "kind": "ck.invite.v1",
+            "kind": "ck.invite.create",
             "from": "did:web:inviter",
         })
+    }
+
+    fn invite_delivery() -> cokret_core::InviteDeliveryRequest {
+        cokret_core::InviteDeliveryRequest::new(
+            payload(),
+            cokret_core::InviteAddress::principal_server(
+                cokret_core::Did::new("did:web:holder").unwrap(),
+                cokret_core::Did::new("did:web:auth.example").unwrap(),
+            ),
+            cokret_core::IntroductionEvidence::ExplicitAddress,
+            "idem-1",
+        )
     }
 
     fn active_cell(scope: &str) -> serde_json::Value {
@@ -348,17 +385,21 @@ mod tests {
             .mount(&server)
             .await;
 
-        // Forward-target mock: 200 OK accepts the payload.
+        // Forward-target mock: 200 OK accepts the typed invite delivery.
         Mock::given(method("POST"))
-            .and(path_regex(r"^/_soland/self/invites/intake"))
-            .respond_with(ResponseTemplate::new(200))
+            .and(path_regex(r"^/_cokret/peer/invites"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "accepted"
+            })))
             .expect(1)
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("_soland/self/invites/intake").unwrap();
-        let p = payload();
+        let keystore = test_keystore();
+        let peer =
+            PeerProtocolClient::new(Some(&base), &client, &keystore, peer_identity()).unwrap();
+        let delivery = invite_delivery();
 
         let outcome = relay_invite_with(
             Some(&base),
@@ -367,8 +408,8 @@ mod tests {
             "did:web:inviter",
             "invite",
             true,
-            Some(&forward),
-            Some(&p),
+            Some(&peer),
+            Some(&delivery),
             &client,
         )
         .await
@@ -400,8 +441,6 @@ mod tests {
         // see forwarded_ok=false. The Allow branch must not execute.
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("_soland/self/invites/intake").unwrap();
-        let p = payload();
 
         let outcome = relay_invite_with(
             Some(&base),
@@ -410,8 +449,8 @@ mod tests {
             "did:web:inviter",
             "invite",
             true, // require_consent
-            Some(&forward),
-            Some(&p),
+            None,
+            None,
             &client,
         )
         .await
@@ -438,8 +477,6 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("_soland/self/invites/intake").unwrap();
-        let p = payload();
 
         let outcome = relay_invite_with(
             Some(&base),
@@ -448,8 +485,8 @@ mod tests {
             "did:web:inviter",
             "invite",
             false, // require_consent off
-            Some(&forward),
-            Some(&p),
+            None,
+            None,
             &client,
         )
         .await
@@ -467,7 +504,6 @@ mod tests {
     async fn relay_rejects_when_target_principal_url_missing() {
         setup();
         let client = reqwest::Client::new();
-        let p = payload();
 
         let err = relay_invite_with(
             None, // no URL
@@ -477,7 +513,7 @@ mod tests {
             "invite",
             true,
             None,
-            Some(&p),
+            None,
             &client,
         )
         .await
@@ -515,14 +551,16 @@ mod tests {
             .await;
 
         Mock::given(method("POST"))
-            .and(path_regex(r"^/_soland/self/invites/intake"))
+            .and(path_regex(r"^/_cokret/peer/invites"))
             .respond_with(ResponseTemplate::new(503))
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let forward = base.join("_soland/self/invites/intake").unwrap();
-        let p = payload();
+        let keystore = test_keystore();
+        let peer =
+            PeerProtocolClient::new(Some(&base), &client, &keystore, peer_identity()).unwrap();
+        let delivery = invite_delivery();
 
         let outcome = relay_invite_with(
             Some(&base),
@@ -531,8 +569,8 @@ mod tests {
             "did:web:inviter",
             "invite",
             true,
-            Some(&forward),
-            Some(&p),
+            Some(&peer),
+            Some(&delivery),
             &client,
         )
         .await

@@ -22,7 +22,6 @@ use crate::handlers::passwords::PasswordManager;
 use crate::salvo_utils::SessionInfo;
 
 pub mod agents;
-pub mod anchor_view_query;
 pub mod approval;
 pub mod auth;
 pub mod avatar;
@@ -32,7 +31,6 @@ pub mod emails;
 pub mod invite_accept;
 pub mod invite_relay;
 pub mod linked_accounts;
-pub mod mimi_consent;
 pub mod notification_prefs;
 pub mod oauth_clients;
 pub mod openapi;

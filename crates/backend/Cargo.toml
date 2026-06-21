@@ -11,10 +11,8 @@ workspace = true
 [dependencies]
 
 
-# Cokret v1 SDK: typed Move builder + Ed25519 signer used by
-# `handlers::account::mimi_consent::anchor_pending_move`. `signer` feature
-# pulls in the production Ed25519MoveSigner; `cokret-core` carries the
-# trait + UnsignedMove + identifier types.
+# Cokret v1 SDK: shared protocol DTOs, RFC 9421 signatures, and typed
+# identity helpers used by the account, peer-protocol, and WebVH bridges.
 # Umbrella `cokret` SDK — currently consumed only for
 # `cokret::identity::binding::*` (multicodec helpers used by
 # `services::passkey_derive`). Opted in via workspace declaration with

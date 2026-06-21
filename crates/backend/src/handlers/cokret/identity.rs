@@ -130,13 +130,88 @@ pub async fn directory_describe(
 ) -> Result<Json<DirectoryDescribeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
-
-    Ok(Json(DirectoryDescribeOutcome(DirectoryDescription {
-        service_did: parse_did_field("service_did", service_did_for(&url_builder, &cokret_config))?,
-        resource_types: vec!["actor".to_owned(), "handle".to_owned()],
-        discovery_profiles: Vec::new(),
+    let service_did =
+        parse_did_field("service_did", service_did_for(&url_builder, &cokret_config))?;
+    let trust_domain =
+        cokret_core::TypedTrustDomainId::new(trust_domain_for(&url_builder, &cokret_config))
+            .map_err(|error| {
+                CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
+                    "invalid trust_domain: {error}"
+                ))))
+            })?;
+    let supported_profiles = vec!["ck.profile.directory_service.v1".to_owned()];
+    let supported_features = vec![
+        "directory.resolve".to_owned(),
+        "directory.handle_lookup".to_owned(),
+    ];
+    let description = DirectoryDescription {
+        service_did,
+        trust_domain,
+        service_type: "directory_service".to_owned(),
+        protocol_version: COKRET_PROTOCOL_VERSION.to_owned(),
+        supported_profiles: supported_profiles.clone(),
+        supported_operations: vec![
+            "ck.find.directory.query.describe".to_owned(),
+            "ck.find.directory.query.resolve_handle".to_owned(),
+        ],
+        supported_bindings: vec![
+            cokret_core::SupportedBinding::new("http_json")
+                .with_base_url(url_builder.http_base().to_string()),
+        ],
+        supported_features: supported_features.clone(),
+        auth_metadata: cokret_core::AuthMetadata::minimal("public_no_auth"),
+        limits: json!({}),
+        plaintext_visibility: cokret_core::PlaintextVisibility::none(),
+        privacy_derivation: None,
+        implemented_features: supported_features,
+        claimed_profiles: supported_profiles
+            .iter()
+            .map(cokret_core::ClaimedProfileEntry::self_claimed)
+            .collect(),
+        verified_profiles: Vec::new(),
+        experimental_features: Vec::new(),
+        compat_surfaces: Vec::new(),
+        development_mode: false,
+        rate_limit_policy: Some(cokret_core::RateLimitPolicy::unspecified()),
+        rate_limit_policy_id: None,
+        egress_network_policy: Some(cokret_core::EgressNetworkPolicy::deny_private_defaults()),
+        resource_types: vec![
+            cokret_core::models::DirectoryResourceKind::Actor,
+            cokret_core::models::DirectoryResourceKind::Handle,
+        ],
+        discovery_profiles: supported_profiles,
         restricted_query_proof: Some(true),
-    })))
+        ingest_modes: vec![cokret_core::DirectoryIngestMode::Push],
+        accept_policy_kind: Some(cokret_core::DirectoryAcceptPolicyKind::Open),
+        accept_policy_ref: None,
+        default_ttl_seconds: Some(86_400),
+        max_ttl_seconds: Some(604_800),
+        revalidation_grace_seconds: Some(3_600),
+        accepted_resource_kinds: vec![
+            cokret_core::models::DirectoryResourceKind::Actor,
+            cokret_core::models::DirectoryResourceKind::Handle,
+        ],
+        accepted_did_methods: vec![
+            "did:web".to_owned(),
+            "did:webvh".to_owned(),
+            "did:key".to_owned(),
+        ],
+        takedown_contact: None,
+        rate_limits: Some(json!({})),
+        supported_reducer_profiles: Vec::new(),
+        supported_schema_profiles: Vec::new(),
+        frontier: Vec::new(),
+        snapshot_frontier: Vec::new(),
+        reducer_profile: None,
+        last_materialized_at: None,
+    };
+    description.validate().map_err(|error| {
+        CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
+            "invalid directory describe: {error}"
+        ))))
+    })?;
+
+    Ok(Json(DirectoryDescribeOutcome(description)))
 }
 
 #[handler]

@@ -151,8 +151,8 @@ pub struct BatchInviteRequestBody {
 
 /// Inline consent-gate metadata for `BatchInviteRequestBody`.
 ///
-/// Mirrors the fields on `account::invite_relay::RelayRequest`, just
-/// without `inviter_did` / `invite_payload` (admin batch-invite mints
+/// Mirrors the fields on `account::invite_relay::InviteRelayRequestBody`, just
+/// without `inviter_did` / `invite_delivery` (admin batch-invite mints
 /// fresh tokens — there is no inviter-signed payload to forward).
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct BatchInviteConsentGate {
