@@ -119,9 +119,6 @@ fn map_oauth_access_error(error: OAuthAccessError) -> RouteError {
         OAuthAccessError::PolicyViolation => RouteError::BadRequest("policy_violation".into()),
         OAuthAccessError::Repository(error) => RouteError::from(error),
         OAuthAccessError::Internal(error) => RouteError::Internal(error),
-        OAuthAccessError::MissingPrincipalDid(user_id) => RouteError::Internal(Box::new(
-            std::io::Error::other(format!("missing principal DID for user {user_id}")),
-        )),
     }
 }
 

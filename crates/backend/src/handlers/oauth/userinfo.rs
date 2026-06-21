@@ -63,9 +63,6 @@ pub enum RouteError {
 
     #[error("failed to load user {0}")]
     NoSuchUser(Ulid),
-
-    #[error("missing principal DID for user {0}")]
-    MissingPrincipalDid(Ulid),
 }
 
 impl_from_error_for_route!(coauth_data::RepositoryError);
@@ -86,8 +83,7 @@ impl Scribe for RouteError {
             Self::Internal(_)
             | Self::InvalidSigningKey
             | Self::NoSuchClient(_)
-            | Self::NoSuchUser(_)
-            | Self::MissingPrincipalDid(_) => {
+            | Self::NoSuchUser(_) => {
                 res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
                 res.render(Text::Plain(self.to_string()));
             }
@@ -173,18 +169,16 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         .lookup(user_id)
         .await?
         .ok_or(RouteError::NoSuchUser(user_id))?;
-    let principal_did = cokret::principal_did_for_user(&mut repo, &cokret_config, &user)
-        .await?
-        .ok_or(RouteError::MissingPrincipalDid(user.id))?;
+    let subject_did = cokret::oidc_subject_for_user(&url_builder, &cokret_config, &user);
 
     let user_info = UserInfo {
-        sub: principal_did.clone(),
+        sub: subject_did.clone(),
         username: user.localpart.clone(),
         // OIDC `preferred_username` keeps the human-readable `local@host`
         // display form (spec 7157ee8 retires the URI form but the display
         // shape stays for OIDC client compatibility).
         preferred_username: cokret::user_handle_display(&url_builder, &user),
-        principal_did,
+        principal_did: subject_did,
         device_id: cokret::primary_device_id(&session.scope),
         session_id: session.id.to_string(),
         name: user.display_name.clone(),

@@ -75,7 +75,7 @@ pub(crate) fn generate_id_token(
     rng: &mut (impl rand_core::RngCore + rand_core::CryptoRng),
     clock: &impl Clock,
     url_builder: &UrlBuilder,
-    principal_did: &str,
+    subject_did: &str,
     key_store: &Keystore,
     client: &Client,
     grant: Option<&AuthorizationGrant>,
@@ -87,10 +87,10 @@ pub(crate) fn generate_id_token(
     let mut claims = HashMap::new();
     let now = clock.now();
     claims::ISS.insert(&mut claims, url_builder.oidc_issuer().to_string())?;
-    claims::SUB.insert(&mut claims, principal_did.to_owned())?;
+    claims::SUB.insert(&mut claims, subject_did.to_owned())?;
     claims.insert(
         cokret::CLAIM_PRINCIPAL_DID.to_owned(),
-        serde_json::Value::String(principal_did.to_owned()),
+        serde_json::Value::String(subject_did.to_owned()),
     );
     claims::AUD.insert(&mut claims, client.client_id.clone())?;
     claims::IAT.insert(&mut claims, now)?;
@@ -172,7 +172,6 @@ mod tests {
     use std::collections::HashMap;
 
     use chrono::Duration;
-    use coauth_config::CokretConfig;
     use coauth_data::clock::MockClock;
     use coauth_data::{AccessTokenState, AuthenticationMethod};
     use coauth_jose::claims::hash_token;

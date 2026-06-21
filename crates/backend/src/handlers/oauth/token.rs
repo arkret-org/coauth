@@ -261,11 +261,6 @@ impl From<AuthorizationCodeExchangeError> for RouteError {
             }
             AuthorizationCodeExchangeError::Repository(err) => Self::Internal(Box::new(err)),
             AuthorizationCodeExchangeError::Internal(err) => Self::Internal(err),
-            AuthorizationCodeExchangeError::MissingPrincipalDid(user_id) => {
-                Self::Internal(Box::new(std::io::Error::other(format!(
-                    "missing principal DID for user {user_id}"
-                ))))
-            }
         }
     }
 }
@@ -326,9 +321,6 @@ impl From<DeviceCodeExchangeError> for RouteError {
             DeviceCodeExchangeError::ProvisionDeviceFailed(err) => Self::ProvisionDeviceFailed(err),
             DeviceCodeExchangeError::Repository(err) => Self::Internal(Box::new(err)),
             DeviceCodeExchangeError::Internal(err) => Self::Internal(err),
-            DeviceCodeExchangeError::MissingPrincipalDid(user_id) => Self::Internal(Box::new(
-                std::io::Error::other(format!("missing principal DID for user {user_id}")),
-            )),
         }
     }
 }

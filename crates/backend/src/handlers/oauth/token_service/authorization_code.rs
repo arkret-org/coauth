@@ -297,21 +297,17 @@ pub async fn exchange_authorization_code(
             browser_session.id = %browser_session.id,
             "Generating ID token because openid scope is present"
         );
-        let principal_did = crate::handlers::cokret::principal_did_for_user(
-            &mut repo,
+        let subject_did = crate::handlers::cokret::oidc_subject_for_user(
+            url_builder,
             cokret_config,
             &browser_session.user,
-        )
-        .await?
-        .ok_or(AuthorizationCodeExchangeError::MissingPrincipalDid(
-            browser_session.user.id,
-        ))?;
+        );
         Some(
             generate_id_token(
                 rng,
                 clock,
                 url_builder,
-                &principal_did,
+                &subject_did,
                 key_store,
                 client,
                 Some(&authz_grant),

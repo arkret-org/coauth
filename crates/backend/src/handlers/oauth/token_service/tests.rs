@@ -5,17 +5,27 @@
 use std::sync::Arc;
 
 use chrono::Duration;
+use coauth_config::CokretConfig;
 use coauth_data::clock::MockClock;
 use coauth_data::oauth::{LocalizedClientMetadata, NewSessionGrant};
 use coauth_data::{
-    Client, Clock, PgRepositoryFactory, RefreshToken, RefreshTokenState, RepositoryFactory as _,
-    SiteConfig, TokenType,
+    AuthorizationCode, Client, Clock, PgRepositoryFactory, Pkce, RefreshToken, RefreshTokenState,
+    RepositoryFactory as _, SiteConfig, TokenType, UrlBuilder,
 };
+use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
-use oauth_types::requests::{AccessTokenResponse, GrantType, RefreshTokenGrant};
+use coauth_jose::jwt::Jwt;
+use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+use coauth_principal::ConnectorAdmin;
+use coauth_templates::{SiteBranding, SiteFeatures, Templates};
+use oauth_types::pkce::CodeChallengeMethodExt as _;
+use oauth_types::requests::{
+    AccessTokenResponse, AuthorizationCodeGrant, GrantType, RefreshTokenGrant, ResponseMode,
+};
 use oauth_types::scope::{OPENID, Scope};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
+use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use ulid::Ulid;
@@ -23,6 +33,7 @@ use url::Url;
 
 use super::*;
 use crate::handlers::{ActivityTracker, BoundActivityTracker};
+use crate::services::principal_facade::DbConnectorAdmin;
 
 fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> Client {
     Client {
@@ -48,6 +59,36 @@ fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> C
     }
 }
 
+fn eddsa_keystore() -> Keystore {
+    let mut rng = ChaChaRng::seed_from_u64(701);
+    let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+        .with_kid("test-eddsa")
+        .with_alg(JsonWebSignatureAlg::EdDsa);
+    Keystore::new(JsonWebKeySet::new(vec![key]))
+}
+
+async fn test_templates(url_builder: UrlBuilder) -> Templates {
+    let workspace_root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..");
+    Templates::load(
+        workspace_root.join("templates"),
+        url_builder,
+        workspace_root.join("translations"),
+        SiteBranding::new("example.com"),
+        SiteFeatures {
+            password_login: true,
+            password_registration: true,
+            password_registration_contact_required: false,
+            account_recovery: true,
+            login_with_email_allowed: true,
+        },
+        true,
+    )
+    .await
+    .unwrap()
+}
+
 #[test]
 fn public_authorization_code_clients_require_s256_pkce() {
     let client = client_with_auth_method(Some(OAuthClientAuthenticationMethod::None));
@@ -64,6 +105,164 @@ fn public_authorization_code_clients_require_s256_pkce() {
 fn confidential_authorization_code_clients_do_not_require_pkce() {
     let client = client_with_auth_method(Some(OAuthClientAuthenticationMethod::ClientSecretBasic));
     assert!(!authorization_code_pkce_required(&client));
+}
+
+#[tokio::test]
+async fn authorization_code_openid_exchange_does_not_require_principal_did_row() {
+    let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
+        return;
+    };
+
+    let factory = PgRepositoryFactory::new(pool);
+    let clock = Arc::new(MockClock::default());
+    let task_tracker = TaskTracker::new();
+    let cancellation_token = CancellationToken::new();
+    let activity_tracker = ActivityTracker::new(
+        factory.clone().boxed(),
+        std::time::Duration::from_mins(1),
+        &task_tracker,
+        cancellation_token.clone(),
+    )
+    .bind(None);
+    let site_config = crate::handlers::test_utils::test_site_config();
+    let url_builder = UrlBuilder::new("https://auth.local.host/".parse().unwrap(), None, None);
+    let cokret_config = CokretConfig::default();
+    let templates = test_templates(url_builder.clone()).await;
+    let key_store = eddsa_keystore();
+    let principal_server: Arc<dyn ConnectorAdmin> = Arc::new(DbConnectorAdmin::new(
+        "example.com",
+        factory.clone().boxed(),
+        cokret_config.clone(),
+        crate::reqwest_client(),
+    ));
+
+    let mut rng = ChaChaRng::seed_from_u64(702);
+    let mut repo = factory.create().await.unwrap();
+    let redirect_uri = Url::parse("https://client.example/callback").unwrap();
+    let client = repo
+        .oauth_client()
+        .add(
+            &mut rng,
+            &*clock,
+            vec![redirect_uri.clone()],
+            None,
+            None,
+            None,
+            vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
+            Some("local OIDC client".to_owned()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(JsonWebSignatureAlg::EdDsa),
+            None,
+            Some(OAuthClientAuthenticationMethod::None),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let user = repo
+        .user()
+        .add(&mut rng, &*clock, "oidc-no-principal-row".to_owned())
+        .await
+        .unwrap();
+    let browser_session = repo
+        .browser_session()
+        .add(&mut rng, &*clock, &user, None)
+        .await
+        .unwrap();
+    let scope = Scope::from_iter([OPENID]);
+    let session = repo
+        .oauth_session()
+        .add_from_browser_session(&mut rng, &*clock, &client, &browser_session, scope.clone())
+        .await
+        .unwrap();
+
+    let code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    let code_challenge = PkceCodeChallengeMethod::S256
+        .compute_challenge(code_verifier)
+        .unwrap()
+        .into_owned();
+    let authorization_code = AuthorizationCode {
+        code: "auth-code-without-principal-did-row".to_owned(),
+        pkce: Some(Pkce {
+            challenge_method: PkceCodeChallengeMethod::S256,
+            challenge: code_challenge,
+        }),
+    };
+    let authorization_grant = repo
+        .oauth_authorization_grant()
+        .add(
+            &mut rng,
+            &*clock,
+            &client,
+            redirect_uri.clone(),
+            scope,
+            Some(authorization_code.clone()),
+            Some("state".to_owned()),
+            Some("nonce".to_owned()),
+            ResponseMode::Query,
+            false,
+            None,
+            Some("en".to_owned()),
+        )
+        .await
+        .unwrap();
+    repo.oauth_authorization_grant()
+        .fulfill(&*clock, &session, authorization_grant)
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let grant = AuthorizationCodeGrant {
+        code: authorization_code.code,
+        redirect_uri: Some(redirect_uri),
+        code_verifier: Some(code_verifier.to_owned()),
+    };
+    let repo = factory.create().await.unwrap();
+    let (reply, repo) = exchange_authorization_code(
+        &mut rng,
+        &*clock,
+        &activity_tracker,
+        &grant,
+        &client,
+        &key_store,
+        &url_builder,
+        &cokret_config,
+        &site_config,
+        repo,
+        &principal_server,
+        &templates,
+        None,
+    )
+    .await
+    .unwrap();
+    repo.save().await.unwrap();
+
+    let id_token = reply
+        .id_token
+        .expect("openid exchange should return id_token");
+    let jwt = Jwt::<std::collections::HashMap<String, Value>>::try_from(id_token.as_str())
+        .expect("id_token should be a JWT");
+    jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
+
+    let expected_subject =
+        crate::handlers::cokret::oidc_subject_for_user(&url_builder, &cokret_config, &user);
+    assert_eq!(
+        jwt.payload().get("sub").and_then(Value::as_str),
+        Some(expected_subject.as_str())
+    );
+    assert_eq!(
+        jwt.payload()
+            .get(crate::handlers::cokret::CLAIM_PRINCIPAL_DID)
+            .and_then(Value::as_str),
+        Some(expected_subject.as_str())
+    );
+
+    cancellation_token.cancel();
 }
 
 struct RefreshFixture {

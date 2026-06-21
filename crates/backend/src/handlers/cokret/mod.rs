@@ -390,6 +390,18 @@ pub(crate) fn user_did_for(
     )
 }
 
+/// Local OIDC subject for Account Authority-issued OAuth tokens.
+///
+/// This identifies the authenticated coauth account. Principal-server DIDs are
+/// resolved later by the `session-grants` bridge for the requested audience.
+pub(crate) fn oidc_subject_for_user(
+    url_builder: &UrlBuilder,
+    cokret_config: &CokretConfig,
+    user: &User,
+) -> String {
+    user_did_for(url_builder, cokret_config, user)
+}
+
 pub(crate) async fn principal_did_for_user<R>(
     repo: &mut R,
     cokret_config: &CokretConfig,

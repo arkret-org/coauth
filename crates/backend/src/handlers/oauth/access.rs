@@ -103,9 +103,6 @@ pub enum OAuthAccessError {
     #[error("policy violation")]
     PolicyViolation,
 
-    #[error("missing principal DID for user {0}")]
-    MissingPrincipalDid(Ulid),
-
     #[error(transparent)]
     Repository(#[from] RepositoryError),
 
@@ -231,22 +228,18 @@ pub async fn accept_authorization_consent(
             .browser_session()
             .get_last_authentication(browser_session)
             .await?;
-        let principal_did = crate::handlers::cokret::principal_did_for_user(
-            &mut repo,
+        let subject_did = crate::handlers::cokret::oidc_subject_for_user(
+            url_builder,
             cokret_config,
             &browser_session.user,
-        )
-        .await?
-        .ok_or(OAuthAccessError::MissingPrincipalDid(
-            browser_session.user.id,
-        ))?;
+        );
 
         params.id_token = Some(
             generate_id_token(
                 rng,
                 clock,
                 url_builder,
-                &principal_did,
+                &subject_did,
                 key_store,
                 &client,
                 Some(&grant),
