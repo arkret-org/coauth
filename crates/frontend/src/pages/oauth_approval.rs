@@ -131,6 +131,10 @@ fn OAuthApprovalForm(data: ApprovalDataOutcome, grant_id: String) -> Element {
                         // Stable hook for e2e (cotest oidc-login-flow.spec.ts).
                         "data-testid": "coauth-oauth-approve",
                         disabled: submitting(),
+                        autofocus: true,
+                        onmounted: move |event| async move {
+                            let _ = event.set_focus(true).await;
+                        },
                         onclick: {
                             let gid = grant_id.clone();
                             move |_| {
