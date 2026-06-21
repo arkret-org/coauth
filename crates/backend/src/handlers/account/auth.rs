@@ -471,8 +471,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     return Ok(());
                 }
             };
-            let account_handle = oidc_bridge::registration_handle_for_audience(
-                &grant_target.audience,
+            let account_handle = oidc_bridge::registration_handle_for_principal_endpoint(
+                grant_target.principal_server_endpoint.as_deref(),
                 &user.localpart,
             );
             if let Err(message) = oidc_bridge::ensure_soland_account_registered(

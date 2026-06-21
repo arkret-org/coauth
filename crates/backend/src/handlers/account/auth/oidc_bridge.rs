@@ -19,7 +19,7 @@ use coauth_admin_types::{
 };
 use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
-use cokret_core::{AccountRegisterRequestBody, DeviceId, Did};
+use cokret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use oauth_types::errors::{ClientError, ClientErrorCode};
@@ -158,6 +158,83 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
+fn soland_account_register_body(
+    principal_did: &str,
+    handle: Option<&str>,
+    display_name: Option<&str>,
+    device_id: Option<&str>,
+) -> Result<AccountRegisterRequestBody, String> {
+    Ok(AccountRegisterRequestBody {
+        principal_id: Did::new(principal_did.to_owned())
+            .map_err(|error| format!("principal DID is invalid: {error}"))?,
+        handle: handle.map(ToOwned::to_owned),
+        display_name: display_name.map(ToOwned::to_owned),
+        device_id: device_id
+            .map(|value| {
+                DeviceId::new(value.to_owned())
+                    .map_err(|error| format!("device_id is invalid for account register: {error}"))
+            })
+            .transpose()?,
+        policy_evidence: None,
+        proof: None,
+    })
+}
+
+async fn send_soland_account_register(
+    http_client: &reqwest::Client,
+    endpoint: &url::Url,
+    body: &AccountRegisterRequestBody,
+) -> Result<(reqwest::StatusCode, String), String> {
+    let response =
+        outbound_http::send_with_policy(outbound_http::soland_policy("account_register"), || {
+            http_client.post(endpoint.clone()).json(body)
+        })
+        .await
+        .map_err(|error| format!("principal account register request failed: {error}"))?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok((status, String::new()));
+    }
+    let body = response.text().await.unwrap_or_default();
+    Ok((status, body))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SolandAccountRegisterConflict {
+    AccountAlreadyExists,
+    HandleAlreadyTaken,
+}
+
+fn classify_soland_account_register_conflict(
+    status: reqwest::StatusCode,
+    body: &str,
+) -> Option<SolandAccountRegisterConflict> {
+    if status != reqwest::StatusCode::CONFLICT {
+        return None;
+    }
+    let envelope = serde_json::from_str::<ErrorEnvelope>(body).ok()?;
+    if envelope.code() != cokret_core::error::ERROR_CODE_DUPLICATE_CONFLICT {
+        return None;
+    }
+    match envelope.message() {
+        "account already exists" => Some(SolandAccountRegisterConflict::AccountAlreadyExists),
+        message
+            if message.starts_with("handle localpart ")
+                && message.ends_with("is already taken") =>
+        {
+            Some(SolandAccountRegisterConflict::HandleAlreadyTaken)
+        }
+        _ => None,
+    }
+}
+
+fn soland_account_register_failure(status: reqwest::StatusCode, body: &str) -> String {
+    format!(
+        "principal account register returned {status}: {}",
+        body.chars().take(256).collect::<String>()
+    )
+}
+
 /// Resolve the `principal_did` for `user` against the targeted principal
 /// server. The audience must correspond to a `PrincipalServerConfig` with
 /// an embedded webvh provider; this mints (or re-uses) a
@@ -211,19 +288,26 @@ pub(super) async fn ensure_principal_did_for_user(
     .map_err(|error| format!("principal DID minting failed: {error}"))
 }
 
-/// Canonical registration handle (`<localpart>:<domain>`) for the principal
-/// server identified by `audience` (its `did:web:` service DID). The handle
-/// domain MUST be the principal server's own domain — which also matches the
-/// account's webvh DID domain — NOT the OIDC issuer host (`auth.<domain>`),
-/// or the Principal Server would reject the domain mismatch. Returns `None`
-/// when the audience is not a `did:web:` DID, in which case the Principal
-/// Server falls back to a synthetic bootstrap localpart (no published handle).
-pub(super) fn registration_handle_for_audience(audience: &str, localpart: &str) -> Option<String> {
-    let domain = audience.strip_prefix("did:web:")?.replace(':', ".");
-    if domain.is_empty() {
+/// Canonical registration handle (`<localpart>:<domain>`) for the configured
+/// principal server endpoint. The handle domain MUST be the principal server's
+/// own host, not the OIDC issuer host (`auth.<domain>`) and not a domain
+/// inferred from a DID method-specific identifier. soland owns principal DID
+/// issuance, so coauth must not couple handle publication to `did:web`.
+pub(super) fn registration_handle_for_principal_endpoint(
+    principal_endpoint: Option<&str>,
+    localpart: &str,
+) -> Option<String> {
+    let domain = principal_handle_domain_for_endpoint(principal_endpoint?)?;
+    Some(format!("{}:{}", localpart.to_ascii_lowercase(), domain))
+}
+
+fn principal_handle_domain_for_endpoint(principal_endpoint: &str) -> Option<String> {
+    let endpoint = url::Url::parse(principal_endpoint).ok()?;
+    let host = endpoint.host_str()?.trim().trim_end_matches('.');
+    if host.is_empty() {
         return None;
     }
-    Some(format!("{}:{}", localpart.to_ascii_lowercase(), domain))
+    Some(host.to_ascii_lowercase().replace(':', "."))
 }
 
 pub(super) async fn ensure_soland_account_registered(
@@ -238,35 +322,40 @@ pub(super) async fn ensure_soland_account_registered(
         return Ok(());
     };
     let endpoint = soland_account_register_endpoint(principal_endpoint)?;
-    let body = AccountRegisterRequestBody {
-        principal_id: Did::new(principal_did.to_owned())
-            .map_err(|error| format!("principal DID is invalid: {error}"))?,
-        handle: handle.map(ToOwned::to_owned),
-        display_name: display_name.map(ToOwned::to_owned),
-        device_id: device_id
-            .map(|value| {
-                DeviceId::new(value.to_owned())
-                    .map_err(|error| format!("device_id is invalid for account register: {error}"))
-            })
-            .transpose()?,
-        policy_evidence: None,
-        proof: None,
-    };
-    let response =
-        outbound_http::send_with_policy(outbound_http::soland_policy("account_register"), || {
-            http_client.post(endpoint.clone()).json(&body)
-        })
-        .await
-        .map_err(|error| format!("principal account register request failed: {error}"))?;
-    let status = response.status();
-    if status.is_success() || status == reqwest::StatusCode::CONFLICT {
+    let request_body =
+        soland_account_register_body(principal_did, handle, display_name, device_id)?;
+    let (status, response_body) =
+        send_soland_account_register(http_client, &endpoint, &request_body).await?;
+    if status.is_success() {
         return Ok(());
     }
-    let body = response.text().await.unwrap_or_default();
-    Err(format!(
-        "principal account register returned {status}: {}",
-        body.chars().take(256).collect::<String>()
-    ))
+    match classify_soland_account_register_conflict(status, &response_body) {
+        Some(SolandAccountRegisterConflict::AccountAlreadyExists) => Ok(()),
+        Some(SolandAccountRegisterConflict::HandleAlreadyTaken) if handle.is_some() => {
+            tracing::warn!(
+                principal_did,
+                handle,
+                "principal account handle is already taken; retrying registration without handle"
+            );
+            let fallback_body =
+                soland_account_register_body(principal_did, None, display_name, device_id)?;
+            let (fallback_status, fallback_response_body) =
+                send_soland_account_register(http_client, &endpoint, &fallback_body).await?;
+            if fallback_status.is_success()
+                || classify_soland_account_register_conflict(
+                    fallback_status,
+                    &fallback_response_body,
+                ) == Some(SolandAccountRegisterConflict::AccountAlreadyExists)
+            {
+                return Ok(());
+            }
+            Err(soland_account_register_failure(
+                fallback_status,
+                &fallback_response_body,
+            ))
+        }
+        _ => Err(soland_account_register_failure(status, &response_body)),
+    }
 }
 
 fn login_hint_matches_user(
@@ -583,8 +672,10 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
         validate_expected_principal(&principal_did, input.expected_principal_id.as_deref())?;
 
-        let account_handle =
-            registration_handle_for_audience(&grant_target.audience, &user.localpart);
+        let account_handle = registration_handle_for_principal_endpoint(
+            grant_target.principal_server_endpoint.as_deref(),
+            &user.localpart,
+        );
         ensure_soland_account_registered(
             &http_client,
             grant_target.principal_server_endpoint.as_deref(),
@@ -1036,7 +1127,10 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
     validate_expected_principal(&principal_did, input.expected_principal_id.as_deref())?;
 
-    let account_handle = registration_handle_for_audience(&grant_target.audience, &user.localpart);
+    let account_handle = registration_handle_for_principal_endpoint(
+        grant_target.principal_server_endpoint.as_deref(),
+        &user.localpart,
+    );
     ensure_soland_account_registered(
         &http_client,
         grant_target.principal_server_endpoint.as_deref(),
@@ -1213,9 +1307,45 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
 #[cfg(test)]
 mod tests {
     use hyper::{Request, StatusCode};
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, Request as WiremockRequest, ResponseTemplate};
 
     use super::*;
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+
+    const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
+    const TEST_DEVICE_ID: &str = "ck:device:01964137-0000-7000-8000-000000000001";
+    const ACCOUNT_REGISTER_PATH: &str = "/_cokret/gate/account/register";
+
+    fn wire_error(code: &str, message: &str) -> serde_json::Value {
+        serde_json::json!({
+            "ok": false,
+            "error": {
+                "code": code,
+                "message": message,
+            },
+            "request_id": "ck:request:01964137-0000-7000-8000-000000000001",
+        })
+    }
+
+    fn request_json(request: &WiremockRequest) -> serde_json::Value {
+        serde_json::from_slice(&request.body).unwrap_or(serde_json::Value::Null)
+    }
+
+    fn request_has_handle(expected: &'static str) -> impl Fn(&WiremockRequest) -> bool {
+        move |request| {
+            request_json(request)
+                .get("handle")
+                .and_then(|value| value.as_str())
+                == Some(expected)
+        }
+    }
+
+    fn request_omits_handle(request: &WiremockRequest) -> bool {
+        request_json(request)
+            .as_object()
+            .is_some_and(|object| !object.contains_key("handle"))
+    }
 
     #[test]
     fn protocol_device_id_validation_matches_soland_boundary() {
@@ -1282,6 +1412,114 @@ mod tests {
             endpoint.as_str(),
             "https://local.host/_cokret/gate/account/register"
         );
+    }
+
+    #[test]
+    fn registration_handle_uses_principal_endpoint_host() {
+        assert_eq!(
+            registration_handle_for_principal_endpoint(Some("https://local.host/"), "Alice")
+                .as_deref(),
+            Some("alice:local.host")
+        );
+        assert_eq!(
+            registration_handle_for_principal_endpoint(
+                Some("https://local.host/base/path"),
+                "Alice"
+            )
+            .as_deref(),
+            Some("alice:local.host")
+        );
+        assert_eq!(
+            registration_handle_for_principal_endpoint(None, "Alice"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn soland_account_register_handle_conflict_retries_without_handle() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(ACCOUNT_REGISTER_PATH))
+            .and(request_has_handle("alice:local.host"))
+            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
+                cokret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
+                "handle localpart `alice` is already taken",
+            )))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(ACCOUNT_REGISTER_PATH))
+            .and(request_omits_handle)
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "ok": true,
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        ensure_soland_account_registered(
+            &reqwest::Client::new(),
+            Some(&server.uri()),
+            TEST_PRINCIPAL_DID,
+            Some("alice:local.host"),
+            Some("Alice"),
+            Some(TEST_DEVICE_ID),
+        )
+        .await
+        .expect("handle conflict should retry without handle");
+    }
+
+    #[tokio::test]
+    async fn soland_account_register_failed_precondition_is_not_swallowed() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(ACCOUNT_REGISTER_PATH))
+            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
+                cokret_core::error::ERROR_CODE_FAILED_PRECONDITION,
+                "account registration is closed",
+            )))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let error = ensure_soland_account_registered(
+            &reqwest::Client::new(),
+            Some(&server.uri()),
+            TEST_PRINCIPAL_DID,
+            Some("alice:local.host"),
+            Some("Alice"),
+            Some(TEST_DEVICE_ID),
+        )
+        .await
+        .expect_err("registration policy failures must block grant issuance");
+
+        assert!(error.contains("account registration is closed"));
+    }
+
+    #[tokio::test]
+    async fn soland_account_register_existing_account_conflict_is_idempotent() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(ACCOUNT_REGISTER_PATH))
+            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
+                cokret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
+                "account already exists",
+            )))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        ensure_soland_account_registered(
+            &reqwest::Client::new(),
+            Some(&server.uri()),
+            TEST_PRINCIPAL_DID,
+            Some("alice:local.host"),
+            Some("Alice"),
+            Some(TEST_DEVICE_ID),
+        )
+        .await
+        .expect("existing account conflict is idempotent");
     }
 
     /// The canonical Account Authority grant endpoint rejects an

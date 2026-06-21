@@ -352,8 +352,8 @@ pub struct PrincipalServerConfig {
     /// Human-readable identifier for the consumer, such as `soland-prod`.
     pub name: String,
 
-    /// Audience string used when validating tokens or session grants for this
-    /// Principal Server.
+    /// Service DID audience used when validating tokens or session grants for
+    /// this Principal Server.
     pub audience: String,
 
     /// Base URL of the Principal Server integration point.

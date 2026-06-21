@@ -173,9 +173,9 @@ database:
 cokret:
   principal_servers:
     - name: soland
-      audience: https://soland.example.com/api
+      audience: did:webvh:<scid>:soland.example.com:webvh:service
       endpoint: https://soland.example.com/
-      did: did:web:soland.example.com
+      did: did:webvh:<scid>:soland.example.com:webvh:service
   identity_registry:
     kind: public_did_resolver
     resolver: https://resolver.example.com/

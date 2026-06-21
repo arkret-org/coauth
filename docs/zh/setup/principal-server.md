@@ -12,13 +12,13 @@ adapter。
 cokret:
   principal_servers:
     - name: soland
-      audience: https://soland.example.com/api
+      audience: did:webvh:<scid>:soland.example.com:webvh:service
       endpoint: https://soland.example.com/
-      did: did:web:soland.example.com
+      did: did:webvh:<scid>:soland.example.com:webvh:service
 ```
 
 - `name`：面向运维的 Principal Server 标识。
-- `audience`：该服务器验证 token/session grant 时使用的 audience。
+- `audience`：该服务器验证 token/session grant 时使用的 service DID audience。
 - `endpoint`：通过 Cokret/OIDC discovery 发布的基础 URL。
 - `did`：可选的 Principal Server DID。
 

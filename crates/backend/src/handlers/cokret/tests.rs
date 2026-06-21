@@ -217,9 +217,9 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> CokretConfig {
     CokretConfig {
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
-            audience: "did:web:local.host".to_owned(),
+            audience: "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned(),
             endpoint: "https://local.host/".parse().unwrap(),
-            did: Some("did:web:local.host".to_owned()),
+            did: Some("did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned()),
             oauth_introspection_bearer: None,
             session_grant_introspection_bearer: Some(bearer.to_owned()),
             embedded_webvh_registration_bearer: None,
@@ -936,7 +936,9 @@ async fn session_grant_http_introspection_accepts_stateless_agent_grant() {
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let session_public_key =
         serde_json::to_string(&test_session_public_jwk(&session_key, "agent-session-key")).unwrap();
-    let audience = "did:web:local.host".to_owned();
+    let audience =
+        "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service"
+            .to_owned();
     let now = state.clock.now();
     let scope_details = serde_json::json!({
         "agent_principal_id": "did:web:agent.example",
