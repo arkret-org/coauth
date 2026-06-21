@@ -163,6 +163,7 @@ pub async fn directory_describe(
         limits: json!({}),
         plaintext_visibility: cokret_core::PlaintextVisibility::none(),
         privacy_derivation: None,
+        receive_policy_constraints: None,
         implemented_features: supported_features,
         claimed_profiles: supported_profiles
             .iter()
@@ -307,10 +308,12 @@ async fn directory_resolve_not_found(started_at: Instant) -> CokretRouteError {
 }
 
 fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRequestBody) -> bool {
-    let intent_allowed = body
-        .intent
-        .as_deref()
-        .is_some_and(|intent| matches!(intent, "lookup" | "mention" | "invite" | "member_add"));
+    let intent_allowed = body.intent.as_ref().is_some_and(|intent| {
+        matches!(
+            intent.as_str(),
+            "lookup" | "mention" | "invite" | "member_add"
+        )
+    });
     let challenge_present = body
         .proof_challenge
         .as_deref()
