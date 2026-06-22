@@ -907,7 +907,7 @@ pub async fn debug_issue_dpop_grant(
         ]
     });
 
-    let material = issue_session_grant_for_audience(
+    let material = issue_test_session_grant_for_audience(
         &*clock,
         &url_builder,
         &cokret_config,

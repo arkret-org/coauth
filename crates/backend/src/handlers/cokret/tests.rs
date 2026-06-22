@@ -578,7 +578,10 @@ fn session_grant_rejects_implicit_did_web_fallback() {
     )
     .unwrap_err();
 
-    assert!(matches!(error, SessionGrantError::DidWebPrincipalNotExplicit));
+    assert!(matches!(
+        error,
+        SessionGrantError::DidWebPrincipalNotExplicit
+    ));
 }
 
 #[test]
@@ -844,18 +847,12 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let state = TestState::from_pool(pool.clone()).await.unwrap();
     let (_browser_session, grant, material, session_key) =
         seed_persisted_session_grant(&state).await;
-    let challenge = format!("introspect-{}", grant.id);
-    let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
 
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
                 "grant_jwt": material.grant_jwt,
                 "audience": grant.audience,
-                "proof": {
-                    "challenge": challenge,
-                    "proof_jwt": proof_jwt,
-                }
             })),
         )
         .await;
@@ -863,7 +860,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true);
     assert_eq!(body["status"], "active");
-    assert_eq!(body["proof_required"], true);
+    assert_eq!(body["proof_required"], false);
     // Introspection is READ-ONLY: it MUST NOT consume the grant (consumption /
     // single-use rotation is the refresh endpoint's job). So one_time_use is
     // never reported as already-consumed here, and a follow-up introspect of
@@ -898,7 +895,28 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true);
     assert_eq!(body["status"], "active");
+    assert_eq!(body["proof_required"], false);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
+
+    let challenge = format!("introspect-{}", grant.id);
+    let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
+    let response = state
+        .request(
+            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
+                "id": grant.id,
+                "audience": grant.audience,
+                "proof": {
+                    "challenge": challenge,
+                    "proof_jwt": proof_jwt,
+                }
+            })),
+        )
+        .await;
+    response.assert_status(StatusCode::OK);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["active"], true);
+    assert_eq!(body["status"], "active");
+    assert_eq!(body["proof_required"], false);
 
     let response = state
         .request(
@@ -971,23 +989,18 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     .unwrap();
     repo.save().await.unwrap();
 
-    let challenge = format!("introspect-{}", grant.id);
-    let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
                 "grant_jwt": material.grant_jwt,
                 "audience": grant.audience,
-                "proof": {
-                    "challenge": challenge,
-                    "proof_jwt": proof_jwt,
-                }
             })),
         )
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true);
+    assert_eq!(body["proof_required"], false);
     assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
 }
 
@@ -1468,7 +1481,10 @@ fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gat
     )
     .unwrap_err();
 
-    assert!(matches!(error, SessionGrantError::DidWebPrincipalNotExplicit));
+    assert!(matches!(
+        error,
+        SessionGrantError::DidWebPrincipalNotExplicit
+    ));
 }
 
 #[test]

@@ -22,7 +22,6 @@ use url::Url;
 use zeroize::Zeroizing;
 
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
-use crate::handlers::RequesterFingerprint;
 use crate::handlers::account::service::registration::{
     BeginPasswordRegistrationError, BeginPasswordRegistrationRequestBody,
     BeginPasswordRegistrationResult, EmailAvailabilityCheck, LoadRegistrationProgressError,
@@ -35,6 +34,7 @@ use crate::handlers::account::service::registration::{
     submit_registration_email_code, submit_registration_phone_code,
 };
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
+use crate::handlers::{RequesterFingerprint, cokret};
 use crate::salvo_utils::SessionInfoExt;
 use crate::services::soland_webvh::{self, SuppliedInceptionInput};
 
@@ -1279,6 +1279,8 @@ pub async fn post_display_name(
 pub struct FinishRegistrationOutcome {
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub did: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// If the registration was started as part of another strand (e.g. an
     /// OAuth authorization grant continuation), the frontend uses this to
@@ -1308,6 +1310,8 @@ pub async fn post_finish(
     let site_config = depot.site_config()?;
     let principal_server = depot.principal_server()?;
     let repo_factory = depot.repo_factory()?;
+    let url_builder = depot.url_builder()?;
+    let cokret_config = depot.cokret_config()?;
     let input = if req
         .payload()
         .await
@@ -1362,6 +1366,7 @@ pub async fn post_finish(
         RegistrationFinishOutcome::Rejected { error } => {
             return Ok(Json(FinishRegistrationOutcome {
                 status: "error",
+                did: None,
                 error: Some(error.into()),
                 post_auth_action: None,
             }));
@@ -1378,9 +1383,11 @@ pub async fn post_finish(
     cookie_jar.write_to_response(res);
 
     let post_auth_action = completed.registration.post_auth_action.clone();
+    let did = cokret::user_did_for(&url_builder, &cokret_config, &completed.user);
 
     Ok(Json(FinishRegistrationOutcome {
         status: "success",
+        did: Some(did),
         error: None,
         post_auth_action,
     }))

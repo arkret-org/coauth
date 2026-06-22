@@ -509,11 +509,7 @@ impl<F: DeserializeOwned + Send> ClientAuthorization<F> {
 }
 
 fn is_salvo_form_content_type(content_type: &str) -> bool {
-    let media_type = content_type
-        .split(';')
-        .next()
-        .unwrap_or_default()
-        .trim();
+    let media_type = content_type.split(';').next().unwrap_or_default().trim();
     media_type.eq_ignore_ascii_case("application/x-www-form-urlencoded")
         || media_type.eq_ignore_ascii_case("multipart/form-data")
 }

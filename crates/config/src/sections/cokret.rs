@@ -347,8 +347,10 @@ impl CokretConfig {
     /// exception; an omitted `principal_method` still means `did:webvh`.
     #[must_use]
     pub const fn did_web_principal_allowed(&self) -> bool {
-        matches!(self.deployment_profile, DeploymentProfileConfig::PersonalNode)
-            && matches!(self.principal_method, PrincipalMethodConfig::DidWeb)
+        matches!(
+            self.deployment_profile,
+            DeploymentProfileConfig::PersonalNode
+        ) && matches!(self.principal_method, PrincipalMethodConfig::DidWeb)
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
@@ -408,7 +410,10 @@ impl ConfigurationSection for CokretConfig {
         }
 
         if matches!(self.principal_method, PrincipalMethodConfig::DidWeb)
-            && !matches!(self.deployment_profile, DeploymentProfileConfig::PersonalNode)
+            && !matches!(
+                self.deployment_profile,
+                DeploymentProfileConfig::PersonalNode
+            )
         {
             return Err(std::io::Error::other(
                 "cokret.principal_method=did:web requires cokret.deployment_profile=personal_node",

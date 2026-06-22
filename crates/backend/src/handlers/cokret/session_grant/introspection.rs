@@ -271,7 +271,7 @@ pub async fn introspect_session_grant(
         return Ok(Json(SessionGrantIntrospectOutcome {
             active: false,
             status: SessionGrantIntrospectStatus::NotFound,
-            proof_required: true,
+            proof_required: false,
             one_time_use_consumed: false,
             grant: None,
         }));
@@ -289,8 +289,7 @@ pub async fn introspect_session_grant(
     };
     let mut status =
         introspection_status(&grant, user.as_ref(), clock.now(), body.audience.as_deref());
-    let proof_required = status == SessionGrantIntrospectStatus::Active;
-    if proof_required {
+    if status == SessionGrantIntrospectStatus::Active && body.proof.is_some() {
         status = verify_session_grant_introspection_proof(&grant, body.proof.as_ref(), clock.now());
     }
     let mut active = status == SessionGrantIntrospectStatus::Active;
@@ -331,7 +330,7 @@ pub async fn introspect_session_grant(
     Ok(Json(SessionGrantIntrospectOutcome {
         active,
         status,
-        proof_required,
+        proof_required: false,
         one_time_use_consumed: false,
         grant: grant_record,
     }))

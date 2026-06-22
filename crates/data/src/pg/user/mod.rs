@@ -276,18 +276,18 @@ impl UserRepository for PgUserRepository<'_> {
         let mut changed = false;
         let now = clock.now();
 
-        if let Some(display_name) = patch.display_name {
-            user.display_name = display_name;
+        if let Some(display_name) = patch.display_name.as_ref() {
+            user.display_name = display_name.clone();
             changed = true;
         }
 
-        if let Some(avatar_url) = patch.avatar_url {
-            user.avatar_url = avatar_url;
+        if let Some(avatar_url) = patch.avatar_url.as_ref() {
+            user.avatar_url = avatar_url.clone();
             changed = true;
         }
 
-        if let Some(preferred_locale) = patch.preferred_locale {
-            user.preferred_locale = preferred_locale;
+        if let Some(preferred_locale) = patch.preferred_locale.as_ref() {
+            user.preferred_locale = preferred_locale.clone();
             changed = true;
         }
 

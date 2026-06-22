@@ -7,8 +7,8 @@
 //!   passkey's COSE public key
 //!   ([`crate::services::passkey_derive::derive_update_key_from_credential`]), posts `POST
 //!   /_starid/root/webvh/dids` to starid, persists `(account → did, update_key, version_id)`, and
-//!   flips `user.starid_backend = true` for deployments that explicitly use the
-//!   personal-node `did:web` principal method.
+//!   flips `user.starid_backend = true` for deployments that explicitly use the personal-node
+//!   `did:web` principal method.
 //!
 //! * [`rotate_principal_did_for_credential`] — called from the same handler on **subsequent**
 //!   passkey enrolments (account already has a starid-minted DID). Derives the new device's

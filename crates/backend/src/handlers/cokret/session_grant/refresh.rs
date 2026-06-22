@@ -9,11 +9,11 @@ use cokret_core::error::{
     ERROR_CODE_SESSION_GRANT_NOT_FOUND, ERROR_CODE_SESSION_LOGGED_OUT,
 };
 use cokret_core::{
-    DeviceId, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome,
-    SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
+    DeviceId, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome, SessionGrantRefreshProof,
+    SessionGrantRefreshRequestBody,
 };
-use serde::Serialize;
 use salvo::prelude::*;
+use serde::Serialize;
 use sha2::Digest as _;
 
 use super::*;
@@ -162,7 +162,9 @@ fn require_soft_logout_bound_device_id<'a>(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
-            did_proof_required("session grant JWT has no device_id binding for soft logout recovery")
+            did_proof_required(
+                "session grant JWT has no device_id binding for soft logout recovery",
+            )
         })?;
 
     if presented != persisted {
@@ -319,9 +321,12 @@ async fn verify_soft_logout_did_proof(
         ));
     }
 
-    let verification_method =
-        verify_detached_jws_with_sdk(proof_jws, &payload, &resolution.document.verification_method)
-            .map_err(|error| did_proof_invalid(format!("DID proof JWS invalid: {error}")))?;
+    let verification_method = verify_detached_jws_with_sdk(
+        proof_jws,
+        &payload,
+        &resolution.document.verification_method,
+    )
+    .map_err(|error| did_proof_invalid(format!("DID proof JWS invalid: {error}")))?;
     if let Some(expected_method) = proof
         .verification_method
         .as_deref()
@@ -381,8 +386,8 @@ async fn verify_soft_logout_did_proof(
 ///
 /// * A `DPoP` header that proves possession of the same key the existing grant is bound to
 ///   (`cnf.jkt` on the old grant must match the new proof's `jkt`).
-/// * A request body carrying the prior grant JWT, the bound `device_id`, and
-///   a fresh DID proof over the soft-logout restore transcript.
+/// * A request body carrying the prior grant JWT, the bound `device_id`, and a fresh DID proof over
+///   the soft-logout restore transcript.
 ///
 /// On success the old grant is revoked (single-use semantics — its
 /// `revoked_at` is persisted) and a new grant is issued with the same
@@ -634,8 +639,9 @@ pub async fn refresh_session_grant(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::Duration;
+
+    use super::*;
 
     const DEVICE_ID: &str = "ck:device:0196419b-0000-7000-8000-000000000001";
     const OTHER_DEVICE_ID: &str = "ck:device:0196419b-0000-7000-8000-000000000002";

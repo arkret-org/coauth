@@ -334,11 +334,11 @@ mod tests {
         .unwrap();
 
         let jwt = Jwt::<HashMap<String, Value>>::try_from(encoded.as_str()).unwrap();
-        assert_eq!(jwt.payload().get("sub").and_then(Value::as_str), Some(subject));
-        assert!(
-            !jwt.payload()
-                .contains_key(cokret::CLAIM_PRINCIPAL_DID)
+        assert_eq!(
+            jwt.payload().get("sub").and_then(Value::as_str),
+            Some(subject)
         );
+        assert!(!jwt.payload().contains_key(cokret::CLAIM_PRINCIPAL_DID));
     }
 
     #[test]

@@ -89,9 +89,8 @@ pub async fn patch_user(
     let next_status = account_status_from_admin_patch(user.status, &patch);
     let should_reactivate =
         user.status == AccountStatus::Deactivated && next_status == AccountStatus::Active;
-    let should_schedule_deactivation =
-        !account_status_needs_deactivation_fanout(user.status)
-            && account_status_needs_deactivation_fanout(next_status);
+    let should_schedule_deactivation = !account_status_needs_deactivation_fanout(user.status)
+        && account_status_needs_deactivation_fanout(next_status);
 
     let updated = repo
         .user()
@@ -310,7 +309,10 @@ fn validate_admin_patch(patch: &AdminUserPatch) -> Result<(), UserAdminServiceEr
     .map_err(|_| UserAdminServiceError::InvalidDisplayName)
 }
 
-fn account_status_from_admin_patch(current: AccountStatus, patch: &AdminUserPatch) -> AccountStatus {
+fn account_status_from_admin_patch(
+    current: AccountStatus,
+    patch: &AdminUserPatch,
+) -> AccountStatus {
     let mut status = patch.status.unwrap_or(current);
 
     if let Some(locked) = patch.locked {

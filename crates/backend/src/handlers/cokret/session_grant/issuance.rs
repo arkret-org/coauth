@@ -53,11 +53,70 @@ pub(crate) fn issue_session_grant_for_audience(
     subject_override: Option<&str>,
     dpop_jkt: Option<String>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
+    issue_session_grant_for_audience_inner(
+        clock,
+        url_builder,
+        cokret_config,
+        key_store,
+        browser_session,
+        session_public_key,
+        audience,
+        scopes,
+        subject_override,
+        dpop_jkt,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn issue_test_session_grant_for_audience(
+    clock: &dyn Clock,
+    url_builder: &UrlBuilder,
+    cokret_config: &CokretConfig,
+    key_store: &Keystore,
+    browser_session: &BrowserSession,
+    session_public_key: PublicJsonWebKey,
+    audience: String,
+    scopes: Vec<String>,
+    subject_override: Option<&str>,
+    dpop_jkt: Option<String>,
+) -> Result<SessionGrantMaterial, SessionGrantError> {
+    issue_session_grant_for_audience_inner(
+        clock,
+        url_builder,
+        cokret_config,
+        key_store,
+        browser_session,
+        session_public_key,
+        audience,
+        scopes,
+        subject_override,
+        dpop_jkt,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn issue_session_grant_for_audience_inner(
+    clock: &dyn Clock,
+    url_builder: &UrlBuilder,
+    cokret_config: &CokretConfig,
+    key_store: &Keystore,
+    browser_session: &BrowserSession,
+    session_public_key: PublicJsonWebKey,
+    audience: String,
+    scopes: Vec<String>,
+    subject_override: Option<&str>,
+    dpop_jkt: Option<String>,
+    enforce_principal_did_method: bool,
+) -> Result<SessionGrantMaterial, SessionGrantError> {
     let subject = subject_override.map_or_else(
         || user_did_for(url_builder, cokret_config, &browser_session.user),
         ToOwned::to_owned,
     );
-    ensure_principal_did_method_allowed(cokret_config, &subject)?;
+    if enforce_principal_did_method {
+        ensure_principal_did_method_allowed(cokret_config, &subject)?;
+    }
     let session_public_key = serde_json::to_string(&session_public_key)?;
 
     let now = clock.now();
