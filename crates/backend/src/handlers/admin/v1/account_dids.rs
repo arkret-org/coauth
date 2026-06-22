@@ -22,6 +22,7 @@ use serde::Deserialize;
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::cokret::SessionGrantError;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding_proof::{
     DidBindingProofError, normalize_did_for_binding, validate_control_proof,
@@ -136,7 +137,7 @@ pub async fn list_account_dids(
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let events = did_binding_event_logs(&mut repo, id).await?;
-    let data = binding_records_for_user(&user, &cokret_config, did_resolver.as_ref()).await;
+    let data = binding_records_for_user(&user, &cokret_config, did_resolver.as_ref()).await?;
     let data = apply_did_binding_events(
         data,
         &events,
@@ -203,7 +204,7 @@ pub async fn add_account_did(
     let resolver = resolver_descriptor(&cokret_config, did_resolver.as_ref());
     let events = did_binding_event_logs(&mut repo, id).await?;
     let current_bindings = apply_did_binding_events(
-        binding_records_for_user(&account, &cokret_config, did_resolver.as_ref()).await,
+        binding_records_for_user(&account, &cokret_config, did_resolver.as_ref()).await?,
         &events,
         &resolver,
     );
@@ -275,7 +276,7 @@ pub async fn add_account_did(
     let mut events = events;
     events.push(audit_log);
     let data = apply_did_binding_events(
-        binding_records_for_user(&account, &cokret_config, did_resolver.as_ref()).await,
+        binding_records_for_user(&account, &cokret_config, did_resolver.as_ref()).await?,
         &events,
         &resolver,
     );
@@ -350,7 +351,7 @@ pub async fn remove_account_did(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
     let events = did_binding_event_logs(&mut repo, id).await?;
     let resolver = resolver_descriptor(&cokret_config, did_resolver.as_ref());
-    let data = binding_records_for_user(&user, &cokret_config, did_resolver.as_ref()).await;
+    let data = binding_records_for_user(&user, &cokret_config, did_resolver.as_ref()).await?;
     let mut data = apply_did_binding_events(data, &events, &resolver);
     let Some(binding) = data.iter_mut().find(|binding| binding.did == did) else {
         repo.cancel().await?;
@@ -470,6 +471,7 @@ pub(crate) async fn preview_bindings_for_user(
 ) -> Vec<AccountDidBindingPreview> {
     binding_records_for_user(user, cokret_config, did_resolver)
         .await
+        .unwrap_or_default()
         .into_iter()
         .map(|binding| AccountDidBindingPreview {
             did: binding.did,
@@ -485,16 +487,24 @@ pub(crate) async fn primary_did_for_user(
     user: &User,
     cokret_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
-) -> String {
-    did_resolver.primary_did_for_user(cokret_config, user).await
+) -> Result<Option<String>, AppError> {
+    match did_resolver.primary_did_for_user(cokret_config, user).await {
+        Ok(did) => Ok(Some(did)),
+        Err(SessionGrantError::DidWebPrincipalNotExplicit) => Ok(None),
+        Err(error) => Err(AppError::bad_request(format!(
+            "principal_did_policy: {error}"
+        ))),
+    }
 }
 
 async fn binding_records_for_user(
     user: &User,
     cokret_config: &CokretConfig,
     did_resolver: &dyn DidResolverService,
-) -> Vec<AccountDidBinding> {
-    let primary_did = primary_did_for_user(user, cokret_config, did_resolver).await;
+) -> Result<Vec<AccountDidBinding>, AppError> {
+    let Some(primary_did) = primary_did_for_user(user, cokret_config, did_resolver).await? else {
+        return Ok(Vec::new());
+    };
     let created_at = Some(user.created_at);
     let last_verified_at = Some(user.updated_at);
     let revoked_at = user.deactivated_at;
@@ -511,7 +521,7 @@ async fn binding_records_for_user(
     };
     let resolver = resolver_descriptor(cokret_config, did_resolver);
 
-    vec![AccountDidBinding {
+    Ok(vec![AccountDidBinding {
         id: format!("acctdid-{}", binding_slug(&user.id.to_string())),
         account_id: user.id.to_string(),
         did: primary_did,
@@ -528,7 +538,7 @@ async fn binding_records_for_user(
             binding_slug(&user.id.to_string())
         )),
         revoked_at,
-    }]
+    }])
 }
 
 async fn did_binding_event_logs(

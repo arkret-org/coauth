@@ -13,8 +13,9 @@
 //! passkey's COSE public key — never the placeholder this stage used
 //! to forward.
 //!
-//! Accounts that never enrol a passkey simply stay on the local
-//! `did:web:coauth.invalid:…` derivation.
+//! Accounts that never enrol a passkey do not get an implicit principal
+//! `did:web` in non-personal deployments; callers must mint or load a
+//! persisted `did:webvh` principal DID.
 
 use coauth_data::strand::{StageOutcome, StageValidationError};
 use coauth_data::{BoxRepository, Clock, RepositoryAccess};

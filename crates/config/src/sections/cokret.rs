@@ -32,6 +32,58 @@ fn session_grant_ttl_is_default(ttl: &Duration) -> bool {
     *ttl == default_session_grant_ttl()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DeploymentProfileConfig {
+    PersonalNode,
+    SmallTeam,
+    Organization,
+    HighSecurityOrganization,
+    SovereignDeployment,
+}
+
+impl Default for DeploymentProfileConfig {
+    fn default() -> Self {
+        Self::Organization
+    }
+}
+
+impl DeploymentProfileConfig {
+    #[must_use]
+    pub const fn is_default(value: &Self) -> bool {
+        matches!(value, Self::Organization)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum PrincipalMethodConfig {
+    #[serde(rename = "did:webvh")]
+    DidWebvh,
+    #[serde(rename = "did:web")]
+    DidWeb,
+}
+
+impl Default for PrincipalMethodConfig {
+    fn default() -> Self {
+        Self::DidWebvh
+    }
+}
+
+impl PrincipalMethodConfig {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DidWebvh => "did:webvh",
+            Self::DidWeb => "did:web",
+        }
+    }
+
+    #[must_use]
+    pub const fn is_default(value: &Self) -> bool {
+        matches!(value, Self::DidWebvh)
+    }
+}
+
 /// Cokret-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
 #[serde_as]
@@ -42,6 +94,22 @@ pub struct CokretConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub principal_servers: Vec<PrincipalServerConfig>,
 
+    /// Deployment profile that gates principal DID method choices.
+    ///
+    /// `did:web` is only valid for principal DIDs when this is
+    /// `personal_node` and `principal_method` is explicitly `did:web`.
+    /// Other built-in profiles use `did:webvh` for coauth-managed
+    /// principal issuance.
+    #[serde(default, skip_serializing_if = "DeploymentProfileConfig::is_default")]
+    pub deployment_profile: DeploymentProfileConfig,
+
+    /// Principal DID method selected by this deployment.
+    ///
+    /// Defaults to `did:webvh`; setting `did:web` is accepted only for
+    /// `deployment_profile=personal_node`.
+    #[serde(default, skip_serializing_if = "PrincipalMethodConfig::is_default")]
+    pub principal_method: PrincipalMethodConfig,
+
     /// External DID / identity registry resolver used for Cokret identity
     /// binding workflows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -49,8 +117,9 @@ pub struct CokretConfig {
 
     /// `starid` registry endpoint used by onboarding / recovery strands to
     /// mint and verify managed `did:webvh` identifiers for principals.
-    /// When omitted, principal-DID minting falls back to the local
-    /// `did:web` derivation in [`crate::services::did_resolver`].
+    /// When omitted, coauth cannot mint default `did:webvh` principal DIDs.
+    /// The local `did:web` derivation is only allowed when the deployment
+    /// explicitly selects the personal-node exception.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub starid: Option<StaridConfig>,
 
@@ -206,6 +275,8 @@ impl Default for CokretConfig {
     fn default() -> Self {
         Self {
             principal_servers: Vec::new(),
+            deployment_profile: DeploymentProfileConfig::default(),
+            principal_method: PrincipalMethodConfig::default(),
             identity_registry: None,
             starid: None,
             service_did: None,
@@ -230,6 +301,8 @@ impl CokretConfig {
     #[must_use]
     pub fn is_default(&self) -> bool {
         self.principal_servers.is_empty()
+            && DeploymentProfileConfig::is_default(&self.deployment_profile)
+            && PrincipalMethodConfig::is_default(&self.principal_method)
             && self.identity_registry.is_none()
             && self.starid.is_none()
             && self.service_did.is_none()
@@ -267,6 +340,15 @@ impl CokretConfig {
             push(did);
         }
         out
+    }
+
+    /// Returns whether this deployment explicitly opts into `did:web` as a
+    /// principal method. Both fields must match the spec's personal-node
+    /// exception; an omitted `principal_method` still means `did:webvh`.
+    #[must_use]
+    pub const fn did_web_principal_allowed(&self) -> bool {
+        matches!(self.deployment_profile, DeploymentProfileConfig::PersonalNode)
+            && matches!(self.principal_method, PrincipalMethodConfig::DidWeb)
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
@@ -321,6 +403,15 @@ impl ConfigurationSection for CokretConfig {
         if self.session_grant_ttl < min_ttl || self.session_grant_ttl > max_ttl {
             return Err(std::io::Error::other(
                 "cokret.session_grant_ttl must be between 60 and 86400 seconds",
+            )
+            .into());
+        }
+
+        if matches!(self.principal_method, PrincipalMethodConfig::DidWeb)
+            && !matches!(self.deployment_profile, DeploymentProfileConfig::PersonalNode)
+        {
+            return Err(std::io::Error::other(
+                "cokret.principal_method=did:web requires cokret.deployment_profile=personal_node",
             )
             .into());
         }
@@ -507,6 +598,32 @@ mod tests {
             serde_json::from_value(serde_json::json!({ "session_grant_ttl": 900 })).unwrap();
 
         assert_eq!(config.session_grant_ttl, Duration::try_minutes(15).unwrap());
+    }
+
+    #[test]
+    fn did_web_principal_requires_explicit_personal_node_profile() {
+        assert!(!CokretConfig::default().did_web_principal_allowed());
+
+        let personal_web = CokretConfig {
+            deployment_profile: DeploymentProfileConfig::PersonalNode,
+            principal_method: PrincipalMethodConfig::DidWeb,
+            ..CokretConfig::default()
+        };
+        assert!(personal_web.did_web_principal_allowed());
+        assert!(personal_web.validate(&figment::Figment::new()).is_ok());
+
+        let personal_default = CokretConfig {
+            deployment_profile: DeploymentProfileConfig::PersonalNode,
+            ..CokretConfig::default()
+        };
+        assert!(!personal_default.did_web_principal_allowed());
+
+        let organization_web = CokretConfig {
+            principal_method: PrincipalMethodConfig::DidWeb,
+            ..CokretConfig::default()
+        };
+        assert!(!organization_web.did_web_principal_allowed());
+        assert!(organization_web.validate(&figment::Figment::new()).is_err());
     }
 
     #[test]

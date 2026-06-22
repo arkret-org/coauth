@@ -302,12 +302,19 @@ pub async fn exchange_authorization_code(
             cokret_config,
             &browser_session.user,
         );
+        let principal_did = crate::handlers::cokret::published_principal_did_for_user(
+            &mut repo,
+            cokret_config,
+            &browser_session.user,
+        )
+        .await?;
         Some(
             generate_id_token(
                 rng,
                 clock,
                 url_builder,
                 &subject_did,
+                principal_did.as_deref(),
                 key_store,
                 client,
                 Some(&authz_grant),

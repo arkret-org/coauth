@@ -155,7 +155,7 @@ pub async fn get_viewer(
             let total = email_edges.len() as i64;
 
             let has_password = profile.has_password;
-            let did = cokret::principal_did_for_user(&mut repo, &cokret_config, user)
+            let did = cokret::published_principal_did_for_user(&mut repo, &cokret_config, user)
                 .await?
                 .ok_or_else(|| {
                     RouteError::Internal(Box::new(std::io::Error::other(format!(

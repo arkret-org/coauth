@@ -23,6 +23,7 @@ pub struct UpdateRequestBody {
     avatar_url: Option<Option<String>>,
     preferred_locale: Option<Option<String>>,
     admin: Option<bool>,
+    status: Option<String>,
     locked: Option<bool>,
     deactivated: Option<bool>,
     principal_erase: Option<bool>,
@@ -55,11 +56,21 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleO
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
 
+    let status = body
+        .status
+        .as_deref()
+        .map(|status| {
+            cokret_core::AccountStatus::from_wire(status)
+                .ok_or_else(|| AppError::bad_request(format!("Unknown account status: {status}")))
+        })
+        .transpose()?;
+
     let patch = coauth_data::AdminUserPatch {
         display_name: body.display_name,
         avatar_url: body.avatar_url,
         preferred_locale: body.preferred_locale,
         can_request_admin: body.admin,
+        status,
         locked: body.locked,
         deactivated: body.deactivated,
     };

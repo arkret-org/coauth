@@ -81,6 +81,10 @@ passwords:
     algorithm: argon2id
   minimum_complexity: 3
 cokret:
+  # Principal DIDs default to did:webvh. did:web is only accepted when both
+  # deployment_profile: personal_node and principal_method: did:web are set.
+  deployment_profile: organization
+  principal_method: did:webvh
   principal_server_url: https://local.host/
   # Lifetime, in seconds, of the DPoP-bound Cokret session-grant JWTs returned
   # by the REST auth bridge login/exchange paths and rotated through

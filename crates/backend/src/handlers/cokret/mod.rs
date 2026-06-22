@@ -95,6 +95,11 @@ pub enum SessionGrantError {
     #[error(transparent)]
     HandleClaimSubject(#[from] crate::services::handle_subject_validator::HandleClaimSubjectError),
 
+    #[error(
+        "did:web principal requires cokret.deployment_profile=personal_node and cokret.principal_method=did:web"
+    )]
+    DidWebPrincipalNotExplicit,
+
     #[error(transparent)]
     Other(#[from] AnyhowError),
 }
@@ -331,6 +336,12 @@ fn map_did_resolve_error(
         crate::services::did_resolver::DidResolveError::InvalidDid(message) => {
             CokretRouteError::BadRequest(format!("invalid did: {message}"))
         }
+        crate::services::did_resolver::DidResolveError::DidWebPrincipalNotExplicit => {
+            CokretRouteError::BadRequest(
+                "did:web principal requires deployment_profile=personal_node and principal_method=did:web"
+                    .to_owned(),
+            )
+        }
         other => CokretRouteError::Internal(Box::new(other)),
     }
 }
@@ -388,6 +399,21 @@ pub(crate) fn user_did_for(
     )
 }
 
+#[must_use]
+pub(crate) fn is_did_web_principal(did: &str) -> bool {
+    did.starts_with("did:web:")
+}
+
+pub(crate) fn ensure_principal_did_method_allowed(
+    cokret_config: &CokretConfig,
+    did: &str,
+) -> Result<(), SessionGrantError> {
+    if is_did_web_principal(did) && !cokret_config.did_web_principal_allowed() {
+        return Err(SessionGrantError::DidWebPrincipalNotExplicit);
+    }
+    Ok(())
+}
+
 /// Local OIDC subject for Account Authority-issued OAuth tokens.
 ///
 /// This identifies the authenticated coauth account. Principal-server DIDs are
@@ -443,6 +469,23 @@ where
     Ok(principal_did_binding_for_user(repo, cokret_config, user)
         .await?
         .map(|binding| binding.did))
+}
+
+/// Persisted principal DID that is allowed to leave the Account Authority.
+///
+/// The custom OAuth/UserInfo/viewer claims must not synthesize or publish a
+/// `did:web` principal unless the deployment explicitly opted into the
+/// personal-node profile and `did:web` principal method.
+pub(crate) async fn published_principal_did_for_user<R>(
+    repo: &mut R,
+    cokret_config: &CokretConfig,
+    user: &User,
+) -> Result<Option<String>, R::Error>
+where
+    R: RepositoryAccess,
+{
+    let did = principal_did_for_user(repo, cokret_config, user).await?;
+    Ok(did.filter(|did| ensure_principal_did_method_allowed(cokret_config, did).is_ok()))
 }
 
 /// Display form `local@host` used by logging / display paths.

@@ -7,8 +7,8 @@
 //!   passkey's COSE public key
 //!   ([`crate::services::passkey_derive::derive_update_key_from_credential`]), posts `POST
 //!   /_starid/root/webvh/dids` to starid, persists `(account → did, update_key, version_id)`, and
-//!   flips `user.starid_backend = true` so subsequent reads of `primary_did_for_user` route to the
-//!   starid form.
+//!   flips `user.starid_backend = true` for deployments that explicitly use the
+//!   personal-node `did:web` principal method.
 //!
 //! * [`rotate_principal_did_for_credential`] — called from the same handler on **subsequent**
 //!   passkey enrolments (account already has a starid-minted DID). Derives the new device's
@@ -18,9 +18,9 @@
 //! Round 37.4 contract change (rip-and-replace): the old
 //! `mint_principal_did_if_configured` + `PLACEHOLDER_UPDATE_KEY` pair
 //! is gone. Onboarding no longer mints a DID at user-creation time.
-//! Accounts that never enrol a passkey simply stay on the local
-//! `did:web:coauth.invalid:…` derivation, which matches what every
-//! account had before C35.0.
+//! Accounts that never enrol a passkey no longer get an implicit `did:web`
+//! principal in non-personal deployments; those paths must mint or load a
+//! persisted `did:webvh` principal DID.
 
 use coauth_data::{BoxRepository, RepositoryAccess, User};
 use thiserror::Error;
@@ -132,7 +132,9 @@ mod tests {
 
     use std::sync::{Arc, Once};
 
-    use coauth_config::{CokretConfig, StaridConfig};
+    use coauth_config::{
+        CokretConfig, DeploymentProfileConfig, PrincipalMethodConfig, StaridConfig,
+    };
     use serde_json::json;
     use ulid::Ulid;
     use url::Url;
@@ -246,6 +248,8 @@ mod tests {
         install_crypto_provider();
         let resolver = DefaultDidResolverService;
         let cokret_config = CokretConfig {
+            deployment_profile: DeploymentProfileConfig::PersonalNode,
+            principal_method: PrincipalMethodConfig::DidWeb,
             starid: Some(StaridConfig {
                 base_url: Url::parse("https://starid.example").unwrap(),
                 did_host: Some("starid.local".to_owned()),
@@ -258,7 +262,10 @@ mod tests {
         let user_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
         let mut user = sample_user(user_id);
         user.starid_backend = true;
-        let did = resolver.primary_did_for_user(&cokret_config, &user).await;
+        let did = resolver
+            .primary_did_for_user(&cokret_config, &user)
+            .await
+            .unwrap();
         assert_eq!(
             did, "did:web:starid.local:accounts:01arz3ndektsv4rrffq69g5fav",
             "starid_backend=true must produce the starid alias form, not the local derivation",
@@ -266,11 +273,30 @@ mod tests {
 
         // Sanity: same user without the flag stays on the local form.
         user.starid_backend = false;
-        let local = resolver.primary_did_for_user(&cokret_config, &user).await;
+        let local = resolver
+            .primary_did_for_user(&cokret_config, &user)
+            .await
+            .unwrap();
         assert_eq!(
             local, "did:web:coauth.invalid:accounts:01arz3ndektsv4rrffq69g5fav",
             "starid_backend=false uses the local derivation",
         );
+    }
+
+    #[tokio::test]
+    async fn primary_did_for_user_rejects_did_web_without_explicit_personal_node_gate() {
+        let resolver = DefaultDidResolverService;
+        let user_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        let user = sample_user(user_id);
+
+        let error = resolver
+            .primary_did_for_user(&CokretConfig::default(), &user)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            crate::handlers::cokret::SessionGrantError::DidWebPrincipalNotExplicit
+        ));
     }
 
     fn sample_user(id: Ulid) -> coauth_data::User {
@@ -280,6 +306,7 @@ mod tests {
             sub: id.to_string(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            status: cokret_core::AccountStatus::Active,
             locked_at: None,
             deactivated_at: None,
             can_request_admin: false,

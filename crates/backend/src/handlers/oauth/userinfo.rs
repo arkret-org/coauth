@@ -23,7 +23,7 @@ struct UserInfo {
     username: String,
     preferred_username: String,
     #[serde(rename = "org.cokret.principal_did")]
-    principal_did: String,
+    principal_did: Option<String>,
     #[serde(rename = "org.cokret.device_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     device_id: Option<String>,
@@ -170,6 +170,8 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         .await?
         .ok_or(RouteError::NoSuchUser(user_id))?;
     let subject_did = cokret::oidc_subject_for_user(&url_builder, &cokret_config, &user);
+    let principal_did =
+        cokret::published_principal_did_for_user(&mut repo, &cokret_config, &user).await?;
 
     let user_info = UserInfo {
         sub: subject_did.clone(),
@@ -178,7 +180,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         // display form (spec 7157ee8 retires the URI form but the display
         // shape stays for OIDC client compatibility).
         preferred_username: cokret::user_handle_display(&url_builder, &user),
-        principal_did: subject_did,
+        principal_did,
         device_id: cokret::primary_device_id(&session.scope),
         session_id: session.id.to_string(),
         name: user.display_name.clone(),

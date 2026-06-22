@@ -1,6 +1,7 @@
 use chrono::{Duration, Utc};
 use coauth_config::{
-    CokretConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig,
+    CokretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
+    PrincipalMethodConfig, PrincipalServerConfig,
 };
 use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemClock, User};
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
@@ -31,6 +32,14 @@ fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> 
         .with_key_ops(vec![JsonWebKeyOperation::Verify])
         .with_alg(JsonWebSignatureAlg::EdDsa)
         .with_kid(kid)
+}
+
+fn personal_node_did_web_config() -> CokretConfig {
+    CokretConfig {
+        deployment_profile: DeploymentProfileConfig::PersonalNode,
+        principal_method: PrincipalMethodConfig::DidWeb,
+        ..CokretConfig::default()
+    }
 }
 
 #[test]
@@ -77,6 +86,8 @@ fn service_describe_exposes_auth_account_boundary_profile() {
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
         }],
+        deployment_profile: DeploymentProfileConfig::default(),
+        principal_method: PrincipalMethodConfig::default(),
         identity_registry: Some(IdentityRegistryConfig {
             kind: IdentityRegistryKind::PublicDidResolver,
             resolver: "https://resolver.example.com/resolve".parse().unwrap(),
@@ -475,7 +486,7 @@ fn service_describe_advertises_configured_session_grant_ttl() {
 fn session_grant_is_signed_for_the_user_did() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig::default();
+    let cokret_config = personal_node_did_web_config();
     let key_store = test_keystore();
     let now = clock.now();
     let mut fixture_rng = ChaChaRng::seed_from_u64(9);
@@ -540,10 +551,43 @@ fn session_grant_is_signed_for_the_user_did() {
 }
 
 #[test]
+fn session_grant_rejects_implicit_did_web_fallback() {
+    let clock = SystemClock::default();
+    let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
+    let cokret_config = CokretConfig::default();
+    let key_store = test_keystore();
+    let now = clock.now();
+    let mut fixture_rng = ChaChaRng::seed_from_u64(9);
+    let browser_session = BrowserSession::samples(now, &mut fixture_rng)
+        .into_iter()
+        .next()
+        .unwrap();
+    let mut signing_rng = ChaChaRng::seed_from_u64(11);
+    let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
+    let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
+
+    let error = issue_session_grant(
+        &mut signing_rng,
+        &clock,
+        &url_builder,
+        &cokret_config,
+        &key_store,
+        &browser_session,
+        session_public_key,
+        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, SessionGrantError::DidWebPrincipalNotExplicit));
+}
+
+#[test]
 fn session_grant_uses_configured_ttl() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let cokret_config = CokretConfig {
+        deployment_profile: DeploymentProfileConfig::PersonalNode,
+        principal_method: PrincipalMethodConfig::DidWeb,
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
         ..CokretConfig::default()
     };
@@ -694,11 +738,12 @@ async fn seed_persisted_session_grant(
         .await
         .unwrap();
     let session_key = PrivateKey::generate_ed25519(&mut rng);
+    let grant_config = personal_node_did_web_config();
     let material = issue_session_grant(
         &mut rng,
         &*state.clock,
         &state.url_builder,
-        &state.cokret_config,
+        &grant_config,
         &state.key_store,
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
@@ -901,14 +946,15 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         .unwrap();
     let session_key = PrivateKey::generate_ed25519(&mut rng);
     let bound_jkt = "test-dpop-jkt-thumbprint".to_owned();
+    let grant_config = personal_node_did_web_config();
     let material = issue_session_grant_for_audience(
         &*state.clock,
         &state.url_builder,
-        &state.cokret_config,
+        &grant_config,
         &state.key_store,
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
-        required_audience_for(&state.url_builder, &state.cokret_config),
+        required_audience_for(&state.url_builder, &grant_config),
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
         None,
         Some(bound_jkt.clone()),
@@ -953,7 +999,11 @@ async fn session_grant_http_introspection_accepts_stateless_agent_grant() {
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let bearer = "agent-session-grant-introspection";
-    state.cokret_config = config_with_static_session_grant_bearer(bearer);
+    state.cokret_config = CokretConfig {
+        deployment_profile: DeploymentProfileConfig::PersonalNode,
+        principal_method: PrincipalMethodConfig::DidWeb,
+        ..config_with_static_session_grant_bearer(bearer)
+    };
 
     let mut rng = ChaChaRng::seed_from_u64(0xa9e17);
     let session_key = PrivateKey::generate_ed25519(&mut rng);
@@ -1384,6 +1434,41 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         material.payload.claim_kind,
         Some(cokret_core::HandleClaimKind::HandleBinding)
     );
+}
+
+#[test]
+fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gate() {
+    use coauth_data::clock::MockClock;
+    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
+    let cokret_config = CokretConfig::default();
+    let mut rng = ChaChaRng::seed_from_u64(0xc15c);
+    let clock = MockClock::default();
+    let now = clock.now();
+    let user = User::samples(now, &mut rng).into_iter().next().unwrap();
+    let key_store = test_keystore();
+    let hint = cokret_core::DeliveryBindingHint {
+        recipient_service_did: cokret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: cokret_core::RecipientServiceType::PrincipalServer,
+        binding_source: cokret_core::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [cokret_core::DeliveryMode::Events].into_iter().collect(),
+        service_acceptance_ref: None,
+        policy_event_ref: None,
+    };
+
+    let error = issue_handle_claim(
+        &clock,
+        &url_builder,
+        &cokret_config,
+        &key_store,
+        &user,
+        "did:web:alice.example",
+        cokret_core::HandleClaimKind::HandleBinding,
+        "did:web:space.example".to_owned(),
+        hint,
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, SessionGrantError::DidWebPrincipalNotExplicit));
 }
 
 #[test]

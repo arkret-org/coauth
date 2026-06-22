@@ -233,6 +233,12 @@ pub async fn accept_authorization_consent(
             cokret_config,
             &browser_session.user,
         );
+        let principal_did = crate::handlers::cokret::published_principal_did_for_user(
+            &mut repo,
+            cokret_config,
+            &browser_session.user,
+        )
+        .await?;
 
         params.id_token = Some(
             generate_id_token(
@@ -240,6 +246,7 @@ pub async fn accept_authorization_consent(
                 clock,
                 url_builder,
                 &subject_did,
+                principal_did.as_deref(),
                 key_store,
                 &client,
                 Some(&grant),

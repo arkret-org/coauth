@@ -1132,13 +1132,10 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             expected_subject, oauth_userinfo.sub
         )));
     }
-    if oauth_userinfo.principal_did.as_deref() != Some(expected_subject.as_str()) {
-        return Err(OidcExchangeError::proof_invalid(format!(
-            "fresh OAuth userinfo principal_did mismatch: expected {} but userinfo returned {}",
-            expected_subject,
-            oauth_userinfo.principal_did.as_deref().unwrap_or("missing")
-        )));
-    }
+    // `org.cokret.principal_did` is optional and only carries a persisted,
+    // method-allowed principal DID. The local OAuth proof binds the account
+    // with `sub` + session id; the audience-specific principal DID is minted
+    // or loaded below before issuing the session grant.
     if oauth_userinfo.session_id.as_deref() != Some(expected_oauth_session_id.as_str()) {
         return Err(OidcExchangeError::new(
             "invalid_authorization_code",

@@ -10,6 +10,7 @@ use coauth_data::{
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
 };
 use coauth_principal::ConnectorAdmin;
+use cokret_core::AccountStatus;
 use lettre::address::AddressError;
 use rand_core::RngCore;
 use thiserror::Error;
@@ -85,9 +86,12 @@ pub async fn patch_user(
     }
 
     let display_name_patch = patch.display_name.clone();
-    let should_reactivate = user.deactivated_at.is_some() && patch.deactivated == Some(false);
+    let next_status = account_status_from_admin_patch(user.status, &patch);
+    let should_reactivate =
+        user.status == AccountStatus::Deactivated && next_status == AccountStatus::Active;
     let should_schedule_deactivation =
-        user.deactivated_at.is_none() && patch.deactivated == Some(true);
+        !account_status_needs_deactivation_fanout(user.status)
+            && account_status_needs_deactivation_fanout(next_status);
 
     let updated = repo
         .user()
@@ -101,7 +105,7 @@ pub async fn patch_user(
             .map_err(UserAdminServiceError::PrincipalServer)?;
     }
 
-    if updated.deactivated_at.is_none() {
+    if !account_status_needs_deactivation_fanout(updated.status) {
         sync_display_name_patch(principal_server, &updated, display_name_patch)
             .await
             .map_err(|error| match error {
@@ -304,4 +308,37 @@ fn validate_admin_patch(patch: &AdminUserPatch) -> Result<(), UserAdminServiceEr
         preferred_locale: patch.preferred_locale.clone(),
     })
     .map_err(|_| UserAdminServiceError::InvalidDisplayName)
+}
+
+fn account_status_from_admin_patch(current: AccountStatus, patch: &AdminUserPatch) -> AccountStatus {
+    let mut status = patch.status.unwrap_or(current);
+
+    if let Some(locked) = patch.locked {
+        if locked {
+            if AccountStatus::Locked.is_stricter_than(status) {
+                status = AccountStatus::Locked;
+            }
+        } else if status == AccountStatus::Locked {
+            status = AccountStatus::Active;
+        }
+    }
+
+    if let Some(deactivated) = patch.deactivated {
+        if deactivated {
+            if AccountStatus::Deactivated.is_stricter_than(status) {
+                status = AccountStatus::Deactivated;
+            }
+        } else if status == AccountStatus::Deactivated {
+            status = AccountStatus::Active;
+        }
+    }
+
+    status
+}
+
+fn account_status_needs_deactivation_fanout(status: AccountStatus) -> bool {
+    matches!(
+        status,
+        AccountStatus::Deactivated | AccountStatus::ErasurePending
+    )
 }

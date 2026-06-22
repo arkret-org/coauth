@@ -116,7 +116,8 @@ pub struct LoginOutcome {
 pub struct ViewerInfo {
     pub id: String,
     pub handle: String,
-    pub did: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub did: Option<String>,
     pub federated_handle: String,
     pub principal_id: String,
     pub display_name: Option<String>,
@@ -355,6 +356,14 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Err(_) => None,
             };
             if !cokret_config.password_login_session_grants_enabled {
+                let mut viewer_repo = depot.repo().await?;
+                let viewer_did = cokret::published_principal_did_for_user(
+                    &mut viewer_repo,
+                    &cokret_config,
+                    &user,
+                )
+                .await?;
+                viewer_repo.cancel().await.ok();
                 cookie_jar.finalize(
                     res,
                     Json(LoginOutcome {
@@ -363,7 +372,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         viewer: Some(ViewerInfo {
                             id: NodeType::User.serialize(user.id),
                             handle: user.localpart.clone(),
-                            did: cokret::user_did_for(&url_builder, &cokret_config, &user),
+                            did: viewer_did,
                             federated_handle: cokret::user_handle(&url_builder, &user),
                             principal_id: principal_server.principal_id(&user.localpart),
                             display_name,
@@ -527,7 +536,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     viewer: Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
                         handle: user.localpart.clone(),
-                        did: principal_did,
+                        did: Some(principal_did),
                         federated_handle: cokret::user_handle(&url_builder, &user),
                         principal_id: principal_server.principal_id(&user.localpart),
                         display_name,

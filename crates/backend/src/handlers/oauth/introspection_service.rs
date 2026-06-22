@@ -114,7 +114,7 @@ pub async fn introspect_token(
 
             // The session might not have a user on it (for Client Credentials
             // grants for example), so we're optionally fetching the user
-            let (sub, username) = if let Some(user_id) = session.user_id {
+            let (sub, username, principal_did) = if let Some(user_id) = session.user_id {
                 let user = repo
                     .user()
                     .lookup(user_id)
@@ -126,9 +126,11 @@ pub async fn introspect_token(
                 }
 
                 let sub = principal_subject_for_user(url_builder, cokret_config, &user);
-                (Some(sub), Some(user.localpart))
+                let principal_did =
+                    cokret::published_principal_did_for_user(repo, cokret_config, &user).await?;
+                (Some(sub), Some(user.localpart), principal_did)
             } else {
-                (None, None)
+                (None, None, None)
             };
 
             activity_tracker
@@ -155,7 +157,7 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(access_token.jti()),
                 device_id: device_id.clone(),
-                cokret_principal_did: sub,
+                cokret_principal_did: principal_did,
                 cokret_device_id: device_id,
                 cokret_session_id: Some(session.id.to_string()),
             }
@@ -186,7 +188,7 @@ pub async fn introspect_token(
 
             // The session might not have a user on it (for Client Credentials
             // grants for example), so we're optionally fetching the user
-            let (sub, username) = if let Some(user_id) = session.user_id {
+            let (sub, username, principal_did) = if let Some(user_id) = session.user_id {
                 let user = repo
                     .user()
                     .lookup(user_id)
@@ -198,9 +200,11 @@ pub async fn introspect_token(
                 }
 
                 let sub = principal_subject_for_user(url_builder, cokret_config, &user);
-                (Some(sub), Some(user.localpart))
+                let principal_did =
+                    cokret::published_principal_did_for_user(repo, cokret_config, &user).await?;
+                (Some(sub), Some(user.localpart), principal_did)
             } else {
-                (None, None)
+                (None, None, None)
             };
 
             activity_tracker
@@ -225,7 +229,7 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(refresh_token.jti()),
                 device_id: device_id.clone(),
-                cokret_principal_did: sub,
+                cokret_principal_did: principal_did,
                 cokret_device_id: device_id,
                 cokret_session_id: Some(session.id.to_string()),
             }
@@ -297,6 +301,8 @@ pub async fn introspect_token(
             let scope = session.scope;
             let actor_user_sub =
                 principal_subject_for_user(url_builder, cokret_config, &actor_user);
+            let actor_principal_did =
+                cokret::published_principal_did_for_user(repo, cokret_config, &actor_user).await?;
 
             IntrospectionResponse {
                 active: true,
@@ -315,7 +321,7 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
                 device_id: device_id.clone(),
-                cokret_principal_did: Some(actor_user_sub),
+                cokret_principal_did: actor_principal_did,
                 cokret_device_id: device_id,
                 cokret_session_id: Some(session.id.to_string()),
             }

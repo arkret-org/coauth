@@ -57,6 +57,7 @@ pub(crate) fn issue_session_grant_for_audience(
         || user_did_for(url_builder, cokret_config, &browser_session.user),
         ToOwned::to_owned,
     );
+    ensure_principal_did_method_allowed(cokret_config, &subject)?;
     let session_public_key = serde_json::to_string(&session_public_key)?;
 
     let now = clock.now();
@@ -189,6 +190,7 @@ pub(crate) fn mint_agent_session_grant(
     now: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
+    ensure_principal_did_method_allowed(cokret_config, agent_principal_id)?;
     let issuer = issuer_did_for(url_builder, cokret_config);
     let cnf = Some(SessionGrantConfirmation {
         jkt: dpop_jkt.clone(),

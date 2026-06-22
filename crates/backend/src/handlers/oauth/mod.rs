@@ -76,6 +76,7 @@ pub(crate) fn generate_id_token(
     clock: &impl Clock,
     url_builder: &UrlBuilder,
     subject_did: &str,
+    principal_did: Option<&str>,
     key_store: &Keystore,
     client: &Client,
     grant: Option<&AuthorizationGrant>,
@@ -88,10 +89,12 @@ pub(crate) fn generate_id_token(
     let now = clock.now();
     claims::ISS.insert(&mut claims, url_builder.oidc_issuer().to_string())?;
     claims::SUB.insert(&mut claims, subject_did.to_owned())?;
-    claims.insert(
-        cokret::CLAIM_PRINCIPAL_DID.to_owned(),
-        serde_json::Value::String(subject_did.to_owned()),
-    );
+    if let Some(principal_did) = principal_did {
+        claims.insert(
+            cokret::CLAIM_PRINCIPAL_DID.to_owned(),
+            serde_json::Value::String(principal_did.to_owned()),
+        );
+    }
     claims::AUD.insert(&mut claims, client.client_id.clone())?;
     claims::IAT.insert(&mut claims, now)?;
     claims::EXP.insert(&mut claims, now + Duration::try_hours(1).unwrap())?;
@@ -237,6 +240,7 @@ mod tests {
             &clock,
             &url_builder,
             principal_did,
+            Some(principal_did),
             &key_store,
             &client,
             Some(&grant),
@@ -292,6 +296,48 @@ mod tests {
         assert_eq!(
             payload.get("c_hash").and_then(Value::as_str),
             Some(expected_c_hash.as_str())
+        );
+    }
+
+    #[test]
+    fn generate_id_token_omits_principal_did_claim_when_not_published() {
+        let clock = MockClock::default();
+        let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
+        let subject = "did:web:example.com:users:01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let mut rng = ChaChaRng::seed_from_u64(11);
+        let mut fixture_rng = ChaChaRng::seed_from_u64(12);
+        let mut client = Client::samples(clock.now(), &mut fixture_rng)
+            .into_iter()
+            .next()
+            .unwrap();
+        client.id_token_signed_response_alg = Some(JsonWebSignatureAlg::EdDsa);
+        let browser_session = BrowserSession::samples(clock.now(), &mut fixture_rng)
+            .into_iter()
+            .next()
+            .unwrap();
+        let (key_store, _) = keystore_for_alg(&JsonWebSignatureAlg::EdDsa);
+
+        let encoded = generate_id_token(
+            &mut rng,
+            &clock,
+            &url_builder,
+            subject,
+            None,
+            &key_store,
+            &client,
+            None,
+            None,
+            &browser_session,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let jwt = Jwt::<HashMap<String, Value>>::try_from(encoded.as_str()).unwrap();
+        assert_eq!(jwt.payload().get("sub").and_then(Value::as_str), Some(subject));
+        assert!(
+            !jwt.payload()
+                .contains_key(cokret::CLAIM_PRINCIPAL_DID)
         );
     }
 

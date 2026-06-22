@@ -86,14 +86,8 @@ impl AccountRecord {
         user: coauth_data::User,
         cokret_config: &coauth_config::CokretConfig,
         did_resolver: &dyn DidResolverService,
-    ) -> Self {
-        let status = if user.deactivated_at.is_some() {
-            AccountStatus::Deactivated
-        } else if user.locked_at.is_some() {
-            AccountStatus::Locked
-        } else {
-            AccountStatus::Active
-        };
+    ) -> Result<Self, AppError> {
+        let status = admin_account_status(user.status);
         let principal_id_bindings =
             preview_bindings_for_user(&user, cokret_config, did_resolver).await;
         let primary_principal_binding = principal_id_bindings
@@ -104,10 +98,12 @@ impl AccountRecord {
             .iter()
             .map(|binding| binding.did.clone())
             .collect();
-        let primary_principal_id =
-            Some(primary_did_for_user(&user, cokret_config, did_resolver).await);
+        let primary_principal_id = primary_did_for_user(&user, cokret_config, did_resolver)
+            .await
+            .ok()
+            .flatten();
 
-        Self {
+        Ok(Self {
             id: user.id,
             attributes: AdminAccountAttributes {
                 handle: user.localpart,
@@ -125,7 +121,7 @@ impl AccountRecord {
                 primary_principal_binding,
                 principal_id_bindings,
             },
-        }
+        })
     }
 
     /// Convenience accessor used by mutation paths that need to peek at
@@ -152,16 +148,22 @@ impl Resource for AccountRecord {
 #[serde(rename_all = "snake_case")]
 enum AccountFilterStatus {
     Active,
+    SoftLoggedOut,
     Locked,
+    Suspended,
     Deactivated,
+    ErasurePending,
 }
 
 impl std::fmt::Display for AccountFilterStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Active => f.write_str("active"),
+            Self::SoftLoggedOut => f.write_str("soft_logged_out"),
             Self::Locked => f.write_str("locked"),
+            Self::Suspended => f.write_str("suspended"),
             Self::Deactivated => f.write_str("deactivated"),
+            Self::ErasurePending => f.write_str("erasure_pending"),
         }
     }
 }
@@ -230,8 +232,11 @@ pub async fn list_accounts(
     };
     filter = match params.status {
         Some(AccountFilterStatus::Active) => filter.active_only(),
+        Some(AccountFilterStatus::SoftLoggedOut) => filter.soft_logged_out_only(),
         Some(AccountFilterStatus::Locked) => filter.locked_only(),
+        Some(AccountFilterStatus::Suspended) => filter.suspended_only(),
         Some(AccountFilterStatus::Deactivated) => filter.deactivated_only(),
+        Some(AccountFilterStatus::ErasurePending) => filter.erasure_pending_only(),
         None => filter,
     };
 
@@ -239,12 +244,12 @@ pub async fn list_accounts(
         IncludeCount::True => {
             let page = repo.user().list(filter, pagination).await?;
             let count = repo.user().count(filter).await?;
-            let page = map_page_async(page, &cokret_config, did_resolver.as_ref()).await;
+            let page = map_page_async(page, &cokret_config, did_resolver.as_ref()).await?;
             paginated_response_for_page(page, pagination, Some(count), &base)
         }
         IncludeCount::False => {
             let page = repo.user().list(filter, pagination).await?;
-            let page = map_page_async(page, &cokret_config, did_resolver.as_ref()).await;
+            let page = map_page_async(page, &cokret_config, did_resolver.as_ref()).await?;
             paginated_response_for_page(page, pagination, None, &base)
         }
         IncludeCount::Only => {
@@ -285,7 +290,7 @@ pub async fn get_account(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await,
+        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await?,
     )))
 }
 
@@ -335,7 +340,7 @@ pub async fn list_account_session_grants(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let record = AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await;
+    let record = AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await?;
     Ok(Json(AccountSessionGrantsOutcome {
         data: admin_session_grant_records(&record),
     }))
@@ -351,6 +356,7 @@ pub async fn lock_account(
         req,
         depot,
         AdminUserPatch {
+            status: Some(cokret_core::AccountStatus::Locked),
             locked: Some(true),
             ..AdminUserPatch::default()
         },
@@ -370,6 +376,7 @@ pub async fn disable_account(
         req,
         depot,
         AdminUserPatch {
+            status: Some(cokret_core::AccountStatus::Deactivated),
             deactivated: Some(true),
             ..AdminUserPatch::default()
         },
@@ -389,6 +396,7 @@ pub async fn erase_account(
         req,
         depot,
         AdminUserPatch {
+            status: Some(cokret_core::AccountStatus::ErasurePending),
             deactivated: Some(true),
             ..AdminUserPatch::default()
         },
@@ -408,6 +416,7 @@ pub async fn reset_recovery(
         req,
         depot,
         AdminUserPatch {
+            status: Some(cokret_core::AccountStatus::Locked),
             locked: Some(true),
             ..AdminUserPatch::default()
         },
@@ -534,7 +543,7 @@ async fn patch_account(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await,
+        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await?,
     )))
 }
 
@@ -545,7 +554,7 @@ async fn map_page_async(
     page: coauth_data::Page<coauth_data::User>,
     cokret_config: &coauth_config::CokretConfig,
     did_resolver: &dyn DidResolverService,
-) -> coauth_data::Page<AccountRecord> {
+) -> Result<coauth_data::Page<AccountRecord>, AppError> {
     let coauth_data::Page {
         has_next_page,
         has_previous_page,
@@ -554,14 +563,14 @@ async fn map_page_async(
     let mut mapped_edges = Vec::with_capacity(edges.len());
     for edge in edges {
         let cursor = edge.cursor;
-        let node = AccountRecord::from_user(edge.node, cokret_config, did_resolver).await;
+        let node = AccountRecord::from_user(edge.node, cokret_config, did_resolver).await?;
         mapped_edges.push(coauth_data::pagination::Edge { cursor, node });
     }
-    coauth_data::Page {
+    Ok(coauth_data::Page {
         has_next_page,
         has_previous_page,
         edges: mapped_edges,
-    }
+    })
 }
 
 fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) -> AppError {
@@ -579,6 +588,17 @@ fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) 
             AppError::internal(error)
         }
         other => AppError::bad_request(other.to_string()),
+    }
+}
+
+fn admin_account_status(status: cokret_core::AccountStatus) -> AccountStatus {
+    match status {
+        cokret_core::AccountStatus::Active => AccountStatus::Active,
+        cokret_core::AccountStatus::SoftLoggedOut => AccountStatus::SoftLoggedOut,
+        cokret_core::AccountStatus::Locked => AccountStatus::Locked,
+        cokret_core::AccountStatus::Suspended => AccountStatus::Suspended,
+        cokret_core::AccountStatus::Deactivated => AccountStatus::Deactivated,
+        cokret_core::AccountStatus::ErasurePending => AccountStatus::ErasurePending,
     }
 }
 

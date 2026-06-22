@@ -127,6 +127,11 @@ pub enum DidResolveError {
     /// SSRF guard: DID document body exceeded the maximum allowed size.
     #[error("DID document exceeded maximum size ({limit} bytes)")]
     DocumentTooLarge { limit: usize },
+
+    #[error(
+        "did:web principal requires cokret.deployment_profile=personal_node and cokret.principal_method=did:web"
+    )]
+    DidWebPrincipalNotExplicit,
 }
 
 /// Hard upper bound on the size of a fetched DID document. Anything
@@ -153,14 +158,15 @@ pub trait DidResolverService: Send + Sync {
     ) -> Option<Ulid>;
     /// Resolve the primary principal DID for a user.
     ///
-    /// Async because the starid-backed branch may need to call into the
-    /// `starid` registry to look up the canonical `did:webvh:…` head.
-    /// The default implementation only consults `user.starid_backend` +
-    /// `cokret_config.starid` and returns a deterministic
-    /// `did:web:<host>:<path_prefix>:<slug>` form for starid accounts —
-    /// a bare network round-trip happens at *onboarding* time
-    /// (`StaridRegistry::create_principal_did`), not on every read.
-    async fn primary_did_for_user(&self, cokret_config: &CokretConfig, user: &User) -> String;
+    /// This only returns the local/starid `did:web` forms when the deployment
+    /// explicitly selects the `personal_node` + `principal_method=did:web`
+    /// exception. Other profiles must use persisted `did:webvh` principal
+    /// rows instead of deriving a fallback DID here.
+    async fn primary_did_for_user(
+        &self,
+        cokret_config: &CokretConfig,
+        user: &User,
+    ) -> Result<String, SessionGrantError>;
     fn delegated_resolver(&self, cokret_config: &CokretConfig) -> Option<String>;
     fn proof_required_for_pairwise(&self, cokret_config: &CokretConfig) -> bool;
 
@@ -207,27 +213,22 @@ impl DidResolverService for DefaultDidResolverService {
         did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
     }
 
-    async fn primary_did_for_user(&self, cokret_config: &CokretConfig, user: &User) -> String {
-        // C35.0: when this account was onboarded against a configured
-        // `[cokret.starid]` deployment, return the deterministic
-        // `did:web:<host>:<path_prefix>:<slug>` form that the webvh DID
-        // minted at onboarding aliases via its `alsoKnownAs` set. The
-        // SCID-bearing `did:webvh:zXXXX:…` form is what `starid` returns
-        // from starid's private WebVH DID create response — coauth doesn't persist it
-        // separately because the deterministic alias is sufficient as a
-        // *primary* identifier (subject of session grants, audit logs,
-        // etc.). Verification & log-tail reads still go through
-        // `StaridRegistry::verify_control_proof` which takes the full
-        // webvh DID — those callers look up the alias from starid on
-        // demand.
+    async fn primary_did_for_user(
+        &self,
+        cokret_config: &CokretConfig,
+        user: &User,
+    ) -> Result<String, SessionGrantError> {
+        if !cokret_config.did_web_principal_allowed() {
+            return Err(SessionGrantError::DidWebPrincipalNotExplicit);
+        }
+
+        // The following `did:web` forms are only the personal-node explicit
+        // principal method. Organization-style deployments must use the
+        // persisted `did:webvh` rows minted by the principal-server bridge.
         //
-        // For accounts without `starid_backend` (everything created
-        // before the C35.0 backfill, or any account created while
-        // `[cokret.starid]` was unset), fall back to the historical
-        // local `did:web:coauth.invalid:…` derivation. The boolean acts
-        // as the toggle so a deployment that turns starid on later
-        // doesn't accidentally retroactively rewrite DIDs for
-        // already-issued accounts.
+        // For personal-node accounts without `starid_backend`, keep the
+        // historical local derivation. Non-personal profiles fail before this
+        // point and never use this value as a principal DID.
         if user.starid_backend
             && let Some(starid) = cokret_config.starid.as_ref()
         {
@@ -238,16 +239,17 @@ impl DidResolverService for DefaultDidResolverService {
                 .unwrap_or_else(|| "starid.local".to_owned());
             let path_prefix = starid.path_prefix.trim_matches('/');
             let slug = binding_slug(&user.id.to_string());
-            return if path_prefix.is_empty() {
+            let did = if path_prefix.is_empty() {
                 format!("did:web:{host}:{slug}")
             } else {
                 format!("did:web:{host}:{path_prefix}:{slug}")
             };
+            return Ok(did);
         }
-        format!(
+        Ok(format!(
             "did:web:coauth.invalid:accounts:{}",
             binding_slug(&user.id.to_string())
-        )
+        ))
     }
 
     fn delegated_resolver(&self, cokret_config: &CokretConfig) -> Option<String> {
@@ -282,6 +284,9 @@ impl DidResolverService for DefaultDidResolverService {
         // branch stays: that is an internal alias under an RFC2606
         // non-resolvable TLD, never a hosted document.
         if let Some(user_id) = parse_local_primary_account_did(did) {
+            if !cokret_config.did_web_principal_allowed() {
+                return Err(DidResolveError::DidWebPrincipalNotExplicit);
+            }
             let Some(user) = repo.user().lookup(user_id).await? else {
                 return Err(DidResolveError::NotFound);
             };

@@ -257,9 +257,9 @@ pub async fn inject_app_state(
     // handle is `Option<StaridRegistryHandle>` in the depot — handlers
     // that need it (today: the onboarding `user_write` strand stage) read
     // via `DepotExt::starid_registry()` and skip the wire-up when it
-    // returns `None`. The async did_resolver still works without a
-    // handle: it falls back to the local `did:web:coauth.invalid:…`
-    // form for accounts whose `starid_backend` flag is `false`.
+    // returns `None`. Missing starid wiring no longer enables a principal
+    // `did:web` fallback; that path is allowed only by the explicit
+    // personal-node principal-method config.
     if let Some(starid_config) = state.cokret_config.starid.as_ref() {
         match StaridResolver::with_http_client(starid_config, state.http_client.clone()) {
             Ok(resolver) => {
@@ -269,7 +269,7 @@ pub async fn inject_app_state(
             Err(err) => {
                 tracing::warn!(
                     %err,
-                    "starid registry unavailable (base_url={}); onboarding strands will fall back to the local did:web derivation",
+                    "starid registry unavailable (base_url={}); did:web principal fallback remains disabled unless explicitly configured",
                     starid_config.base_url,
                 );
             }

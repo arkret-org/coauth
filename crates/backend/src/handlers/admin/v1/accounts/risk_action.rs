@@ -113,6 +113,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
     match action {
         "lock" => Ok(AccountRiskActionMutation {
             patch: AdminUserPatch {
+                status: Some(cokret_core::AccountStatus::Locked),
                 locked: Some(true),
                 ..AdminUserPatch::default()
             },
@@ -122,6 +123,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
         }),
         "disable" => Ok(AccountRiskActionMutation {
             patch: AdminUserPatch {
+                status: Some(cokret_core::AccountStatus::Deactivated),
                 deactivated: Some(true),
                 ..AdminUserPatch::default()
             },
@@ -131,6 +133,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
         }),
         "erase" => Ok(AccountRiskActionMutation {
             patch: AdminUserPatch {
+                status: Some(cokret_core::AccountStatus::ErasurePending),
                 deactivated: Some(true),
                 ..AdminUserPatch::default()
             },
@@ -140,6 +143,7 @@ fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutatio
         }),
         "reset_recovery" => Ok(AccountRiskActionMutation {
             patch: AdminUserPatch {
+                status: Some(cokret_core::AccountStatus::Locked),
                 locked: Some(true),
                 ..AdminUserPatch::default()
             },
@@ -193,7 +197,8 @@ async fn admin_actor_id(
     })?;
     Ok(did_resolver
         .primary_did_for_user(cokret_config, admin_user)
-        .await)
+        .await
+        .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?)
 }
 
 fn bind_approval_admin_did(
@@ -831,7 +836,7 @@ pub async fn execute(
 
     let account_response = SingleOutcome::new_canonical(
         super::AccountRecord::from_user(updated_account, &cokret_config, did_resolver.as_ref())
-            .await,
+            .await?,
     );
 
     Ok(Json(AccountRiskActionExecuteOutcome {

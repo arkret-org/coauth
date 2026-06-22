@@ -1,14 +1,372 @@
+use std::sync::{Arc, OnceLock};
+
+use chrono::{DateTime, Utc};
 use coauth_jose::jwt::Jwt;
+use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use cokret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_GRANT_ALREADY_CONSUMED,
-    ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
-    ERROR_CODE_SESSION_LOGGED_OUT,
+    ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_PROOF_INVALID,
+    ERROR_CODE_SESSION_GRANT_NOT_FOUND, ERROR_CODE_SESSION_LOGGED_OUT,
 };
-use cokret_core::{SessionGrantRefreshOutcome, SessionGrantRefreshRequestBody};
+use cokret_core::{
+    DeviceId, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome,
+    SessionGrantRefreshProof, SessionGrantRefreshRequestBody,
+};
+use serde::Serialize;
 use salvo::prelude::*;
+use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::cokret::*;
+use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
+use crate::services::third_party_invite::NonceStore;
+
+const SOFT_LOGOUT_RESTORE_OPERATION: &str = "resume_soft_logged_out_session";
+const SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS: i64 = 300;
+const SOFT_LOGOUT_DID_PROOF_REPLAY_REASON: &str = "did_proof_replay_window_exceeded";
+
+#[derive(Debug, Serialize)]
+struct SoftLogoutDidProofClaims<'a> {
+    pub principal_id: &'a str,
+    pub device_id: &'a str,
+    pub audience: &'a str,
+    pub challenge: &'a str,
+    pub request_canonical_digest: &'a str,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+struct SoftLogoutRestoreRequestDigest<'a> {
+    pub operation: &'static str,
+    pub grant_jwt_hash: String,
+    pub principal_id: &'a str,
+    pub device_id: &'a str,
+    pub audience: &'a str,
+    pub holder_key_id: &'a str,
+}
+
+fn shared_soft_logout_did_proof_nonce_store() -> &'static Arc<NonceStore> {
+    static STORE: OnceLock<Arc<NonceStore>> = OnceLock::new();
+    STORE.get_or_init(|| Arc::new(NonceStore::new()))
+}
+
+fn did_proof_required(message: impl Into<String>) -> CokretRouteError {
+    CokretRouteError::coded(
+        StatusCode::UNAUTHORIZED,
+        ERROR_CODE_DID_PROOF_REQUIRED,
+        message,
+    )
+}
+
+fn did_proof_invalid(message: impl Into<String>) -> CokretRouteError {
+    CokretRouteError::coded(
+        StatusCode::UNAUTHORIZED,
+        ERROR_CODE_PROOF_INVALID,
+        format!("reason_code=proof_invalid; {}", message.into()),
+    )
+}
+
+fn did_proof_replay_window_exceeded(message: impl Into<String>) -> CokretRouteError {
+    CokretRouteError::coded(
+        StatusCode::UNAUTHORIZED,
+        ERROR_CODE_PROOF_INVALID,
+        format!(
+            "reason_code={}; {}",
+            SOFT_LOGOUT_DID_PROOF_REPLAY_REASON,
+            message.into()
+        ),
+    )
+}
+
+fn required_soft_logout_proof<'a>(
+    body: &'a SessionGrantRefreshRequestBody,
+) -> Result<&'a SessionGrantRefreshProof, CokretRouteError> {
+    body.proof
+        .as_ref()
+        .ok_or_else(|| did_proof_required("soft logout recovery requires a fresh DID proof"))
+}
+
+fn required_proof_str<'a>(
+    value: &'a Option<String>,
+    field: &str,
+) -> Result<&'a str, CokretRouteError> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
+}
+
+fn required_proof_timestamp(
+    value: &Option<DateTime<Utc>>,
+    field: &str,
+) -> Result<DateTime<Utc>, CokretRouteError> {
+    value
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
+}
+
+fn required_proof_hash<'a>(
+    value: &'a Option<Hash>,
+    field: &str,
+) -> Result<&'a str, CokretRouteError> {
+    value
+        .as_ref()
+        .map(|hash| hash.as_str())
+        .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
+}
+
+fn validate_soft_logout_proof_kind(
+    proof_kind: Option<SessionGrantProofKind>,
+) -> Result<(), CokretRouteError> {
+    let proof_kind = proof_kind
+        .ok_or_else(|| did_proof_required("soft logout DID proof requires proof_kind"))?;
+    match proof_kind {
+        SessionGrantProofKind::DidBoundSignature | SessionGrantProofKind::PairedDeviceProof => {
+            Ok(())
+        }
+        other => Err(did_proof_invalid(format!(
+            "unsupported soft logout DID proof_kind {other:?}"
+        ))),
+    }
+}
+
+fn require_soft_logout_bound_device_id<'a>(
+    presented_device_id: Option<&'a str>,
+    persisted_device_id: Option<&'a str>,
+    jwt_device_id: Option<&'a str>,
+) -> Result<&'a str, CokretRouteError> {
+    let presented = presented_device_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            did_proof_required("soft logout recovery requires the presented device_id")
+        })?;
+    DeviceId::new(presented.to_owned()).map_err(|error| {
+        CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_INVALID_PARAM,
+            format!("device_id is not a protocol device identifier: {error}"),
+        )
+    })?;
+
+    let persisted = persisted_device_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            did_proof_required("session grant has no device_id binding for soft logout recovery")
+        })?;
+    let jwt = jwt_device_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            did_proof_required("session grant JWT has no device_id binding for soft logout recovery")
+        })?;
+
+    if presented != persisted {
+        return Err(did_proof_invalid(
+            "presented device_id does not match the persisted session grant binding",
+        ));
+    }
+    if jwt != persisted {
+        return Err(did_proof_invalid(
+            "session grant JWT device_id does not match the persisted binding",
+        ));
+    }
+
+    Ok(persisted)
+}
+
+fn validate_soft_logout_did_proof_window(
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<(), CokretRouteError> {
+    let freshness_secs = (expires_at - issued_at).num_seconds();
+    if freshness_secs <= 0 || freshness_secs > SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS {
+        return Err(did_proof_replay_window_exceeded(format!(
+            "DID proof expires_at - issued_at must be within 1..={} seconds",
+            SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS
+        )));
+    }
+
+    let skew_secs = (issued_at - now).num_seconds().abs();
+    if skew_secs > SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS {
+        return Err(did_proof_replay_window_exceeded(format!(
+            "DID proof issued_at is outside the {} second receiver skew window",
+            SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS
+        )));
+    }
+
+    if now >= expires_at {
+        return Err(did_proof_replay_window_exceeded(
+            "DID proof has expired and cannot restore a soft-logged-out session",
+        ));
+    }
+
+    Ok(())
+}
+
+fn session_grant_jwt_hash(grant_jwt: &str) -> String {
+    format!(
+        "sha256:{}",
+        hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
+    )
+}
+
+fn soft_logout_restore_request_canonical_digest(
+    grant_jwt: &str,
+    principal_id: &str,
+    device_id: &str,
+    audience: &str,
+    holder_key_id: &str,
+) -> Result<String, CokretRouteError> {
+    canonical_sha256(&SoftLogoutRestoreRequestDigest {
+        operation: SOFT_LOGOUT_RESTORE_OPERATION,
+        grant_jwt_hash: session_grant_jwt_hash(grant_jwt),
+        principal_id,
+        device_id,
+        audience,
+        holder_key_id,
+    })
+    .map_err(|error| {
+        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "soft logout restore request canonicalization failed: {error}"
+        )))
+    })
+}
+
+fn verification_method_did(verification_method: &str) -> &str {
+    let without_fragment = verification_method
+        .split_once('#')
+        .map_or(verification_method, |(did, _)| did);
+    without_fragment
+        .split_once('?')
+        .map_or(without_fragment, |(did, _)| did)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn verify_soft_logout_did_proof(
+    http_client: &reqwest::Client,
+    url_builder: &coauth_data::UrlBuilder,
+    cokret_config: &coauth_config::CokretConfig,
+    key_store: &coauth_keystore::Keystore,
+    repo: &mut coauth_data::BoxRepository,
+    did_resolver: &dyn crate::services::did_resolver::DidResolverService,
+    body: &SessionGrantRefreshRequestBody,
+    prior_grant: &coauth_data::SessionGrant,
+    device_id: &str,
+    now: DateTime<Utc>,
+) -> Result<(), CokretRouteError> {
+    let proof = required_soft_logout_proof(body)?;
+    validate_soft_logout_proof_kind(proof.proof_kind)?;
+
+    let challenge = required_proof_str(&proof.challenge, "challenge")?;
+    let proof_audience = required_proof_str(&proof.audience, "audience")?;
+    let request_canonical_digest =
+        required_proof_hash(&proof.request_canonical_digest, "request_canonical_digest")?;
+    let proof_jws = required_proof_str(&proof.signature, "signature")?;
+    let issued_at = required_proof_timestamp(&proof.issued_at, "issued_at")?;
+    let expires_at = required_proof_timestamp(&proof.expires_at, "expires_at")?;
+
+    if proof_audience != prior_grant.audience {
+        return Err(CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_AUDIENCE_MISMATCH,
+            "soft logout DID proof audience must match the session grant audience",
+        ));
+    }
+
+    validate_soft_logout_did_proof_window(issued_at, expires_at, now)?;
+
+    let claims = SoftLogoutDidProofClaims {
+        principal_id: &prior_grant.subject,
+        device_id,
+        audience: proof_audience,
+        challenge,
+        request_canonical_digest,
+        issued_at,
+        expires_at,
+    };
+    let payload = canonical_json_bytes(&claims).map_err(|error| {
+        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "soft logout DID proof canonicalization failed: {error}"
+        )))
+    })?;
+
+    let resolution = did_resolver
+        .resolve_did_document(
+            http_client,
+            url_builder,
+            cokret_config,
+            key_store,
+            repo,
+            &prior_grant.subject,
+        )
+        .await
+        .map_err(|error| did_proof_invalid(format!("DID document resolution failed: {error}")))?;
+    if let Some(rejection) = resolution.identity_fact_rejection() {
+        return Err(did_proof_invalid(format!(
+            "DID resolver result cannot back a full identity fact: {}",
+            rejection.as_str()
+        )));
+    }
+    if resolution.document.verification_method.is_empty() {
+        return Err(did_proof_invalid(
+            "DID document has no verificationMethod entries",
+        ));
+    }
+
+    let verification_method =
+        verify_detached_jws_with_sdk(proof_jws, &payload, &resolution.document.verification_method)
+            .map_err(|error| did_proof_invalid(format!("DID proof JWS invalid: {error}")))?;
+    if let Some(expected_method) = proof
+        .verification_method
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        && expected_method != verification_method.as_str()
+    {
+        return Err(did_proof_invalid(
+            "DID proof verification_method does not match the detached JWS kid",
+        ));
+    }
+    if verification_method_did(&verification_method) != prior_grant.subject {
+        return Err(did_proof_invalid(
+            "DID proof verification_method principal does not match the session grant subject",
+        ));
+    }
+
+    let expected_digest = soft_logout_restore_request_canonical_digest(
+        &body.grant_jwt,
+        &prior_grant.subject,
+        device_id,
+        proof_audience,
+        &verification_method,
+    )?;
+    if request_canonical_digest != expected_digest {
+        return Err(did_proof_invalid(
+            "DID proof request_canonical_digest does not match the presented restore request",
+        ));
+    }
+
+    let replay_key = format!(
+        "{}|{}|{}|{}|{}|{}",
+        SOFT_LOGOUT_RESTORE_OPERATION,
+        prior_grant.subject,
+        device_id,
+        proof_audience,
+        challenge,
+        request_canonical_digest
+    );
+    shared_soft_logout_did_proof_nonce_store()
+        .check_and_record(&replay_key, expires_at, now)
+        .map_err(|()| did_proof_invalid("DID proof challenge has already been used"))?;
+
+    Ok(())
+}
 
 // ── DPoP-bound session-grant refresh + debug seed ──────────────
 //
@@ -23,7 +381,8 @@ use crate::handlers::cokret::*;
 ///
 /// * A `DPoP` header that proves possession of the same key the existing grant is bound to
 ///   (`cnf.jkt` on the old grant must match the new proof's `jkt`).
-/// * A request body carrying the prior grant JWT.
+/// * A request body carrying the prior grant JWT, the bound `device_id`, and
+///   a fresh DID proof over the soft-logout restore transcript.
 ///
 /// On success the old grant is revoked (single-use semantics — its
 /// `revoked_at` is persisted) and a new grant is issued with the same
@@ -38,6 +397,8 @@ pub async fn refresh_session_grant(
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
+    let http_client = depot.http_client()?;
+    let did_resolver = depot.did_resolver_service()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
@@ -178,6 +539,25 @@ pub async fn refresh_session_grant(
         ));
     }
 
+    let device_id = require_soft_logout_bound_device_id(
+        body.device_id.as_ref().map(DeviceId::as_str),
+        prior_grant.device_id.as_deref(),
+        prior_payload.device_id.as_deref(),
+    )?;
+    verify_soft_logout_did_proof(
+        &http_client,
+        &url_builder,
+        &cokret_config,
+        &key_store,
+        &mut repo,
+        did_resolver.as_ref(),
+        &body,
+        &prior_grant,
+        device_id,
+        now,
+    )
+    .await?;
+
     // 5. Single-use rotation gate (CAS). Atomically consume the prior grant
     // BEFORE minting its successor: `revoke_if_active` sets `revoked_at` only
     // if it is still NULL and reports whether THIS call won. Two concurrent
@@ -250,4 +630,138 @@ pub async fn refresh_session_grant(
         // The prior grant was atomically consumed by the CAS above.
         previous_grant_id: prior_grant.id.to_string(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+
+    const DEVICE_ID: &str = "ck:device:0196419b-0000-7000-8000-000000000001";
+    const OTHER_DEVICE_ID: &str = "ck:device:0196419b-0000-7000-8000-000000000002";
+
+    fn ts(seconds: i64) -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(seconds, 0).expect("test timestamp must be valid")
+    }
+
+    fn assert_coded(error: CokretRouteError, expected_code: &'static str) -> String {
+        match error {
+            CokretRouteError::Coded { code, message, .. } => {
+                assert_eq!(code, expected_code);
+                message
+            }
+            other => panic!("expected coded error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn soft_logout_proof_window_rejects_more_than_300_seconds() {
+        let issued_at = ts(1_700_000_000);
+        let err = validate_soft_logout_did_proof_window(
+            issued_at,
+            issued_at + Duration::seconds(SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS + 1),
+            issued_at,
+        )
+        .expect_err("oversized DID proof replay window must fail closed");
+
+        let message = assert_coded(err, ERROR_CODE_PROOF_INVALID);
+        assert!(message.contains(SOFT_LOGOUT_DID_PROOF_REPLAY_REASON));
+    }
+
+    #[test]
+    fn soft_logout_proof_window_rejects_expired_proof() {
+        let issued_at = ts(1_700_000_000);
+        let expires_at = issued_at + Duration::seconds(SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS);
+        let err = validate_soft_logout_did_proof_window(issued_at, expires_at, expires_at)
+            .expect_err("expired DID proof must fail closed");
+
+        let message = assert_coded(err, ERROR_CODE_PROOF_INVALID);
+        assert!(message.contains(SOFT_LOGOUT_DID_PROOF_REPLAY_REASON));
+    }
+
+    #[test]
+    fn soft_logout_proof_kind_is_required() {
+        let err = validate_soft_logout_proof_kind(None)
+            .expect_err("missing proof_kind must require proof context");
+
+        assert_coded(err, ERROR_CODE_DID_PROOF_REQUIRED);
+    }
+
+    #[test]
+    fn soft_logout_proof_kind_rejects_unrelated_branches() {
+        let err = validate_soft_logout_proof_kind(Some(SessionGrantProofKind::AgentKeyProof))
+            .expect_err("agent_key_proof must not restore a human soft-logged-out session");
+
+        assert_coded(err, ERROR_CODE_PROOF_INVALID);
+    }
+
+    #[test]
+    fn soft_logout_device_binding_requires_presented_device_id() {
+        let err = require_soft_logout_bound_device_id(None, Some(DEVICE_ID), Some(DEVICE_ID))
+            .expect_err("missing presented device_id must require DID proof context");
+
+        assert_coded(err, ERROR_CODE_DID_PROOF_REQUIRED);
+    }
+
+    #[test]
+    fn soft_logout_device_binding_requires_persisted_session_grant_device() {
+        let err = require_soft_logout_bound_device_id(Some(DEVICE_ID), None, Some(DEVICE_ID))
+            .expect_err("legacy unbound grant must not be recoverable");
+
+        assert_coded(err, ERROR_CODE_DID_PROOF_REQUIRED);
+    }
+
+    #[test]
+    fn soft_logout_device_binding_rejects_device_mismatch() {
+        let err = require_soft_logout_bound_device_id(
+            Some(OTHER_DEVICE_ID),
+            Some(DEVICE_ID),
+            Some(DEVICE_ID),
+        )
+        .expect_err("presented device_id must match the grant binding");
+
+        assert_coded(err, ERROR_CODE_PROOF_INVALID);
+    }
+
+    #[test]
+    fn soft_logout_device_binding_accepts_persisted_and_jwt_match() {
+        let device_id =
+            require_soft_logout_bound_device_id(Some(DEVICE_ID), Some(DEVICE_ID), Some(DEVICE_ID))
+                .expect("matching device bindings should pass");
+
+        assert_eq!(device_id, DEVICE_ID);
+    }
+
+    #[test]
+    fn soft_logout_restore_request_digest_binds_device_and_holder_key() {
+        let base = soft_logout_restore_request_canonical_digest(
+            "grant.jwt.value",
+            "did:web:alice.example",
+            DEVICE_ID,
+            "did:web:auth.example",
+            "did:web:alice.example#device-key-1",
+        )
+        .expect("request digest should compute");
+        assert!(base.starts_with("sha256:"));
+
+        let other_device = soft_logout_restore_request_canonical_digest(
+            "grant.jwt.value",
+            "did:web:alice.example",
+            OTHER_DEVICE_ID,
+            "did:web:auth.example",
+            "did:web:alice.example#device-key-1",
+        )
+        .expect("request digest should compute");
+        let other_holder = soft_logout_restore_request_canonical_digest(
+            "grant.jwt.value",
+            "did:web:alice.example",
+            DEVICE_ID,
+            "did:web:auth.example",
+            "did:web:alice.example#other-device-key",
+        )
+        .expect("request digest should compute");
+
+        assert_ne!(base, other_device);
+        assert_ne!(base, other_holder);
+    }
 }

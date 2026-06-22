@@ -521,6 +521,7 @@ async fn test_user_patch_updates_profile_and_state() {
                 avatar_url: Some(Some("mxc://example.com/alice".to_owned())),
                 preferred_locale: Some(Some("zh-CN".to_owned())),
                 can_request_admin: Some(true),
+                status: None,
                 locked: Some(true),
                 deactivated: Some(true),
             },

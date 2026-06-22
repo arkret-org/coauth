@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use coauth_data::{Clock, User, UserPatch, UserProfilePatch};
+pub use cokret_core::AccountStatus as UserStatus;
 use rand_core::RngCore;
 use ulid::Ulid;
 
@@ -30,47 +31,6 @@ pub use self::registration_token::{UserRegistrationTokenFilter, UserRegistration
 pub use self::session::{BrowserSessionFilter, BrowserSessionRepository};
 pub use self::terms::UserTermsRepository;
 pub use self::totp::UserTotpRepository;
-
-/// The lifecycle status of a user account. Account lifecycle lives on the
-/// `status` axis (per `common-fields.md`), matching the admin-facing
-/// `AdminAccountStatus` / `UserStatus` rather than the `state` axis.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UserStatus {
-    /// The account is deactivated, it has the `deactivated_at` timestamp set
-    Deactivated,
-
-    /// The account is locked, it has the `locked_at` timestamp set
-    Locked,
-
-    /// The account is active
-    Active,
-}
-
-impl UserStatus {
-    /// Returns `true` if the user state is [`Locked`].
-    ///
-    /// [`Locked`]: UserStatus::Locked
-    #[must_use]
-    pub fn is_locked(&self) -> bool {
-        matches!(self, Self::Locked)
-    }
-
-    /// Returns `true` if the user state is [`Deactivated`].
-    ///
-    /// [`Deactivated`]: UserStatus::Deactivated
-    #[must_use]
-    pub fn is_deactivated(&self) -> bool {
-        matches!(self, Self::Deactivated)
-    }
-
-    /// Returns `true` if the user state is [`Active`].
-    ///
-    /// [`Active`]: UserStatus::Active
-    #[must_use]
-    pub fn is_active(&self) -> bool {
-        matches!(self, Self::Active)
-    }
-}
 
 /// Filter parameters for listing users
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -105,6 +65,27 @@ impl<'a> UserFilter<'a> {
     #[must_use]
     pub fn deactivated_only(mut self) -> Self {
         self.status = Some(UserStatus::Deactivated);
+        self
+    }
+
+    /// Filter for users pending erasure.
+    #[must_use]
+    pub fn erasure_pending_only(mut self) -> Self {
+        self.status = Some(UserStatus::ErasurePending);
+        self
+    }
+
+    /// Filter for suspended users.
+    #[must_use]
+    pub fn suspended_only(mut self) -> Self {
+        self.status = Some(UserStatus::Suspended);
+        self
+    }
+
+    /// Filter for soft-logged-out users.
+    #[must_use]
+    pub fn soft_logged_out_only(mut self) -> Self {
+        self.status = Some(UserStatus::SoftLoggedOut);
         self
     }
 
@@ -223,6 +204,14 @@ pub trait UserRepository: Send + Sync {
         patch: UserPatch,
     ) -> Result<User, Self::Error>;
 
+    /// Set a user's account lifecycle status.
+    async fn set_account_lifecycle_state(
+        &mut self,
+        clock: &dyn Clock,
+        user: User,
+        status: UserStatus,
+    ) -> Result<User, Self::Error>;
+
     /// Check if a [`User`] exists
     ///
     /// Returns `true` if the [`User`] exists, `false` otherwise
@@ -311,8 +300,9 @@ pub trait UserRepository: Send + Sync {
     /// `starid` as their primary principal DID. Onboarding flips this to
     /// `true` immediately after
     /// [`crate::services::starid_adapter::StaridRegistry::create_principal_did`]
-    /// returns successfully so subsequent reads of `primary_did_for_user`
-    /// route to the starid form instead of the local `did:web` derivation.
+    /// returns successfully. The resolver only exposes starid/local
+    /// `did:web` forms when the deployment explicitly selects the
+    /// personal-node principal method.
     ///
     /// # Errors
     ///
@@ -395,6 +385,12 @@ repository_impl!(UserRepository:
         clock: &dyn Clock,
         user: User,
         patch: UserPatch,
+    ) -> Result<User, Self::Error>;
+    async fn set_account_lifecycle_state(
+        &mut self,
+        clock: &dyn Clock,
+        user: User,
+        status: UserStatus,
     ) -> Result<User, Self::Error>;
     async fn exists(&mut self, handle: &str) -> Result<bool, Self::Error>;
     async fn lock(&mut self, clock: &dyn Clock, user: User) -> Result<User, Self::Error>;

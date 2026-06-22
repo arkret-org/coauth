@@ -1,7 +1,8 @@
 use cokret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_CLAIM_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
-    ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_POLICY_DENIED,
-    ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_UNSUPPORTED_FEATURE,
+    ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
+    ERROR_CODE_POLICY_DENIED, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_SERVICE_UNAVAILABLE,
+    ERROR_CODE_UNSUPPORTED_FEATURE,
 };
 use salvo::prelude::*;
 
@@ -247,7 +248,7 @@ async fn issue_agent_key_proof_session_grant(
         now,
         expires_at,
     )
-    .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+    .map_err(map_session_grant_material_error)?;
 
     let _ = &mut rng;
 
@@ -270,6 +271,17 @@ async fn issue_agent_key_proof_session_grant(
         granted_scope: material.scopes,
         scope_details,
     }))
+}
+
+fn map_session_grant_material_error(error: SessionGrantError) -> CokretRouteError {
+    match error {
+        error @ SessionGrantError::DidWebPrincipalNotExplicit => CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_INVALID_PARAM,
+            error.to_string(),
+        ),
+        other => CokretRouteError::Internal(Box::new(other)),
+    }
 }
 
 fn map_oidc_exchange_error(

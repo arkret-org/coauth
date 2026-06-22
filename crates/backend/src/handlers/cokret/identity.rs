@@ -392,6 +392,11 @@ fn map_handle_claim_issue_error(error: SessionGrantError) -> CokretRouteError {
             ERROR_CODE_INVALID_PARAM,
             error.to_string(),
         ),
+        error @ SessionGrantError::DidWebPrincipalNotExplicit => CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_INVALID_PARAM,
+            error.to_string(),
+        ),
         other => CokretRouteError::Internal(Box::new(other)),
     }
 }

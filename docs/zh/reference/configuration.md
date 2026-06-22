@@ -73,6 +73,9 @@ Cokret 部署元数据，叠加在通用 OIDC server 之上。
 
 ```yaml
 cokret:
+  deployment_profile: organization
+  principal_method: did:webvh
+
   principal_servers:
     - name: soland
       audience: did:webvh:<scid>:soland.example.com:webvh:service
@@ -91,6 +94,10 @@ cokret:
 ```
 
 - `principal_servers`：通过 Cokret discovery 发布的受信任 Principal Server 描述
+- `deployment_profile`：身份部署 profile。只有 `personal_node` 可接受
+  `did:web` principal DID。
+- `principal_method`：principal DID 方法。默认 `did:webvh`；`did:web`
+  必须显式搭配 `deployment_profile: personal_node`。
 - `identity_registry`：委托的 DID / identity resolver，通常是 public DID resolver 服务
 - `service_did`：显式 service DID；未配置时从 `http.public_base` 推导
 - `issuer_did`：session grant 中写入的 DID；默认继承 `service_did`

@@ -76,6 +76,9 @@ Cokret-specific deployment metadata layered on top of the generic OIDC server.
 
 ```yaml
 cokret:
+  deployment_profile: organization
+  principal_method: did:webvh
+
   principal_servers:
     - name: soland
       audience: did:webvh:<scid>:soland.example.com:webvh:service
@@ -95,6 +98,10 @@ cokret:
 
 - `principal_servers`: trusted Principal Server descriptors published through
   Cokret discovery
+- `deployment_profile`: identity deployment profile. `did:web` principal DIDs
+  are accepted only for `personal_node`.
+- `principal_method`: principal DID method. Defaults to `did:webvh`; `did:web`
+  must be explicitly paired with `deployment_profile: personal_node`.
 - `identity_registry`: delegated DID / identity resolver, typically a public DID resolver service
 - `service_did`: explicit service DID, otherwise derived from `http.public_base`
 - `issuer_did`: DID emitted in session grants, defaults to `service_did`

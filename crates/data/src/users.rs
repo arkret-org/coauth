@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
-use cokret_core::Handle;
+use cokret_core::{AccountStatus, Handle};
 use diesel::pg::Pg;
 use diesel::{Queryable, deserialize, sql_types};
 use rand_core::RngCore;
@@ -16,6 +16,7 @@ type UserSqlType = (
     sql_types::Text,
     sql_types::Timestamptz,
     sql_types::Timestamptz,
+    sql_types::Text,
     sql_types::Nullable<sql_types::Timestamptz>,
     sql_types::Nullable<sql_types::Timestamptz>,
     sql_types::Bool,
@@ -32,6 +33,7 @@ type UserSqlRow = (
     String,
     DateTime<Utc>,
     DateTime<Utc>,
+    String,
     Option<DateTime<Utc>>,
     Option<DateTime<Utc>>,
     bool,
@@ -62,6 +64,7 @@ pub struct User {
     pub sub: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub status: AccountStatus,
     pub locked_at: Option<DateTime<Utc>>,
     pub deactivated_at: Option<DateTime<Utc>>,
     pub can_request_admin: bool,
@@ -74,12 +77,14 @@ pub struct User {
     /// `did:webvh:…` minted by `starid` during onboarding (see
     /// [`crate::services::starid_adapter::StaridRegistry::create_principal_did`]).
     /// False for accounts that pre-date the starid integration or were
-    /// created when `[cokret.starid]` config was absent — those still
-    /// resolve to the local `did:web:coauth.invalid:…` derivation.
+    /// created when `[cokret.starid]` config was absent. Those accounts only
+    /// use the local `did:web:coauth.invalid:…` derivation when the
+    /// deployment explicitly selects the personal-node `did:web` principal
+    /// method; other profiles must load a persisted `did:webvh` row.
     ///
     /// Backfill: migration `20260510000200_account_starid_backend_marker`
-    /// adds this column with `DEFAULT FALSE`, so every historical row
-    /// stays on the local derivation.
+    /// adds this column with `DEFAULT FALSE`; the resolver policy decides
+    /// whether the local derivation may be used.
     pub starid_backend: bool,
     /// Interop alias handles for this user (e.g. `acct:<local>@<host>`).
     ///
@@ -161,6 +166,7 @@ impl Queryable<UserSqlType, Pg> for User {
             localpart,
             created_at,
             updated_at,
+            status,
             locked_at,
             deactivated_at,
             can_request_admin,
@@ -172,6 +178,12 @@ impl Queryable<UserSqlType, Pg> for User {
             handle_aliases,
         ) = row;
         let id = Ulid::from(id);
+        let status = AccountStatus::from_wire(&status).ok_or_else(|| {
+            Box::<dyn std::error::Error + Send + Sync>::from(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown account status {status:?}"),
+            ))
+        })?;
 
         Ok(Self {
             id,
@@ -179,6 +191,7 @@ impl Queryable<UserSqlType, Pg> for User {
             sub: id.to_string(),
             created_at,
             updated_at,
+            status,
             locked_at,
             deactivated_at,
             can_request_admin,
@@ -254,7 +267,7 @@ impl User {
     /// Returns `true` unless the user is locked or deactivated.
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        self.locked_at.is_none() && self.deactivated_at.is_none()
+        self.status == AccountStatus::Active
     }
 
     /// Returns `true` if the user is a valid actor, for example
@@ -268,7 +281,10 @@ impl User {
     /// except through administrative access.
     #[must_use]
     pub fn is_valid_actor(&self) -> bool {
-        self.deactivated_at.is_none()
+        !matches!(
+            self.status,
+            AccountStatus::Suspended | AccountStatus::Deactivated | AccountStatus::ErasurePending
+        )
     }
 }
 
@@ -282,6 +298,7 @@ impl User {
             sub: "123-456".to_owned(),
             created_at: now,
             updated_at: now,
+            status: AccountStatus::Active,
             locked_at: None,
             deactivated_at: None,
             can_request_admin: false,
@@ -326,6 +343,7 @@ pub struct UserPatch {
     pub avatar_url: Option<Option<String>>,
     pub preferred_locale: Option<Option<String>>,
     pub can_request_admin: Option<bool>,
+    pub status: Option<AccountStatus>,
     pub locked: Option<bool>,
     pub deactivated: Option<bool>,
 }
@@ -337,6 +355,7 @@ impl UserPatch {
             && self.avatar_url.is_none()
             && self.preferred_locale.is_none()
             && self.can_request_admin.is_none()
+            && self.status.is_none()
             && self.locked.is_none()
             && self.deactivated.is_none()
     }
@@ -349,6 +368,7 @@ impl From<UserProfilePatch> for UserPatch {
             avatar_url: value.avatar_url,
             preferred_locale: value.preferred_locale,
             can_request_admin: None,
+            status: None,
             locked: None,
             deactivated: None,
         }
@@ -362,6 +382,7 @@ pub struct AdminUserPatch {
     pub avatar_url: Option<Option<String>>,
     pub preferred_locale: Option<Option<String>>,
     pub can_request_admin: Option<bool>,
+    pub status: Option<AccountStatus>,
     pub locked: Option<bool>,
     pub deactivated: Option<bool>,
 }
@@ -373,6 +394,7 @@ impl AdminUserPatch {
             && self.avatar_url.is_none()
             && self.preferred_locale.is_none()
             && self.can_request_admin.is_none()
+            && self.status.is_none()
             && self.locked.is_none()
             && self.deactivated.is_none()
     }
@@ -385,6 +407,7 @@ impl From<AdminUserPatch> for UserPatch {
             avatar_url: value.avatar_url,
             preferred_locale: value.preferred_locale,
             can_request_admin: value.can_request_admin,
+            status: value.status,
             locked: value.locked,
             deactivated: value.deactivated,
         }

@@ -318,7 +318,7 @@ impl<F: DeserializeOwned + Send> UserAuthorization<F> {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
-        let is_form = content_type.starts_with("application/x-www-form-urlencoded");
+        let is_form = is_salvo_form_content_type(content_type);
 
         // Take the form value
         let (token_from_form, form) = if is_form {
@@ -342,6 +342,16 @@ impl<F: DeserializeOwned + Send> UserAuthorization<F> {
 
         Ok(UserAuthorization { access_token, form })
     }
+}
+
+fn is_salvo_form_content_type(content_type: &str) -> bool {
+    let media_type = content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim();
+    media_type.eq_ignore_ascii_case("application/x-www-form-urlencoded")
+        || media_type.eq_ignore_ascii_case("multipart/form-data")
 }
 
 static USER_AUTHORIZATION_METADATA: LazyLock<Metadata> =

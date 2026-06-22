@@ -54,6 +54,58 @@ impl<'c> PgUserRepository<'c> {
     pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
         Self { conn }
     }
+
+    fn status_from_patch(user: &User, patch: &UserPatch) -> UserStatus {
+        let mut status = patch.status.unwrap_or(user.status);
+
+        if let Some(locked) = patch.locked {
+            if locked {
+                if UserStatus::Locked.is_stricter_than(status) {
+                    status = UserStatus::Locked;
+                }
+            } else if status == UserStatus::Locked {
+                status = UserStatus::Active;
+            }
+        }
+
+        if let Some(deactivated) = patch.deactivated {
+            if deactivated {
+                if UserStatus::Deactivated.is_stricter_than(status) {
+                    status = UserStatus::Deactivated;
+                }
+            } else if status == UserStatus::Deactivated {
+                status = UserStatus::Active;
+            }
+        }
+
+        status
+    }
+
+    fn apply_status_timestamps(user: &mut User, now: DateTime<Utc>) {
+        match user.status {
+            UserStatus::Active | UserStatus::SoftLoggedOut | UserStatus::Suspended => {
+                user.locked_at = None;
+                user.deactivated_at = None;
+            }
+            UserStatus::Locked => {
+                user.locked_at = user.locked_at.or(Some(now));
+                user.deactivated_at = None;
+            }
+            UserStatus::Deactivated | UserStatus::ErasurePending => {
+                user.deactivated_at = user.deactivated_at.or(Some(now));
+            }
+        }
+    }
+
+    fn validate_status_transition(
+        current: UserStatus,
+        next: UserStatus,
+    ) -> Result<(), DatabaseError> {
+        let supersedes_current_projection = next.is_less_strict_than(current);
+        current
+            .validate_transition_to(next, supersedes_current_projection)
+            .map_err(|_| DatabaseError::invalid_operation())
+    }
 }
 
 macro_rules! select_user_columns {
@@ -63,6 +115,7 @@ macro_rules! select_user_columns {
             users::localpart,
             users::created_at,
             users::updated_at,
+            users::status,
             users::locked_at,
             users::deactivated_at,
             users::can_request_admin,
@@ -173,6 +226,7 @@ impl UserRepository for PgUserRepository<'_> {
             sub: id.to_string(),
             created_at,
             updated_at: created_at,
+            status: UserStatus::Active,
             locked_at: None,
             deactivated_at: None,
             can_request_admin: false,
@@ -242,28 +296,12 @@ impl UserRepository for PgUserRepository<'_> {
             changed = true;
         }
 
-        if let Some(locked) = patch.locked {
-            let next_locked_at = if locked {
-                user.locked_at.or(Some(now))
-            } else {
-                None
-            };
-            if user.locked_at != next_locked_at {
-                user.locked_at = next_locked_at;
-                changed = true;
-            }
-        }
-
-        if let Some(deactivated) = patch.deactivated {
-            let next_deactivated_at = if deactivated {
-                user.deactivated_at.or(Some(now))
-            } else {
-                None
-            };
-            if user.deactivated_at != next_deactivated_at {
-                user.deactivated_at = next_deactivated_at;
-                changed = true;
-            }
+        let next_status = Self::status_from_patch(&user, &patch);
+        if user.status != next_status {
+            Self::validate_status_transition(user.status, next_status)?;
+            user.status = next_status;
+            Self::apply_status_timestamps(&mut user, now);
+            changed = true;
         }
 
         if !changed {
@@ -275,6 +313,7 @@ impl UserRepository for PgUserRepository<'_> {
         let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
             .set((
                 users::updated_at.eq(user.updated_at),
+                users::status.eq(user.status.as_str()),
                 users::locked_at.eq(user.locked_at),
                 users::deactivated_at.eq(user.deactivated_at),
                 users::can_request_admin.eq(user.can_request_admin),
@@ -287,6 +326,29 @@ impl UserRepository for PgUserRepository<'_> {
 
         DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
         Ok(user)
+    }
+
+    #[tracing::instrument(
+        name = "db.user.set_account_lifecycle_state",
+        skip_all,
+        fields(%user.id, account.status = status.as_str()),
+        err,
+    )]
+    async fn set_account_lifecycle_state(
+        &mut self,
+        clock: &dyn Clock,
+        user: User,
+        status: UserStatus,
+    ) -> Result<User, Self::Error> {
+        self.patch(
+            clock,
+            user,
+            UserPatch {
+                status: Some(status),
+                ..UserPatch::default()
+            },
+        )
+        .await
     }
 
     #[tracing::instrument(
@@ -316,19 +378,12 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn lock(&mut self, clock: &dyn Clock, user: User) -> Result<User, Self::Error> {
-        if user.locked_at.is_some() {
+        if user.status == UserStatus::Locked {
             return Ok(user);
         }
 
-        self.patch(
-            clock,
-            user,
-            UserPatch {
-                locked: Some(true),
-                ..UserPatch::default()
-            },
-        )
-        .await
+        self.set_account_lifecycle_state(clock, user, UserStatus::Locked)
+            .await
     }
 
     #[tracing::instrument(
@@ -338,9 +393,11 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn unlock(&mut self, mut user: User) -> Result<User, Self::Error> {
-        if user.locked_at.is_none() {
+        if user.status != UserStatus::Locked {
             return Ok(user);
         }
+        Self::validate_status_transition(user.status, UserStatus::Active)?;
+        user.status = UserStatus::Active;
         user.locked_at = None;
         #[allow(clippy::disallowed_methods)] // trait signature doesn't expose a Clock
         {
@@ -349,6 +406,7 @@ impl UserRepository for PgUserRepository<'_> {
 
         let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
             .set((
+                users::status.eq(user.status.as_str()),
                 users::locked_at.eq(None::<DateTime<Utc>>),
                 users::updated_at.eq(user.updated_at),
             ))
@@ -366,18 +424,11 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn deactivate(&mut self, clock: &dyn Clock, user: User) -> Result<User, Self::Error> {
-        if user.deactivated_at.is_some() {
+        if user.status == UserStatus::Deactivated {
             return Ok(user);
         }
-        self.patch(
-            clock,
-            user,
-            UserPatch {
-                deactivated: Some(true),
-                ..UserPatch::default()
-            },
-        )
-        .await
+        self.set_account_lifecycle_state(clock, user, UserStatus::Deactivated)
+            .await
     }
 
     #[tracing::instrument(
@@ -387,10 +438,13 @@ impl UserRepository for PgUserRepository<'_> {
         err,
     )]
     async fn reactivate(&mut self, mut user: User) -> Result<User, Self::Error> {
-        if user.deactivated_at.is_none() {
+        if user.status == UserStatus::Active {
             return Ok(user);
         }
+        Self::validate_status_transition(user.status, UserStatus::Active)?;
+        user.status = UserStatus::Active;
         user.deactivated_at = None;
+        user.locked_at = None;
         #[allow(clippy::disallowed_methods)] // trait signature doesn't expose a Clock
         {
             user.updated_at = Utc::now();
@@ -398,6 +452,8 @@ impl UserRepository for PgUserRepository<'_> {
 
         let rows_affected = diesel::update(users::table.find(Uuid::from(user.id)))
             .set((
+                users::status.eq(user.status.as_str()),
+                users::locked_at.eq(None::<DateTime<Utc>>),
                 users::deactivated_at.eq(None::<DateTime<Utc>>),
                 users::updated_at.eq(user.updated_at),
             ))
@@ -476,19 +532,7 @@ impl UserRepository for PgUserRepository<'_> {
 
         // Apply filters
         if let Some(state) = filter.status() {
-            match state {
-                UserStatus::Deactivated => {
-                    query = query.filter(users::deactivated_at.is_not_null());
-                }
-                UserStatus::Locked => {
-                    query = query.filter(users::locked_at.is_not_null());
-                }
-                UserStatus::Active => {
-                    query = query
-                        .filter(users::locked_at.is_null())
-                        .filter(users::deactivated_at.is_null());
-                }
-            }
+            query = query.filter(users::status.eq(state.as_str()));
         }
 
         if let Some(can_request_admin) = filter.can_request_admin() {
@@ -531,19 +575,7 @@ impl UserRepository for PgUserRepository<'_> {
         let mut query = users::table.into_boxed();
 
         if let Some(state) = filter.status() {
-            match state {
-                UserStatus::Deactivated => {
-                    query = query.filter(users::deactivated_at.is_not_null());
-                }
-                UserStatus::Locked => {
-                    query = query.filter(users::locked_at.is_not_null());
-                }
-                UserStatus::Active => {
-                    query = query
-                        .filter(users::locked_at.is_null())
-                        .filter(users::deactivated_at.is_null());
-                }
-            }
+            query = query.filter(users::status.eq(state.as_str()));
         }
 
         if let Some(can_request_admin) = filter.can_request_admin() {

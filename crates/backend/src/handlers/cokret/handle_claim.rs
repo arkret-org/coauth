@@ -71,6 +71,7 @@ pub(crate) fn issue_handle_claim(
     // here keeps the issuer honest about whatever the caller passed and
     // lets the same reason code surface as soland / the SDK.
     ensure_subject_is_principal_did(&subject_id)?;
+    ensure_principal_did_method_allowed(cokret_config, &subject_id)?;
     let subject = did_for_handle_claim(subject_id.clone())?;
     let issuer_service = did_for_handle_claim(issuer_service_did.clone())?;
 

@@ -255,11 +255,9 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
         jwt.payload().get("sub").and_then(Value::as_str),
         Some(expected_subject.as_str())
     );
-    assert_eq!(
-        jwt.payload()
-            .get(crate::handlers::cokret::CLAIM_PRINCIPAL_DID)
-            .and_then(Value::as_str),
-        Some(expected_subject.as_str())
+    assert!(
+        !jwt.payload()
+            .contains_key(crate::handlers::cokret::CLAIM_PRINCIPAL_DID)
     );
 
     cancellation_token.cancel();

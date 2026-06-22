@@ -53,6 +53,7 @@ macro_rules! select_user_columns {
             users::localpart,
             users::created_at,
             users::updated_at,
+            users::status,
             users::locked_at,
             users::deactivated_at,
             users::can_request_admin,
