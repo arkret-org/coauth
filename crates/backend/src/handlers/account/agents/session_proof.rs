@@ -10,6 +10,7 @@ use coauth_config::CokretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::accountability::{AccountabilityGrant, AccountabilitySubjectKind};
 use coauth_data::agent_key::NewAgentSessionProofReplay;
+use cokret_core::canonical::canonical_sha256;
 use cokret_core::identifiers::new_prefixed_uuid7;
 use serde::Deserialize;
 use serde_json::Value;
@@ -135,6 +136,15 @@ pub async fn validate_agent_session_proof(
     {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
+    let request_digest = canonical_session_grant_request_digest_without_signature(body)?;
+    if request_digest != proof.request_canonical_digest.as_str() {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
+    let nonce = proof
+        .nonce
+        .as_deref()
+        .filter(|nonce| !nonce.trim().is_empty())
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
 
     // The key MUST be authorized by an accepted, unexpired, unrevoked
     // `ck.agent.key.authorize`. Resolve it by the request's
@@ -156,6 +166,13 @@ pub async fn validate_agent_session_proof(
     if authorization.expires_at <= now {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
+    if !authorization
+        .audience
+        .iter()
+        .any(|audience| audience == &proof.audience)
+    {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
     // The authorization MUST belong to this agent + verification method.
     if authorization.agent_principal_id != agent_principal_id
         || authorization.verification_method != verification_method
@@ -168,6 +185,7 @@ pub async fn validate_agent_session_proof(
     let signed_fields = ProofSignedFields {
         audience: &proof.audience,
         challenge: &proof.challenge,
+        nonce: Some(nonce),
         expires_at,
         request_canonical_digest: proof.request_canonical_digest.as_str(),
         verification_method,
@@ -190,6 +208,7 @@ pub async fn validate_agent_session_proof(
                 agent_principal_id: agent_principal_id.clone(),
                 verification_method: verification_method.to_owned(),
                 challenge: proof.challenge.clone(),
+                nonce: nonce.to_owned(),
                 request_canonical_digest: proof.request_canonical_digest.as_str().to_owned(),
                 audience: proof.audience.clone(),
                 proof_expires_at: expires_at,
@@ -308,6 +327,19 @@ pub async fn validate_agent_session_proof(
         scope_details,
         ttl,
     })
+}
+
+fn canonical_session_grant_request_digest_without_signature(
+    body: &cokret_core::SessionGrantRequestBody,
+) -> Result<String, AgentAuthRejection> {
+    let mut value = serde_json::to_value(body).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let proof = value
+        .get_mut("proof")
+        .and_then(Value::as_object_mut)
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    proof.remove("signature");
+    proof.remove("request_canonical_digest");
+    canonical_sha256(&value).map_err(|_| AgentAuthRejection::ProofInvalid)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1193,5 +1225,59 @@ mod tests {
         .expect_err("requested track must survive grant and policy intersection");
 
         assert_eq!(err, AgentAuthRejection::PolicyViolation);
+    }
+
+    #[test]
+    fn session_request_digest_ignores_signature_but_binds_scope() {
+        let mut body = cokret_core::SessionGrantRequestBody {
+            principal_id: Some(cokret_core::Did::new("did:web:agent.example").unwrap()),
+            device_id: None,
+            requested_scope: vec!["ck.message.create".to_owned()],
+            agent_key_authorization_ref: Some(
+                "ck:event:01970000-0000-7000-8000-000000000021".to_owned(),
+            ),
+            agent_scope_request: serde_json::json!({
+                "realm_ids": ["ck:realm:01970000-0000-7000-8000-000000000000"]
+            }),
+            proof: cokret_core::SessionGrantRequestProof {
+                proof_kind: cokret_core::SessionGrantProofKind::AgentKeyProof,
+                challenge: "challenge-abc".to_owned(),
+                request_canonical_digest: cokret_core::Hash::new(format!(
+                    "sha256:{}",
+                    "0".repeat(64)
+                ))
+                .unwrap(),
+                audience: "https://cokret.example/_cokret".to_owned(),
+                expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
+                signature: "sig-a".to_owned(),
+                verification_method: Some("did:web:agent.example#runtime-key-1".to_owned()),
+                issuer: None,
+                client_id: None,
+                redirect_uri: None,
+                state: None,
+                nonce: Some("nonce-abc".to_owned()),
+                authorization_code: None,
+                code_verifier: None,
+            },
+        };
+        let digest = canonical_session_grant_request_digest_without_signature(&body)
+            .expect("request digest should compute");
+        body.proof.request_canonical_digest = cokret_core::Hash::new(digest.clone()).unwrap();
+
+        let mut signature_changed = body.clone();
+        signature_changed.proof.signature = "sig-b".to_owned();
+        assert_eq!(
+            canonical_session_grant_request_digest_without_signature(&signature_changed).unwrap(),
+            digest
+        );
+
+        let mut scope_changed = body.clone();
+        scope_changed
+            .requested_scope
+            .push("ck.reaction.add".to_owned());
+        assert_ne!(
+            canonical_session_grant_request_digest_without_signature(&scope_changed).unwrap(),
+            digest
+        );
     }
 }

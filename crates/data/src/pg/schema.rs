@@ -125,6 +125,7 @@ diesel::table! {
         agent_principal_id -> Text,
         verification_method -> Text,
         challenge -> Text,
+        nonce -> Text,
         request_canonical_digest -> Text,
         audience -> Text,
         consumed_at -> Timestamptz,

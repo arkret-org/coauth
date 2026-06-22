@@ -157,6 +157,7 @@ mod agent_auth_error_matrix_tests {
         let fields = ProofSignedFields {
             audience: "https://cokret.example/_cokret",
             challenge: "challenge-abc",
+            nonce: Some("nonce-abc"),
             expires_at,
             request_canonical_digest: "sha256:aa",
             verification_method: "did:web:agent.example#runtime-key-1",
@@ -180,6 +181,7 @@ mod agent_auth_error_matrix_tests {
         let signed = ProofSignedFields {
             audience: "https://cokret.example/_cokret",
             challenge: "challenge-abc",
+            nonce: Some("nonce-abc"),
             expires_at,
             request_canonical_digest: "sha256:aa",
             verification_method: "did:web:agent.example#runtime-key-1",
@@ -192,12 +194,43 @@ mod agent_auth_error_matrix_tests {
         let tampered = ProofSignedFields {
             audience: "https://evil.example/_cokret",
             challenge: "challenge-abc",
+            nonce: Some("nonce-abc"),
             expires_at,
             request_canonical_digest: "sha256:aa",
             verification_method: "did:web:agent.example#runtime-key-1",
         };
         let err = verify_proof_signature(&multibase, &tampered, &sig_b64)
             .expect_err("tampered audience must reject");
+        assert_eq!(err.code(), "proof_invalid");
+    }
+
+    #[test]
+    fn proof_signature_rejects_tampered_nonce() {
+        use base64ct::Encoding as _;
+        use cokret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
+        use ed25519_dalek::Signer as _;
+
+        let signing_key = derive_ed25519_from_seed(&[10u8; 32]);
+        let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
+        let expires_at = Utc::now() + chrono::Duration::minutes(5);
+        let signed = ProofSignedFields {
+            audience: "https://cokret.example/_cokret",
+            challenge: "challenge-abc",
+            nonce: Some("nonce-abc"),
+            expires_at,
+            request_canonical_digest: "sha256:aa",
+            verification_method: "did:web:agent.example#runtime-key-1",
+        };
+        let message = canonical_json_bytes(&signed).expect("canonical bytes");
+        let signature = signing_key.sign(&message);
+        let sig_b64 = base64ct::Base64UrlUnpadded::encode_string(&signature.to_bytes());
+
+        let tampered = ProofSignedFields {
+            nonce: Some("nonce-def"),
+            ..signed
+        };
+        let err = verify_proof_signature(&multibase, &tampered, &sig_b64)
+            .expect_err("tampered nonce must reject");
         assert_eq!(err.code(), "proof_invalid");
     }
 }

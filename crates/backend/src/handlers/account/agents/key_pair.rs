@@ -153,6 +153,7 @@ pub async fn post_agent_key_pair(
     let signed_fields = ProofSignedFields {
         audience: &pop.audience,
         challenge: &pop.challenge,
+        nonce: None,
         expires_at: pop.expires_at,
         request_canonical_digest: &pop.request_canonical_digest,
         verification_method: &body.verification_method,

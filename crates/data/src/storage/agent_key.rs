@@ -62,6 +62,8 @@ pub struct NewAgentSessionProofReplay {
     pub verification_method: String,
     /// One-time challenge value consumed.
     pub challenge: String,
+    /// One-time nonce value consumed.
+    pub nonce: String,
     /// `sha256:<hex>` digest the proof covered.
     pub request_canonical_digest: String,
     /// Audience the proof asserted.

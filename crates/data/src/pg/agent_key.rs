@@ -134,6 +134,7 @@ struct InsertableProofReplay {
     agent_principal_id: String,
     verification_method: String,
     challenge: String,
+    nonce: String,
     request_canonical_digest: String,
     audience: String,
     consumed_at: DateTime<Utc>,
@@ -299,6 +300,7 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             agent_principal_id: params.agent_principal_id,
             verification_method: params.verification_method,
             challenge: params.challenge,
+            nonce: params.nonce,
             request_canonical_digest: params.request_canonical_digest,
             audience: params.audience,
             consumed_at: now,
@@ -307,17 +309,12 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             created_at: now,
         };
 
-        // Single-use: the (agent_principal_id, verification_method, challenge)
-        // unique key makes a second insert of the same challenge a no-op. The
-        // first caller inserts one row and wins; a replay inserts zero and loses.
+        // Single-use: either a repeated challenge or repeated nonce makes the
+        // insert a no-op. The first caller inserts one row and wins; a replay
+        // inserts zero and loses.
         let inserted = diesel::insert_into(agent_session_proof_replay::table)
             .values(&row)
-            .on_conflict((
-                agent_session_proof_replay::agent_principal_id,
-                agent_session_proof_replay::verification_method,
-                agent_session_proof_replay::challenge,
-            ))
-            .do_nothing()
+            .on_conflict_do_nothing()
             .execute(self.conn)
             .await?;
 

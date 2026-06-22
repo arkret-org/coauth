@@ -20,6 +20,8 @@ use crate::AppError;
 pub(super) struct ProofSignedFields<'a> {
     pub(super) audience: &'a str,
     pub(super) challenge: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) nonce: Option<&'a str>,
     pub(super) expires_at: DateTime<Utc>,
     pub(super) request_canonical_digest: &'a str,
     pub(super) verification_method: &'a str,
