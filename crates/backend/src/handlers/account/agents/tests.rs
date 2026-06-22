@@ -201,7 +201,7 @@ mod agent_auth_error_matrix_tests {
         };
         let err = verify_proof_signature(&multibase, &tampered, &sig_b64)
             .expect_err("tampered audience must reject");
-        assert_eq!(err.code(), "proof_invalid");
+        assert_eq!(err.reason_code(), Some("proof_invalid"));
     }
 
     #[test]
@@ -231,6 +231,6 @@ mod agent_auth_error_matrix_tests {
         };
         let err = verify_proof_signature(&multibase, &tampered, &sig_b64)
             .expect_err("tampered nonce must reject");
-        assert_eq!(err.code(), "proof_invalid");
+        assert_eq!(err.reason_code(), Some("proof_invalid"));
     }
 }
