@@ -227,6 +227,9 @@ pub async fn directory_resolve_handle(
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
+    let key_store = depot.key_store()?;
+    let http_client = depot.http_client()?;
+    let did_resolver = depot.did_resolver_service()?;
     let limiter = depot.limiter()?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
     let requester = activity_tracker
@@ -281,10 +284,27 @@ pub async fn directory_resolve_handle(
     if !verified {
         return Err(directory_resolve_not_found(started_at).await);
     }
+    let resolution = did_resolver
+        .resolve_did_document(
+            &http_client,
+            &url_builder,
+            &cokret_config,
+            &key_store,
+            &mut repo,
+            &did,
+        )
+        .await;
+    let Ok(resolution) = resolution else {
+        return Err(directory_resolve_not_found(started_at).await);
+    };
+    let canonical_handle = user_handle(&url_builder, &user);
+    if !did_document_endorses_handle(&resolution.document, &canonical_handle) {
+        return Err(directory_resolve_not_found(started_at).await);
+    }
 
     Ok(Json(DirectoryHandleResolutionOutcome {
         did: parse_did_field("did", did)?,
-        handle: user_handle(&url_builder, &user),
+        handle: canonical_handle,
         verified,
         claims: json!([]),
         audience: body.audience,
@@ -297,6 +317,36 @@ pub async fn directory_resolve_handle(
         divergent: false,
         via_services: Vec::new(),
     }))
+}
+
+fn did_document_endorses_handle(document: &DidDocument, canonical_handle: &str) -> bool {
+    let Some((_, domain)) = canonical_handle.split_once(':') else {
+        return false;
+    };
+    document
+        .also_known_as
+        .iter()
+        .any(|alias| normalize_handle_alias(alias, domain).as_deref() == Some(canonical_handle))
+}
+
+fn normalize_handle_alias(alias: &str, default_domain: &str) -> Option<String> {
+    let trimmed = alias.trim().to_ascii_lowercase();
+    let without_acct = trimmed.strip_prefix("acct:").unwrap_or(trimmed.as_str());
+    let without_at_prefix = without_acct.strip_prefix('@').unwrap_or(without_acct);
+    let (localpart, authority) =
+        if let Some((localpart, authority)) = without_at_prefix.rsplit_once('@') {
+            (localpart, authority)
+        } else if let Some((localpart, authority)) = without_at_prefix.split_once(':') {
+            (localpart, authority)
+        } else {
+            (without_at_prefix, default_domain)
+        };
+    let localpart = localpart.trim();
+    let authority = authority.trim();
+    if localpart.is_empty() || authority.is_empty() {
+        return None;
+    }
+    Some(format!("{localpart}:{authority}"))
 }
 
 async fn directory_resolve_not_found(started_at: Instant) -> CokretRouteError {
