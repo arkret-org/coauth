@@ -400,11 +400,18 @@ pub(crate) fn oidc_subject_for_user(
     user_did_for(url_builder, cokret_config, user)
 }
 
-pub(crate) async fn principal_did_for_user<R>(
+#[derive(Debug, Clone)]
+pub(crate) struct PrincipalDidBinding {
+    pub did: String,
+    pub audience: String,
+    pub principal_server_did: Option<String>,
+}
+
+pub(crate) async fn principal_did_binding_for_user<R>(
     repo: &mut R,
     cokret_config: &CokretConfig,
     user: &User,
-) -> Result<Option<String>, R::Error>
+) -> Result<Option<PrincipalDidBinding>, R::Error>
 where
     R: RepositoryAccess,
 {
@@ -414,11 +421,28 @@ where
             .get_for_user_and_audience(user, &server.audience)
             .await?
         {
-            return Ok(Some(row.did));
+            return Ok(Some(PrincipalDidBinding {
+                did: row.did,
+                audience: server.audience.clone(),
+                principal_server_did: server.did.clone(),
+            }));
         }
     }
 
     Ok(None)
+}
+
+pub(crate) async fn principal_did_for_user<R>(
+    repo: &mut R,
+    cokret_config: &CokretConfig,
+    user: &User,
+) -> Result<Option<String>, R::Error>
+where
+    R: RepositoryAccess,
+{
+    Ok(principal_did_binding_for_user(repo, cokret_config, user)
+        .await?
+        .map(|binding| binding.did))
 }
 
 /// Display form `local@host` used by logging / display paths.

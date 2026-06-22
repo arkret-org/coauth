@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
 use coauth_data::RepositoryAccess;
@@ -270,12 +271,13 @@ pub async fn directory_resolve_handle(
     // principal servers in order and take the first minted one. A user
     // who has never bound to a principal server has no resolvable DID
     // yet — fail closed with 404 rather than synthesising an identifier.
-    let did = principal_did_for_user(&mut repo, &cokret_config, &user)
+    let principal_binding = principal_did_binding_for_user(&mut repo, &cokret_config, &user)
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-    let Some(did) = did else {
+    let Some(principal_binding) = principal_binding else {
         return Err(directory_resolve_not_found(started_at).await);
     };
+    let did = principal_binding.did.clone();
 
     let verified = body
         .expected_did
@@ -301,22 +303,97 @@ pub async fn directory_resolve_handle(
     if !did_document_endorses_handle(&resolution.document, &canonical_handle) {
         return Err(directory_resolve_not_found(started_at).await);
     }
+    let clock = crate::handlers::make_clock();
+    let handle_claim_audience = directory_handle_claim_audience(&body, &principal_binding.audience);
+    let member_delivery_binding =
+        directory_handle_delivery_binding(&url_builder, &cokret_config, &principal_binding)?;
+    let claim_material = issue_handle_claim(
+        &*clock,
+        &url_builder,
+        &cokret_config,
+        &key_store,
+        &user,
+        &did,
+        cokret_core::HandleClaimKind::HandleBinding,
+        handle_claim_audience.clone(),
+        member_delivery_binding,
+    )
+    .map_err(map_handle_claim_issue_error)?;
+    claim_material.payload.validate().map_err(|error| {
+        CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
+            "issued handle claim failed SDK validation: {error}"
+        ))))
+    })?;
 
     Ok(Json(DirectoryHandleResolutionOutcome {
         did: parse_did_field("did", did)?,
         handle: canonical_handle,
         verified,
-        claims: json!([]),
-        audience: body.audience,
-        member_delivery_binding: None,
-        handle_claim: None,
-        as_of: None,
-        source_refs: Vec::new(),
+        claims: json!([claim_material.payload.clone()]),
+        audience: Some(handle_claim_audience),
+        member_delivery_binding: claim_material.payload.member_delivery_binding.clone(),
+        handle_claim: Some(claim_material.payload),
+        as_of: Some(clock.now()),
+        source_refs: vec![claim_material.claim_digest],
         policy_revision: None,
         stale: false,
         divergent: false,
         via_services: Vec::new(),
     }))
+}
+
+fn directory_handle_claim_audience(
+    body: &DirectoryResolveHandleRequestBody,
+    principal_audience: &str,
+) -> String {
+    body.audience
+        .clone()
+        .or_else(|| body.realm_id.as_ref().map(ToString::to_string))
+        .or_else(|| body.requester.as_ref().map(ToString::to_string))
+        .unwrap_or_else(|| principal_audience.to_owned())
+}
+
+fn directory_handle_delivery_binding(
+    url_builder: &UrlBuilder,
+    cokret_config: &CokretConfig,
+    principal_binding: &PrincipalDidBinding,
+) -> Result<cokret_core::DeliveryBindingHint, CokretRouteError> {
+    let recipient_service_did = principal_binding
+        .principal_server_did
+        .as_ref()
+        .and_then(|did| cokret_core::Did::new(did.clone()).ok())
+        .or_else(|| cokret_core::Did::new(principal_binding.audience.clone()).ok())
+        .or_else(|| cokret_core::Did::new(service_did_for(url_builder, cokret_config)).ok())
+        .ok_or_else(|| {
+            CokretRouteError::Internal(Box::new(std::io::Error::other(
+                "no valid DID available for handle claim delivery binding",
+            )))
+        })?;
+    Ok(cokret_core::DeliveryBindingHint {
+        recipient_service_did,
+        recipient_service_type: cokret_core::RecipientServiceType::PrincipalServer,
+        binding_source: cokret_core::HandleHintBindingSource::Explicit,
+        delivery_modes: BTreeSet::from([
+            cokret_core::DeliveryMode::Events,
+            cokret_core::DeliveryMode::Sync,
+            cokret_core::DeliveryMode::ToDevice,
+            cokret_core::DeliveryMode::Push,
+            cokret_core::DeliveryMode::KeyPackages,
+        ]),
+        service_acceptance_ref: None,
+        policy_event_ref: None,
+    })
+}
+
+fn map_handle_claim_issue_error(error: SessionGrantError) -> CokretRouteError {
+    match error {
+        SessionGrantError::HandleClaimSubject(error) => CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_INVALID_PARAM,
+            error.to_string(),
+        ),
+        other => CokretRouteError::Internal(Box::new(other)),
+    }
 }
 
 fn did_document_endorses_handle(document: &DidDocument, canonical_handle: &str) -> bool {

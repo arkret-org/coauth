@@ -32,7 +32,8 @@ mod tests {
     use assert_matches::assert_matches;
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_iana::oauth::{
-        OAuthAuthorizationEndpointResponseType, OAuthClientAuthenticationMethod,
+        OAuthAccessTokenType, OAuthAuthorizationEndpointResponseType,
+        OAuthClientAuthenticationMethod,
     };
     use url::Url;
 
