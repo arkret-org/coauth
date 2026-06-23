@@ -74,6 +74,37 @@ pub(crate) fn issue_session_grant_for_audience(
         scopes,
         subject_override,
         dpop_jkt,
+        None,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn issue_session_grant_for_audience_with_applet_delegation(
+    clock: &dyn Clock,
+    url_builder: &UrlBuilder,
+    cokret_config: &CokretConfig,
+    key_store: &Keystore,
+    browser_session: &BrowserSession,
+    session_public_key: PublicJsonWebKey,
+    audience: String,
+    scopes: Vec<String>,
+    subject_override: Option<&str>,
+    dpop_jkt: Option<String>,
+    applet_delegation: Option<cokret_core::SessionGrantAppletDelegation>,
+) -> Result<SessionGrantMaterial, SessionGrantError> {
+    issue_session_grant_for_audience_inner(
+        clock,
+        url_builder,
+        cokret_config,
+        key_store,
+        browser_session,
+        session_public_key,
+        audience,
+        scopes,
+        subject_override,
+        dpop_jkt,
+        applet_delegation,
         true,
     )
 }
@@ -102,6 +133,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
         scopes,
         subject_override,
         dpop_jkt,
+        None,
         false,
     )
 }
@@ -118,6 +150,7 @@ fn issue_session_grant_for_audience_inner(
     scopes: Vec<String>,
     subject_override: Option<&str>,
     dpop_jkt: Option<String>,
+    applet_delegation: Option<cokret_core::SessionGrantAppletDelegation>,
     enforce_principal_did_method: bool,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let subject = subject_override.map_or_else(
@@ -153,6 +186,7 @@ fn issue_session_grant_for_audience_inner(
         revocation_ref,
         provenance_anchor,
         device_id: device_id.clone(),
+        applet_delegation: applet_delegation.clone(),
         session_id: browser_session.id.to_string(),
         browser_session_id: browser_session.id.to_string(),
         cnf: cnf.clone(),
@@ -177,6 +211,7 @@ fn issue_session_grant_for_audience_inner(
         revocation_ref: claims.revocation_ref,
         provenance_anchor: claims.provenance_anchor,
         device_id: claims.device_id,
+        applet_delegation: claims.applet_delegation,
         session_id: claims.session_id,
         browser_session_id: claims.browser_session_id,
         cnf: claims.cnf,
@@ -204,6 +239,7 @@ fn issue_session_grant_for_audience_inner(
         issuer,
         subject,
         device_id,
+        applet_delegation,
         audience,
         scopes,
         dpop_jkt,
@@ -239,6 +275,27 @@ where
                 issuer: &material.issuer,
                 subject: &material.subject,
                 device_id: material.device_id.as_deref(),
+                applet_id: material
+                    .applet_delegation
+                    .as_ref()
+                    .map(|value| value.applet_id.as_str()),
+                effective_scope: material
+                    .applet_delegation
+                    .as_ref()
+                    .map(|value| value.effective_scope.clone()),
+                registration_epoch: material
+                    .applet_delegation
+                    .as_ref()
+                    .map(|value| value.registration_epoch.as_str()),
+                service_did: material
+                    .applet_delegation
+                    .as_ref()
+                    .and_then(|value| value.service_did.as_ref().map(cokret_core::Did::as_str)),
+                capability_grant_refs: material
+                    .applet_delegation
+                    .as_ref()
+                    .map(|value| value.capability_grant_refs.clone())
+                    .unwrap_or_default(),
                 audience: &material.audience,
                 scope,
                 grant_jwt: &material.grant_jwt,
@@ -297,6 +354,7 @@ pub(crate) fn mint_agent_session_grant(
     dpop_jkt: String,
     session_public_key: String,
     scope_details: serde_json::Value,
+    applet_delegation: Option<cokret_core::SessionGrantAppletDelegation>,
     now: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
@@ -322,6 +380,7 @@ pub(crate) fn mint_agent_session_grant(
         revocation_ref,
         provenance_anchor,
         device_id: None,
+        applet_delegation: applet_delegation.clone(),
         session_id: agent_principal_id.to_owned(),
         browser_session_id: agent_principal_id.to_owned(),
         cnf: cnf.clone(),
@@ -346,6 +405,7 @@ pub(crate) fn mint_agent_session_grant(
         revocation_ref: claims.revocation_ref,
         provenance_anchor: claims.provenance_anchor,
         device_id: claims.device_id,
+        applet_delegation: claims.applet_delegation,
         session_id: claims.session_id,
         browser_session_id: claims.browser_session_id,
         cnf: claims.cnf,
@@ -373,6 +433,7 @@ pub(crate) fn mint_agent_session_grant(
         issuer,
         subject: agent_principal_id.to_owned(),
         device_id: None,
+        applet_delegation,
         audience,
         scopes,
         dpop_jkt: Some(dpop_jkt),

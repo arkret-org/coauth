@@ -603,7 +603,7 @@ pub async fn refresh_session_grant(
         .iter()
         .map(|scope| scope.as_str().to_owned())
         .collect();
-    let new_material = issue_session_grant_for_audience(
+    let new_material = issue_session_grant_for_audience_with_applet_delegation(
         &*clock,
         &url_builder,
         &cokret_config,
@@ -614,6 +614,7 @@ pub async fn refresh_session_grant(
         scopes,
         Some(&prior_grant.subject),
         Some(verification.jkt.clone()),
+        session_grant_applet_delegation(&prior_grant),
     )
     .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 

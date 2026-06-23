@@ -713,6 +713,7 @@ fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGr
         revocation_ref: payload.revocation_ref.clone(),
         provenance_anchor: payload.provenance_anchor.clone(),
         device_id: payload.device_id.clone(),
+        applet_delegation: payload.applet_delegation.clone(),
         session_id: payload.session_id.clone(),
         browser_session_id: payload.browser_session_id.clone(),
         cnf: payload.cnf.clone(),

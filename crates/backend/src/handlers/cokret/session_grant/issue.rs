@@ -55,6 +55,18 @@ pub async fn issue_session_grant_endpoint(
     let body: cokret_core::SessionGrantRequestBody = serde_json::from_value(raw_body.clone())
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     enforce_session_grant_inception_key_window(&body, &raw_body)?;
+    if body.applet_delegation.is_some()
+        && !matches!(
+            body.proof.proof_kind,
+            cokret_core::SessionGrantProofKind::AgentKeyProof
+        )
+    {
+        return Err(CokretRouteError::coded(
+            StatusCode::BAD_REQUEST,
+            ERROR_CODE_INVALID_PARAM,
+            "applet_delegation is only valid for agent_key_proof session grants",
+        ));
+    }
 
     match body.proof.proof_kind {
         cokret_core::SessionGrantProofKind::OidcCodeExchange => {
@@ -274,6 +286,7 @@ async fn issue_agent_key_proof_session_grant(
         dpop_binding.jkt.clone(),
         session_public_key,
         token_scope_details.clone(),
+        authorization.applet_delegation.clone(),
         now,
         expires_at,
     )

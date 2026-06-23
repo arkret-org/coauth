@@ -8,6 +8,7 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::RngCore;
+use serde_json::Value;
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -35,6 +36,11 @@ struct SessionGrantLookup {
     issuer: String,
     subject: String,
     device_id: Option<String>,
+    applet_id: Option<String>,
+    effective_scope: Option<Value>,
+    registration_epoch: Option<String>,
+    service_did: Option<String>,
+    capability_grant_refs: Vec<String>,
     audience: String,
     scope_list: Vec<String>,
     grant_jwt: String,
@@ -74,6 +80,11 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
             issuer: value.issuer,
             subject: value.subject,
             device_id: value.device_id,
+            applet_id: value.applet_id,
+            effective_scope: value.effective_scope,
+            registration_epoch: value.registration_epoch,
+            service_did: value.service_did,
+            capability_grant_refs: value.capability_grant_refs,
             audience: value.audience,
             scope,
             grant_jwt: value.grant_jwt,
@@ -94,6 +105,11 @@ struct NewSessionGrantRow<'a> {
     issuer: &'a str,
     subject: &'a str,
     device_id: Option<&'a str>,
+    applet_id: Option<&'a str>,
+    effective_scope: Option<Value>,
+    registration_epoch: Option<&'a str>,
+    service_did: Option<&'a str>,
+    capability_grant_refs: Vec<String>,
     audience: &'a str,
     scope_list: Vec<String>,
     grant_jwt: &'a str,
@@ -118,6 +134,22 @@ macro_rules! apply_session_grant_filter {
 
         if let Some(device_id) = $filter.device_id() {
             q = q.filter(oauth_session_grants::device_id.eq(device_id));
+        }
+
+        if let Some(applet_id) = $filter.applet_id() {
+            q = q.filter(oauth_session_grants::applet_id.eq(applet_id));
+        }
+
+        if let Some(effective_scope) = $filter.effective_scope() {
+            q = q.filter(oauth_session_grants::effective_scope.eq(effective_scope));
+        }
+
+        if let Some(registration_epoch) = $filter.registration_epoch() {
+            q = q.filter(oauth_session_grants::registration_epoch.eq(registration_epoch));
+        }
+
+        if let Some(service_did) = $filter.service_did() {
+            q = q.filter(oauth_session_grants::service_did.eq(service_did));
         }
 
         if let Some(audience) = $filter.audience() {
@@ -160,6 +192,11 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             issuer: grant.issuer,
             subject: grant.subject,
             device_id: grant.device_id,
+            applet_id: grant.applet_id,
+            effective_scope: grant.effective_scope.clone(),
+            registration_epoch: grant.registration_epoch,
+            service_did: grant.service_did,
+            capability_grant_refs: grant.capability_grant_refs.clone(),
             audience: grant.audience,
             scope_list,
             grant_jwt: grant.grant_jwt,
@@ -180,6 +217,11 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
             issuer: grant.issuer.to_owned(),
             subject: grant.subject.to_owned(),
             device_id: grant.device_id.map(ToOwned::to_owned),
+            applet_id: grant.applet_id.map(ToOwned::to_owned),
+            effective_scope: grant.effective_scope,
+            registration_epoch: grant.registration_epoch.map(ToOwned::to_owned),
+            service_did: grant.service_did.map(ToOwned::to_owned),
+            capability_grant_refs: grant.capability_grant_refs,
             audience: grant.audience.to_owned(),
             scope: grant.scope,
             grant_jwt: grant.grant_jwt.to_owned(),

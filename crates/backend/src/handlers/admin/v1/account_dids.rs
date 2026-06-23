@@ -62,6 +62,12 @@ pub struct AddAccountDidBindingRequestBody {
     /// [`crate::services::did_binding_proof`]).
     pub control_proof: ControlProofPayload,
 
+    /// Optional SDK `ck.schema.did_continuity_proof.v1` payload. Required
+    /// when promoting a weak `did:web` primary binding to `did:webvh`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[salvo(schema(value_type = serde_json::Value))]
+    pub continuity_proof: Option<serde_json::Value>,
+
     /// Whether the new binding should become the primary DID when accepted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub make_primary: Option<bool>,
@@ -223,6 +229,15 @@ pub async fn add_account_did(
     let expected_audience = crate::handlers::cokret::service_did_for(&url_builder, &cokret_config);
     let expected_trust_domain =
         crate::handlers::cokret::trust_domain_for(&url_builder, &cokret_config);
+    enforce_did_continuity_for_primary_upgrade(
+        &current_bindings,
+        &did,
+        body.make_primary.unwrap_or(false),
+        body.continuity_proof.as_ref(),
+        &expected_audience,
+        &expected_trust_domain,
+        now,
+    )?;
     let nonce_store = shared_did_binding_nonce_store();
     validate_control_proof(
         &http_client,
@@ -259,6 +274,7 @@ pub async fn add_account_did(
                     "kind": did_binding_kind_wire(body.kind),
                     "state": "active",
                     "make_primary": body.make_primary.unwrap_or(false),
+                    "continuity_proof_present": body.continuity_proof.is_some(),
                     "verification_status": "verified",
                     "verification_method": body.verification_method,
                     "resolver_submission_present": body.resolver_submission.is_some(),
@@ -320,6 +336,97 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
             AppError::bad_request(format!("did_resolver_failed: {inner}"))
         }
     }
+}
+
+fn enforce_did_continuity_for_primary_upgrade(
+    current_bindings: &[AccountDidBinding],
+    new_did: &str,
+    make_primary: bool,
+    continuity_proof: Option<&serde_json::Value>,
+    expected_audience: &str,
+    expected_trust_domain: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), AppError> {
+    if !make_primary {
+        return Ok(());
+    }
+    let Some(current_primary) = current_bindings
+        .iter()
+        .find(|binding| binding.primary && binding.active)
+    else {
+        return Ok(());
+    };
+    if !current_primary.did.starts_with("did:web:") || !new_did.starts_with("did:webvh:") {
+        return Ok(());
+    }
+    let proof_value = continuity_proof.ok_or_else(|| {
+        AppError::bad_request("did_continuity_proof_required: did:web to did:webvh primary upgrade")
+    })?;
+    let proof: cokret_core::DidContinuityProof = serde_json::from_value(proof_value.clone())
+        .map_err(|error| AppError::bad_request(format!("did_continuity_proof_invalid: {error}")))?;
+    proof
+        .validate_minimal()
+        .map_err(|error| AppError::bad_request(format!("did_continuity_proof_invalid: {error}")))?;
+    if proof.purpose != cokret_core::DidContinuityPurpose::PrincipalMethodUpgrade {
+        return Err(AppError::bad_request(
+            "did_continuity_proof_invalid: purpose must be principal_method_upgrade",
+        ));
+    }
+    if proof.old_did.as_str() != current_primary.did || proof.new_did.as_str() != new_did {
+        return Err(AppError::bad_request(
+            "did_continuity_proof_invalid: old_did/new_did mismatch",
+        ));
+    }
+    if !proof
+        .audience
+        .iter()
+        .any(|audience| audience == expected_audience)
+        || !proof
+            .audience
+            .iter()
+            .any(|audience| audience == expected_trust_domain)
+    {
+        return Err(AppError::bad_request(
+            "did_continuity_proof_invalid: audience/trust_domain binding missing",
+        ));
+    }
+    if let Some(expires_at) = proof.expires_at
+        && now >= expires_at
+    {
+        return Err(AppError::bad_request(
+            "did_continuity_proof_invalid: proof expired",
+        ));
+    }
+    if proof.old_did_document_digest.is_none() {
+        return Err(AppError::bad_request(
+            "did_continuity_proof_invalid: old_did_document_digest required",
+        ));
+    }
+    if proof.new_did_document_digest.is_none() {
+        return Err(AppError::bad_request(
+            "did_continuity_proof_invalid: new_did_document_digest required",
+        ));
+    }
+    if proof
+        .transfer_evidence
+        .user_oob_confirmation_id
+        .trim()
+        .is_empty()
+    {
+        return Err(AppError::bad_request(
+            "did_continuity_proof_invalid: OOB confirmation is required",
+        ));
+    }
+    let fingerprint = proof
+        .transfer_evidence
+        .inception_public_key_fingerprint
+        .as_str();
+    if !fingerprint.starts_with("sha256:") {
+        return Err(AppError::bad_request(
+            "did_continuity_proof_invalid: inception fingerprint must be sha256",
+        ));
+    }
+    Ok(())
 }
 
 #[endpoint]

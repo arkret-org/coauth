@@ -32,6 +32,11 @@ fn empty_session_revoke_body() -> SessionRevokeRequestBody {
         target_grant_id: None,
         target_device_id: None,
         all_sessions: None,
+        applet_id: None,
+        effective_scope: None,
+        registration_epoch: None,
+        service_did: None,
+        capability_grant_refs: Vec::new(),
         proof: None,
     }
 }
@@ -118,7 +123,42 @@ enum RevokeSelector {
     Current,
     Grant(GrantId),
     Device(DeviceId),
+    Applet(cokret_core::SessionGrantAppletSelector),
     All,
+}
+
+fn applet_selector(
+    body: &SessionRevokeRequestBody,
+) -> Result<Option<cokret_core::SessionGrantAppletSelector>, CokretRouteError> {
+    let any = body.applet_id.is_some()
+        || body.effective_scope.is_some()
+        || body.registration_epoch.is_some()
+        || body.service_did.is_some()
+        || !body.capability_grant_refs.is_empty();
+    if !any {
+        return Ok(None);
+    }
+
+    let applet_id = body
+        .applet_id
+        .clone()
+        .ok_or_else(|| selector_conflict("applet selector requires applet_id"))?;
+    let effective_scope = body
+        .effective_scope
+        .clone()
+        .ok_or_else(|| selector_conflict("applet selector requires effective_scope"))?;
+    let registration_epoch = body
+        .registration_epoch
+        .clone()
+        .ok_or_else(|| selector_conflict("applet selector requires registration_epoch"))?;
+
+    Ok(Some(cokret_core::SessionGrantAppletSelector {
+        applet_id,
+        effective_scope,
+        registration_epoch,
+        service_did: body.service_did.clone(),
+        capability_grant_refs: body.capability_grant_refs.clone(),
+    }))
 }
 
 fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, CokretRouteError> {
@@ -128,6 +168,7 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Co
         ));
     }
 
+    let applet_selector = applet_selector(body)?;
     let mut selector_count = 0;
     if body.target_grant_id.is_some() {
         selector_count += 1;
@@ -138,9 +179,12 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Co
     if body.all_sessions == Some(true) {
         selector_count += 1;
     }
+    if applet_selector.is_some() {
+        selector_count += 1;
+    }
     if selector_count > 1 {
         return Err(selector_conflict(
-            "target_grant_id, target_device_id, and all_sessions are mutually exclusive",
+            "target_grant_id, target_device_id, all_sessions, and applet selector are mutually exclusive",
         ));
     }
 
@@ -148,6 +192,8 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Co
         Ok(RevokeSelector::Grant(target_grant_id))
     } else if let Some(target_device_id) = body.target_device_id.clone() {
         Ok(RevokeSelector::Device(target_device_id))
+    } else if let Some(applet_selector) = applet_selector {
+        Ok(RevokeSelector::Applet(applet_selector))
     } else if body.all_sessions == Some(true) {
         Ok(RevokeSelector::All)
     } else {
@@ -186,6 +232,21 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_did: 
 
 fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_did: &str) -> bool {
     grant.subject == principal_did || grant_is_agent_delegated_to_controller(grant, principal_did)
+}
+
+fn grant_matches_capability_refs(
+    grant: &SessionGrant,
+    selector: &cokret_core::SessionGrantAppletSelector,
+) -> bool {
+    if selector.capability_grant_refs.is_empty() {
+        return true;
+    }
+    let expected = selector
+        .capability_grant_refs
+        .iter()
+        .collect::<BTreeSet<_>>();
+    let actual = grant.capability_grant_refs.iter().collect::<BTreeSet<_>>();
+    expected == actual
 }
 
 fn validate_lifecycle_proof_kind(proof_kind: &str) -> Result<(), CokretRouteError> {
@@ -264,6 +325,7 @@ async fn verify_cross_session_lifecycle_proof(
         body.target_grant_id.as_ref(),
         body.target_device_id.as_ref(),
         body.all_sessions.unwrap_or(false),
+        applet_selector(body)?.as_ref(),
     )
     .map_err(|error| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -365,6 +427,7 @@ async fn revoke_owned_active_grants(
     clock: &dyn coauth_data::Clock,
     current_principal_did: &str,
     filter_device_id: Option<&str>,
+    applet_selector: Option<&cokret_core::SessionGrantAppletSelector>,
 ) -> Result<Vec<SessionGrant>, CokretRouteError> {
     let mut revoked = Vec::new();
     let mut seen = BTreeSet::new();
@@ -375,6 +438,14 @@ async fn revoke_owned_active_grants(
         let mut filter = SessionGrantFilter::new().active_at(now);
         if let Some(device_id) = filter_device_id {
             filter = filter.for_device(device_id);
+        }
+        if let Some(selector) = applet_selector {
+            filter = filter.for_applet_delegation(
+                &selector.applet_id,
+                &selector.effective_scope,
+                selector.registration_epoch.as_str(),
+                selector.service_did.as_ref().map(cokret_core::Did::as_str),
+            );
         }
         let pagination = after.map_or_else(
             || Pagination::first(100),
@@ -398,7 +469,11 @@ async fn revoke_owned_active_grants(
             .edges
             .into_iter()
             .filter_map(|edge| {
-                if grant_is_owned_by_current_principal(&edge.node, current_principal_did) {
+                if grant_is_owned_by_current_principal(&edge.node, current_principal_did)
+                    && applet_selector.map_or(true, |selector| {
+                        grant_matches_capability_refs(&edge.node, selector)
+                    })
+                {
                     Some(edge.node)
                 } else {
                     None
@@ -474,7 +549,7 @@ pub async fn revoke_session_grant_endpoint(
     let proof_required = match &selector {
         RevokeSelector::Current => false,
         RevokeSelector::Grant(target_grant_id) => target_grant_id != &current_grant.grant_id,
-        RevokeSelector::Device(_) | RevokeSelector::All => true,
+        RevokeSelector::Device(_) | RevokeSelector::Applet(_) | RevokeSelector::All => true,
     };
     if proof_required {
         let current_device_id = current_device_id.as_ref().ok_or_else(|| {
@@ -524,6 +599,21 @@ pub async fn revoke_session_grant_endpoint(
                 &clock,
                 &current_principal_did,
                 Some(target_device_id.as_str()),
+                None,
+            )
+            .await?;
+            if revoked.is_empty() {
+                return Err(session_grant_not_found());
+            }
+            revoked
+        }
+        RevokeSelector::Applet(applet_selector) => {
+            let revoked = revoke_owned_active_grants(
+                &mut repo,
+                &clock,
+                &current_principal_did,
+                None,
+                Some(&applet_selector),
             )
             .await?;
             if revoked.is_empty() {
@@ -533,7 +623,8 @@ pub async fn revoke_session_grant_endpoint(
         }
         RevokeSelector::All => {
             let revoked =
-                revoke_owned_active_grants(&mut repo, &clock, &current_principal_did, None).await?;
+                revoke_owned_active_grants(&mut repo, &clock, &current_principal_did, None, None)
+                    .await?;
             if revoked.is_empty() {
                 return Err(session_grant_not_found());
             }

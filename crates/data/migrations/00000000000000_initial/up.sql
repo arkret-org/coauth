@@ -387,6 +387,11 @@ CREATE TABLE public.oauth_session_grants (
     issuer text NOT NULL,
     subject text NOT NULL,
     device_id text,
+    applet_id text,
+    effective_scope jsonb,
+    registration_epoch text,
+    service_did text,
+    capability_grant_refs text[] DEFAULT '{}'::text[] NOT NULL,
     audience text NOT NULL,
     scope_list text[] NOT NULL,
     grant_jwt text NOT NULL,
@@ -1203,6 +1208,10 @@ CREATE INDEX oauth_refresh_tokens_last_seen_idx ON public.oauth_refresh_tokens U
 CREATE INDEX oauth_session_grants_active_idx ON public.oauth_session_grants USING btree (expires_at) WHERE (revoked_at IS NULL);
 
 CREATE INDEX oauth_session_grants_device_id_idx ON public.oauth_session_grants USING btree (device_id) WHERE (device_id IS NOT NULL);
+
+CREATE INDEX oauth_session_grants_applet_delegation_active_idx ON public.oauth_session_grants USING btree (applet_id, registration_epoch, service_did, expires_at) WHERE ((revoked_at IS NULL) AND (applet_id IS NOT NULL));
+
+CREATE INDEX oauth_session_grants_applet_effective_scope_idx ON public.oauth_session_grants USING gin (effective_scope) WHERE (effective_scope IS NOT NULL);
 
 CREATE UNIQUE INDEX oauth_session_grants_grant_jwt_idx ON public.oauth_session_grants USING btree (grant_jwt);
 

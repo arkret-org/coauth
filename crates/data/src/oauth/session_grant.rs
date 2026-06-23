@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use cokret_core::GrantId;
 use oauth_types::scope::Scope;
 use serde::Serialize;
+use serde_json::Value;
 use ulid::Ulid;
 
 use crate::{Clock, InvalidTransitionError};
@@ -14,6 +15,11 @@ pub struct SessionGrant {
     pub issuer: String,
     pub subject: String,
     pub device_id: Option<String>,
+    pub applet_id: Option<String>,
+    pub effective_scope: Option<Value>,
+    pub registration_epoch: Option<String>,
+    pub service_did: Option<String>,
+    pub capability_grant_refs: Vec<String>,
     pub audience: String,
     pub scope: Scope,
     pub grant_jwt: String,

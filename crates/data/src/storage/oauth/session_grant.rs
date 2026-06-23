@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use cokret_core::GrantId;
 use oauth_types::scope::Scope;
 use rand_core::RngCore;
+use serde_json::Value;
 use ulid::Ulid;
 
 use crate::pagination::Page;
@@ -15,6 +16,10 @@ pub struct SessionGrantFilter<'a> {
     browser_session_id: Option<Ulid>,
     subject: Option<&'a str>,
     device_id: Option<&'a str>,
+    applet_id: Option<&'a str>,
+    effective_scope: Option<&'a Value>,
+    registration_epoch: Option<&'a str>,
+    service_did: Option<&'a str>,
     audience: Option<&'a str>,
     active_at: Option<DateTime<Utc>>,
 }
@@ -65,6 +70,46 @@ impl<'a> SessionGrantFilter<'a> {
         self.device_id
     }
 
+    /// Restrict results to applet-delegated grants for one effective install epoch.
+    #[must_use]
+    pub fn for_applet_delegation(
+        mut self,
+        applet_id: &'a str,
+        effective_scope: &'a Value,
+        registration_epoch: &'a str,
+        service_did: Option<&'a str>,
+    ) -> Self {
+        self.applet_id = Some(applet_id);
+        self.effective_scope = Some(effective_scope);
+        self.registration_epoch = Some(registration_epoch);
+        self.service_did = service_did;
+        self
+    }
+
+    /// Return the applet id constraint, if present.
+    #[must_use]
+    pub fn applet_id(&self) -> Option<&'a str> {
+        self.applet_id
+    }
+
+    /// Return the effective scope constraint, if present.
+    #[must_use]
+    pub fn effective_scope(&self) -> Option<&'a Value> {
+        self.effective_scope
+    }
+
+    /// Return the registration epoch constraint, if present.
+    #[must_use]
+    pub fn registration_epoch(&self) -> Option<&'a str> {
+        self.registration_epoch
+    }
+
+    /// Return the service DID constraint, if present.
+    #[must_use]
+    pub fn service_did(&self) -> Option<&'a str> {
+        self.service_did
+    }
+
     /// Restrict results to a grant audience.
     #[must_use]
     pub fn for_audience(mut self, audience: &'a str) -> Self {
@@ -105,6 +150,16 @@ pub struct NewSessionGrant<'a> {
     pub subject: &'a str,
     /// Optional Cokret client device id.
     pub device_id: Option<&'a str>,
+    /// Applet effective install id, for applet-specific delegated sessions.
+    pub applet_id: Option<&'a str>,
+    /// Canonical effective scope bound to the applet delegated session.
+    pub effective_scope: Option<Value>,
+    /// Applet registration epoch hash.
+    pub registration_epoch: Option<&'a str>,
+    /// Applet service DID bound to the delegation, when available.
+    pub service_did: Option<&'a str>,
+    /// Capability grant refs that backed the applet delegation.
+    pub capability_grant_refs: Vec<String>,
     /// Intended grant audience.
     pub audience: &'a str,
     /// Granted OAuth scope set.
