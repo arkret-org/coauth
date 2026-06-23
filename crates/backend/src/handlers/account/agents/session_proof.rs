@@ -47,7 +47,6 @@ pub struct AgentSessionAuthorization {
     /// Materialized `scope_details` overlay (canonical resource constraints +
     /// optional participation entries).
     pub scope_details: serde_json::Value,
-    pub applet_delegation: Option<cokret_core::SessionGrantAppletDelegation>,
     /// Capped agent session TTL (≤ 15 min).
     pub ttl: chrono::Duration,
 }
@@ -180,10 +179,6 @@ pub async fn validate_agent_session_proof(
     {
         return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch.into());
     }
-    if body.applet_delegation.is_some() && authorization.agent_key_scope != AGENT_KEY_SCOPE_APPLET {
-        return Err(AgentAuthRejection::ProofInvalid.into());
-    }
-
     // Verify the proof signature over the same canonical signed-fields shape
     // the pairing PoP used, against the authorized public key.
     let signed_fields = ProofSignedFields {
@@ -314,11 +309,6 @@ pub async fn validate_agent_session_proof(
         scope_details["participation"] = serde_json::to_value(&scope_request.participation)
             .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     }
-    if let Some(applet_delegation) = body.applet_delegation.as_ref() {
-        scope_details["applet_delegation"] = serde_json::to_value(applet_delegation)
-            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    }
-
     // TTL: cap to the spec ceiling (≤ 15 min), never wider than the
     // (human-oriented) configured grant TTL.
     let configured = cokret_config.session_grant_ttl;
@@ -333,7 +323,6 @@ pub async fn validate_agent_session_proof(
         controller_did,
         granted_scope: effective_scope.granted_scope,
         scope_details,
-        applet_delegation: body.applet_delegation.clone(),
         ttl,
     })
 }

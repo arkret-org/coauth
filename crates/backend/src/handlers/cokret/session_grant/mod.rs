@@ -16,9 +16,8 @@ pub(crate) use introspection::{introspection_status, session_grant_jwt_hash};
 #[cfg(test)]
 pub(crate) use issuance::issue_session_grant;
 pub(crate) use issuance::{
-    issue_session_grant_for_audience, issue_session_grant_for_audience_with_applet_delegation,
-    issue_test_session_grant_for_audience, mint_agent_session_grant, persist_session_grant,
-    persist_unbound_session_grant,
+    issue_session_grant_for_audience, issue_test_session_grant_for_audience,
+    mint_agent_session_grant, persist_session_grant, persist_unbound_session_grant,
 };
 pub use issue::issue_session_grant_endpoint;
 pub use refresh::refresh_session_grant;
@@ -31,5 +30,5 @@ pub use types::{
 };
 pub(crate) use types::{
     SessionGrantIntrospectionProofClaims, SessionGrantPayloadClaims, SessionGrantRecord,
-    SessionGrantTarget, session_grant_applet_delegation,
+    SessionGrantTarget,
 };

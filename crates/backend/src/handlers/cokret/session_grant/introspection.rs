@@ -45,22 +45,10 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectGra
                 .map(|id| format!("ck:session:{id}"))
         })
         .unwrap_or_else(|| format!("ck:session-grant:{}", grant.id));
-    let applet_delegation = session_grant_applet_delegation(grant).or_else(|| {
-        parsed_payload
-            .as_ref()
-            .and_then(|payload| payload.applet_delegation.clone())
-    });
-    let mut scope_details = parsed_payload
+    let scope_details = parsed_payload
         .as_ref()
         .map(|payload| payload.scope_details.clone())
         .unwrap_or(serde_json::Value::Null);
-    if let Some(applet_delegation) = applet_delegation {
-        if scope_details.is_null() {
-            scope_details = serde_json::json!({});
-        }
-        scope_details["applet_delegation"] =
-            serde_json::to_value(applet_delegation).unwrap_or(serde_json::Value::Null);
-    }
 
     SessionGrantIntrospectGrant {
         id: grant.grant_id.to_string(),

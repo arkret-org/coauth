@@ -97,6 +97,10 @@ pub struct LoginReqBody {
     /// the configured provider before the credentials are checked.
     #[serde(default)]
     pub captcha_token: Option<String>,
+    /// Device the issued principal-server session grant is bound to. Required
+    /// when `cokret.password_login_session_grants_enabled=true`.
+    #[serde(default)]
+    pub device_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -260,6 +264,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     }
 
     let requested_audience = input.audience.clone();
+    let requested_device_id = input.device_id.clone();
 
     match login_with_password(
         repo,
@@ -400,6 +405,37 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 }));
                 return Ok(());
             };
+            let Some(device_id) = requested_device_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                res.status_code(StatusCode::BAD_REQUEST);
+                res.render(Json(LoginOutcome {
+                    status: "error",
+                    error: Some("invalid_device_id"),
+                    viewer: None,
+                    session_grant: None,
+                    warnings: vec!["password login session grants require device_id".to_owned()],
+                }));
+                return Ok(());
+            };
+            let device_id = match cokret_core::DeviceId::new(device_id.to_owned()) {
+                Ok(device_id) => device_id,
+                Err(error) => {
+                    PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                    res.status_code(StatusCode::BAD_REQUEST);
+                    res.render(Json(LoginOutcome {
+                        status: "error",
+                        error: Some("invalid_device_id"),
+                        viewer: None,
+                        session_grant: None,
+                        warnings: vec![format!("device_id is invalid: {error}")],
+                    }));
+                    return Ok(());
+                }
+            };
             let grant_target = match cokret::password_login_session_grant_target(
                 &url_builder,
                 &cokret_config,
@@ -489,7 +525,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 &principal_did,
                 account_handle.as_deref(),
                 display_name.as_deref(),
-                None,
+                Some(device_id.as_str()),
             )
             .await
             {
@@ -511,7 +547,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 &user_session,
                 dpop_binding.public_jwk,
                 grant_target.audience.clone(),
-                vec![cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+                oidc_bridge::principal_session_grant_scopes(device_id.as_str()),
                 Some(&principal_did),
                 Some(dpop_binding.jkt),
             )

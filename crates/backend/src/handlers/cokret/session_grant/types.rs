@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
-use cokret_core::{GrantId, SessionGrantAppletDelegation, SessionGrantProofKind};
+use cokret_core::{GrantId, SessionGrantProofKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -14,7 +14,6 @@ pub struct SessionGrantMaterial {
     pub issuer: String,
     pub subject: String,
     pub device_id: Option<String>,
-    pub applet_delegation: Option<SessionGrantAppletDelegation>,
     pub audience: String,
     pub scopes: Vec<String>,
     /// RFC 7638 JWK SHA-256 thumbprint (base64url) of the DPoP proof the
@@ -58,8 +57,6 @@ pub struct SessionGrantPayload {
     pub provenance_anchor: ServiceAttestedProvenanceAnchor,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub applet_delegation: Option<SessionGrantAppletDelegation>,
     pub session_id: String,
     pub browser_session_id: String,
     /// RFC 9449 §6 confirmation — when the grant was issued bound to a
@@ -112,8 +109,6 @@ pub(crate) struct SessionGrantPayloadClaims {
     pub(crate) provenance_anchor: ServiceAttestedProvenanceAnchor,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) device_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) applet_delegation: Option<SessionGrantAppletDelegation>,
     pub(crate) session_id: String,
     pub(crate) browser_session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -132,7 +127,6 @@ pub(crate) struct SessionGrantRecord {
     issuer: String,
     subject: String,
     device_id: Option<String>,
-    applet_delegation: Option<SessionGrantAppletDelegation>,
     audience: String,
     scopes: Vec<String>,
     created_at: DateTime<Utc>,
@@ -154,7 +148,6 @@ pub(crate) struct SessionGrantIntrospectionProofClaims {
 
 impl From<SessionGrant> for SessionGrantRecord {
     fn from(value: SessionGrant) -> Self {
-        let applet_delegation = session_grant_applet_delegation(&value);
         Self {
             id: value.id.to_string(),
             grant_id: value.grant_id,
@@ -162,7 +155,6 @@ impl From<SessionGrant> for SessionGrantRecord {
             issuer: value.issuer,
             subject: value.subject,
             device_id: value.device_id,
-            applet_delegation,
             audience: value.audience,
             scopes: value
                 .scope
@@ -174,23 +166,6 @@ impl From<SessionGrant> for SessionGrantRecord {
             revoked_at: value.revoked_at,
         }
     }
-}
-
-pub(crate) fn session_grant_applet_delegation(
-    value: &SessionGrant,
-) -> Option<SessionGrantAppletDelegation> {
-    Some(SessionGrantAppletDelegation {
-        applet_id: value.applet_id.clone()?,
-        effective_scope: value.effective_scope.clone()?,
-        registration_epoch: cokret_core::Hash::new(value.registration_epoch.clone()?).ok()?,
-        service_did: value
-            .service_did
-            .as_ref()
-            .map(|did| cokret_core::Did::new(did.clone()))
-            .transpose()
-            .ok()?,
-        capability_grant_refs: value.capability_grant_refs.clone(),
-    })
 }
 
 #[derive(Debug, Deserialize)]

@@ -144,7 +144,7 @@ fn is_lowercase_uuidv7(value: &str) -> bool {
     bytes[14] == b'7' && matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
 }
 
-fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
+pub(super) fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
     vec![
         cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
         format!("urn:cokret:client:device:{device_id}"),
