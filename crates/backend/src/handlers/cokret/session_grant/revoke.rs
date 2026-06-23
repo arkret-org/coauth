@@ -31,6 +31,11 @@ fn empty_session_revoke_body() -> SessionRevokeRequestBody {
         target_grant_id: None,
         target_device_id: None,
         all_sessions: None,
+        applet_id: None,
+        effective_scope: None,
+        registration_epoch: None,
+        service_did: None,
+        capability_grant_refs: Vec::new(),
         proof: None,
     }
 }
@@ -137,9 +142,17 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Co
     if body.all_sessions == Some(true) {
         selector_count += 1;
     }
+    if session_revoke_has_applet_selector(body) {
+        selector_count += 1;
+    }
     if selector_count > 1 {
         return Err(selector_conflict(
-            "target_grant_id, target_device_id, and all_sessions are mutually exclusive",
+            "target_grant_id, target_device_id, all_sessions and applet selector are mutually exclusive",
+        ));
+    }
+    if session_revoke_has_applet_selector(body) {
+        return Err(selector_conflict(
+            "applet selector session revoke is not supported by this Account Authority endpoint",
         ));
     }
 
@@ -152,6 +165,14 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Co
     } else {
         Ok(RevokeSelector::Current)
     }
+}
+
+fn session_revoke_has_applet_selector(body: &SessionRevokeRequestBody) -> bool {
+    body.applet_id.is_some()
+        || body.effective_scope.is_some()
+        || body.registration_epoch.is_some()
+        || body.service_did.is_some()
+        || !body.capability_grant_refs.is_empty()
 }
 
 fn verification_method_did(verification_method: &str) -> &str {
@@ -263,6 +284,7 @@ async fn verify_cross_session_lifecycle_proof(
         body.target_grant_id.as_ref(),
         body.target_device_id.as_ref(),
         body.all_sessions.unwrap_or(false),
+        None,
     )
     .map_err(|error| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(

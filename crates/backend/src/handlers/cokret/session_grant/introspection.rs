@@ -4,7 +4,7 @@ use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::Jwt;
 use cokret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use cokret_core::{
-    GrantId, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
+    DeviceId, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
     SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
     SessionGrantIntrospectionProof,
 };
@@ -14,7 +14,9 @@ use sha2::Digest as _;
 use super::*;
 use crate::handlers::cokret::*;
 
-fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectGrant {
+fn introspection_grant_record(
+    grant: &SessionGrant,
+) -> Result<SessionGrantIntrospectGrant, CokretRouteError> {
     // `cnf.jkt` is not stored as its own column — it lives inside the signed
     // grant payload. Parse it back out of the persisted `grant_jwt` (the same
     // way the refresh / logout paths read the prior grant's binding). A grant
@@ -50,12 +52,23 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectGra
         .map(|payload| payload.scope_details.clone())
         .unwrap_or(serde_json::Value::Null);
 
-    SessionGrantIntrospectGrant {
-        id: grant.grant_id.to_string(),
+    let device_id = grant
+        .device_id
+        .as_ref()
+        .map(|device_id| DeviceId::new(device_id.clone()))
+        .transpose()
+        .map_err(|error| {
+            CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "stored session grant device_id is invalid: {error}"
+            )))
+        })?;
+
+    Ok(SessionGrantIntrospectGrant {
+        id: grant.grant_id.clone(),
         issuer: grant.issuer.clone(),
         subject: grant.subject.clone(),
         service_account_id,
-        device_id: grant.device_id.clone(),
+        device_id,
         audience: grant.audience.clone(),
         scopes: grant
             .scope
@@ -72,7 +85,7 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectGra
             .and_then(|payload| payload.proof_kind),
         scope_details,
         freshness_state: None,
-    }
+    })
 }
 
 pub(crate) fn introspection_status(
@@ -193,11 +206,9 @@ pub async fn introspect_session_grant(
     let cokret_config = depot.cokret_config()?;
     let mut repo = depot.repo().await?;
 
-    let grant = if let Some(id) = body.id.as_deref() {
-        let id = GrantId::new(id.to_owned())
-            .map_err(|_| CokretRouteError::BadRequest("invalid session grant id".into()))?;
+    let grant = if let Some(id) = body.id.as_ref() {
         repo.oauth_session_grant()
-            .lookup_by_grant_id(&id)
+            .lookup_by_grant_id(id)
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     } else if let Some(grant_jwt) = body.grant_jwt.as_deref() {
@@ -259,7 +270,8 @@ pub async fn introspect_session_grant(
 
     let grant_record = (status != SessionGrantIntrospectStatus::NotFound
         && status != SessionGrantIntrospectStatus::AudienceMismatch)
-        .then(|| introspection_grant_record(&grant));
+        .then(|| introspection_grant_record(&grant))
+        .transpose()?;
 
     // Introspection is READ-ONLY. The session grant is the (minutes-to-hours,
     // multi-day-via-rotation) refresh credential: the legitimate device

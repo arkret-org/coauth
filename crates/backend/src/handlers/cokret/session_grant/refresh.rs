@@ -632,7 +632,7 @@ pub async fn refresh_session_grant(
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(SessionGrantRefreshOutcome {
-        grant_id: persisted.grant_id.to_string(),
+        grant_id: persisted.grant_id,
         grant_jwt: new_material.grant_jwt,
         session_public_key: new_material.session_public_key,
         expires_at: new_material.expires_at_timestamp,
@@ -640,7 +640,7 @@ pub async fn refresh_session_grant(
         scopes: new_material.scopes,
         dpop_jkt: verification.jkt,
         // The prior grant was atomically consumed by the CAS above.
-        previous_grant_id: prior_grant.grant_id.to_string(),
+        previous_grant_id: prior_grant.grant_id,
     }))
 }
 
