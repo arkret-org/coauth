@@ -382,7 +382,8 @@ CREATE TABLE public.oauth_refresh_tokens (
 
 CREATE TABLE public.oauth_session_grants (
     id uuid NOT NULL,
-    user_session_id uuid NOT NULL,
+    grant_id uuid NOT NULL,
+    user_session_id uuid,
     issuer text NOT NULL,
     subject text NOT NULL,
     device_id text,
@@ -1204,6 +1205,8 @@ CREATE INDEX oauth_session_grants_active_idx ON public.oauth_session_grants USIN
 CREATE INDEX oauth_session_grants_device_id_idx ON public.oauth_session_grants USING btree (device_id) WHERE (device_id IS NOT NULL);
 
 CREATE UNIQUE INDEX oauth_session_grants_grant_jwt_idx ON public.oauth_session_grants USING btree (grant_jwt);
+
+CREATE UNIQUE INDEX oauth_session_grants_grant_id_idx ON public.oauth_session_grants USING btree (grant_id);
 
 CREATE INDEX oauth_session_grants_subject_idx ON public.oauth_session_grants USING btree (subject);
 

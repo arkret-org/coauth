@@ -6,6 +6,7 @@ pub mod did_binding_proof;
 pub mod did_resolver;
 pub mod dpop;
 pub mod email_webhook;
+pub mod erasure_receipt;
 pub mod handle_subject_validator;
 pub mod identity_link;
 pub mod inception_key_window;

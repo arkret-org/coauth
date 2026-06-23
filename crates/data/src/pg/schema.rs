@@ -555,7 +555,8 @@ diesel::table! {
 diesel::table! {
     oauth_session_grants (id) {
         id -> Uuid,
-        user_session_id -> Uuid,
+        grant_id -> Uuid,
+        user_session_id -> Nullable<Uuid>,
         issuer -> Text,
         subject -> Text,
         device_id -> Nullable<Text>,

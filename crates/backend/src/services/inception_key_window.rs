@@ -17,30 +17,25 @@
 //! a protocol hard limit sourced from the SDK constant — it is intentionally
 //! *not* configurable.
 //!
-//! ## Mount-point status (honest boundary — see SEC-04 report)
+//! ## Mount-point status
 //!
-//! coauth does **not** currently issue any `ck.session.grant` /
-//! `ck.device.authorize` that is *signed by a client-presented inception key*:
-//! session grants are signed by coauth's own deployment service key
-//! (`preferred_signing_key`) over an already-authenticated browser session, and
-//! `ck.device.authorize` is not issued by coauth at all. Consequently there is
-//! today no issuance path where "the signing key is provably the inception
-//! key" can be decided, and the persisted principal-DID row keeps only the
-//! webvh `versionId` (`key_log_head`) + DB `created_at`, not the verifiable
-//! entry-0 `versionTime` anchor. Bolting this gate onto the existing
-//! service-key-signed session-grant path would be a *wrongly-triggering or
-//! always-off* gate, which the SEC-04 task explicitly forbids.
-//!
-//! Therefore this helper is wired as a **ready, tested enforcement primitive**
-//! to be called from a genuine inception-key-signed issuance path once coauth
-//! grows one (verifying the signing `verification_method` against the entry-0
-//! controller key and carrying the entry-0 `versionTime` as the anchor). The
-//! correct conservative behaviour (fail closed on a missing / unparseable
-//! anchor) is encoded here so the mount-point wiring is a one-liner and cannot
-//! accidentally fail open.
+//! coauth's current production session grants are still signed by the
+//! deployment service key, and managed-DID device enrollment is
+//! `service_attested` by the persistent enrollment authority. Those paths are
+//! inert unless the request / signed grant explicitly carries an inception
+//! bootstrap anchor or selects an inception-key proof branch. When that happens,
+//! the session-grant and device-enroll handlers call this primitive before
+//! issuing or minting downstream material, preserving the same fail-closed
+//! reason code on every mount point.
 
 use chrono::{DateTime, Utc};
 use cokret_core::inception_key_age_exceeded;
+use serde_json::Value;
+
+const INCEPTION_KEY_VERSION_TIME: &str = "inception_key_version_time";
+const INCEPTION_KEY_VERSION_TIME_CAMEL: &str = "inceptionKeyVersionTime";
+const VERSION_TIME: &str = "version_time";
+const VERSION_TIME_CAMEL: &str = "versionTime";
 
 /// Receiver-side decision: may an inception key whose bootstrap anchor is
 /// `bootstrap_ts` still sign at `now`?
@@ -85,6 +80,37 @@ pub fn enforce_inception_key_window_rfc3339(
         return Err(InceptionKeyWindowError::Exceeded);
     };
     enforce_inception_key_window(parsed.with_timezone(&Utc), now)
+}
+
+/// Extract a client-presented inception-key entry-0 `versionTime` from a
+/// session-grant request body. The SDK request model has not grown a
+/// first-class field yet, so coauth reads the raw JSON overlay while still
+/// deserializing the rest of the body through the SDK type.
+pub fn session_grant_request_anchor(raw_body: &Value) -> Option<&str> {
+    raw_body
+        .pointer("/proof")
+        .and_then(version_time_field)
+        .or_else(|| version_time_field(raw_body))
+}
+
+/// Extract the same anchor from account device-enroll request overlays.
+pub fn device_authorize_request_anchor(raw_body: &Value) -> Option<&str> {
+    version_time_field(raw_body)
+}
+
+/// Extract an anchor carried forward inside a signed session grant's
+/// `scope_details` overlay.
+pub fn scope_details_anchor(scope_details: &Value) -> Option<&str> {
+    version_time_field(scope_details)
+}
+
+fn version_time_field(value: &Value) -> Option<&str> {
+    value
+        .get(INCEPTION_KEY_VERSION_TIME)
+        .or_else(|| value.get(INCEPTION_KEY_VERSION_TIME_CAMEL))
+        .or_else(|| value.get(VERSION_TIME))
+        .or_else(|| value.get(VERSION_TIME_CAMEL))
+        .and_then(Value::as_str)
 }
 
 /// Failure of the receiver-side inception-key window check.

@@ -48,10 +48,13 @@ pub async fn issue_session_grant_endpoint(
             )
         })?;
 
-    let body: cokret_core::SessionGrantRequestBody = req
+    let raw_body: serde_json::Value = req
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+    let body: cokret_core::SessionGrantRequestBody = serde_json::from_value(raw_body.clone())
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
+    enforce_session_grant_inception_key_window(&body, &raw_body)?;
 
     match body.proof.proof_kind {
         cokret_core::SessionGrantProofKind::OidcCodeExchange => {
@@ -137,6 +140,35 @@ pub async fn issue_session_grant_endpoint(
 /// session grant. Returns the SDK `SessionGrantOutcome` with the
 /// `scope_details` overlay. Human-approval and fail-closed rejections surface
 /// as structured errors.
+fn enforce_session_grant_inception_key_window(
+    body: &cokret_core::SessionGrantRequestBody,
+    raw_body: &serde_json::Value,
+) -> Result<(), CokretRouteError> {
+    if !matches!(
+        body.proof.proof_kind,
+        cokret_core::SessionGrantProofKind::DidBoundSignature
+            | cokret_core::SessionGrantProofKind::PairedDeviceProof
+    ) {
+        return Ok(());
+    }
+    let clock = crate::handlers::make_clock();
+    crate::services::inception_key_window::enforce_inception_key_window_rfc3339(
+        crate::services::inception_key_window::session_grant_request_anchor(raw_body),
+        clock.now(),
+    )
+    .map_err(inception_key_window_error)
+}
+
+fn inception_key_window_error(
+    error: crate::services::inception_key_window::InceptionKeyWindowError,
+) -> CokretRouteError {
+    CokretRouteError::coded(
+        StatusCode::FORBIDDEN,
+        ERROR_CODE_FAILED_PRECONDITION,
+        format!("reason_code={}; {error}", error.reason_code()),
+    )
+}
+
 async fn issue_agent_key_proof_session_grant(
     _req: &mut Request,
     depot: &Depot,
@@ -222,9 +254,6 @@ async fn issue_agent_key_proof_session_grant(
     // issuer signature and rechecks agent status inside the revocation
     // freshness window (CKP-0008 §4.11 natural-expiry path), bounded by the
     // ≤ 15-minute TTL.
-    let _ = &mut repo;
-    repo.cancel().await.ok();
-
     let audience = body.proof.audience.clone();
     let now = clock.now();
     let expires_at = now + authorization.ttl;
@@ -250,7 +279,12 @@ async fn issue_agent_key_proof_session_grant(
     )
     .map_err(map_session_grant_material_error)?;
 
-    let _ = &mut rng;
+    let persisted = persist_unbound_session_grant(&mut repo, &mut rng, &*clock, &material)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+    repo.save()
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     let principal_id =
         cokret_core::Did::new(authorization.agent_principal_id.clone()).map_err(|e| {
@@ -260,6 +294,7 @@ async fn issue_agent_key_proof_session_grant(
         })?;
 
     let mut scope_details = token_scope_details;
+    scope_details["grant_id"] = serde_json::Value::String(persisted.grant_id.to_string());
     scope_details["session_public_key"] =
         serde_json::Value::String(material.session_public_key.clone());
 
@@ -280,6 +315,7 @@ fn map_session_grant_material_error(error: SessionGrantError) -> CokretRouteErro
             ERROR_CODE_INVALID_PARAM,
             error.to_string(),
         ),
+        SessionGrantError::InceptionKeyWindowExceeded(error) => inception_key_window_error(error),
         other => CokretRouteError::Internal(Box::new(other)),
     }
 }

@@ -460,6 +460,10 @@ impl TestState {
                     .post(crate::handlers::cokret::issue_session_grant_endpoint),
             )
             .push(
+                Router::with_path("/_cokret/gate/account/session-grants/revoke")
+                    .post(crate::handlers::cokret::revoke_session_grant_endpoint),
+            )
+            .push(
                 Router::with_path("/_cokret/gate/account/auth-sessions/logout")
                     .post(crate::handlers::cokret::logout_auth_session),
             )

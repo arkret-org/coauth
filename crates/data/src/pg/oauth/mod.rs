@@ -430,7 +430,11 @@ mod tests {
                 &mut rng,
                 &clock,
                 NewSessionGrant {
-                    browser_session_id: user_session.id,
+                    grant_id: cokret_core::GrantId::new(
+                        "ck:grant:0196419b-0000-7000-8000-000000000201".to_owned(),
+                    )
+                    .unwrap(),
+                    browser_session_id: Some(user_session.id),
                     issuer: "did:web:issuer.example",
                     subject: "did:web:subject.example",
                     device_id: Some("device-1"),
@@ -621,7 +625,11 @@ mod tests {
                 &mut rng,
                 &clock,
                 NewSessionGrant {
-                    browser_session_id: browser_session.id,
+                    grant_id: cokret_core::GrantId::new(
+                        "ck:grant:0196419b-0000-7000-8000-000000000202".to_owned(),
+                    )
+                    .unwrap(),
+                    browser_session_id: Some(browser_session.id),
                     issuer: "did:web:issuer.example",
                     subject: "did:web:subject.example",
                     device_id: Some("device-cas"),

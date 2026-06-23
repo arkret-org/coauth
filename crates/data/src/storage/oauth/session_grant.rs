@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use cokret_core::GrantId;
 use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -94,8 +95,10 @@ impl<'a> SessionGrantFilter<'a> {
 #[derive(Debug)]
 /// Parameters for creating a persisted Cokret session grant.
 pub struct NewSessionGrant<'a> {
+    /// Protocol-visible session grant id (`ck:grant:<uuidv7>`).
+    pub grant_id: GrantId,
     /// Browser session that the grant is bound to.
-    pub browser_session_id: Ulid,
+    pub browser_session_id: Option<Ulid>,
     /// DID issuer of the signed grant.
     pub issuer: &'a str,
     /// DID subject authorized by the grant.
@@ -130,6 +133,12 @@ pub trait SessionGrantRepository: Send + Sync {
 
     /// Look up a session grant by id.
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
+
+    /// Look up a session grant by protocol-visible grant id.
+    async fn lookup_by_grant_id(
+        &mut self,
+        grant_id: &GrantId,
+    ) -> Result<Option<SessionGrant>, Self::Error>;
 
     /// Look up a session grant by its signed JWT.
     async fn lookup_by_grant_jwt(
@@ -194,6 +203,11 @@ repository_impl!(SessionGrantRepository:
     ) -> Result<SessionGrant, Self::Error>;
 
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error>;
+
+    async fn lookup_by_grant_id(
+        &mut self,
+        grant_id: &GrantId,
+    ) -> Result<Option<SessionGrant>, Self::Error>;
 
     async fn lookup_by_grant_jwt(
         &mut self,

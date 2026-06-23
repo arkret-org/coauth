@@ -515,6 +515,7 @@ fn session_grant_is_signed_for_the_user_did() {
 
     let payload = jwt.payload();
     assert_eq!(payload.kind, "ck.session.grant");
+    assert_eq!(payload.grant_id, grant.grant_id);
     assert_eq!(
         payload.subject,
         user_did_for(&url_builder, &cokret_config, &browser_session.user)
@@ -631,7 +632,11 @@ fn session_grant_record_exposes_metadata_without_secrets() {
     let now = Utc::now();
     let grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        browser_session_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap(),
+        grant_id: cokret_core::GrantId::new(
+            "ck:grant:0196419b-0000-7000-8000-000000000205".to_owned(),
+        )
+        .unwrap(),
+        browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
         issuer: "did:web:auth.example.com".to_owned(),
         subject: "did:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP".to_owned(),
         device_id: Some("device-1".to_owned()),
@@ -663,7 +668,11 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
     let mut user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let mut grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        browser_session_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap(),
+        grant_id: cokret_core::GrantId::new(
+            "ck:grant:0196419b-0000-7000-8000-000000000206".to_owned(),
+        )
+        .unwrap(),
+        browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
         issuer: "did:web:auth.example.com".to_owned(),
         subject: format!("did:web:auth.example.com:users:{}", user.id),
         device_id: Some("device-1".to_owned()),
@@ -780,7 +789,7 @@ fn session_grant_introspection_proof(
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa);
     let claims = SessionGrantIntrospectionProofClaims {
         kind: "ck.session_grant.introspection_proof.v1".to_owned(),
-        grant_id: grant.id.to_string(),
+        grant_id: grant.grant_id.to_string(),
         grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
         audience: grant.audience.clone(),
         challenge: challenge.to_owned(),
@@ -866,7 +875,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     // never reported as already-consumed here, and a follow-up introspect of
     // the same grant still sees it active.
     assert_eq!(body["one_time_use_consumed"], false);
-    assert_eq!(body["grant"]["id"], grant.id.to_string());
+    assert_eq!(body["grant"]["id"], grant.grant_id.to_string());
     assert_eq!(body["grant"]["subject"], grant.subject);
     assert_eq!(body["grant"]["audience"], grant.audience);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
@@ -886,7 +895,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.id,
+                "id": grant.grant_id.to_string(),
                 "audience": grant.audience,
             })),
         )
@@ -898,12 +907,12 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["proof_required"], false);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
 
-    let challenge = format!("introspect-{}", grant.id);
+    let challenge = format!("introspect-{}", grant.grant_id);
     let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.id,
+                "id": grant.grant_id.to_string(),
                 "audience": grant.audience,
                 "proof": {
                     "challenge": challenge,
@@ -921,7 +930,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.id,
+                "id": grant.grant_id.to_string(),
                 "audience": "https://other.example.com/api",
             })),
         )
@@ -1005,7 +1014,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
 }
 
 #[tokio::test]
-async fn session_grant_http_introspection_accepts_stateless_agent_grant() {
+async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     setup();
     let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
         return;
@@ -1048,6 +1057,11 @@ async fn session_grant_http_introspection_accepts_stateless_agent_grant() {
         now + Duration::try_minutes(15).unwrap(),
     )
     .unwrap();
+    let mut repo = state.repository().await.unwrap();
+    let persisted = persist_unbound_session_grant(&mut repo, &mut rng, &*state.clock, &material)
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
 
     let response = state
         .request(
@@ -1069,14 +1083,10 @@ async fn session_grant_http_introspection_accepts_stateless_agent_grant() {
     assert_eq!(body["grant"]["device_id"], serde_json::Value::Null);
     assert_eq!(body["grant"]["proof_kind"], "agent_key_proof");
     assert_eq!(body["grant"]["scope_details"], scope_details);
-    assert_eq!(body["grant"]["freshness_state"], "fresh");
+    assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);
     assert_eq!(body["grant"]["cnf_jkt"], "agent-runtime-dpop-jkt");
     assert_eq!(body["grant"]["session_public_key"], session_public_key);
-    assert!(
-        body["grant"]["id"]
-            .as_str()
-            .is_some_and(|id| id.starts_with("sha256:"))
-    );
+    assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
 }
 
 /// `id` and `grant_jwt` are an exactly-one selector: rejecting both-missing
@@ -1101,7 +1111,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
         .request(
             Request::post("/_cokret/gate/account/session-grants/introspect").json(
                 serde_json::json!({
-                    "id": grant.id,
+                    "id": grant.grant_id.to_string(),
                     "grant_jwt": material.grant_jwt,
                     "audience": grant.audience,
                 }),
@@ -1145,7 +1155,7 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
-                "id": grant.id,
+                "id": grant.grant_id.to_string(),
                 "audience": grant.audience,
             })),
         )
@@ -1154,7 +1164,7 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], false);
     assert_eq!(body["status"], "revoked");
-    assert_eq!(body["grant"]["id"], grant.id.to_string());
+    assert_eq!(body["grant"]["id"], grant.grant_id.to_string());
     assert!(body["grant"]["revoked_at"].is_string());
 }
 

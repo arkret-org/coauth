@@ -22,9 +22,10 @@
 
 use chrono::{DateTime, Utc};
 use cokret_core::error::{
-    ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_GRANT_ALREADY_CONSUMED,
-    ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_SERVICE_UNAVAILABLE,
-    ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+    ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
+    ERROR_CODE_GRANT_ALREADY_CONSUMED, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
+    ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+    ERROR_CODE_SESSION_LOGGED_OUT,
 };
 use cokret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
@@ -123,6 +124,62 @@ fn fresh_hlc(now: DateTime<Utc>, rng: &mut (dyn rand_core::RngCore + Send)) -> H
     Hlc::new(value).expect("generated HLC is well-formed")
 }
 
+fn enforce_device_authorize_inception_key_window(
+    grant_payload: &SessionGrantPayload,
+    raw_body: &serde_json::Value,
+    now: DateTime<Utc>,
+) -> Result<(), CokretRouteError> {
+    let request_anchor =
+        crate::services::inception_key_window::device_authorize_request_anchor(raw_body);
+    let grant_anchor =
+        crate::services::inception_key_window::scope_details_anchor(&grant_payload.scope_details);
+    let anchor = request_anchor.or(grant_anchor);
+    let requires_gate = anchor.is_some()
+        || matches!(
+            grant_payload.proof_kind,
+            Some(
+                cokret_core::SessionGrantProofKind::DidBoundSignature
+                    | cokret_core::SessionGrantProofKind::PairedDeviceProof
+            )
+        );
+    if !requires_gate {
+        return Ok(());
+    }
+    crate::services::inception_key_window::enforce_inception_key_window_rfc3339(anchor, now)
+        .map_err(inception_key_window_error)
+}
+
+fn inception_key_window_error(
+    error: crate::services::inception_key_window::InceptionKeyWindowError,
+) -> CokretRouteError {
+    CokretRouteError::coded(
+        StatusCode::FORBIDDEN,
+        ERROR_CODE_FAILED_PRECONDITION,
+        format!("reason_code={}; {error}", error.reason_code()),
+    )
+}
+
+fn enforce_service_attested_device_authorize_provenance(
+    event: &Event,
+    payload: &DeviceAuthorizePayload,
+) -> Result<(), CokretRouteError> {
+    payload
+        .validate_service_attested_provenance(
+            event.executed_by.as_ref(),
+            event.authorization_ref.as_deref(),
+            event.created_at,
+        )
+        .map_err(|error| service_attested_provenance_error(error.to_string()))
+}
+
+fn service_attested_provenance_error(message: impl std::fmt::Display) -> CokretRouteError {
+    CokretRouteError::coded(
+        StatusCode::FORBIDDEN,
+        ERROR_CODE_FAILED_PRECONDITION,
+        format!("reason_code=service_attested_provenance_required; {message}"),
+    )
+}
+
 /// Single configured principal-server audience, or an error when the
 /// deployment has zero / multiple (the request body carries no audience, so
 /// disambiguation is impossible — fail closed).
@@ -177,9 +234,11 @@ pub async fn device_enroll_endpoint(
         )
     })?;
 
-    let body: AccountDeviceEnrollRequestBody = req
+    let raw_body: serde_json::Value = req
         .parse_json()
         .await
+        .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
+    let body: AccountDeviceEnrollRequestBody = serde_json::from_value(raw_body.clone())
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".to_owned()))?;
 
     // Read `cnf.jkt` from the grant payload; the persisted row is the source of
@@ -187,6 +246,7 @@ pub async fn device_enroll_endpoint(
     let jwt: Jwt<'_, SessionGrantPayload> = Jwt::try_from(grant_jwt.as_str())
         .map_err(|_| CokretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
     let grant_payload = jwt.payload().clone();
+    enforce_device_authorize_inception_key_window(&grant_payload, &raw_body, clock.now())?;
     let expected_jkt = grant_payload
         .cnf
         .as_ref()
@@ -214,6 +274,40 @@ pub async fn device_enroll_endpoint(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_GRANT_ALREADY_CONSUMED,
             "session grant has been revoked",
+        ));
+    }
+    if grant_row.expires_at <= clock.now() {
+        repo.cancel().await.ok();
+        return Err(CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+            "session grant has expired",
+        ));
+    }
+    let Some(browser_session_id) = grant_row.browser_session_id else {
+        repo.cancel().await.ok();
+        return Err(CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+            "device enrollment requires a browser-bound session grant",
+        ));
+    };
+    let browser_session = repo
+        .browser_session()
+        .lookup(browser_session_id)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+        .ok_or_else(|| {
+            CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                "session grant references missing browser session",
+            ))
+        })?;
+    if browser_session.finished_at.is_some() {
+        repo.cancel().await.ok();
+        return Err(CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_SESSION_LOGGED_OUT,
+            "browser session is logged out",
         ));
     }
     repo.cancel().await.ok();
@@ -285,7 +379,13 @@ pub async fn device_enroll_endpoint(
         )))
     })?;
 
-    let not_before = truncate_to_seconds(body.not_before.unwrap_or_else(|| clock.now()));
+    let now = truncate_to_seconds(clock.now());
+    let not_before = body
+        .not_before
+        .as_ref()
+        .cloned()
+        .map(truncate_to_seconds)
+        .unwrap_or_else(|| now.clone());
 
     let payload = DeviceAuthorizePayload {
         principal_id: principal_id.clone(),
@@ -314,7 +414,6 @@ pub async fn device_enroll_endpoint(
         )))
     })?;
 
-    let now = truncate_to_seconds(clock.now());
     let mut event = Event {
         event_id: EventId::new(cokret_core::identifiers::new_prefixed_uuid7("ck:event:")).map_err(
             |error| {
@@ -341,13 +440,15 @@ pub async fn device_enroll_endpoint(
         redacts: None,
         content,
         executed_by: Some(authority_did.clone()),
-        authorization_ref: Some(authorization_ref),
+        authorization_ref: Some(authorization_ref.clone()),
         applet_id: None,
         external_ref: None,
         actor_kind: None,
         unsigned: std::collections::BTreeMap::new(),
         proofs: Vec::new(),
     };
+
+    enforce_service_attested_device_authorize_provenance(&event, &payload)?;
 
     // 5. Sign the proof with the persistent enrollment key; the VM maps to `executed_by`
     //    (device-lifecycle §5.4). Bind the proof to the target principal server

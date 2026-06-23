@@ -169,6 +169,7 @@ fn register_all_handlers(w: &mut QueueWorker) {
 
     // User lifecycle
     w.register_handler::<queue::DeactivateUserJob>();
+    w.register_handler::<queue::AccountProjectionRewriteJob>();
     w.register_handler::<queue::ReactivateUserJob>();
 
     // principal device management

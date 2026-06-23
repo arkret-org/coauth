@@ -768,7 +768,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             principal_did,
             device_id,
             session_grant,
-            persisted_grant_id: persisted.id.to_string(),
+            persisted_grant_id: persisted.grant_id.to_string(),
         });
     }
 
@@ -1217,7 +1217,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         principal_did,
         device_id,
         session_grant,
-        persisted_grant_id: persisted.id.to_string(),
+        persisted_grant_id: persisted.grant_id.to_string(),
     })
 }
 

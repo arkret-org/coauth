@@ -472,6 +472,41 @@ impl InsertableJob for DeactivateUserJob {
     const QUEUE_NAME: &'static str = "deactivate-user";
 }
 
+/// A job to rewrite account projections after an erasure lifecycle transition.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AccountProjectionRewriteJob {
+    user_id: Ulid,
+    erase_private_state: bool,
+}
+
+impl AccountProjectionRewriteJob {
+    /// Create a new projection rewrite job for a user.
+    #[must_use]
+    pub fn new(user: &User, erase_private_state: bool) -> Self {
+        Self {
+            user_id: user.id,
+            erase_private_state,
+        }
+    }
+
+    /// The ID of the user whose projections must be rewritten.
+    #[must_use]
+    pub fn user_id(&self) -> Ulid {
+        self.user_id
+    }
+
+    /// Whether private account state must be minimized rather than only
+    /// recomputed from durable lifecycle state.
+    #[must_use]
+    pub fn erase_private_state(&self) -> bool {
+        self.erase_private_state
+    }
+}
+
+impl InsertableJob for AccountProjectionRewriteJob {
+    const QUEUE_NAME: &'static str = "account-projection-rewrite";
+}
+
 /// A job to reactivate a user
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReactivateUserJob {

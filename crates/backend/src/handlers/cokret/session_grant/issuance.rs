@@ -5,11 +5,21 @@ use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, UrlBuil
 use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
+use cokret_core::GrantId;
+use cokret_core::identifiers::new_prefixed_uuid7;
 use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::{CryptoRngCore, RngCore};
+use ulid::Ulid;
 
 use super::*;
 use crate::handlers::cokret::*;
+
+const SERVICE_ATTESTED_PROVENANCE_KIND: &str = "service_attested";
+
+fn new_session_grant_id() -> GrantId {
+    GrantId::new(new_prefixed_uuid7("ck:grant:"))
+        .expect("generated ck:grant uuidv7 id must be valid")
+}
 
 pub(crate) fn issue_session_grant(
     _rng: &mut (dyn CryptoRngCore + Send),
@@ -121,13 +131,17 @@ fn issue_session_grant_for_audience_inner(
 
     let now = clock.now();
     let expires_at = now + cokret_config.session_grant_ttl;
+    let grant_id = new_session_grant_id();
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
     let issuer = issuer_did_for(url_builder, cokret_config);
     let cnf = dpop_jkt
         .as_ref()
         .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
+    let revocation_ref = format!("ck:session:{}", browser_session.id);
+    let provenance_anchor = service_attested_provenance_anchor(&issuer, &revocation_ref);
     let claims = SessionGrantPayloadClaims {
         kind: "ck.session.grant".to_owned(),
+        grant_id: grant_id.clone(),
         issuer: issuer.clone(),
         subject: subject.clone(),
         service_account_id: browser_session.user.id.to_string(),
@@ -136,7 +150,8 @@ fn issue_session_grant_for_audience_inner(
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
-        revocation_ref: format!("ck:session:{}", browser_session.id),
+        revocation_ref,
+        provenance_anchor,
         device_id: device_id.clone(),
         session_id: browser_session.id.to_string(),
         browser_session_id: browser_session.id.to_string(),
@@ -150,6 +165,7 @@ fn issue_session_grant_for_audience_inner(
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
     let payload = SessionGrantPayload {
         kind: claims.kind,
+        grant_id: claims.grant_id,
         issuer: claims.issuer,
         subject: claims.subject,
         service_account_id: claims.service_account_id,
@@ -159,6 +175,7 @@ fn issue_session_grant_for_audience_inner(
         not_before: claims.not_before,
         expires_at: claims.expires_at,
         revocation_ref: claims.revocation_ref,
+        provenance_anchor: claims.provenance_anchor,
         device_id: claims.device_id,
         session_id: claims.session_id,
         browser_session_id: claims.browser_session_id,
@@ -179,6 +196,7 @@ fn issue_session_grant_for_audience_inner(
     let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
 
     Ok(SessionGrantMaterial {
+        grant_id,
         grant_jwt,
         session_public_key,
         expires_at: expires_at.to_rfc3339(),
@@ -192,11 +210,11 @@ fn issue_session_grant_for_audience_inner(
     })
 }
 
-pub(crate) async fn persist_session_grant<R>(
+async fn persist_session_grant_with_browser_session_id<R>(
     repo: &mut R,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
-    browser_session: &BrowserSession,
+    browser_session_id: Option<Ulid>,
     material: &SessionGrantMaterial,
 ) -> Result<SessionGrant, R::Error>
 where
@@ -216,7 +234,8 @@ where
             rng,
             clock,
             NewSessionGrant {
-                browser_session_id: browser_session.id,
+                grant_id: material.grant_id.clone(),
+                browser_session_id,
                 issuer: &material.issuer,
                 subject: &material.subject,
                 device_id: material.device_id.as_deref(),
@@ -228,6 +247,38 @@ where
             },
         )
         .await
+}
+
+pub(crate) async fn persist_session_grant<R>(
+    repo: &mut R,
+    rng: &mut (dyn RngCore + Send),
+    clock: &dyn Clock,
+    browser_session: &BrowserSession,
+    material: &SessionGrantMaterial,
+) -> Result<SessionGrant, R::Error>
+where
+    R: RepositoryAccess + ?Sized,
+{
+    persist_session_grant_with_browser_session_id(
+        repo,
+        rng,
+        clock,
+        Some(browser_session.id),
+        material,
+    )
+    .await
+}
+
+pub(crate) async fn persist_unbound_session_grant<R>(
+    repo: &mut R,
+    rng: &mut (dyn RngCore + Send),
+    clock: &dyn Clock,
+    material: &SessionGrantMaterial,
+) -> Result<SessionGrant, R::Error>
+where
+    R: RepositoryAccess + ?Sized,
+{
+    persist_session_grant_with_browser_session_id(repo, rng, clock, None, material).await
 }
 
 /// Mint a signed agent `ck.session.grant` JWT bound to the agent principal as
@@ -251,11 +302,15 @@ pub(crate) fn mint_agent_session_grant(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     ensure_principal_did_method_allowed(cokret_config, agent_principal_id)?;
     let issuer = issuer_did_for(url_builder, cokret_config);
+    let grant_id = new_session_grant_id();
     let cnf = Some(SessionGrantConfirmation {
         jkt: dpop_jkt.clone(),
     });
+    let revocation_ref = format!("ck:agent_session:{agent_principal_id}");
+    let provenance_anchor = service_attested_provenance_anchor(&issuer, &revocation_ref);
     let claims = SessionGrantPayloadClaims {
         kind: "ck.session.grant".to_owned(),
+        grant_id: grant_id.clone(),
         issuer: issuer.clone(),
         subject: agent_principal_id.to_owned(),
         service_account_id: agent_principal_id.to_owned(),
@@ -264,7 +319,8 @@ pub(crate) fn mint_agent_session_grant(
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
-        revocation_ref: format!("ck:agent_session:{agent_principal_id}"),
+        revocation_ref,
+        provenance_anchor,
         device_id: None,
         session_id: agent_principal_id.to_owned(),
         browser_session_id: agent_principal_id.to_owned(),
@@ -278,6 +334,7 @@ pub(crate) fn mint_agent_session_grant(
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
     let payload = SessionGrantPayload {
         kind: claims.kind,
+        grant_id: claims.grant_id,
         issuer: claims.issuer,
         subject: claims.subject,
         service_account_id: claims.service_account_id,
@@ -287,6 +344,7 @@ pub(crate) fn mint_agent_session_grant(
         not_before: claims.not_before,
         expires_at: claims.expires_at,
         revocation_ref: claims.revocation_ref,
+        provenance_anchor: claims.provenance_anchor,
         device_id: claims.device_id,
         session_id: claims.session_id,
         browser_session_id: claims.browser_session_id,
@@ -307,6 +365,7 @@ pub(crate) fn mint_agent_session_grant(
     let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
 
     Ok(SessionGrantMaterial {
+        grant_id,
         grant_jwt,
         session_public_key,
         expires_at: expires_at.to_rfc3339(),
@@ -318,4 +377,15 @@ pub(crate) fn mint_agent_session_grant(
         scopes,
         dpop_jkt: Some(dpop_jkt),
     })
+}
+
+fn service_attested_provenance_anchor(
+    authority_did: &str,
+    authorization_ref: &str,
+) -> ServiceAttestedProvenanceAnchor {
+    ServiceAttestedProvenanceAnchor {
+        kind: SERVICE_ATTESTED_PROVENANCE_KIND.to_owned(),
+        authority_did: authority_did.to_owned(),
+        authorization_ref: authorization_ref.to_owned(),
+    }
 }

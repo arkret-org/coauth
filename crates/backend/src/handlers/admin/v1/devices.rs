@@ -199,11 +199,14 @@ async fn aggregate_devices(
 
             // Resolve the owning account once per grant so we can both
             // filter and populate the draft.
-            let owner = repo
-                .browser_session()
-                .lookup(grant.browser_session_id)
-                .await?
-                .map(|browser_session| browser_session.user.id);
+            let owner = if let Some(browser_session_id) = grant.browser_session_id {
+                repo.browser_session()
+                    .lookup(browser_session_id)
+                    .await?
+                    .map(|browser_session| browser_session.user.id)
+            } else {
+                None
+            };
 
             if let Some(wanted) = account_filter
                 && owner != Some(wanted)
@@ -499,7 +502,11 @@ mod tests {
                 &mut rng,
                 &*state.clock,
                 NewSessionGrant {
-                    browser_session_id: browser_session.id,
+                    grant_id: cokret_core::GrantId::new(
+                        "ck:grant:0196419b-0000-7000-8000-000000000203".to_owned(),
+                    )
+                    .unwrap(),
+                    browser_session_id: Some(browser_session.id),
                     issuer: "did:web:auth.example",
                     subject: "did:web:alice.example",
                     device_id: Some("device-1"),

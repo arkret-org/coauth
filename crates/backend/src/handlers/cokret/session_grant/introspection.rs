@@ -4,13 +4,12 @@ use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::Jwt;
 use cokret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use cokret_core::{
-    FreshnessState, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
+    GrantId, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
     SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProof, SessionGrantProofKind,
+    SessionGrantIntrospectionProof,
 };
 use salvo::prelude::*;
 use sha2::Digest as _;
-use ulid::Ulid;
 
 use super::*;
 use crate::handlers::cokret::*;
@@ -26,14 +25,32 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectGra
     let cnf_jkt = parsed_payload
         .as_ref()
         .and_then(|payload| payload.cnf.as_ref().map(|cnf| cnf.jkt.clone()));
+    let service_account_id = parsed_payload
+        .as_ref()
+        .map(|payload| payload.service_account_id.clone())
+        .or_else(|| {
+            grant
+                .subject
+                .rsplit_once(":users:")
+                .map(|(_, id)| id.to_owned())
+        })
+        .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
+        .unwrap_or_else(|| grant.subject.clone());
+    let revocation_ref = parsed_payload
+        .as_ref()
+        .map(|payload| payload.revocation_ref.clone())
+        .or_else(|| {
+            grant
+                .browser_session_id
+                .map(|id| format!("ck:session:{id}"))
+        })
+        .unwrap_or_else(|| format!("ck:session-grant:{}", grant.id));
+
     SessionGrantIntrospectGrant {
-        id: grant.id.to_string(),
+        id: grant.grant_id.to_string(),
         issuer: grant.issuer.clone(),
         subject: grant.subject.clone(),
-        service_account_id: grant.subject.rsplit_once(":users:").map_or_else(
-            || grant.browser_session_id.to_string(),
-            |(_, id)| id.to_owned(),
-        ),
+        service_account_id,
         device_id: grant.device_id.clone(),
         audience: grant.audience.clone(),
         scopes: grant
@@ -43,7 +60,7 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectGra
             .collect(),
         expires_at: grant.expires_at,
         revoked_at: grant.revoked_at,
-        revocation_ref: format!("ck:session:{}", grant.browser_session_id),
+        revocation_ref,
         session_public_key: grant.session_public_key.clone(),
         cnf_jkt,
         proof_kind: parsed_payload
@@ -55,65 +72,6 @@ fn introspection_grant_record(grant: &SessionGrant) -> SessionGrantIntrospectGra
             .unwrap_or(serde_json::Value::Null),
         freshness_state: None,
     }
-}
-
-fn stateless_agent_introspection(
-    grant_jwt: &str,
-    key_store: &coauth_keystore::Keystore,
-    audience: Option<&str>,
-    now: DateTime<Utc>,
-) -> Option<SessionGrantIntrospectOutcome> {
-    let jwt = Jwt::<SessionGrantPayload>::try_from(grant_jwt).ok()?;
-    if jwt.verify_with_jwks(&key_store.public_jwks()).is_err() {
-        return None;
-    }
-    let payload = jwt.payload();
-    if payload.proof_kind != Some(SessionGrantProofKind::AgentKeyProof) {
-        return None;
-    }
-    if audience.is_some_and(|audience| audience != payload.audience) {
-        return Some(SessionGrantIntrospectOutcome {
-            active: false,
-            status: SessionGrantIntrospectStatus::AudienceMismatch,
-            proof_required: false,
-            one_time_use_consumed: false,
-            grant: None,
-        });
-    }
-
-    let status = if payload.expires_at <= now {
-        SessionGrantIntrospectStatus::Expired
-    } else {
-        SessionGrantIntrospectStatus::Active
-    };
-    let active = status == SessionGrantIntrospectStatus::Active;
-    let grant = (status != SessionGrantIntrospectStatus::AudienceMismatch).then(|| {
-        SessionGrantIntrospectGrant {
-            id: session_grant_jwt_hash(grant_jwt),
-            issuer: payload.issuer.clone(),
-            subject: payload.subject.clone(),
-            service_account_id: payload.service_account_id.clone(),
-            device_id: payload.device_id.clone(),
-            audience: payload.audience.clone(),
-            scopes: payload.scopes.clone(),
-            expires_at: payload.expires_at,
-            revoked_at: None,
-            revocation_ref: payload.revocation_ref.clone(),
-            session_public_key: payload.session_public_key.clone(),
-            cnf_jkt: payload.cnf.as_ref().map(|cnf| cnf.jkt.clone()),
-            proof_kind: payload.proof_kind,
-            scope_details: payload.scope_details.clone(),
-            freshness_state: active.then_some(FreshnessState::Fresh),
-        }
-    });
-
-    Some(SessionGrantIntrospectOutcome {
-        active,
-        status,
-        proof_required: false,
-        one_time_use_consumed: false,
-        grant,
-    })
 }
 
 pub(crate) fn introspection_status(
@@ -181,7 +139,7 @@ fn verify_session_grant_introspection_proof(
     let claims = jwt.payload();
     let max_future_skew = Duration::try_seconds(30).unwrap();
     if claims.kind != "ck.session_grant.introspection_proof.v1"
-        || claims.grant_id != grant.id.to_string()
+        || claims.grant_id != grant.grant_id.to_string()
         || claims.grant_jwt_hash != session_grant_jwt_hash(&grant.grant_jwt)
         || claims.audience != grant.audience
         || claims.challenge != proof.challenge
@@ -232,14 +190,13 @@ pub async fn introspect_session_grant(
     let clock = crate::handlers::make_clock();
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
-    let key_store = depot.key_store()?;
     let mut repo = depot.repo().await?;
 
     let grant = if let Some(id) = body.id.as_deref() {
-        let id = Ulid::from_string(id)
+        let id = GrantId::new(id.to_owned())
             .map_err(|_| CokretRouteError::BadRequest("invalid session grant id".into()))?;
         repo.oauth_session_grant()
-            .lookup(id)
+            .lookup_by_grant_id(&id)
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
     } else if let Some(grant_jwt) = body.grant_jwt.as_deref() {
@@ -252,19 +209,6 @@ pub async fn introspect_session_grant(
     };
 
     let Some(grant) = grant else {
-        if let Some(grant_jwt) = body.grant_jwt.as_deref()
-            && let Some(outcome) = stateless_agent_introspection(
-                grant_jwt,
-                &key_store,
-                body.audience.as_deref(),
-                clock.now(),
-            )
-        {
-            repo.cancel()
-                .await
-                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-            return Ok(Json(outcome));
-        }
         repo.cancel()
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
@@ -299,10 +243,10 @@ pub async fn introspect_session_grant(
     // individually revoked — otherwise a grant rotated out just before logout
     // could keep introspecting `active` until self-expiry. Auth Server fail
     // closed per account-lifecycle §4.1.
-    if active {
+    if active && let Some(browser_session_id) = grant.browser_session_id {
         let logged_out = repo
             .browser_session()
-            .lookup(grant.browser_session_id)
+            .lookup(browser_session_id)
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
             .map_or(true, |session| session.finished_at.is_some());

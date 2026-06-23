@@ -143,6 +143,11 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(cokret::refresh_session_grant),
         )
+        .push(
+            Router::with_path("gate/account/session-grants/revoke")
+                .options(oidc_preflight_handler)
+                .post(cokret::revoke_session_grant_endpoint),
+        )
         // Auth-side hard logout sub-operation (account-lifecycle §4.1).
         // This is an internal Account Authority -> Auth Server service call:
         // the client-visible hard logout endpoint is the Principal/Account

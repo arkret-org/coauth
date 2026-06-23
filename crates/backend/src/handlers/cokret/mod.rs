@@ -701,6 +701,7 @@ fn session_grant_claims_hash(
 fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGrantPayloadClaims {
     SessionGrantPayloadClaims {
         kind: payload.kind.clone(),
+        grant_id: payload.grant_id.clone(),
         issuer: payload.issuer.clone(),
         subject: payload.subject.clone(),
         service_account_id: payload.service_account_id.clone(),
@@ -710,6 +711,7 @@ fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGr
         not_before: payload.not_before,
         expires_at: payload.expires_at,
         revocation_ref: payload.revocation_ref.clone(),
+        provenance_anchor: payload.provenance_anchor.clone(),
         device_id: payload.device_id.clone(),
         session_id: payload.session_id.clone(),
         browser_session_id: payload.browser_session_id.clone(),
@@ -931,7 +933,7 @@ pub async fn debug_issue_dpop_grant(
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(DebugIssueDpopGrantOutcome {
-        grant_id: persisted.id.to_string(),
+        grant_id: persisted.grant_id.to_string(),
         grant_jwt: material.grant_jwt,
         dpop_jkt: jkt,
         audience: material.audience,

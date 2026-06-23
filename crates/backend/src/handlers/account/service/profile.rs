@@ -1,5 +1,7 @@
 use anyhow::Error as AnyhowError;
-use coauth_data::queue::{DeactivateUserJob, QueueJobRepositoryExt as _};
+use coauth_data::queue::{
+    AccountProjectionRewriteJob, DeactivateUserJob, QueueJobRepositoryExt as _,
+};
 use coauth_data::user::UserRepository;
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, RepositoryError, SiteConfig};
 use rand_chacha::rand_core::CryptoRngCore;
@@ -84,6 +86,15 @@ pub async fn deactivate_current_account(
     repo.queue_job()
         .schedule_job(rng, clock, DeactivateUserJob::new(&user, principal_erase))
         .await?;
+    if principal_erase {
+        repo.queue_job()
+            .schedule_job(
+                rng,
+                clock,
+                AccountProjectionRewriteJob::new(&user, principal_erase),
+            )
+            .await?;
+    }
 
     repo.save().await?;
 

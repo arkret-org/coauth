@@ -2,7 +2,9 @@ use std::str::FromStr as _;
 
 use anyhow::Error as AnyhowError;
 use coauth_data::audit::AdminOperation;
-use coauth_data::queue::{DeactivateUserJob, QueueJobRepositoryExt as _};
+use coauth_data::queue::{
+    AccountProjectionRewriteJob, DeactivateUserJob, QueueJobRepositoryExt as _,
+};
 use coauth_data::upstream_oauth::{UpstreamOAuthLinkRepository, UpstreamOAuthProviderRepository};
 use coauth_data::user::{UserEmailRepository, UserRepository};
 use coauth_data::{
@@ -140,6 +142,15 @@ pub async fn patch_user(
                 DeactivateUserJob::new(&updated, principal_erase),
             )
             .await?;
+        if principal_erase || updated.status == AccountStatus::ErasurePending {
+            repo.queue_job()
+                .schedule_job(
+                    rng,
+                    clock,
+                    AccountProjectionRewriteJob::new(&updated, principal_erase),
+                )
+                .await?;
+        }
     }
 
     let details = serde_json::json!({

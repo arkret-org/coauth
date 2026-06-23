@@ -92,18 +92,20 @@ async fn terminate_auth_side_session_by_grant_jwt(
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     }
 
-    let unfinished_session = {
-        repo.browser_session()
-            .lookup(grant.browser_session_id)
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-            .filter(|session| session.finished_at.is_none())
-    };
-    if let Some(session) = unfinished_session {
-        repo.browser_session()
-            .finish(&*clock, session)
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+    if let Some(browser_session_id) = grant.browser_session_id {
+        let unfinished_session = {
+            repo.browser_session()
+                .lookup(browser_session_id)
+                .await
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+                .filter(|session| session.finished_at.is_none())
+        };
+        if let Some(session) = unfinished_session {
+            repo.browser_session()
+                .finish(&*clock, session)
+                .await
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+        }
     }
 
     repo.save()

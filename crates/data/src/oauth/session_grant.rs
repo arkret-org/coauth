@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use cokret_core::GrantId;
 use oauth_types::scope::Scope;
 use serde::Serialize;
 use ulid::Ulid;
@@ -8,7 +9,8 @@ use crate::{Clock, InvalidTransitionError};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SessionGrant {
     pub id: Ulid,
-    pub browser_session_id: Ulid,
+    pub grant_id: GrantId,
+    pub browser_session_id: Option<Ulid>,
     pub issuer: String,
     pub subject: String,
     pub device_id: Option<String>,

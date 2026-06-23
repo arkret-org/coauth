@@ -404,6 +404,7 @@ mod tests {
         for path in [
             "/_cokret/gate/account/session-grants",
             "/_cokret/gate/account/session-grants/refresh",
+            "/_cokret/gate/account/session-grants/revoke",
         ] {
             let response = TestClient::options(format!("http://127.0.0.1:8698{path}"))
                 .add_header("Origin", "http://127.0.0.1:8080", true)

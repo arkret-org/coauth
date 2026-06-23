@@ -501,9 +501,16 @@ pub async fn refresh_session_grant(
 
     // 4. Resolve the underlying browser session so the new grant lives under the same
     //    authentication context.
+    let browser_session_id = prior_grant.browser_session_id.ok_or_else(|| {
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+            "session-grant refresh requires a browser-bound session grant",
+        )
+    })?;
     let browser_session = repo
         .browser_session()
-        .lookup(prior_grant.browser_session_id)
+        .lookup(browser_session_id)
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
         .ok_or_else(|| {
@@ -625,7 +632,7 @@ pub async fn refresh_session_grant(
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     Ok(Json(SessionGrantRefreshOutcome {
-        grant_id: persisted.id.to_string(),
+        grant_id: persisted.grant_id.to_string(),
         grant_jwt: new_material.grant_jwt,
         session_public_key: new_material.session_public_key,
         expires_at: new_material.expires_at_timestamp,
@@ -633,7 +640,7 @@ pub async fn refresh_session_grant(
         scopes: new_material.scopes,
         dpop_jkt: verification.jkt,
         // The prior grant was atomically consumed by the CAS above.
-        previous_grant_id: prior_grant.id.to_string(),
+        previous_grant_id: prior_grant.grant_id.to_string(),
     }))
 }
 

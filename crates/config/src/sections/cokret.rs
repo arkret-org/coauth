@@ -32,13 +32,19 @@ fn session_grant_ttl_is_default(ttl: &Duration) -> bool {
     *ttl == default_session_grant_ttl()
 }
 
+/// Deployment profile used to constrain Cokret identity and trust choices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DeploymentProfileConfig {
+    /// Single-user node profile that may opt into local `did:web` principals.
     PersonalNode,
+    /// Small team deployment with managed principal issuance.
     SmallTeam,
+    /// Default organization deployment profile.
     Organization,
+    /// Organization profile for stricter operational controls.
     HighSecurityOrganization,
+    /// Sovereign deployment profile for isolated trust domains.
     SovereignDeployment,
 }
 
@@ -49,16 +55,20 @@ impl Default for DeploymentProfileConfig {
 }
 
 impl DeploymentProfileConfig {
+    /// Return true when the value matches the serialized default.
     #[must_use]
     pub const fn is_default(value: &Self) -> bool {
         matches!(value, Self::Organization)
     }
 }
 
+/// Principal DID method selected for coauth-managed principals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum PrincipalMethodConfig {
+    /// Use `did:webvh` principal DIDs.
     #[serde(rename = "did:webvh")]
     DidWebvh,
+    /// Use `did:web` principal DIDs.
     #[serde(rename = "did:web")]
     DidWeb,
 }
@@ -70,6 +80,7 @@ impl Default for PrincipalMethodConfig {
 }
 
 impl PrincipalMethodConfig {
+    /// Return the canonical DID method string.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -78,6 +89,7 @@ impl PrincipalMethodConfig {
         }
     }
 
+    /// Return true when the value matches the serialized default.
     #[must_use]
     pub const fn is_default(value: &Self) -> bool {
         matches!(value, Self::DidWebvh)

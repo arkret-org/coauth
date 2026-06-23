@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
-use cokret_core::SessionGrantProofKind;
+use cokret_core::{GrantId, SessionGrantProofKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct SessionGrantMaterial {
+    pub grant_id: GrantId,
     pub grant_jwt: String,
     pub session_public_key: String,
     pub expires_at: String,
@@ -22,6 +23,15 @@ pub struct SessionGrantMaterial {
     pub dpop_jkt: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ServiceAttestedProvenanceAnchor {
+    pub kind: String,
+    #[serde(alias = "authorityDid")]
+    pub authority_did: String,
+    #[serde(alias = "authorizationRef")]
+    pub authorization_ref: String,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct SessionGrantTarget {
     pub audience: String,
@@ -33,6 +43,7 @@ pub(crate) struct SessionGrantTarget {
 pub struct SessionGrantPayload {
     #[serde(rename = "type")]
     pub kind: String,
+    pub grant_id: GrantId,
     pub issuer: String,
     pub subject: String,
     pub service_account_id: String,
@@ -42,6 +53,8 @@ pub struct SessionGrantPayload {
     pub not_before: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub revocation_ref: String,
+    #[serde(alias = "provenanceAnchor")]
+    pub provenance_anchor: ServiceAttestedProvenanceAnchor,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
     pub session_id: String,
@@ -83,6 +96,7 @@ pub struct SessionGrantProof {
 pub(crate) struct SessionGrantPayloadClaims {
     #[serde(rename = "type")]
     pub(crate) kind: String,
+    pub(crate) grant_id: GrantId,
     pub(crate) issuer: String,
     pub(crate) subject: String,
     pub(crate) service_account_id: String,
@@ -92,6 +106,7 @@ pub(crate) struct SessionGrantPayloadClaims {
     pub(crate) not_before: DateTime<Utc>,
     pub(crate) expires_at: DateTime<Utc>,
     pub(crate) revocation_ref: String,
+    pub(crate) provenance_anchor: ServiceAttestedProvenanceAnchor,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) device_id: Option<String>,
     pub(crate) session_id: String,
@@ -107,7 +122,8 @@ pub(crate) struct SessionGrantPayloadClaims {
 #[derive(Debug, Serialize)]
 pub(crate) struct SessionGrantRecord {
     id: String,
-    browser_session_id: String,
+    grant_id: GrantId,
+    browser_session_id: Option<String>,
     issuer: String,
     subject: String,
     device_id: Option<String>,
@@ -134,7 +150,8 @@ impl From<SessionGrant> for SessionGrantRecord {
     fn from(value: SessionGrant) -> Self {
         Self {
             id: value.id.to_string(),
-            browser_session_id: value.browser_session_id.to_string(),
+            grant_id: value.grant_id,
+            browser_session_id: value.browser_session_id.map(|id| id.to_string()),
             issuer: value.issuer,
             subject: value.subject,
             device_id: value.device_id,

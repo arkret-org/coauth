@@ -37,7 +37,8 @@ pub use self::branding::BrandingConfig;
 pub use self::captcha::{CaptchaConfig, CaptchaServiceKind};
 pub use self::clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig};
 pub use self::cokret::{
-    CokretConfig, IdentityRegistryConfig, IdentityRegistryKind, PrincipalServerConfig, StaridConfig,
+    CokretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
+    PrincipalMethodConfig, PrincipalServerConfig, StaridConfig,
 };
 pub use self::database::{DatabaseConfig, PgSslMode};
 pub use self::email::{

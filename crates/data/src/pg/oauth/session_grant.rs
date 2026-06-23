@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::oauth::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository};
 use coauth_data::pagination::{Node, PaginationDirection};
 use coauth_data::{Clock, Page, Pagination, SessionGrant, new_id};
+use cokret_core::GrantId;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use oauth_types::scope::{Scope, ScopeToken};
@@ -29,7 +30,8 @@ impl<'c> PgOAuthSessionGrantRepository<'c> {
 #[diesel(table_name = oauth_session_grants)]
 struct SessionGrantLookup {
     id: Uuid,
-    user_session_id: Uuid,
+    grant_id: Uuid,
+    user_session_id: Option<Uuid>,
     issuer: String,
     subject: String,
     device_id: Option<String>,
@@ -67,7 +69,8 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 
         Ok(Self {
             id,
-            browser_session_id: value.user_session_id.into(),
+            grant_id: GrantId::from_uuid(value.grant_id),
+            browser_session_id: value.user_session_id.map(Into::into),
             issuer: value.issuer,
             subject: value.subject,
             device_id: value.device_id,
@@ -86,7 +89,8 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 #[diesel(table_name = oauth_session_grants)]
 struct NewSessionGrantRow<'a> {
     id: Uuid,
-    user_session_id: Uuid,
+    grant_id: Uuid,
+    user_session_id: Option<Uuid>,
     issuer: &'a str,
     subject: &'a str,
     device_id: Option<&'a str>,
@@ -103,7 +107,9 @@ macro_rules! apply_session_grant_filter {
         let mut q = $query;
 
         if let Some(user_session_id) = $filter.browser_session_id() {
-            q = q.filter(oauth_session_grants::user_session_id.eq(Uuid::from(user_session_id)));
+            q = q.filter(
+                oauth_session_grants::user_session_id.eq(Some(Uuid::from(user_session_id))),
+            );
         }
 
         if let Some(subject) = $filter.subject() {
@@ -149,7 +155,8 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
 
         let row = NewSessionGrantRow {
             id: Uuid::from(id),
-            user_session_id: Uuid::from(grant.browser_session_id),
+            grant_id: grant.grant_id.uuid(),
+            user_session_id: grant.browser_session_id.map(Uuid::from),
             issuer: grant.issuer,
             subject: grant.subject,
             device_id: grant.device_id,
@@ -168,6 +175,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
 
         Ok(SessionGrant {
             id,
+            grant_id: grant.grant_id,
             browser_session_id: grant.browser_session_id,
             issuer: grant.issuer.to_owned(),
             subject: grant.subject.to_owned(),
@@ -186,6 +194,23 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
     async fn lookup(&mut self, id: Ulid) -> Result<Option<SessionGrant>, Self::Error> {
         let row = oauth_session_grants::table
             .find(Uuid::from(id))
+            .select(SessionGrantLookup::as_select())
+            .first::<SessionGrantLookup>(self.conn)
+            .await
+            .optional()?;
+
+        row.map(SessionGrant::try_from)
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    #[tracing::instrument(name = "db.oauth_session_grant.lookup_by_grant_id", skip_all, err)]
+    async fn lookup_by_grant_id(
+        &mut self,
+        grant_id: &GrantId,
+    ) -> Result<Option<SessionGrant>, Self::Error> {
+        let row = oauth_session_grants::table
+            .filter(oauth_session_grants::grant_id.eq(grant_id.uuid()))
             .select(SessionGrantLookup::as_select())
             .first::<SessionGrantLookup>(self.conn)
             .await
