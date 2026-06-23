@@ -49,8 +49,9 @@ fn introspection_grant_record(
         .unwrap_or_else(|| format!("ck:session-grant:{}", grant.id));
     let scope_details = parsed_payload
         .as_ref()
-        .map(|payload| payload.scope_details.clone())
-        .unwrap_or(serde_json::Value::Null);
+        .map_or(serde_json::Value::Null, |payload| {
+            payload.scope_details.clone()
+        });
 
     let device_id = grant
         .device_id
@@ -261,7 +262,7 @@ pub async fn introspect_session_grant(
             .lookup(browser_session_id)
             .await
             .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-            .map_or(true, |session| session.finished_at.is_some());
+            .is_none_or(|session| session.finished_at.is_some());
         if logged_out {
             status = SessionGrantIntrospectStatus::Revoked;
             active = false;

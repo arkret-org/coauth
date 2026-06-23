@@ -433,8 +433,8 @@ fn normalize_handle_alias(alias: &str, default_domain: &str) -> Option<String> {
 
 async fn directory_resolve_not_found(started_at: Instant) -> CokretRouteError {
     let elapsed = started_at.elapsed();
-    if elapsed < DIRECTORY_RESOLVE_FAILURE_FLOOR {
-        tokio::time::sleep(DIRECTORY_RESOLVE_FAILURE_FLOOR - elapsed).await;
+    if let Some(remaining) = DIRECTORY_RESOLVE_FAILURE_FLOOR.checked_sub(elapsed) {
+        tokio::time::sleep(remaining).await;
     }
     CokretRouteError::NotFound
 }

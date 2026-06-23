@@ -380,12 +380,7 @@ pub async fn device_enroll_endpoint(
     })?;
 
     let now = truncate_to_seconds(clock.now());
-    let not_before = body
-        .not_before
-        .as_ref()
-        .cloned()
-        .map(truncate_to_seconds)
-        .unwrap_or_else(|| now.clone());
+    let not_before = body.not_before.map_or_else(|| now, truncate_to_seconds);
 
     let payload = DeviceAuthorizePayload {
         principal_id: principal_id.clone(),

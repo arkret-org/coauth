@@ -362,7 +362,7 @@ async fn verify_cross_session_lifecycle_proof(
     );
     shared_session_revoke_nonce_store()
         .check_and_record(&replay_key, proof.expires_at, now)
-        .map_err(|()| lifecycle_proof_invalid("lifecycle proof challenge has already been used"))?;
+        .map_err(|_| lifecycle_proof_invalid("lifecycle proof challenge has already been used"))?;
 
     Ok(())
 }

@@ -5,7 +5,7 @@ use cokret_core::ErasureReceipt;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::services::did_binding_proof::{SdkJwsVerifyError, verify_detached_jws_with_sdk};
+use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
 use crate::services::did_resolver::{DidResolveError, DidResolverService};
 
 #[derive(Debug, Error)]
@@ -100,12 +100,10 @@ pub async fn verify_erasure_receipt(
             &proof_payload,
             &resolution.document.verification_method,
         );
-        match verified_method {
-            Ok(verified_method) if verified_method == proof.verification_method => return Ok(()),
-            Ok(_) => continue,
-            Err(SdkJwsVerifyError::MethodNotFound(_)) => continue,
-            Err(SdkJwsVerifyError::SignatureMismatch(_)) => continue,
-            Err(_) => continue,
+        if let Ok(verified_method) = verified_method
+            && verified_method == proof.verification_method
+        {
+            return Ok(());
         }
     }
 

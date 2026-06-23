@@ -450,11 +450,12 @@ pub async fn get_strand_session(req: &mut Request) -> Result<Json<StrandOutcome>
 
     // Enforce the session TTL: an expired non-terminal session is treated as
     // gone — remove it and report NotFound rather than continuing to serve it.
-    if let Some((_, session)) = store.get(&id) {
-        if !session.status.is_terminal() && session.expires_at <= Utc::now() {
-            store.remove(&id);
-            return Err(RouteError::NotFound);
-        }
+    if let Some((_, session)) = store.get(&id)
+        && !session.status.is_terminal()
+        && session.expires_at <= Utc::now()
+    {
+        store.remove(&id);
+        return Err(RouteError::NotFound);
     }
 
     let (plan, session) = store.get_mut(&id).ok_or(RouteError::NotFound)?;
@@ -501,11 +502,12 @@ pub async fn respond_strand(
 
     // Enforce the session TTL before accepting a response: an expired
     // non-terminal session is treated as gone and may not be advanced.
-    if let Some((_, session)) = store.get(&id) {
-        if !session.status.is_terminal() && session.expires_at <= Utc::now() {
-            store.remove(&id);
-            return Err(RouteError::NotFound);
-        }
+    if let Some((_, session)) = store.get(&id)
+        && !session.status.is_terminal()
+        && session.expires_at <= Utc::now()
+    {
+        store.remove(&id);
+        return Err(RouteError::NotFound);
     }
 
     let (plan, session) = store.get_mut(&id).ok_or(RouteError::NotFound)?;

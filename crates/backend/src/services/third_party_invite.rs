@@ -484,6 +484,9 @@ pub struct NonceStore {
     inner: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NonceReplayError;
+
 impl NonceStore {
     /// Build an empty store.
     #[must_use]
@@ -502,14 +505,14 @@ impl NonceStore {
         jti: &str,
         exp: DateTime<Utc>,
         now: DateTime<Utc>,
-    ) -> Result<(), ()> {
+    ) -> Result<(), NonceReplayError> {
         let mut guard = self.inner.lock().expect("nonce store mutex poisoned");
         // Prune expired entries opportunistically.
         guard.retain(|_, e| *e > now);
         if let Some(existing_exp) = guard.get(jti)
             && *existing_exp > now
         {
-            return Err(());
+            return Err(NonceReplayError);
         }
         guard.insert(jti.to_owned(), exp);
         Ok(())
@@ -571,7 +574,7 @@ pub async fn verify_invite(
     // attacker poison the store with garbage entries.
     ctx.nonce_store
         .check_and_record(&verification.jti, verification_exp, ctx.now)
-        .map_err(|()| {
+        .map_err(|_| {
             InviteVerificationError::VerificationProofInvalid(format!(
                 "jti {} already used",
                 verification.jti

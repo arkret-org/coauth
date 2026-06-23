@@ -266,17 +266,16 @@ pub async fn post_invite_relay(
 
     let service_did = cokret::service_did_for(&url_builder, &cokret_config);
     let trust_domain = cokret::trust_domain_for(&url_builder, &cokret_config);
-    let destination_service_did = params
-        .invite_delivery
-        .as_ref()
-        .map(|delivery| {
+    let destination_service_did = params.invite_delivery.as_ref().map_or_else(
+        || service_did.clone(),
+        |delivery| {
             delivery
                 .invite_address
                 .recipient_service_did
                 .as_str()
                 .to_owned()
-        })
-        .unwrap_or_else(|| service_did.clone());
+        },
+    );
     let identity = PeerProtocolIdentity {
         source_service_did: service_did,
         destination_service_did,

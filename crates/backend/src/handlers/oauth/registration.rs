@@ -6,7 +6,7 @@ use coauth_data::{
 };
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_keystore::Encrypter;
-use coauth_policy::{EvaluationResult, Policy, PolicyFactory};
+use coauth_policy::{EvaluationResult, PolicyFactory, PolicyInstance};
 use oauth_types::errors::{ClientError, ClientErrorCode};
 use oauth_types::registration::{
     ClientMetadata, ClientMetadataVerificationError, ClientRegistrationResponse, Localized,
@@ -221,7 +221,7 @@ async fn handle_post(
         Box::new(ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng"));
 
     let mut repo: BoxRepository = repo_factory.create().await?;
-    let mut policy: Policy = policy_factory
+    let mut policy: PolicyInstance = policy_factory
         .instantiate()
         .await
         .map_err(|e| RouteError::Internal(Box::new(e)))?;

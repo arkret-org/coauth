@@ -803,13 +803,13 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
     // State binding: the proof's `state` MUST equal the state coauth recorded
     // on the authorization grant when the authorize request was issued.
-    if let Some(expected_state) = authz_grant.state.as_deref() {
-        if input.state.trim() != expected_state {
-            return Err(OidcExchangeError::proof_invalid(format!(
-                "callback state mismatch: authorization_code was issued for state={expected_state} but proof carried {}",
-                input.state.trim()
-            )));
-        }
+    if let Some(expected_state) = authz_grant.state.as_deref()
+        && input.state.trim() != expected_state
+    {
+        return Err(OidcExchangeError::proof_invalid(format!(
+            "callback state mismatch: authorization_code was issued for state={expected_state} but proof carried {}",
+            input.state.trim()
+        )));
     }
     // Nonce binding (id_token nonce equivalent for the local issuer).
     validate_returned_nonce(authz_grant.nonce.as_deref(), input.nonce.trim())

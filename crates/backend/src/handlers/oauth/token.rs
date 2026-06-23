@@ -5,7 +5,7 @@ use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SiteConfig, SystemClock, UrlBuilder,
 };
 use coauth_keystore::Keystore;
-use coauth_policy::Policy;
+use coauth_policy::PolicyInstance;
 use coauth_principal::ConnectorAdmin;
 use coauth_templates::Templates;
 use oauth_types::errors::{ClientError, ClientErrorCode};
@@ -397,7 +397,7 @@ async fn handle_post(
         Box::new(ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng"));
 
     let mut repo: BoxRepository = repo_factory.create().await?;
-    let policy: Policy = policy_factory
+    let policy: PolicyInstance = policy_factory
         .instantiate()
         .await
         .map_err(|e| RouteError::Internal(Box::new(e)))?;

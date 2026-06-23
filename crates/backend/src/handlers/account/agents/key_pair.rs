@@ -170,11 +170,6 @@ pub async fn post_agent_key_pair(
     // authorization has nothing to be accountable to — fail closed.
     let pairing_request_id = req
         .query::<String>("pairing_request_id")
-        .or_else(|| {
-            body.runtime_attestation
-                .as_ref()
-                .and_then(|_| None::<String>)
-        })
         .unwrap_or_default();
 
     let mut rng = make_rng();

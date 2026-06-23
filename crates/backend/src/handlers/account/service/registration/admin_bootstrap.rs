@@ -40,8 +40,8 @@ pub(super) async fn prepare_admin_bootstrap(
     match normalize_optional_token(requested_bootstrap_admin_token) {
         Some(requested_bootstrap_admin_token)
             if crate::util::constant_time_token_eq(
-                &requested_bootstrap_admin_token,
-                &configured_bootstrap_admin_token,
+                requested_bootstrap_admin_token,
+                configured_bootstrap_admin_token,
             ) =>
         {
             Ok(true)

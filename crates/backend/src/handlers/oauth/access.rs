@@ -12,7 +12,7 @@ use coauth_data::{
     Client, Clock, PrincipalUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
 };
 use coauth_keystore::Keystore;
-use coauth_policy::{Policy, PolicyFactory};
+use coauth_policy::{PolicyFactory, PolicyInstance};
 use coauth_principal::ConnectorAdmin;
 use oauth_types::requests::AuthorizationResponse;
 use thiserror::Error;
@@ -419,7 +419,7 @@ async fn has_policy_violation(
     requester_ip: Option<IpAddr>,
     user_agent: Option<String>,
 ) -> Result<bool, OAuthAccessError> {
-    let mut policy: Policy = policy_factory
+    let mut policy: PolicyInstance = policy_factory
         .instantiate()
         .await
         .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?;

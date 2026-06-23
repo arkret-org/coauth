@@ -345,7 +345,7 @@ pub async fn validate_control_proof(
     );
     nonce_store
         .check_and_record(&replay_key, claims.exp, now)
-        .map_err(|()| DidBindingProofError::NonceReplayed)?;
+        .map_err(|_| DidBindingProofError::NonceReplayed)?;
 
     Ok(claims.clone())
 }

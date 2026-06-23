@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 use ulid::Ulid;
 
 use crate::handlers::METER;
-use crate::handlers::activity_tracker::{Message, SessionKind};
+use crate::handlers::activity_tracker::{ActivityMessage, SessionKind};
 
 /// The maximum number of pending activity records before we flush them to the
 /// database automatically.
@@ -88,7 +88,7 @@ impl Worker {
 
     pub(super) async fn run(
         mut self,
-        mut receiver: tokio::sync::mpsc::Receiver<Message>,
+        mut receiver: tokio::sync::mpsc::Receiver<ActivityMessage>,
         cancellation_token: CancellationToken,
     ) {
         // This guard on the shutdown token is to ensure that if this task crashes for
@@ -115,7 +115,7 @@ impl Worker {
             };
 
             match message {
-                Message::Record {
+                ActivityMessage::Record {
                     kind,
                     id,
                     date_time,
@@ -155,7 +155,7 @@ impl Worker {
                     record.end_time = date_time.max(record.end_time);
                 }
 
-                Message::Flush(tx) => {
+                ActivityMessage::Flush(tx) => {
                     self.message_counter.add(1, &[KeyValue::new(TYPE, "flush")]);
 
                     self.flush().await;

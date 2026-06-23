@@ -14,7 +14,9 @@ use coauth_data::{
     UpstreamOAuthProvider, UpstreamOAuthProviderOnConflict, UrlBuilder, User, UserRegistration,
 };
 use coauth_jose::jwt::Jwt;
-use coauth_policy::{Policy, RegisterInput, RegistrationMethod, Requester as PolicyRequester};
+use coauth_policy::{
+    PolicyInstance, RegisterInput, RegistrationMethod, Requester as PolicyRequester,
+};
 use coauth_principal::ConnectorAdmin;
 use minijinja::Environment;
 use rand_core::RngCore;
@@ -236,7 +238,7 @@ pub async fn load_upstream_link_state(
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
     principal_server: &dyn ConnectorAdmin,
-    policy: &mut Policy,
+    policy: &mut PolicyInstance,
     site_config: &SiteConfig,
     user_agent: Option<String>,
     ip_address: Option<IpAddr>,
@@ -359,7 +361,7 @@ pub async fn submit_upstream_link_action(
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
     principal_server: &dyn ConnectorAdmin,
-    policy: &mut Policy,
+    policy: &mut PolicyInstance,
     site_config: &SiteConfig,
     user_agent: Option<String>,
     ip_address: Option<IpAddr>,
@@ -470,7 +472,7 @@ async fn load_upstream_registration_screen(
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
     principal_server: &dyn ConnectorAdmin,
-    policy: &mut Policy,
+    policy: &mut PolicyInstance,
     site_config: &SiteConfig,
     user_agent: Option<String>,
     ip_address: Option<IpAddr>,
@@ -618,7 +620,7 @@ async fn pre_check_handle(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
     principal_server: &dyn ConnectorAdmin,
-    policy: &mut Policy,
+    policy: &mut PolicyInstance,
     provider: &UpstreamOAuthProvider,
     link: &UpstreamOAuthLink,
     suggested_handle: Option<String>,
@@ -953,7 +955,7 @@ fn resolve_registration_attributes(
 async fn validate_registration_action(
     repo: &mut BoxRepository,
     principal_server: &dyn ConnectorAdmin,
-    policy: &mut Policy,
+    policy: &mut PolicyInstance,
     site_config: &SiteConfig,
     ip_address: Option<IpAddr>,
     user_agent: Option<String>,

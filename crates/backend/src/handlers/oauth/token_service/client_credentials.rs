@@ -1,7 +1,7 @@
 //! `client_credentials` grant-type handling.
 
 use coauth_data::{BoxRepository, Client, Clock, SiteConfig, TokenType};
-use coauth_policy::Policy;
+use coauth_policy::PolicyInstance;
 use oauth_types::requests::{AccessTokenResponse, ClientCredentialsGrant, GrantType};
 
 use super::ClientCredentialsGrantError;
@@ -22,7 +22,7 @@ pub async fn handle_client_credentials(
     client: &Client,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
-    mut policy: Policy,
+    mut policy: PolicyInstance,
     user_agent: Option<String>,
 ) -> Result<(AccessTokenResponse, BoxRepository), ClientCredentialsGrantError> {
     // Check that the client is allowed to use this grant type

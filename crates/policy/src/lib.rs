@@ -17,7 +17,7 @@
 //! - [`PolicyEvaluator`](provider::PolicyEvaluator): Evaluates individual policy checks
 //!   (registration, email, authorization, etc.).
 //!
-//! [`PolicyFactory`] and [`Policy`] are the public-facing types that wrap
+//! [`PolicyFactory`] and [`PolicyInstance`] are the public-facing types that wrap
 //! these traits and form the public API used by handler code.
 
 pub mod audit;
@@ -95,7 +95,7 @@ pub enum EvaluationError {
 // PolicyFactory - the main public-facing factory
 // ---------------------------------------------------------------------------
 
-/// Factory for creating [`Policy`] instances.
+/// Factory for creating [`PolicyInstance`] instances.
 ///
 /// Wraps a [`PolicyProviderFactory`] implementation, allowing different
 /// backends to be used transparently. The backend is selected at construction
@@ -192,25 +192,25 @@ impl PolicyFactory {
     ///
     /// Returns an error if the policy can't be instantiated.
     #[tracing::instrument(name = "policy.instantiate", skip_all)]
-    pub async fn instantiate(&self) -> Result<Policy, InstantiateError> {
+    pub async fn instantiate(&self) -> Result<PolicyInstance, InstantiateError> {
         let evaluator = self.inner.instantiate().await?;
-        Ok(Policy { inner: evaluator })
+        Ok(PolicyInstance { inner: evaluator })
     }
 }
 
 // ---------------------------------------------------------------------------
-// Policy - the main public-facing evaluator
+// PolicyInstance - the main public-facing evaluator
 // ---------------------------------------------------------------------------
 
 /// An instantiated policy evaluator.
 ///
 /// Created by [`PolicyFactory::instantiate`]. Wraps a [`PolicyEvaluator`]
 /// trait object, delegating evaluation calls to the selected backend.
-pub struct Policy {
+pub struct PolicyInstance {
     inner: Box<dyn PolicyEvaluator>,
 }
 
-impl Policy {
+impl PolicyInstance {
     /// Evaluate the 'email' policy.
     ///
     /// # Errors

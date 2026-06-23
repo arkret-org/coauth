@@ -79,9 +79,9 @@ fn did_proof_replay_window_exceeded(message: impl Into<String>) -> CokretRouteEr
     )
 }
 
-fn required_soft_logout_proof<'a>(
-    body: &'a SessionGrantRefreshRequestBody,
-) -> Result<&'a SessionGrantRefreshProof, CokretRouteError> {
+fn required_soft_logout_proof(
+    body: &SessionGrantRefreshRequestBody,
+) -> Result<&SessionGrantRefreshProof, CokretRouteError> {
     body.proof
         .as_ref()
         .ok_or_else(|| did_proof_required("soft logout recovery requires a fresh DID proof"))
@@ -104,7 +104,7 @@ fn required_proof_timestamp(
 ) -> Result<DateTime<Utc>, CokretRouteError> {
     value
         .as_ref()
-        .cloned()
+        .copied()
         .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
 }
 
@@ -114,7 +114,7 @@ fn required_proof_hash<'a>(
 ) -> Result<&'a str, CokretRouteError> {
     value
         .as_ref()
-        .map(|hash| hash.as_str())
+        .map(cokret_core::Hash::as_str)
         .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
 }
 
@@ -189,16 +189,14 @@ fn validate_soft_logout_did_proof_window(
     let freshness_secs = (expires_at - issued_at).num_seconds();
     if freshness_secs <= 0 || freshness_secs > SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS {
         return Err(did_proof_replay_window_exceeded(format!(
-            "DID proof expires_at - issued_at must be within 1..={} seconds",
-            SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS
+            "DID proof expires_at - issued_at must be within 1..={SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS} seconds"
         )));
     }
 
     let skew_secs = (issued_at - now).num_seconds().abs();
     if skew_secs > SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS {
         return Err(did_proof_replay_window_exceeded(format!(
-            "DID proof issued_at is outside the {} second receiver skew window",
-            SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS
+            "DID proof issued_at is outside the {SOFT_LOGOUT_DID_PROOF_MAX_WINDOW_SECS} second receiver skew window"
         )));
     }
 
@@ -368,7 +366,7 @@ async fn verify_soft_logout_did_proof(
     );
     shared_soft_logout_did_proof_nonce_store()
         .check_and_record(&replay_key, expires_at, now)
-        .map_err(|()| did_proof_invalid("DID proof challenge has already been used"))?;
+        .map_err(|_| did_proof_invalid("DID proof challenge has already been used"))?;
 
     Ok(())
 }

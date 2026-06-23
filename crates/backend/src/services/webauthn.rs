@@ -45,7 +45,7 @@ pub type WebauthnServiceHandle = Arc<dyn WebauthnService>;
 /// is started but never finished (abandoned tab, dropped connection) leaves its
 /// state behind; without an expiry the entry would persist until process
 /// restart and the challenge nonce would have no server-side validity bound.
-const CHALLENGE_TTL: Duration = Duration::from_secs(600);
+const CHALLENGE_TTL: Duration = Duration::from_mins(10);
 
 /// A pending ceremony state plus the instant it was created, for TTL eviction.
 struct PendingChallenge<S> {

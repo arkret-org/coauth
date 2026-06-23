@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use coauth_data::{Clock, PrincipalUser};
-use coauth_policy::Policy;
+use coauth_policy::PolicyInstance;
 use crate::salvo_utils::{
     InternalError,
     csrf::{CsrfExt, ProtectedForm},
@@ -54,7 +54,7 @@ async fn handle_get(
     let principal_server = depot.principal_server()?;
     let mut repo = depot.repo().await?;
     let policy_factory = depot.policy_factory()?;
-    let mut policy: Policy = policy_factory
+    let mut policy: PolicyInstance = policy_factory
         .instantiate()
         .await
         .map_err(|e| InternalError::new(Box::new(e)))?;
@@ -223,7 +223,7 @@ async fn handle_post(
     let principal_server = depot.principal_server()?;
     let mut repo = depot.repo().await?;
     let policy_factory = depot.policy_factory()?;
-    let mut policy: Policy = policy_factory
+    let mut policy: PolicyInstance = policy_factory
         .instantiate()
         .await
         .map_err(|e| InternalError::new(Box::new(e)))?;

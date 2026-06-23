@@ -8,7 +8,7 @@ use coauth_data::{
 };
 use coauth_i18n::Translator;
 use coauth_keystore::{Encrypter, Keystore};
-use coauth_policy::{Policy, PolicyFactory};
+use coauth_policy::{PolicyFactory, PolicyInstance};
 use coauth_principal::{ConnectorAdmin, ConnectorRegistry};
 use coauth_templates::Templates;
 use diesel_async::AsyncPgConnection;
@@ -435,8 +435,10 @@ pub fn extract_rng() -> BoxRng {
     Box::new(rng)
 }
 
-/// Extract Policy from depot
-pub async fn extract_policy(depot: &Depot) -> Result<Policy, coauth_policy::InstantiateError> {
+/// Extract a policy evaluator instance from depot.
+pub async fn extract_policy(
+    depot: &Depot,
+) -> Result<PolicyInstance, coauth_policy::InstantiateError> {
     let policy_factory = depot.get_policy_factory().ok_or_else(|| {
         coauth_policy::InstantiateError::Runtime(anyhow::anyhow!(
             "PolicyFactory not found in depot"

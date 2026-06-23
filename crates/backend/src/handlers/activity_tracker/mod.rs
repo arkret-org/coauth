@@ -38,7 +38,7 @@ impl SessionKind {
     }
 }
 
-enum Message {
+enum ActivityMessage {
     Record {
         kind: SessionKind,
         id: Ulid,
@@ -50,7 +50,7 @@ enum Message {
 
 #[derive(Clone)]
 pub struct ActivityTracker {
-    channel: tokio::sync::mpsc::Sender<Message>,
+    channel: tokio::sync::mpsc::Sender<ActivityMessage>,
 }
 
 impl ActivityTracker {
@@ -96,7 +96,7 @@ impl ActivityTracker {
     ) {
         let res = self
             .channel
-            .send(Message::Record {
+            .send(ActivityMessage::Record {
                 kind: SessionKind::OAuth,
                 id: session.id,
                 date_time: clock.now(),
@@ -118,7 +118,7 @@ impl ActivityTracker {
     ) {
         let res = self
             .channel
-            .send(Message::Record {
+            .send(ActivityMessage::Record {
                 kind: SessionKind::Personal,
                 id: session.id,
                 date_time: clock.now(),
@@ -140,7 +140,7 @@ impl ActivityTracker {
     ) {
         let res = self
             .channel
-            .send(Message::Record {
+            .send(ActivityMessage::Record {
                 kind: SessionKind::Browser,
                 id: browser_session.id,
                 date_time: clock.now(),
@@ -156,7 +156,7 @@ impl ActivityTracker {
     /// Manually flush the activity tracker.
     pub async fn flush(&self) {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let res = self.channel.send(Message::Flush(tx)).await;
+        let res = self.channel.send(ActivityMessage::Flush(tx)).await;
 
         match res {
             Ok(()) => {

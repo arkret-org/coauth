@@ -33,7 +33,7 @@ fn session_grant_ttl_is_default(ttl: &Duration) -> bool {
 }
 
 /// Deployment profile used to constrain Cokret identity and trust choices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DeploymentProfileConfig {
     /// Single-user node profile that may opt into local `did:web` principals.
@@ -41,17 +41,12 @@ pub enum DeploymentProfileConfig {
     /// Small team deployment with managed principal issuance.
     SmallTeam,
     /// Default organization deployment profile.
+    #[default]
     Organization,
     /// Organization profile for stricter operational controls.
     HighSecurityOrganization,
     /// Sovereign deployment profile for isolated trust domains.
     SovereignDeployment,
-}
-
-impl Default for DeploymentProfileConfig {
-    fn default() -> Self {
-        Self::Organization
-    }
 }
 
 impl DeploymentProfileConfig {
@@ -63,20 +58,15 @@ impl DeploymentProfileConfig {
 }
 
 /// Principal DID method selected for coauth-managed principals.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum PrincipalMethodConfig {
     /// Use `did:webvh` principal DIDs.
     #[serde(rename = "did:webvh")]
+    #[default]
     DidWebvh,
     /// Use `did:web` principal DIDs.
     #[serde(rename = "did:web")]
     DidWeb,
-}
-
-impl Default for PrincipalMethodConfig {
-    fn default() -> Self {
-        Self::DidWebvh
-    }
 }
 
 impl PrincipalMethodConfig {

@@ -195,10 +195,10 @@ async fn admin_actor_id(
     let admin_user = admin_user.ok_or_else(|| {
         AppError::forbidden("risk action workflow requires a user-bound admin token")
     })?;
-    Ok(did_resolver
+    did_resolver
         .primary_did_for_user(cokret_config, admin_user)
         .await
-        .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?)
+        .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))
 }
 
 fn bind_approval_admin_did(
