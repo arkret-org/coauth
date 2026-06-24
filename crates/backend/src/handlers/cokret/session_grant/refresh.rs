@@ -18,7 +18,7 @@ use sha2::Digest as _;
 
 use super::*;
 use crate::handlers::cokret::*;
-use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
+use crate::services::device_signing_directory::resolve_authorized_device_signing_key;
 use crate::services::third_party_invite::NonceStore;
 
 const SOFT_LOGOUT_RESTORE_OPERATION: &str = "resume_soft_logged_out_session";
@@ -247,14 +247,69 @@ fn verification_method_did(verification_method: &str) -> &str {
         .map_or(without_fragment, |(did, _)| did)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Verify an EdDSA detached compact JWS (`protected..signature`) over
+/// `payload_bytes` against a bare Ed25519 multibase verifying key (the
+/// device signing key resolved from the Principal Server directory). Returns
+/// the `kid` (verification method) from the protected header on success.
+///
+/// The signing input is recomputed from the wire bytes per RFC 7515 §5.2 as
+/// `b64u(protected) "." b64u(payload_bytes)`, so no JWS library state intervenes
+/// between the directory-resolved key and the SDK Ed25519 verifier
+/// (`cokret_signatures::proof::verify_detached_ed25519_signature`).
+fn verify_detached_jws_with_device_key(
+    detached_jws: &str,
+    payload_bytes: &[u8],
+    device_multibase: &str,
+) -> Result<String, String> {
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
+    use cokret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+
+    let mut parts = detached_jws.split('.');
+    let header_b64u = parts.next().ok_or("missing protected header")?;
+    let payload_segment = parts.next().ok_or("missing payload segment")?;
+    let signature_b64u = parts.next().ok_or("missing signature segment")?;
+    if parts.next().is_some() {
+        return Err("too many JWS segments".to_owned());
+    }
+    if !payload_segment.is_empty() {
+        return Err("detached JWS payload segment must be empty".to_owned());
+    }
+
+    let header_bytes = Base64UrlUnpadded::decode_vec(header_b64u)
+        .map_err(|error| format!("invalid header b64url: {error}"))?;
+    let header: serde_json::Value = serde_json::from_slice(&header_bytes)
+        .map_err(|error| format!("invalid protected header: {error}"))?;
+    if header.get("alg").and_then(serde_json::Value::as_str) != Some("EdDSA") {
+        return Err("protected header alg must be EdDSA".to_owned());
+    }
+    let verification_method = header
+        .get("kid")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or("protected header missing kid")?
+        .to_owned();
+
+    // RFC 7515 §5.2 signing input over the attached payload bytes.
+    let payload_b64u = Base64UrlUnpadded::encode_string(payload_bytes);
+    let mut signing_input = String::with_capacity(header_b64u.len() + 1 + payload_b64u.len());
+    signing_input.push_str(header_b64u);
+    signing_input.push('.');
+    signing_input.push_str(&payload_b64u);
+
+    let material = PublicKeyMaterial::Ed25519Multibase {
+        value: device_multibase.to_owned(),
+    };
+    if verify_detached_ed25519_signature(&material, signing_input.as_bytes(), signature_b64u) {
+        Ok(verification_method)
+    } else {
+        Err("Ed25519 signature did not verify against the authorized device key".to_owned())
+    }
+}
+
 async fn verify_soft_logout_did_proof(
     http_client: &reqwest::Client,
-    url_builder: &coauth_data::UrlBuilder,
     cokret_config: &coauth_config::CokretConfig,
-    key_store: &coauth_keystore::Keystore,
-    repo: &mut coauth_data::BoxRepository,
-    did_resolver: &dyn crate::services::did_resolver::DidResolverService,
     body: &SessionGrantRefreshRequestBody,
     prior_grant: &coauth_data::SessionGrant,
     device_id: &str,
@@ -296,35 +351,26 @@ async fn verify_soft_logout_did_proof(
         )))
     })?;
 
-    let resolution = did_resolver
-        .resolve_did_document(
-            http_client,
-            url_builder,
-            cokret_config,
-            key_store,
-            repo,
-            &prior_grant.subject,
-        )
-        .await
-        .map_err(|error| did_proof_invalid(format!("DID document resolution failed: {error}")))?;
-    if let Some(rejection) = resolution.identity_fact_rejection() {
-        return Err(did_proof_invalid(format!(
-            "DID resolver result cannot back a full identity fact: {}",
-            rejection.as_str()
-        )));
-    }
-    if resolution.document.verification_method.is_empty() {
-        return Err(did_proof_invalid(
-            "DID document has no verificationMethod entries",
-        ));
-    }
-
-    let verification_method = verify_detached_jws_with_sdk(
-        proof_jws,
-        &payload,
-        &resolution.document.verification_method,
+    // Holder-key source of truth is the Principal Server's device directory, NOT
+    // the principal DID document. The device signing key was authorized by a
+    // `ck.device.authorize` event and projected into soland's device directory;
+    // a `ck.device.revoke` masks it. Resolve the authorized, non-revoked key for
+    // this `(principal, device)` and verify the detached holder-proof JWS against
+    // it. The directory only surfaces verified, non-revoked devices, so a
+    // resolved key is itself proof the device is currently authorized.
+    let resolved = resolve_authorized_device_signing_key(
+        http_client,
+        cokret_config,
+        &prior_grant.audience,
+        &prior_grant.subject,
+        device_id,
     )
-    .map_err(|error| did_proof_invalid(format!("DID proof JWS invalid: {error}")))?;
+    .await
+    .map_err(|error| did_proof_invalid(format!("device signing key resolution failed: {error}")))?;
+
+    let verification_method =
+        verify_detached_jws_with_device_key(proof_jws, &payload, &resolved.multibase)
+            .map_err(|error| did_proof_invalid(format!("holder proof JWS invalid: {error}")))?;
     if let Some(expected_method) = proof
         .verification_method
         .as_deref()
@@ -333,12 +379,28 @@ async fn verify_soft_logout_did_proof(
         && expected_method != verification_method.as_str()
     {
         return Err(did_proof_invalid(
-            "DID proof verification_method does not match the detached JWS kid",
+            "holder proof verification_method does not match the detached JWS kid",
         ));
     }
-    if verification_method_did(&verification_method) != prior_grant.subject {
+    // The kid principal MUST still be the session-grant subject, so a proof
+    // signed under a different principal's device key cannot restore this
+    // session. The kid may carry either the principal DID prefix
+    // (`{principal}#{device}`) or the bare device `did:key`; accept either, but
+    // when it is principal-prefixed it MUST match the subject.
+    let kid_principal = verification_method_did(&verification_method);
+    let kid_is_principal_prefixed =
+        kid_principal.starts_with("did:webvh:") || kid_principal.starts_with("did:web:");
+    if kid_is_principal_prefixed && kid_principal != prior_grant.subject {
         return Err(did_proof_invalid(
-            "DID proof verification_method principal does not match the session grant subject",
+            "holder proof verification_method principal does not match the session grant subject",
+        ));
+    }
+    if !kid_is_principal_prefixed
+        && !kid_principal.starts_with("did:key:")
+        && verification_method.as_str() != resolved.device_signing_key_did
+    {
+        return Err(did_proof_invalid(
+            "holder proof verification_method does not match the authorized device signing key",
         ));
     }
 
@@ -401,7 +463,6 @@ pub async fn refresh_session_grant(
     let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
-    let did_resolver = depot.did_resolver_service()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
@@ -556,11 +617,7 @@ pub async fn refresh_session_grant(
     )?;
     verify_soft_logout_did_proof(
         &http_client,
-        &url_builder,
         &cokret_config,
-        &key_store,
-        &mut repo,
-        did_resolver.as_ref(),
         &body,
         &prior_grant,
         device_id,
