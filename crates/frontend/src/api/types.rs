@@ -508,68 +508,7 @@ pub struct ResendEmailAuthCodePayload {
 
 // ── Auth API types ────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LoginReqBody {
-    pub handle: String,
-    pub password: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LoginOutcome {
-    pub status: String,
-    #[serde(default)]
-    pub error: Option<String>,
-    #[serde(default)]
-    pub redirect: Option<String>,
-    #[serde(default)]
-    pub viewer: Option<LoginViewerInfo>,
-    #[serde(default)]
-    pub session_grant: Option<SessionGrantInfo>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LoginViewerInfo {
-    pub id: String,
-    pub handle: String,
-    pub did: String,
-    pub federated_handle: String,
-    pub principal_id: String,
-    #[serde(default)]
-    pub display_name: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SessionGrantInfo {
-    #[serde(default)]
-    pub id: Option<String>,
-    pub grant_jwt: String,
-    pub session_public_key: String,
-    pub expires_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LogoutOutcome {
-    pub status: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct UpstreamProvider {
-    pub id: String,
-    #[serde(default)]
-    pub human_name: Option<String>,
-    #[serde(default)]
-    pub brand_name: Option<String>,
-    pub authorize_url: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ProvidersOutcome {
-    pub providers: Vec<UpstreamProvider>,
-    pub password_login_enabled: bool,
-    pub password_registration_enabled: bool,
-    #[serde(default)]
-    pub account_recovery_allowed: bool,
-}
+pub use coauth_account_types::{LoginOutcome, ProvidersOutcome};
 
 // ── Registration API types ────────────────────────────────────
 

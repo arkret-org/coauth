@@ -1,0 +1,25 @@
+[package]
+name = "coauth-account-types"
+description = "Shared serde types for the coauth account UI API surface, consumed by the coauth backend and frontend."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+schema = ["dep:salvo"]
+
+[dependencies]
+salvo = {workspace = true,optional = true}
+serde = {workspace = true,features = ["derive"]}
+
+[dev-dependencies]
+serde_json = {workspace = true}

@@ -26,6 +26,7 @@ bcrypt = {workspace = true}
 bytes = {workspace = true}
 camino = {workspace = true}
 chrono = {workspace = true}
+coauth-account-types = {workspace = true,features = ["schema"]}
 coauth-admin-types = {workspace = true,features = ["schema"]}
 coauth-config = {workspace = true}
 coauth-data = {workspace = true}

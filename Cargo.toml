@@ -128,6 +128,7 @@ chrono = {version = "0.4.45",default-features = false,features = [
 ]}
 clap = {version = "4.6.1",features = ["derive"]}
 coauth = {version = "=0.3.0",path = "crates/cli"}
+coauth-account-types = {version = "=0.3.0",path = "crates/account-types"}
 coauth-admin-types = {version = "=0.3.0",path = "crates/admin-types"}
 coauth-backend = {version = "=0.3.0",path = "crates/backend"}
 coauth-config = {version = "=0.3.0",path = "crates/config"}

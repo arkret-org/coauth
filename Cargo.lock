@@ -1247,6 +1247,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "coauth-account-types"
+version = "0.3.0"
+dependencies = [
+ "salvo",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "coauth-admin-types"
 version = "0.3.0"
 dependencies = [
@@ -1271,6 +1280,7 @@ dependencies = [
  "bytes",
  "camino",
  "chrono",
+ "coauth-account-types",
  "coauth-admin-types",
  "coauth-config",
  "coauth-data",
@@ -1460,6 +1470,7 @@ name = "coauth-frontend"
 version = "0.3.0"
 dependencies = [
  "chrono",
+ "coauth-account-types",
  "dioxus",
  "gloo-timers 0.4.0",
  "js-sys",

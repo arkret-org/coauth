@@ -8,6 +8,10 @@ pub mod passkey;
 
 use std::sync::LazyLock;
 
+use coauth_account_types::{
+    LoginOutcome, LoginReqBody, LogoutOutcome, ProviderInfo, ProvidersOutcome, SessionGrantKind,
+    SessionGrantOneShotInfo, SessionGrantPrincipalServerInfo, ViewerInfo,
+};
 use coauth_data::UrlBuilder;
 use coauth_jose::jwk::PublicJsonWebKey;
 pub use oidc_bridge::integration_describe;
@@ -17,9 +21,7 @@ pub use passkey::{
     auth_finish as passkey_auth_finish, auth_start as passkey_auth_start,
     register_finish as passkey_register_finish, register_start as passkey_register_start,
 };
-use salvo::oapi::ToSchema;
 use salvo::prelude::*;
-use serde::{Deserialize, Serialize};
 
 use super::{DepotExt, NodeType, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
 use crate::handlers::account::service::access::{
@@ -79,102 +81,6 @@ static PASSWORD_LOGIN_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
 });
 const RESULT: Key = Key::from_static_str("result");
 
-// ── Request / Response types ───────────────────────────────────
-
-#[derive(Deserialize, ToSchema)]
-pub struct LoginReqBody {
-    pub handle: String,
-    pub password: String,
-    /// Audience the client wants the issued session grant to be bound to.
-    /// Must exactly match a configured principal-server audience. When
-    /// omitted, the caller is implicitly accepting the deployment's only
-    /// configured `server_name`; deployments with zero or multiple
-    /// principal servers will reject the request.
-    #[serde(default)]
-    pub audience: Option<String>,
-    /// Solved CAPTCHA token, supplied when the deployment has a CAPTCHA
-    /// provider configured (`site.captcha`). The token is verified with
-    /// the configured provider before the credentials are checked.
-    #[serde(default)]
-    pub captcha_token: Option<String>,
-    /// Device the issued principal-server session grant is bound to. Required
-    /// when `cokret.password_login_session_grants_enabled=true`.
-    #[serde(default)]
-    pub device_id: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct LoginOutcome {
-    pub status: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub viewer: Option<ViewerInfo>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_grant: Option<SessionGrantOneShotInfo>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub warnings: Vec<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct ViewerInfo {
-    pub id: String,
-    pub handle: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub did: Option<String>,
-    pub federated_handle: String,
-    pub principal_id: String,
-    pub display_name: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum SessionGrantKind {
-    PrincipalSession,
-    PushRegister,
-    DevicePairing,
-    AdminBridge,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct SessionGrantOneShotInfo {
-    pub kind: SessionGrantKind,
-    pub id: String,
-    pub grant_jwt: String,
-    pub session_public_key: String,
-    pub expires_at: String,
-    pub audience: String,
-    pub scopes: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub principal_server: Option<SessionGrantPrincipalServerInfo>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct SessionGrantPrincipalServerInfo {
-    pub name: String,
-    pub endpoint: String,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct LogoutOutcome {
-    pub status: &'static str,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct ProvidersOutcome {
-    pub providers: Vec<ProviderInfo>,
-    pub password_login_enabled: bool,
-    pub password_registration_enabled: bool,
-    pub account_recovery_allowed: bool,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct ProviderInfo {
-    pub id: String,
-    pub human_name: Option<String>,
-    pub brand_name: Option<String>,
-    pub authorize_url: String,
-}
 // ── POST /_coauth/gate/account/auth/login ────────────────────────────────────
 
 /// Authenticate a user with username and password, returning viewer info,
@@ -210,13 +116,9 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         Ok(jkt) => jkt,
         Err(error) => {
             res.status_code(StatusCode::BAD_REQUEST);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_dpop_proof"),
-                viewer: None,
-                session_grant: None,
-                warnings: vec![error.to_string()],
-            }));
+            res.render(Json(
+                LoginOutcome::error("invalid_dpop_proof").with_warnings(vec![error.to_string()]),
+            ));
             return Ok(());
         }
     };
@@ -229,13 +131,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     // Validate fields
     if input.handle.is_empty() || input.password.is_empty() {
         PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-        res.render(Json(LoginOutcome {
-            status: "error",
-            error: Some("invalid_credentials"),
-            viewer: None,
-            session_grant: None,
-            warnings: Vec::new(),
-        }));
+        res.render(Json(LoginOutcome::error("invalid_credentials")));
         return Ok(());
     }
 
@@ -252,13 +148,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         {
             tracing::warn!(error = %error, "CAPTCHA verification failed on login");
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("captcha_failed"),
-                viewer: None,
-                session_grant: None,
-                warnings: Vec::new(),
-            }));
+            res.render(Json(LoginOutcome::error("captcha_failed")));
             return Ok(());
         }
     }
@@ -294,58 +184,28 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     })? {
         PasswordLoginOutcome::Disabled => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("password_login_disabled"),
-                viewer: None,
-                session_grant: None,
-                warnings: Vec::new(),
-            }));
+            res.render(Json(LoginOutcome::error("password_login_disabled")));
             Ok(())
         }
         PasswordLoginOutcome::InvalidCredentials => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("invalid_credentials"),
-                viewer: None,
-                session_grant: None,
-                warnings: Vec::new(),
-            }));
+            res.render(Json(LoginOutcome::error("invalid_credentials")));
             Ok(())
         }
         PasswordLoginOutcome::RateLimited => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
             res.status_code(StatusCode::TOO_MANY_REQUESTS);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("rate_limited"),
-                viewer: None,
-                session_grant: None,
-                warnings: Vec::new(),
-            }));
+            res.render(Json(LoginOutcome::error("rate_limited")));
             Ok(())
         }
         PasswordLoginOutcome::AccountDeactivated { .. } => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("account_deactivated"),
-                viewer: None,
-                session_grant: None,
-                warnings: Vec::new(),
-            }));
+            res.render(Json(LoginOutcome::error("account_deactivated")));
             Ok(())
         }
         PasswordLoginOutcome::AccountLocked { .. } => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-            res.render(Json(LoginOutcome {
-                status: "error",
-                error: Some("account_locked"),
-                viewer: None,
-                session_grant: None,
-                warnings: Vec::new(),
-            }));
+            res.render(Json(LoginOutcome::error("account_locked")));
             Ok(())
         }
         PasswordLoginOutcome::Authenticated { user, user_session } => {
@@ -371,10 +231,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 viewer_repo.cancel().await.ok();
                 cookie_jar.finalize(
                     res,
-                    Json(LoginOutcome {
-                        status: "success",
-                        error: None,
-                        viewer: Some(ViewerInfo {
+                    Json(LoginOutcome::success(
+                        Some(ViewerInfo {
                             id: NodeType::User.serialize(user.id),
                             handle: user.localpart.clone(),
                             did: viewer_did,
@@ -382,27 +240,23 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                             principal_id: principal_server.principal_id(&user.localpart),
                             display_name,
                         }),
-                        session_grant: None,
-                        warnings: vec![
+                        None,
+                        vec![
                             "password_login_session_grants_disabled; use the OIDC/passkey bridge"
                                 .to_owned(),
                         ],
-                    }),
+                    )),
                 );
                 return Ok(());
             }
             let Some(dpop_binding) = dpop_binding else {
                 PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                 res.status_code(StatusCode::BAD_REQUEST);
-                res.render(Json(LoginOutcome {
-                    status: "error",
-                    error: Some("invalid_dpop_proof"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![
+                res.render(Json(
+                    LoginOutcome::error("invalid_dpop_proof").with_warnings(vec![
                         "password login session grants require a valid DPoP proof".to_owned(),
-                    ],
-                }));
+                    ]),
+                ));
                 return Ok(());
             };
             let Some(device_id) = requested_device_id
@@ -412,13 +266,11 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             else {
                 PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                 res.status_code(StatusCode::BAD_REQUEST);
-                res.render(Json(LoginOutcome {
-                    status: "error",
-                    error: Some("invalid_device_id"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec!["password login session grants require device_id".to_owned()],
-                }));
+                res.render(Json(
+                    LoginOutcome::error("invalid_device_id").with_warnings(vec![
+                        "password login session grants require device_id".to_owned(),
+                    ]),
+                ));
                 return Ok(());
             };
             let device_id = match cokret_core::DeviceId::new(device_id.to_owned()) {
@@ -426,13 +278,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Err(error) => {
                     PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                     res.status_code(StatusCode::BAD_REQUEST);
-                    res.render(Json(LoginOutcome {
-                        status: "error",
-                        error: Some("invalid_device_id"),
-                        viewer: None,
-                        session_grant: None,
-                        warnings: vec![format!("device_id is invalid: {error}")],
-                    }));
+                    res.render(Json(
+                        LoginOutcome::error("invalid_device_id")
+                            .with_warnings(vec![format!("device_id is invalid: {error}")]),
+                    ));
                     return Ok(());
                 }
             };
@@ -445,13 +294,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Err(error) => {
                     PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                     res.status_code(StatusCode::BAD_REQUEST);
-                    res.render(Json(LoginOutcome {
-                        status: "error",
-                        error: Some("invalid_audience"),
-                        viewer: None,
-                        session_grant: None,
-                        warnings: vec![error.to_string()],
-                    }));
+                    res.render(Json(
+                        LoginOutcome::error("invalid_audience")
+                            .with_warnings(vec![error.to_string()]),
+                    ));
                     return Ok(());
                 }
             };
@@ -505,13 +351,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Ok(did) => did,
                 Err(message) => {
                     PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-                    res.render(Json(LoginOutcome {
-                        status: "error",
-                        error: Some("principal_did_minting_failed"),
-                        viewer: None,
-                        session_grant: None,
-                        warnings: vec![message],
-                    }));
+                    res.render(Json(
+                        LoginOutcome::error("principal_did_minting_failed")
+                            .with_warnings(vec![message]),
+                    ));
                     return Ok(());
                 }
             };
@@ -519,10 +362,16 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 grant_target.principal_server_endpoint.as_deref(),
                 &user.localpart,
             );
+            let localpart_sync_bearer = oidc_bridge::principal_server_operation_bearer(
+                &cokret_config,
+                &grant_target.audience,
+            );
             if let Err(message) = oidc_bridge::ensure_soland_account_registered(
                 &http_client,
                 grant_target.principal_server_endpoint.as_deref(),
                 &principal_did,
+                localpart_sync_bearer,
+                Some(&user.localpart),
                 account_handle.as_deref(),
                 display_name.as_deref(),
                 Some(device_id.as_str()),
@@ -530,13 +379,10 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             .await
             {
                 PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-                res.render(Json(LoginOutcome {
-                    status: "error",
-                    error: Some("principal_account_registration_failed"),
-                    viewer: None,
-                    session_grant: None,
-                    warnings: vec![message],
-                }));
+                res.render(Json(
+                    LoginOutcome::error("principal_account_registration_failed")
+                        .with_warnings(vec![message]),
+                ));
                 return Ok(());
             }
             let session_grant = cokret::issue_session_grant_for_audience(
@@ -566,10 +412,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
 
             cookie_jar.finalize(
                 res,
-                Json(LoginOutcome {
-                    status: "success",
-                    error: None,
-                    viewer: Some(ViewerInfo {
+                Json(LoginOutcome::success(
+                    Some(ViewerInfo {
                         id: NodeType::User.serialize(user.id),
                         handle: user.localpart.clone(),
                         did: Some(principal_did),
@@ -577,7 +421,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         principal_id: principal_server.principal_id(&user.localpart),
                         display_name,
                     }),
-                    session_grant: Some(SessionGrantOneShotInfo {
+                    Some(SessionGrantOneShotInfo {
                         kind: SessionGrantKind::PrincipalSession,
                         id: persisted_session_grant.id.to_string(),
                         grant_jwt: session_grant.grant_jwt,
@@ -593,8 +437,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                                 endpoint,
                             }),
                     }),
-                    warnings: Vec::new(),
-                }),
+                    Vec::new(),
+                )),
             );
             Ok(())
         }
@@ -628,7 +472,7 @@ pub async fn logout(
     // Clear the session cookie
     let cookie_jar = cookie_jar.update_session_info(&session_info.mark_session_ended());
 
-    cookie_jar.finalize(res, Json(LogoutOutcome { status: "success" }));
+    cookie_jar.finalize(res, Json(LogoutOutcome::success()));
     Ok(())
 }
 
