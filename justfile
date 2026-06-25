@@ -12,6 +12,13 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 # real secret seed in production.
 export COAUTH_DEVICE_ENROLLMENT_KEY_SEED := "wgGYluck4bZVA5oa9khVpSriHgrcV81H4iPu6rqtRRY="
 
+# Dev-only escape hatch for the registration email-delivery bypass.
+# config.dev.yaml enables `account.registration_email_delivery_bypass_allowed`
+# (in-band verification code, no SMTP) so local dev needs no mail server. The
+# config validator fails closed unless this variable is also set, so a
+# mis-configured production deployment refuses to start. NEVER set in production.
+export COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS := "1"
+
 # Default recipe: show available commands
 default:
     @just --list
@@ -59,9 +66,14 @@ frontend-build:
     dx build -p coauth-frontend --release
     {{ if os() == "windows" { "if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse target/dx/coauth-frontend/release/web/public dist" } else { "rm -rf dist && cp -r target/dx/coauth-frontend/release/web/public dist" } }}
 
-# Build backend-served frontend assets from the current source tree
+# Build backend-served frontend assets from the current source tree.
+# Uses a debug build on purpose: `dx build --release` always invokes wasm-opt,
+# whose bundled binaryen binary crashes on Windows (exit 0xc0000409) and prints
+# a scary ERROR during `just dev`/`just backend`. Debug builds skip wasm-opt
+# entirely and are perfectly fine for locally serving the dev frontend.
 frontend-assets:
-    just frontend-build
+    dx build -p coauth-frontend
+    {{ if os() == "windows" { "if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse target/dx/coauth-frontend/debug/web/public dist" } else { "rm -rf dist && cp -r target/dx/coauth-frontend/debug/web/public dist" } }}
 
 # ── Build ────────────────────────────────────────────────────
 
