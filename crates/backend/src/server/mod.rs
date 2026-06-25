@@ -27,33 +27,51 @@ use routers::{
     connection_info_handler,
 };
 
-/// Scan the Dioxus build output directory for the hashed frontend JS entry
-/// point. Returns a URL path like `/assets/coauth-frontend-dxh<hash>.js`.
+/// Scan the Dioxus build output directory for the frontend JS entry point.
+///
+/// Two layouts are produced by `dx build` depending on the profile:
+/// - **release** emits hashed assets under `assets/`
+///   (e.g. `assets/coauth-frontend-dxh<hash>.js`);
+/// - **debug** emits a non-hashed entry under `wasm/`
+///   (`wasm/coauth-frontend.js`), and the JS hard-codes an absolute
+///   `/wasm/coauth-frontend_bg.wasm` load path.
+///
+/// Returns the URL path the served page should reference for whichever layout
+/// is present (`/assets/...` or `/wasm/coauth-frontend.js`).
 #[must_use]
 pub fn discover_frontend_script(assets_root: &camino::Utf8Path) -> Option<String> {
     let assets_dir = assets_root.join("assets");
-    let dir = std::fs::read_dir(&assets_dir).ok()?;
-    let mut candidates = Vec::new();
-    for entry in dir.flatten() {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with("coauth-frontend-") && name.ends_with(".js") {
-            let modified = entry
-                .metadata()
-                .and_then(|metadata| metadata.modified())
-                .unwrap_or(SystemTime::UNIX_EPOCH);
-            candidates.push((modified, name.into_owned()));
+    if let Ok(dir) = std::fs::read_dir(&assets_dir) {
+        let mut candidates = Vec::new();
+        for entry in dir.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("coauth-frontend-") && name.ends_with(".js") {
+                let modified = entry
+                    .metadata()
+                    .and_then(|metadata| metadata.modified())
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
+                candidates.push((modified, name.into_owned()));
+            }
+        }
+
+        candidates.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+        if let Some((_modified, name)) = candidates.into_iter().next() {
+            return Some(format!("/assets/{name}"));
+        }
+
+        // Fallback: non-hashed name under assets/.
+        if assets_dir.join("coauth-frontend.js").exists() {
+            return Some("/assets/coauth-frontend.js".into());
         }
     }
 
-    candidates.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
-    if let Some((_modified, name)) = candidates.into_iter().next() {
-        return Some(format!("/assets/{name}"));
-    }
-
-    // Fallback: check for non-hashed name
-    if assets_dir.join("coauth-frontend.js").exists() {
-        return Some("/assets/coauth-frontend.js".into());
+    // Debug `dx build` layout: the entry point and its `_bg.wasm` live under
+    // `wasm/`, and the JS loads the wasm from an absolute `/wasm/` URL, so the
+    // served page must reference it under `/wasm/` too (see the `/wasm/` route
+    // in `build_app_router`).
+    if assets_root.join("wasm").join("coauth-frontend.js").exists() {
+        return Some("/wasm/coauth-frontend.js".into());
     }
     None
 }
@@ -124,6 +142,20 @@ pub fn build_router(
                         .hoop(cache_control_middleware)
                         .get(
                             StaticDir::new([path.join("assets")])
+                                .include_dot_files(false)
+                                .auto_list(false),
+                        ),
+                )
+                // Debug `dx build` emits the wasm entry point, its `_bg.wasm`,
+                // and JS snippets under `wasm/` (not `assets/`), and the entry
+                // JS loads them from absolute `/wasm/` URLs. Serve that
+                // directory too so the dev (debug) frontend loads. Harmless in
+                // release: the directory simply does not exist.
+                .push(
+                    Router::with_path("/wasm/{**path}")
+                        .hoop(cache_control_middleware)
+                        .get(
+                            StaticDir::new([path.join("wasm")])
                                 .include_dot_files(false)
                                 .auto_list(false),
                         ),
