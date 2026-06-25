@@ -684,6 +684,11 @@ mod rfc7519 {
     pub const AUD: Claim<OneOrMany<String>, Contains<String>> = Claim::new("aud");
     pub const NBF: Claim<Timestamp, TimeNotBefore> = Claim::new("nbf");
     pub const EXP: Claim<Timestamp, TimeNotAfter> = Claim::new("exp");
+    // `iat` is validated with `TimeNotBefore`, which only rejects tokens whose
+    // issuance time lies in the future (clock-skew sanity). It deliberately
+    // does NOT enforce freshness: an old-but-not-future `iat` passes. Callers
+    // that need a freshness bound must combine this with `exp` and/or apply
+    // their own `max_age` check against `iat`.
     pub const IAT: Claim<Timestamp, TimeNotBefore> = Claim::new("iat");
     pub const JTI: Claim<String> = Claim::new("jti");
 }

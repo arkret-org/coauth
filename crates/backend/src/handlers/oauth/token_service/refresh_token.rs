@@ -150,7 +150,7 @@ pub async fn handle_refresh_token(
 
     activity_tracker.record_oauth_session(clock, &session).await;
 
-    let ttl = site_config.access_token_ttl;
+    let ttl = super::capped_access_token_ttl(site_config.access_token_ttl);
     let (new_access_token, new_refresh_token) =
         generate_token_pair(rng, clock, &mut repo, &session, ttl).await?;
 

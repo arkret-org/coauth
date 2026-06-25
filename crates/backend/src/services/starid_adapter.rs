@@ -464,6 +464,7 @@ fn parse_api_fault(status: u16, bytes: &[u8]) -> StaridError {
 mod tests {
     use std::sync::Once;
 
+    use cokret_core::error::ERROR_CODE_INVALID_SIGNATURE;
     use serde_json::json;
     use wiremock::matchers::{body_partial_json, header, method, path, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -774,7 +775,7 @@ mod tests {
         match err {
             StaridError::Api { status, code, .. } => {
                 assert_eq!(status, 401);
-                assert_eq!(code, "invalid_signature");
+                assert_eq!(code, ERROR_CODE_INVALID_SIGNATURE);
             }
             other => panic!("expected Api fault, got {other:?}"),
         }

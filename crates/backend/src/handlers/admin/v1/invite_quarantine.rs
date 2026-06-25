@@ -180,7 +180,10 @@ pub async fn list_invite_quarantine(
     let crate::handlers::admin::call_context::CallContext { repo, .. } = ctx;
     let query: InviteQuarantineListQuery = req.parse_queries().unwrap_or_default();
     let queue = depot.invite_quarantine_service()?;
-    let limit = query.limit.unwrap_or(100);
+    // REL-10: clamp the caller-supplied limit so an unbounded / negative
+    // value cannot drive an oversized scan. Mirrors the 1-1000 range
+    // documented on `InviteQuarantineListQuery::limit`.
+    let limit = query.limit.unwrap_or(100).clamp(1, 1000);
     repo.cancel().await?;
 
     let data = queue

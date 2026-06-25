@@ -375,6 +375,15 @@ pub async fn complete_account_recovery(
         .add(rng, clock, &user, version, hash, None)
         .await?;
 
+    // Recovery has no concept of a trusted current session, so revoke *all*
+    // existing browser and OAuth sessions for the account. Any session
+    // established before the recovery (potentially by an attacker) is
+    // terminated.
+    crate::handlers::account::service::sessions::revoke_user_sessions(
+        &mut repo, rng, clock, &user, None, None,
+    )
+    .await?;
+
     repo.user_recovery()
         .consume_ticket(clock, ticket, session)
         .await?;

@@ -48,7 +48,7 @@ pub use self::email::{
     SendgridEmailProviderConfig, SendgridWebhookConfig, SendmailEmailProviderConfig,
     SmtpEmailProviderConfig, TwilioEmailProviderConfig,
 };
-pub use self::experimental::ExperimentalConfig;
+pub use self::experimental::{ExperimentalConfig, MAX_ACCESS_TOKEN_TTL_SECS};
 pub use self::http::{
     BindConfig as HttpBindConfig, HstsConfig as HttpHstsConfig, HttpConfig,
     ListenerConfig as HttpListenerConfig, Resource as HttpResource, TlsConfig as HttpTlsConfig,

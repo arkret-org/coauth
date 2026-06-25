@@ -211,6 +211,11 @@ impl UserRepository for PgUserRepository<'_> {
             updated_at: created_at,
         };
 
+        // `do_nothing()` inserts zero rows when another concurrent finish has
+        // already claimed this localpart (protected by the
+        // `users_localpart_key` UNIQUE constraint). Surface that as an explicit
+        // `UniqueViolation` so the registration handler can return a clean
+        // `handle_taken` rejection instead of a generic repository 500.
         let rows_affected = diesel::insert_into(users::table)
             .values(&new_user)
             .on_conflict(users::localpart)
@@ -218,6 +223,9 @@ impl UserRepository for PgUserRepository<'_> {
             .execute(self.conn)
             .await?;
 
+        if rows_affected == 0 {
+            return Err(DatabaseError::UniqueViolation);
+        }
         DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
 
         Ok(User {

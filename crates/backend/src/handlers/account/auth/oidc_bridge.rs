@@ -19,6 +19,7 @@ use coauth_admin_types::{
 };
 use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
+use cokret_core::error::ERROR_CODE_PROOF_INVALID;
 use cokret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
@@ -99,7 +100,7 @@ impl OidcExchangeError {
     }
 
     fn proof_invalid(message: impl Into<String>) -> Self {
-        Self::new("proof_invalid", message)
+        Self::new(ERROR_CODE_PROOF_INVALID, message)
     }
 }
 
@@ -108,14 +109,15 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
     if returned_nonce == expected_nonce {
         return Ok(());
     }
-    Err(format!(
-        "authorization_code nonce mismatch: expected {expected_nonce} but grant carried {}",
-        if returned_nonce.is_empty() {
-            "missing"
-        } else {
-            returned_nonce
-        }
-    ))
+    // The recorded nonce is an internal binding value; keep it out of the
+    // client-facing envelope and only surface the detail at debug level.
+    tracing::debug!(
+        target: "coauth.oidc_exchange",
+        expected_nonce = %expected_nonce,
+        grant_nonce = %if returned_nonce.is_empty() { "missing" } else { returned_nonce },
+        "authorization_code nonce mismatch",
+    );
+    Err("authorization_code nonce mismatch: the proof nonce does not match the authorization_code".to_owned())
 }
 
 pub(crate) fn is_protocol_device_id(value: &str) -> bool {
@@ -661,6 +663,12 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             if issuer.scheme() == "https" {
                 discovery::discover(&http_client, issuer.as_str()).await
             } else {
+                tracing::warn!(
+                    target: "coauth.oidc_exchange",
+                    %issuer,
+                    "OIDC discovery is running in insecure (non-https) mode for the local issuer; \
+                     this bypasses TLS validation and must only be used in development environments",
+                );
                 discovery::insecure_discover(&http_client, issuer.as_str()).await
             }
         }
@@ -669,6 +677,13 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 discovery::discover(&http_client, issuer.as_str()).await
             }
             UpstreamOAuthProviderDiscoveryMode::Insecure => {
+                tracing::warn!(
+                    target: "coauth.oidc_exchange",
+                    %issuer,
+                    provider = %provider.human_name.as_deref().unwrap_or(provider.client_id.as_str()),
+                    "OIDC discovery is running in insecure mode for a federated upstream provider; \
+                     this bypasses validation and must only be used in development environments",
+                );
                 discovery::insecure_discover(&http_client, issuer.as_str()).await
             }
             UpstreamOAuthProviderDiscoveryMode::Disabled => {
@@ -736,6 +751,13 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 input.authorization_code.trim(),
                 redirect_uri.clone(),
                 input.code_verifier.trim(),
+                // Bind the client-supplied nonce to the upstream id_token. The
+                // `state` parameter is intentionally NOT validated here: in the
+                // federated flow the client (and, where applicable, the upstream
+                // provider) owns the authorization-request <-> callback `state`
+                // round-trip, so coauth never recorded an expected state to
+                // compare against. coauth's binding obligation is the nonce.
+                Some(input.nonce.trim()),
                 clock.now(),
                 &mut rng,
             )
@@ -775,21 +797,28 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             .await
             .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?
             .ok_or_else(|| {
+                // Do not reflect the upstream subject identifier in the
+                // client-facing envelope; it is an internal value.
+                tracing::debug!(
+                    target: "coauth.oidc_exchange",
+                    upstream_subject = %upstream_subject,
+                    provider = %provider.human_name.as_deref().unwrap_or(provider.client_id.as_str()),
+                    "federated upstream subject is not linked to a local account",
+                );
                 OidcExchangeError::new(
                     "upstream_link_required",
-                    format!(
-                        "federated upstream subject={} is not linked to a local account for provider={}",
-                        upstream_subject,
-                        provider.human_name.as_deref().unwrap_or(provider.client_id.as_str())
-                    ),
+                    "federated upstream subject is not linked to a local account",
                 )
             })?;
         let user_id = upstream_link.user_id.ok_or_else(|| {
+            tracing::debug!(
+                target: "coauth.oidc_exchange",
+                upstream_subject = %upstream_subject,
+                "federated upstream link is unassociated with a local account",
+            );
             OidcExchangeError::new(
                 "upstream_link_required",
-                format!(
-                    "federated upstream subject={upstream_subject} has an unassociated upstream link; complete account linking before issuing a grant"
-                ),
+                "federated upstream subject has an unassociated upstream link; complete account linking before issuing a grant",
             )
         })?;
         let user = repo
@@ -940,10 +969,17 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     if let Some(expected_state) = authz_grant.state.as_deref()
         && input.state.trim() != expected_state
     {
-        return Err(OidcExchangeError::proof_invalid(format!(
-            "callback state mismatch: authorization_code was issued for state={expected_state} but proof carried {}",
-            input.state.trim()
-        )));
+        // The expected state is an internal value bound to the grant; never
+        // reflect it (or the supplied state) in the client-facing envelope.
+        tracing::debug!(
+            target: "coauth.oidc_exchange",
+            expected_state = %expected_state,
+            supplied_state = %input.state.trim(),
+            "callback state mismatch",
+        );
+        return Err(OidcExchangeError::proof_invalid(
+            "callback state mismatch: the proof state does not match the authorization_code",
+        ));
     }
     // Nonce binding (id_token nonce equivalent for the local issuer).
     validate_returned_nonce(authz_grant.nonce.as_deref(), input.nonce.trim())
@@ -1066,7 +1102,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 let lower_description = error_description.to_ascii_lowercase();
                 let (code, error_kind) = match error.error {
                     ClientErrorCode::InvalidGrant if lower_description.contains("pkce") => (
-                        "proof_invalid",
+                        ERROR_CODE_PROOF_INVALID,
                         format!("pkce verification failed: {error_description}"),
                     ),
                     ClientErrorCode::InvalidGrant => {
@@ -1085,12 +1121,29 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                     ),
                 ))
             }
-            Err(error) => Err(OidcExchangeError::new(
-                "internal_error",
-                format!(
-                    "local OAuth token endpoint returned {status} and its error body could not be decoded: {error}"
-                ),
-            )),
+            Err(decode_error) => {
+                // A 4xx with an undecodable body is still a client-side
+                // rejection of this exchange, not a coauth fault: classify by
+                // status code instead of collapsing everything to
+                // `internal_error`. The raw decode error stays in the log.
+                tracing::debug!(
+                    target: "coauth.oidc_exchange",
+                    %status,
+                    error = %decode_error,
+                    "local OAuth token endpoint error body could not be decoded",
+                );
+                let code = match status {
+                    http::StatusCode::UNAUTHORIZED | http::StatusCode::FORBIDDEN => "invalid_client",
+                    http::StatusCode::BAD_REQUEST => "invalid_request",
+                    _ => "invalid_authorization_code",
+                };
+                Err(OidcExchangeError::new(
+                    code,
+                    format!(
+                        "local OAuth token endpoint rejected the authorization_code exchange with {status} and an undecodable error body"
+                    ),
+                ))
+            }
         };
     }
     let oauth_token_reply: AccessTokenResponse = oauth_token_http_response
@@ -1189,21 +1242,31 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         ));
     }
     if oauth_introspection.iss.as_deref() != Some(expected_issuer.as_str()) {
+        // Do not echo the expected issuer or the introspected issuer to the
+        // client; both are internal binding values.
+        tracing::debug!(
+            target: "coauth.oidc_exchange",
+            expected_issuer = %expected_issuer,
+            introspected_issuer = %oauth_introspection.iss.as_deref().unwrap_or("missing"),
+            "fresh OAuth access token issuer mismatch",
+        );
         return Err(OidcExchangeError::new(
             "invalid_discovery_binding",
-            format!(
-                "fresh OAuth access token issuer mismatch: expected {} but introspection returned {}",
-                expected_issuer,
-                oauth_introspection.iss.as_deref().unwrap_or("missing")
-            ),
+            "fresh OAuth access token issuer mismatch",
         ));
     }
     if oauth_introspection.sub.as_deref() != Some(expected_subject.as_str()) {
-        return Err(OidcExchangeError::proof_invalid(format!(
-            "fresh OAuth access token subject mismatch: expected {} but introspection returned {}",
-            expected_subject,
-            oauth_introspection.sub.as_deref().unwrap_or("missing")
-        )));
+        // The expected subject is the user's DID and the introspected subject is
+        // an internal value; keep both out of the client-facing envelope.
+        tracing::debug!(
+            target: "coauth.oidc_exchange",
+            expected_subject = %expected_subject,
+            introspected_subject = %oauth_introspection.sub.as_deref().unwrap_or("missing"),
+            "fresh OAuth access token subject mismatch",
+        );
+        return Err(OidcExchangeError::proof_invalid(
+            "fresh OAuth access token subject mismatch",
+        ));
     }
     let expected_oauth_client_id = oauth_session.client_id.to_string();
     if oauth_introspection.client_id.as_deref() != Some(expected_oauth_client_id.as_str()) {
@@ -1381,9 +1444,17 @@ fn validate_expected_principal(
         return Ok(());
     };
     if expected != resolved_principal_did {
-        return Err(OidcExchangeError::proof_invalid(format!(
-            "principal binding mismatch: request principal_id={expected} but the authenticated user resolves to {resolved_principal_did}"
-        )));
+        // Do not echo the resolved principal DID back to the client: it is an
+        // internal binding value the caller does not necessarily own.
+        tracing::debug!(
+            target: "coauth.oidc_exchange",
+            request_principal_id = %expected,
+            resolved_principal_did = %resolved_principal_did,
+            "principal binding mismatch",
+        );
+        return Err(OidcExchangeError::proof_invalid(
+            "principal binding mismatch: the request principal_id does not match the authenticated user",
+        ));
     }
     Ok(())
 }

@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Cokret Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
 
-name: Integration e2e
+name: Gitea Integration e2e
 
 # bring up the docker-compose integration stack
 # (Postgres + coauth + soland + sodmin) and run the smoke + e2e harness
@@ -29,7 +29,7 @@ env:
   CARGO_TERM_COLOR: always
 
 concurrency:
-  group: integration-e2e-${{ github.ref }}
+  group: gitea-integration-e2e-${{ gitea.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install jq + curl
         run: |
@@ -90,7 +90,7 @@ jobs:
 
       - name: Upload integration diagnostic logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v7.0.0
+        uses: christopherhx/gitea-upload-artifact@v4
         with:
           name: integration-e2e-logs
           path: target/integration-logs/
@@ -99,3 +99,4 @@ jobs:
       - name: Tear down integration stack
         if: ${{ always() }}
         run: bash scripts/integration-up.sh --down
+

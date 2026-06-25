@@ -176,14 +176,87 @@ enum SessionGrantAuthz {
     PrincipalServer,
 }
 
+/// Resolved session-grant caller: the authorization tier plus, for a
+/// Principal Server caller, the set of audiences it is allowed to read.
+///
+/// `allowed_audiences` is `None` for an admin caller (unrestricted) and
+/// `Some(..)` for a Principal Server caller. A Principal Server is only ever
+/// authorized for the audience(s) of the principal-server configuration it
+/// authenticated as, so it must not be able to enumerate session-grant
+/// metadata across other subjects/audiences (SEC-SG-ENUM).
+#[derive(Debug, Clone)]
+struct SessionGrantCaller {
+    authz: SessionGrantAuthz,
+    allowed_audiences: Option<Vec<String>>,
+}
+
+impl SessionGrantCaller {
+    fn admin() -> Self {
+        Self {
+            authz: SessionGrantAuthz::Admin,
+            allowed_audiences: None,
+        }
+    }
+
+    fn principal_server(allowed_audiences: Vec<String>) -> Self {
+        Self {
+            authz: SessionGrantAuthz::PrincipalServer,
+            allowed_audiences: Some(allowed_audiences),
+        }
+    }
+
+    /// Resolve the audience a session-grant *read* query must be pinned to,
+    /// given the audience the caller requested (if any).
+    ///
+    /// - An admin caller (`allowed_audiences == None`) is unrestricted: the
+    ///   requested audience is honoured as-is and `None` means "all".
+    /// - A Principal Server caller MUST stay within its `allowed_audiences`
+    ///   (SEC-SG-ENUM). When it requests an audience, that audience must be in
+    ///   the allow-list. When it requests none and exactly one audience is
+    ///   configured for it, that single audience is auto-pinned. Otherwise the
+    ///   caller must disambiguate, so cross-subject enumeration is refused.
+    fn resolve_read_audience(
+        &self,
+        requested: Option<&str>,
+    ) -> Result<Option<String>, CokretRouteError> {
+        let requested = requested.map(str::trim).filter(|a| !a.is_empty());
+        match &self.allowed_audiences {
+            None => Ok(requested.map(ToOwned::to_owned)),
+            Some(allowed) => match requested {
+                Some(audience) => {
+                    if allowed.iter().any(|candidate| candidate == audience) {
+                        Ok(Some(audience.to_owned()))
+                    } else {
+                        Err(CokretRouteError::Forbidden(
+                            "principal-server caller may only query its own audience".to_owned(),
+                        ))
+                    }
+                }
+                None => match allowed.as_slice() {
+                    [audience] => Ok(Some(audience.clone())),
+                    _ => Err(CokretRouteError::Forbidden(
+                        "principal-server caller must specify an allowed audience".to_owned(),
+                    )),
+                },
+            },
+        }
+    }
+}
+
 /// Resolve the bearer token on the request and require either an admin
 /// scope or the `server_name` session-bind scope. Used by the
 /// session-grant admin surface to gate access without going through the
 /// heavier admin call-context extractor.
+///
+/// In addition to the scope check, this validates the credential's liveness:
+/// expired or revoked access tokens / sessions are rejected with `401`
+/// (SEC-SG-EXPIRY / REL-04). The legacy behaviour only inspected
+/// `session.scope` and would happily authorize a long-expired or revoked
+/// token.
 async fn require_session_grant_caller(
     req: &Request,
     depot: &Depot,
-) -> Result<SessionGrantAuthz, CokretRouteError> {
+) -> Result<SessionGrantCaller, CokretRouteError> {
     use coauth_data::{RepositoryAccess, TokenType};
 
     let auth_header = req
@@ -202,11 +275,16 @@ async fn require_session_grant_caller(
     // token configured in `cokret.principal_servers[].
     // session_grant_introspection_bearer`. This lets a server-to-server caller
     // skip the DB-backed PAT/OAuth-session lookup. Grants `PrincipalServer`
-    // authz only — never `Admin` — so it cannot revoke session grants.
+    // authz only — never `Admin` — so it cannot revoke session grants. The
+    // matching server's audience is the only one this caller may read.
     let cokret_config = depot.cokret_config()?;
-    if principal_server_static_session_grant_bearer_matches(&cokret_config, token) {
-        return Ok(SessionGrantAuthz::PrincipalServer);
+    if let Some(audience) =
+        principal_server_static_session_grant_bearer_audience(&cokret_config, token)
+    {
+        return Ok(SessionGrantCaller::principal_server(vec![audience]));
     }
+
+    let now = crate::handlers::make_clock().now();
 
     let token_type = TokenType::check(token)
         .map_err(|_| CokretRouteError::Unauthorized("invalid bearer token".to_owned()))?;
@@ -220,6 +298,13 @@ async fn require_session_grant_caller(
                 .await
                 .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| CokretRouteError::Unauthorized("unknown access token".to_owned()))?;
+            // SEC-SG-EXPIRY / REL-04: reject revoked or expired access tokens.
+            if !access.is_valid(now) {
+                repo.cancel().await?;
+                return Err(CokretRouteError::Unauthorized(
+                    "access token is expired or revoked".to_owned(),
+                ));
+            }
             let session = repo
                 .oauth_session()
                 .lookup(access.session_id)
@@ -230,6 +315,13 @@ async fn require_session_grant_caller(
                         "access token references missing session",
                     ))
                 })?;
+            // SEC-SG-EXPIRY / REL-04: reject finished (logged-out) sessions.
+            if !session.is_valid() {
+                repo.cancel().await?;
+                return Err(CokretRouteError::Unauthorized(
+                    "session is finished".to_owned(),
+                ));
+            }
             session.scope.clone()
         }
         TokenType::PersonalAccessToken => {
@@ -239,6 +331,13 @@ async fn require_session_grant_caller(
                 .await
                 .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
                 .ok_or_else(|| CokretRouteError::Unauthorized("unknown access token".to_owned()))?;
+            // SEC-SG-EXPIRY / REL-04: reject revoked or expired personal tokens.
+            if !access.is_valid(now) {
+                repo.cancel().await?;
+                return Err(CokretRouteError::Unauthorized(
+                    "access token is expired or revoked".to_owned(),
+                ));
+            }
             let session = repo
                 .personal_session()
                 .lookup(access.session_id)
@@ -249,6 +348,13 @@ async fn require_session_grant_caller(
                         "access token references missing session",
                     ))
                 })?;
+            // SEC-SG-EXPIRY / REL-04: reject revoked personal sessions.
+            if !session.is_valid() {
+                repo.cancel().await?;
+                return Err(CokretRouteError::Unauthorized(
+                    "session is revoked".to_owned(),
+                ));
+            }
             session.scope.clone()
         }
         _ => {
@@ -260,9 +366,19 @@ async fn require_session_grant_caller(
     repo.cancel().await?;
 
     if crate::handlers::admin::has_admin_scope(&scope) {
-        Ok(SessionGrantAuthz::Admin)
+        Ok(SessionGrantCaller::admin())
     } else if scope.contains(PRINCIPAL_SERVER_SESSION_BIND_SCOPE) {
-        Ok(SessionGrantAuthz::PrincipalServer)
+        // A `session.bind`-scoped caller is a Principal Server. The scope does
+        // not pin which configured server, so the caller may read any of the
+        // configured principal-server audiences (and only those). The list /
+        // introspect handlers further require the caller to pin one of these
+        // audiences before any subject/device enumeration is allowed.
+        let allowed_audiences = cokret_config
+            .principal_servers
+            .iter()
+            .map(|server| server.audience.clone())
+            .collect();
+        Ok(SessionGrantCaller::principal_server(allowed_audiences))
     } else {
         Err(CokretRouteError::Forbidden(
             "missing admin or principal-server scope".to_owned(),
@@ -274,12 +390,30 @@ fn principal_server_static_session_grant_bearer_matches(
     cokret_config: &CokretConfig,
     token: &str,
 ) -> bool {
-    !token.trim().is_empty()
-        && cokret_config
-            .principal_servers
-            .iter()
-            .filter_map(|server| server.session_grant_introspection_bearer.as_deref())
-            .any(|configured| crate::util::constant_time_token_eq(configured, token))
+    principal_server_static_session_grant_bearer_audience(cokret_config, token).is_some()
+}
+
+/// Returns the audience of the principal server whose static
+/// `session_grant_introspection_bearer` matches `token`, or `None` when no
+/// configured static bearer matches. The audience scopes what a static-bearer
+/// Principal Server caller is allowed to read (SEC-SG-ENUM).
+fn principal_server_static_session_grant_bearer_audience(
+    cokret_config: &CokretConfig,
+    token: &str,
+) -> Option<String> {
+    if token.trim().is_empty() {
+        return None;
+    }
+    cokret_config
+        .principal_servers
+        .iter()
+        .find(|server| {
+            server
+                .session_grant_introspection_bearer
+                .as_deref()
+                .is_some_and(|configured| crate::util::constant_time_token_eq(configured, token))
+        })
+        .map(|server| server.audience.clone())
 }
 
 impl Scribe for CokretRouteError {
@@ -670,31 +804,16 @@ pub(crate) fn password_login_session_grant_target(
     }
 }
 
-// T5.3 (Round 22, 2026-05-20) — handle_claim digest convergence.
-//
-// The previous in-file `write_canonical_json` walker and
-// `canonical_json_sha256` helper were a hand-rolled (but spec-equivalent)
-// canonical-JSON implementation. They are now a thin shim over
-// `cokret_core::canonical::canonical_sha256`, which is the single canonical
-// JSON pipeline shared by soland / starid / yougen / floria. This keeps
-// the handle-claim payload hash byte-identical to every other Cokret
-// service computing `sha256(canonical_json(payload))`.
-//
-// The SDK encoder is *stricter* than the original (it rejects float
-// numbers per `encoding.md` §3.2). Coauth's `HandleClaimDigestInput` is
-// composed of strings, DateTime<Utc> (rendered as RFC 3339 strings), and
-// an inner struct of strings, so no shape that previously hashed cleanly
-// will now reject. The result type is the SDK's own `cokret_core::Error`
-// so callers retain its structured variants rather than a re-wrapped
-// `serde_json::Error`.
-fn canonical_json_sha256(value: &impl Serialize) -> Result<String, cokret_core::Error> {
-    cokret_core::canonical::canonical_sha256(value)
-}
-
+// handle_claim digest convergence — `sha256(canonical_json(payload))` is
+// computed directly via `cokret_core::canonical::canonical_sha256`, the single
+// canonical-JSON pipeline shared by soland / starid / yougen / floria. This
+// keeps the handle-claim payload hash byte-identical to every other Cokret
+// service. The result type is the SDK's own `cokret_core::Error` so callers
+// retain its structured variants.
 fn session_grant_claims_hash(
     claims: &SessionGrantPayloadClaims,
 ) -> Result<String, cokret_core::Error> {
-    canonical_json_sha256(claims)
+    cokret_core::canonical::canonical_sha256(claims)
 }
 
 #[cfg(test)]

@@ -109,6 +109,24 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
     canonicalize_circle_ids(&mut body.allowed_circle_ids);
     let mut rng = make_rng();
     let mut repo = call_context.repo;
+
+    // REL-03: consume the approved proposal *before* persisting the grant.
+    // `mark_executed` claims execution rights (`approved -> executed`); a
+    // concurrent request racing on the same proposal sees `AlreadyExecuted`
+    // and is rejected, so a single approval cannot mint two grants.
+    if let Some(proposal_ulid) = approved_proposal {
+        let proposals = depot.risk_action_proposals_service()?;
+        proposals
+            .mark_executed(proposal_ulid, chrono::Utc::now())
+            .await
+            .map_err(|err| {
+                AppError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("risk_action mark_executed: {err}"),
+                )
+            })?;
+    }
+
     let grant = repo
         .circle_capability_grant()
         .add(
@@ -123,19 +141,6 @@ pub async fn create_handler(req: &mut Request, depot: &Depot) -> JsonResult<Circ
             },
         )
         .await?;
-
-    if let Some(proposal_ulid) = approved_proposal {
-        let proposals = depot.risk_action_proposals_service()?;
-        proposals
-            .mark_executed(proposal_ulid, chrono::Utc::now())
-            .await
-            .map_err(|err| {
-                AppError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("risk_action mark_executed: {err}"),
-                )
-            })?;
-    }
 
     repo.save().await?;
 

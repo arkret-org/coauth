@@ -43,10 +43,10 @@ pub struct AliyunSmsProviderConfig {
     /// Aliyun access key secret
     pub access_key_secret: String,
 
-    /// Aliyun sign name (签名)
+    /// Aliyun sign name
     pub sign_name: String,
 
-    /// Aliyun template code (模板编号)
+    /// Aliyun template code
     pub template_code: String,
 }
 
@@ -62,10 +62,10 @@ pub struct TencentCloudSmsProviderConfig {
     /// Tencent Cloud SDK app ID
     pub sdk_app_id: String,
 
-    /// Tencent Cloud sign name (签名)
+    /// Tencent Cloud sign name
     pub sign_name: String,
 
-    /// Tencent Cloud template ID (模板 ID)
+    /// Tencent Cloud template id
     pub template_id: String,
 }
 

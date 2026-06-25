@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use diesel::QueryableByName;
+use diesel::{OptionalExtension as _, QueryableByName};
 use diesel::sql_types::{Int4, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
@@ -398,36 +398,25 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         id: Ulid,
         executed_at: DateTime<Utc>,
     ) -> Result<RiskActionProposalRecord, RiskActionProposalsError> {
-        let existing = self
-            .get(id)
-            .await?
-            .ok_or(RiskActionProposalsError::NotFound)?;
-        match existing.state {
-            ProposalState::Executed => return Err(RiskActionProposalsError::AlreadyExecuted),
-            ProposalState::Cancelled | ProposalState::Rejected => {
-                return Err(RiskActionProposalsError::AlreadyCancelled);
-            }
-            ProposalState::Draft => {
-                return Err(RiskActionProposalsError::NotApproved {
-                    got: existing.approval_proofs.len() as u32,
-                    need: existing.required_approvals,
-                });
-            }
-            ProposalState::Approved => {}
-        }
-
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
-        let row = diesel::sql_query(
+
+        // Atomic compare-and-set: only the `approved` row transitions to
+        // `executed`, and PostgreSQL serialises concurrent UPDATEs on the same
+        // row. Exactly one of N concurrent callers carrying the same approved
+        // proposal observes `state = 'approved'` and gets the RETURNING row;
+        // the others match zero rows. This closes the execute-then-mark TOCTOU
+        // (CKP-0007 P2B.5: an N-of-M approved proposal MUST be consumed once).
+        let updated = diesel::sql_query(
             r"
             UPDATE risk_action_proposals
             SET state = 'executed',
                 executed_at = $2,
                 updated_at = $2
-            WHERE id = $1
+            WHERE id = $1 AND state = 'approved'
             RETURNING
                 id, account_id, action, proposer_did, reason, ticket,
                 state, approval_proofs, required_approvals,
@@ -438,8 +427,34 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .bind::<Timestamptz, _>(executed_at)
         .get_result::<ProposalRow>(&mut *conn)
         .await
+        .optional()
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
-        Ok(row.into_record())
+
+        if let Some(row) = updated {
+            return Ok(row.into_record());
+        }
+
+        // Lost the race (or never eligible). Re-read the committed row to
+        // report the precise reason instead of a generic failure.
+        let existing = self
+            .get(id)
+            .await?
+            .ok_or(RiskActionProposalsError::NotFound)?;
+        match existing.state {
+            ProposalState::Executed => Err(RiskActionProposalsError::AlreadyExecuted),
+            ProposalState::Cancelled | ProposalState::Rejected => {
+                Err(RiskActionProposalsError::AlreadyCancelled)
+            }
+            ProposalState::Draft => Err(RiskActionProposalsError::NotApproved {
+                got: existing.approval_proofs.len() as u32,
+                need: existing.required_approvals,
+            }),
+            // Still `approved` yet our conditional UPDATE matched nothing: the
+            // row must have flipped to a non-approved state between the UPDATE
+            // and this re-read (another executor won). Treat as already
+            // executed — never run the mutation twice.
+            ProposalState::Approved => Err(RiskActionProposalsError::AlreadyExecuted),
+        }
     }
 
     async fn cancel(

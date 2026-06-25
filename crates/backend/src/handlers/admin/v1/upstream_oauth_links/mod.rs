@@ -84,7 +84,7 @@ pub async fn add_link(
         // If already associated to a user, reject as conflict
         if entry.user_id.is_some() {
             return Err(AppError::conflict(format!(
-                "Upstream Oauth 2.0 Provider ID {} with subject {} is already linked to a user",
+                "Upstream OAuth 2.0 Provider ID {} with subject {} is already linked to a user",
                 entry.provider_id, entry.subject
             )));
         }

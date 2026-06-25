@@ -285,7 +285,7 @@ pub async fn exchange_authorization_code(
         .get_last_authentication(&browser_session)
         .await?;
 
-    let ttl = site_config.access_token_ttl;
+    let ttl = super::capped_access_token_ttl(site_config.access_token_ttl);
     let (access_token, refresh_token) =
         generate_token_pair(rng, clock, &mut repo, &session, ttl).await?;
 

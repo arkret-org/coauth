@@ -184,9 +184,17 @@ async fn aggregate_devices(
             pagination = pagination.after(cursor);
         }
 
+        // Push the owning-account constraint down to the query layer so we
+        // only page grants for the target account instead of scanning the
+        // whole table and resolving each owner in memory.
+        let mut filter = SessionGrantFilter::new();
+        if let Some(wanted) = account_filter {
+            filter = filter.for_account(wanted);
+        }
+
         let page = repo
             .oauth_session_grant()
-            .list(SessionGrantFilter::new(), pagination)
+            .list(filter, pagination)
             .await?;
         let has_next = page.has_next_page;
 
@@ -197,9 +205,12 @@ async fn aggregate_devices(
                 continue;
             };
 
-            // Resolve the owning account once per grant so we can both
-            // filter and populate the draft.
-            let owner = if let Some(browser_session_id) = grant.browser_session_id {
+            // When `account_filter` is set the query already restricted the
+            // page to that account, so the owner is known without a lookup.
+            // Otherwise resolve it once per grant to populate the draft.
+            let owner = if let Some(wanted) = account_filter {
+                Some(wanted)
+            } else if let Some(browser_session_id) = grant.browser_session_id {
                 repo.browser_session()
                     .lookup(browser_session_id)
                     .await?
@@ -207,12 +218,6 @@ async fn aggregate_devices(
             } else {
                 None
             };
-
-            if let Some(wanted) = account_filter
-                && owner != Some(wanted)
-            {
-                continue;
-            }
 
             let entry = match devices.entry(device_id.clone()) {
                 Entry::Occupied(entry) => entry.into_mut(),
@@ -445,8 +450,9 @@ mod tests {
 
     #[test]
     fn device_draft_does_not_synthesize_device_did() {
-        // Device 不是 DID 主体:即使 id 是 did: 形态,DeviceDraft 也不再
-        // 派生任何 device_did(该字段已移除)。设备只有 device_id。
+        // A device is not a DID subject: even when the id has a `did:`
+        // shape, `DeviceDraft` no longer derives any device_did (that
+        // field was removed). A device only has a device_id.
         let record = DeviceDraft::new("did:web:device.example".to_owned()).into_record();
 
         assert_eq!(record.id, "did:web:device.example");

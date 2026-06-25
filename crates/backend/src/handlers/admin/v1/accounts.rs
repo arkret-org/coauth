@@ -263,7 +263,20 @@ pub async fn list_accounts(
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.accounts.admin_bridge_describe", skip_all)]
-pub async fn admin_bridge_describe(depot: &Depot) -> JsonResult<AdminBridgeDescribe> {
+pub async fn admin_bridge_describe(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<AdminBridgeDescribe> {
+    // SEC-ADMIN-NOAUTH: this endpoint discloses deployment fingerprint
+    // (risk-action state-store kind / bridge capabilities), so it MUST be
+    // gated behind the same admin authorization as every other admin
+    // handler. `extract_call_context` validates the bearer token, its
+    // session, expiry, and the `urn:coauth:admin` / `urn:cokret:admin:*`
+    // scope before we read any deployment state. We drop the repository
+    // transaction immediately since this handler does no DB work.
+    let crate::handlers::admin::call_context::CallContext { repo, .. } =
+        extract_call_context(req, depot).await?;
+    repo.cancel().await?;
     let risk_action_state = depot.risk_action_state_service()?;
 
     Ok(Json(coauth_admin_types::admin_bridge_describe(
@@ -460,8 +473,16 @@ async fn patch_account(
     // query / header parameter; the propose / approve workflow lives in
     // `admin/v1/accounts/risk_action.rs` and persists each approval as an
     // `ApprovalProof` row inside the proposal's `approval_proofs` JSONB
-    // column. We mark the proposal `executed` *after* `patch_user`
-    // succeeds so a failed mutation does not consume the approval set.
+    // column.
+    //
+    // REL-03: the proposal MUST be consumed (`mark_executed`) *before* the
+    // mutation runs, not after. `mark_executed` transitions the proposal
+    // `approved -> executed`; a second concurrent request observes the
+    // proposal already `executed` and is rejected with
+    // `AlreadyExecuted`, so the high-risk mutation cannot be double-applied
+    // off a single approved proposal. (Previously the consume happened
+    // after the mutation, leaving a TOCTOU window where two requests both
+    // mutated before either marked the proposal executed.)
     let approved_proposal = if crate::services::risk_action_proposals::is_high_risk_action(
         action_label,
     ) {
@@ -512,6 +533,23 @@ async fn patch_account(
         None
     };
 
+    // REL-03: consume the approved proposal *before* applying the
+    // mutation. This claims execution rights (`approved -> executed`); a
+    // concurrent request racing on the same proposal sees `AlreadyExecuted`
+    // and is rejected, so the mutation runs at most once per proposal.
+    if let Some(proposal_ulid) = approved_proposal {
+        let proposals = depot.risk_action_proposals_service()?;
+        let _ = proposals
+            .mark_executed(proposal_ulid, clock.now())
+            .await
+            .map_err(|err| {
+                AppError::new(
+                    salvo::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("risk_action mark_executed: {err}"),
+                )
+            })?;
+    }
+
     let account = crate::services::user_admin::patch_user(
         &mut repo,
         &mut rng,
@@ -525,20 +563,6 @@ async fn patch_account(
     )
     .await
     .map_err(map_service_error)?;
-
-    // Mark the proposal `executed` on success so it cannot be replayed.
-    if let Some(proposal_ulid) = approved_proposal {
-        let proposals = depot.risk_action_proposals_service()?;
-        let _ = proposals
-            .mark_executed(proposal_ulid, clock.now())
-            .await
-            .map_err(|err| {
-                AppError::new(
-                    salvo::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("risk_action mark_executed: {err}"),
-                )
-            })?;
-    }
 
     repo.save().await?;
 

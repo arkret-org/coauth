@@ -666,6 +666,11 @@ impl AwsSesWebhookRuntime {
                             "SNS SubscriptionConfirmation missing SubscribeURL".into(),
                         )
                     })?;
+                    // Auto-confirm issues a server-side GET against an
+                    // attacker-influenced URL, so it is an SSRF sink: restrict
+                    // the target to the AWS SNS endpoint allow-list before
+                    // sending the request.
+                    validate_sns_aws_endpoint_url(subscribe_url, "SubscribeURL")?;
                     self.client
                         .get(subscribe_url)
                         .send_traced()
@@ -1329,6 +1334,35 @@ async fn verify_sns_signature(
             "unsupported SNS signature version {other}"
         ))),
     }
+}
+
+/// Validate that an SNS-supplied URL targets an AWS endpoint over HTTPS.
+///
+/// SNS embeds attacker-influenced URLs (`SubscribeURL`, `SigningCertURL`) in
+/// the request body. `SubscribeURL` is auto-confirmed with a server-side GET,
+/// so it is an SSRF sink: without this guard a forged envelope could point it
+/// at an arbitrary host. We apply the same `*.amazonaws.com[.cn]` host suffix
+/// allow-list used for the signing certificate before issuing the request.
+fn validate_sns_aws_endpoint_url(url_str: &str, field: &str) -> Result<(), Error> {
+    let url = Url::parse(url_str)
+        .map_err(|error| Error::Unauthorized(format!("invalid SNS {field}: {error}")))?;
+
+    if url.scheme() != "https" {
+        return Err(Error::Unauthorized(format!("SNS {field} must use HTTPS")));
+    }
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| Error::Unauthorized(format!("SNS {field} is missing a host")))?
+        .to_ascii_lowercase();
+
+    if !host.ends_with(".amazonaws.com") && !host.ends_with(".amazonaws.com.cn") {
+        return Err(Error::Unauthorized(format!(
+            "SNS {field} host must be an AWS SNS endpoint"
+        )));
+    }
+
+    Ok(())
 }
 
 fn validate_sns_signing_cert_url(

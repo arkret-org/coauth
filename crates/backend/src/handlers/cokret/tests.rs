@@ -1063,7 +1063,6 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         "agent-runtime-dpop-jkt".to_owned(),
         session_public_key.clone(),
         scope_details.clone(),
-        None,
         now,
         now + Duration::try_minutes(15).unwrap(),
     )

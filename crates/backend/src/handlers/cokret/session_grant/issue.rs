@@ -1,8 +1,8 @@
 use cokret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_CLAIM_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
-    ERROR_CODE_POLICY_DENIED, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_SERVICE_UNAVAILABLE,
-    ERROR_CODE_UNSUPPORTED_FEATURE,
+    ERROR_CODE_POLICY_DENIED, ERROR_CODE_PROOF_INVALID, ERROR_CODE_SCHEMA_VIOLATION,
+    ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_UNSUPPORTED_FEATURE,
 };
 use salvo::prelude::*;
 
@@ -324,7 +324,7 @@ fn map_oidc_exchange_error(
 ) -> CokretRouteError {
     let (status, code) = match error.code {
         "internal_error" => (StatusCode::INTERNAL_SERVER_ERROR, ERROR_CODE_INTERNAL_ERROR),
-        "proof_invalid" | "invalid_authorization_code" | "invalid_client" => {
+        ERROR_CODE_PROOF_INVALID | "invalid_authorization_code" | "invalid_client" => {
             (StatusCode::UNAUTHORIZED, ERROR_CODE_INVALID_SIGNATURE)
         }
         "invalid_audience" => (StatusCode::BAD_REQUEST, ERROR_CODE_AUDIENCE_MISMATCH),

@@ -371,31 +371,66 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn admin_openapi_yaml_is_served_from_admin_and_well_known_paths() {
+    async fn admin_openapi_yaml_is_served_from_admin_path() {
         let service = salvo::Service::new(build_admin_router(Router::new()));
 
-        for path in [
-            "/_coauth/admin/openapi.yaml",
-            "/.well-known/cokret/openapi.yaml",
-        ] {
-            let mut response = TestClient::get(format!("http://127.0.0.1:8698{path}"))
+        let mut response =
+            TestClient::get("http://127.0.0.1:8698/_coauth/admin/openapi.yaml")
                 .send(&service)
                 .await;
 
-            assert_eq!(response.status_code, Some(StatusCode::OK));
-            assert_eq!(
-                response
-                    .headers()
-                    .get(CONTENT_TYPE)
-                    .and_then(|value| value.to_str().ok()),
-                Some("application/yaml; charset=utf-8")
-            );
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        assert_eq!(
+            response
+                .headers()
+                .get(CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("application/yaml; charset=utf-8")
+        );
 
-            let body = response.take_string().await.unwrap();
-            assert!(body.contains("title: coauth Admin API"), "{body}");
-            assert!(body.contains("/_coauth/admin/user-sessions:"), "{body}");
-            assert!(!body.contains("Pasion Admin API"), "{body}");
-        }
+        let body = response.take_string().await.unwrap();
+        assert!(body.contains("title: coauth Admin API"), "{body}");
+        assert!(body.contains("/_coauth/admin/user-sessions:"), "{body}");
+        assert!(!body.contains("Pasion Admin API"), "{body}");
+
+        // The protocol-surface well-known path must NOT be served by the admin
+        // router — it is published by the account/protocol router instead.
+        let not_found =
+            TestClient::get("http://127.0.0.1:8698/.well-known/cokret/openapi.yaml")
+                .send(&service)
+                .await;
+        assert_eq!(not_found.status_code, Some(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn cokret_protocol_openapi_yaml_is_served_from_well_known_path() {
+        let service = salvo::Service::new(build_account_api_router(Router::new()));
+
+        let mut response =
+            TestClient::get("http://127.0.0.1:8698/.well-known/cokret/openapi.yaml")
+                .send(&service)
+                .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        assert_eq!(
+            response
+                .headers()
+                .get(CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("application/yaml; charset=utf-8")
+        );
+
+        let body = response.take_string().await.unwrap();
+        // It MUST publish the protocol surface, never the product-private admin
+        // API. The `/_cokret/*` handlers are currently `#[handler]` rather than
+        // `#[endpoint]`, so `merge_router` cannot yet introspect their path
+        // operations — the document carries the correct protocol identity with
+        // an (intentionally) empty `paths` until the protocol handlers gain
+        // OpenAPI annotations. The load-bearing contract today is that this
+        // path no longer leaks the admin API.
+        assert!(body.contains("title: Cokret Protocol API"), "{body}");
+        assert!(!body.contains("title: coauth Admin API"), "{body}");
+        assert!(!body.contains("/_coauth/admin/"), "{body}");
     }
 
     #[tokio::test]

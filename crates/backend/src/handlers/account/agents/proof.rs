@@ -46,6 +46,12 @@ pub(super) fn verify_proof_signature(
     }
 }
 
+/// Compute the canonical SHA-256 digest of `value`, mapping the canonical
+/// serialization failure into an [`AppError`].
+///
+/// Kept as a shared helper rather than inlined: there are multiple call sites
+/// across the agents module (`key_pair.rs`, `accountability.rs`) and inlining
+/// would duplicate the identical error-mapping boilerplate at each one.
 pub(super) fn canonical_digest(value: &impl Serialize) -> Result<String, AppError> {
     canonical_sha256(value).map_err(|error| {
         AppError::internal_box(Box::new(std::io::Error::other(format!(

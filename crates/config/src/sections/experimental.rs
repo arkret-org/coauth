@@ -10,6 +10,13 @@ use crate::ConfigurationSection;
 /// Five minutes expressed in microseconds -- the default token lifetime
 const ACCESS_TOKEN_TTL_MICROS: i64 = 5 * 60 * 1_000_000;
 
+/// Hard ceiling on bearer access-token lifetime: 15 minutes. Bearer tokens are
+/// not revocation-checked on every request, so their lifetime is the window an
+/// attacker keeps access after a leak; this matches the
+/// `capped_bearer_expiry <= 15min` rule enforced on the soland side. Both the
+/// configuration schema and the token issuance path clamp to this value.
+pub const MAX_ACCESS_TOKEN_TTL_SECS: i64 = 15 * 60;
+
 fn default_access_token_ttl() -> Duration {
     Duration::microseconds(ACCESS_TOKEN_TTL_MICROS)
 }
@@ -51,8 +58,11 @@ pub struct SessionLimitConfig {
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct ExperimentalConfig {
-    /// Lifetime of access tokens (seconds). Default: 300 (5 min).
-    #[schemars(with = "u64", range(min = 60, max = 86400))]
+    /// Lifetime of access tokens (seconds). Default: 300 (5 min). Hard-capped
+    /// at 900 (15 min): bearer access tokens must be short-lived, matching the
+    /// `capped_bearer_expiry <= 15min` rule enforced on the soland side. The
+    /// issuance path additionally clamps to this ceiling as a defence in depth.
+    #[schemars(with = "u64", range(min = 60, max = 900))]
     #[serde(
         default = "default_access_token_ttl",
         skip_serializing_if = "access_token_ttl_is_default"

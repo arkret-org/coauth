@@ -554,6 +554,11 @@ fn notification_failure_from_error(error: &NotificationError) -> NotificationDel
                 Some(format!("SMS provider returned non-success status {status}")),
                 *status >= 500 || *status == 429,
             ),
+            coauth_messaging::sms::SmsTransportError::Serialization(error) => (
+                Some("sms_serialization".to_owned()),
+                Some(error.to_string()),
+                false,
+            ),
         },
     };
 

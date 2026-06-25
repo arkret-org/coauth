@@ -657,6 +657,7 @@ async fn did_binding_event_logs(
         .list_admin_operations(
             AdminOperationFilter::new()
                 .for_resource_type("account")
+                .for_resource(account_id)
                 .with_limit(200),
         )
         .await?;

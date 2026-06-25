@@ -125,6 +125,10 @@ impl AsymmetricSigningKey {
     #[must_use]
     pub fn es512(key: elliptic_curve::SecretKey<p521::NistP521>) -> Self {
         let bytes = key.to_bytes();
+        // Infallible in practice: `key` is already a valid P-521 secret key,
+        // so its scalar bytes always round-trip into a signing key. Keeping
+        // this constructor infallible (`-> Self`) avoids forcing `Result` on
+        // all callers for an unreachable branch.
         let key = super::Es512SigningKey::from_bytes(&bytes)
             .expect("P-521 secret key should convert to a signing key");
         Self::Es512(key)
@@ -408,6 +412,10 @@ impl AsymmetricVerifyingKey {
     #[must_use]
     pub fn es512(key: elliptic_curve::PublicKey<p521::NistP521>) -> Self {
         let encoded = key.to_encoded_point(false);
+        // Infallible in practice: `key` is already a valid P-521 public key,
+        // so its uncompressed SEC1 encoding always parses back into a verifying
+        // key. Keeping this constructor infallible (`-> Self`) avoids forcing
+        // `Result` on all callers for an unreachable branch.
         let key = super::Es512VerifyingKey::from_sec1_bytes(encoded.as_bytes())
             .expect("P-521 public key should convert to a verifying key");
         Self::Es512(key)

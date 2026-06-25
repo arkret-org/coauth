@@ -1,4 +1,4 @@
-//! `WeCom` (企业微信) OAuth specific request implementations.
+//! `WeCom` OAuth specific request implementations.
 //!
 //! `WeCom` uses a non-standard OAuth strand:
 //! - First obtain a corp `access_token` using corpid + corpsecret

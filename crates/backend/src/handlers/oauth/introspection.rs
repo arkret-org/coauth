@@ -171,24 +171,33 @@ async fn handle_post(
     let ClientAuthorization { credentials, form } =
         ClientAuthorization::<IntrospectionRequest>::extract(req, depot).await?;
 
+    // Pull infrastructure off the depot, mapping a missing entry to a 500
+    // instead of panicking so a mis-wired server returns an error response
+    // rather than crashing the worker thread.
+    let depot_missing = |what: &str| {
+        RouteError::Internal(Box::new(std::io::Error::other(format!(
+            "{what} not found in depot"
+        ))))
+    };
+
     let http_client = depot
         .get::<reqwest::Client>("http_client")
-        .expect("reqwest::Client not found in depot");
+        .map_err(|_| depot_missing("reqwest::Client"))?;
     let encrypter = depot
         .get::<Encrypter>("encrypter")
-        .expect("Encrypter not found in depot");
+        .map_err(|_| depot_missing("Encrypter"))?;
     let principal_server = depot
         .get::<Arc<dyn ConnectorAdmin>>("principal_server_admin")
-        .expect("ConnectorAdmin not found in depot");
+        .map_err(|_| depot_missing("ConnectorAdmin"))?;
     let repo_factory = depot
         .get::<BoxRepositoryFactory>("box_repository_factory")
-        .expect("BoxRepositoryFactory not found in depot");
+        .map_err(|_| depot_missing("BoxRepositoryFactory"))?;
     let activity_tracker = depot
         .get::<ActivityTracker>("activity_tracker")
-        .expect("ActivityTracker not found in depot");
+        .map_err(|_| depot_missing("ActivityTracker"))?;
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
-        .expect("UrlBuilder not found in depot");
+        .map_err(|_| depot_missing("UrlBuilder"))?;
     let cokret_config = depot
         .get::<CokretConfig>("cokret_config")
         .cloned()

@@ -24,14 +24,16 @@ use zeroize::Zeroizing;
 use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
 use crate::handlers::account::service::registration::{
     BeginPasswordRegistrationError, BeginPasswordRegistrationRequestBody,
-    BeginPasswordRegistrationResult, EmailAvailabilityCheck, LoadRegistrationProgressError,
-    PrincipalServerCheckMode, RegistrationDisplayNameOutcome, RegistrationDisplayNameWorkflowError,
+    BeginPasswordRegistrationResult, CheckRegistrationFinishEligibilityError,
+    EmailAvailabilityCheck, LoadRegistrationProgressError, PrincipalServerCheckMode,
+    RegistrationDisplayNameOutcome, RegistrationDisplayNameWorkflowError,
     RegistrationEmailChangeError, RegistrationEmailChangeOutcome, RegistrationFinishError,
     RegistrationFinishOutcome, RegistrationResendError, RegistrationResendOutcome,
     RegistrationVerificationError, RegistrationVerificationOutcome, begin_password_registration,
-    change_registration_email, finish_registration, load_registration_status,
-    next_registration_step, resend_registration_verification, submit_registration_display_name,
-    submit_registration_email_code, submit_registration_phone_code,
+    change_registration_email, check_registration_finish_eligibility, finish_registration,
+    load_registration_status, next_registration_step, resend_registration_verification,
+    submit_registration_display_name, submit_registration_email_code,
+    submit_registration_phone_code,
 };
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
 use crate::handlers::{RequesterFingerprint, cokret};
@@ -445,7 +447,15 @@ pub async fn post_webvh_email(
         .await?;
 
     let (delivery, dev_code) = if site_config.registration_email_delivery_bypass_allowed {
-        let code = "123456".to_owned();
+        // Dev/test bypass only (guarded above by the config flag, which the
+        // configuration layer refuses to enable in production). Generate a
+        // random code rather than a predictable constant so a leaked
+        // bypass-enabled deployment cannot be trivially registered against with
+        // a known code. The code is returned in-band via `dev_code` for the
+        // e2e harness, which is acceptable because this branch never runs in
+        // production.
+        use rand_core::RngCore as _;
+        let code = format!("{:06}", rng.next_u32() % 1_000_000);
         let _ = repo
             .user_email()
             .add_authentication_code(
@@ -657,6 +667,44 @@ pub async fn post_webvh_finish(
     let principal_url = registration_webvh_principal_url(&registration.post_auth_action);
     let target = resolve_webvh_provider(&cokret_config, principal_url.as_deref())
         .map_err(RouteError::BadRequest)?;
+
+    // Pre-flight the registration-finish eligibility *before* writing the
+    // password and submitting the (non-reversible) DID operation. This moves
+    // the common rejection cases (handle already taken, registration expired)
+    // ahead of the irreversible side effects so a doomed finish does not leave
+    // an orphaned password row and a submitted DID with no backing user.
+    match check_registration_finish_eligibility(
+        &mut repo,
+        &clock,
+        principal_server.as_ref(),
+        &registration,
+        None,
+        PrincipalServerCheckMode::BestEffort,
+    )
+    .await
+    {
+        Ok(()) => {}
+        Err(CheckRegistrationFinishEligibilityError::RegistrationExpired) => {
+            return Ok(Json(webvh_finish_error("registration_expired")));
+        }
+        Err(CheckRegistrationFinishEligibilityError::HandleTaken) => {
+            return Ok(Json(webvh_finish_error("handle_taken")));
+        }
+        Err(CheckRegistrationFinishEligibilityError::HandleNotAvailable) => {
+            return Ok(Json(webvh_finish_error("handle_not_available")));
+        }
+        // BestEffort mode never surfaces these, but fail closed regardless.
+        Err(CheckRegistrationFinishEligibilityError::BrowserSessionMissing) => {
+            return Ok(Json(webvh_finish_error("browser_session_required")));
+        }
+        Err(CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error)) => {
+            return Err(RouteError::Internal(error.into()));
+        }
+        Err(CheckRegistrationFinishEligibilityError::Repository(error)) => {
+            return Err(error.into());
+        }
+    }
+
     let (version, password_hash) = password_manager
         .hash(&mut *rng, Zeroizing::new(input.password))
         .await
@@ -695,6 +743,16 @@ pub async fn post_webvh_finish(
     .await
     .map_err(|error| RouteError::BadRequest(format!("embedded_webvh_provider_error:{error}")))?;
 
+    // At this point the password has been persisted and the (irreversible) DID
+    // operation has been submitted to the webvh provider. If the final finish
+    // step fails we have an orphaned password row + submitted DID with no
+    // backing user. We cannot transactionally roll back the remote DID
+    // submission, so emit a structured error with enough context for an
+    // operator (or a retry) to reconcile. The whole `finish` endpoint is
+    // idempotent — `set_password` overwrites, the webvh submission is
+    // idempotent on the provider side, and a second `finish_registration` for
+    // an already-created user returns `Rejected{registration_already_completed}`
+    // — so the client may safely retry this request.
     let repo = repo_factory.create().await?;
     let outcome = finish_registration(
         repo,
@@ -710,10 +768,21 @@ pub async fn post_webvh_finish(
         user_agent,
     )
     .await
-    .map_err(|error| match error {
-        RegistrationFinishError::NotFound => RouteError::NotFound,
-        RegistrationFinishError::Repository(error) => RouteError::from(error),
-        RegistrationFinishError::Internal(error) => RouteError::Internal(error.into()),
+    .map_err(|error| {
+        tracing::error!(
+            registration.id = %id,
+            did = %webvh.did,
+            localpart = %local_id,
+            error = %error,
+            "webvh registration finish failed AFTER DID submission; password and DID are \
+             orphaned without a backing user. The finish endpoint is idempotent and can be \
+             retried to reconcile."
+        );
+        match error {
+            RegistrationFinishError::NotFound => RouteError::NotFound,
+            RegistrationFinishError::Repository(error) => RouteError::from(error),
+            RegistrationFinishError::Internal(error) => RouteError::Internal(error.into()),
+        }
     })?;
 
     let completed = match outcome {

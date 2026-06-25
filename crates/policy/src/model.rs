@@ -99,9 +99,8 @@ pub struct Violation {
 /// Aggregated result of evaluating one or more policy rules.
 /// Contains zero or more violations; an empty list means the
 /// input passed all policy checks.
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct EvaluationResult {
-    #[serde(rename = "result")]
     pub violations: Vec<Violation>,
 }
 
@@ -271,4 +270,39 @@ pub struct EmailInput<'a> {
 
     /// Information about the entity making this request
     pub requester: Requester,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evaluation_result_round_trips_via_violations_field() {
+        let result = EvaluationResult {
+            violations: vec![Violation {
+                msg: "blocked".to_owned(),
+                redirect_uri: None,
+                field: Some("handle".to_owned()),
+                code: Some(Code::HandleTooShort),
+            }],
+        };
+
+        let json = serde_json::to_value(&result).expect("serialize");
+        // The wire shape uses `violations`, matching the remote service
+        // contract (`RemoteEvaluationOutcome`). There must be no `result` key.
+        assert!(json.get("violations").is_some());
+        assert!(json.get("result").is_none());
+
+        let decoded: EvaluationResult = serde_json::from_value(json).expect("deserialize");
+        assert_eq!(decoded.violations.len(), 1);
+        assert_eq!(decoded.violations[0].msg, "blocked");
+        assert!(!decoded.valid());
+    }
+
+    #[test]
+    fn evaluation_result_deserializes_from_violations_key() {
+        let decoded: EvaluationResult =
+            serde_json::from_str(r#"{"violations":[]}"#).expect("deserialize empty");
+        assert!(decoded.valid());
+    }
 }

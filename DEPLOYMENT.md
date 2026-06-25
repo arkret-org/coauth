@@ -23,7 +23,7 @@ http:
   - name: web
     resources: [discovery, human, oauth, restapi, assets, health]
     binds:
-    - address: "0.0.0.0:7080"
+    - address: "0.0.0.0:8080"
   public_base: https://auth.acme.example/
   issuer: https://auth.acme.example/
 database:
@@ -32,7 +32,7 @@ cokret:
   trust_domain: ck:trust_domain:acme.example
   principal_servers:
   - name: soland
-    audience: did:web:soland.acme.example
+    audience: did:webvh:soland.acme.example
     endpoint: https://soland.acme.example/
 ```
 

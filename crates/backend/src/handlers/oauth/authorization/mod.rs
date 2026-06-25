@@ -134,8 +134,9 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
 
     #[allow(clippy::box_default)] // Box::default() doesn't apply to dyn Clock+Send
     let clock: BoxClock = Box::new(SystemClock::default());
-    let mut rng: BoxRng =
-        Box::new(ChaChaRng::from_rng(rand_core::OsRng).expect("Failed to seed rng"));
+    let mut rng: BoxRng = Box::new(
+        ChaChaRng::from_rng(rand_core::OsRng).map_err(|e| RouteError::Internal(Box::new(e)))?,
+    );
 
     // Extract preferred language
     let locale = crate::handlers::preferred_language(req, depot);

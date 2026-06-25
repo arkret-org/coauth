@@ -42,6 +42,13 @@ pub enum DatabaseError {
         /// How many rows were actually affected
         actual: u64,
     },
+
+    /// A row could not be written because it would violate a uniqueness
+    /// constraint (e.g. a handle/localpart already taken). Distinguished from
+    /// the opaque [`Self::Diesel`] case so callers can map a concurrent
+    /// insert race to a clean domain conflict instead of a generic 500.
+    #[error("Unique constraint violation")]
+    UniqueViolation,
 }
 
 impl DatabaseError {
@@ -67,6 +74,27 @@ impl DatabaseError {
 
     pub(crate) const fn invalid_operation() -> Self {
         Self::InvalidOperation { source: None }
+    }
+
+    /// Whether this error represents a uniqueness-constraint violation.
+    ///
+    /// Returns `true` both for the explicit [`Self::UniqueViolation`] variant
+    /// and for a raw diesel `UniqueViolation` database error wrapped in
+    /// [`Self::Diesel`], so callers do not have to know which insert strategy
+    /// produced the conflict.
+    #[must_use]
+    pub fn is_unique_violation(&self) -> bool {
+        match self {
+            Self::UniqueViolation => true,
+            Self::Diesel { source } => matches!(
+                source,
+                diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                )
+            ),
+            _ => false,
+        }
     }
 }
 

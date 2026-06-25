@@ -174,6 +174,31 @@ impl NodeType {
     }
 }
 
+// ── Email masking ──────────────────────────────────────────────
+
+/// Mask an email address for display in unauthenticated/low-trust responses,
+/// e.g. `alice@example.com` -> `a***@example.com`.
+///
+/// The first character of the local part is kept, the rest is replaced with a
+/// fixed `***` marker, and the domain is preserved so the user can still
+/// recognize their own address without disclosing the full local part to
+/// anyone holding the (unauthenticated) recovery ticket/session id.
+#[must_use]
+pub fn mask_email(email: &str) -> String {
+    match email.split_once('@') {
+        Some((local, domain)) => {
+            let first = local.chars().next();
+            match first {
+                Some(first) => format!("{first}***@{domain}"),
+                // Empty local part: nothing to reveal.
+                None => format!("***@{domain}"),
+            }
+        }
+        // Not a well-formed address; mask the whole thing rather than echo it.
+        None => "***".to_owned(),
+    }
+}
+
 // ── Pagination helpers ─────────────────────────────────────────
 
 #[derive(Deserialize, Default)]

@@ -130,8 +130,38 @@ impl AccountConfig {
     }
 }
 
+/// Explicit opt-in environment variable required to enable the dev/test email
+/// delivery bypass. Acts as a deployment-time guard: a production deployment
+/// that accidentally enables [`AccountConfig::registration_email_delivery_bypass_allowed`]
+/// will fail to start unless this variable is also set, since production
+/// deployments must never set it.
+const DEV_EMAIL_BYPASS_ESCAPE_HATCH: &str = "COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS";
+
 impl ConfigurationSection for AccountConfig {
     const PATH: &'static str = "account";
+
+    fn validate(
+        &self,
+        _figment: &figment::Figment,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        // Fail closed: the registration email-delivery bypass returns an
+        // in-band verification code and must never be enabled in production.
+        // Require an explicit dev-only environment escape hatch so a
+        // mis-configured production deployment refuses to start instead of
+        // silently shipping a code-bypassed registration flow.
+        if self.registration_email_delivery_bypass_allowed
+            && std::env::var_os(DEV_EMAIL_BYPASS_ESCAPE_HATCH).is_none()
+        {
+            return Err(format!(
+                "account.registration_email_delivery_bypass_allowed is enabled but the \
+                 dev-only escape hatch {DEV_EMAIL_BYPASS_ESCAPE_HATCH} is not set; this bypass \
+                 is for dev/test only and must never run in production"
+            )
+            .into());
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

@@ -165,7 +165,7 @@ pub async fn exchange_device_code(
             .await?;
     }
 
-    let ttl = site_config.access_token_ttl;
+    let ttl = super::capped_access_token_ttl(site_config.access_token_ttl);
     let access_token_str = TokenType::AccessToken.generate(rng);
 
     let access_token = repo

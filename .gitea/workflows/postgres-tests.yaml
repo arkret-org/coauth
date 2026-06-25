@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Cokret Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
 
-name: Postgres lib-test gate
+name: Gitea Postgres lib-test gate
 
 # a dedicated job that runs `coauth-data`'s `--lib` test
 # suite against a real, migrated Postgres instance.
@@ -37,11 +37,9 @@ on:
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   CARGO_TERM_COLOR: always
-  RUSTC_WRAPPER: "sccache"
-  SCCACHE_GHA_ENABLED: "true"
 
 concurrency:
-  group: postgres-tests-${{ github.ref }}
+  group: gitea-postgres-tests-${{ gitea.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -72,18 +70,37 @@ jobs:
 
     steps:
       - name: Fetch repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: Fetch Cokret Rust SDK
+      - name: Check out Cokret Rust SDK
         env:
-          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
+          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN }}
+          GITHUB_REPOSITORY_OWNER: ${{ gitea.repository_owner }}
+          GITHUB_SERVER_URL: ${{ gitea.server_url }}
         run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Restore Cargo dependency cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+          key: gitea-cargo-stable-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            gitea-cargo-stable-v1-${{ runner.os }}-
+
+      - name: Restore Postgres target cache
+        uses: actions/cache@v3
+        with:
+          path: target/
+          key: gitea-target-postgres-stable-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            gitea-target-postgres-stable-v1-${{ runner.os }}-
 
       - name: Wait for Postgres to accept connections
         run: |

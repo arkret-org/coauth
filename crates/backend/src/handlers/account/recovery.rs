@@ -153,9 +153,11 @@ pub async fn get_recovery(
 
     repo.cancel().await?;
 
+    // This endpoint is unauthenticated (keyed only by the recovery session id),
+    // so only return a masked form of the email.
     Ok(Json(RecoveryStatusOutcome {
         id: session.id.to_string(),
-        email: session.email,
+        email: super::mask_email(&session.email),
         status,
     }))
 }

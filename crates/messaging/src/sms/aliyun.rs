@@ -1,4 +1,4 @@
-//! Aliyun SMS (阿里云短信) transport
+//! Aliyun SMS transport
 // Production server callers inject the backend guarded client through
 // `SmsTransport::aliyun_with_client`; this crate stays backend-agnostic.
 #![allow(clippy::disallowed_methods)]
@@ -23,9 +23,9 @@ pub struct AliyunSmsTransport {
     pub access_key_id: String,
     /// Aliyun access key secret
     pub access_key_secret: String,
-    /// SMS sign name (签名)
+    /// SMS sign name
     pub sign_name: String,
-    /// SMS template code (模板编号)
+    /// SMS template code
     pub template_code: String,
 }
 

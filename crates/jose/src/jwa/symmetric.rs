@@ -12,10 +12,23 @@ pub enum SymmetricKey {
 }
 
 #[derive(Debug, Error)]
-#[error("Invalid algorithm {alg} used for symmetric key")]
-pub struct InvalidAlgorithm {
-    pub alg: JsonWebSignatureAlg,
-    pub key: Vec<u8>,
+pub enum InvalidAlgorithm {
+    #[error("Invalid algorithm {alg} used for symmetric key")]
+    UnsupportedAlgorithm {
+        alg: JsonWebSignatureAlg,
+        key: Vec<u8>,
+    },
+
+    /// The supplied key is shorter than the minimum required by RFC 7518 §3.2
+    /// for the requested HMAC algorithm.
+    #[error(
+        "key of {actual} bytes is too short for {alg}; RFC 7518 §3.2 requires at least {required} bytes"
+    )]
+    KeyTooShort {
+        alg: JsonWebSignatureAlg,
+        actual: usize,
+        required: usize,
+    },
 }
 
 impl SymmetricKey {
@@ -23,16 +36,36 @@ impl SymmetricKey {
     ///
     /// # Errors
     ///
-    /// Returns an error if the algorithm is not supported.
+    /// Returns an error if the algorithm is not supported, or if the key is
+    /// shorter than the minimum length mandated by RFC 7518 §3.2 for the HMAC
+    /// algorithm (HS256/HS384/HS512 require at least 32/48/64 bytes
+    /// respectively, i.e. a key at least as large as the hash output).
     pub fn new_for_alg(key: Vec<u8>, alg: &JsonWebSignatureAlg) -> Result<Self, InvalidAlgorithm> {
+        let required = match alg {
+            JsonWebSignatureAlg::Hs256 => 32,
+            JsonWebSignatureAlg::Hs384 => 48,
+            JsonWebSignatureAlg::Hs512 => 64,
+            _ => {
+                return Err(InvalidAlgorithm::UnsupportedAlgorithm {
+                    alg: alg.clone(),
+                    key,
+                });
+            }
+        };
+
+        if key.len() < required {
+            return Err(InvalidAlgorithm::KeyTooShort {
+                alg: alg.clone(),
+                actual: key.len(),
+                required,
+            });
+        }
+
         match alg {
             JsonWebSignatureAlg::Hs256 => Ok(Self::hs256(key)),
             JsonWebSignatureAlg::Hs384 => Ok(Self::hs384(key)),
             JsonWebSignatureAlg::Hs512 => Ok(Self::hs512(key)),
-            _ => Err(InvalidAlgorithm {
-                alg: alg.clone(),
-                key,
-            }),
+            _ => unreachable!("non-HMAC algorithms are rejected above"),
         }
     }
 

@@ -23,6 +23,9 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = [
     # RSA key extraction "Marvin Attack" (PKCS#1 v1.5 encryption only,
     # which we do not use).
+    # RE-EVALUATE this ignore if any rsa PKCS#1 v1.5 *encryption* usage is
+    # ever introduced (signing/verification with the `rsa` crate is not
+    # affected); the timing side-channel only applies to RSA decryption.
     "RUSTSEC-2023-0071",
 ]
 

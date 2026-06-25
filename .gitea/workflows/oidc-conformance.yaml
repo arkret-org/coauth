@@ -1,0 +1,145 @@
+# Copyright (c) 2026 Cokret Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
+
+name: Gitea OIDC conformance suite
+
+# Full OpenID Foundation conformance is intentionally kept out of PRs.
+# PR coverage remains smoke-only through the integration scripts; this
+# workflow runs the full suite on a nightly schedule or on explicit
+# workflow_dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan:
+        description: "Conformance plan to run"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - basic-op
+          - fapi2-baseline
+          - mtls-baseline
+  schedule:
+    # Nightly at 04:13 UTC.
+    - cron: "13 4 * * *"
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  CARGO_TERM_COLOR: always
+  COAUTH_CONFORMANCE_IMAGE: ${{ vars.COAUTH_CONFORMANCE_IMAGE || 'openid/conformance-suite:latest' }}
+
+concurrency:
+  group: gitea-oidc-conformance-${{ gitea.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    name: OIDC conformance run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v4
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Cargo dependency cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+          key: gitea-cargo-stable-v1-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            gitea-cargo-stable-v1-${{ runner.os }}-
+
+      - name: Install jq
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y jq
+          fi
+
+      - name: Check nightly conformance plans
+        run: |
+          set -euo pipefail
+          for plan in \
+            conformance/plan-basic-op.json \
+            conformance/plan-fapi2-baseline.json \
+            conformance/plan-mtls-baseline.json
+          do
+            test -f "${plan}"
+            jq empty "${plan}"
+          done
+
+      - name: Pre-pull conformance suite image
+        run: docker pull "${COAUTH_CONFORMANCE_IMAGE}"
+
+      - name: Bring up integration stack (Postgres + coauth)
+        env:
+          # Build the coauth image locally inside compose; soland/sodmin
+          # are profile-gated and not pulled here. Only coauth is
+          # exercised by the OIDC harness.
+          COAUTH_IMAGE: coauth:ci
+        run: |
+          # integration-up.sh handles: build coauth, generate a fresh
+          # test config with signing keys, then compose up postgres + coauth.
+          bash scripts/integration-up.sh
+
+      - name: Wait for coauth /health
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null -m 2 http://127.0.0.1:57080/health; then
+              echo "coauth healthy after ${attempt}s"
+              break
+            fi
+            sleep 1
+            if [[ "${attempt}" -eq 30 ]]; then
+              echo "coauth /health never returned 200" >&2
+              docker compose -f docker-compose.integration.yaml logs coauth >&2 || true
+              exit 3
+            fi
+          done
+
+      - name: Run OIDC conformance suite
+        env:
+          COAUTH_RUN_FULL_CONFORMANCE: "1"
+          COAUTH_BIND: "127.0.0.1:57080"
+          COAUTH_SKIP_BOOT: "1"
+          CONFORMANCE_PLAN: ${{ gitea.event.inputs.plan || 'all' }}
+        run: |
+          bash scripts/oidc-conformance.sh --plan "${CONFORMANCE_PLAN}"
+
+      - name: Upload conformance results
+        if: ${{ always() }}
+        uses: christopherhx/gitea-upload-artifact@v4
+        with:
+          name: conformance-results
+          path: target/conformance-results/
+          if-no-files-found: ignore
+
+      - name: Capture coauth logs on failure
+        if: ${{ failure() }}
+        run: |
+          mkdir -p target/conformance-logs
+          docker compose -f docker-compose.integration.yaml logs --no-color coauth > target/conformance-logs/coauth.log || true
+          docker compose -f docker-compose.integration.yaml logs --no-color postgres > target/conformance-logs/postgres.log || true
+
+      - name: Upload diagnostic logs
+        if: ${{ failure() }}
+        uses: christopherhx/gitea-upload-artifact@v4
+        with:
+          name: conformance-diagnostic-logs
+          path: target/conformance-logs/
+          if-no-files-found: ignore
+
+      - name: Tear down integration stack
+        if: ${{ always() }}
+        run: docker compose -f docker-compose.integration.yaml down -v

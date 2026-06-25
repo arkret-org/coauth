@@ -1,8 +1,9 @@
-use coauth_data::oauth::{OAuthClientRepository, OAuthSessionRepository};
+use coauth_data::oauth::{OAuthClientRepository, OAuthSessionFilter, OAuthSessionRepository};
 use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
-use coauth_data::user::{BrowserSessionRepository, UserRepository};
+use coauth_data::user::{BrowserSessionFilter, BrowserSessionRepository, UserRepository};
 use coauth_data::{
-    Authentication, BoxRepository, BrowserSession, Client, Clock, RepositoryError, Session,
+    Authentication, BoxRepository, BrowserSession, Client, Clock, Pagination, RepositoryError,
+    Session, User,
 };
 use coauth_principal::ConnectorAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
@@ -136,6 +137,79 @@ pub async fn end_oauth_session(
 
     repo.oauth_session().finish(clock, session).await?;
     repo.save().await?;
+
+    Ok(())
+}
+
+/// Revoke every active browser and OAuth session belonging to `user`,
+/// optionally preserving the session that is performing the current request.
+///
+/// This is invoked after a credential change (password change or account
+/// recovery) so that any session established with the *old* password is
+/// terminated. For password recovery there is no trusted current session, so
+/// callers pass `None` for both `keep_*` arguments to revoke everything.
+///
+/// A [`SyncDevicesJob`] is scheduled so downstream device state is reconciled.
+/// The caller is responsible for `repo.save()`.
+pub async fn revoke_user_sessions(
+    repo: &mut BoxRepository,
+    rng: &mut (dyn CryptoRngCore + Send),
+    clock: &dyn Clock,
+    user: &User,
+    keep_browser_session_id: Option<Ulid>,
+    keep_oauth_session_id: Option<Ulid>,
+) -> Result<(), RepositoryError> {
+    // Finish active browser sessions, skipping the caller's own session.
+    let mut cursor = Pagination::first(1000);
+    loop {
+        let page = repo
+            .browser_session()
+            .list(
+                BrowserSessionFilter::new().for_user(user).active_only(),
+                cursor,
+            )
+            .await?;
+
+        for edge in page.edges {
+            cursor = cursor.after(edge.cursor);
+            if Some(edge.node.id) == keep_browser_session_id {
+                continue;
+            }
+            repo.browser_session().finish(clock, edge.node).await?;
+        }
+
+        if !page.has_next_page {
+            break;
+        }
+    }
+
+    // Finish active OAuth sessions, skipping the caller's own session.
+    let mut cursor = Pagination::first(1000);
+    loop {
+        let page = repo
+            .oauth_session()
+            .list(
+                OAuthSessionFilter::new().for_user(user).active_only(),
+                cursor,
+            )
+            .await?;
+
+        for edge in page.edges {
+            cursor = cursor.after(edge.cursor);
+            if Some(edge.node.id) == keep_oauth_session_id {
+                continue;
+            }
+            repo.oauth_session().finish(clock, edge.node).await?;
+        }
+
+        if !page.has_next_page {
+            break;
+        }
+    }
+
+    repo.queue_job()
+        .schedule_job(rng, clock, SyncDevicesJob::new(user))
+        .await?;
 
     Ok(())
 }

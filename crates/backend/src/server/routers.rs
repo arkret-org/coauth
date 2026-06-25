@@ -432,10 +432,24 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
 
     let docs_router = openapi::build_openapi_router(&coauth_router);
 
+    // The `/.well-known/cokret/openapi.yaml` path is a *protocol-surface*
+    // contract: it MUST publish the Cokret protocol API (`/_cokret/*`), not the
+    // product-private admin API. Generate the protocol-face OpenAPI document
+    // from `cokret_router` and serve it from the well-known path here, keeping
+    // the admin document (`/_coauth/admin/openapi.yaml`) strictly separate.
+    let cokret_doc = build_cokret_protocol_openapi_doc(&cokret_router);
+    let cokret_doc_yaml = OpenApiYaml::from_doc(&cokret_doc);
+
     router
         .push(cokret_router)
         .push(coauth_router)
         .push(docs_router)
+        .push(Router::with_path("/.well-known/cokret/openapi.yaml").get(cokret_doc_yaml))
+}
+
+pub(super) fn build_cokret_protocol_openapi_doc(cokret_router: &Router) -> salvo::oapi::OpenApi {
+    salvo::oapi::OpenApi::new("Cokret Protocol API", env!("CARGO_PKG_VERSION"))
+        .merge_router(cokret_router)
 }
 
 pub(super) fn build_admin_router(router: Router) -> Router {
@@ -728,8 +742,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
     router
         .push(admin_router)
         .push(admin_doc.clone().into_router("/api-doc/admin/openapi.json"))
-        .push(Router::with_path("/_coauth/admin/openapi.yaml").get(admin_doc_yaml.clone()))
-        .push(Router::with_path("/.well-known/cokret/openapi.yaml").get(admin_doc_yaml))
+        .push(Router::with_path("/_coauth/admin/openapi.yaml").get(admin_doc_yaml))
         .push(
             salvo::oapi::swagger_ui::SwaggerUi::new("/api-doc/admin/openapi.json")
                 .into_router("admin-swagger-ui"),

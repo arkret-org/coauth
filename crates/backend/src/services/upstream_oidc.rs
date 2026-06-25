@@ -119,6 +119,11 @@ pub trait UpstreamOidcService: Send + Sync {
         authorization_code: &str,
         redirect_uri: Url,
         code_verifier: &str,
+        // The `nonce` the client bound to the upstream authorization request.
+        // When present it MUST equal the `nonce` claim of the upstream id_token,
+        // mirroring the local-issuer nonce binding. `None`/empty disables the
+        // check (the upstream provider did not issue a nonce-bound id_token).
+        expected_nonce: Option<&str>,
         now: DateTime<Utc>,
         rng: &mut coauth_data::BoxRng,
     ) -> Result<FederatedOidcExchange, String>;
@@ -333,6 +338,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         authorization_code: &str,
         redirect_uri: Url,
         code_verifier: &str,
+        expected_nonce: Option<&str>,
         now: DateTime<Utc>,
         rng: &mut coauth_data::BoxRng,
     ) -> Result<FederatedOidcExchange, String> {
@@ -409,6 +415,19 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                 .map_err(|error| {
                     format!("upstream ID token authorization-code hash validation failed: {error}")
                 })?;
+
+            // Nonce binding: when the client bound a non-empty nonce to the
+            // upstream authorization request, the upstream id_token MUST echo it
+            // back. This is the federated equivalent of the local-issuer nonce
+            // check and defends against id_token replay / cross-session
+            // injection.
+            if let Some(expected_nonce) = expected_nonce.filter(|value| !value.is_empty()) {
+                claims::NONCE
+                    .extract_required_with_options(&mut claims, expected_nonce)
+                    .map_err(|error| {
+                        format!("upstream ID token nonce binding failed: {error}")
+                    })?;
+            }
         }
 
         let (userinfo, userinfo_response_signed) = fetch_oidc_userinfo(

@@ -1,4 +1,4 @@
-//! Tencent Cloud SMS (腾讯云短信) transport
+//! Tencent Cloud SMS transport
 // Production server callers inject the backend guarded client through
 // `SmsTransport::tencent_cloud_with_client`; this crate stays backend-agnostic.
 #![allow(clippy::disallowed_methods)]
@@ -18,9 +18,9 @@ pub struct TencentSmsTransport {
     pub secret_key: String,
     /// SMS SDK App ID
     pub sdk_app_id: String,
-    /// SMS sign name (签名)
+    /// SMS sign name
     pub sign_name: String,
-    /// SMS template ID (模板 ID)
+    /// SMS template id
     pub template_id: String,
 }
 

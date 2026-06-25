@@ -202,7 +202,7 @@ async fn test_link_already_exists() {
         {
           "errors": [
             {
-              "title": "Upstream Oauth 2.0 Provider ID 01FSHN9AG09NMZYX8MFYH578R9 with subject subject1 is already linked to a user"
+              "title": "Upstream OAuth 2.0 Provider ID 01FSHN9AG09NMZYX8MFYH578R9 with subject subject1 is already linked to a user"
             }
           ]
         }

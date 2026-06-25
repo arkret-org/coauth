@@ -26,6 +26,19 @@ pub enum JwtVerificationError {
         #[source]
         inner: signature::Error,
     },
+
+    #[error("token marks header parameters as critical that this implementation does not support")]
+    UnsupportedCriticalHeader,
+}
+
+/// Returns `true` when the header declares a non-empty `crit` list.
+///
+/// Per RFC 7515 §4.1.11 the `crit` parameter enumerates header parameters that
+/// a recipient MUST understand and process. This implementation supports no
+/// extension header parameters, so any non-empty `crit` list is unsatisfiable
+/// and the token must be rejected.
+fn header_has_unsupported_crit(header: &crate::jwt::JsonWebSignatureHeader) -> bool {
+    header.crit().is_some_and(|crit| !crit.is_empty())
 }
 
 impl JwtVerificationError {
@@ -62,6 +75,13 @@ impl<T> Jwt<'_, T> {
         K: Verifier<S>,
         S: SignatureEncoding,
     {
+        // SECURITY: per RFC 7515 §4.1.11, reject any token that marks header
+        // parameters as critical (`crit`). No extension parameter is
+        // understood by this implementation, so a non-empty `crit` list can
+        // never be satisfied and MUST cause verification to fail.
+        if header_has_unsupported_crit(&self.header) {
+            return Err(JwtVerificationError::UnsupportedCriticalHeader);
+        }
         let typed_sig = S::try_from(&self.signature).map_err(JwtVerificationError::bad_encoding)?;
         key.verify(self.raw.signed_part().as_bytes(), &typed_sig)
             .map_err(JwtVerificationError::failed)
@@ -75,6 +95,13 @@ impl<T> Jwt<'_, T> {
     ///
     /// Fails when the algorithm is unsupported or the signature is wrong.
     pub fn verify_with_shared_secret(&self, secret: Vec<u8>) -> Result<(), NoKeyWorked> {
+        // SECURITY: per RFC 7515 §4.1.11, reject any token that marks header
+        // parameters as critical (`crit`). This implementation understands no
+        // extension parameters, so a non-empty `crit` list can never be
+        // satisfied and MUST cause verification to fail.
+        if header_has_unsupported_crit(&self.header) {
+            return Err(NoKeyWorked::default());
+        }
         // SECURITY: refuse `alg=none` (and any algorithm not on the
         // supported whitelist) before touching the key material. This
         // closes the classic JWT alg-stripping / alg-confusion attacks
@@ -97,6 +124,13 @@ impl<T> Jwt<'_, T> {
     /// Returns [`NoKeyWorked`] when no candidate key produces a valid
     /// signature.
     pub fn verify_with_jwks(&self, jwks: &PublicJsonWebKeySet) -> Result<(), NoKeyWorked> {
+        // SECURITY: per RFC 7515 §4.1.11, reject any token that marks header
+        // parameters as critical (`crit`). This implementation understands no
+        // extension parameters, so a non-empty `crit` list can never be
+        // satisfied and MUST cause verification to fail.
+        if header_has_unsupported_crit(&self.header) {
+            return Err(NoKeyWorked::default());
+        }
         // SECURITY: gate verification on the supported-signing whitelist
         // first. The `alg=none` value (and any value not present in
         // `SUPPORTED_SIGNING_ALGORITHMS`) is rejected before any JWK
@@ -106,7 +140,12 @@ impl<T> Jwt<'_, T> {
             return Err(NoKeyWorked::default());
         }
 
-        let constraints = ConstraintSet::from(&self.header);
+        // SECURITY: only consider keys whose `use` is `sig` (or unspecified),
+        // mirroring the signing path (`signing_key_for_algorithm`). This
+        // prevents an encryption-only key from being used to verify a
+        // signature.
+        let constraints =
+            ConstraintSet::from(&self.header).use_(&coauth_iana::jose::JsonWebKeyUse::Sig);
         let candidates = constraints.filter(&**jwks);
 
         for candidate in candidates {

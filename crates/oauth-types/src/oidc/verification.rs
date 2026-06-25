@@ -184,6 +184,15 @@ impl ProviderMetadata {
                 }
                 Ok(())
             }),
+            // Rule: id_token signing alg values must not contain "none".
+            // `id_token_signing_alg_values_supported` is required (checked by
+            // `insecure_verify_metadata` above), so the accessor is safe here.
+            Box::new(|m| {
+                reject_none_signing_alg(
+                    "id_token",
+                    m.id_token_signing_alg_values_supported().iter(),
+                )
+            }),
             // Rule: token endpoint signing alg values must not contain "none".
             Box::new(|m| {
                 reject_none_signing_alg(

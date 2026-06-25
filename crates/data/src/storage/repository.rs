@@ -71,6 +71,20 @@ impl RepositoryError {
             source: Box::new(value),
         }
     }
+
+    /// Whether the underlying error is a uniqueness-constraint violation.
+    ///
+    /// Used by callers that perform a check-then-insert (e.g. registration
+    /// finish racing on a handle) to turn a concurrent-insert conflict into a
+    /// clean domain rejection instead of a generic 500. Returns `true` only
+    /// when the boxed source is a [`crate::pg::DatabaseError`] reporting a
+    /// unique violation.
+    #[must_use]
+    pub fn is_unique_violation(&self) -> bool {
+        self.source
+            .downcast_ref::<crate::pg::DatabaseError>()
+            .is_some_and(crate::pg::DatabaseError::is_unique_violation)
+    }
 }
 
 /// A type-erased [`Repository`]

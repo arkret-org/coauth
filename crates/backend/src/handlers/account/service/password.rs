@@ -12,6 +12,7 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 use crate::handlers::passwords::PasswordManager;
+use crate::handlers::{Limiter, RequesterFingerprint};
 
 // ── Change password ───────────────────────────────────────────
 
@@ -37,6 +38,9 @@ pub enum ChangePasswordError {
 
     #[error("current password is incorrect")]
     WrongPassword,
+
+    #[error("too many password attempts")]
+    RateLimited,
 
     #[error(transparent)]
     Password(AnyhowError),
@@ -67,11 +71,15 @@ pub async fn change_password(
     rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     password_manager: &PasswordManager,
+    limiter: &Limiter,
+    requester: RequesterFingerprint,
     user_id: ulid::Ulid,
     current_password: Option<Zeroizing<String>>,
     new_password: Zeroizing<String>,
     is_admin: bool,
     password_change_allowed: bool,
+    keep_browser_session_id: Option<ulid::Ulid>,
+    keep_oauth_session_id: Option<ulid::Ulid>,
 ) -> Result<(), ChangePasswordError> {
     if new_password.is_empty() {
         return Err(ChangePasswordError::PasswordTooWeak);
@@ -97,6 +105,15 @@ pub async fn change_password(
     if !is_admin {
         if !password_change_allowed {
             return Err(ChangePasswordError::PasswordChangesDisabled);
+        }
+
+        // Rate limit the current-password verification path (per requester IP
+        // and per target user), mirroring the login limiter, so the
+        // authenticated change-password endpoint cannot be abused to brute
+        // force the current password.
+        if let Err(error) = limiter.check_password(requester, &user).await {
+            tracing::warn!(error = &error as &dyn std::error::Error);
+            return Err(ChangePasswordError::RateLimited);
         }
 
         let active_password = repo
@@ -129,6 +146,19 @@ pub async fn change_password(
     repo.user_password()
         .add(rng, clock, &user, version, hash, None)
         .await?;
+
+    // Revoke all existing sessions established with the previous password,
+    // preserving the session performing this request so the user is not logged
+    // out of the device they just used to change their password.
+    crate::handlers::account::service::sessions::revoke_user_sessions(
+        &mut repo,
+        rng,
+        clock,
+        &user,
+        keep_browser_session_id,
+        keep_oauth_session_id,
+    )
+    .await?;
 
     repo.save().await?;
 

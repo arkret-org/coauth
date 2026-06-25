@@ -116,7 +116,7 @@ pub(crate) fn issue_handle_claim(
     // input mirrors the wire shape of `HandleClaimPayload` exactly so
     // downstream verifiers can reproduce the hash from the on-the-wire
     // claim without renaming.
-    let claim_digest = canonical_json_sha256(&payload_no_proofs)?;
+    let claim_digest = cokret_core::canonical::canonical_sha256(&payload_no_proofs)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();

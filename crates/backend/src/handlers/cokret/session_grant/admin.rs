@@ -25,7 +25,15 @@ pub async fn list_session_grants(
     let clock = crate::handlers::make_clock();
     let subject = req.query::<String>("subject");
     let device_id = req.query::<String>("device_id");
-    let audience = req.query::<String>("audience");
+    let requested_audience = req.query::<String>("audience");
+
+    let caller = require_session_grant_caller(req, depot).await?;
+
+    // SEC-SG-ENUM: a Principal Server caller may not enumerate session-grant
+    // metadata across arbitrary subjects/audiences. Pin the query to the
+    // caller's own audience; an admin caller stays unrestricted.
+    let audience = caller.resolve_read_audience(requested_audience.as_deref())?;
+
     let mut filter = SessionGrantFilter::new();
 
     if let Some(subject) = subject.as_deref() {
@@ -50,7 +58,6 @@ pub async fn list_session_grants(
         filter = filter.active_at(clock.now());
     }
 
-    let _ = require_session_grant_caller(req, depot).await?;
     let mut repo = depot.repo().await?;
     let page = repo
         .oauth_session_grant()
@@ -83,7 +90,7 @@ pub async fn revoke_session_grant(
         .map_err(|_| CokretRouteError::BadRequest("invalid session grant id".into()))?;
 
     // Revocation is destructive — server_name scope is not enough.
-    match require_session_grant_caller(req, depot).await? {
+    match require_session_grant_caller(req, depot).await?.authz {
         SessionGrantAuthz::Admin => {}
         SessionGrantAuthz::PrincipalServer => {
             return Err(CokretRouteError::Forbidden(

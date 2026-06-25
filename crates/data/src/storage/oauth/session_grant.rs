@@ -14,6 +14,9 @@ use crate::{Clock, SessionGrant, repository_impl};
 /// Filters used when listing persisted Cokret session grants.
 pub struct SessionGrantFilter<'a> {
     browser_session_id: Option<Ulid>,
+    /// Owning account, resolved through the grant's browser session
+    /// (`oauth_session_grants.user_session_id -> user_sessions.user_id`).
+    account_id: Option<Ulid>,
     subject: Option<&'a str>,
     device_id: Option<&'a str>,
     applet_id: Option<&'a str>,
@@ -42,6 +45,24 @@ impl<'a> SessionGrantFilter<'a> {
     #[must_use]
     pub fn browser_session_id(&self) -> Option<Ulid> {
         self.browser_session_id
+    }
+
+    /// Restrict results to grants owned by one account.
+    ///
+    /// Ownership is the `user_id` of the browser session the grant is bound
+    /// to. Grants without a browser session (`user_session_id IS NULL`) never
+    /// match an account filter. Pushing this down avoids paging the whole
+    /// table and resolving the owner per grant in memory.
+    #[must_use]
+    pub fn for_account(mut self, account_id: Ulid) -> Self {
+        self.account_id = Some(account_id);
+        self
+    }
+
+    /// Return the owning-account constraint, if present.
+    #[must_use]
+    pub fn account_id(&self) -> Option<Ulid> {
+        self.account_id
     }
 
     /// Restrict results to a subject DID.

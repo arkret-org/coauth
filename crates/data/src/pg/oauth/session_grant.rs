@@ -12,7 +12,7 @@ use serde_json::Value;
 use ulid::Ulid;
 use uuid::Uuid;
 
-use crate::schema::oauth_session_grants;
+use crate::schema::{oauth_session_grants, user_sessions};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`SessionGrantRepository`].
@@ -126,6 +126,18 @@ macro_rules! apply_session_grant_filter {
             q = q.filter(
                 oauth_session_grants::user_session_id.eq(Some(Uuid::from(user_session_id))),
             );
+        }
+
+        if let Some(account_id) = $filter.account_id() {
+            // Owning account is the `user_id` of the browser session the grant
+            // is bound to. Push the ownership check down as a subquery on
+            // `user_sessions` instead of paging the whole table and resolving
+            // each owner in memory. Grants with `user_session_id IS NULL` are
+            // excluded because the subquery never yields NULL.
+            let owned_sessions = user_sessions::table
+                .filter(user_sessions::user_id.eq(Uuid::from(account_id)))
+                .select(user_sessions::id.nullable());
+            q = q.filter(oauth_session_grants::user_session_id.eq_any(owned_sessions));
         }
 
         if let Some(subject) = $filter.subject() {

@@ -10,9 +10,15 @@
 //! `redirect_uris`, `grant_types`, `token_endpoint_auth_method`, scope) and
 //! persists a new entry to `oauth_clients`. Returns the standard
 //! response shape — `client_id`, `client_secret` (only for confidential
-//! clients), `client_id_issued_at`, `client_secret_expires_at`, and a
-//! `registration_access_token` so the operator can re-edit the
-//! registration via the admin SPA.
+//! clients), `client_id_issued_at`, and `client_secret_expires_at`.
+//!
+//! SEC-OAUTHREG-NOPERSIST: this endpoint does **not** return an
+//! RFC 7592 `registration_access_token`. There is no RFC 7592
+//! registration-management surface mounted (no `GET` / `PUT` / `DELETE`
+//! of the registration, no `rotate-secret` endpoint), so a token here
+//! would never be verifiable and only mislead the operator. If/when a
+//! management surface is added, the token MUST be persisted (hashed)
+//! before being surfaced again.
 //!
 //! This is the *admin* surface (mounted under `/_coauth/admin`). The
 //! public, abuse-gated RFC 7591 endpoint at `/oauth/registration` is
@@ -70,26 +76,16 @@ pub struct AdminClientRegistrationRequestBody {
     pub scope: Option<String>,
 }
 
-/// Response body — RFC 7591 §3.2.1 with the addition of
-/// `registration_access_token` (RFC 7592).
+/// Response body — RFC 7591 §3.2.1.
 ///
 /// # Normative: one-shot `client_secret`
 ///
 /// The `client_secret` field is returned **exactly once**, in the body
 /// of this registration response. It is never echoed by subsequent
 /// `GET`s of the registration. If the operator loses it, they MUST
-/// rotate the credential by calling the registration management
-/// endpoint with the `registration_access_token`:
-///
-/// ```text
-/// POST /_coauth/admin/oauth/clients/{client_id}/rotate-secret
-/// Authorization: Bearer <registration_access_token>
-/// ```
-///
-/// The `registration_access_token` is the long-lived RFC 7592 bearer
-/// that authorises `GET` / `PUT` / `DELETE` on the registration; it is
-/// stored hashed server-side and SHOULD be treated by the operator with
-/// the same care as the `client_secret` itself.
+/// re-register the client; there is no RFC 7592
+/// `registration_access_token` flow because no registration-management
+/// surface is mounted (see the module-level note).
 #[derive(Debug, Serialize, JsonSchema, ToSchema)]
 pub struct AdminClientRegistrationOutcome {
     pub client_id: String,
@@ -98,18 +94,13 @@ pub struct AdminClientRegistrationOutcome {
     ///
     /// **Returned exactly once.** This value is not stored in
     /// plaintext server-side and cannot be recovered via subsequent
-    /// `GET` of the registration. Use the
-    /// `registration_access_token` to rotate the secret if it is
-    /// lost.
+    /// `GET` of the registration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
     /// Time the client id was issued (Unix seconds).
     pub client_id_issued_at: DateTime<Utc>,
     /// `0` to indicate non-expiring secret per RFC 7591 §3.2.1.
     pub client_secret_expires_at: i64,
-    /// Bearer token usable to manage this registration via the admin
-    /// SPA.
-    pub registration_access_token: String,
     /// Echo of the persisted metadata.
     pub client_name: Option<String>,
     pub redirect_uris: Vec<String>,
@@ -304,11 +295,6 @@ pub async fn register(
         )
         .await?;
 
-    // Generate a registration access token (RFC 7592). Random 32-byte
-    // alphanumeric bearer token; not persisted yet — clients receive
-    // it once at registration time.
-    let registration_access_token = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
-
     record_admin_operation(
         &mut repo,
         &mut rng,
@@ -333,7 +319,6 @@ pub async fn register(
         client_secret,
         client_id_issued_at: client.id.datetime().into(),
         client_secret_expires_at: 0,
-        registration_access_token,
         client_name: body.client_name,
         redirect_uris: redirect_uris.iter().map(ToString::to_string).collect(),
         grant_types: grant_types_input.iter().map(grant_type_to_str).collect(),

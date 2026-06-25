@@ -400,8 +400,13 @@ pub async fn finish_registration(
                     "Registration browser session is required",
                 )));
             }
-            CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(_) => {
-                unreachable!()
+            CheckRegistrationFinishEligibilityError::PrincipalServerUnavailable(error) => {
+                // Reachable in `PrincipalServerCheckMode::Strict`: the
+                // eligibility check propagates the principal-server error rather
+                // than swallowing it. Fail closed with an internal error instead
+                // of panicking so the registration is not completed while the
+                // handle's availability could not be confirmed.
+                return Err(RegistrationFinishError::Internal(error));
             }
             CheckRegistrationFinishEligibilityError::Repository(error) => {
                 return Err(RegistrationFinishError::Repository(error));
@@ -500,7 +505,7 @@ pub async fn finish_registration(
         }
     };
 
-    let completed = complete_registration(
+    let completed = match complete_registration(
         repo,
         rng,
         clock,
@@ -508,7 +513,19 @@ pub async fn finish_registration(
         grant_admin,
     )
     .await
-    .map_err(RegistrationFinishError::Repository)?;
+    {
+        Ok(completed) => completed,
+        // A concurrent finish claimed the same handle between the eligibility
+        // check and the user insert. The unique constraint on the localpart
+        // rejects the loser; report it as a clean `handle_taken` instead of a
+        // generic repository 500.
+        Err(error) if error.is_unique_violation() => {
+            return Ok(RegistrationFinishOutcome::Rejected {
+                error: "handle_taken",
+            });
+        }
+        Err(error) => return Err(RegistrationFinishError::Repository(error)),
+    };
 
     Ok(RegistrationFinishOutcome::Completed(completed))
 }

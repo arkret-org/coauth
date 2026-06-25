@@ -200,6 +200,8 @@ pub struct AdminOperationFilter {
     pub admin_user_id: Option<Ulid>,
     /// Only return operations on this resource type.
     pub resource_type: Option<String>,
+    /// Only return operations targeting this specific resource id.
+    pub resource_id: Option<Ulid>,
     /// Only return operations created after this time.
     pub created_after: Option<DateTime<Utc>>,
     /// Only return operations created before this time.
@@ -226,6 +228,18 @@ impl AdminOperationFilter {
     #[must_use]
     pub fn for_resource_type(mut self, resource_type: impl Into<String>) -> Self {
         self.resource_type = Some(resource_type.into());
+        self
+    }
+
+    /// Filter by a specific target resource id (the `resource_id` column).
+    ///
+    /// Use this to scope an audit read to a single account/device/etc. at the
+    /// query layer instead of pulling a wide `with_limit` page and filtering in
+    /// memory, which silently truncates older rows once the global page cap is
+    /// exceeded.
+    #[must_use]
+    pub fn for_resource(mut self, resource_id: Ulid) -> Self {
+        self.resource_id = Some(resource_id);
         self
     }
 

@@ -881,6 +881,7 @@ pub async fn list_history(
         .list_admin_operations(
             coauth_data::audit::AdminOperationFilter::new()
                 .for_resource_type("account")
+                .for_resource(id)
                 .with_limit(100),
         )
         .await?;
@@ -916,6 +917,7 @@ pub async fn get_current(
         .list_admin_operations(
             coauth_data::audit::AdminOperationFilter::new()
                 .for_resource_type("account")
+                .for_resource(id)
                 .with_limit(100),
         )
         .await?;

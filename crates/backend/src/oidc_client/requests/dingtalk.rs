@@ -1,4 +1,4 @@
-//! `DingTalk` (钉钉) OAuth specific request implementations.
+//! `DingTalk` OAuth specific request implementations.
 //!
 //! `DingTalk` uses a mostly standard OAuth strand with JSON request/response
 //! bodies and a custom header for the access token in userinfo requests.

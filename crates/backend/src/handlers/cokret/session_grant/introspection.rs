@@ -201,7 +201,7 @@ pub async fn introspect_session_grant(
         _ => {}
     }
 
-    let _ = require_session_grant_caller(req, depot).await?;
+    let caller = require_session_grant_caller(req, depot).await?;
     let clock = crate::handlers::make_clock();
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
@@ -233,6 +233,25 @@ pub async fn introspect_session_grant(
             grant: None,
         }));
     };
+
+    // SEC-SG-ENUM: a Principal Server caller may only introspect grants for an
+    // audience it is authorized for. A grant minted for any other audience is
+    // reported as an audience mismatch (with no grant metadata) so a Principal
+    // Server cannot probe grants belonging to other audiences.
+    if let Some(allowed) = caller.allowed_audiences.as_deref() {
+        if !allowed.iter().any(|audience| audience == &grant.audience) {
+            repo.cancel()
+                .await
+                .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+            return Ok(Json(SessionGrantIntrospectOutcome {
+                active: false,
+                status: SessionGrantIntrospectStatus::AudienceMismatch,
+                proof_required: false,
+                one_time_use_consumed: false,
+                grant: None,
+            }));
+        }
+    }
 
     let user = if let Some(user_id) =
         parse_local_user_did_for(&url_builder, &cokret_config, &grant.subject)

@@ -1,6 +1,7 @@
 //! Shared helpers for HTTP-based email providers.
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use lettre::Message;
 use lettre::message::header::{HeaderName, HeaderValue};
@@ -10,6 +11,12 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use super::{Error, OutboundEmail, SendResult};
+
+/// Per-request timeout applied to every outbound provider HTTP call.
+///
+/// Bounds each individual `send()` so a stalled provider connection cannot
+/// hang the request indefinitely, independent of any client-wide default.
+const PROVIDER_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Serialize)]
 pub(crate) struct ProviderMailbox<'a> {
@@ -66,7 +73,7 @@ pub(crate) fn build_lettre_message(email: &OutboundEmail) -> Result<Message, Err
 }
 
 pub(crate) async fn execute_provider_request(request: RequestBuilder) -> Result<SendResult, Error> {
-    let response = request.send().await?;
+    let response = request.timeout(PROVIDER_REQUEST_TIMEOUT).send().await?;
     let status = response.status();
     let headers = response.headers().clone();
     let body = response.text().await.unwrap_or_default();
@@ -83,7 +90,7 @@ pub(crate) async fn execute_provider_request(request: RequestBuilder) -> Result<
 pub(crate) async fn execute_provider_json_request<T: DeserializeOwned>(
     request: RequestBuilder,
 ) -> Result<T, Error> {
-    let response = request.send().await?;
+    let response = request.timeout(PROVIDER_REQUEST_TIMEOUT).send().await?;
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
 
@@ -98,7 +105,7 @@ pub(crate) async fn execute_optional_provider_json_request<T: DeserializeOwned>(
     request: RequestBuilder,
     ignored_statuses: &[StatusCode],
 ) -> Result<Option<T>, Error> {
-    let response = request.send().await?;
+    let response = request.timeout(PROVIDER_REQUEST_TIMEOUT).send().await?;
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
 

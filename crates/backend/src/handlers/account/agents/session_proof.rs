@@ -1237,6 +1237,7 @@ mod tests {
             agent_scope_request: serde_json::json!({
                 "realm_ids": ["ck:realm:01970000-0000-7000-8000-000000000000"]
             }),
+            applet_delegation: None,
             proof: cokret_core::SessionGrantRequestProof {
                 proof_kind: cokret_core::SessionGrantProofKind::AgentKeyProof,
                 challenge: "challenge-abc".to_owned(),

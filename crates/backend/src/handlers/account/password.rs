@@ -91,6 +91,7 @@ pub async fn set_password(
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
+    let limiter = depot.limiter()?;
     let clock = make_clock();
     let mut rng = make_rng();
 
@@ -106,16 +107,26 @@ pub async fn set_password(
         return Err(RouteError::Unauthorized);
     }
 
+    // Preserve the session that is performing this change so the caller is not
+    // logged out of their own device when the other sessions are revoked.
+    let keep_browser_session_id = requester.browser_session().map(|session| session.id);
+    let keep_oauth_session_id = requester.oauth_session().map(|session| session.id);
+    let requester_fingerprint = requester.fingerprint();
+
     match change_password(
         repo,
         &mut rng,
         &clock,
         &password_manager,
+        &limiter,
+        requester_fingerprint,
         user_id,
         input.current_password.map(Zeroizing::new),
         Zeroizing::new(input.new_password),
         requester.is_admin(),
         config.password_change_allowed,
+        keep_browser_session_id,
+        keep_oauth_session_id,
     )
     .await
     {
@@ -138,6 +149,9 @@ pub async fn set_password(
         )),
         Err(ChangePasswordError::WrongPassword) => {
             Ok(Json(SetPasswordOutcome::status("WRONG_PASSWORD")))
+        }
+        Err(ChangePasswordError::RateLimited) => {
+            Ok(Json(SetPasswordOutcome::status("RATE_LIMITED")))
         }
         Err(ChangePasswordError::Password(error)) => Err(RouteError::Internal(error.into())),
         Err(ChangePasswordError::Repository(error)) => Err(error.into()),
@@ -200,7 +214,9 @@ pub async fn get_recovery_ticket_status(
         "valid"
     };
 
-    let email = Some(recovery_session.email.clone());
+    // This endpoint is unauthenticated (anyone holding the ticket string can
+    // call it), so only return a masked form of the email.
+    let email = Some(super::mask_email(&recovery_session.email));
     repo.cancel().await?;
 
     Ok(Json(RecoveryTicketStatusOutcome { status, email }))
@@ -509,7 +525,7 @@ mod tests {
         let body: serde_json::Value = response.json();
 
         assert_eq!(body["status"], "valid");
-        assert_eq!(body["email"], "alice@example.com");
+        assert_eq!(body["email"], "a***@example.com");
     }
 
     #[tokio::test]

@@ -153,8 +153,12 @@ async fn handle_post(
     let ip_address = activity_tracker.ip();
 
     let device_code = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
+    // 8-character user code (uppercased): the device-code grant is rate-limited
+    // at the token endpoint, but the user code is also the only secret a user
+    // types by hand, so we widen it from 6 to 8 alphanumerics to raise the
+    // brute-force cost without harming usability.
     let user_code = Alphanumeric
-        .sample_string(&mut rand::thread_rng(), 6)
+        .sample_string(&mut rand::thread_rng(), 8)
         .to_uppercase();
 
     let device_code = repo
@@ -228,6 +232,6 @@ mod tests {
 
         let response: DeviceAuthorizationResponse = response.json();
         assert_eq!(response.device_code.len(), 32);
-        assert_eq!(response.user_code.len(), 6);
+        assert_eq!(response.user_code.len(), 8);
     }
 }

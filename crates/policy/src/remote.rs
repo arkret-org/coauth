@@ -39,6 +39,8 @@
 //!
 //! An empty `violations` array means the request is allowed.
 
+use std::time::Duration;
+
 use async_trait::async_trait;
 use coauth_data::PolicyData;
 use serde::Deserialize;
@@ -49,6 +51,12 @@ use crate::model::{
 };
 use crate::provider::{PolicyEvaluator, PolicyProviderFactory};
 use crate::{EvaluationError, InstantiateError, LoadError};
+
+/// Per-request timeout applied to every outbound call to the remote policy
+/// service. Bounds each individual `send()` so a stalled remote endpoint
+/// cannot hang policy evaluation indefinitely, independent of any client-wide
+/// default.
+const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Remote HTTP policy provider factory.
 ///
@@ -83,6 +91,7 @@ impl PolicyProviderFactory for RemoteProviderFactory {
             .client
             .post(format!("{}/data", self.base_url))
             .json(&data.data)
+            .timeout(REMOTE_REQUEST_TIMEOUT)
             .send()
             .await
             .map_err(|e| {
@@ -132,6 +141,7 @@ impl RemoteEvaluator {
             .client
             .post(&url)
             .json(input)
+            .timeout(REMOTE_REQUEST_TIMEOUT)
             .send()
             .await
             .map_err(|e| {

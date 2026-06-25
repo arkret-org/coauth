@@ -6,6 +6,7 @@
 #![allow(clippy::disallowed_methods)]
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -33,7 +34,17 @@ pub enum SmsTransportError {
         /// Response body
         body: String,
     },
+
+    /// The request payload could not be serialized
+    #[error("failed to serialize SMS request payload: {0}")]
+    Serialization(#[from] serde_json::Error),
 }
+
+/// Per-request timeout applied to every outbound SMS provider HTTP call.
+///
+/// Bounds each individual `send()` so a stalled provider connection cannot
+/// hang the request indefinitely, independent of any client-wide default.
+const SMS_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A wrapper around multiple SMS transport backends
 #[derive(Clone)]
@@ -291,6 +302,7 @@ impl SmsTransport {
                     .post(&url)
                     .header("Authorization", format!("Basic {credentials}"))
                     .form(&[("To", to), ("From", from_number.as_str()), ("Body", body)])
+                    .timeout(SMS_REQUEST_TIMEOUT)
                     .send()
                     .await?;
 
@@ -332,7 +344,7 @@ impl SmsTransport {
                     request = request.header("Authorization", format!("Bearer {api_key}"));
                 }
 
-                let response = request.send().await?;
+                let response = request.timeout(SMS_REQUEST_TIMEOUT).send().await?;
 
                 let status = response.status();
                 if !status.is_success() {
@@ -369,8 +381,7 @@ impl SmsTransport {
                     "recipient": to,
                     "body": body,
                 });
-                let body = serde_json::to_vec(&payload)
-                    .expect("paloud internal sms payload should serialize");
+                let body = serde_json::to_vec(&payload)?;
                 let timestamp = Utc::now().timestamp();
                 let nonce = paloud_internal_nonce(timestamp);
                 let signature = sign_paloud_internal_request(
@@ -390,6 +401,7 @@ impl SmsTransport {
                     .header("X-Paloud-Signature", signature)
                     .header("Content-Type", "application/json")
                     .body(body)
+                    .timeout(SMS_REQUEST_TIMEOUT)
                     .send()
                     .await?;
 

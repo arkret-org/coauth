@@ -10,6 +10,10 @@ on:
       - "release/**"
     tags:
       - "v*"
+  # Daily advisory sweep so newly disclosed CVEs surface even when nobody is
+  # pushing. The cargo-deny job is the cheapest way to re-run it.
+  schedule:
+    - cron: "37 5 * * *"
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
@@ -247,3 +251,21 @@ jobs:
           ~/.cargo/bin/cargo-nextest nextest run \
             --archive-file nextest-archive.tar.zst \
             --partition count:${{ matrix.partition }}/3
+
+  # -- Final gate --
+
+  tests-done:
+    name: All checks passed
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    needs:
+      - rustfmt
+      - clippy
+      - typos
+      - cargo-deny
+      - test
+
+    steps:
+      - uses: matrix-org/done-action@v3
+        with:
+          needs: ${{ toJSON(needs) }}

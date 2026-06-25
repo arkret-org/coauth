@@ -28,6 +28,21 @@ pub use client_credentials::handle_client_credentials;
 pub use device_code::exchange_device_code;
 pub use refresh_token::handle_refresh_token;
 
+/// Clamp a configured access-token TTL to the hard ceiling
+/// (`MAX_ACCESS_TOKEN_TTL_SECS`, 15 minutes).
+///
+/// Bearer access tokens are not revocation-checked on each request, so their
+/// lifetime is the window an attacker retains access after a leak. The
+/// configuration schema already caps the value, but we clamp again at issuance
+/// as defence in depth so a tampered or legacy config can never mint a
+/// long-lived bearer token. This matches the soland-side
+/// `capped_bearer_expiry <= 15min` rule.
+#[must_use]
+pub(crate) fn capped_access_token_ttl(ttl: chrono::Duration) -> chrono::Duration {
+    let ceiling = chrono::Duration::seconds(coauth_config::MAX_ACCESS_TOKEN_TTL_SECS);
+    ttl.min(ceiling)
+}
+
 /// Public authorization-code clients must use PKCE. Confidential clients can
 /// still use PKCE, but do not require it under OIDC Core.
 #[must_use]
