@@ -12,6 +12,13 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 # real secret seed in production.
 export COAUTH_DEVICE_ENROLLMENT_KEY_SEED := "wgGYluck4bZVA5oa9khVpSriHgrcV81H4iPu6rqtRRY="
 
+# Dev-only escape hatch for the registration email-delivery bypass.
+# config.dev.yaml enables `account.registration_email_delivery_bypass_allowed`
+# (in-band verification code, no SMTP) so local dev needs no mail server. The
+# config validator fails closed unless this variable is also set, so a
+# mis-configured production deployment refuses to start. NEVER set in production.
+export COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS := "1"
+
 # Default recipe: show available commands
 default:
     @just --list
