@@ -474,6 +474,22 @@ pub async fn remove_account_did(
             "account DID binding removal requires a user-bound admin token",
         ));
     };
+    // High-risk: a supplied approval_proof MUST be a real detached JWS
+    // bound to the admin DID over the canonical revocation transcript,
+    // rather than recorded as a bare `approval_proof_present` boolean.
+    let reason = body.reason.as_deref().unwrap_or_default();
+    let approval_verification_method =
+        crate::handlers::admin::v1::revocation_approval::verify_revocation_approval_proof(
+            depot,
+            &mut repo,
+            admin_user,
+            "account_did_binding.revoke",
+            &did,
+            Some(&user.id.to_string()),
+            reason,
+            body.approval_proof.as_deref(),
+        )
+        .await?;
     let revoked_at = clock.now();
     let mut rng = crate::handlers::account::make_rng();
     repo.audit()
@@ -492,6 +508,7 @@ pub async fn remove_account_did(
                     "next_state": "revoked",
                     "reason": body.reason,
                     "approval_proof_present": body.approval_proof.as_ref().is_some_and(|value| !value.trim().is_empty()),
+                    "approval_verification_method": approval_verification_method,
                     "revoke_related_sessions": body.revoke_related_sessions.unwrap_or(false),
                     "revoked_by": admin_user.id,
                     "revoked_by_handle": admin_user.localpart,

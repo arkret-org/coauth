@@ -222,7 +222,12 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
             // `{id}/revoke`. `introspect` is the spec operation served under
             // `/_cokret` above; the DPoP-bound `refresh` / hard-logout `revoke`
             // are protocol operations and live under `/_cokret` only.
-            Router::with_path("gate/account/session-grants")
+            //
+            // Product-private paths deliberately avoid the protocol
+            // trust-surface classifier `gate/`; they live under
+            // `/_coauth/account/*` so the `gate/account/*` vocabulary stays
+            // reserved for the canonical `/_cokret` operations.
+            Router::with_path("account/session-grants")
                 .get(cokret::list_session_grants)
                 .push(Router::with_path("{id}/revoke").post(cokret::revoke_session_grant)),
         )
@@ -259,14 +264,14 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         .push(Router::with_path("self/oauth-clients/{id}").get(oauth_clients::get_client))
         // Password recovery
         .push(
-            Router::with_path("gate/account/password-recovery")
+            Router::with_path("account/password-recovery")
                 .push(Router::with_path("{ticket}").get(password::get_recovery_ticket_status))
                 .push(Router::with_path("set").post(password::set_password_by_recovery))
                 .push(Router::with_path("resend").post(password::resend_recovery_email)),
         )
         // Email authentication
         .push(
-            Router::with_path("gate/account/email-auth")
+            Router::with_path("account/email-auth")
                 .push(Router::with_path("start").post(emails::start_email_auth))
                 .push(
                     Router::with_path("{id}")
@@ -278,7 +283,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // User emails
         .push(Router::with_path("self/user-emails/{id}").delete(emails::remove_email))
         .push(
-            Router::with_path("gate/account/integration/describe").get(auth::integration_describe),
+            Router::with_path("account/integration/describe").get(auth::integration_describe),
         )
         // Auth (login, logout, providers, registration, recovery)
         //
@@ -292,7 +297,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // (`/authorize`, `/oauth/token`, `/.well-known/openid-configuration`)
         // are unchanged.
         .push(
-            Router::with_path("gate/account/auth")
+            Router::with_path("account/auth")
                 .push(Router::with_path("login").post(auth::login))
                 .push(
                     Router::with_path("passkey")
@@ -425,7 +430,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
     #[cfg(debug_assertions)]
     if cokret::test_endpoints_enabled() {
         coauth_router = coauth_router.push(
-            Router::with_path("gate/account/test/debug/issue-dpop-grant")
+            Router::with_path("account/test/debug/issue-dpop-grant")
                 .post(cokret::debug_issue_dpop_grant),
         );
     }

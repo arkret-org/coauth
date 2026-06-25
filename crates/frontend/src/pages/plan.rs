@@ -13,19 +13,31 @@ pub fn Plan() -> Element {
 
     match &*binding {
         Some(Ok(result)) => {
-            if let Some(uri) = &result.plan_management_iframe_uri {
-                let uri = uri.clone();
-                rsx! {
-                    iframe {
-                        class: "plan-iframe",
-                        title: "Plan management",
-                        src: "{uri}",
-                        scrolling: "no",
+            // Defence in depth: the backend already rejects non-https
+            // `plan_management_iframe_uri` at config load, but re-check the
+            // scheme here before injecting it into `iframe src` so a
+            // `javascript:`/`data:` value can never be embedded even if it
+            // reached the client through some other path.
+            match result
+                .plan_management_iframe_uri
+                .as_deref()
+                .filter(|uri| is_safe_iframe_src(uri))
+            {
+                Some(uri) => {
+                    let uri = uri.to_owned();
+                    rsx! {
+                        iframe {
+                            class: "plan-iframe",
+                            title: "Plan management",
+                            src: "{uri}",
+                            scrolling: "no",
+                        }
                     }
                 }
-            } else {
-                nav.push(Route::AccountOverview {});
-                rsx! {}
+                None => {
+                    nav.push(Route::AccountOverview {});
+                    rsx! {}
+                }
             }
         }
         Some(Err(e)) => rsx! {
@@ -33,4 +45,13 @@ pub fn Plan() -> Element {
         },
         None => rsx! { LoadingScreen {} },
     }
+}
+
+/// Only allow an absolute `https://` URL to be injected into the iframe
+/// `src`. Rejects `javascript:`, `data:` and any non-https scheme.
+fn is_safe_iframe_src(uri: &str) -> bool {
+    uri.len() > "https://".len()
+        && uri
+            .get(.."https://".len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
 }

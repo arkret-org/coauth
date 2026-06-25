@@ -267,11 +267,25 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
         user: admin_user,
         ..
     } = ctx;
-    if admin_user.is_none() {
+    let Some(admin_user) = admin_user.as_ref() else {
         return Err(AppError::forbidden(
             "device revocation requires an authenticated admin user for audit",
         ));
-    }
+    };
+    // High-risk: a supplied approval_proof MUST be a real detached JWS
+    // bound to the admin DID over the canonical revocation transcript;
+    // a forged/garbage proof is rejected rather than logged as a boolean.
+    let approval_verification_method = crate::handlers::admin::v1::revocation_approval::verify_revocation_approval_proof(
+        depot,
+        &mut repo,
+        admin_user,
+        "device.revoke",
+        &device_id,
+        None,
+        &reason,
+        body.approval_proof.as_deref(),
+    )
+    .await?;
     let mut rng = crate::handlers::account::make_rng();
 
     // Cascade-revoke every active session grant tied to this device, in
@@ -285,7 +299,7 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
         &mut repo,
         &mut rng,
         &*clock,
-        admin_user.as_ref(),
+        Some(admin_user),
         AdminOperation::Other("device.revoke".to_owned()),
         "device",
         None,
@@ -293,6 +307,7 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
             "device_id": device_id,
             "reason": reason,
             "approval_proof_present": body.approval_proof.is_some(),
+            "approval_verification_method": approval_verification_method,
             "revoked_session_grants": outcome.revoked_session_grants,
             "revoked_at": outcome.revoked_at,
         }),
@@ -345,16 +360,29 @@ pub async fn revoke_account_device(
         user: admin_user,
         ..
     } = ctx;
-    if admin_user.is_none() {
+    let Some(admin_user) = admin_user.as_ref() else {
         return Err(AppError::forbidden(
             "device revocation requires an authenticated admin user for audit",
         ));
-    }
+    };
     if repo.user().lookup(account_id).await?.is_none() {
         return Err(AppError::not_found(format!(
             "Account ID {account_id} not found"
         )));
     }
+    // High-risk: a supplied approval_proof MUST be a real detached JWS
+    // bound to the admin DID over the canonical revocation transcript.
+    let approval_verification_method = crate::handlers::admin::v1::revocation_approval::verify_revocation_approval_proof(
+        depot,
+        &mut repo,
+        admin_user,
+        "device.revoke",
+        &device_id,
+        Some(&account_id.to_string()),
+        &reason,
+        body.approval_proof.as_deref(),
+    )
+    .await?;
     let mut rng = crate::handlers::account::make_rng();
 
     // Same atomic cascade as the flat endpoint: device-revoke audit entry +
@@ -367,7 +395,7 @@ pub async fn revoke_account_device(
         &mut repo,
         &mut rng,
         &*clock,
-        admin_user.as_ref(),
+        Some(admin_user),
         AdminOperation::Other("device.revoke".to_owned()),
         "device",
         None,
@@ -376,6 +404,7 @@ pub async fn revoke_account_device(
             "device_id": device_id,
             "reason": reason,
             "approval_proof_present": body.approval_proof.is_some(),
+            "approval_verification_method": approval_verification_method,
             "revoked_session_grants": outcome.revoked_session_grants,
             "revoked_at": outcome.revoked_at,
         }),

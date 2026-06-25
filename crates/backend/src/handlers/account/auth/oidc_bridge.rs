@@ -1212,6 +1212,9 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         &service_activity_tracker,
         &oauth_token_reply.access_token,
         Some(coauth_iana::oauth::OAuthTokenTypeHint::AccessToken),
+        // Internal self-introspection of a token this bridge just minted;
+        // the full device/principal/session association is required here.
+        crate::handlers::oauth::introspection_service::CokretAssociationDisclosure::Full,
     )
     .await
     {
@@ -1467,7 +1470,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
         service: "coauth".to_owned(),
         service_kind: "account_authority".to_owned(),
         api_base_path: "/_coauth".to_owned(),
-        describe_path: "/_coauth/gate/account/integration/describe".to_owned(),
+        describe_path: "/_coauth/account/integration/describe".to_owned(),
         dependencies: vec![
             IntegrationManifestDependency {
                 service: "soland".to_owned(),
@@ -1496,7 +1499,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "passkey_auth".to_owned(),
                 method: "POST".to_owned(),
-                path: "/_coauth/gate/account/auth/passkey/{register,auth}/{start,finish}".to_owned(),
+                path: "/_coauth/account/auth/passkey/{register,auth}/{start,finish}".to_owned(),
                 contract: "cokret.rest.passkey_auth.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "WebAuthn challenge and finish use the production passkey service; finish currently returns credential identity and still relies on the session-grant follow-up path.".to_owned(),

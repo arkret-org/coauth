@@ -81,7 +81,7 @@ static PASSWORD_LOGIN_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
 });
 const RESULT: Key = Key::from_static_str("result");
 
-// ── POST /_coauth/gate/account/auth/login ────────────────────────────────────
+// ── POST /_coauth/account/auth/login ────────────────────────────────────
 
 /// Authenticate a user with username and password, returning viewer info,
 /// setting a session cookie on success, and minting a temporary scaffold
@@ -445,7 +445,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     }
 }
 
-// ── POST /_coauth/gate/account/auth/logout ───────────────────────────────────
+// ── POST /_coauth/account/auth/logout ───────────────────────────────────
 
 /// End the current browser session and clear the session cookie.
 #[endpoint]
@@ -476,7 +476,7 @@ pub async fn logout(
     Ok(())
 }
 
-// ── GET /_coauth/gate/account/auth/providers ─────────────────────────────────
+// ── GET /_coauth/account/auth/providers ─────────────────────────────────
 
 /// List all enabled upstream OAuth providers and site configuration flags
 /// relevant to the login/registration UI.

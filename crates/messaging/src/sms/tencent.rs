@@ -66,15 +66,10 @@ impl TencentSmsTransport {
         let string_to_sign =
             format!("TC3-HMAC-SHA256\n{timestamp}\n{credential_scope}\n{hashed_canonical}");
 
-        // Step 3: Calculate signature via HMAC chain
-        let secret_date = hmac_sha256(
-            format!("TC3{}", self.secret_key).as_bytes(),
-            date.as_bytes(),
-        );
-        let secret_service = hmac_sha256(&secret_date, service.as_bytes());
-        let secret_signing = hmac_sha256(&secret_service, b"tc3_request");
-        let signature_bytes = hmac_sha256(&secret_signing, string_to_sign.as_bytes());
-        let signature = hex::encode(signature_bytes);
+        // Step 3: Calculate signature via the TC3 HMAC-SHA256 key-derivation
+        // chain. Extracted into a pure helper so the brittle chain has
+        // offline contract coverage (see tests) without live credentials.
+        let signature = tc3_signature(&self.secret_key, &date, service, &string_to_sign);
 
         // Step 4: Build authorization header
         let authorization = format!(
@@ -118,6 +113,19 @@ impl TencentSmsTransport {
     }
 }
 
+/// Compute a Tencent Cloud TC3-HMAC-SHA256 signature.
+///
+/// Runs the documented key-derivation chain
+/// `HMAC(HMAC(HMAC(HMAC("TC3"+secret_key, date), service), "tc3_request"),
+/// string_to_sign)` and returns the lowercase hex signature.
+fn tc3_signature(secret_key: &str, date: &str, service: &str, string_to_sign: &str) -> String {
+    let secret_date = hmac_sha256(format!("TC3{secret_key}").as_bytes(), date.as_bytes());
+    let secret_service = hmac_sha256(&secret_date, service.as_bytes());
+    let secret_signing = hmac_sha256(&secret_service, b"tc3_request");
+    let signature_bytes = hmac_sha256(&secret_signing, string_to_sign.as_bytes());
+    hex::encode(signature_bytes)
+}
+
 /// Private hex encoding module to avoid adding hex as a dependency
 mod hex {
     /// Encode bytes as lowercase hex string
@@ -126,5 +134,30 @@ mod hex {
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tc3_signature;
+
+    #[test]
+    fn tc3_signature_matches_offline_vector() {
+        // Offline contract vector for the TC3-HMAC-SHA256 key-derivation
+        // chain. The expected hex was computed independently with OpenSSL
+        // (HMAC-SHA256 applied stepwise: TC3<key> -> date -> service ->
+        // tc3_request -> string_to_sign), guarding against drift in the
+        // chain ordering / hex encoding without live Tencent credentials.
+        let signature = tc3_signature(
+            "Gu5t9xGARNpq86cd98joQYCN3EXAMPLE",
+            "2019-02-25",
+            "cvm",
+            "TC3-HMAC-SHA256\n1551113065\n2019-02-25/cvm/tc3_request\n\
+5ffe6a04c0664d6b969fab9a13bdab201d63ee709638e2749d62a09ca18d7031",
+        );
+        assert_eq!(
+            signature,
+            "72e494ea809ad7a8c8f7a4507b9bddcbaa8e581f516e8da2f66e2c5a96525168"
+        );
     }
 }

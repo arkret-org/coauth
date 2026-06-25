@@ -13,7 +13,7 @@ pub fn RecoveryProgress(id: String) -> Element {
         let rid = recovery_id.clone();
         async move {
             crate::api::api_get::<RecoveryStatusOutcome>(&format!(
-                "/gate/account/auth/recovery/{rid}"
+                "/account/auth/recovery/{rid}"
             ))
             .await
         }
@@ -93,7 +93,7 @@ fn RecoveryProgressContent(data: RecoveryStatusOutcome, id: String) -> Element {
 
                                 spawn(async move {
                                     let result = crate::api::api_post::<serde_json::Value>(
-                                        &format!("/gate/account/auth/recovery/{rid}/resend"),
+                                        &format!("/account/auth/recovery/{rid}/resend"),
                                         serde_json::json!({}),
                                     ).await;
                                     resending.set(false);

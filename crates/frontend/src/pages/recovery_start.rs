@@ -44,7 +44,7 @@ pub fn RecoveryStart() -> Element {
 
                             spawn(async move {
                                 let result = crate::api::api_post::<RecoveryStartOutcome>(
-                                    "/gate/account/auth/recovery/start",
+                                    "/account/auth/recovery/start",
                                     serde_json::json!({ "email": em }),
                                 ).await;
                                 submitting.set(false);

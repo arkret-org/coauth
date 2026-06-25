@@ -164,7 +164,7 @@ fn LinkedAccountsSection(accounts: Vec<LinkedAccount>) -> Element {
 
     // Fetch available providers to show "Link" buttons for unlinked ones
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersOutcome>("/gate/account/auth/providers").await
+        crate::api::api_get::<ProvidersOutcome>("/account/auth/providers").await
     });
 
     rsx! {

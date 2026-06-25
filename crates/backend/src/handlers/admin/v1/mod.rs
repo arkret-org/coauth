@@ -18,6 +18,7 @@ pub mod passkeys;
 pub mod personal_sessions;
 pub mod policy_checks;
 pub mod policy_data;
+pub mod revocation_approval;
 pub mod site_config;
 pub mod upstream_oauth_links;
 pub mod upstream_oauth_providers;

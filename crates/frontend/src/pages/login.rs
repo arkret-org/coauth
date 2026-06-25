@@ -99,7 +99,7 @@ fn store_post_auth_continuation(kind: &str, id: &str) {
 #[component]
 pub fn Login() -> Element {
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersOutcome>("/gate/account/auth/providers").await
+        crate::api::api_get::<ProvidersOutcome>("/account/auth/providers").await
     });
     let binding = providers_data.read();
 
@@ -188,7 +188,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
 
                             spawn(async move {
                                 let result = crate::api::api_post::<LoginOutcome>(
-                                    "/gate/account/auth/login",
+                                    "/account/auth/login",
                                     serde_json::json!({
                                         "handle": user,
                                         "password": pass,

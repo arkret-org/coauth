@@ -440,9 +440,36 @@ impl ConfigurationSection for CokretConfig {
             return Err(std::io::Error::other("cokret.admin_org_id must not be empty").into());
         }
 
+        // Fail closed: `password_login_session_grants_enabled` activates the
+        // P0 password-bootstrap scaffold (auth.rs), which mints a
+        // principal-server session grant directly from a password login,
+        // bypassing the canonical OIDC `authorize -> token` ceremony, PKCE
+        // binding and the PoP strand. It is a development-only bring-up
+        // path that MUST be replaced before production. Require an explicit
+        // dev-only environment escape hatch so a mis-configured production
+        // deployment refuses to start instead of silently trusting these
+        // grants. Mirrors `account.registration_email_delivery_bypass_allowed`.
+        if self.password_login_session_grants_enabled
+            && std::env::var_os(PASSWORD_BOOTSTRAP_ESCAPE_HATCH).is_none()
+        {
+            return Err(std::io::Error::other(format!(
+                "cokret.password_login_session_grants_enabled is enabled but the dev-only escape \
+                 hatch {PASSWORD_BOOTSTRAP_ESCAPE_HATCH} is not set; this password-bootstrap \
+                 scaffold is for dev/test only and must never run in production"
+            ))
+            .into());
+        }
+
         Ok(())
     }
 }
+
+/// Dev-only escape hatch gating the P0 password-bootstrap session-grant
+/// scaffold. Production deployments must never set
+/// `cokret.password_login_session_grants_enabled=true`; requiring this
+/// environment variable makes a mis-configured production process fail
+/// closed at startup.
+const PASSWORD_BOOTSTRAP_ESCAPE_HATCH: &str = "COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP";
 
 /// Trusted Principal Server metadata published through Cokret discovery.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

@@ -74,8 +74,11 @@ pub struct ExperimentalConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inactive_session_expiration: Option<InactiveSessionExpirationConfig>,
 
-    /// URI for an embeddable plan-management interface (forwarded to the
-    /// client verbatim without validation)
+    /// URI for an embeddable plan-management interface. Forwarded to the
+    /// client and injected into an `iframe src`, so it is validated at
+    /// config load time: it MUST parse as an absolute URL with an `https`
+    /// scheme. Non-`https` schemes (notably `javascript:` / `data:`) are
+    /// rejected to prevent script injection / phishing through the embed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_management_iframe_uri: Option<String>,
 
@@ -106,4 +109,29 @@ impl ExperimentalConfig {
 
 impl ConfigurationSection for ExperimentalConfig {
     const PATH: &'static str = "experimental";
+
+    fn validate(
+        &self,
+        _figment: &figment::Figment,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        // The plan-management URI is injected verbatim into an `iframe src`
+        // on the account surface. Restrict it to absolute `https` URLs so a
+        // `javascript:` / `data:` / other-scheme value can never reach the
+        // embed (script injection / phishing). Fail closed at startup.
+        if let Some(uri) = &self.plan_management_iframe_uri {
+            let parsed = url::Url::parse(uri).map_err(|error| {
+                format!("experimental.plan_management_iframe_uri is not a valid URL: {error}")
+            })?;
+            if parsed.scheme() != "https" {
+                return Err(format!(
+                    "experimental.plan_management_iframe_uri must use the https scheme, got \
+                     `{}`; non-https schemes are rejected to prevent iframe script injection",
+                    parsed.scheme()
+                )
+                .into());
+            }
+        }
+
+        Ok(())
+    }
 }

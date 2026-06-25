@@ -448,7 +448,7 @@ impl TestState {
             )
             // REST API
             .push(
-                Router::with_path("/_coauth/gate/account/integration/describe")
+                Router::with_path("/_coauth/account/integration/describe")
                     .get(crate::handlers::account::auth::integration_describe),
             )
             // Canonical Account Authority/Auth Server surface (mirrors
@@ -482,7 +482,7 @@ impl TestState {
             )
             .push(
                 // Product-private account-management UI: list + {id}/revoke.
-                Router::with_path("/_coauth/gate/account/session-grants")
+                Router::with_path("/_coauth/account/session-grants")
                     .get(crate::handlers::cokret::list_session_grants)
                     .push(
                         Router::with_path("{id}/revoke")
@@ -515,15 +515,15 @@ impl TestState {
                     .post(crate::handlers::account::password::set_password),
             )
             .push(
-                Router::with_path("/_coauth/gate/account/password-recovery/{ticket}")
+                Router::with_path("/_coauth/account/password-recovery/{ticket}")
                     .get(crate::handlers::account::password::get_recovery_ticket_status),
             )
             .push(
-                Router::with_path("/_coauth/gate/account/password-recovery/set")
+                Router::with_path("/_coauth/account/password-recovery/set")
                     .post(crate::handlers::account::password::set_password_by_recovery),
             )
             .push(
-                Router::with_path("/_coauth/gate/account/password-recovery/resend")
+                Router::with_path("/_coauth/account/password-recovery/resend")
                     .post(crate::handlers::account::password::resend_recovery_email),
             )
             .push(
@@ -540,19 +540,19 @@ impl TestState {
                     .patch(crate::handlers::account::notification_prefs::patch_notification_preferences),
             )
             .push(
-                Router::with_path("/_coauth/gate/account/email-auth/start")
+                Router::with_path("/_coauth/account/email-auth/start")
                     .post(crate::handlers::account::emails::start_email_auth),
             )
             .push(
-                Router::with_path("/_coauth/gate/account/email-auth/{id}")
+                Router::with_path("/_coauth/account/email-auth/{id}")
                     .get(crate::handlers::account::emails::get_email_auth),
             )
             .push(
-                Router::with_path("/_coauth/gate/account/email-auth/{id}/complete")
+                Router::with_path("/_coauth/account/email-auth/{id}/complete")
                     .post(crate::handlers::account::emails::complete_email_auth),
             )
             .push(
-                Router::with_path("/_coauth/gate/account/email-auth/{id}/resend")
+                Router::with_path("/_coauth/account/email-auth/{id}/resend")
                     .post(crate::handlers::account::emails::resend_email_auth_code),
             )
             .push(

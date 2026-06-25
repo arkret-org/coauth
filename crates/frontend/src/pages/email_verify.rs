@@ -30,7 +30,7 @@ pub fn EmailVerify(id: String) -> Element {
         let qid = id_for_query.clone();
         async move {
             crate::api::api_get::<UserEmailAuthentication>(&format!(
-                "/gate/account/email-auth/{qid}"
+                "/account/email-auth/{qid}"
             ))
             .await
         }
@@ -103,7 +103,7 @@ pub fn EmailVerify(id: String) -> Element {
 
                                     spawn(async move {
                                         let result = crate::api::api_post::<crate::api::types::CompleteEmailAuthPayload>(
-                                            &format!("/gate/account/email-auth/{eid}/complete"),
+                                            &format!("/account/email-auth/{eid}/complete"),
                                             serde_json::json!({
                                                 "code": code_val,
                                             }),
@@ -187,7 +187,7 @@ pub fn EmailVerify(id: String) -> Element {
                                             resend_message.set(None);
                                             spawn(async move {
                                                 let result = crate::api::api_post::<ResendEmailAuthCodePayload>(
-                                                    &format!("/gate/account/email-auth/{rid}/resend"),
+                                                    &format!("/account/email-auth/{rid}/resend"),
                                                     serde_json::json!({
                                                         "language": "en",
                                                     }),

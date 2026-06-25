@@ -80,7 +80,7 @@ pub fn PasswordRecovery() -> Element {
                 }
 
                 match crate::api::api_get::<RecoveryTicketStatusOutcome>(&format!(
-                    "/gate/account/password-recovery/{ticket_value}"
+                    "/account/password-recovery/{ticket_value}"
                 ))
                 .await
                 {
@@ -187,7 +187,7 @@ pub fn PasswordRecovery() -> Element {
 
                                 spawn(async move {
                                     let result = crate::api::api_post::<ResendRecoveryEmailPayload>(
-                                        "/gate/account/password-recovery/resend",
+                                        "/account/password-recovery/resend",
                                         serde_json::json!({ "ticket": ticket_value }),
                                     )
                                     .await;
@@ -294,7 +294,7 @@ pub fn PasswordRecovery() -> Element {
                         let ticket_value = ticket_value.clone();
                         spawn(async move {
                             let result = crate::api::api_post::<SetPasswordPayload>(
-                                "/gate/account/password-recovery/set",
+                                "/account/password-recovery/set",
                                 serde_json::json!({
                                     "ticket": ticket_value,
                                     "new_password": new_password_value,

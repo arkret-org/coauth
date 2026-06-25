@@ -61,6 +61,34 @@ pub enum IntrospectionError {
 ///
 /// The caller is responsible for client authentication and HTTP-level
 /// concerns. This function only touches the repository.
+/// Whether the introspecting caller is entitled to the cokret
+/// device/principal/session association fields.
+///
+/// RFC 7662 introspection defaults to `sub`/`scope`/`exp`-style claims.
+/// The cokret extension fields (`cokret_principal_did`, `device_id`,
+/// `cokret_device_id`, `cokret_session_id`) link a token to a concrete
+/// device + principal + local session and materially widen the
+/// de-anonymisation surface. They are S2S material for the trusted
+/// Principal Server (which enforces the `/_cokret/self/*` surface), not
+/// for arbitrary confidential OIDC clients. Callers pass
+/// [`CokretAssociationDisclosure::Full`] only when authenticated as the
+/// Principal Server (homeserver bearer) or for internal self-introspection;
+/// untrusted confidential clients pass
+/// [`CokretAssociationDisclosure::Redacted`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CokretAssociationDisclosure {
+    /// Return the full device/principal/session association.
+    Full,
+    /// Omit cokret association fields; only standard RFC 7662 claims.
+    Redacted,
+}
+
+impl CokretAssociationDisclosure {
+    fn is_full(self) -> bool {
+        matches!(self, CokretAssociationDisclosure::Full)
+    }
+}
+
 pub async fn introspect_token(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
@@ -69,6 +97,7 @@ pub async fn introspect_token(
     activity_tracker: &ActivityTracker,
     token_str: &str,
     token_type_hint: Option<OAuthTokenTypeHint>,
+    disclosure: CokretAssociationDisclosure,
 ) -> Result<IntrospectionResponse, IntrospectionError> {
     let token_type = TokenType::check(token_str)?;
     if let Some(hint) = token_type_hint
@@ -156,10 +185,10 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(access_token.jti()),
-                device_id: device_id.clone(),
-                cokret_principal_did: principal_did,
-                cokret_device_id: device_id,
-                cokret_session_id: Some(session.id.to_string()),
+                device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
+                cokret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
+                cokret_device_id: disclosure.is_full().then_some(device_id).flatten(),
+                cokret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
         }
 
@@ -228,10 +257,10 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(refresh_token.jti()),
-                device_id: device_id.clone(),
-                cokret_principal_did: principal_did,
-                cokret_device_id: device_id,
-                cokret_session_id: Some(session.id.to_string()),
+                device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
+                cokret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
+                cokret_device_id: disclosure.is_full().then_some(device_id).flatten(),
+                cokret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
         }
 
@@ -320,10 +349,10 @@ pub async fn introspect_token(
                 aud: None,
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
-                device_id: device_id.clone(),
-                cokret_principal_did: actor_principal_did,
-                cokret_device_id: device_id,
-                cokret_session_id: Some(session.id.to_string()),
+                device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
+                cokret_principal_did: disclosure.is_full().then_some(actor_principal_did).flatten(),
+                cokret_device_id: disclosure.is_full().then_some(device_id).flatten(),
+                cokret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
         }
     };

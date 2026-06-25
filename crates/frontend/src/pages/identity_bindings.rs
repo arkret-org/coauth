@@ -15,7 +15,7 @@ pub fn IdentityBindings() -> Element {
         crate::api::api_get::<LinkedAccountsOutcome>("/self/linked-accounts").await
     });
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersOutcome>("/gate/account/auth/providers").await
+        crate::api::api_get::<ProvidersOutcome>("/account/auth/providers").await
     });
     let mut feedback: Signal<Option<Result<String, String>>> = use_signal(|| None);
     let mut unlinking_id: Signal<Option<String>> = use_signal(|| None);

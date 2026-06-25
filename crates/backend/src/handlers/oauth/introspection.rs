@@ -208,7 +208,10 @@ async fn handle_post(
 
     let mut repo: BoxRepository = repo_factory.create().await?;
 
-    if let Some(token) = credentials.bearer_token() {
+    // Only the trusted Principal Server (homeserver bearer) is entitled to
+    // the cokret device/principal/session association fields; arbitrary
+    // confidential OIDC clients get the redacted RFC 7662 view.
+    let disclosure = if let Some(token) = credentials.bearer_token() {
         if !principal_server
             .verify_token(token)
             .await
@@ -216,6 +219,7 @@ async fn handle_post(
         {
             return Err(RouteError::InvalidBearerToken);
         }
+        introspection_service::CokretAssociationDisclosure::Full
     } else {
         // Otherwise, it presented regular client credentials, so we verify them
         let client = credentials
@@ -234,7 +238,8 @@ async fn handle_post(
         credentials
             .verify(http_client, encrypter, method, &client)
             .await?;
-    }
+        introspection_service::CokretAssociationDisclosure::Redacted
+    };
 
     let Some(form) = form else {
         return Err(RouteError::BadRequest);
@@ -249,6 +254,7 @@ async fn handle_post(
         activity_tracker,
         &form.token,
         form.token_type_hint,
+        disclosure,
     )
     .await?;
 

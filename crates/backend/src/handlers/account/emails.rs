@@ -45,7 +45,7 @@ pub struct RemoveEmailOutcome {
     pub status: &'static str,
 }
 
-// ── GET /_coauth/gate/account/email-auth/:id ─────────────────────────────────
+// ── GET /_coauth/account/email-auth/:id ─────────────────────────────────
 
 #[derive(Serialize, ToSchema)]
 pub struct EmailAuthStatusOutcome {
@@ -83,7 +83,7 @@ pub async fn get_email_auth(
     }))
 }
 
-// ── POST /_coauth/gate/account/email-auth/start ──────────────────────────────
+// ── POST /_coauth/account/email-auth/start ──────────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct StartEmailAuthInput {
@@ -171,7 +171,7 @@ pub async fn start_email_auth(
     }
 }
 
-// ── POST /_coauth/gate/account/email-auth/:id/complete ───────────────────────
+// ── POST /_coauth/account/email-auth/:id/complete ───────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct CompleteEmailAuthInput {
@@ -239,7 +239,7 @@ pub async fn complete_email_auth(
     }
 }
 
-// ── POST /_coauth/gate/account/email-auth/:id/resend ─────────────────────────
+// ── POST /_coauth/account/email-auth/:id/resend ─────────────────────────
 
 #[derive(Deserialize, ToSchema)]
 pub struct ResendEmailAuthInput {
