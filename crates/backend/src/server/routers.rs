@@ -457,9 +457,9 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         account_dids, accounts, audit_feed, circle_capabilities, claims,
         collaboration_capabilities, connector_health, devices, invite_quarantine,
         notification_channels, notification_templates, oauth_clients, oauth_clients_i18n,
-        oauth_clients_register, oauth_sessions, passkeys, personal_sessions, policy_checks,
-        policy_data, site_config, upstream_oauth_links, upstream_oauth_providers, user_emails,
-        user_registration_tokens, user_sessions, users, version,
+        oauth_clients_register, oauth_sessions, organizations, passkeys, personal_sessions,
+        policy_checks, policy_data, site_config, upstream_oauth_links, upstream_oauth_providers,
+        user_emails, user_registration_tokens, user_sessions, users, version,
     };
 
     let admin_router = Router::with_path("/_coauth/admin")
@@ -498,6 +498,41 @@ pub(super) fn build_admin_router(router: Router) -> Router {
                 .push(
                     Router::with_path("{grant_id}")
                         .delete(collaboration_capabilities::revoke_handler),
+                ),
+        )
+        // COA-ORG: organization principal control + delegation management.
+        // Wire shapes are in coauth-admin-types::organization_admin + the SDK
+        // ck.realm.organization payload; persistence is durable.
+        .push(
+            Router::with_path("organizations")
+                .push(Router::with_path("bootstrap").post(organizations::bootstrap_handler))
+                .push(
+                    Router::with_path("{org_did}")
+                        .get(organizations::get_handler)
+                        .push(
+                            Router::with_path("rotate-controller")
+                                .post(organizations::rotate_controller_handler),
+                        )
+                        .push(
+                            Router::with_path("statements")
+                                .post(organizations::issue_statement_handler),
+                        )
+                        .push(
+                            Router::with_path("delegations")
+                                .get(organizations::list_delegations_handler)
+                                .post(organizations::record_delegation_handler)
+                                .push(
+                                    Router::with_path("{delegation_ref}")
+                                        .push(
+                                            Router::with_path("revoke")
+                                                .post(organizations::revoke_delegation_handler),
+                                        )
+                                        .push(
+                                            Router::with_path("renew")
+                                                .post(organizations::renew_delegation_handler),
+                                        ),
+                                ),
+                        ),
                 ),
         )
         // Invite-quarantine outbox (C10.E §6.1 default-profile path)

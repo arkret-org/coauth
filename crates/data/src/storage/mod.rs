@@ -125,6 +125,8 @@ pub mod handle_audit;
 pub mod notification;
 /// Notification template version repositories.
 pub mod notification_template;
+/// Organization principal control + delegation repositories.
+pub mod organization_control;
 /// OAuth repositories.
 pub mod oauth;
 /// Personal access repositories.

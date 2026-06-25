@@ -17,6 +17,7 @@ use crate::oauth::{
     OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
     SessionGrantRepository,
 };
+use crate::organization_control::OrganizationControlRepository;
 use crate::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
 use crate::policy_data::PolicyDataRepository;
 use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
@@ -154,6 +155,11 @@ pub trait RepositoryAccess: Send {
     fn collaboration_capability_grant<'c>(
         &'c mut self,
     ) -> Box<dyn CollaborationCapabilityGrantRepository<Error = Self::Error> + 'c>;
+
+    /// Get an [`OrganizationControlRepository`].
+    fn organization_control<'c>(
+        &'c mut self,
+    ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c>;
 
     /// Get a [`DpopReplayRepository`].
     fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c>;
@@ -320,6 +326,7 @@ mod impls {
         OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
         SessionGrantRepository,
     };
+    use crate::organization_control::OrganizationControlRepository;
     use crate::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
     use crate::policy_data::PolicyDataRepository;
     use crate::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
@@ -403,6 +410,15 @@ mod impls {
         ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
             Box::new(MapErr::new(
                 self.inner.circle_capability_grant(),
+                &mut self.mapper,
+            ))
+        }
+
+        fn organization_control<'c>(
+            &'c mut self,
+        ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c> {
+            Box::new(MapErr::new(
+                self.inner.organization_control(),
                 &mut self.mapper,
             ))
         }
@@ -673,6 +689,12 @@ mod impls {
             &'c mut self,
         ) -> Box<dyn CircleCapabilityGrantRepository<Error = Self::Error> + 'c> {
             (**self).circle_capability_grant()
+        }
+
+        fn organization_control<'c>(
+            &'c mut self,
+        ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c> {
+            (**self).organization_control()
         }
 
         fn collaboration_capability_grant<'c>(

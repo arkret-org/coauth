@@ -8,6 +8,7 @@ use coauth_data::circle_capability::CircleCapabilityGrantRepository;
 use coauth_data::collaboration_capability::CollaborationCapabilityGrantRepository;
 use coauth_data::dpop_replay::DpopReplayRepository;
 use coauth_data::notification::{NotificationRepository, NotificationTemplateRepository};
+use coauth_data::organization_control::OrganizationControlRepository;
 use coauth_data::oauth::{
     OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
     OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
@@ -46,6 +47,7 @@ use crate::circle_capability::PgCircleCapabilityGrantRepository;
 use crate::collaboration_capability::PgCollaborationCapabilityGrantRepository;
 use crate::dpop_replay::PgDpopReplayRepository;
 use crate::notification::{PgNotificationRepository, PgNotificationTemplateRepository};
+use crate::organization_control::PgOrganizationControlRepository;
 use crate::oauth::{
     PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
     PgOAuthDeviceCodeGrantRepository, PgOAuthRefreshTokenRepository, PgOAuthSessionGrantRepository,
@@ -219,6 +221,12 @@ impl RepositoryAccess for PgRepository {
         Box::new(PgCollaborationCapabilityGrantRepository::new(
             &mut self.conn,
         ))
+    }
+
+    fn organization_control<'c>(
+        &'c mut self,
+    ) -> Box<dyn OrganizationControlRepository<Error = Self::Error> + 'c> {
+        Box::new(PgOrganizationControlRepository::new(&mut self.conn))
     }
 
     fn dpop_replay<'c>(&'c mut self) -> Box<dyn DpopReplayRepository<Error = Self::Error> + 'c> {

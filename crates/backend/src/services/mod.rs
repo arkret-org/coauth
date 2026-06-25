@@ -14,6 +14,8 @@ pub mod inception_key_window;
 pub mod invite_quarantine;
 pub mod onboarding_starid;
 pub mod oob_code;
+pub mod organization_bootstrap;
+pub mod organization_statement;
 pub mod oob_invite_state;
 pub mod passkey_derive;
 pub mod peer_protocol_client;

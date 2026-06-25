@@ -1261,6 +1261,7 @@ version = "0.3.0"
 dependencies = [
  "chrono",
  "coauth-data",
+ "cokret-core",
  "salvo",
  "schemars 1.2.1",
  "serde",

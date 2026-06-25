@@ -56,6 +56,8 @@ pub mod collaboration_capability;
 pub mod dpop_replay;
 /// Persisted notification request, delivery, and audit event models.
 pub mod notification;
+/// Organization principal control state and organization DID delegations.
+pub mod organization_control;
 /// OAuth client and session models.
 pub mod oauth;
 /// Personal access token types.
@@ -154,6 +156,12 @@ pub use self::notification::{
     NotificationDeliveryStatus, NotificationDestination, NotificationEventActor,
     NotificationEventKind, NotificationEventLog, NotificationPreference, NotificationRequest,
     NotificationRequestSource, NotificationRequestStatus,
+};
+pub use self::organization_control::{
+    NewOrganizationDelegation, NewOrganizationPrincipalControl,
+    OrganizationBootstrapAuthorization, OrganizationControlRepository, OrganizationDelegation,
+    OrganizationDelegationStatus, OrganizationPrincipalControl,
+    PRINCIPAL_CONTROL_REALM_BOOTSTRAP_PURPOSE,
 };
 pub use self::oauth::{
     AuthorizationCode, AuthorizationGrant, AuthorizationGrantStage, Client, DeviceCodeGrant,

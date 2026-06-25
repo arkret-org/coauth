@@ -13,6 +13,7 @@ pub mod oauth_clients;
 pub mod oauth_clients_i18n;
 pub mod oauth_clients_register;
 pub mod oauth_sessions;
+pub mod organizations;
 pub mod passkeys;
 pub mod personal_sessions;
 pub mod policy_checks;

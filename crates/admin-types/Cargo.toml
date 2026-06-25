@@ -25,6 +25,7 @@ schema = ["dep:schemars", "dep:salvo", "coauth-data/schema"]
 [dependencies]
 chrono = {workspace = true,features = ["serde"]}
 coauth-data = {workspace = true}
+cokret-core = {workspace = true}
 salvo = {workspace = true,optional = true}
 schemars = {workspace = true,optional = true}
 serde = {workspace = true,features = ["derive"]}

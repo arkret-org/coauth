@@ -161,6 +161,42 @@ diesel::table! {
 }
 
 diesel::table! {
+    organization_principal_controls (id) {
+        id -> Uuid,
+        organization_did -> Text,
+        principal_control_realm_id -> Text,
+        control_stream_ref -> Nullable<Text>,
+        pcr_frontier_digest -> Nullable<Text>,
+        bootstrap_authorization -> Text,
+        bootstrap_delegation_ref -> Nullable<Text>,
+        executed_by -> Nullable<Text>,
+        bootstrap_proof_digest -> Nullable<Text>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    organization_delegations (id) {
+        id -> Uuid,
+        delegation_ref -> Text,
+        organization_did -> Text,
+        delegate_did -> Text,
+        issuer_role -> Text,
+        purposes -> Array<Text>,
+        covered_relationships -> Array<Text>,
+        covered_control_scopes -> Array<Text>,
+        status -> Text,
+        valid_from -> Timestamptz,
+        valid_until -> Nullable<Timestamptz>,
+        created_by -> Text,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        revoked_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
     collaboration_capability_grants (id) {
         id -> Uuid,
         capability_grant_id -> Text,
@@ -1028,4 +1064,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     accountability_subject_revocations,
     circle_capability_grants,
     collaboration_capability_grants,
+    organization_principal_controls,
+    organization_delegations,
 );
