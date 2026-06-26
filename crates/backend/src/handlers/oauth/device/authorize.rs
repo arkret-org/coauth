@@ -145,7 +145,7 @@ async fn handle_post(
     let scope = client_authorization
         .form
         .and_then(|f| f.scope)
-        // XXX: Is this really how we do empty scopes?
+        // TODO(COA-HYG-02): Is this really how we do empty scopes?
         .unwrap_or(std::iter::empty::<ScopeToken>().collect());
 
     let expires_in = Duration::microseconds(20 * 60 * 1000 * 1000);

@@ -36,6 +36,32 @@ const TEMPLATE_SMS_VERIFICATION: &str = "sms_verification_code";
 const TEMPLATE_EMAIL_RECOVERY: &str = "email_recovery";
 const EMAIL_VERIFICATION_LANGUAGE: &str = "en";
 
+const RECOVERY_TICKET_CHARSET: &[u8] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+/// Draw a uniform `u32` in `0..bound` without modulo bias (COA-COR-02).
+///
+/// Uses rejection sampling: rejects the small unrepresentable tail of the
+/// `u32` range (`u32::MAX % bound + 1` values) so every output is equiprobable.
+/// `bound` MUST be non-zero.
+fn uniform_u32_below(rng: &mut (dyn RngCore + Send), bound: u32) -> u32 {
+    debug_assert!(bound > 0, "bound must be non-zero");
+    // Largest multiple of `bound` that fits in u32; samples at or above it are
+    // rejected so the remaining range is an exact multiple of `bound`.
+    let zone = u32::MAX - (u32::MAX % bound);
+    loop {
+        let value = rng.next_u32();
+        if value < zone {
+            return value % bound;
+        }
+    }
+}
+
+/// Draw a uniform charset byte without modulo bias (COA-COR-02).
+fn uniform_charset_byte(rng: &mut (dyn RngCore + Send), charset: &[u8]) -> u8 {
+    charset[uniform_u32_below(rng, charset.len() as u32) as usize]
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EmailVerificationPayload {
     code: String,
@@ -222,7 +248,7 @@ pub(crate) async fn send_email_authentication_code(
     {
         "123456".to_owned()
     } else {
-        format!("{:06}", rng.next_u32() % 1_000_000)
+        format!("{:06}", uniform_u32_below(&mut rng, 1_000_000))
     };
     let code = repo
         .user_email()
@@ -307,7 +333,7 @@ pub(crate) async fn send_sms_authentication_code(
         return Ok(());
     }
 
-    let code = format!("{:06}", rng.next_u32() % 1_000_000);
+    let code = format!("{:06}", uniform_u32_below(&mut rng, 1_000_000));
     let code = repo
         .user_phone()
         .add_authentication_code(
@@ -390,16 +416,9 @@ pub(crate) async fn send_account_recovery(
             .map_err(JobError::retry)?;
 
         for edge in &page.edges {
-            let ticket = {
-                const CHARSET: &[u8] =
-                    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-                let mut bytes = [0u8; 32];
-                rng.fill_bytes(&mut bytes);
-                bytes
-                    .iter()
-                    .map(|b| CHARSET[*b as usize % CHARSET.len()] as char)
-                    .collect::<String>()
-            };
+            let ticket = (0..32)
+                .map(|_| uniform_charset_byte(&mut rng, RECOVERY_TICKET_CHARSET) as char)
+                .collect::<String>();
             let ticket = repo
                 .user_recovery()
                 .add_ticket(&mut rng, clock, &session, &edge.node, ticket)

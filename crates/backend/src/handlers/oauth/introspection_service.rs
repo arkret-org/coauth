@@ -106,7 +106,7 @@ pub async fn introspect_token(
         return Err(IntrospectionError::UnexpectedTokenType);
     }
 
-    // XXX: we should get the IP from the client introspecting the token
+    // TODO(COA-HYG-02): we should get the IP from the client introspecting the token
     let ip = None;
 
     let reply = match token_type {

@@ -311,7 +311,7 @@ mod tests {
         clock.advance(Duration::try_minutes(6).unwrap());
         assert!(!access_token.is_valid(clock.now()));
 
-        // XXX: we might want to create a new access token
+        // TODO(COA-HYG-02): we might want to create a new access token
         clock.advance(Duration::try_minutes(-6).unwrap()); // Go back in time
         assert!(access_token.is_valid(clock.now()));
 

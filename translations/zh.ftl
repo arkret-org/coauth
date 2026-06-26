@@ -62,9 +62,14 @@ coauth-change-password-new = 新密码
 coauth-choose-display-name-description = 这是能被其他人看到的名称，你可以随时更改。
 coauth-choose-display-name-headline = 选择显示名称
 coauth-approval-client-wants-access = <span>{ $client_name }</span> 位于 <span>{ $redirect_uri }</span>，请求访问您的账户。
+coauth-approval-continue-to = 继续前往 <span>{ $client_name }</span>？
 coauth-approval-heading = 允许访问你的账户？
 coauth-approval-make-sure-you-trust = 请确保你信任 <span>{ $client_name }</span> 。
+coauth-approval-scope-list-preface = 继续即表示你允许 <span>{ $client_name }</span>：
 coauth-approval-this-will-allow = 这将允许 <span>{ $client_name }</span> ：
+coauth-approval-this-will-setup =
+    这将使用你的 <span>{ $server_name }</span> 账户设置 { $client_name }（<span>{ $client_uri }</span>）。
+coauth-approval-use-another-account = 使用其他账户
 coauth-approval-you-may-be-sharing = 你可能正在与本网站或 app 分享敏感信息。
 coauth-device-card-access-requested = 已请求访问权限
 coauth-device-card-device-code = 代码
@@ -77,6 +82,8 @@ coauth-device-approval-denied-description = 你已拒绝{ $client_name } 的访�
 coauth-device-approval-denied-heading = 访问被拒绝
 coauth-device-approval-granted-description = 您已授予 { $client_name } 访问权限。您可以关闭此窗口。
 coauth-device-approval-granted-heading = 已授予访问权限
+coauth-device-approval-this-will-setup =
+    另一个设备想要使用你的 <span>{ $server_name }</span> 账户设置 { $client_name }（<span>{ $client_uri }</span>）。请确认你认得该设备。
 coauth-device-display-name-client-on-device = 运行在 { $device_name } 的 { $client_name }
 coauth-device-display-name-name-for-platform = { $name } { $platform }
 coauth-device-display-name-unknown-device = 未知设备

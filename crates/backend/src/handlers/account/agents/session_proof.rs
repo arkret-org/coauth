@@ -44,9 +44,17 @@ pub struct AgentSessionAuthorization {
     /// Effective granted scope (intersection of requested scope, the authorized
     /// key scope, active capability grants, and Realm policy).
     pub granted_scope: Vec<String>,
-    /// Materialized `scope_details` overlay (canonical resource constraints +
-    /// optional participation entries).
+    /// Materialized `scope_details` overlay baked into the session-grant JWT
+    /// payload (canonical resource constraints + optional participation
+    /// entries). This is the JWT-internal shape soland enforces against; it is
+    /// NOT the `SessionGrantOutcome.scope_details` wire DTO.
     pub scope_details: serde_json::Value,
+    /// Spec-typed `SessionGrantOutcome.scope_details` overlay returned on the
+    /// wire (`service-operation-dtos.schema.json#/$defs/SessionGrantOutcome`,
+    /// `additionalProperties:false`, agent-only four fields). Distinct from the
+    /// JWT-internal `scope_details` above, which carries the canonical
+    /// constraint projection soland needs.
+    pub wire_scope_details: cokret_core::SessionGrantScopeDetails,
     /// Capped agent session TTL (≤ 15 min).
     pub ttl: chrono::Duration,
 }
@@ -309,6 +317,33 @@ pub async fn validate_agent_session_proof(
         scope_details["participation"] = serde_json::to_value(&scope_request.participation)
             .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     }
+
+    // Spec-typed wire overlay returned in `SessionGrantOutcome.scope_details`.
+    // Only the four agent-only fields the spec allows
+    // (`additionalProperties:false`): realm_ids / strand_ids / track_names /
+    // participation. The canonical constraint projection
+    // (allowed_tracks/data_classes/endpoints, capability_grant_refs,
+    // policy_refs) rides the JWT-internal `scope_details` above, never the
+    // wire DTO. `track_names` mirrors the materialized `allowed_tracks`.
+    let wire_realm_ids = effective_scope
+        .realm_ids
+        .iter()
+        .map(|id| cokret_core::RealmId::new(id.clone()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let wire_strand_ids = effective_scope
+        .strand_ids
+        .iter()
+        .map(|id| cokret_core::StrandId::new(id.clone()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let wire_scope_details = cokret_core::SessionGrantScopeDetails {
+        realm_ids: wire_realm_ids,
+        strand_ids: wire_strand_ids,
+        track_names: effective_scope.allowed_tracks.clone(),
+        participation: scope_request.participation.clone(),
+    };
+
     // TTL: cap to the spec ceiling (≤ 15 min), never wider than the
     // (human-oriented) configured grant TTL.
     let configured = cokret_config.session_grant_ttl;
@@ -323,6 +358,7 @@ pub async fn validate_agent_session_proof(
         controller_did,
         granted_scope: effective_scope.granted_scope,
         scope_details,
+        wire_scope_details,
         ttl,
     })
 }

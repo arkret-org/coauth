@@ -151,6 +151,15 @@ pub enum UserInfoError {
     #[error(transparent)]
     Http(#[from] reqwest::Error),
 
+    /// The userinfo response body exceeded the configured safety cap
+    /// (COA-SEC-02).
+    #[error("userinfo response exceeded {limit} bytes (actual {actual})")]
+    ResponseTooLarge { limit: usize, actual: usize },
+
+    /// The userinfo response body was not valid JSON.
+    #[error("userinfo response was not valid JSON")]
+    Json(#[from] serde_json::Error),
+
     /// The server returned an error
     #[error(transparent)]
     OAuth(#[from] OAuthError),

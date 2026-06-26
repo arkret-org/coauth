@@ -11,6 +11,7 @@ action-sign-in = Sign in
 action-sign-out = Sign out
 action-skip = Skip
 action-start-over = Start over
+action-submit = Submit
 
 ## app
 
@@ -54,6 +55,8 @@ coauth-account-locked-description =
 coauth-account-locked-heading = Account locked
 coauth-account-logged-out-description = This session has been terminated. Sign out to be able to log back in
 coauth-account-logged-out-heading = Session terminated
+coauth-add-email-description = Add an email address so you can recover your account if you lose access.
+coauth-add-email-heading = Add an email address
 coauth-back-to-homepage = Go back to the homepage
 coauth-captcha-noscript =
     This form is protected by a CAPTCHA and requires JavaScript to be enabled to submit it. Please enable JavaScript in your browser and reload this page.
@@ -63,6 +66,7 @@ coauth-change-password-change = Change password
 coauth-change-password-confirm = Confirm password
 # Field for the user's current password
 coauth-change-password-current = Current password
+coauth-change-password-description = This will change your account password.
 # Heading on the change password page
 coauth-change-password-heading = Change my password
 # Field for the user's new password
@@ -71,8 +75,13 @@ coauth-change-password-new = New password
 coauth-choose-display-name-description = This is the name other people will see. You can change this at any time.
 # During the registration strand, the user is asked to choose a display name. This is the headline of that form.
 coauth-choose-display-name-headline = Choose your display name
+coauth-approval-client-wants-access = <span>{ $client_name }</span> at <span>{ $redirect_uri }</span> is requesting access to your account.
 coauth-approval-continue-to = Continue to <span>{ $client_name }</span>?
+coauth-approval-heading = Allow access to your account?
+coauth-approval-make-sure-you-trust = Make sure you trust <span>{ $client_name }</span>.
 coauth-approval-scope-list-preface = By continuing, you allow <span>{ $client_name }</span> to:
+coauth-approval-this-will-allow = This will allow <span>{ $client_name }</span> to:
+coauth-approval-you-may-be-sharing = You may be sharing sensitive information with this site or app.
 coauth-approval-this-will-setup =
     This will set up { $client_name } (<span>{ $client_uri }</span>) with your <span>{ $server_name }</span> account.
 coauth-approval-use-another-account = Use another account
@@ -82,6 +91,7 @@ coauth-device-card-generic-device = Device
 coauth-device-card-ip-address = IP address
 coauth-device-code-link-description = Link a device
 coauth-device-code-link-headline = Enter the code displayed on your device
+coauth-device-approval-another-device-access = Another device wants to access your account.
 coauth-device-approval-denied-description = You denied access to { $client_name }. You can close this window.
 coauth-device-approval-denied-heading = Access denied
 coauth-device-approval-granted-description = You granted access to { $client_name }. You can close this window.
@@ -141,6 +151,8 @@ coauth-login-headline = Sign in
 coauth-login-link-description = Linking your <span class="break-keep text-links">{ $provider }</span> account
 coauth-login-link-headline = Sign in to link
 coauth-login-no-login-methods = No login methods available.
+# Separator between the login methods
+coauth-login-separator = Or
 coauth-login-handle-or-email = Username or Email
 coauth-navbar-my-account = My account
 coauth-navbar-register = Create an account
@@ -198,17 +210,23 @@ coauth-register-continue-with-email = Continue with email address
 coauth-register-continue-with-password = Continue with password
 coauth-register-create-account-description = Choose a username to continue.
 coauth-register-create-account-heading = Create an account
+coauth-register-sign-in-instead = Sign in instead
 coauth-register-terms-of-service = I agree to the <a href="{ $tos_uri }" data-kind="primary" class="cpd-link">Terms and Conditions</a>
 coauth-registration-token-description = Enter a registration token provided by your coauth administrator.
 coauth-registration-token-field = Registration token
 coauth-registration-token-headline = Registration token
 coauth-scope-coauth-admin = Manage coauth accounts (urn:coauth:admin)
+coauth-scope-edit-profile = Edit your profile and contact details
+coauth-scope-manage-sessions = Manage your devices and sessions
 coauth-scope-send-messages = Send Cokret messages on your behalf
 coauth-scope-view-messages = Read Cokret message metadata
 # Displayed when the 'openid' scope is requested
 coauth-scope-view-profile = See your coauth profile info and contact details
 # Page shown when the user tries to link an upstream account that is already linked to another account
 coauth-upstream-oauth-link-mismatch-heading = This upstream account is already linked to another account.
+coauth-upstream-oauth-login-link-action = Continue
+coauth-upstream-oauth-login-link-description = This username ({ $handle }) already belongs to an account; it will be linked to this upstream account.
+coauth-upstream-oauth-login-link-heading = Link to an existing account
 coauth-upstream-oauth-register-choose-handle-description = This cannot be changed later.
 # Displayed when creating a new account from an SSO login, and the username is not forced
 coauth-upstream-oauth-register-choose-handle-heading = Choose your username
@@ -237,5 +255,6 @@ coauth-upstream-oauth-register-use = Use
 coauth-upstream-oauth-suggest-link-action = Link
 coauth-upstream-oauth-suggest-link-heading = Link to your existing account
 coauth-verify-email-6-digit-code = 6-digit code
+coauth-verify-email-code = Code
 coauth-verify-email-description = Enter the 6-digit code sent to: <em>{ $email }</em>
 coauth-verify-email-headline = Verify your email

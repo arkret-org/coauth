@@ -212,9 +212,13 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // self/policy/check) was a backward-compatibility shim and has been
         // removed — clients must use `/_cokret`.
         .push(
-            // `root/identity/primary-handle` is a coauth product-private
-            // path (not a spec operation), so it legitimately stays here.
-            Router::with_path("root/identity/primary-handle")
+            // `account/identity/primary-handle` is a coauth product-private
+            // path (not a spec operation). It deliberately avoids the protocol
+            // trust-surface classifier `root/identity/` (reserved for the
+            // canonical `/_cokret/root/identity/{describe,resolve,document}`
+            // Principal Server identity-root operations), mirroring how
+            // `account/session-grants` below avoids the `gate/` classifier.
+            Router::with_path("account/identity/primary-handle")
                 .patch(cokret::patch_primary_handle_preference),
         )
         .push(

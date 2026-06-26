@@ -78,7 +78,7 @@ pub async fn handle_client_credentials(
 
     let mut params = AccessTokenResponse::new(access_token.access_token).with_expires_in(ttl);
 
-    // XXX: there is a potential (but unlikely) race here, where the activity for
+    // TODO(COA-HYG-02): there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker.record_oauth_session(clock, &session).await;

@@ -10,7 +10,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::super::error::{TokenRequestError, UserInfoError};
-use crate::outbound_http::RequestBuilderExt;
+use crate::outbound_http::{oidc_upstream_policy, send_with_policy};
 
 /// `DingTalk` token exchange request body.
 #[derive(Serialize)]
@@ -75,10 +75,11 @@ pub async fn request_access_token(
         grant_type: "authorization_code",
     };
 
-    let response: DingTalkTokenResponse = http_client
-        .post(token_endpoint.as_str())
-        .json(&body)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: DingTalkTokenResponse =
+        send_with_policy(oidc_upstream_policy("dingtalk_token"), || {
+            http_client.post(token_endpoint.as_str()).json(&body)
+        })
         .await?
         .error_for_status()?
         .json()
@@ -101,10 +102,13 @@ pub async fn fetch_userinfo(
 ) -> Result<HashMap<String, Value>, UserInfoError> {
     tracing::debug!("Fetching DingTalk user info...");
 
-    let response: HashMap<String, Value> = http_client
-        .get(userinfo_endpoint.as_str())
-        .header("x-acs-dingtalk-access-token", access_token)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: HashMap<String, Value> =
+        send_with_policy(oidc_upstream_policy("dingtalk_userinfo"), || {
+            http_client
+                .get(userinfo_endpoint.as_str())
+                .header("x-acs-dingtalk-access-token", access_token)
+        })
         .await?
         .error_for_status()?
         .json()

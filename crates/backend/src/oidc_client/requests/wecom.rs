@@ -13,7 +13,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::super::error::{TokenRequestError, UserInfoError};
-use crate::outbound_http::RequestBuilderExt;
+use crate::outbound_http::{oidc_upstream_policy, send_with_policy};
 
 const WECOM_TOKEN_ENDPOINT: &str = "https://qyapi.weixin.qq.com/cgi-bin/gettoken";
 const WECOM_USERINFO_ENDPOINT: &str = "https://qyapi.weixin.qq.com/cgi-bin/auth/getuserinfo";
@@ -69,13 +69,14 @@ pub async fn get_corp_access_token(
         .append_pair("corpid", corpid)
         .append_pair("corpsecret", corpsecret);
 
-    let response: WeComTokenResponse = http_client
-        .get(url)
-        .send_traced()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: WeComTokenResponse = send_with_policy(oidc_upstream_policy("wecom_token"), || {
+        http_client.get(url.clone())
+    })
+    .await?
+    .error_for_status()?
+    .json()
+    .await?;
 
     if response.errcode != 0 {
         return Err(TokenRequestError::ProviderError {
@@ -105,9 +106,11 @@ pub async fn get_user_identity(
         .append_pair("access_token", access_token)
         .append_pair("code", code);
 
-    let response: WeComUserIdentity = http_client
-        .get(url)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: WeComUserIdentity =
+        send_with_policy(oidc_upstream_policy("wecom_userinfo"), || {
+            http_client.get(url.clone())
+        })
         .await?
         .error_for_status()?
         .json()
@@ -142,9 +145,11 @@ pub async fn fetch_userinfo(
         .append_pair("access_token", access_token)
         .append_pair("userid", userid);
 
-    let response: HashMap<String, Value> = http_client
-        .get(url)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: HashMap<String, Value> =
+        send_with_policy(oidc_upstream_policy("wecom_user_get"), || {
+            http_client.get(url.clone())
+        })
         .await?
         .error_for_status()?
         .json()

@@ -471,7 +471,7 @@ impl TestState {
             .push(Router::with_path("/_cokret/root/identity/describe").get(crate::handlers::cokret::identity_describe))
             .push(Router::with_path("/_cokret/root/identity/resolve").post(crate::handlers::cokret::identity_resolve))
             .push(Router::with_path("/_cokret/root/identity/document").get(crate::handlers::cokret::identity_document))
-            .push(Router::with_path("/_coauth/root/identity/primary-handle").patch(crate::handlers::cokret::patch_primary_handle_preference))
+            .push(Router::with_path("/_coauth/account/identity/primary-handle").patch(crate::handlers::cokret::patch_primary_handle_preference))
             .push(Router::with_path("/_cokret/find/directory/describe").get(crate::handlers::cokret::directory_describe))
             .push(Router::with_path("/_cokret/find/directory/resolve-handle").post(crate::handlers::cokret::directory_resolve_handle))
             // Canonical spec surface (mirrors production server.rs): the

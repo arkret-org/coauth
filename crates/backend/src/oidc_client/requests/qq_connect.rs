@@ -12,7 +12,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::super::error::{TokenRequestError, UserInfoError};
-use crate::outbound_http::RequestBuilderExt;
+use crate::outbound_http::{oidc_upstream_policy, send_with_policy};
 
 const QQ_ME_ENDPOINT: &str = "https://graph.qq.com/oauth.0/me";
 const QQ_USERINFO_ENDPOINT: &str = "https://graph.qq.com/user/get_user_info";
@@ -75,14 +75,14 @@ pub async fn request_access_token(
         fmt: "json",
     };
 
-    let response: QQTokenResponse = http_client
-        .post(token_endpoint.as_str())
-        .form(&body)
-        .send_traced()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: QQTokenResponse = send_with_policy(oidc_upstream_policy("qq_token"), || {
+        http_client.post(token_endpoint.as_str()).form(&body)
+    })
+    .await?
+    .error_for_status()?
+    .json()
+    .await?;
 
     Ok(response)
 }
@@ -119,13 +119,14 @@ pub async fn fetch_openid(
         .append_pair("access_token", access_token)
         .append_pair("fmt", "json");
 
-    let response_text = http_client
-        .get(url)
-        .send_traced()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response_text = send_with_policy(oidc_upstream_policy("qq_openid"), || {
+        http_client.get(url.clone())
+    })
+    .await?
+    .error_for_status()?
+    .text()
+    .await?;
 
     // QQ may return JSONP format even with fmt=json; handle both.
     let json_str = strip_jsonp(&response_text);
@@ -176,13 +177,14 @@ pub async fn fetch_userinfo(
         .append_pair("oauth_consumer_key", client_id)
         .append_pair("openid", openid);
 
-    let response: HashMap<String, Value> = http_client
-        .get(url)
-        .send_traced()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: HashMap<String, Value> = send_with_policy(oidc_upstream_policy("qq_userinfo"), || {
+        http_client.get(url.clone())
+    })
+    .await?
+    .error_for_status()?
+    .json()
+    .await?;
 
     // QQ userinfo uses "ret" field for error code (0 = success)
     if let Some(ret) = response.get("ret").and_then(serde_json::Value::as_i64)

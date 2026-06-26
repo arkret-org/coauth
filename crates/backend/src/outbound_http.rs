@@ -136,6 +136,19 @@ pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPol
         .with_backoff(Duration::from_millis(100))
 }
 
+/// Policy for upstream OIDC / IdP authentication-path egress
+/// (discovery / JWKS / userinfo / token exchange) — COA-SEC-02. Short per-call
+/// timeout with a small bounded retry budget, replacing the previous reliance
+/// on the shared client's 60 s global timeout, so a slow/hung upstream cannot
+/// pile up coauth auth-processing tasks.
+#[must_use]
+pub(crate) const fn oidc_upstream_policy(operation: &'static str) -> OutboundRequestPolicy {
+    OutboundRequestPolicy::new("oidc_upstream", operation)
+        .with_timeout(Duration::from_secs(10))
+        .with_max_attempts(2)
+        .with_backoff(Duration::from_millis(100))
+}
+
 #[must_use]
 pub(crate) const fn policy_frontier_policy() -> OutboundRequestPolicy {
     OutboundRequestPolicy::new("policy_frontier", "fetch")
@@ -160,12 +173,25 @@ impl reqwest::dns::Resolve for TracingResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let requested_name = name.as_str().to_owned();
         let span = tracing::info_span!("dns.resolve", name = requested_name);
+        // Parse the hostname into the inner resolver's `Name` exactly once,
+        // mapping a parse failure to a resolver error instead of panicking
+        // (COA-COR-01). `name` was constructed by reqwest/hyper so this round
+        // trip normally succeeds; the explicit error path guards against any
+        // hostname-validation drift between hyper and this `Name::from_str`.
+        let parsed_name = match Name::from_str(name.as_str()) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                return Box::pin(async move {
+                    Err(Box::new(error) as Box<dyn StdError + Send + Sync>)
+                });
+            }
+        };
         if !private_networks_allowed() {
             if private_egress_target_allowed(&requested_name) {
                 let mut inner = self.inner.clone();
                 return Box::pin(
                     inner
-                        .call(Name::from_str(name.as_str()).unwrap())
+                        .call(parsed_name)
                         .map(move |result| {
                             let addrs =
                                 result.map_err(|err| -> Box<dyn StdError + Send + Sync> {
@@ -195,7 +221,7 @@ impl reqwest::dns::Resolve for TracingResolver {
         let mut inner = self.inner.clone();
         Box::pin(
             inner
-                .call(Name::from_str(name.as_str()).unwrap())
+                .call(parsed_name)
                 .map(move |result| {
                     let addrs = result
                         .map_err(|err| -> Box<dyn StdError + Send + Sync> { Box::new(err) })?;
@@ -267,8 +293,12 @@ fn private_networks_allowed() -> bool {
     if env_flag_enabled("COAUTH_OUTBOUND_HTTP_DENY_PRIVATE") {
         return false;
     }
-    cfg!(debug_assertions)
-        || env_flag_enabled("COAUTH_OUTBOUND_HTTP_ALLOW_PRIVATE")
+    // COA-SEC-01: private/cloud-metadata egress is allowed ONLY when explicitly
+    // opted in via env flag. Previously `cfg!(debug_assertions)` defaulted debug
+    // builds to allow, silently disabling SSRF protection for the whole
+    // private/loopback/link-local/metadata range whenever a debug image was
+    // (mis)deployed. debug and release now behave identically: deny by default.
+    env_flag_enabled("COAUTH_OUTBOUND_HTTP_ALLOW_PRIVATE")
         || env_flag_enabled("COAUTH_ALLOW_PRIVATE_EGRESS")
 }
 

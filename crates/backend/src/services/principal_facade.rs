@@ -106,6 +106,18 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
     Ok(())
 }
 
+// TODO(_fix_plan.md decision 4 / COA-ARCH-01): migrate capability-fanout off
+// the soland-private `POST /_soland/root/authz/capability-fanout` edge onto the
+// protocol `POST /_cokret/self/events` (submitting a `ck.capability.grant`
+// Event). This CANNOT be completed single-sidedly: `validate_capability_fanout_
+// response` below requires a *synchronous* projection ack
+// (`authz_state.{projected,effective,revoked}`) confirming the grant became
+// effective. The generic `/_cokret/self/events` submit only acknowledges Event
+// acceptance (accepted/duplicate), not synchronous authz-state projection. The
+// migration therefore needs coauth+soland coordination: soland must expose an
+// equivalent "submit Event + projection confirmation" path before coauth can
+// drop the `/_soland/root/authz/*` dependency. Keeping the existing working
+// contract intact until that coordinated change lands (do not half-migrate).
 async fn submit_collaboration_capability_fanout_to_target(
     http_client: &reqwest::Client,
     target: &CapabilityFanoutTarget,

@@ -219,12 +219,25 @@ struct FullAuthorizationRequest {
 }
 
 /// Generate a random alphanumeric string of the given length.
+///
+/// Each character is drawn by unbiased rejection sampling over the 62-char set
+/// (COA-COR-02): a plain `byte % 62` over a 256-value byte over-weights the
+/// first `256 % 62` characters. `next_u32` rejection sampling makes every
+/// character equiprobable.
 fn rand_alphanumeric_string(rng: &mut impl Rng, len: usize) -> String {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let mut buf = vec![0u8; len];
-    rng.fill_bytes(&mut buf);
-    buf.iter()
-        .map(|b| CHARSET[(*b as usize) % CHARSET.len()] as char)
+    let bound = CHARSET.len() as u32;
+    let zone = u32::MAX - (u32::MAX % bound);
+    (0..len)
+        .map(|_| {
+            let index = loop {
+                let value = rng.next_u32();
+                if value < zone {
+                    break (value % bound) as usize;
+                }
+            };
+            CHARSET[index] as char
+        })
         .collect()
 }
 

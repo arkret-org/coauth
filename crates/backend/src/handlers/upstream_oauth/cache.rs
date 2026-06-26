@@ -324,7 +324,7 @@ impl MetadataCache {
 
 #[cfg(test)]
 mod tests {
-    // XXX: sadly, we can't test HTTPS requests with wiremock, so we can only test
+    // TODO(COA-HYG-02): sadly, we can't test HTTPS requests with wiremock, so we can only test
     // 'insecure' discovery
 
     use coauth_data::clock::MockClock;

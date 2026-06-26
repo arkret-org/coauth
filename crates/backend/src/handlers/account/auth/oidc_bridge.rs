@@ -106,7 +106,10 @@ impl OidcExchangeError {
 
 fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> Result<(), String> {
     let returned_nonce = grant_nonce.unwrap_or_default();
-    if returned_nonce == expected_nonce {
+    // Constant-time compare (COA-SEC-04): the nonce binds the proof to the
+    // authorization grant; compare without leaking a matching-prefix timing
+    // side channel.
+    if crate::util::constant_time_token_eq(returned_nonce, expected_nonce) {
         return Ok(());
     }
     // The recorded nonce is an internal binding value; keep it out of the
@@ -160,6 +163,19 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
+/// Build the Principal Server localpart directory endpoint for `principal_did`.
+///
+/// DEPLOYMENT-INTERNAL S2S CONVENTION, NOT A PROTOCOL-FACE OPERATION
+/// (`_fix_plan.md` decision 4 / COA-ARCH-01). This `/_soland/accounts/{did}/
+/// localparts` edge is used during OIDC token exchange to *list and sync* the
+/// account's primary localpart binding on the Principal Server
+/// (`ensure_soland_account_localpart_bound`). It is intentionally NOT migrated
+/// to the protocol directory reads `ck.find.directory.query.list_handles_for_
+/// subject` / `resolve_handle`: those are read-only handle lookups and cannot
+/// perform the write/sync binding this provisioning flow requires. coauth and
+/// soland share this static-bearer-gated `/_soland/*` edge as a deployment-local
+/// account-provisioning convention; it is registered here as such rather than as
+/// a `/_cokret/*` protocol surface.
 fn soland_account_localparts_endpoint(
     principal_endpoint: &str,
     principal_did: &str,
@@ -966,8 +982,10 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
     // State binding: the proof's `state` MUST equal the state coauth recorded
     // on the authorization grant when the authorize request was issued.
+    // Constant-time compare (COA-SEC-04): avoid a matching-prefix timing side
+    // channel on the recorded grant state.
     if let Some(expected_state) = authz_grant.state.as_deref()
-        && input.state.trim() != expected_state
+        && !crate::util::constant_time_token_eq(input.state.trim(), expected_state)
     {
         // The expected state is an internal value bound to the grant; never
         // reflect it (or the supplied state) in the client-facing envelope.

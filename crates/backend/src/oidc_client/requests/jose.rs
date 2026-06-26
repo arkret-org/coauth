@@ -26,7 +26,7 @@ use url::Url;
 
 use super::super::error::{IdTokenError, JwksError, JwtVerificationError};
 use super::super::types::IdToken;
-use crate::outbound_http::RequestBuilderExt;
+use crate::outbound_http::{oidc_upstream_policy, send_with_policy};
 
 const MAX_JWKS_BYTES: usize = 1_048_576;
 
@@ -48,11 +48,11 @@ pub async fn fetch_jwks(
 ) -> Result<PublicJsonWebKeySet, JwksError> {
     tracing::debug!("Fetching JWKS...");
 
-    let response = client
-        .get(jwks_uri.as_str())
-        .send_traced()
-        .await?
-        .error_for_status()?;
+    let response = send_with_policy(oidc_upstream_policy("jwks"), || {
+        client.get(jwks_uri.as_str())
+    })
+    .await?
+    .error_for_status()?;
     if response
         .content_length()
         .is_some_and(|len| len > MAX_JWKS_BYTES as u64)

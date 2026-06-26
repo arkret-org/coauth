@@ -13,7 +13,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::super::error::{TokenRequestError, UserInfoError};
-use crate::outbound_http::RequestBuilderExt;
+use crate::outbound_http::{oidc_upstream_policy, send_with_policy};
 
 /// `WeChat` token endpoint response.
 #[derive(Debug, Deserialize)]
@@ -57,9 +57,11 @@ pub async fn request_access_token(
         .append_pair("code", code)
         .append_pair("grant_type", "authorization_code");
 
-    let response: WeChatTokenResponse = http_client
-        .get(url)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: WeChatTokenResponse =
+        send_with_policy(oidc_upstream_policy("wechat_token"), || {
+            http_client.get(url.clone())
+        })
         .await?
         .error_for_status()?
         .json()
@@ -97,9 +99,11 @@ pub async fn fetch_userinfo(
         .append_pair("openid", openid)
         .append_pair("lang", "zh_CN");
 
-    let response: HashMap<String, Value> = http_client
-        .get(url)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: HashMap<String, Value> =
+        send_with_policy(oidc_upstream_policy("wechat_userinfo"), || {
+            http_client.get(url.clone())
+        })
         .await?
         .error_for_status()?
         .json()

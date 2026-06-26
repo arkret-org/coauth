@@ -97,17 +97,29 @@ pub async fn issue_session_grant_endpoint(
                     ))
                 })?;
 
+            // Human (OIDC) grant: grant_id / session_public_key / audience are
+            // SessionGrantOutcome top-level fields (mirroring
+            // SessionGrantRefreshOutcome). `scope_details` is the agent-only
+            // overlay and MUST be omitted (None) for human grants — the prior
+            // code wrote these three into `scope_details`, violating its
+            // `additionalProperties:false` agent-only schema.
+            let grant_id =
+                cokret_core::GrantId::new(success.persisted_grant_id.clone()).map_err(|e| {
+                    CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
+                        format!("issued grant carried a non-protocol grant_id: {e}"),
+                    ))
+                })?;
+
             Ok(Json(cokret_core::SessionGrantOutcome {
                 principal_id,
                 device_id: Some(device_id),
                 session_grant: success.session_grant.grant_jwt.clone(),
                 expires_at: success.session_grant.expires_at_timestamp,
+                grant_id: Some(grant_id),
+                session_public_key: Some(success.session_grant.session_public_key.clone()),
+                audience: Some(success.session_grant.audience.clone()),
                 granted_scope: success.session_grant.scopes.clone(),
-                scope_details: serde_json::json!({
-                    "grant_id": success.persisted_grant_id,
-                    "session_public_key": success.session_grant.session_public_key,
-                    "audience": success.session_grant.audience,
-                }),
+                scope_details: None,
             }))
         }
         cokret_core::SessionGrantProofKind::AgentKeyProof => {
@@ -292,18 +304,28 @@ async fn issue_agent_key_proof_session_grant(
             )))
         })?;
 
-    let mut scope_details = token_scope_details;
-    scope_details["grant_id"] = serde_json::Value::String(persisted.grant_id.to_string());
-    scope_details["session_public_key"] =
-        serde_json::Value::String(material.session_public_key.clone());
+    // grant_id / session_public_key / audience are SessionGrantOutcome
+    // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in
+    // `scope_details`. The wire `scope_details` carries only the spec-typed
+    // agent overlay (CKP-0008 §4.6); the JWT-internal `token_scope_details`
+    // (with the canonical constraint projection) is already baked into the
+    // minted grant above.
+    let grant_id = cokret_core::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {
+        CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "issued agent grant carried a non-protocol grant_id: {e}"
+        )))
+    })?;
 
     Ok(Json(cokret_core::SessionGrantOutcome {
         principal_id,
         device_id: None,
         session_grant: material.grant_jwt,
         expires_at: material.expires_at_timestamp,
+        grant_id: Some(grant_id),
+        session_public_key: Some(material.session_public_key.clone()),
+        audience: Some(material.audience.clone()),
         granted_scope: material.scopes,
-        scope_details,
+        scope_details: Some(authorization.wire_scope_details),
     }))
 }
 

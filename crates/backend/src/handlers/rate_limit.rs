@@ -346,6 +346,27 @@ impl Limiter {
         Ok(())
     }
 
+    /// Per-IP gate for the recovery-completion (`set_password_by_recovery`)
+    /// endpoint (COA-SEC-05). The ticket itself is 188-bit so guessing is
+    /// infeasible, but the endpoint otherwise has no rate limit, so a holder can
+    /// drive repeated password-hash computation. Reuses the per-requester
+    /// account-recovery bucket (email is unknown until the ticket resolves, so
+    /// only the per-IP dimension applies here).
+    pub async fn check_account_recovery_completion(
+        &self,
+        requester: RequesterFingerprint,
+    ) -> Result<(), AccountRecoveryLimitedError> {
+        if !self
+            .inner
+            .account_recovery_per_requester
+            .check(&requester)
+            .await
+        {
+            return Err(AccountRecoveryLimitedError::Requester(requester));
+        }
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Password check
     // -----------------------------------------------------------------------
@@ -546,6 +567,28 @@ impl Limiter {
 
     /// Check whether a public directory lookup may proceed for the requester.
     pub async fn check_directory_lookup(
+        &self,
+        requester: RequesterFingerprint,
+    ) -> Result<(), DirectoryLookupLimitedError> {
+        if !self
+            .inner
+            .directory_lookup_per_requester
+            .check(&requester)
+            .await
+        {
+            return Err(DirectoryLookupLimitedError::Requester(requester));
+        }
+
+        Ok(())
+    }
+
+    /// Per-IP gate for the unauthenticated device-link user-code lookup
+    /// (`device_link_get`, COA-COR-03). The endpoint maps a user code to a
+    /// pending device-authorization grant_id with no attempt counter; a per-IP
+    /// budget closes the user-code enumeration surface (RFC 8628 brute-force
+    /// consideration). Reuses the public directory-lookup bucket (same
+    /// unauthenticated per-IP read shape).
+    pub async fn check_device_link_lookup(
         &self,
         requester: RequesterFingerprint,
     ) -> Result<(), DirectoryLookupLimitedError> {

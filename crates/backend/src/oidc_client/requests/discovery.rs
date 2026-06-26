@@ -20,7 +20,7 @@ use oauth_types::oidc::{ProviderMetadata, VerifiedProviderMetadata};
 use url::Url;
 
 use super::super::error::DiscoveryError;
-use crate::outbound_http::RequestBuilderExt;
+use crate::outbound_http::{oidc_upstream_policy, send_with_policy};
 
 const MAX_PROVIDER_METADATA_BYTES: usize = 1_048_576;
 
@@ -43,11 +43,11 @@ async fn discover_inner(
 
     let config_url = config_url.join(".well-known/openid-configuration")?;
 
-    let response = client
-        .get(config_url.as_str())
-        .send_traced()
-        .await?
-        .error_for_status()?;
+    let response = send_with_policy(oidc_upstream_policy("discovery"), || {
+        client.get(config_url.as_str())
+    })
+    .await?
+    .error_for_status()?;
     if response
         .content_length()
         .is_some_and(|len| len > MAX_PROVIDER_METADATA_BYTES as u64)

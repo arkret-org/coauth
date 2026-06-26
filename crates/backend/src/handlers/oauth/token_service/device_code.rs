@@ -157,7 +157,7 @@ pub async fn exchange_device_code(
         .exchange(clock, grant, &session)
         .await?;
 
-    // XXX: should we get the user agent from the device code grant instead?
+    // TODO(COA-HYG-02): should we get the user agent from the device code grant instead?
     if let Some(user_agent) = user_agent {
         session = repo
             .oauth_session()
@@ -274,7 +274,7 @@ pub async fn exchange_device_code(
             })?;
     }
 
-    // XXX: there is a potential (but unlikely) race here, where the activity for
+    // TODO(COA-HYG-02): there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker.record_oauth_session(clock, &session).await;

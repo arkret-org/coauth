@@ -314,7 +314,7 @@ async fn handle_post(
     // If the client doesn't have a secret, we may be able to deduplicate it. To
     // do so, we hash the client metadata, and look for it in the database
     let (digest_hash, existing_client) = if client_secret.is_none() {
-        // XXX: One interesting caveat is that we hash *before* saving to the database.
+        // TODO(COA-HYG-02): One interesting caveat is that we hash *before* saving to the database.
         // It means it takes into account fields that we don't care about *yet*.
         //
         // This means that if later we start supporting a particular field, we
@@ -354,7 +354,7 @@ async fn handle_post(
                 metadata.tos_uri.clone().map(Localized::to_non_localized),
                 metadata.jwks_uri.clone(),
                 metadata.jwks.clone(),
-                // XXX: those might not be right, should be function calls
+                // TODO(COA-HYG-02): those might not be right, should be function calls
                 metadata.id_token_signed_response_alg.clone(),
                 metadata.userinfo_signed_response_alg.clone(),
                 metadata.token_endpoint_auth_method.clone(),
@@ -383,7 +383,7 @@ async fn handle_post(
     let response = ClientRegistrationResponse {
         client_id: client.client_id.clone(),
         client_secret,
-        // XXX: we should have a `created_at` field on the clients
+        // TODO(COA-HYG-02): we should have a `created_at` field on the clients
         client_id_issued_at: Some(client.id.datetime().into()),
         client_secret_expires_at: None,
     };

@@ -22,6 +22,24 @@ use thiserror::Error;
 
 use crate::outbound_http;
 
+// TODO(_fix_plan.md decision 4 / COA-ARCH-01): the protocol read face for the
+// device signing-key directory facet is `POST /_cokret/self/keys/query`
+// (`ck.self.keys.query.lookup`), whose response `query_device_record` carries
+// `device_signing_key` / `device_status`. coauth CANNOT switch to it
+// single-sidedly: that protocol path authenticates a *principal session grant*
+// (`authenticated_session`) and gates cross-principal reads behind a
+// realm-co-membership visibility predicate. While verifying a device holder
+// proof during session-grant refresh / soft-logout restore, coauth acts as the
+// Auth Server — it holds no session grant for the target principal and is not a
+// realm co-member, so it cannot authenticate as the subject nor pass the
+// visibility check. soland exposes this dedicated server-to-server bearer-gated
+// read (`/_soland/gate/account/device-signing-keys/query`, op
+// `org.cokret.soland.gate.account.device_signing_keys.query`) precisely for the
+// Auth-Server role; it is documented soland-side as a deployment-local
+// integration read, not a spec operation. Migrating onto `/_cokret/self/...`
+// needs coauth+soland coordination (soland accepting an S2S auth mode with a
+// cross-principal exemption on the protocol path). Keep the working S2S edge
+// until that coordinated change lands.
 const DEVICE_SIGNING_KEY_DIRECTORY_PATH: &str =
     "/_soland/gate/account/device-signing-keys/query";
 

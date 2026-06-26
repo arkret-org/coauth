@@ -159,7 +159,7 @@ async fn handle_get(
 
     // Fetch informations about the user. This is purely cosmetic, so we let it
     // fail and put a 1s timeout to it in case we fail to query it
-    // XXX: we're likely to need this in other places
+    // TODO(COA-HYG-02): we're likely to need this in other places
     let username = &session.user.handle;
     let display_name = match tokio::time::timeout(
         Duration::from_secs(1),
@@ -344,7 +344,7 @@ async fn handle_post(
             }
         }
     } else {
-        // XXX: In case we're not pending, let's just return the grant as-is
+        // TODO(COA-HYG-02): In case we're not pending, let's just return the grant as-is
         // since it might just be a form resubmission, and feedback is nice enough
         warn!(
             oauth_device_code.id = %grant.id,
@@ -359,7 +359,7 @@ async fn handle_post(
 
     // Fetch informations about the user. This is purely cosmetic, so we let it
     // fail and put a 1s timeout to it in case we fail to query it
-    // XXX: we're likely to need this in other places
+    // TODO(COA-HYG-02): we're likely to need this in other places
     let username = &session.user.handle;
     let display_name = match tokio::time::timeout(
         Duration::from_secs(1),

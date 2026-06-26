@@ -27,7 +27,13 @@ use url::Url;
 use super::super::error::{IdTokenError, ResponseExt, UserInfoError};
 use super::super::requests::jose::verify_signed_jwt;
 use super::jose::JwtVerificationData;
-use crate::outbound_http::RequestBuilderExt;
+use crate::outbound_http::{oidc_upstream_policy, send_with_policy};
+
+/// Upper bound on the userinfo response body (COA-SEC-02). Discovery / JWKS
+/// already cap at 1 MiB; userinfo claim sets are far smaller, but an unbounded
+/// read let a hostile/buggy upstream amplify memory use. 1 MiB is generous for
+/// any legitimate claim set.
+const MAX_USERINFO_BYTES: usize = 1_048_576;
 
 /// Obtain information about an authenticated end-user.
 ///
@@ -69,16 +75,15 @@ pub async fn fetch_userinfo(
         mime::APPLICATION_JSON.as_ref()
     };
 
-    let userinfo_request = http_client
-        .get(userinfo_endpoint.as_str())
-        .bearer_auth(access_token)
-        .header(ACCEPT, HeaderValue::from_static(expected_content_type));
-
-    let userinfo_response = userinfo_request
-        .send_traced()
-        .await?
-        .error_from_oauth_error_response()
-        .await?;
+    let userinfo_response = send_with_policy(oidc_upstream_policy("userinfo"), || {
+        http_client
+            .get(userinfo_endpoint.as_str())
+            .bearer_auth(access_token)
+            .header(ACCEPT, HeaderValue::from_static(expected_content_type))
+    })
+    .await?
+    .error_from_oauth_error_response()
+    .await?;
 
     let content_type: Mime = userinfo_response
         .headers()
@@ -94,14 +99,35 @@ pub async fn fetch_userinfo(
         });
     }
 
+    // Bound the response body before parsing (COA-SEC-02). `Content-Length`, when
+    // present, lets us reject early; the post-read length check catches
+    // chunked / mislabeled responses.
+    if userinfo_response
+        .content_length()
+        .is_some_and(|len| len > MAX_USERINFO_BYTES as u64)
+    {
+        return Err(UserInfoError::ResponseTooLarge {
+            limit: MAX_USERINFO_BYTES,
+            actual: usize::MAX,
+        });
+    }
+    let body_bytes = userinfo_response.bytes().await?;
+    if body_bytes.len() > MAX_USERINFO_BYTES {
+        return Err(UserInfoError::ResponseTooLarge {
+            limit: MAX_USERINFO_BYTES,
+            actual: body_bytes.len(),
+        });
+    }
+
     let claims = if let Some(verification_data) = jwt_verification_data {
-        let response_body = userinfo_response.text().await?;
-        verify_signed_jwt(&response_body, verification_data)
+        let response_body = std::str::from_utf8(&body_bytes)
+            .map_err(|_| UserInfoError::InvalidResponseContentTypeValue)?;
+        verify_signed_jwt(response_body, verification_data)
             .map_err(IdTokenError::from)?
             .into_parts()
             .1
     } else {
-        userinfo_response.json().await?
+        serde_json::from_slice(&body_bytes).map_err(UserInfoError::from)?
     };
 
     Ok(claims)

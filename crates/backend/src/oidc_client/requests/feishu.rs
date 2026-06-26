@@ -13,7 +13,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::super::error::{TokenRequestError, UserInfoError};
-use crate::outbound_http::RequestBuilderExt;
+use crate::outbound_http::{oidc_upstream_policy, send_with_policy};
 
 /// Feishu (China) `app_access_token` endpoint.
 pub const FEISHU_APP_TOKEN_ENDPOINT: &str =
@@ -137,10 +137,11 @@ pub async fn get_app_access_token(
 
     let body = AppAccessTokenRequest { app_id, app_secret };
 
-    let response: AppAccessTokenResponse = http_client
-        .post(app_token_endpoint)
-        .json(&body)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: AppAccessTokenResponse =
+        send_with_policy(oidc_upstream_policy("feishu_app_token"), || {
+            http_client.post(app_token_endpoint).json(&body)
+        })
         .await?
         .error_for_status()?
         .json()
@@ -174,11 +175,14 @@ pub async fn request_access_token(
         code,
     };
 
-    let response: Envelope<FeishuTokenData> = http_client
-        .post(token_endpoint.as_str())
-        .bearer_auth(app_access_token)
-        .json(&body)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: Envelope<FeishuTokenData> =
+        send_with_policy(oidc_upstream_policy("feishu_token"), || {
+            http_client
+                .post(token_endpoint.as_str())
+                .bearer_auth(app_access_token)
+                .json(&body)
+        })
         .await?
         .error_for_status()?
         .json()
@@ -211,10 +215,13 @@ pub async fn fetch_userinfo(
 ) -> Result<HashMap<String, Value>, UserInfoError> {
     tracing::debug!("Fetching Feishu user info...");
 
-    let response: Envelope<HashMap<String, Value>> = http_client
-        .get(userinfo_endpoint.as_str())
-        .bearer_auth(user_access_token)
-        .send_traced()
+    // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
+    let response: Envelope<HashMap<String, Value>> =
+        send_with_policy(oidc_upstream_policy("feishu_userinfo"), || {
+            http_client
+                .get(userinfo_endpoint.as_str())
+                .bearer_auth(user_access_token)
+        })
         .await?
         .error_for_status()?
         .json()

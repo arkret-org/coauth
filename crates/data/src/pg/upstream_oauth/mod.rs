@@ -196,7 +196,7 @@ mod tests {
             .await
             .unwrap();
 
-        // XXX: we should also try other combinations of the filter
+        // TODO(COA-HYG-02): we should also try other combinations of the filter
         let filter = UpstreamOAuthLinkFilter::new()
             .for_user(&user)
             .for_provider(&provider)

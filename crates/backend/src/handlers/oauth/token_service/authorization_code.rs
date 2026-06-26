@@ -392,7 +392,7 @@ pub async fn exchange_authorization_code(
         .exchange(clock, authz_grant)
         .await?;
 
-    // XXX: there is a potential (but unlikely) race here, where the activity for
+    // TODO(COA-HYG-02): there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker.record_oauth_session(clock, &session).await;

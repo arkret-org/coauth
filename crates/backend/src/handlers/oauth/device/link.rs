@@ -46,7 +46,7 @@ async fn handle_get(
             .oauth_device_code_grant()
             .find_by_user_code(&code)
             .await?
-            // XXX: We should have different error messages for already exchanged and expired
+            // TODO(COA-HYG-02): We should have different error messages for already exchanged and expired
             .filter(|grant| grant.is_pending())
             .filter(|grant| grant.expires_at > clock.now());
 

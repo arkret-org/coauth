@@ -4,7 +4,7 @@ use salvo::prelude::*;
 use super::*;
 use crate::handlers::cokret::*;
 
-/// `PATCH /_coauth/root/identity/primary-handle` — self-service holder
+/// `PATCH /_coauth/account/identity/primary-handle` — self-service holder
 /// preference for DID `metadata.primary_handle`.
 ///
 /// Body shape: `{ "primary_handle": "alice:example.com" }` to set, or

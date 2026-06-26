@@ -387,7 +387,10 @@ pub async fn handler(
         return Err(RouteError::ProviderMismatch);
     }
 
-    if state != session.state_str {
+    // Constant-time compare (COA-SEC-04): the state binds the upstream callback
+    // to the session that initiated it; compare without leaking a
+    // matching-prefix timing side channel.
+    if !crate::util::constant_time_token_eq(&state, &session.state_str) {
         // The state in the session cookie should match the one from the params
         return Err(RouteError::StateMismatch);
     }
