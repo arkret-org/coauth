@@ -19,6 +19,18 @@ export COAUTH_DEVICE_ENROLLMENT_KEY_SEED := "wgGYluck4bZVA5oa9khVpSriHgrcV81H4iP
 # mis-configured production deployment refuses to start. NEVER set in production.
 export COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS := "1"
 
+# Dev-only SSRF egress allowlist for the loopback-fronted local hosts.
+# COA-SEC-01 made outbound private/loopback egress deny-by-default in ALL
+# builds (debug no longer auto-allows via `cfg!(debug_assertions)`). Local dev
+# fronts coauth and soland behind Caddy at `auth.local.host` / `local.host`,
+# both resolving to 127.0.0.1. The OIDC session-grant exchange has coauth fetch
+# its own issuer discovery doc (`https://auth.local.host/.well-known/...`) and
+# call soland (`https://local.host/...`); without this allowlist those self
+# calls are blocked at the resolver and the exchange fails closed with a 409
+# `invalid_discovery_binding`. Scoped to the two dev hosts so SSRF protection
+# stays on for every other target. NEVER set in production.
+export COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST := "auth.local.host,local.host"
+
 # Default recipe: show available commands
 default:
     @just --list
