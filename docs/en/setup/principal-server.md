@@ -23,6 +23,39 @@ cokret:
 - `endpoint`: base URL advertised through Cokret/OIDC discovery.
 - `did`: optional DID advertised for the Principal Server.
 
+## Server-to-server trust boundary (deployment-internal)
+
+In its Auth-Server role coauth performs two server-to-server reads/writes
+against the Principal Server that have **no principal session** and therefore
+cannot use the principal-authenticated `/_cokret/self/*` protocol surface.
+These are deployment-internal S2S contracts on the Principal Server's own
+negative-space root, per `service-http-binding.md` §2.1.3(b) — they are **not**
+v1 protocol operations:
+
+| coauth call | Principal Server endpoint | Operation id | When |
+| --- | --- | --- | --- |
+| Device signing-key directory lookup | `POST /_soland/gate/account/device-signing-keys/query` | `org.cokret.soland.gate.account.device_signing_keys.query` | Verifying a device holder proof during session-grant refresh / soft-logout restore |
+| Collaboration capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.cokret.soland.root.authz.capability_fanout.submit` | Materialising a coauth-issued `ck.capability.grant` / `ck.capability.revoke` |
+
+Both edges are authenticated with the shared bearer configured on the matching
+`principal_servers` entry:
+
+```yaml
+cokret:
+  principal_servers:
+    - name: soland
+      # ...
+      embedded_webvh_registration_bearer: "<shared S2S secret>"
+```
+
+Operationally this means the bearer is a **trust-boundary secret**: it grants
+coauth (the authentication TCB) directory-read and capability-fanout authority
+against the Principal Server. Rotate it on the same cadence as other
+inter-service credentials, and ensure the coauth↔Principal-Server hop is
+confined to the trusted deployment network. The Principal Server treats these
+endpoints as deployment-local product surface and never exposes them on its
+`/_cokret/*` protocol root.
+
 ## Discovery
 
 coauth publishes Principal Server metadata through the standard OpenID

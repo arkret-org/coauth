@@ -22,24 +22,34 @@ use thiserror::Error;
 
 use crate::outbound_http;
 
-// TODO(_fix_plan.md decision 4 / COA-ARCH-01): the protocol read face for the
-// device signing-key directory facet is `POST /_cokret/self/keys/query`
-// (`ck.self.keys.query.lookup`), whose response `query_device_record` carries
-// `device_signing_key` / `device_status`. coauth CANNOT switch to it
-// single-sidedly: that protocol path authenticates a *principal session grant*
-// (`authenticated_session`) and gates cross-principal reads behind a
-// realm-co-membership visibility predicate. While verifying a device holder
-// proof during session-grant refresh / soft-logout restore, coauth acts as the
-// Auth Server — it holds no session grant for the target principal and is not a
-// realm co-member, so it cannot authenticate as the subject nor pass the
-// visibility check. soland exposes this dedicated server-to-server bearer-gated
-// read (`/_soland/gate/account/device-signing-keys/query`, op
-// `org.cokret.soland.gate.account.device_signing_keys.query`) precisely for the
-// Auth-Server role; it is documented soland-side as a deployment-local
-// integration read, not a spec operation. Migrating onto `/_cokret/self/...`
-// needs coauth+soland coordination (soland accepting an S2S auth mode with a
-// cross-principal exemption on the protocol path). Keep the working S2S edge
-// until that coordinated change lands.
+// RULING (_fix_plan.md "## R1/R2 协同落地" / R2): this read is a
+// deployment-internal server-to-server directory lookup, NOT a protocol
+// responsibility — so the `/_soland/*` S2S edge below is the correct, compliant
+// surface, not a "violation" to be migrated off.
+//
+// The protocol read face `POST /_cokret/self/keys/query` (`ck.self.keys.query
+// .lookup`) is *definitionally* member-to-member: device-lifecycle.md §8.1
+// (`:701`) requires the server to authenticate the requester and return a
+// directory record ONLY when an authorization relationship exists between
+// requester and the queried `principal_id` (realm co-membership the requester
+// is still `join`ed to, or a shared call/session/contact context), else it
+// MUST fail indistinguishably from "not found". coauth, verifying a device
+// holder proof during session-grant refresh / soft-logout restore, acts as the
+// Auth Server: it holds no principal session and is not a realm co-member, so
+// it is *not* an eligible caller of that protocol operation — by design, not by
+// a missing exemption. There is no spec gap and no protocol S2S directory-read
+// operation to migrate to (decision 4's "already covered by
+// `ck.self.keys.query.lookup`" was over-optimistic; service-http-binding.md
+// §2.1.3(b) is the correct framing).
+//
+// soland therefore exposes this as a product-surface S2S contract on its own
+// negative-space root: `POST /_soland/gate/account/device-signing-keys/query`,
+// op `org.cokret.soland.gate.account.device_signing_keys.query`, bearer-gated by
+// the shared `embedded_webvh_registration_bearer`. Per service-http-binding.md
+// §2.1.3(b) a deployment-private capability MUST live on the implementation's
+// own `/_soland/*` root and MUST NOT occupy a `/_cokret/*` protocol segment.
+// The coauth↔soland S2S trust boundary is registered in
+// `docs/{zh,en}/setup/principal-server.md`.
 const DEVICE_SIGNING_KEY_DIRECTORY_PATH: &str =
     "/_soland/gate/account/device-signing-keys/query";
 
