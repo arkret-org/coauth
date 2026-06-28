@@ -12,7 +12,8 @@ use coauth_account_types::{
     LoginOutcome, LoginReqBody, LogoutOutcome, ProviderInfo, ProvidersOutcome, SessionGrantKind,
     SessionGrantOneShotInfo, SessionGrantPrincipalServerInfo, ViewerInfo,
 };
-use coauth_data::UrlBuilder;
+use coauth_data::oauth::{LoginHint, OAuthAuthorizationGrantRepository};
+use coauth_data::{AuthorizationGrant, PostAuthAction, SiteConfig, UrlBuilder};
 use coauth_jose::jwk::PublicJsonWebKey;
 pub use oidc_bridge::integration_describe;
 use opentelemetry::metrics::Counter;
@@ -22,6 +23,7 @@ pub use passkey::{
     register_finish as passkey_register_finish, register_start as passkey_register_start,
 };
 use salvo::prelude::*;
+use serde::Deserialize;
 
 use super::{DepotExt, NodeType, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
 use crate::handlers::account::service::access::{
@@ -80,6 +82,12 @@ static PASSWORD_LOGIN_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
         .build()
 });
 const RESULT: Key = Key::from_static_str("result");
+
+#[derive(Deserialize, Default)]
+struct ProvidersQuery {
+    #[serde(flatten)]
+    post_auth_action: Option<PostAuthAction>,
+}
 
 // ── POST /_coauth/account/auth/login ────────────────────────────────────
 
@@ -481,11 +489,17 @@ pub async fn logout(
 /// List all enabled upstream OAuth providers and site configuration flags
 /// relevant to the login/registration UI.
 #[endpoint]
-pub async fn providers(depot: &Depot) -> Result<Json<ProvidersOutcome>, RouteError> {
+pub async fn providers(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<ProvidersOutcome>, RouteError> {
     let site_config = depot.site_config()?;
+    let url_builder = depot.url_builder()?;
     let mut repo = depot.repo().await?;
+    let query: ProvidersQuery = req.parse_queries().unwrap_or_default();
 
     let upstream_providers = load_enabled_upstream_providers(&mut repo).await?;
+    let login_hint = provider_login_hint(&mut repo, &query, &site_config, &url_builder).await?;
 
     let provider_list: Vec<ProviderInfo> = upstream_providers
         .into_iter()
@@ -507,5 +521,106 @@ pub async fn providers(depot: &Depot) -> Result<Json<ProvidersOutcome>, RouteErr
         password_login_enabled: site_config.password_login_enabled,
         password_registration_enabled: site_config.password_registration_enabled,
         account_recovery_allowed: site_config.account_recovery_allowed,
+        login_hint,
     }))
+}
+
+async fn provider_login_hint(
+    repo: &mut coauth_data::BoxRepository,
+    query: &ProvidersQuery,
+    site_config: &SiteConfig,
+    url_builder: &UrlBuilder,
+) -> Result<Option<String>, RouteError> {
+    let Some(PostAuthAction::ContinueAuthorizationGrant { id }) = query.post_auth_action.as_ref()
+    else {
+        return Ok(None);
+    };
+    let Some(grant) = repo.oauth_authorization_grant().lookup(*id).await? else {
+        return Ok(None);
+    };
+    Ok(password_form_login_hint(&grant, site_config, url_builder))
+}
+
+fn password_form_login_hint(
+    grant: &AuthorizationGrant,
+    site_config: &SiteConfig,
+    url_builder: &UrlBuilder,
+) -> Option<String> {
+    match grant.parse_login_hint() {
+        LoginHint::Username(username) => Some(username.to_owned()),
+        LoginHint::Email(email) if site_config.login_with_email_allowed => Some(email.to_string()),
+        _ => grant
+            .login_hint
+            .as_deref()
+            .and_then(|hint| cokret::parse_local_handle(url_builder, hint)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coauth_data::clock::{Clock, MockClock};
+    use rand_core::SeedableRng;
+
+    use super::*;
+    use crate::handlers::test_utils::test_site_config;
+
+    fn grant_with_hint(login_hint: &str) -> AuthorizationGrant {
+        let now = MockClock::default().now();
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        AuthorizationGrant {
+            login_hint: Some(login_hint.to_owned()),
+            ..AuthorizationGrant::sample(now, &mut rng)
+        }
+    }
+
+    fn test_url_builder() -> UrlBuilder {
+        UrlBuilder::new("https://auth.local.host/".parse().unwrap(), None, None)
+    }
+
+    #[test]
+    fn password_form_login_hint_accepts_username() {
+        let site_config = test_site_config();
+        let url_builder = test_url_builder();
+        let grant = grant_with_hint("chris");
+
+        assert_eq!(
+            password_form_login_hint(&grant, &site_config, &url_builder).as_deref(),
+            Some("chris")
+        );
+    }
+
+    #[test]
+    fn password_form_login_hint_converts_local_canonical_handle() {
+        let site_config = test_site_config();
+        let url_builder = test_url_builder();
+        let grant = grant_with_hint("chris:auth.local.host");
+
+        assert_eq!(
+            password_form_login_hint(&grant, &site_config, &url_builder).as_deref(),
+            Some("chris")
+        );
+    }
+
+    #[test]
+    fn password_form_login_hint_rejects_remote_or_opaque_colon_hint() {
+        let site_config = test_site_config();
+        let url_builder = test_url_builder();
+
+        assert_eq!(
+            password_form_login_hint(
+                &grant_with_hint("chris:remote.example"),
+                &site_config,
+                &url_builder,
+            ),
+            None
+        );
+        assert_eq!(
+            password_form_login_hint(
+                &grant_with_hint("something:anything"),
+                &site_config,
+                &url_builder
+            ),
+            None
+        );
+    }
 }

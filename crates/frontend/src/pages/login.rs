@@ -99,7 +99,13 @@ fn store_post_auth_continuation(kind: &str, id: &str) {
 #[component]
 pub fn Login() -> Element {
     let providers_data = use_resource(|| async {
-        crate::api::api_get::<ProvidersOutcome>("/account/auth/providers").await
+        let query = current_query_string();
+        let path = if query.is_empty() {
+            "/account/auth/providers".to_owned()
+        } else {
+            format!("/account/auth/providers?{query}")
+        };
+        crate::api::api_get::<ProvidersOutcome>(&path).await
     });
     let binding = providers_data.read();
 
@@ -133,6 +139,7 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
                 password_login_enabled: true,
                 password_registration_enabled: false,
                 account_recovery_allowed: true,
+                login_hint: None,
             },
         }
     }
@@ -140,7 +147,9 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
 
 #[component]
 fn LoginForm(providers: ProvidersOutcome) -> Element {
-    let mut handle = use_signal(String::new);
+    let initial_login_hint = providers.login_hint.clone().unwrap_or_default();
+    let has_login_hint = !initial_login_hint.trim().is_empty();
+    let mut handle = use_signal(move || initial_login_hint.clone());
     let mut password = use_signal(String::new);
     let show_password = use_signal(|| false);
     let mut submitting = use_signal(|| false);
@@ -243,6 +252,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                 "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
                                 placeholder: "Username or email",
                                 value: "{handle}",
+                                readonly: has_login_hint,
                                 oninput: move |e| handle.set(e.value()),
                             }
                         }
@@ -260,6 +270,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                     "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
                                     placeholder: "Password",
                                     value: "{password}",
+                                    autofocus: has_login_hint,
                                     oninput: move |e| password.set(e.value()),
                                 }
                                 PasswordVisibilityToggle { visible: show_password }

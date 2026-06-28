@@ -46,6 +46,7 @@ pub fn Register() -> Element {
                         password_login_enabled: true,
                         password_registration_enabled: true,
                         account_recovery_allowed: true,
+                        login_hint: None,
                     },
                 }
             }

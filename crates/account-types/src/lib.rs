@@ -139,6 +139,8 @@ pub struct ProvidersOutcome {
     pub password_registration_enabled: bool,
     #[serde(default)]
     pub account_recovery_allowed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
