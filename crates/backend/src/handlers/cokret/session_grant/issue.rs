@@ -347,7 +347,7 @@ fn map_oidc_exchange_error(
     let (status, code) = match error.code {
         "internal_error" => (StatusCode::INTERNAL_SERVER_ERROR, ERROR_CODE_INTERNAL_ERROR),
         ERROR_CODE_PROOF_INVALID | "invalid_authorization_code" | "invalid_client" => {
-            (StatusCode::UNAUTHORIZED, ERROR_CODE_INVALID_SIGNATURE)
+            (StatusCode::UNAUTHORIZED, ERROR_CODE_PROOF_INVALID)
         }
         "invalid_audience" => (StatusCode::BAD_REQUEST, ERROR_CODE_AUDIENCE_MISMATCH),
         "invalid_request" => (
@@ -374,4 +374,31 @@ fn map_oidc_exchange_error(
         format!("reason_code={}; {}", error.code, error.message)
     };
     CokretRouteError::coded(status, code, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::handlers::account::auth::oidc_bridge::OidcExchangeError;
+
+    #[test]
+    fn oidc_exchange_binding_errors_surface_as_proof_invalid() {
+        let err = map_oidc_exchange_error(OidcExchangeError {
+            code: "invalid_authorization_code",
+            message: "authorization code was already exchanged".to_owned(),
+        });
+
+        match err {
+            CokretRouteError::Coded {
+                status,
+                code,
+                message,
+            } => {
+                assert_eq!(status, StatusCode::UNAUTHORIZED);
+                assert_eq!(code, ERROR_CODE_PROOF_INVALID);
+                assert!(message.contains("reason_code=invalid_authorization_code"));
+            }
+            other => panic!("expected coded error, got {other:?}"),
+        }
+    }
 }

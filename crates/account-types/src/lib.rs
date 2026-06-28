@@ -141,6 +141,18 @@ pub struct ProvidersOutcome {
     pub account_recovery_allowed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_account: Option<CurrentAccountInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
+pub struct CurrentAccountInfo {
+    pub id: String,
+    pub username: String,
+    pub handle: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

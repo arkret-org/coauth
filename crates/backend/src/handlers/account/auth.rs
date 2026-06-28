@@ -9,8 +9,8 @@ pub mod passkey;
 use std::sync::LazyLock;
 
 use coauth_account_types::{
-    LoginOutcome, LoginReqBody, LogoutOutcome, ProviderInfo, ProvidersOutcome, SessionGrantKind,
-    SessionGrantOneShotInfo, SessionGrantPrincipalServerInfo, ViewerInfo,
+    CurrentAccountInfo, LoginOutcome, LoginReqBody, LogoutOutcome, ProviderInfo, ProvidersOutcome,
+    SessionGrantKind, SessionGrantOneShotInfo, SessionGrantPrincipalServerInfo, ViewerInfo,
 };
 use coauth_data::oauth::{LoginHint, OAuthAuthorizationGrantRepository};
 use coauth_data::{AuthorizationGrant, PostAuthAction, SiteConfig, UrlBuilder};
@@ -25,7 +25,10 @@ pub use passkey::{
 use salvo::prelude::*;
 use serde::Deserialize;
 
-use super::{DepotExt, NodeType, RouteError, extract_bound_activity_tracker, make_clock, make_rng};
+use super::{
+    DepotExt, NodeType, RouteError, extract_bound_activity_tracker, extract_session_info,
+    make_clock, make_rng,
+};
 use crate::handlers::account::service::access::{
     PasswordLoginOutcome, PasswordLoginRequestBody, load_enabled_upstream_providers,
     login_with_password, logout_browser_session,
@@ -500,6 +503,18 @@ pub async fn providers(
 
     let upstream_providers = load_enabled_upstream_providers(&mut repo).await?;
     let login_hint = provider_login_hint(&mut repo, &query, &site_config, &url_builder).await?;
+    let current_account = extract_session_info(req, depot)
+        .load_active_session(&mut repo)
+        .await?
+        .map(|session| {
+            let user = session.user;
+            CurrentAccountInfo {
+                id: NodeType::User.serialize(user.id),
+                username: user.localpart.clone(),
+                handle: cokret::user_handle(&url_builder, &user),
+                display_name: user.display_name,
+            }
+        });
 
     let provider_list: Vec<ProviderInfo> = upstream_providers
         .into_iter()
@@ -522,6 +537,7 @@ pub async fn providers(
         password_registration_enabled: site_config.password_registration_enabled,
         account_recovery_allowed: site_config.account_recovery_allowed,
         login_hint,
+        current_account,
     }))
 }
 

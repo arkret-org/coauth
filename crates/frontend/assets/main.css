@@ -1712,6 +1712,53 @@ body:has(.dialog-overlay) .theme-toggle {
     text-align: center;
 }
 
+.login-selected-account {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3x);
+    min-width: 0;
+}
+
+.login-current-account-button {
+    justify-content: flex-start;
+    min-height: 64px;
+    padding: var(--space-3x) var(--space-4x);
+    text-align: left;
+}
+
+.login-current-account-button .login-selected-account {
+    width: 100%;
+}
+
+.login-selected-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: var(--radius-md);
+    color: #fff;
+    font-weight: 700;
+    background: var(--color-bg-accent-primary);
+}
+
+.login-selected-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.login-selected-label {
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-sm);
+}
+
+.login-selected-copy strong {
+    overflow-wrap: anywhere;
+}
+
 .login-divider {
     display: flex;
     align-items: center;

@@ -47,6 +47,7 @@ pub fn Register() -> Element {
                         password_registration_enabled: true,
                         account_recovery_allowed: true,
                         login_hint: None,
+                        current_account: None,
                     },
                 }
             }
@@ -247,10 +248,8 @@ pub fn RegisterVerifyEmail(id: String) -> Element {
     let mut status = use_resource(move || {
         let rid = status_id.clone();
         async move {
-            crate::api::api_get::<RegisterStatusOutcome>(&format!(
-                "/account/auth/register/{rid}"
-            ))
-            .await
+            crate::api::api_get::<RegisterStatusOutcome>(&format!("/account/auth/register/{rid}"))
+                .await
         }
     });
 

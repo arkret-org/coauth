@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use js_sys::Reflect;
 use web_sys::wasm_bindgen::JsValue;
 
-use crate::api::types::{LoginOutcome, ProvidersOutcome};
+use crate::api::types::{CurrentAccountInfo, LoginOutcome, ProvidersOutcome};
 use crate::components::layout::Layout;
 use crate::components::loading::LoadingSpinner;
 use crate::components::password_input::PasswordVisibilityToggle;
@@ -12,6 +12,12 @@ const PRESERVED_LOGIN_QUERY_PROPERTY: &str = "__coauth_login_query";
 const LOGIN_ERROR_ID: &str = "login-error";
 const LOGIN_HANDLE_ID: &str = "login-handle";
 const LOGIN_PASSWORD_ID: &str = "login-password";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LoginStep {
+    Identifier,
+    Password,
+}
 
 fn preserved_login_query() -> Option<String> {
     let window = web_sys::window()?;
@@ -96,6 +102,38 @@ fn store_post_auth_continuation(kind: &str, id: &str) {
     let _ = (kind, id);
 }
 
+fn account_label(account: &CurrentAccountInfo) -> String {
+    account
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            let handle = account.handle.trim();
+            if handle.is_empty() {
+                account.username.trim()
+            } else {
+                handle
+            }
+        })
+        .to_owned()
+}
+
+fn account_initial(label: &str) -> String {
+    label
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().to_string())
+        .unwrap_or_else(|| "?".to_owned())
+}
+
+fn account_matches_login_hint(account: &CurrentAccountInfo, login_hint: &str) -> bool {
+    let login_hint = login_hint.trim();
+    login_hint.is_empty()
+        || account.username.eq_ignore_ascii_case(login_hint)
+        || account.handle.eq_ignore_ascii_case(login_hint)
+}
+
 #[component]
 pub fn Login() -> Element {
     let providers_data = use_resource(|| async {
@@ -140,6 +178,7 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
                 password_registration_enabled: false,
                 account_recovery_allowed: true,
                 login_hint: None,
+                current_account: None,
             },
         }
     }
@@ -149,8 +188,28 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
 fn LoginForm(providers: ProvidersOutcome) -> Element {
     let initial_login_hint = providers.login_hint.clone().unwrap_or_default();
     let has_login_hint = !initial_login_hint.trim().is_empty();
+    let current_account = providers.current_account.clone();
+    let current_account_matches_hint = current_account
+        .as_ref()
+        .is_some_and(|account| account_matches_login_hint(account, &initial_login_hint));
+    let current_account_label = current_account
+        .as_ref()
+        .map(account_label)
+        .unwrap_or_default();
+    let current_account_initial = account_initial(&current_account_label);
+    let current_account_username = current_account
+        .as_ref()
+        .map(|account| account.username.clone())
+        .unwrap_or_default();
     let mut handle = use_signal(move || initial_login_hint.clone());
     let mut password = use_signal(String::new);
+    let mut step = use_signal(move || {
+        if has_login_hint {
+            LoginStep::Password
+        } else {
+            LoginStep::Identifier
+        }
+    });
     let show_password = use_signal(|| false);
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
@@ -178,124 +237,208 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                 }
 
                 if password_enabled {
-                    form {
-                        class: "form-root",
-                        "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
-                        onsubmit: move |e| {
-                            e.prevent_default();
-                            e.stop_propagation();
-                            let user = handle.to_string();
-                            let pass = password.to_string();
-
-                            if user.is_empty() || pass.is_empty() {
-                                error.set(Some("Please enter your username and password.".to_owned()));
-                                return;
-                            }
-
-                            submitting.set(true);
-                            error.set(None);
-
-                            spawn(async move {
-                                let result = crate::api::api_post::<LoginOutcome>(
-                                    "/account/auth/login",
-                                    serde_json::json!({
-                                        "handle": user,
-                                        "password": pass,
-                                    }),
-                                ).await;
-                                submitting.set(false);
-                                match result {
-                                    Ok(resp) if resp.status == "success" => {
-                                        let continuation =
-                                            get_query_param("kind").zip(get_query_param("id"));
-                                        clear_preserved_login_query();
-
-                                        // Check if this login is part of an OAuth authorization strand
-                                        if let Some((kind, id)) = continuation {
-                                            if kind == "continue_authorization_grant" {
-                                                nav.push(Route::OAuthApproval { grant_id: id });
-                                            } else {
-                                                nav.push(Route::AccountOverview {});
-                                            }
-                                        } else {
-                                            nav.push(Route::AccountOverview {});
-                                        }
-                                    }
-                                    Ok(resp) => {
-                                        let msg = match resp.error.as_deref() {
-                                            Some("invalid_credentials") => "Invalid username or password.",
-                                            Some("rate_limited") => "Too many attempts. Please try again later.",
-                                            Some("account_deactivated") => "This account has been deactivated.",
-                                            Some("account_locked") => "This account has been locked.",
-                                            Some("password_login_disabled") => "Password login is not available.",
-                                            Some(other) => other,
-                                            None => "Login failed.",
-                                        };
-                                        error.set(Some(msg.to_owned()));
-                                    }
-                                    Err(e) => {
-                                        error.set(Some(e));
+                    if current_account_matches_hint && step() == LoginStep::Identifier {
+                        div { class: "form-root",
+                            button {
+                                class: "btn btn-secondary btn-block login-current-account-button",
+                                r#type: "button",
+                                "data-testid": "coauth-continue-as-current",
+                                onclick: move |_| {
+                                    handle.set(current_account_username.clone());
+                                    password.set(String::new());
+                                    error.set(None);
+                                    step.set(LoginStep::Password);
+                                },
+                                div { class: "login-selected-account",
+                                    div { class: "login-selected-avatar", "{current_account_initial}" }
+                                    div { class: "login-selected-copy",
+                                        span { class: "login-selected-label", "Continue as" }
+                                        strong { "{current_account_label}" }
                                     }
                                 }
-                            });
-                        },
-
-                        div { class: "form-field",
-                            label { class: "form-label", r#for: LOGIN_HANDLE_ID, "Username" }
-                            input {
-                                id: LOGIN_HANDLE_ID,
-                                class: "form-input",
-                                r#type: "text",
-                                autocomplete: "username",
-                                required: true,
-                                "aria-invalid": if has_error { "true" } else { "false" },
-                                "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
-                                placeholder: "Username or email",
-                                value: "{handle}",
-                                readonly: has_login_hint,
-                                oninput: move |e| handle.set(e.value()),
                             }
                         }
-
-                        div { class: "form-field",
-                            label { class: "form-label", r#for: LOGIN_PASSWORD_ID, "Password" }
-                            div { class: "password-input-wrapper",
-                                input {
-                                    id: LOGIN_PASSWORD_ID,
-                                    class: "form-input",
-                                    r#type: if show_password() { "text" } else { "password" },
-                                    autocomplete: "current-password",
-                                    required: true,
-                                    "aria-invalid": if has_error { "true" } else { "false" },
-                                    "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
-                                    placeholder: "Password",
-                                    value: "{password}",
-                                    autofocus: has_login_hint,
-                                    oninput: move |e| password.set(e.value()),
-                                }
-                                PasswordVisibilityToggle { visible: show_password }
-                            }
-                        }
-
-                        button {
-                            class: "btn btn-primary btn-block",
-                            r#type: "submit",
-                            // Stable hook for e2e (cotest oidc-login-flow.spec.ts);
-                            // the button carries no id otherwise.
-                            "data-testid": "coauth-login-submit",
-                            disabled: submitting(),
-                            "aria-busy": if submitting() { "true" } else { "false" },
-                            if submitting() {
-                                LoadingSpinner { inline: true }
-                            }
-                            "Sign in"
+                        div { class: "login-divider",
+                            span { "or" }
                         }
                     }
 
-                    if recovery_enabled {
-                        div { class: "login-links",
-                            Link { class: "link", to: Route::RecoveryStart {},
-                                "Forgot password?"
+                    if step() == LoginStep::Identifier {
+                        form {
+                            class: "form-root",
+                            "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
+                            onsubmit: move |e| {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                let user = handle.to_string();
+
+                                if user.trim().is_empty() {
+                                    error.set(Some("Please enter your username or email.".to_owned()));
+                                    return;
+                                }
+
+                                password.set(String::new());
+                                error.set(None);
+                                step.set(LoginStep::Password);
+                            },
+
+                            div { class: "form-field",
+                                label { class: "form-label", r#for: LOGIN_HANDLE_ID, "Username" }
+                                input {
+                                    id: LOGIN_HANDLE_ID,
+                                    class: "form-input",
+                                    r#type: "text",
+                                    autocomplete: "username",
+                                    required: true,
+                                    "aria-invalid": if has_error { "true" } else { "false" },
+                                    "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
+                                    placeholder: "Username or email",
+                                    value: "{handle}",
+                                    autofocus: true,
+                                    oninput: move |e| handle.set(e.value()),
+                                }
+                            }
+
+                            button {
+                                class: "btn btn-primary btn-block",
+                                r#type: "submit",
+                                "data-testid": "coauth-login-identifier-submit",
+                                "Next"
+                            }
+                        }
+                    } else {
+                        form {
+                            class: "form-root",
+                            "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
+                            onsubmit: move |e| {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                let user = handle.to_string();
+                                let pass = password.to_string();
+
+                                if user.trim().is_empty() {
+                                    error.set(Some("Please enter your username or email.".to_owned()));
+                                    step.set(LoginStep::Identifier);
+                                    return;
+                                }
+
+                                if pass.is_empty() {
+                                    error.set(Some("Please enter your password.".to_owned()));
+                                    return;
+                                }
+
+                                submitting.set(true);
+                                error.set(None);
+
+                                spawn(async move {
+                                    let result = crate::api::api_post::<LoginOutcome>(
+                                        "/account/auth/login",
+                                        serde_json::json!({
+                                            "handle": user,
+                                            "password": pass,
+                                        }),
+                                    ).await;
+                                    submitting.set(false);
+                                    match result {
+                                        Ok(resp) if resp.status == "success" => {
+                                            let continuation =
+                                                get_query_param("kind").zip(get_query_param("id"));
+                                            clear_preserved_login_query();
+
+                                            if let Some((kind, id)) = continuation {
+                                                if kind == "continue_authorization_grant" {
+                                                    nav.push(Route::OAuthApproval { grant_id: id });
+                                                } else {
+                                                    nav.push(Route::AccountOverview {});
+                                                }
+                                            } else {
+                                                nav.push(Route::AccountOverview {});
+                                            }
+                                        }
+                                        Ok(resp) => {
+                                            let msg = match resp.error.as_deref() {
+                                                Some("invalid_credentials") => "Invalid username or password.",
+                                                Some("rate_limited") => "Too many attempts. Please try again later.",
+                                                Some("account_deactivated") => "This account has been deactivated.",
+                                                Some("account_locked") => "This account has been locked.",
+                                                Some("password_login_disabled") => "Password login is not available.",
+                                                Some(other) => other,
+                                                None => "Login failed.",
+                                            };
+                                            error.set(Some(msg.to_owned()));
+                                        }
+                                        Err(e) => {
+                                            error.set(Some(e));
+                                        }
+                                    }
+                                });
+                            },
+
+                            div { class: "login-selected-account",
+                                div { class: "login-selected-avatar",
+                                    "{handle().chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_else(|| \"?\".to_owned())}"
+                                }
+                                div { class: "login-selected-copy",
+                                    span { class: "login-selected-label", "Selected account" }
+                                    strong { "{handle}" }
+                                }
+                            }
+
+                            div { class: "form-field",
+                                label { class: "form-label", r#for: LOGIN_PASSWORD_ID, "Password" }
+                                div { class: "password-input-wrapper",
+                                    input {
+                                        id: LOGIN_PASSWORD_ID,
+                                        class: "form-input",
+                                        r#type: if show_password() { "text" } else { "password" },
+                                        autocomplete: "current-password",
+                                        required: true,
+                                        "aria-invalid": if has_error { "true" } else { "false" },
+                                        "aria-describedby": if has_error { LOGIN_ERROR_ID } else { "" },
+                                        placeholder: "Password",
+                                        value: "{password}",
+                                        autofocus: true,
+                                        oninput: move |e| password.set(e.value()),
+                                    }
+                                    PasswordVisibilityToggle { visible: show_password }
+                                }
+                            }
+
+                            button {
+                                class: "btn btn-primary btn-block",
+                                r#type: "submit",
+                                // Stable hook for e2e (cotest oidc-login-flow.spec.ts);
+                                // the button carries no id otherwise.
+                                "data-testid": "coauth-login-submit",
+                                disabled: submitting(),
+                                "aria-busy": if submitting() { "true" } else { "false" },
+                                if submitting() {
+                                    LoadingSpinner { inline: true }
+                                }
+                                "Sign in"
+                            }
+
+                            if !has_login_hint {
+                                button {
+                                    class: "btn btn-tertiary btn-block",
+                                    r#type: "button",
+                                    "data-testid": "coauth-login-change-identifier",
+                                    disabled: submitting(),
+                                    onclick: move |_| {
+                                        password.set(String::new());
+                                        error.set(None);
+                                        step.set(LoginStep::Identifier);
+                                    },
+                                    "Use another account"
+                                }
+                            }
+                        }
+
+                        if recovery_enabled {
+                            div { class: "login-links",
+                                Link { class: "link", to: Route::RecoveryStart {},
+                                    "Forgot password?"
+                                }
                             }
                         }
                     }
@@ -347,7 +490,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                     }
                 }
 
-                if registration_enabled {
+                if registration_enabled && step() == LoginStep::Identifier {
                     div { class: "login-register",
                         span { "Don't have an account? " }
                         Link {
