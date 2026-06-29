@@ -29,17 +29,16 @@ use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
-use cokret_core::canonical::canonical_json_bytes;
 use cokret_core::models::{
     NoDelegationResolver, RealmOrganizationAuthorization, RealmOrganizationControlScope,
     RealmOrganizationDelegation, RealmOrganizationDelegationResolver, RealmOrganizationIssuerRole,
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
-    SignatureMaterial, verify_realm_organization_statement,
+    SignatureMaterial, realm_organization_statement_signing_bytes,
+    verify_realm_organization_statement,
 };
 use cokret_core::{Did, RealmId};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
-use serde::Serialize;
 use signature::RandomizedSigner as _;
 use thiserror::Error;
 
@@ -89,42 +88,6 @@ pub struct OrganizationStatementRequest {
     pub executed_by: Option<Did>,
 }
 
-/// Canonical bytes the proof signs over. We sign every field of the statement
-/// except the inner `authorization.proof` (which is the signature itself), so a
-/// verifier can rebuild the exact bytes from the wire statement. Optional
-/// fields are omitted when absent so the bytes are stable.
-#[derive(Debug, Serialize)]
-struct OrganizationStatementTranscript<'a> {
-    kind: &'a str,
-    statement_id: &'a str,
-    realm_id: &'a RealmId,
-    organization_id: &'a Did,
-    relationship: &'a RealmOrganizationRelationship,
-    status: &'a RealmOrganizationStatus,
-    control_scopes: &'a [RealmOrganizationControlScope],
-    issued_at: &'a chrono::DateTime<chrono::Utc>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    not_before: Option<&'a chrono::DateTime<chrono::Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    expires_at: Option<&'a chrono::DateTime<chrono::Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    supersedes_statement_id: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    revokes_statement_id: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    realm_frontier_digest: Option<&'a cokret_core::Hash>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    organization_policy_ref: Option<&'a String>,
-    issuer: &'a Did,
-    issuer_role: &'a RealmOrganizationIssuerRole,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    delegation_ref: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    executed_by: Option<&'a Did>,
-}
-
-const ORGANIZATION_STATEMENT_TRANSCRIPT_KIND: &str = "ck.realm.organization.statement.v1";
-
 /// Issue a signed `ck.realm.organization` statement.
 ///
 /// `service_did` is the coauth service DID used to construct the
@@ -154,48 +117,20 @@ where
         _ => {}
     }
 
-    let transcript = OrganizationStatementTranscript {
-        kind: ORGANIZATION_STATEMENT_TRANSCRIPT_KIND,
-        statement_id: &request.statement_id,
-        realm_id: &request.realm_id,
-        organization_id: &request.organization_id,
-        relationship: &request.relationship,
-        status: &request.status,
-        control_scopes: &request.control_scopes,
-        issued_at: &request.issued_at,
-        not_before: request.not_before.as_ref(),
-        expires_at: request.expires_at.as_ref(),
-        supersedes_statement_id: request.supersedes_statement_id.as_ref(),
-        revokes_statement_id: request.revokes_statement_id.as_ref(),
-        realm_frontier_digest: request.realm_frontier_digest.as_ref(),
-        organization_policy_ref: request.organization_policy_ref.as_ref(),
-        issuer: &request.issuer,
-        issuer_role: &request.issuer_role,
-        delegation_ref: request.delegation_ref.as_ref(),
-        executed_by: request.executed_by.as_ref(),
-    };
-
-    let canonical = canonical_json_bytes(&transcript)
-        .map_err(|e| OrganizationStatementError::Canonical(e.to_string()))?;
-
+    // Resolve the signing key + verification method up front so the statement can
+    // be built before signing.
     let (alg, key) =
         preferred_service_signing_key(key_store).ok_or(OrganizationStatementError::NoSigningKey)?;
     let key_id = key.kid().ok_or(OrganizationStatementError::NoSigningKey)?;
-    let signer = key_store
-        .signer_for_algorithm(&alg)
-        .map_err(|_| OrganizationStatementError::KeyAlgMismatch)?;
-    let mut rng =
-        ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| OrganizationStatementError::Sign)?;
-    let raw = signer
-        .try_sign_with_rng(&mut rng, &canonical)
-        .map_err(|_| OrganizationStatementError::Sign)?;
-    let sig_bytes: Box<[u8]> = raw.into();
-    let sig_b64 = Base64UrlUnpadded::encode_string(&sig_bytes);
     let verification_method = format!("{service_did}#{key_id}");
 
-    let payload = RealmOrganizationPayload {
+    // Build the statement with a placeholder proof. The canonical signing bytes
+    // are produced by the SDK (shared with soland's verifier) and exclude
+    // authorization.proof and authorization.signed_at, so signing over them and
+    // writing the real proof back yields a verifiable statement.
+    let mut payload = RealmOrganizationPayload {
         statement_id: request.statement_id,
-        realm_id: request.realm_id.clone(),
+        realm_id: request.realm_id,
         organization_id: request.organization_id,
         relationship: request.relationship,
         status: request.status,
@@ -214,9 +149,24 @@ where
             delegation_ref: request.delegation_ref,
             executed_by: request.executed_by,
             signed_at: now,
-            proof: SignatureMaterial::NonEmptyString(sig_b64),
+            proof: SignatureMaterial::NonEmptyString(String::new()),
         },
     };
+
+    let canonical = realm_organization_statement_signing_bytes(&payload)
+        .map_err(|e| OrganizationStatementError::Canonical(e.to_string()))?;
+
+    let signer = key_store
+        .signer_for_algorithm(&alg)
+        .map_err(|_| OrganizationStatementError::KeyAlgMismatch)?;
+    let mut rng =
+        ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| OrganizationStatementError::Sign)?;
+    let raw = signer
+        .try_sign_with_rng(&mut rng, &canonical)
+        .map_err(|_| OrganizationStatementError::Sign)?;
+    let sig_bytes: Box<[u8]> = raw.into();
+    payload.authorization.proof =
+        SignatureMaterial::NonEmptyString(Base64UrlUnpadded::encode_string(&sig_bytes));
 
     // COA-ORG-03 acceptance: the statement we sign is exactly the statement
     // soland's SDK verifier accepts. Self-verify before returning.
