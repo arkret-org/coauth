@@ -9,6 +9,7 @@ use coauth_data::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
+use subtle::ConstantTimeEq as _;
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -660,18 +661,31 @@ impl UserEmailRepository for PgUserEmailRepository<'_> {
         authentication: &UserEmailAuthentication,
         code: &str,
     ) -> Result<Option<UserEmailAuthenticationCode>, Self::Error> {
-        let res = user_email_authentication_codes::table
+        // The secret code is deliberately NOT part of the SQL `WHERE` clause:
+        // a DB equality filter on the code leaks a timing side channel (and may
+        // short-circuit byte-by-byte inside the engine). Instead we fetch every
+        // candidate code bound to this (owner-checked, non-secret)
+        // authentication id and compare each one in constant time.
+        let candidates = user_email_authentication_codes::table
             .filter(
                 user_email_authentication_codes::user_email_authentication_id
                     .eq(Uuid::from(authentication.id)),
             )
-            .filter(user_email_authentication_codes::code.eq(code))
             .select(UserEmailAuthenticationCodeLookup::as_select())
-            .first::<UserEmailAuthenticationCodeLookup>(self.conn)
-            .await
-            .optional()?;
+            .load::<UserEmailAuthenticationCodeLookup>(self.conn)
+            .await?;
 
-        Ok(res.map(UserEmailAuthenticationCode::from))
+        let needle = code.as_bytes();
+        let mut matched: Option<UserEmailAuthenticationCode> = None;
+        for candidate in candidates {
+            let candidate = UserEmailAuthenticationCode::from(candidate);
+            let is_match: bool = candidate.code.as_bytes().ct_eq(needle).into();
+            if is_match {
+                matched = Some(candidate);
+            }
+        }
+
+        Ok(matched)
     }
 
     #[tracing::instrument(

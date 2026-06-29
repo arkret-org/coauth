@@ -499,7 +499,12 @@ pub async fn providers(
     let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
     let mut repo = depot.repo().await?;
-    let query: ProvidersQuery = req.parse_queries().unwrap_or_default();
+    let query: ProvidersQuery = req.parse_queries().unwrap_or_else(|err| {
+        // A malformed `post_auth_action` query must not silently degrade into a
+        // hint-less response with no diagnostic trail; record it at debug level.
+        tracing::debug!(error = %err, "failed to parse providers query parameters");
+        ProvidersQuery::default()
+    });
 
     let upstream_providers = load_enabled_upstream_providers(&mut repo).await?;
     let login_hint = provider_login_hint(&mut repo, &query, &site_config, &url_builder).await?;
@@ -554,6 +559,15 @@ async fn provider_login_hint(
     let Some(grant) = repo.oauth_authorization_grant().lookup(*id).await? else {
         return Ok(None);
     };
+    // `providers` is an unauthenticated, pre-login endpoint and `lookup` is a
+    // bare primary-key fetch with no owner/session binding. The login hint only
+    // serves to pre-fill the sign-in form *before* a grant is fulfilled, so we
+    // refuse to echo back the hint of any grant that has already progressed past
+    // `pending`. This closes the cross-subject PII read surface: a fulfilled or
+    // exchanged grant's hint is never disclosed to a fresh anonymous caller.
+    if !grant.is_pending() {
+        return Ok(None);
+    }
     Ok(password_form_login_hint(&grant, site_config, url_builder))
 }
 

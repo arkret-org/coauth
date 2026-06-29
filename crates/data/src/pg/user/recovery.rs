@@ -8,6 +8,7 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use ipnetwork::IpNetwork;
 use rand_core::RngCore;
+use subtle::ConstantTimeEq as _;
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -200,18 +201,36 @@ impl UserRecoveryRepository for PgUserRecoveryRepository<'_> {
         &mut self,
         ticket: &str,
     ) -> Result<Option<UserRecoveryTicket>, Self::Error> {
-        let row = user_recovery_tickets::table
-            .filter(user_recovery_tickets::ticket.eq(ticket))
+        // The ticket secret is deliberately NOT part of the SQL `WHERE` clause:
+        // a DB equality filter on the secret leaks a timing side channel.
+        // Instead we fetch the candidate tickets bound to still-open recovery
+        // sessions (`consumed_at IS NULL`) and compare each ticket value in
+        // constant time. The candidate set is naturally tiny: tickets are
+        // short-lived and a session can only ever be consumed once, so already
+        // used sessions are excluded here. Expiry is enforced separately by the
+        // caller via `UserRecoveryTicket::active`.
+        let candidates = user_recovery_tickets::table
+            .inner_join(
+                user_recovery_sessions::table
+                    .on(user_recovery_tickets::user_recovery_session_id
+                        .eq(user_recovery_sessions::id)),
+            )
+            .filter(user_recovery_sessions::consumed_at.is_null())
             .select(UserRecoveryTicketRow::as_select())
-            .first::<UserRecoveryTicketRow>(self.conn)
-            .await
-            .optional()?;
+            .load::<UserRecoveryTicketRow>(self.conn)
+            .await?;
 
-        let Some(row) = row else {
-            return Ok(None);
-        };
+        let needle = ticket.as_bytes();
+        let mut matched: Option<UserRecoveryTicket> = None;
+        for row in candidates {
+            let candidate = UserRecoveryTicket::from(row);
+            let is_match: bool = candidate.ticket.as_bytes().ct_eq(needle).into();
+            if is_match {
+                matched = Some(candidate);
+            }
+        }
 
-        Ok(Some(row.into()))
+        Ok(matched)
     }
 
     #[tracing::instrument(

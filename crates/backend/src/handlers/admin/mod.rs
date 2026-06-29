@@ -45,14 +45,18 @@ pub const ADMIN_SCOPE: &str = "urn:coauth:admin";
 /// Cokret admin scope family.
 pub const COKRET_ADMIN_SCOPE: &str = "urn:cokret:admin:*";
 
-/// Returns `true` if the given scope string contains an admin scope.
+/// Returns `true` if the given scope grants full admin access.
+///
+/// Matching is **exact**: only the two canonical full-admin scope tokens
+/// (`urn:coauth:admin` and the `urn:cokret:admin:*` family marker) are
+/// accepted. We deliberately do NOT prefix-match `urn:cokret:admin:`: a
+/// prefix check would silently promote any future narrowly-scoped token
+/// (e.g. a hypothetical `urn:cokret:admin:readonly`) to full admin. Such
+/// sub-scopes must be authorized explicitly by their own predicate, never by
+/// virtue of sharing the admin URN prefix.
 #[must_use]
 pub fn has_admin_scope(scope: &oauth_types::scope::Scope) -> bool {
-    scope.contains(ADMIN_SCOPE)
-        || scope.contains(COKRET_ADMIN_SCOPE)
-        || scope
-            .iter()
-            .any(|token| token.as_str().starts_with("urn:cokret:admin:"))
+    scope.contains(ADMIN_SCOPE) || scope.contains(COKRET_ADMIN_SCOPE)
 }
 
 /// JSON response wrapper that sets HTTP 201 Created status code.
