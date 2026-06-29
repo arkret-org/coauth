@@ -1,7 +1,7 @@
 use cokret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_CLAIM_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
-    ERROR_CODE_POLICY_DENIED, ERROR_CODE_PROOF_INVALID, ERROR_CODE_SCHEMA_VIOLATION,
+    ERROR_CODE_POLICY_DENIED, REASON_PROOF_INVALID, ERROR_CODE_SCHEMA_VIOLATION,
     ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_UNSUPPORTED_FEATURE,
 };
 use salvo::prelude::*;
@@ -346,8 +346,8 @@ fn map_oidc_exchange_error(
 ) -> CokretRouteError {
     let (status, code) = match error.code {
         "internal_error" => (StatusCode::INTERNAL_SERVER_ERROR, ERROR_CODE_INTERNAL_ERROR),
-        ERROR_CODE_PROOF_INVALID | "invalid_authorization_code" | "invalid_client" => {
-            (StatusCode::UNAUTHORIZED, ERROR_CODE_PROOF_INVALID)
+        REASON_PROOF_INVALID | "invalid_authorization_code" | "invalid_client" => {
+            (StatusCode::UNAUTHORIZED, REASON_PROOF_INVALID)
         }
         "invalid_audience" => (StatusCode::BAD_REQUEST, ERROR_CODE_AUDIENCE_MISMATCH),
         "invalid_request" => (
@@ -395,7 +395,7 @@ mod tests {
                 message,
             } => {
                 assert_eq!(status, StatusCode::UNAUTHORIZED);
-                assert_eq!(code, ERROR_CODE_PROOF_INVALID);
+                assert_eq!(code, REASON_PROOF_INVALID);
                 assert!(message.contains("reason_code=invalid_authorization_code"));
             }
             other => panic!("expected coded error, got {other:?}"),

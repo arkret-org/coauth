@@ -10,7 +10,12 @@ use std::sync::LazyLock;
 
 use coauth_account_types::{
     CurrentAccountInfo, LoginOutcome, LoginReqBody, LogoutOutcome, ProviderInfo, ProvidersOutcome,
-    SessionGrantKind, SessionGrantOneShotInfo, SessionGrantPrincipalServerInfo, ViewerInfo,
+    ViewerInfo,
+};
+// Only the password-bootstrap scaffold emits a session grant one-shot.
+#[cfg(feature = "password-bootstrap")]
+use coauth_account_types::{
+    SessionGrantKind, SessionGrantOneShotInfo, SessionGrantPrincipalServerInfo,
 };
 use coauth_data::oauth::{LoginHint, OAuthAuthorizationGrantRepository};
 use coauth_data::{AuthorizationGrant, PostAuthAction, SiteConfig, UrlBuilder};
@@ -167,6 +172,18 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let requested_audience = input.audience.clone();
     let requested_device_id = input.device_id.clone();
 
+    // When the password-bootstrap scaffold is compiled out these are only
+    // consumed by the disabled-by-default grant-minting branch; the DPoP
+    // extraction above is still performed for its security side effect of
+    // rejecting present-but-broken proofs.
+    #[cfg(not(feature = "password-bootstrap"))]
+    let _ = (
+        &dpop_binding,
+        &requested_audience,
+        &requested_device_id,
+        &key_store,
+    );
+
     match login_with_password(
         repo,
         &mut rng,
@@ -231,7 +248,18 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 Ok(info) => info.displayname,
                 Err(_) => None,
             };
-            if !cokret_config.password_login_session_grants_enabled {
+            // The P0 password-bootstrap scaffold is compiled out unless the
+            // `password-bootstrap` feature is enabled, so a production build
+            // always takes the disabled path regardless of the runtime config
+            // flag. This is the compile-time half of the defence-in-depth
+            // (the other halves are the default-off config flag and the
+            // mandatory dev-only startup escape hatch in `coauth-config`).
+            #[cfg(feature = "password-bootstrap")]
+            let session_grants_enabled = cokret_config.password_login_session_grants_enabled;
+            #[cfg(not(feature = "password-bootstrap"))]
+            let session_grants_enabled = false;
+
+            if !session_grants_enabled {
                 let mut viewer_repo = depot.repo().await?;
                 let viewer_did = cokret::published_principal_did_for_user(
                     &mut viewer_repo,
@@ -260,6 +288,8 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 );
                 return Ok(());
             }
+            #[cfg(feature = "password-bootstrap")]
+            {
             let Some(dpop_binding) = dpop_binding else {
                 PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                 res.status_code(StatusCode::BAD_REQUEST);
@@ -451,6 +481,13 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     Vec::new(),
                 )),
             );
+            Ok(())
+            }
+
+            // Feature compiled out: the disabled-path `if` above always
+            // returns first, so this is the (statically-required) trailing
+            // value for the match arm.
+            #[cfg(not(feature = "password-bootstrap"))]
             Ok(())
         }
     }

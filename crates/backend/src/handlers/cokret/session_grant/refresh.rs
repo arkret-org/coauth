@@ -5,7 +5,7 @@ use coauth_jose::jwt::Jwt;
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use cokret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_GRANT_ALREADY_CONSUMED,
-    ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_PROOF_INVALID,
+    ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE, REASON_PROOF_INVALID,
     ERROR_CODE_SESSION_GRANT_NOT_FOUND, ERROR_CODE_SESSION_LOGGED_OUT,
 };
 use cokret_core::{
@@ -62,7 +62,7 @@ fn did_proof_required(message: impl Into<String>) -> CokretRouteError {
 fn did_proof_invalid(message: impl Into<String>) -> CokretRouteError {
     CokretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        ERROR_CODE_PROOF_INVALID,
+        REASON_PROOF_INVALID,
         format!("reason_code=proof_invalid; {}", message.into()),
     )
 }
@@ -70,7 +70,7 @@ fn did_proof_invalid(message: impl Into<String>) -> CokretRouteError {
 fn did_proof_replay_window_exceeded(message: impl Into<String>) -> CokretRouteError {
     CokretRouteError::coded(
         StatusCode::UNAUTHORIZED,
-        ERROR_CODE_PROOF_INVALID,
+        REASON_PROOF_INVALID,
         format!(
             "reason_code={}; {}",
             SOFT_LOGOUT_DID_PROOF_REPLAY_REASON,
@@ -732,7 +732,7 @@ mod tests {
         )
         .expect_err("oversized DID proof replay window must fail closed");
 
-        let message = assert_coded(err, ERROR_CODE_PROOF_INVALID);
+        let message = assert_coded(err, REASON_PROOF_INVALID);
         assert!(message.contains(SOFT_LOGOUT_DID_PROOF_REPLAY_REASON));
     }
 
@@ -743,7 +743,7 @@ mod tests {
         let err = validate_soft_logout_did_proof_window(issued_at, expires_at, expires_at)
             .expect_err("expired DID proof must fail closed");
 
-        let message = assert_coded(err, ERROR_CODE_PROOF_INVALID);
+        let message = assert_coded(err, REASON_PROOF_INVALID);
         assert!(message.contains(SOFT_LOGOUT_DID_PROOF_REPLAY_REASON));
     }
 
@@ -760,7 +760,7 @@ mod tests {
         let err = validate_soft_logout_proof_kind(Some(SessionGrantProofKind::AgentKeyProof))
             .expect_err("agent_key_proof must not restore a human soft-logged-out session");
 
-        assert_coded(err, ERROR_CODE_PROOF_INVALID);
+        assert_coded(err, REASON_PROOF_INVALID);
     }
 
     #[test]
@@ -788,7 +788,7 @@ mod tests {
         )
         .expect_err("presented device_id must match the grant binding");
 
-        assert_coded(err, ERROR_CODE_PROOF_INVALID);
+        assert_coded(err, REASON_PROOF_INVALID);
     }
 
     #[test]

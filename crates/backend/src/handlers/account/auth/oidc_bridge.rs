@@ -19,7 +19,7 @@ use coauth_admin_types::{
 };
 use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
-use cokret_core::error::ERROR_CODE_PROOF_INVALID;
+use cokret_core::error::REASON_PROOF_INVALID;
 use cokret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
@@ -100,7 +100,7 @@ impl OidcExchangeError {
     }
 
     fn proof_invalid(message: impl Into<String>) -> Self {
-        Self::new(ERROR_CODE_PROOF_INVALID, message)
+        Self::new(REASON_PROOF_INVALID, message)
     }
 }
 
@@ -1120,7 +1120,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 let lower_description = error_description.to_ascii_lowercase();
                 let (code, error_kind) = match error.error {
                     ClientErrorCode::InvalidGrant if lower_description.contains("pkce") => (
-                        ERROR_CODE_PROOF_INVALID,
+                        REASON_PROOF_INVALID,
                         format!("pkce verification failed: {error_description}"),
                     ),
                     ClientErrorCode::InvalidGrant => {

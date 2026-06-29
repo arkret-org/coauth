@@ -38,7 +38,10 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 use url::Url;
 
-use super::{DepotExt, RouteError};
+use super::{
+    DepotExt, RouteError, extract_bound_activity_tracker, extract_session_info, get_requester,
+    make_clock,
+};
 use crate::handlers::account::consent_cell_query::{
     InviteGateDecision, evaluate_invite_gate, query_consent_cell,
 };
@@ -52,9 +55,12 @@ use crate::services::peer_protocol_client::{
 /// Body of `POST /_coauth/self/account/invites/relay`.
 #[derive(Debug, Deserialize)]
 pub struct InviteRelayRequestBody {
-    /// DID of the actor issuing the invite. Recorded in audit but not
-    /// trusted as authentication on its own; the bearer cookie / OAuth
-    /// token guards the route.
+    /// DID of the actor issuing the invite. The route is guarded by the
+    /// browser-session cookie / OAuth bearer (`post_invite_relay` runs
+    /// `extract_session_info` + `get_requester`): a non-admin caller may
+    /// only relay for their own published principal DID, while an admin
+    /// session may relay on behalf of any `inviter_did`. The value is never
+    /// trusted as authentication on its own.
     pub inviter_did: String,
 
     /// Base URL of the target's `server_name` (`soland`).
@@ -246,12 +252,60 @@ pub async fn post_invite_relay(
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
 
+    // ── Authentication + authorization ─────────────────────────────
+    // This endpoint drives a signed, coauth-DID-attested outbound forward to
+    // a target principal server, so it MUST NOT be reachable anonymously
+    // (the `/_coauth` parent router only mounts CORS). Mirror the standard
+    // `self/` auth pattern (`viewer`, `sessions`): require an authenticated
+    // requester, then bind the relay to that identity.
+    let repo_factory = depot.repo_factory()?;
+    let clock = make_clock();
+    let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let session_info = extract_session_info(req, depot);
+    let repo = repo_factory.create().await?;
+    let (requester, mut repo) =
+        get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+
+    let user = requester.user().ok_or(RouteError::Unauthorized)?;
+
+    // A non-admin session may only relay invites for its own published
+    // principal DID. An admin session (OAuth scope) may relay on behalf of
+    // any `inviter_did`. The body-supplied `inviter_did` is otherwise never
+    // trusted as authentication.
+    if !requester.is_admin() {
+        let caller_did =
+            cokret::published_principal_did_for_user(&mut repo, &cokret_config, user)
+                .await?
+                .ok_or(RouteError::Unauthorized)?;
+        if caller_did != params.inviter_did {
+            return Err(RouteError::Unauthorized);
+        }
+    }
+
+    repo.cancel().await?;
+
     // Body-supplied URL takes precedence over the global config — admins
     // can route to a holder whose principal lives elsewhere.
     let principal_url = params
         .target_principal_url
         .clone()
         .or_else(|| cokret_config.principal_server_url.clone());
+
+    // Deny-by-default for the federation hop: the relay forwards a request
+    // signed under coauth's service DID, so the destination MUST resolve to
+    // a configured trust anchor (a `principal_servers` endpoint, the global
+    // `principal_server_url`, the identity registry resolver, or starid).
+    // This blocks the SSRF / signing-oracle vector where a caller supplies
+    // an arbitrary `target_principal_url`.
+    if let Some(target) = principal_url.as_ref()
+        && !cokret_config.is_trusted_outbound_target(target)
+    {
+        warn!(
+            host = target.host_str().unwrap_or("<none>"),
+            "invite-relay: rejected untrusted target_principal_url"
+        );
+        return Err(RouteError::BadRequest("untrusted_principal_url".into()));
+    }
 
     if let Some(delivery) = params.invite_delivery.as_ref() {
         delivery

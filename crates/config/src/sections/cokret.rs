@@ -344,6 +344,55 @@ impl CokretConfig {
         out
     }
 
+    /// Set of host names this deployment trusts as outbound
+    /// principal-server / identity-resolver targets.
+    ///
+    /// Built from every configured `principal_servers[].endpoint`, the
+    /// global `principal_server_url`, the `identity_registry.resolver`, and
+    /// the `starid.base_url`. Hosts are lower-cased so comparison is
+    /// case-insensitive. Used by outbound relays (e.g. the consent-gated
+    /// invite relay) to reject caller-supplied URLs that do not resolve to a
+    /// configured trust anchor (deny-by-default for the federation hop).
+    #[must_use]
+    pub fn trusted_outbound_hosts(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let mut push = |url: &Url| {
+            if let Some(host) = url.host_str() {
+                let host = host.to_ascii_lowercase();
+                if !host.is_empty() && !out.iter().any(|existing| existing == &host) {
+                    out.push(host);
+                }
+            }
+        };
+        for server in &self.principal_servers {
+            push(&server.endpoint);
+        }
+        if let Some(url) = self.principal_server_url.as_ref() {
+            push(url);
+        }
+        if let Some(registry) = self.identity_registry.as_ref() {
+            push(&registry.resolver);
+        }
+        if let Some(starid) = self.starid.as_ref() {
+            push(&starid.base_url);
+        }
+        out
+    }
+
+    /// Returns `true` when `url`'s host matches a configured trust anchor
+    /// (see [`Self::trusted_outbound_hosts`]). A `url` with no host is never
+    /// trusted.
+    #[must_use]
+    pub fn is_trusted_outbound_target(&self, url: &Url) -> bool {
+        let Some(host) = url.host_str() else {
+            return false;
+        };
+        let host = host.to_ascii_lowercase();
+        self.trusted_outbound_hosts()
+            .iter()
+            .any(|trusted| trusted == &host)
+    }
+
     /// Returns whether this deployment explicitly opts into `did:web` as a
     /// principal method. Both fields must match the spec's personal-node
     /// exception; an omitted `principal_method` still means `did:webvh`.
