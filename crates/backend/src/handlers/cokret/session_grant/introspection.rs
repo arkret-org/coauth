@@ -38,15 +38,10 @@ fn introspection_grant_record(
         })
         .or_else(|| grant.browser_session_id.map(|id| id.to_string()))
         .unwrap_or_else(|| grant.subject.clone());
-    let revocation_ref = parsed_payload
-        .as_ref()
-        .map(|payload| payload.revocation_ref.clone())
-        .or_else(|| {
-            grant
-                .browser_session_id
-                .map(|id| format!("ck:session:{id}"))
-        })
-        .unwrap_or_else(|| format!("ck:session-grant:{}", grant.id));
+    let revocation_ref = grant
+        .browser_session_id
+        .map(|id| format!("ck:session:{id}"))
+        .unwrap_or_else(|| format!("ck:session-grant:{}", grant.grant_id));
     let scope_details = parsed_payload
         .as_ref()
         .map_or(serde_json::Value::Null, |payload| {

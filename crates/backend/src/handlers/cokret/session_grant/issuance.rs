@@ -135,8 +135,7 @@ fn issue_session_grant_for_audience_inner(
     let cnf = dpop_jkt
         .as_ref()
         .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
-    let revocation_ref = format!("ck:session:{}", browser_session.id);
-    let claims = SessionGrantPayloadClaims {
+    let payload = SessionGrantPayload {
         kind: "ck.session.grant".to_owned(),
         grant_id: grant_id.clone(),
         subject: subject.clone(),
@@ -144,40 +143,14 @@ fn issue_session_grant_for_audience_inner(
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
-        revocation_ref,
-        device_id: device_id.clone(),
         session_id: browser_session.id.to_string(),
-        cnf: cnf.clone(),
+        cnf,
         proof_kind: None,
         scope_details: serde_json::Value::Null,
     };
-    let payload_digest = session_grant_claims_hash(&claims)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let payload = SessionGrantPayload {
-        kind: claims.kind,
-        grant_id: claims.grant_id,
-        subject: claims.subject,
-        audience: claims.audience,
-        scopes: claims.scopes,
-        not_before: claims.not_before,
-        expires_at: claims.expires_at,
-        revocation_ref: claims.revocation_ref,
-        device_id: claims.device_id,
-        session_id: claims.session_id,
-        cnf: claims.cnf,
-        proof_kind: claims.proof_kind,
-        scope_details: claims.scope_details,
-        proof: SessionGrantProof {
-            kind: "ck.session.grant.proof.v1".to_owned(),
-            alg: alg.to_string(),
-            key_id: key_id.clone(),
-            canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
-            payload_digest_alg: "sha-256".to_owned(),
-            payload_digest,
-        },
-    };
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
     let signer = key_store.signer_for_algorithm(&alg)?;
     let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();
@@ -298,9 +271,8 @@ pub(crate) fn mint_agent_session_grant(
         jkt: dpop_jkt.clone(),
     });
     let session_id = grant_id.to_string();
-    let revocation_ref = format!("ck:session-grant:{session_id}");
     let scope_details = compact_agent_scope_details(scope_details);
-    let claims = SessionGrantPayloadClaims {
+    let payload = SessionGrantPayload {
         kind: "ck.session.grant".to_owned(),
         grant_id: grant_id.clone(),
         subject: agent_principal_id.to_owned(),
@@ -308,40 +280,14 @@ pub(crate) fn mint_agent_session_grant(
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
-        revocation_ref,
-        device_id: None,
         session_id,
-        cnf: cnf.clone(),
+        cnf,
         proof_kind: Some(cokret_core::SessionGrantProofKind::AgentKeyProof),
         scope_details,
     };
-    let payload_digest = session_grant_claims_hash(&claims)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();
-    let payload = SessionGrantPayload {
-        kind: claims.kind,
-        grant_id: claims.grant_id,
-        subject: claims.subject,
-        audience: claims.audience,
-        scopes: claims.scopes,
-        not_before: claims.not_before,
-        expires_at: claims.expires_at,
-        revocation_ref: claims.revocation_ref,
-        device_id: claims.device_id,
-        session_id: claims.session_id,
-        cnf: claims.cnf,
-        proof_kind: claims.proof_kind,
-        scope_details: claims.scope_details,
-        proof: SessionGrantProof {
-            kind: "ck.session.grant.proof.v1".to_owned(),
-            alg: alg.to_string(),
-            key_id: key_id.clone(),
-            canonicalization: "json-c14n-object-key-sort-v1".to_owned(),
-            payload_digest_alg: "sha-256".to_owned(),
-            payload_digest,
-        },
-    };
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id);
     let signer = key_store.signer_for_algorithm(&alg)?;
     let grant_jwt = Jwt::sign(header, payload, &*signer)?.into_string();

@@ -53,10 +53,13 @@ fn assert_session_grant_jwt_omits_server_identity_metadata(raw_payload: &serde_j
         "provenance_anchor",
         "provenanceAnchor",
         "browser_session_id",
+        "device_id",
+        "revocation_ref",
+        "proof",
     ] {
         assert!(
             raw_payload.get(field).is_none(),
-            "session grant JWT must not inline server-derived `{field}`"
+            "session grant JWT must not inline redundant `{field}`"
         );
     }
 }
@@ -535,6 +538,7 @@ fn session_grant_is_signed_for_the_user_did() {
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
 
+    let device_scope = "urn:cokret:client:device:ck:device:01964137-0000-7000-8000-000000000001";
     let grant = issue_session_grant(
         &mut signing_rng,
         &clock,
@@ -543,7 +547,10 @@ fn session_grant_is_signed_for_the_user_did() {
         &key_store,
         &browser_session,
         session_public_key,
-        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
+        vec![
+            PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+            device_scope.to_owned(),
+        ],
     )
     .unwrap();
 
@@ -561,20 +568,18 @@ fn session_grant_is_signed_for_the_user_did() {
         payload.audience,
         required_audience_for(&url_builder, &cokret_config)
     );
-    assert_eq!(payload.scopes, vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE]);
+    assert_eq!(
+        payload.scopes,
+        vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE, device_scope]
+    );
     assert_eq!(payload.session_id, browser_session.id.to_string());
-    assert_eq!(payload.device_id, None);
+    assert_eq!(
+        grant.device_id.as_deref(),
+        Some("ck:device:01964137-0000-7000-8000-000000000001")
+    );
     assert_eq!(
         payload.expires_at - payload.not_before,
         Duration::try_hours(8).unwrap()
-    );
-    assert_eq!(payload.proof.kind, "ck.session.grant.proof.v1");
-    assert_eq!(payload.proof.alg, "EdDSA");
-    assert_eq!(payload.proof.key_id, "test-eddsa");
-    assert_eq!(payload.proof.payload_digest_alg, "sha-256");
-    assert_eq!(
-        payload.proof.payload_digest,
-        session_grant_claims_hash(&session_grant_claims_from_payload(payload)).unwrap()
     );
     let raw_payload = jwt_payload_value(&grant.grant_jwt);
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);

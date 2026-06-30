@@ -5,8 +5,8 @@ use coauth_jose::jwt::Jwt;
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use cokret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_GRANT_ALREADY_CONSUMED,
-    ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE, REASON_PROOF_INVALID,
-    ERROR_CODE_SESSION_GRANT_NOT_FOUND, ERROR_CODE_SESSION_LOGGED_OUT,
+    ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
+    ERROR_CODE_SESSION_LOGGED_OUT, REASON_PROOF_INVALID,
 };
 use cokret_core::{
     DeviceId, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome, SessionGrantRefreshProof,
@@ -136,7 +136,6 @@ fn validate_soft_logout_proof_kind(
 fn require_soft_logout_bound_device_id<'a>(
     presented_device_id: Option<&'a str>,
     persisted_device_id: Option<&'a str>,
-    jwt_device_id: Option<&'a str>,
 ) -> Result<&'a str, CokretRouteError> {
     let presented = presented_device_id
         .map(str::trim)
@@ -158,23 +157,9 @@ fn require_soft_logout_bound_device_id<'a>(
         .ok_or_else(|| {
             did_proof_required("session grant has no device_id binding for soft logout recovery")
         })?;
-    let jwt = jwt_device_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            did_proof_required(
-                "session grant JWT has no device_id binding for soft logout recovery",
-            )
-        })?;
-
     if presented != persisted {
         return Err(did_proof_invalid(
             "presented device_id does not match the persisted session grant binding",
-        ));
-    }
-    if jwt != persisted {
-        return Err(did_proof_invalid(
-            "session grant JWT device_id does not match the persisted binding",
         ));
     }
 
@@ -613,7 +598,6 @@ pub async fn refresh_session_grant(
     let device_id = require_soft_logout_bound_device_id(
         body.device_id.as_ref().map(DeviceId::as_str),
         prior_grant.device_id.as_deref(),
-        prior_payload.device_id.as_deref(),
     )?;
     verify_soft_logout_did_proof(
         &http_client,
@@ -765,7 +749,7 @@ mod tests {
 
     #[test]
     fn soft_logout_device_binding_requires_presented_device_id() {
-        let err = require_soft_logout_bound_device_id(None, Some(DEVICE_ID), Some(DEVICE_ID))
+        let err = require_soft_logout_bound_device_id(None, Some(DEVICE_ID))
             .expect_err("missing presented device_id must require DID proof context");
 
         assert_coded(err, ERROR_CODE_DID_PROOF_REQUIRED);
@@ -773,7 +757,7 @@ mod tests {
 
     #[test]
     fn soft_logout_device_binding_requires_persisted_session_grant_device() {
-        let err = require_soft_logout_bound_device_id(Some(DEVICE_ID), None, Some(DEVICE_ID))
+        let err = require_soft_logout_bound_device_id(Some(DEVICE_ID), None)
             .expect_err("legacy unbound grant must not be recoverable");
 
         assert_coded(err, ERROR_CODE_DID_PROOF_REQUIRED);
@@ -781,21 +765,16 @@ mod tests {
 
     #[test]
     fn soft_logout_device_binding_rejects_device_mismatch() {
-        let err = require_soft_logout_bound_device_id(
-            Some(OTHER_DEVICE_ID),
-            Some(DEVICE_ID),
-            Some(DEVICE_ID),
-        )
-        .expect_err("presented device_id must match the grant binding");
+        let err = require_soft_logout_bound_device_id(Some(OTHER_DEVICE_ID), Some(DEVICE_ID))
+            .expect_err("presented device_id must match the grant binding");
 
         assert_coded(err, REASON_PROOF_INVALID);
     }
 
     #[test]
-    fn soft_logout_device_binding_accepts_persisted_and_jwt_match() {
-        let device_id =
-            require_soft_logout_bound_device_id(Some(DEVICE_ID), Some(DEVICE_ID), Some(DEVICE_ID))
-                .expect("matching device bindings should pass");
+    fn soft_logout_device_binding_accepts_persisted_match() {
+        let device_id = require_soft_logout_bound_device_id(Some(DEVICE_ID), Some(DEVICE_ID))
+            .expect("matching device bindings should pass");
 
         assert_eq!(device_id, DEVICE_ID);
     }

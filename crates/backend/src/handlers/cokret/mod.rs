@@ -803,37 +803,6 @@ pub(crate) fn password_login_session_grant_target(
     }
 }
 
-// handle_claim digest convergence — `sha256(canonical_json(payload))` is
-// computed directly via `cokret_core::canonical::canonical_sha256`, the single
-// canonical-JSON pipeline shared by soland / starid / yougen / floria. This
-// keeps the handle-claim payload hash byte-identical to every other Cokret
-// service. The result type is the SDK's own `cokret_core::Error` so callers
-// retain its structured variants.
-fn session_grant_claims_hash(
-    claims: &SessionGrantPayloadClaims,
-) -> Result<String, cokret_core::Error> {
-    cokret_core::canonical::canonical_sha256(claims)
-}
-
-#[cfg(test)]
-fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGrantPayloadClaims {
-    SessionGrantPayloadClaims {
-        kind: payload.kind.clone(),
-        grant_id: payload.grant_id.clone(),
-        subject: payload.subject.clone(),
-        audience: payload.audience.clone(),
-        scopes: payload.scopes.clone(),
-        not_before: payload.not_before,
-        expires_at: payload.expires_at,
-        revocation_ref: payload.revocation_ref.clone(),
-        device_id: payload.device_id.clone(),
-        session_id: payload.session_id.clone(),
-        cnf: payload.cnf.clone(),
-        proof_kind: payload.proof_kind,
-        scope_details: payload.scope_details.clone(),
-    }
-}
-
 fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) -> Option<String> {
     tokens.into_iter().find_map(|token| {
         token

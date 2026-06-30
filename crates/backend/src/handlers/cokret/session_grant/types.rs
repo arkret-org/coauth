@@ -40,9 +40,6 @@ pub struct SessionGrantPayload {
     pub scopes: Vec<String>,
     pub not_before: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
-    pub revocation_ref: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub device_id: Option<String>,
     pub session_id: String,
     /// RFC 9449 §6 confirmation — when the grant was issued bound to a
     /// DPoP proof, `cnf.jkt` carries the RFC 7638 SHA-256 thumbprint
@@ -54,7 +51,6 @@ pub struct SessionGrantPayload {
     pub proof_kind: Option<SessionGrantProofKind>,
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub scope_details: Value,
-    pub proof: SessionGrantProof,
 }
 
 /// RFC 9449 / RFC 7800 confirmation claim, carrying the JWK thumbprint
@@ -64,39 +60,6 @@ pub struct SessionGrantPayload {
 pub struct SessionGrantConfirmation {
     /// `jkt` — base64url SHA-256 JWK thumbprint per RFC 7638.
     pub jkt: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionGrantProof {
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub alg: String,
-    pub key_id: String,
-    pub canonicalization: String,
-    pub payload_digest_alg: String,
-    pub payload_digest: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct SessionGrantPayloadClaims {
-    #[serde(rename = "type")]
-    pub(crate) kind: String,
-    pub(crate) grant_id: GrantId,
-    pub(crate) subject: String,
-    pub(crate) audience: String,
-    pub(crate) scopes: Vec<String>,
-    pub(crate) not_before: DateTime<Utc>,
-    pub(crate) expires_at: DateTime<Utc>,
-    pub(crate) revocation_ref: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) device_id: Option<String>,
-    pub(crate) session_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) cnf: Option<SessionGrantConfirmation>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) proof_kind: Option<SessionGrantProofKind>,
-    #[serde(default, skip_serializing_if = "Value::is_null")]
-    pub(crate) scope_details: Value,
 }
 
 #[derive(Debug, Serialize)]

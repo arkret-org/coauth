@@ -25,9 +25,8 @@ pub use revoke::revoke_session_grant_endpoint;
 pub use session_logout::logout_auth_session;
 pub use types::{
     PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome,
-    SessionGrantConfirmation, SessionGrantMaterial, SessionGrantPayload, SessionGrantProof,
+    SessionGrantConfirmation, SessionGrantMaterial, SessionGrantPayload,
 };
 pub(crate) use types::{
-    SessionGrantIntrospectionProofClaims, SessionGrantPayloadClaims, SessionGrantRecord,
-    SessionGrantTarget,
+    SessionGrantIntrospectionProofClaims, SessionGrantRecord, SessionGrantTarget,
 };
