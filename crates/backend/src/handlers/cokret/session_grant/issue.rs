@@ -1,8 +1,8 @@
 use cokret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_CLAIM_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
-    ERROR_CODE_POLICY_DENIED, REASON_PROOF_INVALID, ERROR_CODE_SCHEMA_VIOLATION,
-    ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_UNSUPPORTED_FEATURE,
+    ERROR_CODE_POLICY_DENIED, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_SERVICE_UNAVAILABLE,
+    ERROR_CODE_UNSUPPORTED_FEATURE, REASON_PROOF_INVALID,
 };
 use salvo::prelude::*;
 
@@ -272,9 +272,6 @@ async fn issue_agent_key_proof_session_grant(
     let session_public_key = serde_json::to_string(&dpop_binding.public_jwk).map_err(|error| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(error))
     })?;
-    let mut token_scope_details = authorization.scope_details.clone();
-    token_scope_details["audience"] = serde_json::Value::String(audience.clone());
-
     let material = mint_agent_session_grant(
         &url_builder,
         &cokret_config,
@@ -284,7 +281,7 @@ async fn issue_agent_key_proof_session_grant(
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
         session_public_key,
-        token_scope_details.clone(),
+        authorization.scope_details.clone(),
         now,
         expires_at,
     )
@@ -307,9 +304,9 @@ async fn issue_agent_key_proof_session_grant(
     // grant_id / session_public_key / audience are SessionGrantOutcome
     // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in
     // `scope_details`. The wire `scope_details` carries only the spec-typed
-    // agent overlay (CKP-0008 §4.6); the JWT-internal `token_scope_details`
-    // (with the canonical constraint projection) is already baked into the
-    // minted grant above.
+    // agent overlay (CKP-0008 §4.6); the JWT-internal scope details with the
+    // canonical constraint projection are already baked into the minted grant
+    // above.
     let grant_id = cokret_core::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "issued agent grant carried a non-protocol grant_id: {e}"

@@ -14,8 +14,6 @@ use ulid::Ulid;
 use super::*;
 use crate::handlers::cokret::*;
 
-const SERVICE_ATTESTED_PROVENANCE_KIND: &str = "service_attested";
-
 fn new_session_grant_id() -> GrantId {
     GrantId::new(new_prefixed_uuid7("ck:grant:"))
         .expect("generated ck:grant uuidv7 id must be valid")
@@ -138,22 +136,17 @@ fn issue_session_grant_for_audience_inner(
         .as_ref()
         .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
     let revocation_ref = format!("ck:session:{}", browser_session.id);
-    let provenance_anchor = service_attested_provenance_anchor(&issuer, &revocation_ref);
     let claims = SessionGrantPayloadClaims {
         kind: "ck.session.grant".to_owned(),
         grant_id: grant_id.clone(),
-        issuer: issuer.clone(),
         subject: subject.clone(),
-        service_account_id: browser_session.user.id.to_string(),
         audience: audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
         revocation_ref,
-        provenance_anchor,
         device_id: device_id.clone(),
         session_id: browser_session.id.to_string(),
-        browser_session_id: browser_session.id.to_string(),
         cnf: cnf.clone(),
         proof_kind: None,
         scope_details: serde_json::Value::Null,
@@ -165,18 +158,14 @@ fn issue_session_grant_for_audience_inner(
     let payload = SessionGrantPayload {
         kind: claims.kind,
         grant_id: claims.grant_id,
-        issuer: claims.issuer,
         subject: claims.subject,
-        service_account_id: claims.service_account_id,
         audience: claims.audience,
         scopes: claims.scopes,
         not_before: claims.not_before,
         expires_at: claims.expires_at,
         revocation_ref: claims.revocation_ref,
-        provenance_anchor: claims.provenance_anchor,
         device_id: claims.device_id,
         session_id: claims.session_id,
-        browser_session_id: claims.browser_session_id,
         cnf: claims.cnf,
         proof_kind: claims.proof_kind,
         scope_details: claims.scope_details,
@@ -286,9 +275,8 @@ where
 
 /// Mint a signed agent `ck.session.grant` JWT bound to the agent principal as
 /// subject and the runtime's DPoP key (`cnf.jkt`). No browser session is
-/// involved; `session_id` / `browser_session_id` carry the agent principal so
-/// the payload shape stays uniform, and `revocation_ref` is keyed by the agent
-/// principal for the soland-side freshness recheck.
+/// involved; `session_id` carries the grant id so the payload shape stays
+/// uniform without repeating the agent principal DID outside `subject`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mint_agent_session_grant(
     url_builder: &UrlBuilder,
@@ -309,23 +297,20 @@ pub(crate) fn mint_agent_session_grant(
     let cnf = Some(SessionGrantConfirmation {
         jkt: dpop_jkt.clone(),
     });
-    let revocation_ref = format!("ck:agent_session:{agent_principal_id}");
-    let provenance_anchor = service_attested_provenance_anchor(&issuer, &revocation_ref);
+    let session_id = grant_id.to_string();
+    let revocation_ref = format!("ck:session-grant:{session_id}");
+    let scope_details = compact_agent_scope_details(scope_details);
     let claims = SessionGrantPayloadClaims {
         kind: "ck.session.grant".to_owned(),
         grant_id: grant_id.clone(),
-        issuer: issuer.clone(),
         subject: agent_principal_id.to_owned(),
-        service_account_id: agent_principal_id.to_owned(),
         audience: audience.clone(),
         scopes: scopes.clone(),
         not_before: now,
         expires_at,
         revocation_ref,
-        provenance_anchor,
         device_id: None,
-        session_id: agent_principal_id.to_owned(),
-        browser_session_id: agent_principal_id.to_owned(),
+        session_id,
         cnf: cnf.clone(),
         proof_kind: Some(cokret_core::SessionGrantProofKind::AgentKeyProof),
         scope_details,
@@ -337,18 +322,14 @@ pub(crate) fn mint_agent_session_grant(
     let payload = SessionGrantPayload {
         kind: claims.kind,
         grant_id: claims.grant_id,
-        issuer: claims.issuer,
         subject: claims.subject,
-        service_account_id: claims.service_account_id,
         audience: claims.audience,
         scopes: claims.scopes,
         not_before: claims.not_before,
         expires_at: claims.expires_at,
         revocation_ref: claims.revocation_ref,
-        provenance_anchor: claims.provenance_anchor,
         device_id: claims.device_id,
         session_id: claims.session_id,
-        browser_session_id: claims.browser_session_id,
         cnf: claims.cnf,
         proof_kind: claims.proof_kind,
         scope_details: claims.scope_details,
@@ -380,13 +361,12 @@ pub(crate) fn mint_agent_session_grant(
     })
 }
 
-fn service_attested_provenance_anchor(
-    authority_did: &str,
-    authorization_ref: &str,
-) -> ServiceAttestedProvenanceAnchor {
-    ServiceAttestedProvenanceAnchor {
-        kind: SERVICE_ATTESTED_PROVENANCE_KIND.to_owned(),
-        authority_did: authority_did.to_owned(),
-        authorization_ref: authorization_ref.to_owned(),
+fn compact_agent_scope_details(mut scope_details: serde_json::Value) -> serde_json::Value {
+    if let Some(object) = scope_details.as_object_mut() {
+        object.remove("agent_principal_id");
+        object.remove("principal_id");
+        object.remove("subject");
+        object.remove("audience");
     }
+    scope_details
 }

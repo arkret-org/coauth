@@ -45,6 +45,32 @@ fn jwt_payload_value(jwt: &str) -> serde_json::Value {
     serde_json::from_slice(&bytes).expect("payload must be JSON")
 }
 
+fn assert_session_grant_jwt_omits_server_identity_metadata(raw_payload: &serde_json::Value) {
+    for field in [
+        "issuer",
+        "service_account_id",
+        "principal_id",
+        "provenance_anchor",
+        "provenanceAnchor",
+        "browser_session_id",
+    ] {
+        assert!(
+            raw_payload.get(field).is_none(),
+            "session grant JWT must not inline server-derived `{field}`"
+        );
+    }
+}
+
+fn assert_subject_did_occurs_once(raw_payload: &serde_json::Value, subject: &str) {
+    assert_eq!(raw_payload["subject"].as_str(), Some(subject));
+    let serialized = serde_json::to_string(raw_payload).expect("payload JSON must serialize");
+    assert_eq!(
+        serialized.matches(subject).count(),
+        1,
+        "session grant JWT must carry the subject DID exactly once"
+    );
+}
+
 fn personal_node_did_web_config() -> CokretConfig {
     CokretConfig {
         deployment_profile: DeploymentProfileConfig::PersonalNode,
@@ -532,11 +558,6 @@ fn session_grant_is_signed_for_the_user_did() {
         user_did_for(&url_builder, &cokret_config, &browser_session.user)
     );
     assert_eq!(
-        payload.service_account_id,
-        browser_session.user.id.to_string()
-    );
-    assert_eq!(payload.issuer, issuer_did_for(&url_builder, &cokret_config));
-    assert_eq!(
         payload.audience,
         required_audience_for(&url_builder, &cokret_config)
     );
@@ -556,6 +577,8 @@ fn session_grant_is_signed_for_the_user_did() {
         session_grant_claims_hash(&session_grant_claims_from_payload(payload)).unwrap()
     );
     let raw_payload = jwt_payload_value(&grant.grant_jwt);
+    assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
+    assert_subject_did_occurs_once(&raw_payload, &payload.subject);
     assert!(
         raw_payload.get("session_public_key").is_none(),
         "session grant JWT must bind holder keys with cnf.jkt, not inline the full JWK"
@@ -790,6 +813,7 @@ async fn seed_persisted_session_grant(
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
+    assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert!(
         raw_payload.get("session_public_key").is_none(),
         "session grant JWT must not inline the full holder JWK"
@@ -1021,6 +1045,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
+    assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert!(
         raw_payload.get("session_public_key").is_none(),
         "DPoP-bound grant JWT must not inline the full holder JWK"
@@ -1075,9 +1100,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             .to_owned();
     let now = state.clock.now();
     let scope_details = serde_json::json!({
-        "agent_principal_id": "did:web:agent.example",
         "controller_did": "did:web:alice.example",
-        "audience": audience.clone(),
         "resources": {
             "realm_refs": ["ck:realm:team"],
         },
@@ -1097,6 +1120,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
+    assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
+    assert_subject_did_occurs_once(&raw_payload, "did:web:agent.example");
     assert!(
         raw_payload.get("session_public_key").is_none(),
         "agent session grant JWT must not inline the full holder JWK"

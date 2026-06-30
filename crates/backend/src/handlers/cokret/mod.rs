@@ -208,13 +208,12 @@ impl SessionGrantCaller {
     /// Resolve the audience a session-grant *read* query must be pinned to,
     /// given the audience the caller requested (if any).
     ///
-    /// - An admin caller (`allowed_audiences == None`) is unrestricted: the
-    ///   requested audience is honoured as-is and `None` means "all".
-    /// - A Principal Server caller MUST stay within its `allowed_audiences`
-    ///   (SEC-SG-ENUM). When it requests an audience, that audience must be in
-    ///   the allow-list. When it requests none and exactly one audience is
-    ///   configured for it, that single audience is auto-pinned. Otherwise the
-    ///   caller must disambiguate, so cross-subject enumeration is refused.
+    /// - An admin caller (`allowed_audiences == None`) is unrestricted: the requested audience is
+    ///   honoured as-is and `None` means "all".
+    /// - A Principal Server caller MUST stay within its `allowed_audiences` (SEC-SG-ENUM). When it
+    ///   requests an audience, that audience must be in the allow-list. When it requests none and
+    ///   exactly one audience is configured for it, that single audience is auto-pinned. Otherwise
+    ///   the caller must disambiguate, so cross-subject enumeration is refused.
     fn resolve_read_audience(
         &self,
         requested: Option<&str>,
@@ -821,18 +820,14 @@ fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGr
     SessionGrantPayloadClaims {
         kind: payload.kind.clone(),
         grant_id: payload.grant_id.clone(),
-        issuer: payload.issuer.clone(),
         subject: payload.subject.clone(),
-        service_account_id: payload.service_account_id.clone(),
         audience: payload.audience.clone(),
         scopes: payload.scopes.clone(),
         not_before: payload.not_before,
         expires_at: payload.expires_at,
         revocation_ref: payload.revocation_ref.clone(),
-        provenance_anchor: payload.provenance_anchor.clone(),
         device_id: payload.device_id.clone(),
         session_id: payload.session_id.clone(),
-        browser_session_id: payload.browser_session_id.clone(),
         cnf: payload.cnf.clone(),
         proof_kind: payload.proof_kind,
         scope_details: payload.scope_details.clone(),

@@ -23,15 +23,6 @@ pub struct SessionGrantMaterial {
     pub dpop_jkt: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ServiceAttestedProvenanceAnchor {
-    pub kind: String,
-    #[serde(alias = "authorityDid")]
-    pub authority_did: String,
-    #[serde(alias = "authorizationRef")]
-    pub authorization_ref: String,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct SessionGrantTarget {
     pub audience: String,
@@ -44,20 +35,15 @@ pub struct SessionGrantPayload {
     #[serde(rename = "type")]
     pub kind: String,
     pub grant_id: GrantId,
-    pub issuer: String,
     pub subject: String,
-    pub service_account_id: String,
     pub audience: String,
     pub scopes: Vec<String>,
     pub not_before: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub revocation_ref: String,
-    #[serde(alias = "provenanceAnchor")]
-    pub provenance_anchor: ServiceAttestedProvenanceAnchor,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
     pub session_id: String,
-    pub browser_session_id: String,
     /// RFC 9449 §6 confirmation — when the grant was issued bound to a
     /// DPoP proof, `cnf.jkt` carries the RFC 7638 SHA-256 thumbprint
     /// (base64url) of the proof's public key. The refresh path requires
@@ -96,19 +82,15 @@ pub(crate) struct SessionGrantPayloadClaims {
     #[serde(rename = "type")]
     pub(crate) kind: String,
     pub(crate) grant_id: GrantId,
-    pub(crate) issuer: String,
     pub(crate) subject: String,
-    pub(crate) service_account_id: String,
     pub(crate) audience: String,
     pub(crate) scopes: Vec<String>,
     pub(crate) not_before: DateTime<Utc>,
     pub(crate) expires_at: DateTime<Utc>,
     pub(crate) revocation_ref: String,
-    pub(crate) provenance_anchor: ServiceAttestedProvenanceAnchor,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) device_id: Option<String>,
     pub(crate) session_id: String,
-    pub(crate) browser_session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cnf: Option<SessionGrantConfirmation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

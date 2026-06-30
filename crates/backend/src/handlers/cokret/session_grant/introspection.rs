@@ -1,5 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
-use coauth_data::{SessionGrant, User};
+use coauth_data::{BrowserSession, SessionGrant, User};
 use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::Jwt;
 use cokret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
@@ -16,6 +16,7 @@ use crate::handlers::cokret::*;
 
 fn introspection_grant_record(
     grant: &SessionGrant,
+    browser_session: Option<&BrowserSession>,
 ) -> Result<SessionGrantIntrospectGrant, CokretRouteError> {
     // `cnf.jkt` is not stored as its own column — it lives inside the signed
     // grant payload. Parse it back out of the persisted `grant_jwt` (the same
@@ -27,9 +28,8 @@ fn introspection_grant_record(
     let cnf_jkt = parsed_payload
         .as_ref()
         .and_then(|payload| payload.cnf.as_ref().map(|cnf| cnf.jkt.clone()));
-    let service_account_id = parsed_payload
-        .as_ref()
-        .map(|payload| payload.service_account_id.clone())
+    let service_account_id = browser_session
+        .map(|session| session.user.id.to_string())
         .or_else(|| {
             grant
                 .subject
@@ -253,7 +253,18 @@ pub async fn introspect_session_grant(
         }
     }
 
-    let user = if let Some(user_id) =
+    let browser_session = if let Some(browser_session_id) = grant.browser_session_id {
+        repo.browser_session()
+            .lookup(browser_session_id)
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+    } else {
+        None
+    };
+
+    let user = if let Some(browser_session) = browser_session.as_ref() {
+        Some(browser_session.user.clone())
+    } else if let Some(user_id) =
         parse_local_user_did_for(&url_builder, &cokret_config, &grant.subject)
     {
         repo.user()
@@ -275,12 +286,9 @@ pub async fn introspect_session_grant(
     // individually revoked — otherwise a grant rotated out just before logout
     // could keep introspecting `active` until self-expiry. Auth Server fail
     // closed per account-lifecycle §4.1.
-    if active && let Some(browser_session_id) = grant.browser_session_id {
-        let logged_out = repo
-            .browser_session()
-            .lookup(browser_session_id)
-            .await
-            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+    if active && grant.browser_session_id.is_some() {
+        let logged_out = browser_session
+            .as_ref()
             .is_none_or(|session| session.finished_at.is_some());
         if logged_out {
             status = SessionGrantIntrospectStatus::Revoked;
@@ -290,7 +298,7 @@ pub async fn introspect_session_grant(
 
     let grant_record = (status != SessionGrantIntrospectStatus::NotFound
         && status != SessionGrantIntrospectStatus::AudienceMismatch)
-        .then(|| introspection_grant_record(&grant))
+        .then(|| introspection_grant_record(&grant, browser_session.as_ref()))
         .transpose()?;
 
     // Introspection is READ-ONLY. The session grant is the (minutes-to-hours,
