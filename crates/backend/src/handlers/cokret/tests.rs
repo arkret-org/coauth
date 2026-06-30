@@ -34,6 +34,17 @@ fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> 
         .with_kid(kid)
 }
 
+fn jwt_payload_value(jwt: &str) -> serde_json::Value {
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
+
+    let payload = jwt
+        .split('.')
+        .nth(1)
+        .expect("compact JWT must contain a payload segment");
+    let bytes = Base64UrlUnpadded::decode_vec(payload).expect("payload must be base64url");
+    serde_json::from_slice(&bytes).expect("payload must be JSON")
+}
+
 fn personal_node_did_web_config() -> CokretConfig {
     CokretConfig {
         deployment_profile: DeploymentProfileConfig::PersonalNode,
@@ -544,8 +555,14 @@ fn session_grant_is_signed_for_the_user_did() {
         payload.proof.payload_digest,
         session_grant_claims_hash(&session_grant_claims_from_payload(payload)).unwrap()
     );
+    let raw_payload = jwt_payload_value(&grant.grant_jwt);
     assert!(
-        payload
+        raw_payload.get("session_public_key").is_none(),
+        "session grant JWT must bind holder keys with cnf.jkt, not inline the full JWK"
+    );
+    assert!(raw_payload.get("cnf").is_none());
+    assert!(
+        grant
             .session_public_key
             .contains("\"kid\":\"test-session-key\"")
     );
@@ -772,6 +789,12 @@ async fn seed_persisted_session_grant(
         vec![PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()],
     )
     .unwrap();
+    let raw_payload = jwt_payload_value(&material.grant_jwt);
+    assert!(
+        raw_payload.get("session_public_key").is_none(),
+        "session grant JWT must not inline the full holder JWK"
+    );
+    assert!(raw_payload.get("cnf").is_none());
     let grant = persist_session_grant(
         &mut repo,
         &mut rng,
@@ -997,6 +1020,12 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         Some(bound_jkt.clone()),
     )
     .unwrap();
+    let raw_payload = jwt_payload_value(&material.grant_jwt);
+    assert!(
+        raw_payload.get("session_public_key").is_none(),
+        "DPoP-bound grant JWT must not inline the full holder JWK"
+    );
+    assert_eq!(raw_payload["cnf"]["jkt"].as_str(), Some(bound_jkt.as_str()));
     let grant = persist_session_grant(
         &mut repo,
         &mut rng,
@@ -1067,6 +1096,15 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         now + Duration::try_minutes(15).unwrap(),
     )
     .unwrap();
+    let raw_payload = jwt_payload_value(&material.grant_jwt);
+    assert!(
+        raw_payload.get("session_public_key").is_none(),
+        "agent session grant JWT must not inline the full holder JWK"
+    );
+    assert_eq!(
+        raw_payload["cnf"]["jkt"].as_str(),
+        Some("agent-runtime-dpop-jkt")
+    );
     let mut repo = state.repository().await.unwrap();
     let persisted = persist_unbound_session_grant(&mut repo, &mut rng, &*state.clock, &material)
         .await

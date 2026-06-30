@@ -824,7 +824,6 @@ fn session_grant_claims_from_payload(payload: &SessionGrantPayload) -> SessionGr
         issuer: payload.issuer.clone(),
         subject: payload.subject.clone(),
         service_account_id: payload.service_account_id.clone(),
-        session_public_key: payload.session_public_key.clone(),
         audience: payload.audience.clone(),
         scopes: payload.scopes.clone(),
         not_before: payload.not_before,
