@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use cokret_core::{FreshnessState, Hash, RealmId};
+use cokret_core::{EventsFrontierFederationPeerState, FreshnessState, Hash, RealmId};
 use thiserror::Error;
 use url::Url;
 
@@ -218,24 +218,17 @@ impl FrontierSource for SolandFrontierSource {
                 )));
             }
 
-            let body: serde_json::Value = response
+            // soland returns the typed `ck.peer.events.query.frontier`
+            // federation-peer response directly (no envelope wrapper). Decode
+            // it strongly; a malformed or incomplete response surfaces as an
+            // error the caller maps to a signed sentinel rather than a 500.
+            let frontier: EventsFrontierFederationPeerState = response
                 .json()
                 .await
                 .map_err(|e| FrontierError::Http(format!("frontier body parse: {e}")))?;
 
-            // soland's response envelope normally places the typed federation
-            // peer response under `events_frontier`; older local mocks return
-            // the frontier object directly. Probe both shapes defensively so
-            // malformed or incomplete responses produce a signed sentinel
-            // rather than a 500.
-            let frontier_body = body.get("events_frontier").unwrap_or(&body);
-            let frontier_root = frontier_body
-                .get("frontier_root")
-                .and_then(|v| v.as_str())
-                .ok_or(FrontierError::MissingField("frontier_root"))?;
-
-            let h = Hash::new(frontier_root.to_owned()).map_err(|_| FrontierError::InvalidShape)?;
-            let freshness_state = frontier_freshness_state(frontier_body, Utc::now());
+            let h = frontier.frontier_root.clone();
+            let freshness_state = frontier_freshness_state(&frontier.observed_at, Utc::now());
             Ok(Frontier {
                 auth_state_digest: h.clone(),
                 policy_frontier_digest: h.clone(),
@@ -247,16 +240,7 @@ impl FrontierSource for SolandFrontierSource {
     }
 }
 
-fn frontier_freshness_state(
-    frontier_body: &serde_json::Value,
-    now: DateTime<Utc>,
-) -> FreshnessState {
-    let Some(observed_at) = frontier_body
-        .get("observed_at")
-        .and_then(|value| value.as_str())
-    else {
-        return FreshnessState::Unknown;
-    };
+fn frontier_freshness_state(observed_at: &str, now: DateTime<Utc>) -> FreshnessState {
     let Ok(observed_at) =
         DateTime::parse_from_rfc3339(observed_at).map(|ts| ts.with_timezone(&Utc))
     else {
@@ -357,37 +341,29 @@ mod tests {
 
     #[test]
     fn observed_frontier_within_required_window_is_fresh() {
-        let body = serde_json::json!({
-            "observed_at": "2026-06-19T23:58:30Z"
-        });
         assert_eq!(
-            frontier_freshness_state(&body, fixed_now()),
+            frontier_freshness_state("2026-06-19T23:58:30Z", fixed_now()),
             FreshnessState::Fresh
         );
     }
 
     #[test]
     fn observed_frontier_outside_required_window_is_stale() {
-        let body = serde_json::json!({
-            "observed_at": "2026-06-19T23:55:00Z"
-        });
         assert_eq!(
-            frontier_freshness_state(&body, fixed_now()),
+            frontier_freshness_state("2026-06-19T23:55:00Z", fixed_now()),
             FreshnessState::Stale
         );
     }
 
     #[test]
     fn missing_or_future_frontier_observation_is_unknown() {
+        // An unparseable / absent timestamp yields Unknown.
         assert_eq!(
-            frontier_freshness_state(&serde_json::json!({}), fixed_now()),
+            frontier_freshness_state("", fixed_now()),
             FreshnessState::Unknown
         );
-        let future = serde_json::json!({
-            "observed_at": "2026-06-20T00:02:00Z"
-        });
         assert_eq!(
-            frontier_freshness_state(&future, fixed_now()),
+            frontier_freshness_state("2026-06-20T00:02:00Z", fixed_now()),
             FreshnessState::Unknown
         );
     }

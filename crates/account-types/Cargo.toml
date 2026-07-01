@@ -20,6 +20,6 @@ schema = ["dep:salvo"]
 [dependencies]
 salvo = {workspace = true,optional = true}
 serde = {workspace = true,features = ["derive"]}
-
-[dev-dependencies]
+# Passkey wire types carry the browser WebAuthn payloads
+# (challenge/attestation/assertion) as opaque `serde_json::Value`.
 serde_json = {workspace = true}

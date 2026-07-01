@@ -6,11 +6,13 @@
 //! shape.
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
+use coauth_account_types::passkey::{
+    PasskeyAccountHint, PasskeyAuthFinishOutcome, PasskeyAuthFinishRequestBody,
+    PasskeyAuthStartOutcome, PasskeyRegisterFinishOutcome, PasskeyRegisterFinishRequestBody,
+    PasskeyRegisterStartOutcome,
+};
 use coauth_data::{BoxRepository, RepositoryAccess, User};
-use salvo::oapi::ToSchema;
 use salvo::prelude::*;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 use webauthn_rs::prelude::{
     CreationChallengeResponse, PublicKeyCredential, RegisterPublicKeyCredential,
@@ -24,69 +26,6 @@ use crate::services::onboarding_starid::{
 use crate::services::starid_adapter::StaridError;
 use crate::services::webauthn::WebauthnError;
 use crate::{AppError, JsonResult};
-
-#[derive(Default, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "AuthPasskeyAccountHint")]
-pub struct PasskeyAccountHint {
-    #[serde(default)]
-    pub account_id: Option<String>,
-    #[serde(default)]
-    pub handle: Option<String>,
-    #[serde(default)]
-    pub login_hint: Option<String>,
-    #[serde(default)]
-    pub display_name: Option<String>,
-}
-
-#[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "AuthPasskeyRegisterFinishRequest")]
-pub struct PasskeyRegisterFinishRequestBody {
-    #[serde(flatten)]
-    pub hint: PasskeyAccountHint,
-    #[serde(default)]
-    pub label: Option<String>,
-    pub attestation: serde_json::Value,
-}
-
-#[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "AuthPasskeyAuthFinishRequest")]
-pub struct PasskeyAuthFinishRequestBody {
-    #[serde(flatten)]
-    pub hint: PasskeyAccountHint,
-    pub assertion: serde_json::Value,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct PasskeyRegisterStartOutcome {
-    pub account_id: String,
-    pub handle: String,
-    pub challenge: serde_json::Value,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct PasskeyRegisterFinishOutcome {
-    pub account_id: String,
-    pub id: String,
-    pub credential_id_b64: String,
-    pub label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub starid_did: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub starid_version_id: Option<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct PasskeyAuthStartOutcome {
-    pub account_id: String,
-    pub handle: String,
-    pub challenge: serde_json::Value,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct PasskeyAuthFinishOutcome {
-    pub account_id: String,
-    pub credential_id_b64: String,
-}
 
 fn map_starid_error(err: OnboardingStaridError) -> AppError {
     match err {

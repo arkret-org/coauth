@@ -5,6 +5,8 @@
 //! Cokret endpoints served under `/_cokret` continue to use types from
 //! `cokret-rust-sdk`.
 
+pub mod passkey;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
