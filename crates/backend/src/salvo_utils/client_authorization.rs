@@ -132,8 +132,10 @@ impl Credentials {
                     .decrypt_string(encrypted_client_secret)
                     .map_err(|_e| CredentialsVerificationError::DecryptionError)?;
 
-                // Check if the client_secret matches
-                if client_secret.as_bytes() != decrypted_client_secret {
+                let decrypted_client_secret = std::str::from_utf8(&decrypted_client_secret)
+                    .map_err(|_e| CredentialsVerificationError::DecryptionError)?;
+
+                if !crate::util::constant_time_token_eq(client_secret, decrypted_client_secret) {
                     return Err(CredentialsVerificationError::ClientSecretMismatch);
                 }
             }

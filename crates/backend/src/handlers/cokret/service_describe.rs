@@ -414,6 +414,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -
         .to_string();
     let origin = url_builder.http_base().to_string();
     let origin = origin.strip_suffix('/').unwrap_or(&origin).to_owned();
+    let service_did = service_did_for(url_builder, cokret_config);
 
     let mut extra = std::collections::BTreeMap::new();
     extra.insert(
@@ -441,6 +442,16 @@ fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -
         "session_grant_scope".to_owned(),
         json!(PRINCIPAL_SERVER_SESSION_BIND_SCOPE),
     );
+    if service_did.starts_with("did:web:") {
+        extra.insert(
+            "service_did_history_evidence_kind".to_owned(),
+            json!("none"),
+        );
+        extra.insert(
+            "service_did_trust_profile".to_owned(),
+            json!("no_history_service"),
+        );
+    }
 
     AuthMetadata {
         mode: if cokret_config.principal_servers.is_empty() {

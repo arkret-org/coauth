@@ -3,19 +3,18 @@
 //!
 //! Routes (all under `/_coauth/admin/organizations`):
 //!
-//! - `POST   /organizations/bootstrap` — bootstrap an organization PCR
-//!   (COA-ORG-02). Authorized only by a DID controller proof or a
-//!   `principal_control_realm_bootstrap` delegation; the admin session is only
-//!   the executor.
+//! - `POST   /organizations/bootstrap` — bootstrap an organization PCR (COA-ORG-02). Authorized
+//!   only by a DID controller proof or a `principal_control_realm_bootstrap` delegation; the admin
+//!   session is only the executor.
 //! - `GET    /organizations/{org_did}` — read-only control state + delegations.
 //! - `GET    /organizations/{org_did}/delegations` — list delegations.
 //! - `POST   /organizations/{org_did}/delegations` — record a delegation.
 //! - `POST   /organizations/{org_did}/delegations/{ref}/revoke` — revoke.
 //! - `POST   /organizations/{org_did}/delegations/{ref}/renew` — renew validity.
-//! - `POST   /organizations/{org_did}/rotate-controller` — rotate the control
-//!   stream / frontier ref.
-//! - `POST   /organizations/{org_did}/statements` — issue a signed
-//!   `ck.realm.organization` statement (COA-ORG-03).
+//! - `POST   /organizations/{org_did}/rotate-controller` — rotate the control stream / frontier
+//!   ref.
+//! - `POST   /organizations/{org_did}/statements` — issue a signed `ck.realm.organization`
+//!   statement (COA-ORG-03).
 //!
 //! Wire shapes come from [`coauth_admin_types::organization_admin`] (which
 //! re-exports the shared `coauth-data` domain types) and the SDK
@@ -33,7 +32,7 @@ use coauth_data::organization_control::{
 };
 use coauth_data::{BoxRepository, RepositoryAccess};
 use cokret_core::identifiers::new_prefixed_uuid7;
-use cokret_core::models::{RealmOrganizationStatus, RealmOrganizationPayload};
+use cokret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
 use cokret_core::{Did, Hash, RealmId};
 use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
@@ -51,7 +50,8 @@ use crate::services::organization_statement::{
 };
 
 fn parse_did(raw: &str) -> Result<Did, AppError> {
-    Did::new(raw.to_owned()).map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))
+    Did::new(raw.to_owned())
+        .map_err(|e| AppError::bad_request(format!("invalid organization DID: {e}")))
 }
 
 async fn load_control(
@@ -106,10 +106,11 @@ pub async fn bootstrap_handler(
 
     // Resolve the delegation row (if delegated) so the decision can verify it.
     let delegation = match &body.authorization {
-        BootstrapAuthorizationInput::DelegatedGovernance { delegation_ref } => repo
-            .organization_control()
-            .get_delegation_by_ref(delegation_ref)
-            .await?,
+        BootstrapAuthorizationInput::DelegatedGovernance { delegation_ref } => {
+            repo.organization_control()
+                .get_delegation_by_ref(delegation_ref)
+                .await?
+        }
         BootstrapAuthorizationInput::DidControllerProof { .. } => None,
     };
 
@@ -131,11 +132,12 @@ pub async fn bootstrap_handler(
         bootstrap_authorization,
         bootstrap_delegation_ref,
         bootstrap_proof_digest,
-    } = authorize_bootstrap(&body.organization_did, has_admin_session, attempt, now)
-        .map_err(|e| {
+    } = authorize_bootstrap(&body.organization_did, has_admin_session, attempt, now).map_err(
+        |e| {
             // Authorization failures are caller errors (forbidden), not 500s.
             AppError::forbidden(format!("organization bootstrap rejected: {e}"))
-        })?;
+        },
+    )?;
 
     let mut rng = make_rng();
     let control = repo
@@ -364,11 +366,10 @@ pub async fn issue_statement_handler(
     let realm_id = RealmId::new(body.realm_id.as_str())
         .map_err(|e| AppError::bad_request(format!("invalid realm_id: {e}")))?;
     if body.control_scopes.is_empty() {
-        return Err(AppError::bad_request(
-            "control_scopes must be non-empty",
-        ));
+        return Err(AppError::bad_request("control_scopes must be non-empty"));
     }
-    if matches!(body.status, RealmOrganizationStatus::Revoked) && body.revokes_statement_id.is_none()
+    if matches!(body.status, RealmOrganizationStatus::Revoked)
+        && body.revokes_statement_id.is_none()
     {
         return Err(AppError::bad_request(
             "revoked statement requires revokes_statement_id",
@@ -398,10 +399,11 @@ pub async fn issue_statement_handler(
     // Issuer of the statement: the organization DID for direct statements, the
     // delegate DID for delegated statements.
     let delegation = match &body.delegation_ref {
-        Some(reference) => repo
-            .organization_control()
-            .get_delegation_by_ref(reference)
-            .await?,
+        Some(reference) => {
+            repo.organization_control()
+                .get_delegation_by_ref(reference)
+                .await?
+        }
         None => None,
     };
     let issuer = match (&body.delegation_ref, &delegation) {

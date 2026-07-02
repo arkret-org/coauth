@@ -50,8 +50,7 @@ use crate::outbound_http;
 // own `/_soland/*` root and MUST NOT occupy a `/_cokret/*` protocol segment.
 // The coauth↔soland S2S trust boundary is registered in
 // `docs/{zh,en}/setup/principal-server.md`.
-const DEVICE_SIGNING_KEY_DIRECTORY_PATH: &str =
-    "/_soland/gate/account/device-signing-keys/query";
+const DEVICE_SIGNING_KEY_DIRECTORY_PATH: &str = "/_soland/gate/account/device-signing-keys/query";
 
 /// Errors raised while resolving an authorized device signing key.
 #[derive(Debug, Error)]

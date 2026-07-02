@@ -273,10 +273,9 @@ pub async fn post_invite_relay(
     // any `inviter_did`. The body-supplied `inviter_did` is otherwise never
     // trusted as authentication.
     if !requester.is_admin() {
-        let caller_did =
-            cokret::published_principal_did_for_user(&mut repo, &cokret_config, user)
-                .await?
-                .ok_or(RouteError::Unauthorized)?;
+        let caller_did = cokret::published_principal_did_for_user(&mut repo, &cokret_config, user)
+            .await?
+            .ok_or(RouteError::Unauthorized)?;
         if caller_did != params.inviter_did {
             return Err(RouteError::Unauthorized);
         }

@@ -70,13 +70,14 @@ pub async fn get_corp_access_token(
         .append_pair("corpsecret", corpsecret);
 
     // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
-    let response: WeComTokenResponse = send_with_policy(oidc_upstream_policy("wecom_token"), || {
-        http_client.get(url.clone())
-    })
-    .await?
-    .error_for_status()?
-    .json()
-    .await?;
+    let response: WeComTokenResponse =
+        send_with_policy(oidc_upstream_policy("wecom_token"), || {
+            http_client.get(url.clone())
+        })
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
 
     if response.errcode != 0 {
         return Err(TokenRequestError::ProviderError {

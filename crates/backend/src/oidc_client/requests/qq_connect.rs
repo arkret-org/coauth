@@ -178,13 +178,14 @@ pub async fn fetch_userinfo(
         .append_pair("openid", openid);
 
     // COA-SEC-02: short timeout + bounded retry instead of the 60s global.
-    let response: HashMap<String, Value> = send_with_policy(oidc_upstream_policy("qq_userinfo"), || {
-        http_client.get(url.clone())
-    })
-    .await?
-    .error_for_status()?
-    .json()
-    .await?;
+    let response: HashMap<String, Value> =
+        send_with_policy(oidc_upstream_policy("qq_userinfo"), || {
+            http_client.get(url.clone())
+        })
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
 
     // QQ userinfo uses "ret" field for error code (0 = success)
     if let Some(ret) = response.get("ret").and_then(serde_json::Value::as_i64)

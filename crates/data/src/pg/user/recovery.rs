@@ -209,16 +209,15 @@ impl UserRecoveryRepository for PgUserRecoveryRepository<'_> {
         // short-lived and a session can only ever be consumed once, so already
         // used sessions are excluded here. Expiry is enforced separately by the
         // caller via `UserRecoveryTicket::active`.
-        let candidates = user_recovery_tickets::table
-            .inner_join(
-                user_recovery_sessions::table
-                    .on(user_recovery_tickets::user_recovery_session_id
-                        .eq(user_recovery_sessions::id)),
-            )
-            .filter(user_recovery_sessions::consumed_at.is_null())
-            .select(UserRecoveryTicketRow::as_select())
-            .load::<UserRecoveryTicketRow>(self.conn)
-            .await?;
+        let candidates =
+            user_recovery_tickets::table
+                .inner_join(user_recovery_sessions::table.on(
+                    user_recovery_tickets::user_recovery_session_id.eq(user_recovery_sessions::id),
+                ))
+                .filter(user_recovery_sessions::consumed_at.is_null())
+                .select(UserRecoveryTicketRow::as_select())
+                .load::<UserRecoveryTicketRow>(self.conn)
+                .await?;
 
         let needle = ticket.as_bytes();
         let mut matched: Option<UserRecoveryTicket> = None;

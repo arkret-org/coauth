@@ -530,9 +530,7 @@ mod tests {
             create_recovery_ticket(&state, "alice@example.com".to_owned()).await;
 
         let response = state
-            .request(
-                Request::get(format!("/_coauth/account/password-recovery/{ticket}")).empty(),
-            )
+            .request(Request::get(format!("/_coauth/account/password-recovery/{ticket}")).empty())
             .await;
 
         response.assert_status(StatusCode::OK);
@@ -590,15 +588,13 @@ mod tests {
 
         let response = state
             .request(
-                Request::post("/_coauth/account/password-recovery/set").json(
-                    serde_json::json!({
-                        "ticket": ticket,
-                        "new_password": "Correct Horse Battery Staple 42!",
-                        "requested_trust_boundary": {
-                            "device_trust_reset": true
-                        }
-                    }),
-                ),
+                Request::post("/_coauth/account/password-recovery/set").json(serde_json::json!({
+                    "ticket": ticket,
+                    "new_password": "Correct Horse Battery Staple 42!",
+                    "requested_trust_boundary": {
+                        "device_trust_reset": true
+                    }
+                })),
             )
             .await;
 

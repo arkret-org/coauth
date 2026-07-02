@@ -19,9 +19,9 @@
 use cokret_core::canonical::canonical_json_bytes;
 use serde::Serialize;
 
+use crate::AppError;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
-use crate::AppError;
 
 /// Canonical transcript that an admin revocation approval JWS must cover.
 ///
@@ -52,13 +52,13 @@ struct RevocationApprovalTranscript<'a> {
 /// authenticated admin user's primary DID.
 ///
 /// Returns:
-/// - `Ok(None)` when no proof was supplied (revocation proceeds on the
-///   admin-token + audit baseline).
-/// - `Ok(Some(verification_method))` when a proof was supplied and verified
-///   against the authenticated admin's primary DID document; the resolved
-///   verification method is returned for audit binding.
-/// - `Err(_)` when a proof was supplied but is empty / malformed / not
-///   anchored to the admin DID / signature-invalid.
+/// - `Ok(None)` when no proof was supplied (revocation proceeds on the admin-token + audit
+///   baseline).
+/// - `Ok(Some(verification_method))` when a proof was supplied and verified against the
+///   authenticated admin's primary DID document; the resolved verification method is returned for
+///   audit binding.
+/// - `Err(_)` when a proof was supplied but is empty / malformed / not anchored to the admin DID /
+///   signature-invalid.
 ///
 /// The caller's open `repo` is reused so the resolve happens inside the same
 /// transaction as the revocation + audit write.
@@ -73,7 +73,10 @@ pub(super) async fn verify_revocation_approval_proof(
     reason: &str,
     approval_proof: Option<&str>,
 ) -> Result<Option<String>, AppError> {
-    let proof = match approval_proof.map(str::trim).filter(|value| !value.is_empty()) {
+    let proof = match approval_proof
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         Some(proof) => proof,
         None => return Ok(None),
     };

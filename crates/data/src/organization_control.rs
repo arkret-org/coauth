@@ -9,15 +9,13 @@
 //!
 //! Two durable shapes live here:
 //!
-//! - [`OrganizationPrincipalControl`] — one row per organization DID. Holds the
-//!   organization DID, its Principal Control Realm id, control-stream / PCR
-//!   refs, the bootstrap authorization boundary (controller proof vs delegated
-//!   governance / Account Authority), and the human/service principal that
-//!   *executed* the bootstrap (`executed_by`) without becoming the
-//!   organization principal.
-//! - [`OrganizationDelegation`] — a delegation the organization DID Document /
-//!   governance profile grants to an Account Authority or governance service.
-//!   It backs the SDK
+//! - [`OrganizationPrincipalControl`] — one row per organization DID. Holds the organization DID,
+//!   its Principal Control Realm id, control-stream / PCR refs, the bootstrap authorization
+//!   boundary (controller proof vs delegated governance / Account Authority), and the human/service
+//!   principal that *executed* the bootstrap (`executed_by`) without becoming the organization
+//!   principal.
+//! - [`OrganizationDelegation`] — a delegation the organization DID Document / governance profile
+//!   grants to an Account Authority or governance service. It backs the SDK
 //!   `RealmOrganizationDelegationResolver` and the audit / management API.
 //!
 //! These types deliberately use the SDK enums

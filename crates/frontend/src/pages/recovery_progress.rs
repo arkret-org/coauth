@@ -12,10 +12,8 @@ pub fn RecoveryProgress(id: String) -> Element {
     let status_data = use_resource(move || {
         let rid = recovery_id.clone();
         async move {
-            crate::api::api_get::<RecoveryStatusOutcome>(&format!(
-                "/account/auth/recovery/{rid}"
-            ))
-            .await
+            crate::api::api_get::<RecoveryStatusOutcome>(&format!("/account/auth/recovery/{rid}"))
+                .await
         }
     });
     let binding = status_data.read();

@@ -313,7 +313,8 @@ impl AuditRepository for PgAuditRepository<'_> {
         }
 
         if let Some(resource_id) = filter.resource_id {
-            query = query.filter(admin_operation_logs::resource_id.eq(Some(Uuid::from(resource_id))));
+            query =
+                query.filter(admin_operation_logs::resource_id.eq(Some(Uuid::from(resource_id))));
         }
 
         if let Some(created_after) = filter.created_after {
@@ -357,7 +358,8 @@ impl AuditRepository for PgAuditRepository<'_> {
         }
 
         if let Some(resource_id) = filter.resource_id {
-            query = query.filter(admin_operation_logs::resource_id.eq(Some(Uuid::from(resource_id))));
+            query =
+                query.filter(admin_operation_logs::resource_id.eq(Some(Uuid::from(resource_id))));
         }
 
         if let Some(created_after) = filter.created_after {

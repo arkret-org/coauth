@@ -285,8 +285,8 @@ mod tests {
         use rand_core::SeedableRng;
 
         let mut rng = ChaChaRng::seed_from_u64(42);
-        let eddsa = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid("service-signing");
+        let eddsa =
+            JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("service-signing");
         Keystore::new(JsonWebKeySet::new(vec![eddsa]))
     }
 

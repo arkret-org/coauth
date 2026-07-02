@@ -115,8 +115,8 @@ fn service_and_user_identifiers_follow_cokret_shape() {
 fn service_describe_exposes_auth_account_boundary_profile() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let cokret_config = CokretConfig {
-        service_did: Some("did:web:auth.example.com".to_owned()),
-        issuer_did: Some("did:web:issuer.example.com".to_owned()),
+        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        issuer_did: Some("did:webvh:ztest:issuer.example.com:webvh:issuer".to_owned()),
         admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-prod".to_owned(),
@@ -149,13 +149,16 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     let body =
         serde_json::to_value(service_describe_response(&url_builder, &cokret_config, &[])).unwrap();
 
-    assert_eq!(body["service_did"], "did:web:auth.example.com");
+    assert_eq!(
+        body["service_did"],
+        "did:webvh:ztest:auth.example.com:webvh:service"
+    );
     assert_eq!(body["trust_domain"], "ck:trust_domain:auth.example.com");
     assert_eq!(body["service_type"], "auth_server");
     assert_eq!(body["admin_audience"], "https://auth.example.com/api/admin");
     assert_eq!(
         body["auth_metadata"]["issuer_did"],
-        "did:web:issuer.example.com"
+        "did:webvh:ztest:issuer.example.com:webvh:issuer"
     );
     assert_eq!(
         body["auth_metadata"]["session_grant_scope"],
@@ -263,8 +266,35 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     }
 }
 
+#[test]
+fn service_describe_marks_personal_node_did_web_service_as_no_history() {
+    let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
+    let cokret_config = CokretConfig {
+        service_did: Some("did:web:auth.example.com".to_owned()),
+        deployment_profile: DeploymentProfileConfig::PersonalNode,
+        principal_method: PrincipalMethodConfig::DidWeb,
+        ..CokretConfig::default()
+    };
+    let body =
+        serde_json::to_value(service_describe_response(&url_builder, &cokret_config, &[])).unwrap();
+
+    assert_eq!(body["service_did"], "did:web:auth.example.com");
+    assert_eq!(
+        body["auth_metadata"]["service_did_history_evidence_kind"],
+        "none"
+    );
+    assert_eq!(
+        body["auth_metadata"]["service_did_trust_profile"],
+        "no_history_service"
+    );
+}
+
 fn config_with_static_session_grant_bearer(bearer: &str) -> CokretConfig {
     CokretConfig {
+        service_did: Some(
+            "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth"
+                .to_owned(),
+        ),
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
             audience: "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service".to_owned(),

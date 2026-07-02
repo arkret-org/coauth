@@ -385,7 +385,7 @@ async fn require_session_grant_caller(
     }
 }
 
-fn principal_server_static_session_grant_bearer_matches(
+pub(crate) fn principal_server_static_session_grant_bearer_matches(
     cokret_config: &CokretConfig,
     token: &str,
 ) -> bool {

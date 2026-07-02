@@ -8,12 +8,12 @@ use coauth_data::circle_capability::CircleCapabilityGrantRepository;
 use coauth_data::collaboration_capability::CollaborationCapabilityGrantRepository;
 use coauth_data::dpop_replay::DpopReplayRepository;
 use coauth_data::notification::{NotificationRepository, NotificationTemplateRepository};
-use coauth_data::organization_control::OrganizationControlRepository;
 use coauth_data::oauth::{
     OAuthAccessTokenRepository, OAuthAuthorizationGrantRepository, OAuthClientRepository,
     OAuthDeviceCodeGrantRepository, OAuthRefreshTokenRepository, OAuthSessionRepository,
     SessionGrantRepository,
 };
+use coauth_data::organization_control::OrganizationControlRepository;
 use coauth_data::personal::PersonalSessionRepository;
 use coauth_data::policy_data::PolicyDataRepository;
 use coauth_data::queue::{QueueJobRepository, QueueScheduleRepository, QueueWorkerRepository};
@@ -47,12 +47,12 @@ use crate::circle_capability::PgCircleCapabilityGrantRepository;
 use crate::collaboration_capability::PgCollaborationCapabilityGrantRepository;
 use crate::dpop_replay::PgDpopReplayRepository;
 use crate::notification::{PgNotificationRepository, PgNotificationTemplateRepository};
-use crate::organization_control::PgOrganizationControlRepository;
 use crate::oauth::{
     PgOAuthAccessTokenRepository, PgOAuthAuthorizationGrantRepository, PgOAuthClientRepository,
     PgOAuthDeviceCodeGrantRepository, PgOAuthRefreshTokenRepository, PgOAuthSessionGrantRepository,
     PgOAuthSessionRepository,
 };
+use crate::organization_control::PgOrganizationControlRepository;
 use crate::personal::{PgPersonalAccessTokenRepository, PgPersonalSessionRepository};
 use crate::pg::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM;
 use crate::policy_data::PgPolicyDataRepository;

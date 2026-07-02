@@ -3,15 +3,15 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cokret_core::models::{
-    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
-};
 use coauth_data::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationBootstrapAuthorization,
     OrganizationControlRepository, OrganizationDelegation, OrganizationDelegationStatus,
     OrganizationPrincipalControl,
 };
 use coauth_data::{Clock, new_id};
+use cokret_core::models::{
+    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
+};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
@@ -57,14 +57,14 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
 
     fn try_from(value: ControlRow) -> Result<Self, Self::Error> {
         let id = Ulid::from(value.id);
-        let bootstrap_authorization =
-            OrganizationBootstrapAuthorization::parse(&value.bootstrap_authorization).ok_or_else(
-                || {
-                    DatabaseInconsistencyError::on("organization_principal_controls")
-                        .column("bootstrap_authorization")
-                        .row(id)
-                },
-            )?;
+        let bootstrap_authorization = OrganizationBootstrapAuthorization::parse(
+            &value.bootstrap_authorization,
+        )
+        .ok_or_else(|| {
+            DatabaseInconsistencyError::on("organization_principal_controls")
+                .column("bootstrap_authorization")
+                .row(id)
+        })?;
         Ok(Self {
             id: id.to_string(),
             organization_did: value.organization_did,
@@ -131,8 +131,8 @@ impl TryFrom<DelegationRow> for OrganizationDelegation {
         };
         let issuer_role =
             parse_issuer_role(&value.issuer_role).ok_or_else(|| on_err("issuer_role"))?;
-        let status = OrganizationDelegationStatus::parse(&value.status)
-            .ok_or_else(|| on_err("status"))?;
+        let status =
+            OrganizationDelegationStatus::parse(&value.status).ok_or_else(|| on_err("status"))?;
         let covered_relationships = value
             .covered_relationships
             .iter()
@@ -531,7 +531,10 @@ mod tests {
             .unwrap()
             .expect("control persisted");
         assert_eq!(fetched.organization_did, did);
-        assert_eq!(fetched.executed_by.as_deref(), Some("did:web:admin.example"));
+        assert_eq!(
+            fetched.executed_by.as_deref(),
+            Some("did:web:admin.example")
+        );
 
         let resolved = repo
             .organization_control()

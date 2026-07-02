@@ -10,12 +10,7 @@
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, User};
 use coauth_keystore::Encrypter;
 use cokret_core::DidOperationSubmitOutcome;
-use rand_core::RngCore;
-use thiserror::Error;
-use url::Url;
-
-use crate::outbound_http;
-
+pub use cokret_core::DidOperationSubmitRequestBody;
 // Re-export the shared SDK builder surface so existing call-sites
 // (`soland_webvh::prepare_inception`, `SuppliedInceptionInput`, …) keep working
 // without a second copy of the crypto in this crate.
@@ -23,8 +18,11 @@ pub use cokret_signatures::webvh::{
     InceptionInput, PreparedInception, SubmittedInception, SuppliedInceptionInput,
     WebvhInceptionError, prepare_inception, prepare_supplied_inception,
 };
+use rand_core::RngCore;
+use thiserror::Error;
+use url::Url;
 
-pub use cokret_core::DidOperationSubmitRequestBody;
+use crate::outbound_http;
 
 /// Errors produced while POSTing a `did:webvh` inception entry or running the
 /// lookup-or-mint flow. Build / cryptography failures surface as

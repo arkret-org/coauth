@@ -120,7 +120,10 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
         grant_nonce = %if returned_nonce.is_empty() { "missing" } else { returned_nonce },
         "authorization_code nonce mismatch",
     );
-    Err("authorization_code nonce mismatch: the proof nonce does not match the authorization_code".to_owned())
+    Err(
+        "authorization_code nonce mismatch: the proof nonce does not match the authorization_code"
+            .to_owned(),
+    )
 }
 
 pub(crate) fn is_protocol_device_id(value: &str) -> bool {
@@ -1151,7 +1154,9 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                     "local OAuth token endpoint error body could not be decoded",
                 );
                 let code = match status {
-                    http::StatusCode::UNAUTHORIZED | http::StatusCode::FORBIDDEN => "invalid_client",
+                    http::StatusCode::UNAUTHORIZED | http::StatusCode::FORBIDDEN => {
+                        "invalid_client"
+                    }
                     http::StatusCode::BAD_REQUEST => "invalid_request",
                     _ => "invalid_authorization_code",
                 };

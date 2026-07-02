@@ -40,7 +40,7 @@ use crate::handlers::account::service::access::{
 };
 use crate::handlers::{METER, RequesterFingerprint, cokret};
 use crate::salvo_utils::session::SessionInfoExt;
-use crate::services::dpop::{DpopError, DpopVerifier, dpop_header_from_request, dpop_htu};
+use crate::services::dpop::{DpopError, dpop_header_from_request, dpop_htu};
 
 #[derive(Clone)]
 pub(crate) struct DpopSessionBinding {
@@ -68,7 +68,7 @@ pub(crate) async fn extract_dpop_binding_for_kickoff(
     };
     let verifier = depot
         .dpop_verifier()
-        .unwrap_or_else(|_| DpopVerifier::shared());
+        .map_err(|error| DpopError::VerifierUnavailable(error.to_string()))?;
     let now = chrono::Utc::now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base = url_builder.http_base();
@@ -130,6 +130,9 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     // requires a verified proof-bound public key.
     let dpop_binding = match extract_dpop_binding_for_kickoff(req, depot, &url_builder).await {
         Ok(jkt) => jkt,
+        Err(error @ DpopError::VerifierUnavailable(_)) => {
+            return Err(RouteError::Internal(Box::new(error)));
+        }
         Err(error) => {
             res.status_code(StatusCode::BAD_REQUEST);
             res.render(Json(
@@ -290,198 +293,198 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             }
             #[cfg(feature = "password-bootstrap")]
             {
-            let Some(dpop_binding) = dpop_binding else {
-                PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-                res.status_code(StatusCode::BAD_REQUEST);
-                res.render(Json(
-                    LoginOutcome::error("invalid_dpop_proof").with_warnings(vec![
-                        "password login session grants require a valid DPoP proof".to_owned(),
-                    ]),
-                ));
-                return Ok(());
-            };
-            let Some(device_id) = requested_device_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            else {
-                PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-                res.status_code(StatusCode::BAD_REQUEST);
-                res.render(Json(
-                    LoginOutcome::error("invalid_device_id").with_warnings(vec![
-                        "password login session grants require device_id".to_owned(),
-                    ]),
-                ));
-                return Ok(());
-            };
-            let device_id = match cokret_core::DeviceId::new(device_id.to_owned()) {
-                Ok(device_id) => device_id,
-                Err(error) => {
+                let Some(dpop_binding) = dpop_binding else {
                     PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                     res.status_code(StatusCode::BAD_REQUEST);
                     res.render(Json(
-                        LoginOutcome::error("invalid_device_id")
-                            .with_warnings(vec![format!("device_id is invalid: {error}")]),
+                        LoginOutcome::error("invalid_dpop_proof").with_warnings(vec![
+                            "password login session grants require a valid DPoP proof".to_owned(),
+                        ]),
                     ));
                     return Ok(());
-                }
-            };
-            let grant_target = match cokret::password_login_session_grant_target(
-                &url_builder,
-                &cokret_config,
-                requested_audience.as_deref(),
-            ) {
-                Ok(target) => target,
-                Err(error) => {
+                };
+                let Some(device_id) = requested_device_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                else {
                     PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                     res.status_code(StatusCode::BAD_REQUEST);
                     res.render(Json(
-                        LoginOutcome::error("invalid_audience")
-                            .with_warnings(vec![error.to_string()]),
+                        LoginOutcome::error("invalid_device_id").with_warnings(vec![
+                            "password login session grants require device_id".to_owned(),
+                        ]),
                     ));
                     return Ok(());
-                }
-            };
-            // TODO(cokret): replace password bootstrap minting with the real
-            // coauth-owned OIDC/passkey exchange and proof-bound grant issuance.
-            //
-            // STATUS: scaffold — disabled by default; NOT for production.
-            // CATEGORY: P0 / auth-issuance.
-            // RISK: this path mints a principal-server session grant
-            //   directly from a password login without the canonical
-            //   OIDC `authorize -> token` ceremony. It bypasses
-            //   per-grant scope negotiation, PKCE binding, and the
-            //   proof-of-possession strand that real deployments
-            //   require. Acceptable for the bring-up phase because it
-            //   keeps the development loop short, but MUST be replaced
-            //   before any external relying party trusts these grants. The
-            //   handler now requires
-            //   `cokret.password_login_session_grants_enabled=true` and a
-            //   valid DPoP proof before this branch can run.
-            // PRE-PROD CHECKLIST:
-            //   - swap to passkey / OIDC exchange via
-            //     `crate::handlers::account::auth::oidc_bridge`.
-            //   - bind the grant `cnf.jkt` to a DPoP proof carried on the actual exchange request
-            //     (not the kickoff one).
-            //   - enforce policy on scopes the caller may request.
-            //   (TODO scaffold — pre-production checklist above.)
-            //
-            // Subject parity with the OIDC bridge: the grant subject (and
-            // `viewer.did`) MUST be the soland-minted `did:webvh:…` principal
-            // DID, not the coauth-local `user_did_for` fallback. The fallback
-            // anchors the actor identity on coauth's own host
-            // (`did:web:<coauth-host>:users:<ulid>`), which diverges from the
-            // principal DID the bridge mints for the same user — every event
-            // the client then writes is attributed to a DID that no DID
-            // service resolves under the principal server's authority.
-            let http_client = depot.http_client()?;
-            let encrypter = depot.encrypter()?;
-            let principal_did = match oidc_bridge::ensure_principal_did_for_user_committed(
-                depot,
-                &mut rng,
-                &clock,
-                &encrypter,
-                &http_client,
-                &url_builder,
-                &cokret_config,
-                &user,
-                &grant_target.audience,
-            )
-            .await
-            {
-                Ok(did) => did,
-                Err(message) => {
+                };
+                let device_id = match cokret_core::DeviceId::new(device_id.to_owned()) {
+                    Ok(device_id) => device_id,
+                    Err(error) => {
+                        PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                        res.status_code(StatusCode::BAD_REQUEST);
+                        res.render(Json(
+                            LoginOutcome::error("invalid_device_id")
+                                .with_warnings(vec![format!("device_id is invalid: {error}")]),
+                        ));
+                        return Ok(());
+                    }
+                };
+                let grant_target = match cokret::password_login_session_grant_target(
+                    &url_builder,
+                    &cokret_config,
+                    requested_audience.as_deref(),
+                ) {
+                    Ok(target) => target,
+                    Err(error) => {
+                        PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                        res.status_code(StatusCode::BAD_REQUEST);
+                        res.render(Json(
+                            LoginOutcome::error("invalid_audience")
+                                .with_warnings(vec![error.to_string()]),
+                        ));
+                        return Ok(());
+                    }
+                };
+                // TODO(cokret): replace password bootstrap minting with the real
+                // coauth-owned OIDC/passkey exchange and proof-bound grant issuance.
+                //
+                // STATUS: scaffold — disabled by default; NOT for production.
+                // CATEGORY: P0 / auth-issuance.
+                // RISK: this path mints a principal-server session grant
+                //   directly from a password login without the canonical
+                //   OIDC `authorize -> token` ceremony. It bypasses
+                //   per-grant scope negotiation, PKCE binding, and the
+                //   proof-of-possession strand that real deployments
+                //   require. Acceptable for the bring-up phase because it
+                //   keeps the development loop short, but MUST be replaced
+                //   before any external relying party trusts these grants. The
+                //   handler now requires
+                //   `cokret.password_login_session_grants_enabled=true` and a
+                //   valid DPoP proof before this branch can run.
+                // PRE-PROD CHECKLIST:
+                //   - swap to passkey / OIDC exchange via
+                //     `crate::handlers::account::auth::oidc_bridge`.
+                //   - bind the grant `cnf.jkt` to a DPoP proof carried on the actual exchange
+                //     request (not the kickoff one).
+                //   - enforce policy on scopes the caller may request.
+                //   (TODO scaffold — pre-production checklist above.)
+                //
+                // Subject parity with the OIDC bridge: the grant subject (and
+                // `viewer.did`) MUST be the soland-minted `did:webvh:…` principal
+                // DID, not the coauth-local `user_did_for` fallback. The fallback
+                // anchors the actor identity on coauth's own host
+                // (`did:web:<coauth-host>:users:<ulid>`), which diverges from the
+                // principal DID the bridge mints for the same user — every event
+                // the client then writes is attributed to a DID that no DID
+                // service resolves under the principal server's authority.
+                let http_client = depot.http_client()?;
+                let encrypter = depot.encrypter()?;
+                let principal_did = match oidc_bridge::ensure_principal_did_for_user_committed(
+                    depot,
+                    &mut rng,
+                    &clock,
+                    &encrypter,
+                    &http_client,
+                    &url_builder,
+                    &cokret_config,
+                    &user,
+                    &grant_target.audience,
+                )
+                .await
+                {
+                    Ok(did) => did,
+                    Err(message) => {
+                        PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
+                        res.render(Json(
+                            LoginOutcome::error("principal_did_minting_failed")
+                                .with_warnings(vec![message]),
+                        ));
+                        return Ok(());
+                    }
+                };
+                let account_handle = oidc_bridge::registration_handle_for_principal_endpoint(
+                    grant_target.principal_server_endpoint.as_deref(),
+                    &user.localpart,
+                );
+                let localpart_sync_bearer = oidc_bridge::principal_server_operation_bearer(
+                    &cokret_config,
+                    &grant_target.audience,
+                );
+                if let Err(message) = oidc_bridge::ensure_soland_account_registered(
+                    &http_client,
+                    grant_target.principal_server_endpoint.as_deref(),
+                    &principal_did,
+                    localpart_sync_bearer,
+                    Some(&user.localpart),
+                    account_handle.as_deref(),
+                    display_name.as_deref(),
+                    Some(device_id.as_str()),
+                )
+                .await
+                {
                     PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
                     res.render(Json(
-                        LoginOutcome::error("principal_did_minting_failed")
+                        LoginOutcome::error("principal_account_registration_failed")
                             .with_warnings(vec![message]),
                     ));
                     return Ok(());
                 }
-            };
-            let account_handle = oidc_bridge::registration_handle_for_principal_endpoint(
-                grant_target.principal_server_endpoint.as_deref(),
-                &user.localpart,
-            );
-            let localpart_sync_bearer = oidc_bridge::principal_server_operation_bearer(
-                &cokret_config,
-                &grant_target.audience,
-            );
-            if let Err(message) = oidc_bridge::ensure_soland_account_registered(
-                &http_client,
-                grant_target.principal_server_endpoint.as_deref(),
-                &principal_did,
-                localpart_sync_bearer,
-                Some(&user.localpart),
-                account_handle.as_deref(),
-                display_name.as_deref(),
-                Some(device_id.as_str()),
-            )
-            .await
-            {
-                PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
-                res.render(Json(
-                    LoginOutcome::error("principal_account_registration_failed")
-                        .with_warnings(vec![message]),
-                ));
-                return Ok(());
-            }
-            let session_grant = cokret::issue_session_grant_for_audience(
-                &clock,
-                &url_builder,
-                &cokret_config,
-                &key_store,
-                &user_session,
-                dpop_binding.public_jwk,
-                grant_target.audience.clone(),
-                oidc_bridge::principal_session_grant_scopes(device_id.as_str()),
-                Some(&principal_did),
-                Some(dpop_binding.jkt),
-            )
-            .map_err(|error| RouteError::Internal(Box::new(error)))?;
+                let session_grant = cokret::issue_session_grant_for_audience(
+                    &clock,
+                    &url_builder,
+                    &cokret_config,
+                    &key_store,
+                    &user_session,
+                    dpop_binding.public_jwk,
+                    grant_target.audience.clone(),
+                    oidc_bridge::principal_session_grant_scopes(device_id.as_str()),
+                    Some(&principal_did),
+                    Some(dpop_binding.jkt),
+                )
+                .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
-            let mut grant_repo = depot.repo().await?;
-            let persisted_session_grant = cokret::persist_session_grant(
-                &mut grant_repo,
-                &mut rng,
-                &clock,
-                &user_session,
-                &session_grant,
-            )
-            .await?;
-            grant_repo.save().await?;
+                let mut grant_repo = depot.repo().await?;
+                let persisted_session_grant = cokret::persist_session_grant(
+                    &mut grant_repo,
+                    &mut rng,
+                    &clock,
+                    &user_session,
+                    &session_grant,
+                )
+                .await?;
+                grant_repo.save().await?;
 
-            cookie_jar.finalize(
-                res,
-                Json(LoginOutcome::success(
-                    Some(ViewerInfo {
-                        id: NodeType::User.serialize(user.id),
-                        handle: user.localpart.clone(),
-                        did: Some(principal_did),
-                        federated_handle: cokret::user_handle(&url_builder, &user),
-                        principal_id: principal_server.principal_id(&user.localpart),
-                        display_name,
-                    }),
-                    Some(SessionGrantOneShotInfo {
-                        kind: SessionGrantKind::PrincipalSession,
-                        id: persisted_session_grant.id.to_string(),
-                        grant_jwt: session_grant.grant_jwt,
-                        session_public_key: session_grant.session_public_key,
-                        expires_at: session_grant.expires_at,
-                        audience: session_grant.audience,
-                        scopes: session_grant.scopes,
-                        principal_server: grant_target
-                            .principal_server_name
-                            .zip(grant_target.principal_server_endpoint)
-                            .map(|(name, endpoint)| SessionGrantPrincipalServerInfo {
-                                name,
-                                endpoint,
-                            }),
-                    }),
-                    Vec::new(),
-                )),
-            );
-            Ok(())
+                cookie_jar.finalize(
+                    res,
+                    Json(LoginOutcome::success(
+                        Some(ViewerInfo {
+                            id: NodeType::User.serialize(user.id),
+                            handle: user.localpart.clone(),
+                            did: Some(principal_did),
+                            federated_handle: cokret::user_handle(&url_builder, &user),
+                            principal_id: principal_server.principal_id(&user.localpart),
+                            display_name,
+                        }),
+                        Some(SessionGrantOneShotInfo {
+                            kind: SessionGrantKind::PrincipalSession,
+                            id: persisted_session_grant.id.to_string(),
+                            grant_jwt: session_grant.grant_jwt,
+                            session_public_key: session_grant.session_public_key,
+                            expires_at: session_grant.expires_at,
+                            audience: session_grant.audience,
+                            scopes: session_grant.scopes,
+                            principal_server: grant_target
+                                .principal_server_name
+                                .zip(grant_target.principal_server_endpoint)
+                                .map(|(name, endpoint)| SessionGrantPrincipalServerInfo {
+                                    name,
+                                    endpoint,
+                                }),
+                        }),
+                        Vec::new(),
+                    )),
+                );
+                Ok(())
             }
 
             // Feature compiled out: the disabled-path `if` above always

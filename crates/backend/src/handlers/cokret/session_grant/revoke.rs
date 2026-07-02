@@ -6,8 +6,8 @@ use coauth_data::{Pagination, RepositoryAccess, SessionGrant};
 use coauth_jose::jwt::Jwt;
 use cokret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_INVALID_PARAM,
-    REASON_PROOF_INVALID, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
-    ERROR_CODE_SESSION_REVOKE_SELECTOR_CONFLICT,
+    ERROR_CODE_SESSION_GRANT_NOT_FOUND, ERROR_CODE_SESSION_REVOKE_SELECTOR_CONFLICT,
+    REASON_PROOF_INVALID,
 };
 use cokret_core::{
     AccountLifecycleProof, DeviceId, Did, GrantId, SessionRevokeOutcome, SessionRevokeRequestBody,

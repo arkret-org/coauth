@@ -153,6 +153,9 @@ pub enum DpopError {
 
     #[error("DPoP replay store failed: {0}")]
     ReplayStore(String),
+
+    #[error("DPoP verifier is unavailable: {0}")]
+    VerifierUnavailable(String),
 }
 
 /// Replay-protection store for DPoP `jti` values (RFC 9449 §4.3).
@@ -290,8 +293,8 @@ impl Default for DpopVerifier {
 
 impl DpopVerifier {
     /// Construct a new verifier backed by a fresh in-process replay store.
-    /// Most callers should use [`DpopVerifier::shared`] instead so that all
-    /// handlers in this process share one replay window.
+    /// Production handlers should use the depot-injected verifier instead so
+    /// replay state stays repository-backed across replicas.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -306,8 +309,8 @@ impl DpopVerifier {
         Self { jti_store }
     }
 
-    /// Process-wide singleton. Required so that proofs presented to
-    /// different handlers share the same replay window.
+    /// Process-wide singleton for tests and single-process fixtures.
+    /// Production handlers must not fall back to this weaker store.
     #[must_use]
     pub fn shared() -> Self {
         static SHARED: LazyLock<DpopVerifier> = LazyLock::new(DpopVerifier::new);

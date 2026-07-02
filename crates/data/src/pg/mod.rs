@@ -33,10 +33,10 @@ pub mod dpop_replay;
 pub mod handle_audit;
 /// PostgreSQL notification persistence repositories.
 pub mod notification;
-/// PostgreSQL organization principal control + delegation repository.
-pub mod organization_control;
 /// PostgreSQL OAuth repositories.
 pub mod oauth;
+/// PostgreSQL organization principal control + delegation repository.
+pub mod organization_control;
 /// PostgreSQL personal access repositories.
 pub mod personal;
 /// PostgreSQL queue repositories.

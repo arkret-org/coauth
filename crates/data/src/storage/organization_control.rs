@@ -2,12 +2,12 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cokret_core::models::{
-    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
-};
 use coauth_data::Clock;
 use coauth_data::organization_control::{
     OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationPrincipalControl,
+};
+use cokret_core::models::{
+    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
 use rand_core::RngCore;
 

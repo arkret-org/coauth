@@ -76,6 +76,7 @@ pub async fn post_policy_check(
 ) -> Result<Json<PolicyCheckOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
+    require_policy_check_bearer(req, &cokret_config)?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     // Rebuild a fresh `PgRepositoryFactory` from the depot-injected pool;
@@ -130,6 +131,30 @@ pub async fn post_policy_check(
     )
     .await?;
     Ok(Json(response))
+}
+
+fn require_policy_check_bearer(
+    req: &Request,
+    cokret_config: &CokretConfig,
+) -> Result<(), CokretRouteError> {
+    let auth_header = req
+        .headers()
+        .get(http::header::AUTHORIZATION)
+        .ok_or_else(|| CokretRouteError::Unauthorized("missing authorization header".to_owned()))?;
+    let auth_str = auth_header
+        .to_str()
+        .map_err(|_| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+    let token = auth_str
+        .strip_prefix("Bearer ")
+        .or_else(|| auth_str.strip_prefix("bearer "))
+        .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
+    if cokret::principal_server_static_session_grant_bearer_matches(cokret_config, token) {
+        Ok(())
+    } else {
+        Err(CokretRouteError::Unauthorized(
+            "invalid policy-check bearer".to_owned(),
+        ))
+    }
 }
 
 /// Build the full [`PolicyCheckOutcome`] bound to the request

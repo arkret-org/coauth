@@ -8,14 +8,12 @@
 //! authorized, per `identity-did.md` §7. There are exactly two acceptable
 //! shapes:
 //!
-//! 1. **DID controller proof** — a verified proof of the organization DID
-//!    method inception / controller key, bound to `principal_control_realm_id`,
-//!    `fields.purpose = "principal_control"` and
-//!    `ck.profile.principal_control_realm.v1`.
-//! 2. **Delegated governance** — a delegation declared in the organization DID
-//!    Document / governance profile to an Account Authority or
-//!    `CokretGovernanceService` whose delegation purpose covers
-//!    `principal_control_realm_bootstrap`, recorded with the actual executor.
+//! 1. **DID controller proof** — a verified proof of the organization DID method inception /
+//!    controller key, bound to `principal_control_realm_id`, `fields.purpose = "principal_control"`
+//!    and `ck.profile.principal_control_realm.v1`.
+//! 2. **Delegated governance** — a delegation declared in the organization DID Document /
+//!    governance profile to an Account Authority or `CokretGovernanceService` whose delegation
+//!    purpose covers `principal_control_realm_bootstrap`, recorded with the actual executor.
 //!
 //! Crucially, a human OIDC / passkey / password session is **never** one of
 //! these. A logged-in admin can only ever appear as the `executed_by` executor
@@ -102,10 +100,12 @@ pub fn authorize_bootstrap(
         BootstrapAttempt::ControllerProof { proof_digest } => {
             // A controller proof stands on its own; an admin session, if any,
             // is irrelevant to the authority.
-            if proof_digest.as_deref().is_some_and(|d| !d.trim().is_empty()) {
+            if proof_digest
+                .as_deref()
+                .is_some_and(|d| !d.trim().is_empty())
+            {
                 Ok(AuthorizedBootstrap {
-                    bootstrap_authorization:
-                        OrganizationBootstrapAuthorization::DidControllerProof,
+                    bootstrap_authorization: OrganizationBootstrapAuthorization::DidControllerProof,
                     bootstrap_delegation_ref: None,
                     bootstrap_proof_digest: proof_digest,
                 })
@@ -126,8 +126,7 @@ pub fn authorize_bootstrap(
             if !has_admin_session {
                 return Err(OrganizationBootstrapError::SessionIsNotOrganizationControl);
             }
-            let delegation =
-                delegation.ok_or(OrganizationBootstrapError::DelegationNotFound)?;
+            let delegation = delegation.ok_or(OrganizationBootstrapError::DelegationNotFound)?;
             if delegation.organization_did != organization_did {
                 return Err(OrganizationBootstrapError::DelegationOrgMismatch);
             }
@@ -326,7 +325,10 @@ mod tests {
             out.bootstrap_authorization,
             OrganizationBootstrapAuthorization::DelegatedGovernance
         );
-        assert_eq!(out.bootstrap_delegation_ref.as_deref(), Some(d.delegation_ref.as_str()));
+        assert_eq!(
+            out.bootstrap_delegation_ref.as_deref(),
+            Some(d.delegation_ref.as_str())
+        );
     }
 
     #[test]
@@ -358,10 +360,7 @@ mod tests {
             now(),
         )
         .unwrap_err();
-        assert_eq!(
-            err,
-            OrganizationBootstrapError::DelegationPurposeNotCovered
-        );
+        assert_eq!(err, OrganizationBootstrapError::DelegationPurposeNotCovered);
     }
 
     #[test]

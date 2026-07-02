@@ -30,11 +30,9 @@ use routers::{
 /// Scan the Dioxus build output directory for the frontend JS entry point.
 ///
 /// Two layouts are produced by `dx build` depending on the profile:
-/// - **release** emits hashed assets under `assets/`
-///   (e.g. `assets/coauth-frontend-dxh<hash>.js`);
-/// - **debug** emits a non-hashed entry under `wasm/`
-///   (`wasm/coauth-frontend.js`), and the JS hard-codes an absolute
-///   `/wasm/coauth-frontend_bg.wasm` load path.
+/// - **release** emits hashed assets under `assets/` (e.g. `assets/coauth-frontend-dxh<hash>.js`);
+/// - **debug** emits a non-hashed entry under `wasm/` (`wasm/coauth-frontend.js`), and the JS
+///   hard-codes an absolute `/wasm/coauth-frontend_bg.wasm` load path.
 ///
 /// Returns the URL path the served page should reference for whichever layout
 /// is present (`/assets/...` or `/wasm/coauth-frontend.js`).
@@ -406,10 +404,9 @@ mod tests {
     async fn admin_openapi_yaml_is_served_from_admin_path() {
         let service = salvo::Service::new(build_admin_router(Router::new()));
 
-        let mut response =
-            TestClient::get("http://127.0.0.1:8698/_coauth/admin/openapi.yaml")
-                .send(&service)
-                .await;
+        let mut response = TestClient::get("http://127.0.0.1:8698/_coauth/admin/openapi.yaml")
+            .send(&service)
+            .await;
 
         assert_eq!(response.status_code, Some(StatusCode::OK));
         assert_eq!(
@@ -427,10 +424,9 @@ mod tests {
 
         // The protocol-surface well-known path must NOT be served by the admin
         // router — it is published by the account/protocol router instead.
-        let not_found =
-            TestClient::get("http://127.0.0.1:8698/.well-known/cokret/openapi.yaml")
-                .send(&service)
-                .await;
+        let not_found = TestClient::get("http://127.0.0.1:8698/.well-known/cokret/openapi.yaml")
+            .send(&service)
+            .await;
         assert_eq!(not_found.status_code, Some(StatusCode::NOT_FOUND));
     }
 
@@ -438,10 +434,9 @@ mod tests {
     async fn cokret_protocol_openapi_yaml_is_served_from_well_known_path() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
 
-        let mut response =
-            TestClient::get("http://127.0.0.1:8698/.well-known/cokret/openapi.yaml")
-                .send(&service)
-                .await;
+        let mut response = TestClient::get("http://127.0.0.1:8698/.well-known/cokret/openapi.yaml")
+            .send(&service)
+            .await;
 
         assert_eq!(response.status_code, Some(StatusCode::OK));
         assert_eq!(

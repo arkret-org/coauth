@@ -424,9 +424,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             if let Some(expected_nonce) = expected_nonce.filter(|value| !value.is_empty()) {
                 claims::NONCE
                     .extract_required_with_options(&mut claims, expected_nonce)
-                    .map_err(|error| {
-                        format!("upstream ID token nonce binding failed: {error}")
-                    })?;
+                    .map_err(|error| format!("upstream ID token nonce binding failed: {error}"))?;
             }
         }
 

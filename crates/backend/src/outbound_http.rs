@@ -181,9 +181,9 @@ impl reqwest::dns::Resolve for TracingResolver {
         let parsed_name = match Name::from_str(name.as_str()) {
             Ok(parsed) => parsed,
             Err(error) => {
-                return Box::pin(async move {
-                    Err(Box::new(error) as Box<dyn StdError + Send + Sync>)
-                });
+                return Box::pin(
+                    async move { Err(Box::new(error) as Box<dyn StdError + Send + Sync>) },
+                );
             }
         };
         if !private_networks_allowed() {

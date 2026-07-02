@@ -125,10 +125,12 @@ pub struct CokretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub starid: Option<StaridConfig>,
 
-    /// Optional explicit service DID for the coauth deployment.
+    /// Explicit service DID for the coauth deployment.
     ///
-    /// When omitted, the backend derives a `did:web` identifier from
-    /// `http.public_base`.
+    /// Production deployments MUST configure a `did:webvh` service DID. The
+    /// only `did:web` service DID exception is the explicit personal-node
+    /// no-history profile selected by `deployment_profile=personal_node` and
+    /// `principal_method=did:web`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_did: Option<String>,
 
@@ -404,6 +406,13 @@ impl CokretConfig {
         ) && matches!(self.principal_method, PrincipalMethodConfig::DidWeb)
     }
 
+    /// Returns whether this deployment explicitly opts into the no-history
+    /// `did:web` service DID exception.
+    #[must_use]
+    pub const fn did_web_service_did_allowed(&self) -> bool {
+        self.did_web_principal_allowed()
+    }
+
     /// Validate the configured `trust_domain` (if any) against the SDK
     /// `ck:trust_domain:<scope>` wire format. Returns the borrowed
     /// scope half on success so call-sites can build the
@@ -468,6 +477,44 @@ impl ConfigurationSection for CokretConfig {
         {
             return Err(std::io::Error::other(
                 "cokret.principal_method=did:web requires cokret.deployment_profile=personal_node",
+            )
+            .into());
+        }
+
+        match self.service_did.as_deref().map(str::trim) {
+            Some("") => {
+                return Err(std::io::Error::other("cokret.service_did must not be empty").into());
+            }
+            Some(service_did) if service_did.starts_with("did:webvh:") => {}
+            Some(service_did)
+                if service_did.starts_with("did:web:") && self.did_web_service_did_allowed() => {}
+            Some(service_did) if service_did.starts_with("did:web:") => {
+                return Err(std::io::Error::other(
+                    "cokret.service_did=did:web requires the explicit personal-node no-history profile",
+                )
+                .into());
+            }
+            Some(_) => {
+                return Err(std::io::Error::other(
+                    "cokret.service_did must use did:webvh, except explicit personal-node no-history did:web",
+                )
+                .into());
+            }
+            None if !self.did_web_service_did_allowed() => {
+                return Err(std::io::Error::other(
+                    "cokret.service_did is required for non-personal-node deployments and must be did:webvh",
+                )
+                .into());
+            }
+            None => {}
+        }
+
+        if let Some(issuer_did) = self.issuer_did.as_deref().map(str::trim)
+            && issuer_did.starts_with("did:web:")
+            && !self.did_web_service_did_allowed()
+        {
+            return Err(std::io::Error::other(
+                "cokret.issuer_did=did:web requires the explicit personal-node no-history profile",
             )
             .into());
         }
@@ -622,6 +669,13 @@ fn default_path_prefix() -> String {
 mod tests {
     use super::*;
 
+    fn valid_service_config() -> CokretConfig {
+        CokretConfig {
+            service_did: Some("did:webvh:ztest:auth.example:webvh:service".to_owned()),
+            ..CokretConfig::default()
+        }
+    }
+
     #[test]
     fn trust_domain_accepts_well_formed_scope() {
         assert!(CokretConfig::validate_trust_domain("ck:trust_domain:example.net").is_ok());
@@ -656,7 +710,7 @@ mod tests {
     fn lookup_oob_kind_is_fail_closed_until_strikes_are_durable() {
         let config = CokretConfig {
             oob_code_kind: OobCodeKindConfig::Lookup,
-            ..CokretConfig::default()
+            ..valid_service_config()
         };
         let figment = figment::Figment::new();
         assert!(config.validate(&figment).is_err());
@@ -707,6 +761,34 @@ mod tests {
         };
         assert!(!organization_web.did_web_principal_allowed());
         assert!(organization_web.validate(&figment::Figment::new()).is_err());
+    }
+
+    #[test]
+    fn service_did_requires_webvh_or_explicit_no_history_web() {
+        assert!(
+            CokretConfig::default()
+                .validate(&figment::Figment::new())
+                .is_err()
+        );
+        assert!(
+            valid_service_config()
+                .validate(&figment::Figment::new())
+                .is_ok()
+        );
+
+        let organization_web = CokretConfig {
+            service_did: Some("did:web:auth.example".to_owned()),
+            ..CokretConfig::default()
+        };
+        assert!(organization_web.validate(&figment::Figment::new()).is_err());
+
+        let personal_web = CokretConfig {
+            deployment_profile: DeploymentProfileConfig::PersonalNode,
+            principal_method: PrincipalMethodConfig::DidWeb,
+            service_did: Some("did:web:auth.example".to_owned()),
+            ..CokretConfig::default()
+        };
+        assert!(personal_web.validate(&figment::Figment::new()).is_ok());
     }
 
     #[test]

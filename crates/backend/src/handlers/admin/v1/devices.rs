@@ -192,10 +192,7 @@ async fn aggregate_devices(
             filter = filter.for_account(wanted);
         }
 
-        let page = repo
-            .oauth_session_grant()
-            .list(filter, pagination)
-            .await?;
+        let page = repo.oauth_session_grant().list(filter, pagination).await?;
         let has_next = page.has_next_page;
 
         for edge in page.edges {
@@ -275,17 +272,18 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
     // High-risk: a supplied approval_proof MUST be a real detached JWS
     // bound to the admin DID over the canonical revocation transcript;
     // a forged/garbage proof is rejected rather than logged as a boolean.
-    let approval_verification_method = crate::handlers::admin::v1::revocation_approval::verify_revocation_approval_proof(
-        depot,
-        &mut repo,
-        admin_user,
-        "device.revoke",
-        &device_id,
-        None,
-        &reason,
-        body.approval_proof.as_deref(),
-    )
-    .await?;
+    let approval_verification_method =
+        crate::handlers::admin::v1::revocation_approval::verify_revocation_approval_proof(
+            depot,
+            &mut repo,
+            admin_user,
+            "device.revoke",
+            &device_id,
+            None,
+            &reason,
+            body.approval_proof.as_deref(),
+        )
+        .await?;
     let mut rng = crate::handlers::account::make_rng();
 
     // Cascade-revoke every active session grant tied to this device, in
@@ -372,17 +370,18 @@ pub async fn revoke_account_device(
     }
     // High-risk: a supplied approval_proof MUST be a real detached JWS
     // bound to the admin DID over the canonical revocation transcript.
-    let approval_verification_method = crate::handlers::admin::v1::revocation_approval::verify_revocation_approval_proof(
-        depot,
-        &mut repo,
-        admin_user,
-        "device.revoke",
-        &device_id,
-        Some(&account_id.to_string()),
-        &reason,
-        body.approval_proof.as_deref(),
-    )
-    .await?;
+    let approval_verification_method =
+        crate::handlers::admin::v1::revocation_approval::verify_revocation_approval_proof(
+            depot,
+            &mut repo,
+            admin_user,
+            "device.revoke",
+            &device_id,
+            Some(&account_id.to_string()),
+            &reason,
+            body.approval_proof.as_deref(),
+        )
+        .await?;
     let mut rng = crate::handlers::account::make_rng();
 
     // Same atomic cascade as the flat endpoint: device-revoke audit entry +

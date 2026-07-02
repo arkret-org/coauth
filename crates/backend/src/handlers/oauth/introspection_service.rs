@@ -350,7 +350,10 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
                 device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
-                cokret_principal_did: disclosure.is_full().then_some(actor_principal_did).flatten(),
+                cokret_principal_did: disclosure
+                    .is_full()
+                    .then_some(actor_principal_did)
+                    .flatten(),
                 cokret_device_id: disclosure.is_full().then_some(device_id).flatten(),
                 cokret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
