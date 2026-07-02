@@ -384,6 +384,8 @@ pub async fn device_enroll_endpoint(
         principal_id: principal_id.clone(),
         device_id: device_id.as_str().to_owned(),
         device_public_key: device_public_key_multibase,
+        hpke_key: body.hpke_key.clone(),
+        algorithms: body.algorithms.clone(),
         device_key_algorithm: None,
         authorized_by: DeviceOrPrincipalRef::Did(authority_did.clone()),
         scopes: None,
