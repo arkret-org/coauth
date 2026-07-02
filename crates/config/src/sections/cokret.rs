@@ -23,6 +23,12 @@ const TRUST_DOMAIN_PREFIX: &str = "ck:trust_domain:";
 const SESSION_GRANT_TTL_MICROS: i64 = 8 * 60 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
 const SESSION_GRANT_TTL_MAX_SECONDS: i64 = 86_400;
+const SERVICE_DID_BOOTSTRAP_HELP: &str = concat!(
+    "Local development: run `coauth config generate --dev -o config.dev.yaml`. ",
+    "Production: run `coauth config service-did init --starid-url <https://starid.example> ",
+    "--host <auth.example.com> --key-output <service-did-keys.yaml>` and copy the emitted ",
+    "`cokret.service_did` into your config."
+);
 
 fn default_session_grant_ttl() -> Duration {
     Duration::microseconds(SESSION_GRANT_TTL_MICROS)
@@ -483,27 +489,30 @@ impl ConfigurationSection for CokretConfig {
 
         match self.service_did.as_deref().map(str::trim) {
             Some("") => {
-                return Err(std::io::Error::other("cokret.service_did must not be empty").into());
+                return Err(std::io::Error::other(format!(
+                    "cokret.service_did must not be empty. {SERVICE_DID_BOOTSTRAP_HELP}"
+                ))
+                .into());
             }
             Some(service_did) if service_did.starts_with("did:webvh:") => {}
             Some(service_did)
                 if service_did.starts_with("did:web:") && self.did_web_service_did_allowed() => {}
             Some(service_did) if service_did.starts_with("did:web:") => {
-                return Err(std::io::Error::other(
-                    "cokret.service_did=did:web requires the explicit personal-node no-history profile",
-                )
+                return Err(std::io::Error::other(format!(
+                    "cokret.service_did=did:web requires the explicit personal-node no-history profile. {SERVICE_DID_BOOTSTRAP_HELP}"
+                ))
                 .into());
             }
             Some(_) => {
-                return Err(std::io::Error::other(
-                    "cokret.service_did must use did:webvh, except explicit personal-node no-history did:web",
-                )
+                return Err(std::io::Error::other(format!(
+                    "cokret.service_did must use did:webvh, except explicit personal-node no-history did:web. {SERVICE_DID_BOOTSTRAP_HELP}"
+                ))
                 .into());
             }
             None if !self.did_web_service_did_allowed() => {
-                return Err(std::io::Error::other(
-                    "cokret.service_did is required for non-personal-node deployments and must be did:webvh",
-                )
+                return Err(std::io::Error::other(format!(
+                    "cokret.service_did is required for non-personal-node deployments and must be did:webvh. {SERVICE_DID_BOOTSTRAP_HELP}"
+                ))
                 .into());
             }
             None => {}

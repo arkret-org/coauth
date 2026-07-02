@@ -56,8 +56,7 @@ dev-down:
 
 # Generate a dev config pointing to the local Docker PostgreSQL
 config-dev-generate:
-    cargo run -p coauth -- config generate > config.dev.yaml.tmp
-    sed -i 's|uri: postgresql://|uri: postgresql://coauth:coauth@localhost/coauth|' config.dev.yaml.tmp
+    cargo run -p coauth -- config generate --dev -o config.dev.yaml.tmp
     mv config.dev.yaml.tmp config.dev.yaml
     @echo "Created config.dev.yaml"
 
@@ -169,9 +168,9 @@ docs-zh:
 doctor *ARGS:
     cargo run -p coauth -- doctor {{ARGS}}
 
-# Generate a default configuration file
-config-generate:
-    cargo run -p coauth -- config generate
+# Generate a configuration file
+config-generate *ARGS:
+    cargo run -p coauth -- config generate {{ARGS}}
 
 # Clean all build artifacts
 clean:

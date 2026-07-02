@@ -31,6 +31,7 @@ coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
 console = {workspace = true}
+cokret-core = {workspace = true}
 crc = {workspace = true}
 deadpool = {workspace = true}
 dialoguer = {workspace = true}
@@ -38,6 +39,7 @@ diesel = {workspace = true}
 diesel-async = {workspace = true}
 diesel_migrations = {workspace = true}
 dotenvy = {workspace = true}
+ed25519-dalek = {workspace = true}
 figment = {workspace = true}
 futures-util = {workspace = true}
 headers = {workspace = true}
@@ -68,6 +70,7 @@ sentry = {workspace = true}
 sentry-tracing = {workspace = true}
 serde_json = {workspace = true}
 serde_yaml_ng = {workspace = true}
+sha2 = {workspace = true}
 tokio = {workspace = true}
 tokio-postgres = {workspace = true}
 tokio-util = {workspace = true}

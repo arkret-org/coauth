@@ -85,6 +85,11 @@ cokret:
   # deployment_profile: personal_node and principal_method: did:web are set.
   deployment_profile: organization
   principal_method: did:webvh
+  # Production deployments must use a real did:webvh service DID minted through
+  # starid:
+  #   coauth config service-did init --starid-url https://starid.example \
+  #     --host auth.example.com --key-output service-did-keys.yaml
+  service_did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service
   principal_server_url: https://local.host/
   # Deployment trust-domain identifier injected into Realm policy and the
   # server-describe document. Wire form: ck:trust_domain:<scope> where <scope>
