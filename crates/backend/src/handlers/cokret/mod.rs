@@ -20,15 +20,14 @@ use coauth_config::CokretConfig;
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
-use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::JwtSignatureError;
 use coauth_keystore::{Keystore, WrongAlgorithmError};
+use coauth_oauth_types::scope::Scope;
 use cokret_core::ErrorEnvelope;
 use cokret_core::error::{
     ERROR_CODE_BAD_JSON, ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_INTERNAL_ERROR,
     ERROR_CODE_INVALID_PARAM, ERROR_CODE_NOT_FOUND, ERROR_CODE_UNAUTHENTICATED,
 };
-use oauth_types::scope::Scope;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -168,7 +167,7 @@ impl From<coauth_data::RepositoryError> for CokretRouteError {
 
 /// Authorization decision for a session-grant administrative endpoint.
 #[derive(Debug, Clone, Copy)]
-enum SessionGrantAuthz {
+pub(crate) enum SessionGrantAuthz {
     /// The caller presented an admin scope. Allowed for read and write.
     Admin,
     /// The caller presented the `server_name` `session.bind` scope.
@@ -185,8 +184,8 @@ enum SessionGrantAuthz {
 /// authenticated as, so it must not be able to enumerate session-grant
 /// metadata across other subjects/audiences (SEC-SG-ENUM).
 #[derive(Debug, Clone)]
-struct SessionGrantCaller {
-    authz: SessionGrantAuthz,
+pub(crate) struct SessionGrantCaller {
+    pub(crate) authz: SessionGrantAuthz,
     allowed_audiences: Option<Vec<String>>,
 }
 
@@ -214,7 +213,7 @@ impl SessionGrantCaller {
     ///   requests an audience, that audience must be in the allow-list. When it requests none and
     ///   exactly one audience is configured for it, that single audience is auto-pinned. Otherwise
     ///   the caller must disambiguate, so cross-subject enumeration is refused.
-    fn resolve_read_audience(
+    pub(crate) fn resolve_read_audience(
         &self,
         requested: Option<&str>,
     ) -> Result<Option<String>, CokretRouteError> {
@@ -252,7 +251,7 @@ impl SessionGrantCaller {
 /// (SEC-SG-EXPIRY / REL-04). The legacy behaviour only inspected
 /// `session.scope` and would happily authorize a long-expired or revoked
 /// token.
-async fn require_session_grant_caller(
+pub(crate) async fn require_session_grant_caller(
     req: &Request,
     depot: &Depot,
 ) -> Result<SessionGrantCaller, CokretRouteError> {
@@ -479,57 +478,29 @@ fn map_did_resolve_error(
     }
 }
 
-pub(crate) fn service_did(url_builder: &UrlBuilder) -> String {
-    let base = url_builder.http_base();
-    let host = match base.port() {
-        Some(port) => format!(
-            "{}%3A{}",
-            base.host_str().unwrap_or("localhost").to_lowercase(),
-            port
-        ),
-        None => base.host_str().unwrap_or("localhost").to_lowercase(),
-    };
-
-    let mut segments = vec![host];
-    segments.extend(
-        base.path_segments()
-            .into_iter()
-            .flatten()
-            .filter(|segment| !segment.is_empty())
-            .map(ToOwned::to_owned),
-    );
-
-    format!("did:web:{}", segments.join(":"))
-}
-
-pub(crate) fn service_did_for(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {
+/// The deployment's configured service DID.
+///
+/// There is deliberately NO host-derived `did:web` fallback here:
+/// `identity-did.md` §3 makes `did:webvh` the default service DID method and
+/// any `did:web` downgrade an explicit no-history choice, so an unconfigured
+/// `cokret.service_did` fails startup validation instead of silently minting
+/// a `did:web` identity (see `CokretConfig::validate`).
+pub(crate) fn service_did_for(cokret_config: &CokretConfig) -> String {
     cokret_config
         .service_did
         .clone()
-        .unwrap_or_else(|| service_did(url_builder))
+        .expect("cokret.service_did is enforced by startup configuration validation")
 }
 
-pub(crate) fn issuer_did_for(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {
+pub(crate) fn issuer_did_for(cokret_config: &CokretConfig) -> String {
     cokret_config
         .issuer_did
         .clone()
-        .unwrap_or_else(|| service_did_for(url_builder, cokret_config))
+        .unwrap_or_else(|| service_did_for(cokret_config))
 }
 
-pub(crate) fn user_did(url_builder: &UrlBuilder, user: &User) -> String {
-    format!("{}:users:{}", service_did(url_builder), user.id)
-}
-
-pub(crate) fn user_did_for(
-    url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
-    user: &User,
-) -> String {
-    format!(
-        "{}:users:{}",
-        service_did_for(url_builder, cokret_config),
-        user.id
-    )
+pub(crate) fn user_did_for(cokret_config: &CokretConfig, user: &User) -> String {
+    format!("{}:users:{}", service_did_for(cokret_config), user.id)
 }
 
 #[must_use]
@@ -551,12 +522,8 @@ pub(crate) fn ensure_principal_did_method_allowed(
 ///
 /// This identifies the authenticated coauth account. Principal-server DIDs are
 /// resolved later by the `session-grants` bridge for the requested audience.
-pub(crate) fn oidc_subject_for_user(
-    url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
-    user: &User,
-) -> String {
-    user_did_for(url_builder, cokret_config, user)
+pub(crate) fn oidc_subject_for_user(cokret_config: &CokretConfig, user: &User) -> String {
+    user_did_for(cokret_config, user)
 }
 
 #[derive(Debug, Clone)]
@@ -812,7 +779,11 @@ fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) 
 }
 
 pub(crate) fn primary_device_id(scope: &Scope) -> Option<String> {
-    primary_device_id_from_tokens(scope.iter().map(oauth_types::scope::ScopeToken::as_str))
+    primary_device_id_from_tokens(
+        scope
+            .iter()
+            .map(coauth_oauth_types::scope::ScopeToken::as_str),
+    )
 }
 
 fn preferred_signing_key(
@@ -841,28 +812,8 @@ fn preferred_signing_key(
     })
 }
 
-pub(crate) fn preferred_public_signing_key(key_store: &Keystore) -> Option<PublicJsonWebKey> {
-    let (alg, key) = preferred_signing_key(key_store)?;
-    let public_jwks = key_store.public_jwks();
-
-    public_jwks
-        .iter()
-        .find(|candidate| candidate.alg() == Some(&alg) && candidate.kid() == key.kid())
-        .cloned()
-        .or_else(|| {
-            public_jwks
-                .iter()
-                .find(|candidate| candidate.kid() == key.kid())
-                .cloned()
-        })
-}
-
-pub(crate) fn parse_local_user_did_for(
-    url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
-    did: &str,
-) -> Option<Ulid> {
-    let prefix = format!("{}:users:", service_did_for(url_builder, cokret_config));
+pub(crate) fn parse_local_user_did_for(cokret_config: &CokretConfig, did: &str) -> Option<Ulid> {
+    let prefix = format!("{}:users:", service_did_for(cokret_config));
     did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
 }
 
@@ -962,10 +913,9 @@ pub async fn debug_issue_dpop_grant(
     // most recent one for the user identified by `actor_id`, or fail
     // closed when none exists. The cotest harness registers the user
     // first, so a session always exists in practice.
-    let user_id = parse_local_user_did_for(&url_builder, &cokret_config, &body.actor_id)
-        .ok_or_else(|| {
-            CokretRouteError::BadRequest("actor_id is not a local Cokret user DID".to_owned())
-        })?;
+    let user_id = parse_local_user_did_for(&cokret_config, &body.actor_id).ok_or_else(|| {
+        CokretRouteError::BadRequest("actor_id is not a local Cokret user DID".to_owned())
+    })?;
     let user = repo
         .user()
         .lookup(user_id)
@@ -993,7 +943,6 @@ pub async fn debug_issue_dpop_grant(
 
     let material = issue_test_session_grant_for_audience(
         &*clock,
-        &url_builder,
         &cokret_config,
         &key_store,
         &browser_session,

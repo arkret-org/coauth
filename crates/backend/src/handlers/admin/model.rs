@@ -17,66 +17,6 @@ use serde::Serialize;
 use thiserror::Error;
 use ulid::Ulid;
 
-/// A user
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct User {
-    #[serde(skip)]
-    id: Ulid,
-
-    /// The handle of the user.
-    handle: String,
-
-    /// When the user was created
-    created_at: DateTime<Utc>,
-
-    /// When the user was last updated through the local account model.
-    updated_at: DateTime<Utc>,
-
-    /// When the user was locked. If null, the user is not locked.
-    locked_at: Option<DateTime<Utc>>,
-
-    /// When the user was deactivated. If null, the user is not deactivated.
-    deactivated_at: Option<DateTime<Utc>>,
-
-    /// Whether the user can request admin privileges.
-    admin: bool,
-
-    /// Human-facing display name.
-    display_name: Option<String>,
-
-    /// Optional avatar URL.
-    avatar_url: Option<String>,
-
-    /// Preferred locale stored for this user.
-    preferred_locale: Option<String>,
-}
-
-impl From<coauth_data::User> for User {
-    fn from(user: coauth_data::User) -> Self {
-        Self {
-            id: user.id,
-            handle: user.localpart,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-            locked_at: user.locked_at,
-            deactivated_at: user.deactivated_at,
-            admin: user.can_request_admin,
-            display_name: user.display_name,
-            avatar_url: user.avatar_url,
-            preferred_locale: user.preferred_locale,
-        }
-    }
-}
-
-impl Resource for User {
-    const KIND: &'static str = "user";
-    const PATH: &'static str = "/_coauth/admin/users";
-
-    fn id(&self) -> String {
-        self.id.to_string()
-    }
-}
-
 /// An email address for a user
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct UserEmail {

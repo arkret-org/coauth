@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
-use oauth_types::scope::Scope;
+use coauth_oauth_types::scope::Scope;
 use serde::Serialize;
 use ulid::Ulid;
 

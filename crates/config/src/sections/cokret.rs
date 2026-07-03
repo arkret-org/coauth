@@ -133,10 +133,11 @@ pub struct CokretConfig {
 
     /// Explicit service DID for the coauth deployment.
     ///
-    /// Production deployments MUST configure a `did:webvh` service DID. The
-    /// only `did:web` service DID exception is the explicit personal-node
-    /// no-history profile selected by `deployment_profile=personal_node` and
-    /// `principal_method=did:web`.
+    /// Required: startup validation fails fast when omitted — there is no
+    /// host-derived `did:web` fallback. Deployments MUST configure a
+    /// `did:webvh` service DID; the only `did:web` exception is the explicit
+    /// personal-node no-history profile selected by
+    /// `deployment_profile=personal_node` and `principal_method=did:web`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_did: Option<String>,
 
@@ -509,13 +510,16 @@ impl ConfigurationSection for CokretConfig {
                 ))
                 .into());
             }
-            None if !self.did_web_service_did_allowed() => {
+            // No implicit host-derived `did:web` fallback exists anywhere:
+            // even the personal-node no-history profile must configure its
+            // service DID explicitly, so startup fails fast here instead of
+            // a request path silently minting a downgraded identity.
+            None => {
                 return Err(std::io::Error::other(format!(
-                    "cokret.service_did is required for non-personal-node deployments and must be did:webvh. {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "cokret.service_did is required (did:webvh by default; explicit did:web only for the personal-node no-history profile). {SERVICE_DID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
-            None => {}
         }
 
         if let Some(issuer_did) = self.issuer_did.as_deref().map(str::trim)
@@ -753,10 +757,24 @@ mod tests {
         let personal_web = CokretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
+            // Even the personal-node no-history profile must configure its
+            // service DID explicitly — omitting it fails validation.
+            service_did: Some("did:web:personal.example".to_owned()),
             ..CokretConfig::default()
         };
         assert!(personal_web.did_web_principal_allowed());
         assert!(personal_web.validate(&figment::Figment::new()).is_ok());
+
+        let personal_web_unconfigured = CokretConfig {
+            deployment_profile: DeploymentProfileConfig::PersonalNode,
+            principal_method: PrincipalMethodConfig::DidWeb,
+            ..CokretConfig::default()
+        };
+        assert!(
+            personal_web_unconfigured
+                .validate(&figment::Figment::new())
+                .is_err()
+        );
 
         let personal_default = CokretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,

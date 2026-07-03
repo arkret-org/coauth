@@ -150,10 +150,7 @@ pub async fn deactivate_user(
 
 fn map_account_profile_error(error: AccountProfileError) -> RouteError {
     match error {
-        AccountProfileError::NotFound => RouteError::NotFound,
-        AccountProfileError::Unauthorized | AccountProfileError::BrowserSessionRequired => {
-            RouteError::Unauthorized
-        }
+        AccountProfileError::BrowserSessionRequired => RouteError::Unauthorized,
         AccountProfileError::DeactivationDisabled => {
             RouteError::BadRequest("Account deactivation is not allowed".into())
         }

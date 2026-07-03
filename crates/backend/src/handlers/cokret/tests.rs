@@ -93,10 +93,23 @@ fn service_and_user_identifiers_follow_cokret_shape() {
     let now = Utc::now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
 
-    assert_eq!(service_did(&url_builder), "did:web:auth.example.com:coauth");
+    // There is no host-derived `did:web` fallback any more: the service DID
+    // is always the explicitly configured one (did:webvh by default; startup
+    // validation fails fast when it is missing).
+    let cokret_config = CokretConfig {
+        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
+        ..CokretConfig::default()
+    };
     assert_eq!(
-        user_did(&url_builder, &user),
-        format!("did:web:auth.example.com:coauth:users:{}", user.id)
+        service_did_for(&cokret_config),
+        "did:webvh:ztest:auth.example.com:webvh:service"
+    );
+    assert_eq!(
+        user_did_for(&cokret_config, &user),
+        format!(
+            "did:webvh:ztest:auth.example.com:webvh:service:users:{}",
+            user.id
+        )
     );
     // Spec 7157ee8 §3.1 — canonical handle form is
     // `<localpart>:<domain>` (was `<localpart>@<domain>` pre-R3.1).
@@ -592,7 +605,7 @@ fn session_grant_is_signed_for_the_user_did() {
     assert_eq!(payload.grant_id, grant.grant_id);
     assert_eq!(
         payload.subject,
-        user_did_for(&url_builder, &cokret_config, &browser_session.user)
+        user_did_for(&cokret_config, &browser_session.user)
     );
     assert_eq!(
         payload.audience,
@@ -1068,7 +1081,6 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let grant_config = personal_node_did_web_config();
     let material = issue_session_grant_for_audience(
         &*state.clock,
-        &state.url_builder,
         &grant_config,
         &state.key_store,
         &browser_session,
@@ -1097,11 +1109,36 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     .unwrap();
     repo.save().await.unwrap();
 
+    // ① A `cnf`-bound grant introspected WITHOUT a holder proof must fail
+    // closed: `proof_required: true`, not usable, and no grant metadata.
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
                 "grant_jwt": material.grant_jwt,
                 "audience": grant.audience,
+            })),
+        )
+        .await;
+    response.assert_status(StatusCode::OK);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["active"], false);
+    assert_eq!(body["status"], "proof_required");
+    assert_eq!(body["proof_required"], true);
+    assert_eq!(body["grant"], serde_json::Value::Null);
+
+    // ② With a device-signed holder proof the bound grant introspects active
+    // and exposes `cnf.jkt` to the Principal Server.
+    let challenge = format!("introspect-{}", grant.grant_id);
+    let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
+    let response = state
+        .request(
+            Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
+                "grant_jwt": material.grant_jwt,
+                "audience": grant.audience,
+                "proof": {
+                    "challenge": challenge,
+                    "proof_jwt": proof_jwt,
+                }
             })),
         )
         .await;
@@ -1141,7 +1178,6 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         },
     });
     let material = mint_agent_session_grant(
-        &state.url_builder,
         &state.cokret_config,
         &state.key_store,
         "did:web:agent.example",
@@ -1171,6 +1207,11 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         .unwrap();
     repo.save().await.unwrap();
 
+    // The agent grant is `cnf`-bound, so a proofless introspection reports
+    // `proof_required` — present the runtime-key holder proof.
+    let challenge = format!("introspect-{}", persisted.grant_id);
+    let proof_jwt =
+        session_grant_introspection_proof(&persisted, &material, &session_key, &challenge);
     let response = state
         .request(
             Request::post("/_cokret/gate/account/session-grants/introspect")
@@ -1178,6 +1219,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
                     "audience": audience,
+                    "proof": {
+                        "challenge": challenge,
+                        "proof_jwt": proof_jwt,
+                    }
                 })),
         )
         .await;

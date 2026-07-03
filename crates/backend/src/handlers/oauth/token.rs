@@ -5,11 +5,11 @@ use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SiteConfig, SystemClock, UrlBuilder,
 };
 use coauth_keystore::Keystore;
+use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
+use coauth_oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
 use coauth_policy::PolicyInstance;
 use coauth_principal::ConnectorAdmin;
 use coauth_templates::Templates;
-use oauth_types::errors::{ClientError, ClientErrorCode};
-use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
 use rand_chacha::ChaChaRng;
@@ -45,7 +45,7 @@ pub(crate) enum RouteError {
     BadRequest,
 
     #[error("pkce verification failed")]
-    PkceVerification(#[from] oauth_types::pkce::CodeChallengeError),
+    PkceVerification(#[from] coauth_oauth_types::pkce::CodeChallengeError),
 
     #[error("client not found")]
     ClientNotFound,
@@ -103,22 +103,6 @@ pub(crate) enum RouteError {
     #[error("failed to load oauth session {0}")]
     NoSuchOAuthSession(Ulid),
 
-    #[error(
-        "failed to load the next refresh token ({next:?}) from the previous one ({previous:?})"
-    )]
-    NoSuchNextRefreshToken { next: Ulid, previous: Ulid },
-
-    #[error(
-        "failed to load the access token ({access_token:?}) associated with the next refresh token ({refresh_token:?})"
-    )]
-    NoSuchNextAccessToken {
-        access_token: Ulid,
-        refresh_token: Ulid,
-    },
-
-    #[error("no access token associated with the refresh token {refresh_token:?}")]
-    NoAccessTokenOnRefreshToken { refresh_token: Ulid },
-
     #[error("device code grant expired")]
     DeviceCodeExpired,
 
@@ -146,10 +130,7 @@ impl Scribe for RouteError {
             | Self::ClientCredentialsVerification { .. }
             | Self::NoSuchBrowserSession(_)
             | Self::NoSuchOAuthSession(_)
-            | Self::ProvisionDeviceFailed(_)
-            | Self::NoSuchNextRefreshToken { .. }
-            | Self::NoSuchNextAccessToken { .. }
-            | Self::NoAccessTokenOnRefreshToken { .. } => {
+            | Self::ProvisionDeviceFailed(_) => {
                 res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
                 res.render(Json(ClientError::from(ClientErrorCode::ServerError)));
             }
@@ -276,19 +257,6 @@ impl From<RefreshTokenExchangeError> for RouteError {
                 Self::ClientIDMismatch { expected, actual }
             }
             RefreshTokenExchangeError::NoSuchOAuthSession(id) => Self::NoSuchOAuthSession(id),
-            RefreshTokenExchangeError::NoSuchNextRefreshToken { next, previous } => {
-                Self::NoSuchNextRefreshToken { next, previous }
-            }
-            RefreshTokenExchangeError::NoSuchNextAccessToken {
-                access_token,
-                refresh_token,
-            } => Self::NoSuchNextAccessToken {
-                access_token,
-                refresh_token,
-            },
-            RefreshTokenExchangeError::NoAccessTokenOnRefreshToken { refresh_token } => {
-                Self::NoAccessTokenOnRefreshToken { refresh_token }
-            }
             RefreshTokenExchangeError::Repository(err) => Self::Internal(Box::new(err)),
         }
     }

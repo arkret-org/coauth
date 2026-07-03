@@ -6,10 +6,10 @@ use coauth_data::{
     new_id,
 };
 use coauth_iana::oauth::PkceCodeChallengeMethod;
+use coauth_oauth_types::requests::ResponseMode;
+use coauth_oauth_types::scope::Scope;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth_types::requests::ResponseMode;
-use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
@@ -331,7 +331,7 @@ impl OAuthAuthorizationGrantRepository for PgOAuthAuthorizationGrantRepository<'
 
         DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
 
-        // TODO(COA-HYG-02): check affected rows & new methods
+        // TODO: check affected rows & new methods
         let grant = grant
             .fulfill(fulfilled_at, session)
             .map_err(DatabaseError::to_invalid_operation)?;

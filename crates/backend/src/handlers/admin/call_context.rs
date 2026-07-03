@@ -8,7 +8,7 @@ use coauth_data::personal::session::{PersonalSession, PersonalSessionOwner};
 use coauth_data::{
     BoxClock, BoxRepository, RepositoryError, Session, TokenFormatError, TokenType, User,
 };
-use oauth_types::scope::Scope;
+use coauth_oauth_types::scope::Scope;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use ulid::Ulid;

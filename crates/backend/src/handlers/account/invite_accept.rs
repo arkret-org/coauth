@@ -191,7 +191,7 @@ pub async fn post_verify_invite(
         }));
         return Ok(());
     }
-    let expected_aud = did_resolver.service_did(&url_builder, &cokret_config);
+    let expected_aud = did_resolver.service_did(&cokret_config);
 
     let mut repo = depot.repo().await?;
     let nonce_store = shared_nonce_store();

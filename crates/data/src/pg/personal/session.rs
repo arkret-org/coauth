@@ -8,9 +8,9 @@ use coauth_data::personal::{
     PersonalAccessToken, PersonalSessionFilter, PersonalSessionRepository, PersonalSessionState,
 };
 use coauth_data::{Clock, Page, Pagination, User, new_id};
+use coauth_oauth_types::scope::Scope;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;

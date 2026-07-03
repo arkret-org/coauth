@@ -8,10 +8,10 @@ use coauth_data::{
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
 use coauth_jose::jwk::PublicJsonWebKeySet;
+use coauth_oauth_types::oidc::ApplicationType;
+use coauth_oauth_types::requests::GrantType;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth_types::oidc::ApplicationType;
-use oauth_types::requests::GrantType;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;

@@ -6,8 +6,10 @@ use coauth_config::CokretConfig;
 use coauth_data::{UpstreamOAuthProvider, UrlBuilder};
 use coauth_jose::claims::{self, TokenHash};
 use coauth_keystore::{Encrypter, Keystore};
-use oauth_types::oidc::VerifiedProviderMetadata;
-use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant};
+use coauth_oauth_types::oidc::VerifiedProviderMetadata;
+use coauth_oauth_types::requests::{
+    AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant,
+};
 use serde::Deserialize;
 use url::Url;
 

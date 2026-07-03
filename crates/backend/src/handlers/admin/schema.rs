@@ -32,27 +32,3 @@ impl JsonSchema for Ulid {
         })
     }
 }
-
-/// A type to use for schema definitions of device IDs
-///
-/// Use with `#[schemars(with = "crate::handlers::admin::schema::Device")]`
-pub struct Device;
-
-impl JsonSchema for Device {
-    fn schema_name() -> Cow<'static, str> {
-        Cow::Borrowed("DeviceID")
-    }
-
-    fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
-        json_schema!({
-            "type": "string",
-            "title": "Device ID",
-            "description": "A client device identifier.",
-            "examples": [
-                "AABBCCDDEE",
-                "FFGGHHIIJJ",
-            ],
-            "pattern": "^[A-Za-z0-9._~!$&'()*+,;=:&/-]+$",
-        })
-    }
-}

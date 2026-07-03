@@ -470,8 +470,8 @@ mod tests {
     use chrono::TimeZone as _;
     use coauth_data::Clock;
     use coauth_data::oauth::NewSessionGrant;
+    use coauth_oauth_types::scope::Scope;
     use hyper::{Request, StatusCode};
-    use oauth_types::scope::Scope;
 
     use super::*;
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};

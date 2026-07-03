@@ -142,20 +142,10 @@ pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
-    fn service_did(&self, url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String;
-    fn issuer_did(&self, url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String;
-    fn user_did(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        user: &User,
-    ) -> String;
-    fn parse_local_user_did(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        did: &str,
-    ) -> Option<Ulid>;
+    fn service_did(&self, cokret_config: &CokretConfig) -> String;
+    fn issuer_did(&self, cokret_config: &CokretConfig) -> String;
+    fn user_did(&self, cokret_config: &CokretConfig, user: &User) -> String;
+    fn parse_local_user_did(&self, cokret_config: &CokretConfig, did: &str) -> Option<Ulid>;
     /// Resolve the primary principal DID for a user.
     ///
     /// This only returns the local/starid `did:web` forms when the deployment
@@ -186,30 +176,20 @@ pub struct DefaultDidResolverService;
 
 #[async_trait]
 impl DidResolverService for DefaultDidResolverService {
-    fn service_did(&self, url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {
-        service_did_for(url_builder, cokret_config)
+    fn service_did(&self, cokret_config: &CokretConfig) -> String {
+        service_did_for(cokret_config)
     }
 
-    fn issuer_did(&self, url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {
-        issuer_did_for(url_builder, cokret_config)
+    fn issuer_did(&self, cokret_config: &CokretConfig) -> String {
+        issuer_did_for(cokret_config)
     }
 
-    fn user_did(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        user: &User,
-    ) -> String {
-        user_did_for(url_builder, cokret_config, user)
+    fn user_did(&self, cokret_config: &CokretConfig, user: &User) -> String {
+        user_did_for(cokret_config, user)
     }
 
-    fn parse_local_user_did(
-        &self,
-        url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
-        did: &str,
-    ) -> Option<Ulid> {
-        let prefix = format!("{}:users:", self.service_did(url_builder, cokret_config));
+    fn parse_local_user_did(&self, cokret_config: &CokretConfig, did: &str) -> Option<Ulid> {
+        let prefix = format!("{}:users:", self.service_did(cokret_config));
         did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
     }
 
@@ -330,6 +310,15 @@ impl DidResolverService for DefaultDidResolverService {
                 DidResolutionSource::DidKey,
                 false,
             )),
+            // RULING (2026-07 review, CAU-SPEC-02 closed): coauth deliberately
+            // does NOT resolve/verify `did:webvh` natively. identity-did.md
+            // §3.5 places webvh hosting and log/history verification authority
+            // on the principal server (soland / starid); every other method —
+            // including `did:webvh` — is delegated to the configured
+            // `identity_registry.resolver`, and deployments without one
+            // fail closed with `UnsupportedMethod`. Do not add a local webvh
+            // history verifier here without a spec-level ruling moving that
+            // authority boundary.
             Some(_) => match self.delegated_resolver(cokret_config) {
                 Some(resolver) => {
                     let url = delegated_resolver_url(&resolver, did)?;

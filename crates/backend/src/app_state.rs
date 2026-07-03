@@ -1,4 +1,3 @@
-use std::net::IpAddr;
 use std::sync::Arc;
 
 use coauth_config::CokretConfig;
@@ -458,54 +457,4 @@ pub async fn extract_repository(
         ))
     })?;
     app_state.repository_factory.create().await
-}
-
-fn infer_client_ip(req: &Request, trusted_proxies: &[IpNetwork]) -> Option<IpAddr> {
-    let connection_info = req.extensions().get::<crate::listener::ConnectionInfo>();
-
-    let peer = if let Some(info) = connection_info {
-        // We can always trust the proxy protocol to give us the correct IP address
-        if let Some(proxy) = info.proxy()
-            && let Some(source) = proxy.source()
-        {
-            return Some(source.ip());
-        }
-
-        info.peer_addr().map(|addr| addr.ip())
-    } else {
-        None
-    };
-
-    // Get the list of IPs from the X-Forwarded-For header
-    let peers_from_header = req
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.split(',').filter_map(|v| v.trim().parse().ok()))
-        .into_iter()
-        .flatten();
-
-    // This constructs a list of IP addresses that might be the client's IP address.
-    // Each intermediate proxy is supposed to add the client's IP address to front
-    // of the list. We are effectively adding the IP we got from the socket to the
-    // front of the list.
-    // We also call `to_canonical` so that IPv6-mapped IPv4 addresses
-    // (::ffff:A.B.C.D) are converted to IPv4.
-    let peer_list: Vec<IpAddr> = peer
-        .into_iter()
-        .chain(peers_from_header)
-        .map(|ip| ip.to_canonical())
-        .collect();
-
-    // We'll fallback to the first IP in the list if all the IPs we got are trusted
-    let fallback = peer_list.first().copied();
-
-    // Now we go through the list, and the IP of the client is the first IP that is
-    // not in the list of trusted proxies, starting from the back.
-    let client_ip = peer_list
-        .iter()
-        .rfind(|ip| !trusted_proxies.iter().any(|network| network.contains(**ip)))
-        .copied();
-
-    client_ip.or(fallback)
 }

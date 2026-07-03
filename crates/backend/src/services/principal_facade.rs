@@ -29,8 +29,8 @@ use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
     PrincipalCapabilityFanoutOperation, PrincipalCapabilityFanoutRequest,
 };
-use serde::Deserialize;
 use serde_json::Value;
+use soland_core::capability_fanout::CapabilityFanoutResponse;
 use url::Url;
 
 /// `ConnectorAdmin` backed by coauth's own Postgres (`users`).
@@ -67,23 +67,6 @@ struct CapabilityFanoutTarget {
     bearer: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct CapabilityFanoutResponse {
-    accepted: Vec<String>,
-    duplicate: Vec<String>,
-    event_id: String,
-    capability_grant_id: String,
-    authz_state: CapabilityFanoutAuthzState,
-}
-
-#[derive(Debug, Deserialize)]
-struct CapabilityFanoutAuthzState {
-    projected: bool,
-    effective: bool,
-    revoked: bool,
-    #[allow(dead_code)]
-    grant_present: bool,
-}
 
 pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
     http_client: &reqwest::Client,
@@ -106,7 +89,7 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
     Ok(())
 }
 
-// RULING (_fix_plan.md "## R1/R2 协同落地" / R1): this fanout is a
+// RULING: this fanout is a
 // deployment-internal server-to-server contract, NOT a protocol responsibility.
 // The soland-private `POST /_soland/root/authz/capability-fanout` edge is the
 // correct, compliant surface — there is nothing to migrate to and nothing to

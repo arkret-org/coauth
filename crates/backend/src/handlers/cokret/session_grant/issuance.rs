@@ -1,14 +1,18 @@
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
+#[cfg(test)]
+use coauth_data::UrlBuilder;
 use coauth_data::oauth::NewSessionGrant;
-use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, UrlBuilder};
+use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant};
 use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
+use coauth_oauth_types::scope::{Scope, ScopeToken};
 use cokret_core::GrantId;
 use cokret_core::identifiers::new_prefixed_uuid7;
-use oauth_types::scope::{Scope, ScopeToken};
-use rand_core::{CryptoRngCore, RngCore};
+#[cfg(test)]
+use rand_core::CryptoRngCore;
+use rand_core::RngCore;
 use ulid::Ulid;
 
 use super::*;
@@ -19,6 +23,9 @@ fn new_session_grant_id() -> GrantId {
         .expect("generated ck:grant uuidv7 id must be valid")
 }
 
+// Test-only convenience wrapper (re-exported under `#[cfg(test)]` from the
+// session_grant module); production paths call the audience-explicit forms.
+#[cfg(test)]
 pub(crate) fn issue_session_grant(
     _rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
@@ -31,7 +38,6 @@ pub(crate) fn issue_session_grant(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience(
         clock,
-        url_builder,
         cokret_config,
         key_store,
         browser_session,
@@ -51,7 +57,6 @@ pub(crate) fn issue_session_grant(
 // principal_did`.
 pub(crate) fn issue_session_grant_for_audience(
     clock: &dyn Clock,
-    url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
@@ -63,7 +68,6 @@ pub(crate) fn issue_session_grant_for_audience(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience_inner(
         clock,
-        url_builder,
         cokret_config,
         key_store,
         browser_session,
@@ -79,7 +83,6 @@ pub(crate) fn issue_session_grant_for_audience(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn issue_test_session_grant_for_audience(
     clock: &dyn Clock,
-    url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
@@ -91,7 +94,6 @@ pub(crate) fn issue_test_session_grant_for_audience(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience_inner(
         clock,
-        url_builder,
         cokret_config,
         key_store,
         browser_session,
@@ -107,7 +109,6 @@ pub(crate) fn issue_test_session_grant_for_audience(
 #[allow(clippy::too_many_arguments)]
 fn issue_session_grant_for_audience_inner(
     clock: &dyn Clock,
-    url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
@@ -119,7 +120,7 @@ fn issue_session_grant_for_audience_inner(
     enforce_principal_did_method: bool,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let subject = subject_override.map_or_else(
-        || user_did_for(url_builder, cokret_config, &browser_session.user),
+        || user_did_for(cokret_config, &browser_session.user),
         ToOwned::to_owned,
     );
     if enforce_principal_did_method {
@@ -131,7 +132,7 @@ fn issue_session_grant_for_audience_inner(
     let expires_at = now + cokret_config.session_grant_ttl;
     let grant_id = new_session_grant_id();
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
-    let issuer = issuer_did_for(url_builder, cokret_config);
+    let issuer = issuer_did_for(cokret_config);
     let cnf = dpop_jkt
         .as_ref()
         .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
@@ -252,7 +253,6 @@ where
 /// uniform without repeating the agent principal DID outside `subject`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mint_agent_session_grant(
-    url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     agent_principal_id: &str,
@@ -265,7 +265,7 @@ pub(crate) fn mint_agent_session_grant(
     expires_at: DateTime<Utc>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     ensure_principal_did_method_allowed(cokret_config, agent_principal_id)?;
-    let issuer = issuer_did_for(url_builder, cokret_config);
+    let issuer = issuer_did_for(cokret_config);
     let grant_id = new_session_grant_id();
     let cnf = Some(SessionGrantConfirmation {
         jkt: dpop_jkt.clone(),

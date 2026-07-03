@@ -32,7 +32,7 @@ cokret:
   trust_domain: ck:trust_domain:acme.example
   principal_servers:
   - name: soland
-    audience: did:webvh:soland.acme.example
+    audience: did:webvh:<scid>:soland.acme.example:webvh:service
     endpoint: https://soland.acme.example/
 ```
 

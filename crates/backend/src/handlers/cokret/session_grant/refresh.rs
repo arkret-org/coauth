@@ -642,7 +642,6 @@ pub async fn refresh_session_grant(
         .collect();
     let new_material = issue_session_grant_for_audience(
         &*clock,
-        &url_builder,
         &cokret_config,
         &key_store,
         &browser_session,

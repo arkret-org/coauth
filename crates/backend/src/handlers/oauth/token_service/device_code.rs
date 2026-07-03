@@ -7,9 +7,9 @@ use coauth_data::{
     BoxRepository, Client, Clock, DeviceCodeGrantState, SiteConfig, TokenType, UrlBuilder,
 };
 use coauth_keystore::Keystore;
+use coauth_oauth_types::requests::{AccessTokenResponse, DeviceCodeGrant, GrantType};
+use coauth_oauth_types::scope;
 use coauth_principal::ConnectorAdmin;
-use oauth_types::requests::{AccessTokenResponse, DeviceCodeGrant, GrantType};
-use oauth_types::scope;
 use tracing::{debug, error, warn};
 
 use super::{DeviceCodeExchangeError, client_device_ids, scope_tokens};
@@ -157,7 +157,7 @@ pub async fn exchange_device_code(
         .exchange(clock, grant, &session)
         .await?;
 
-    // TODO(COA-HYG-02): should we get the user agent from the device code grant instead?
+    // TODO: should we get the user agent from the device code grant instead?
     if let Some(user_agent) = user_agent {
         session = repo
             .oauth_session()
@@ -198,11 +198,8 @@ pub async fn exchange_device_code(
             browser_session.id = %browser_session.id,
             "Generating ID token because openid scope is present"
         );
-        let subject_did = crate::handlers::cokret::oidc_subject_for_user(
-            url_builder,
-            cokret_config,
-            &browser_session.user,
-        );
+        let subject_did =
+            crate::handlers::cokret::oidc_subject_for_user(cokret_config, &browser_session.user);
         let principal_did = crate::handlers::cokret::published_principal_did_for_user(
             &mut repo,
             cokret_config,
@@ -274,7 +271,7 @@ pub async fn exchange_device_code(
             })?;
     }
 
-    // TODO(COA-HYG-02): there is a potential (but unlikely) race here, where the activity for
+    // TODO: there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker.record_oauth_session(clock, &session).await;

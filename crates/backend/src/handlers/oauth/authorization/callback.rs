@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use coauth_data::AuthorizationGrant;
 use coauth_i18n::Locale;
+use coauth_oauth_types::requests::ResponseMode;
 use coauth_templates::{FormPostContext, Templates};
-use oauth_types::requests::ResponseMode;
 use salvo::prelude::*;
 use salvo::writing::{Redirect, Text};
 use serde::Serialize;

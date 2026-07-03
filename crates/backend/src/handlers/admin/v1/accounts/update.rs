@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Update endpoint: `PATCH /users/{id}`.
+//! Update endpoint: `PATCH /accounts/{id}` (profile / lifecycle patch).
 
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -10,8 +10,9 @@ use serde::Deserialize;
 
 use crate::handlers::admin::audit_helper::AdminAuditSigning;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::User;
 use crate::handlers::admin::params::extract_ulid_param;
+
+use super::AccountRecord;
 use crate::handlers::admin::response::SingleOutcome;
 use crate::handlers::cokret::service_did_for;
 use crate::handlers::common::DepotExt;
@@ -30,8 +31,11 @@ pub struct UpdateRequestBody {
 }
 
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.users.update", skip_all)]
-pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleOutcome<User>> {
+#[tracing::instrument(name = "handler.admin.v1.accounts.update", skip_all)]
+pub async fn update_account(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<SingleOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -43,8 +47,8 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleO
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
     let cokret_config = depot.cokret_config()?;
-    let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let did_resolver = depot.did_resolver_service()?;
+    let service_did = service_did_for(&cokret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_did: &service_did,
@@ -91,17 +95,21 @@ pub async fn update_user(req: &mut Request, depot: &Depot) -> JsonResult<SingleO
 
     repo.save().await?;
 
-    Ok(Json(SingleOutcome::new_canonical(User::from(user))))
+    Ok(Json(SingleOutcome::new_canonical(
+        AccountRecord::from_user(user, &cokret_config, did_resolver.as_ref()).await?,
+    )))
 }
 
 /// Translate a `UserAdminServiceError` returned by the `user_admin`
-/// service into a wire-friendly [`AppError`]. Lives in this module rather
-/// than `services/user_admin.rs` so it can stay an internal detail of the
-/// PATCH endpoint.
-fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) -> AppError {
+/// service into a wire-friendly [`AppError`]. This is the exhaustive mapper
+/// shared by the accounts module (`super::map_service_error` re-uses it for
+/// the lifecycle mutation endpoints).
+pub(super) fn map_service_error(
+    error: crate::services::user_admin::UserAdminServiceError,
+) -> AppError {
     match error {
         crate::services::user_admin::UserAdminServiceError::UserNotFound(id) => {
-            AppError::not_found(format!("User ID {id} not found"))
+            AppError::not_found(format!("Account ID {id} not found"))
         }
         crate::services::user_admin::UserAdminServiceError::ReferencedUserNotFound(id) => {
             AppError::bad_request(format!("Referenced user ID {id} not found"))

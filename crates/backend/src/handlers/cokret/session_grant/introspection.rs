@@ -122,14 +122,21 @@ pub(crate) fn session_grant_jwt_hash(grant_jwt: &str) -> String {
     )
 }
 
+/// Whether the persisted grant carries a holder/device binding: a `cnf`
+/// confirmation claim inside the signed grant payload. A bound grant MUST NOT
+/// introspect as usable without a holder proof; an unbound grant has no
+/// device-bound confirmation key, so its holder proof stays optional.
+fn session_grant_has_holder_binding(grant: &SessionGrant) -> bool {
+    Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
+        .ok()
+        .is_some_and(|jwt| jwt.payload().cnf.is_some())
+}
+
 fn verify_session_grant_introspection_proof(
     grant: &SessionGrant,
-    proof: Option<&SessionGrantIntrospectionProof>,
+    proof: &SessionGrantIntrospectionProof,
     now: DateTime<Utc>,
 ) -> SessionGrantIntrospectStatus {
-    let Some(proof) = proof else {
-        return SessionGrantIntrospectStatus::ProofRequired;
-    };
     if proof.challenge.trim().is_empty() || proof.proof_jwt.trim().is_empty() {
         return SessionGrantIntrospectStatus::InvalidProof;
     }
@@ -198,7 +205,6 @@ pub async fn introspect_session_grant(
 
     let caller = require_session_grant_caller(req, depot).await?;
     let clock = crate::handlers::make_clock();
-    let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let mut repo = depot.repo().await?;
 
@@ -259,9 +265,7 @@ pub async fn introspect_session_grant(
 
     let user = if let Some(browser_session) = browser_session.as_ref() {
         Some(browser_session.user.clone())
-    } else if let Some(user_id) =
-        parse_local_user_did_for(&url_builder, &cokret_config, &grant.subject)
-    {
+    } else if let Some(user_id) = parse_local_user_did_for(&cokret_config, &grant.subject) {
         repo.user()
             .lookup(user_id)
             .await
@@ -271,8 +275,23 @@ pub async fn introspect_session_grant(
     };
     let mut status =
         introspection_status(&grant, user.as_ref(), clock.now(), body.audience.as_deref());
-    if status == SessionGrantIntrospectStatus::Active && body.proof.is_some() {
-        status = verify_session_grant_introspection_proof(&grant, body.proof.as_ref(), clock.now());
+    let mut proof_required = false;
+    if status == SessionGrantIntrospectStatus::Active {
+        match body.proof.as_ref() {
+            Some(proof) => {
+                status = verify_session_grant_introspection_proof(&grant, proof, clock.now());
+            }
+            // A `cnf`-bound grant must not report usable without its holder
+            // proof: surface `proof_required` so the caller re-introspects
+            // with a device-signed proof instead of trusting bearer-only
+            // possession.
+            None if session_grant_has_holder_binding(&grant) => {
+                status = SessionGrantIntrospectStatus::ProofRequired;
+                proof_required = true;
+            }
+            // Unbound grant: the holder proof is genuinely optional.
+            None => {}
+        }
     }
     let mut active = status == SessionGrantIntrospectStatus::Active;
 
@@ -291,8 +310,11 @@ pub async fn introspect_session_grant(
         }
     }
 
+    // Fail closed on metadata too: a bound grant introspected without its
+    // holder proof discloses no grant record until the proof is presented.
     let grant_record = (status != SessionGrantIntrospectStatus::NotFound
-        && status != SessionGrantIntrospectStatus::AudienceMismatch)
+        && status != SessionGrantIntrospectStatus::AudienceMismatch
+        && status != SessionGrantIntrospectStatus::ProofRequired)
         .then(|| introspection_grant_record(&grant, browser_session.as_ref()))
         .transpose()?;
 
@@ -310,7 +332,7 @@ pub async fn introspect_session_grant(
     Ok(Json(SessionGrantIntrospectOutcome {
         active,
         status,
-        proof_required: false,
+        proof_required,
         one_time_use_consumed: false,
         grant: grant_record,
     }))

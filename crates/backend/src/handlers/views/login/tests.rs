@@ -11,7 +11,7 @@ mod tests {
         Request, StatusCode,
         header::{CONTENT_TYPE, LOCATION},
     };
-    use oauth_types::scope::OPENID;
+    use coauth_oauth_types::scope::OPENID;
     use coauth_data::{
         UpstreamOAuthProviderClaimsImports, UpstreamOAuthProviderOnBackchannelLogout,
         UpstreamOAuthProviderTokenAuthMethod,

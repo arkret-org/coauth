@@ -7,7 +7,7 @@ use std::collections::HashMap;
 #[doc(inline)]
 pub use coauth_iana as iana;
 use coauth_jose::jwt::Jwt;
-pub use oauth_types::*;
+pub use coauth_oauth_types::*;
 use serde_json::Value;
 
 /// An OpenID Connect [ID Token].

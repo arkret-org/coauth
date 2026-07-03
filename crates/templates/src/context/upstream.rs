@@ -8,7 +8,7 @@ use coauth_data::{
     UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod, User,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
-use oauth_types::scope::{OPENID, Scope};
+use coauth_oauth_types::scope::{OPENID, Scope};
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;

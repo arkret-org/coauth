@@ -34,7 +34,7 @@ fluent-bundle = {workspace = true}
 http = {workspace = true}
 minijinja = {workspace = true}
 minijinja-contrib = {workspace = true}
-oauth-types = {workspace = true}
+coauth-oauth-types = {workspace = true}
 rand = {workspace = true}
 rand_chacha = {workspace = true}
 rand_core = {workspace = true}

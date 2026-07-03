@@ -22,6 +22,7 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
 use coauth_messaging::NotificationCenter;
 use coauth_messaging::email::{Mailer, Transport as MailTransport};
+use coauth_oauth_types::scope::Scope;
 use coauth_policy::PolicyFactory;
 use coauth_principal::ConnectorAdmin;
 use coauth_tasks::QueueWorker;
@@ -32,7 +33,6 @@ use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use headers::{Authorization, ContentType, HeaderMapExt, HeaderName, HeaderValue};
 use hyper::header::{CONTENT_TYPE, COOKIE, SET_COOKIE};
 use hyper::{Request, Response, StatusCode};
-use oauth_types::scope::Scope;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::prelude::*;
@@ -128,7 +128,11 @@ pub(crate) struct TestState {
     pub clock: Arc<MockClock>,
     pub rng: Arc<Mutex<ChaChaRng>>,
     pub http_client: reqwest::Client,
+    // Test-harness keep-alive + helper state: which helpers below are called
+    // varies with the DB-gated test set, so these stay even while unused.
+    #[allow(dead_code)]
     pub task_tracker: TaskTracker,
+    #[allow(dead_code)]
     queue_worker: Arc<tokio::sync::Mutex<QueueWorker>>,
 
     #[allow(dead_code)] // It is used, as it will cancel the CancellationToken when dropped
@@ -252,6 +256,14 @@ impl TestState {
 
         let url_builder = UrlBuilder::new("https://example.com/".parse()?, None, None);
 
+        // `cokret.service_did` is required (the backend no longer derives a
+        // `did:web` fallback from the host); pin the value the old host
+        // derivation used to produce so DID-shaped assertions stay stable.
+        let cokret_config = CokretConfig {
+            service_did: Some("did:web:example.com".to_owned()),
+            ..CokretConfig::default()
+        };
+
         let templates = Templates::load(
             workspace_root.join("templates"),
             url_builder.clone(),
@@ -295,7 +307,7 @@ impl TestState {
         let principal_server_admin = Arc::new(DbConnectorAdmin::new(
             site_config.server_name.clone(),
             PgRepositoryFactory::new(pool.clone()).boxed(),
-            CokretConfig::default(),
+            cokret_config.clone(),
             crate::reqwest_client(),
         ));
 
@@ -339,7 +351,7 @@ impl TestState {
         Ok(Self {
             repository_factory: PgRepositoryFactory::new(pool),
             templates,
-            cokret_config: CokretConfig::default(),
+            cokret_config,
             key_store,
             cookie_manager,
             metadata_cache,
@@ -363,12 +375,18 @@ impl TestState {
     /// Run all the available jobs in the queue.
     ///
     /// Panics if it fails to run the jobs (but not on job failures!)
+    /// Test-harness surface: kept while unused because the DB-gated test set
+    /// moves helpers in and out of use.
+    #[allow(dead_code)]
     pub async fn run_jobs_in_queue(&self) {
         let mut queue = self.queue_worker.lock().await;
         queue.process_all_jobs_in_tests().await.unwrap();
     }
 
     /// Reset the test utils to a fresh state, with the same configuration.
+    /// Test-harness surface: kept while unused because the DB-gated test set
+    /// moves helpers in and out of use.
+    #[allow(dead_code)]
     pub async fn reset(self) -> Self {
         let site_config = self.site_config.clone();
         let pool = self.repository_factory.pool().clone();
@@ -392,7 +410,7 @@ impl TestState {
             account_dids, accounts, audit_feed, claims, connector_health, devices,
             notification_channels, notification_templates, oauth_sessions, personal_sessions,
             policy_checks, policy_data, site_config, upstream_oauth_links,
-            upstream_oauth_providers, user_emails, user_registration_tokens, user_sessions, users,
+            upstream_oauth_providers, user_emails, user_registration_tokens, user_sessions,
             version,
         };
 
@@ -471,7 +489,7 @@ impl TestState {
             .push(Router::with_path("/_cokret/root/identity/describe").get(crate::handlers::cokret::identity_describe))
             .push(Router::with_path("/_cokret/root/identity/resolve").post(crate::handlers::cokret::identity_resolve))
             .push(Router::with_path("/_cokret/root/identity/document").get(crate::handlers::cokret::identity_document))
-            .push(Router::with_path("/_coauth/account/identity/primary-handle").patch(crate::handlers::cokret::patch_primary_handle_preference))
+            .push(Router::with_path("/_coauth/account/identity/primary-handle").patch(crate::handlers::account::primary_handle::patch_primary_handle_preference))
             .push(Router::with_path("/_cokret/find/directory/describe").get(crate::handlers::cokret::directory_describe))
             .push(Router::with_path("/_cokret/find/directory/resolve-handle").post(crate::handlers::cokret::directory_resolve_handle))
             // Canonical spec surface (mirrors production server.rs): the
@@ -483,10 +501,10 @@ impl TestState {
             .push(
                 // Product-private account-management UI: list + {id}/revoke.
                 Router::with_path("/_coauth/account/session-grants")
-                    .get(crate::handlers::cokret::list_session_grants)
+                    .get(crate::handlers::account::session_grants::list_session_grants)
                     .push(
                         Router::with_path("{id}/revoke")
-                            .post(crate::handlers::cokret::revoke_session_grant),
+                            .post(crate::handlers::account::session_grants::revoke_session_grant),
                     ),
             )
             .push(Router::with_path("/_coauth/self/viewer").get(crate::handlers::account::viewer::get_viewer))
@@ -597,9 +615,23 @@ impl TestState {
                     .push(
                         Router::with_path("accounts")
                             .get(accounts::list_accounts)
+                            .post(accounts::create::add_account)
+                            .push(
+                                Router::with_path("by-username/{username}")
+                                    .get(accounts::get_account_by_username),
+                            )
+                            .push(
+                                Router::with_path("batch-invite")
+                                    .post(accounts::create::batch_invite),
+                            )
                             .push(
                                 Router::with_path("{id}")
                                     .get(accounts::get_account)
+                                    .patch(accounts::update::update_account)
+                                    .push(
+                                        Router::with_path("set-password")
+                                            .post(accounts::security::set_password),
+                                    )
                                     .push(
                                         Router::with_path("lock")
                                             .post(accounts::lock_account),
@@ -645,29 +677,6 @@ impl TestState {
                                                     .delete(account_dids::remove_account_did),
                                             ),
                                     ),
-                            ),
-                    )
-                    .push(
-                        Router::with_path("users")
-                            .get(users::list_users)
-                            .post(users::add_user)
-                            .push(
-                                Router::with_path("by-username/{username}")
-                                    .get(users::get_by_username),
-                            )
-                            .push(
-                                Router::with_path("batch-invite")
-                                    .post(users::batch_invite),
-                            )
-                            .push(
-                                Router::with_path("{id}")
-                                    .get(users::get_user)
-                                    .patch(users::update_user)
-                                    .push(
-                                        Router::with_path("set-password")
-                                            .post(users::set_password),
-                                    )
-                                    .push(Router::with_path("risk-action").post(users::risk_action)),
                             ),
                     )
                     .push(
@@ -902,6 +911,9 @@ impl TestState {
     /// # Panics
     ///
     /// Panics if the response status code is not 200 or 401.
+    /// Test-harness surface: kept while unused because the DB-gated test set
+    /// moves helpers in and out of use.
+    #[allow(dead_code)]
     pub async fn is_access_token_valid(&self, token: &str) -> bool {
         let request = Request::get("/oauth/userinfo").bearer(token).empty();
 
@@ -932,6 +944,8 @@ pub(crate) trait RequestBuilderExt {
 
     /// Sets the request Authorization header to the given basic auth
     /// credentials.
+    /// Test-harness surface: kept while unused (see note on `TestState`).
+    #[allow(dead_code)]
     fn basic_auth(self, username: &str, password: &str) -> Self;
 
     /// Builds the request with an empty body.
@@ -989,6 +1003,8 @@ pub(crate) trait ResponseExt {
     ///
     /// Panics if the response does not have the given header or if the header
     /// value does not match.
+    /// Test-harness surface: kept while unused (see note on `TestState`).
+    #[allow(dead_code)]
     fn assert_header_value(&self, header: HeaderName, value: &str);
 
     /// Get the response body as JSON.
@@ -1080,6 +1096,9 @@ impl CookieHelper {
     }
 
     /// Save the cookies from the response into the store.
+    /// Test-harness surface: kept while unused because the DB-gated test set
+    /// moves helpers in and out of use.
+    #[allow(dead_code)]
     pub fn save_cookies<B>(&self, response: &Response<B>) {
         let url = "https://example.com/".parse().unwrap();
         let mut store = self.store.write().unwrap();

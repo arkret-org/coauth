@@ -7,9 +7,9 @@
 
 use coauth_data::{Client, RepositoryError};
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
-use oauth_types::pkce::CodeChallengeError;
-use oauth_types::requests::GrantType;
-use oauth_types::scope;
+use coauth_oauth_types::pkce::CodeChallengeError;
+use coauth_oauth_types::requests::GrantType;
+use coauth_oauth_types::scope;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -151,22 +151,6 @@ pub enum RefreshTokenExchangeError {
 
     #[error("failed to load oauth session {0}")]
     NoSuchOAuthSession(Ulid),
-
-    #[error(
-        "failed to load the next refresh token ({next:?}) from the previous one ({previous:?})"
-    )]
-    NoSuchNextRefreshToken { next: Ulid, previous: Ulid },
-
-    #[error(
-        "failed to load the access token ({access_token:?}) associated with the next refresh token ({refresh_token:?})"
-    )]
-    NoSuchNextAccessToken {
-        access_token: Ulid,
-        refresh_token: Ulid,
-    },
-
-    #[error("no access token associated with the refresh token {refresh_token:?}")]
-    NoAccessTokenOnRefreshToken { refresh_token: Ulid },
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),

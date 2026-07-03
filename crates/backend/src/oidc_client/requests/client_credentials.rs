@@ -17,8 +17,10 @@
 //! [Client Credentials strand]: https://www.rfc-editor.org/rfc/rfc6749#section-4.4
 
 use chrono::{DateTime, Utc};
-use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse, ClientCredentialsGrant};
-use oauth_types::scope::Scope;
+use coauth_oauth_types::requests::{
+    AccessTokenRequest, AccessTokenResponse, ClientCredentialsGrant,
+};
+use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore as Rng;
 use url::Url;
 

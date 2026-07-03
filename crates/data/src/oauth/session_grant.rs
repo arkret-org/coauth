@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
+use coauth_oauth_types::scope::Scope;
 use cokret_core::GrantId;
-use oauth_types::scope::Scope;
 use serde::Serialize;
 use serde_json::Value;
 use ulid::Ulid;

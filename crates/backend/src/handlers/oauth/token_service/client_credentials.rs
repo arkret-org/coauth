@@ -1,8 +1,8 @@
 //! `client_credentials` grant-type handling.
 
 use coauth_data::{BoxRepository, Client, Clock, SiteConfig, TokenType};
+use coauth_oauth_types::requests::{AccessTokenResponse, ClientCredentialsGrant, GrantType};
 use coauth_policy::PolicyInstance;
-use oauth_types::requests::{AccessTokenResponse, ClientCredentialsGrant, GrantType};
 
 use super::ClientCredentialsGrantError;
 use crate::handlers::BoundActivityTracker;
@@ -78,7 +78,7 @@ pub async fn handle_client_credentials(
 
     let mut params = AccessTokenResponse::new(access_token.access_token).with_expires_in(ttl);
 
-    // TODO(COA-HYG-02): there is a potential (but unlikely) race here, where the activity for
+    // TODO: there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker.record_oauth_session(clock, &session).await;

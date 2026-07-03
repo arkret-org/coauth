@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use coauth_data::{AuthorizationCode, AuthorizationGrant, Client, Clock, Session};
-use oauth_types::requests::ResponseMode;
-use oauth_types::scope::Scope;
+use coauth_oauth_types::requests::ResponseMode;
+use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;

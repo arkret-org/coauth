@@ -109,8 +109,6 @@ pub struct LoadedUpstreamLinkContext {
 }
 
 pub struct UpstreamRegisterScreen {
-    pub link: UpstreamOAuthLink,
-    pub provider: UpstreamOAuthProvider,
     pub suggested_handle: Option<String>,
     pub handle_forced: bool,
     pub suggested_display_name: Option<String>,
@@ -583,8 +581,6 @@ async fn load_upstream_registration_screen(
     let provider_name = provider.human_name.clone();
     Ok(LoadUpstreamLinkOutcome::Register {
         screen: UpstreamRegisterScreen {
-            link,
-            provider,
             suggested_handle: username,
             handle_forced,
             suggested_display_name: suggestions.suggested_display_name,
@@ -1158,7 +1154,7 @@ mod tests {
         UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderTokenAuthMethod,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
-    use oauth_types::scope::{OPENID, Scope};
+    use coauth_oauth_types::scope::{OPENID, Scope};
     use serde_json::json;
 
     use super::*;

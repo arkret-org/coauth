@@ -9,7 +9,7 @@ use crate::{Pagination, repository_impl};
 /// Filter parameters for listing upstream OAuth links
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct UpstreamOAuthLinkFilter<'a> {
-    // TODO(COA-HYG-02): we might also want to filter for links without a user linked to them
+    // TODO: we might also want to filter for links without a user linked to them
     user: Option<&'a User>,
     provider: Option<&'a UpstreamOAuthProvider>,
     provider_enabled: Option<bool>,

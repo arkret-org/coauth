@@ -455,7 +455,7 @@ mod test_utils {
         UpstreamOAuthProviderTokenAuthMethod,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
-    use oauth_types::scope::{OPENID, Scope};
+    use coauth_oauth_types::scope::{OPENID, Scope};
 
     pub(crate) fn oidc_provider_params(name: &str) -> UpstreamOAuthProviderParams {
         UpstreamOAuthProviderParams {

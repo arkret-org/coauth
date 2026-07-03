@@ -18,8 +18,8 @@
 
 use chrono::{DateTime, Utc};
 use coauth_jose::claims::{self, TokenHash};
-use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse, RefreshTokenGrant};
-use oauth_types::scope::Scope;
+use coauth_oauth_types::requests::{AccessTokenRequest, AccessTokenResponse, RefreshTokenGrant};
+use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore as Rng;
 use url::Url;
 

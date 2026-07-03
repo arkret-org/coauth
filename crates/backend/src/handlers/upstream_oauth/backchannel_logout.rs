@@ -7,7 +7,7 @@ use coauth_data::user::BrowserSessionFilter;
 use coauth_data::{Pagination, UpstreamOAuthProvider, UpstreamOAuthProviderOnBackchannelLogout};
 use coauth_jose::claims::{self, Claim, TimeOptions};
 use coauth_jose::jwt::JwtDecodeError;
-use oauth_types::errors::{ClientError, ClientErrorCode};
+use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use salvo::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;

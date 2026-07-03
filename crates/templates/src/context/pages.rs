@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 
-use coauth_data::{UrlBuilder, User};
+use coauth_data::UrlBuilder;
 use http::{Method, Uri, Version};
 use rand_core::RngCore as Rng;
 use serde::Serialize;
@@ -247,33 +247,3 @@ impl TemplateContext for NotFoundContext {
 }
 
 // -- Account state pages ----------------------------------------------------
-
-/// Data for the `account/deactivated.html` and `account/locked.html`
-/// templates.
-#[derive(Serialize)]
-pub struct AccountInactiveContext {
-    user: User,
-}
-
-impl AccountInactiveContext {
-    /// Build the account-inactive page context.
-    #[must_use]
-    pub fn new(user: User) -> Self {
-        Self { user }
-    }
-}
-
-impl TemplateContext for AccountInactiveContext {
-    fn sample<R: Rng>(
-        now: chrono::DateTime<chrono::Utc>,
-        rng: &mut R,
-        _locales: &[coauth_i18n::Locale],
-    ) -> BTreeMap<SampleIdentifier, Self> {
-        sample_list(
-            User::samples(now, rng)
-                .into_iter()
-                .map(|u| Self { user: u })
-                .collect(),
-        )
-    }
-}

@@ -7,7 +7,7 @@ use coauth_data::{
     UpstreamOAuthProviderPkceMode,
 };
 use coauth_iana::oauth::PkceCodeChallengeMethod;
-use oauth_types::oidc::VerifiedProviderMetadata;
+use coauth_oauth_types::oidc::VerifiedProviderMetadata;
 use tokio::sync::RwLock;
 use url::Url;
 
@@ -324,7 +324,7 @@ impl MetadataCache {
 
 #[cfg(test)]
 mod tests {
-    // TODO(COA-HYG-02): sadly, we can't test HTTPS requests with wiremock, so we can only test
+    // TODO: sadly, we can't test HTTPS requests with wiremock, so we can only test
     // 'insecure' discovery
 
     use coauth_data::clock::MockClock;
@@ -333,7 +333,7 @@ mod tests {
         UpstreamOAuthProviderTokenAuthMethod,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
-    use oauth_types::scope::{OPENID, Scope};
+    use coauth_oauth_types::scope::{OPENID, Scope};
     use ulid::Ulid;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

@@ -1379,7 +1379,6 @@ pub async fn post_finish(
     let site_config = depot.site_config()?;
     let principal_server = depot.principal_server()?;
     let repo_factory = depot.repo_factory()?;
-    let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let input = if req
         .payload()
@@ -1452,7 +1451,7 @@ pub async fn post_finish(
     cookie_jar.write_to_response(res);
 
     let post_auth_action = completed.registration.post_auth_action.clone();
-    let did = cokret::user_did_for(&url_builder, &cokret_config, &completed.user);
+    let did = cokret::user_did_for(&cokret_config, &completed.user);
 
     Ok(Json(FinishRegistrationOutcome {
         status: "success",

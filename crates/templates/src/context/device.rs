@@ -5,7 +5,7 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use chrono::Duration;
 use coauth_data::{Client, DeviceCodeGrant, PrincipalUser};
-use oauth_types::scope::OPENID;
+use coauth_oauth_types::scope::OPENID;
 use rand_core::RngCore as Rng;
 use serde::{Deserialize, Serialize};
 

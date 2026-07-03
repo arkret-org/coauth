@@ -25,7 +25,6 @@ const DIRECTORY_RESOLVE_FAILURE_FLOOR: Duration = Duration::from_millis(25);
 pub async fn identity_describe(
     depot: &Depot,
 ) -> Result<Json<IdentityDescribeOutcome>, CokretRouteError> {
-    let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let registry_mode = if delegated_identity_registry_descriptor(&cokret_config).is_some() {
         "delegated_resolver"
@@ -34,7 +33,7 @@ pub async fn identity_describe(
     };
 
     Ok(Json(IdentityDescribeOutcome(IdentityDescription {
-        service_did: parse_did_field("service_did", service_did_for(&url_builder, &cokret_config))?,
+        service_did: parse_did_field("service_did", service_did_for(&cokret_config))?,
         registry_mode: registry_mode.to_owned(),
         supported_receipts: Vec::new(),
         protocol_version: COKRET_PROTOCOL_VERSION.to_owned(),
@@ -131,8 +130,7 @@ pub async fn directory_describe(
 ) -> Result<Json<DirectoryDescribeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
-    let service_did =
-        parse_did_field("service_did", service_did_for(&url_builder, &cokret_config))?;
+    let service_did = parse_did_field("service_did", service_did_for(&cokret_config))?;
     let trust_domain =
         cokret_core::TypedTrustDomainId::new(trust_domain_for(&url_builder, &cokret_config))
             .map_err(|error| {
@@ -306,7 +304,7 @@ pub async fn directory_resolve_handle(
     let clock = crate::handlers::make_clock();
     let handle_claim_audience = directory_handle_claim_audience(&body, &principal_binding.audience);
     let member_delivery_binding =
-        directory_handle_delivery_binding(&url_builder, &cokret_config, &principal_binding)?;
+        directory_handle_delivery_binding(&cokret_config, &principal_binding)?;
     let claim_material = issue_handle_claim(
         &*clock,
         &url_builder,
@@ -354,7 +352,6 @@ fn directory_handle_claim_audience(
 }
 
 fn directory_handle_delivery_binding(
-    url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     principal_binding: &PrincipalDidBinding,
 ) -> Result<cokret_core::DeliveryBindingHint, CokretRouteError> {
@@ -363,7 +360,7 @@ fn directory_handle_delivery_binding(
         .as_ref()
         .and_then(|did| cokret_core::Did::new(did.clone()).ok())
         .or_else(|| cokret_core::Did::new(principal_binding.audience.clone()).ok())
-        .or_else(|| cokret_core::Did::new(service_did_for(url_builder, cokret_config)).ok())
+        .or_else(|| cokret_core::Did::new(service_did_for(cokret_config)).ok())
         .ok_or_else(|| {
             CokretRouteError::Internal(Box::new(std::io::Error::other(
                 "no valid DID available for handle claim delivery binding",

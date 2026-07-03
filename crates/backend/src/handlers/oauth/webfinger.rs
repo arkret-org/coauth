@@ -1,4 +1,4 @@
-use oauth_types::webfinger::WebFingerResponse;
+use coauth_oauth_types::webfinger::WebFingerResponse;
 use salvo::prelude::*;
 use serde::Deserialize;
 
@@ -13,10 +13,6 @@ pub struct Params {
     // `Vec<String>` is trivial if we ever need to return multiple links.
     #[serde(default)]
     rel: Option<String>,
-}
-
-fn jrd() -> mime::Mime {
-    "application/jrd+json".parse().unwrap()
 }
 
 #[handler]

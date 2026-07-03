@@ -18,12 +18,11 @@ publish = false
 
 [workspace.lints.rust]
 unsafe_code = "deny"
-# Allowed because many helpers, fields, and intermediate types are public-API
-# surface that the warning can't see through (consumed via trait impls,
-# build-time codegen, conditional compilation, or future hooks). When a
-# helper is truly dead, delete it; don't gate the warning on a case-by-case
-# basis.
-dead_code = "allow"
+# Keep dead-code detection ON. The few genuinely-false positives (public API
+# surface consumed via trait impls, build-time codegen, or conditional
+# compilation) get a local `#[allow(dead_code)]` WITH a reason comment at the
+# item; everything else the compiler flags should be deleted, not silenced.
+dead_code = "warn"
 
 [workspace.lints.clippy]
 # We use groups as good defaults, but with a lower priority so that we can override them
@@ -73,40 +72,9 @@ broken_intra_doc_links = "deny"
 
 [workspace.dependencies]
 
-# Workspace crates
+# The dependency list below is sorted alphabetically; per-dependency notes sit
+# directly above the entry they describe.
 
-
-# Cokret v1 protocol SDK pieces — `cokret-core` exposes the typed
-# identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
-# `cokret-signatures` (with the `signer` feature) provides the production
-# Ed25519 backend used by `anchor_pending_move`.
-# Lightweight typed-identifier validators (no heavy transitive deps beyond
-# what `cokret-core` already pulls in). Used by `coauth-config` for the
-# `ck:trust_domain:<scope>` wire-form check so config and SDK never drift.
-# Umbrella `cokret` SDK pulled in for the pure-protocol modules that
-# don't have a smaller-crate home: today just `cokret::identity::binding`
-# (consumed by `services::passkey_derive`). Default features pull in the
-# heavy client / openmls / sync surface, so opt into only `full-surface`
-# (gates the identity tree).
-# NOTE: pinned to 0.14 because the entire RustCrypto stack we depend on
-# transitively (digest 0.10, sha2 0.10, hmac 0.12, aead 0.5, aes-gcm 0.10,
-# chacha20poly1305 0.10) still re-exports `generic_array 0.14`. The crates
-# that bridge to generic-array 1.x (digest 0.11, sha2 0.11, aead 0.6, …)
-# are still in pre-release as of 2026-05; bumping `generic-array` here in
-# isolation would land us with two side-by-side versions and break any
-# trait bound like `OutputSizeUser::OutputSize: ArrayLength<u8>`. The
-# `#[deprecated]` warnings on `digest::generic_array::*` are expected
-# until the upstream RustCrypto migration ships (last verified: cargo tree
-# -i generic-array shows 13+ transitive consumers all on 0.14). Revisit
-# once `sha2 0.11` is stable on crates.io.
-
-# --- Front-end (Dioxus WASM) dependencies ---
-
-# [profile.release]
-# codegen-units = 1 # Reduce the number of codegen units to increase optimizations
-# lto = true        # Enable fat LTO
-
-# A few profile opt-level tweaks to make the test suite run faster
 aead = {version = "0.5.2",features = ["std"]}
 anyhow = "1.0.102"
 arc-swap = "1.9.1"
@@ -145,8 +113,20 @@ coauth-policy = {version = "=0.3.0",path = "crates/policy"}
 coauth-principal = {version = "=0.3.0",path = "crates/principal"}
 coauth-tasks = {version = "=0.3.0",path = "crates/tasks"}
 coauth-templates = {version = "=0.3.0",path = "crates/templates"}
+# Umbrella `cokret` SDK pulled in for the pure-protocol modules that don't
+# have a smaller-crate home: today just `cokret::identity::binding` (consumed
+# by `services::passkey_derive`). Default features pull in the heavy
+# client / openmls / sync surface, so opt into only `full-surface` (gates the
+# identity tree).
 cokret = {version = "0.3.0",path = "../cokret-rust-sdk/crates/sdk",default-features = false,features = ["full-surface"]}
+# Cokret v1 protocol SDK pieces — `cokret-core` exposes the typed
+# identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
+# `cokret-signatures` (with the `signer` feature) provides the production
+# Ed25519 backend used by `anchor_pending_move`.
 cokret-core = {version = "0.3.0",path = "../cokret-rust-sdk/crates/core",default-features = false}
+# Lightweight typed-identifier validators (no heavy transitive deps beyond
+# what `cokret-core` already pulls in). Used by `coauth-config` for the
+# `ck:trust_domain:<scope>` wire-form check so config and SDK never drift.
 cokret-identifiers = {version = "0.3.0",path = "../cokret-rust-sdk/crates/identifiers",default-features = false}
 cokret-signatures = {version = "0.3.0",path = "../cokret-rust-sdk/crates/signatures",default-features = false,features = ["signer"]}
 compact_str = "0.9.1"
@@ -193,6 +173,17 @@ fluent-langneg = "0.14"
 fluent-syntax = "0.12"
 form_urlencoded = "1.2.2"
 futures-util = "0.3.32"
+# NOTE: pinned to 0.14 because the entire RustCrypto stack we depend on
+# transitively (digest 0.10, sha2 0.10, hmac 0.12, aead 0.5, aes-gcm 0.10,
+# chacha20poly1305 0.10) still re-exports `generic_array 0.14`. The crates
+# that bridge to generic-array 1.x (digest 0.11, sha2 0.11, aead 0.6, ...)
+# are still in pre-release as of 2026-05; bumping `generic-array` here in
+# isolation would land us with two side-by-side versions and break any
+# trait bound like `OutputSizeUser::OutputSize: ArrayLength<u8>`. The
+# `#[deprecated]` warnings on `digest::generic_array::*` are expected
+# until the upstream RustCrypto migration ships (last verified: cargo tree
+# -i generic-array shows 13+ transitive consumers all on 0.14). Revisit
+# once `sha2 0.11` is stable on crates.io.
 generic-array = "0.14.9"
 gloo-timers = {version = "0.4",features = ["futures"]}
 headers = "0.4.1"
@@ -255,7 +246,7 @@ minijinja = {version = "2.20.0",features = [
 ]}
 minijinja-contrib = {version = "2.20.0",features = ["pycompat"]}
 nonzero_ext = "0.3.0"
-oauth-types = {version = "=0.3.0",path = "crates/oauth-types"}
+coauth-oauth-types = {version = "=0.3.0",path = "crates/oauth-types"}
 opendal = {version = "0.57",features = ["services-fs", "services-s3"]}
 opentelemetry = {version = "0.31.0",features = ["trace", "metrics"]}
 opentelemetry-http = {version = "0.31.0",features = ["reqwest"]}
@@ -345,6 +336,9 @@ sha1 = "0.10.6"
 sha2 = {version = "0.10.9",features = ["oid"]}
 signature = {version = "2.2.0",features = ["std", "rand_core"]}
 socket2 = "0.6.4"
+# soland deployment-internal S2S contracts (capability fanout DTOs shared
+# with the principal server; SOL-DRY-03).
+soland-core = {path = "../soland/crates/core"}
 spki = {version = "0.7.3",features = ["std"]}
 subtle = "2.6.1"
 thiserror = "2.0.18"
@@ -406,6 +400,8 @@ writeable = "0.6.3"
 x509-cert = "0.2.5"
 zeroize = "1.8.2"
 zxcvbn = "3.1.1"
+
+# A few profile opt-level tweaks to make the test suite run faster.
 [profile.dev.package]
 argon2.opt-level = 3
 bcrypt.opt-level = 3

@@ -19,14 +19,14 @@ use coauth_admin_types::{
 };
 use coauth_data::{RepositoryAccess, UpstreamOAuthProviderDiscoveryMode, User};
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
+use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
+use coauth_oauth_types::requests::{
+    AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
+};
 use cokret_core::error::REASON_PROOF_INVALID;
 use cokret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
-use oauth_types::errors::{ClientError, ClientErrorCode};
-use oauth_types::requests::{
-    AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
-};
 use salvo::prelude::*;
 
 use super::{DepotExt, DpopSessionBinding, RouteError, make_clock, make_rng};
@@ -168,8 +168,8 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
 
 /// Build the Principal Server localpart directory endpoint for `principal_did`.
 ///
-/// DEPLOYMENT-INTERNAL S2S CONVENTION, NOT A PROTOCOL-FACE OPERATION
-/// (`_fix_plan.md` decision 4 / COA-ARCH-01). This `/_soland/accounts/{did}/
+/// RULING: DEPLOYMENT-INTERNAL S2S CONVENTION, NOT A PROTOCOL-FACE OPERATION.
+/// This `/_soland/accounts/{did}/
 /// localparts` edge is used during OIDC token exchange to *list and sync* the
 /// account's primary localpart binding on the Principal Server
 /// (`ensure_soland_account_localpart_bound`). It is intentionally NOT migrated
@@ -556,18 +556,6 @@ pub(super) async fn ensure_soland_account_registered(
     }
 }
 
-fn login_hint_matches_user(
-    url_builder: &coauth_data::UrlBuilder,
-    cokret_config: &coauth_config::CokretConfig,
-    user: &User,
-    login_hint: &str,
-) -> bool {
-    let login_hint = login_hint.trim();
-    login_hint == user.localpart
-        || login_hint == cokret::user_did_for(url_builder, cokret_config, user)
-        || login_hint == cokret::user_handle(url_builder, user)
-}
-
 /// Account Authority OIDC authorization-code → `ck.session.grant` exchange.
 ///
 /// This is the core that the canonical
@@ -920,7 +908,6 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
         let session_grant = cokret::issue_session_grant_for_audience(
             &*clock,
-            &url_builder,
             &cokret_config,
             &key_store,
             &browser_session,
@@ -1224,8 +1211,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 format!("authorization_code references missing browser_session={user_session_id}"),
             )
         })?;
-    let expected_subject =
-        cokret::user_did_for(&url_builder, &cokret_config, &browser_session.user);
+    let expected_subject = cokret::user_did_for(&cokret_config, &browser_session.user);
     let expected_issuer = url_builder.oidc_issuer();
     let oauth_introspection = match crate::handlers::oauth::introspection_service::introspect_token(
         &mut repo,
@@ -1415,7 +1401,6 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
     let session_grant = cokret::issue_session_grant_for_audience(
         &clock,
-        &url_builder,
         &cokret_config,
         &key_store,
         &browser_session,

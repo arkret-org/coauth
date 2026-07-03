@@ -3,7 +3,7 @@ use coauth_data::oauth::OAuthClientRepository;
 use coauth_data::{BoxClock, BoxRepository, BoxRng, SystemClock};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
-use oauth_types::scope::OPENID;
+use coauth_oauth_types::scope::OPENID;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::Extractible;
@@ -169,7 +169,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         .lookup(user_id)
         .await?
         .ok_or(RouteError::NoSuchUser(user_id))?;
-    let subject_did = cokret::oidc_subject_for_user(&url_builder, &cokret_config, &user);
+    let subject_did = cokret::oidc_subject_for_user(&cokret_config, &user);
     let principal_did =
         cokret::published_principal_did_for_user(&mut repo, &cokret_config, &user).await?;
 

@@ -45,6 +45,9 @@ pub struct BeginPasswordRegistrationRequestBody {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmailAvailabilityCheck {
     Precheck,
+    // Only the orphaned SSR register views (handlers/views/, not part of the
+    // module tree) selected Deferred; kept pending the ruling on that tree.
+    #[allow(dead_code)]
     Deferred,
 }
 
@@ -127,20 +130,6 @@ pub struct RegistrationStatusSummary {
     pub phone_pending: bool,
     pub steps_completed: Vec<&'static str>,
     pub next_step: &'static str,
-    pub workflow: RegistrationWorkflowSnapshot,
-}
-
-pub struct RegistrationEmailStepContext {
-    pub registration: UserRegistration,
-    pub email_authentication: UserEmailAuthentication,
-}
-
-pub struct RegistrationDisplayNameStepContext {
-    pub registration: UserRegistration,
-}
-
-pub struct RegistrationTokenStepContext {
-    pub registration: UserRegistration,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -202,7 +191,6 @@ pub struct CompletedRegistration {
     pub registration: UserRegistration,
     pub user: User,
     pub user_session: BrowserSession,
-    pub password_authenticated: bool,
 }
 
 pub struct PreparedRegistrationCompletion {
@@ -249,74 +237,6 @@ pub enum BeginPasswordRegistrationError {
 pub enum LoadRegistrationProgressError {
     #[error("registration not found")]
     NotFound,
-
-    #[error(transparent)]
-    Repository(#[from] RepositoryError),
-}
-
-#[derive(Debug, Error)]
-#[allow(clippy::large_enum_variant)]
-pub enum LoadRegistrationEmailStepError {
-    #[error("registration not found")]
-    NotFound,
-
-    #[error("registration already completed")]
-    RegistrationCompleted(UserRegistration),
-
-    #[error("registration has no email authentication")]
-    NoEmailAuthentication,
-
-    #[error("registration email authentication not found")]
-    EmailAuthenticationMissing,
-
-    #[error("email authentication already completed")]
-    EmailAlreadyVerified,
-
-    #[error(transparent)]
-    Repository(#[from] RepositoryError),
-}
-
-#[derive(Debug, Error)]
-#[allow(clippy::large_enum_variant)]
-pub enum LoadRegistrationDisplayNameStepError {
-    #[error("registration not found")]
-    NotFound,
-
-    #[error("registration already completed")]
-    RegistrationCompleted(UserRegistration),
-
-    #[error(transparent)]
-    Repository(#[from] RepositoryError),
-}
-
-#[derive(Debug, Error)]
-pub enum LoadRegistrationTokenStepError {
-    #[error("registration not found")]
-    NotFound,
-
-    #[error("registration already completed")]
-    RegistrationCompleted(UserRegistration),
-
-    #[error("registration token already attached")]
-    TokenAlreadyAttached(UserRegistration),
-
-    #[error(transparent)]
-    Repository(#[from] RepositoryError),
-}
-
-#[derive(Debug, Error)]
-pub enum AttachRegistrationTokenError {
-    #[error("registration not found")]
-    NotFound,
-
-    #[error("registration already completed")]
-    RegistrationCompleted(UserRegistration),
-
-    #[error("registration token already attached")]
-    TokenAlreadyAttached(UserRegistration),
-
-    #[error("registration token invalid")]
-    InvalidToken,
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -507,6 +427,9 @@ pub enum RegistrationFinishError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrincipalServerCheckMode {
+    // Only the orphaned SSR register views (handlers/views/, not part of the
+    // module tree) selected Strict; kept pending the ruling on that tree.
+    #[allow(dead_code)]
     Strict,
     BestEffort,
 }

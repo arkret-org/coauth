@@ -96,6 +96,9 @@ impl CookieOption {
     /// guarantees `Secure`, `Path=/`, and no `Domain` attribute, which
     /// removes a class of session-fixation tricks where a sibling
     /// subdomain plants a cookie that the auth host then reads.
+    // Kept (with `apply_cross_site_hardened` below) for the `__Host-`
+    // prefixed cookie profile that is not wired up yet.
+    #[allow(dead_code)]
     fn host_prefix_eligible(&self) -> bool {
         self.secure() && self.path() == "/"
     }

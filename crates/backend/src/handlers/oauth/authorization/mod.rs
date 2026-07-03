@@ -6,10 +6,10 @@ use coauth_data::{
     AuthorizationCode, BoxClock, BoxRepository, BoxRng, Pkce, PostAuthAction, RepositoryAccess,
     SystemClock,
 };
-use oauth_types::errors::{ClientError, ClientErrorCode};
-use oauth_types::pkce;
-use oauth_types::requests::{AuthorizationRequest, GrantType, Prompt, ResponseMode};
-use oauth_types::response_type::ResponseType;
+use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
+use coauth_oauth_types::pkce;
+use coauth_oauth_types::requests::{AuthorizationRequest, GrantType, Prompt, ResponseMode};
+use coauth_oauth_types::response_type::ResponseType;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::prelude::*;

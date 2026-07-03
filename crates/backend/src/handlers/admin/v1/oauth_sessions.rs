@@ -8,7 +8,7 @@ use coauth_data::RepositoryAccess;
 use coauth_data::audit::AdminOperation;
 use coauth_data::oauth::OAuthSessionFilter;
 use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
-use oauth_types::scope::{Scope, ScopeToken};
+use coauth_oauth_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;

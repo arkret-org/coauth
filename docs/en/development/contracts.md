@@ -40,14 +40,17 @@ When evolving the contract:
 4. Mark the previous version "deprecated" in this doc and in the
    handler module's top-of-file comment; remove it in a later release.
 
-## starid DID resolution: did:key vs did:web
+## starid DID resolution: did:key vs did:webvh
 
-coauth resolves both `did:key:…` and `did:web:…` identifiers (the
-latter including the `did:webvh:…` variant served by starid). The two
-go through different resolver paths with different operational
+coauth resolves both `did:key:…` and web-hosted identifiers — that is
+`did:webvh:…` (the v1 core default method, served by starid) and
+`did:web:…` (accepted only when the deployment explicitly declares the
+no-history profile, i.e. `history_evidence_kind="none"` — for service
+DIDs — or the `personal_node` deployment profile for principal DIDs).
+The two go through different resolver paths with different operational
 properties:
 
-| Concern             | `did:key`                                   | `did:web` / `did:webvh`                        |
+| Concern             | `did:key`                                   | `did:webvh` / `did:web`                        |
 | ------------------- | ------------------------------------------- | ---------------------------------------------- |
 | Resolver            | Pure in-process key decode (`multibase`)    | HTTPS GET against the DID method URL           |
 | TLS validation      | N/A                                         | Strict — system root store; no `--insecure`    |
@@ -62,13 +65,13 @@ Implementation pointers:
   `crates/backend/src/services/did_resolver.rs`. The resolver
   inspects the DID method prefix and routes to the in-process
   decoder for `did:key:` or the HTTPS resolver for
-  `did:web:` / `did:webvh:`.
-- TLS validation for `did:web` goes through the standard
+  `did:webvh:` / `did:web:`.
+- TLS validation for `did:webvh` / `did:web` goes through the standard
   `reqwest`-with-rustls path — there is no per-host bypass. If a
   deployment needs to resolve a DID hosted on an internal CA, the CA
   cert must be added to the system trust store.
-- The cache TTL is intentionally short for `did:web` because the DID
-  document is the rotation surface. Production deployments tune it
+- The cache TTL is intentionally short for `did:webvh` / `did:web`
+  because the DID document is the rotation surface. Production deployments tune it
   via configuration; the default is conservative so a key rotation
   takes at most one TTL window to propagate.
 

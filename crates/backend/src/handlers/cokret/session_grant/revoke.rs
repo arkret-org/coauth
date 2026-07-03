@@ -458,7 +458,7 @@ pub async fn revoke_session_grant_endpoint(
     let body = parse_session_revoke_body(req).await?;
     let selector = revoke_selector(&body)?;
 
-    let service_did = Did::new(service_did_for(&url_builder, &cokret_config)).map_err(|error| {
+    let service_did = Did::new(service_did_for(&cokret_config)).map_err(|error| {
         CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,

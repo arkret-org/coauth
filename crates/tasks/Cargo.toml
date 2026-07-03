@@ -42,7 +42,7 @@ cokret-core = {workspace = true}
 cron = {workspace = true}
 diesel = {workspace = true}
 diesel-async = {workspace = true}
-oauth-types = {workspace = true}
+coauth-oauth-types = {workspace = true}
 opentelemetry = {workspace = true}
 opentelemetry-semantic-conventions = {workspace = true}
 rand = {workspace = true}

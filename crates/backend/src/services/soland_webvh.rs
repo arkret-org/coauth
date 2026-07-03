@@ -150,6 +150,8 @@ pub async fn ensure_principal_did_minted(
         .encrypt_to_string(&prepared.update_key_seed)
         .map_err(|_| SolandWebvhError::Encrypt)?;
 
+    // `PreparedInception` is zeroize-on-drop in the SDK, so its fields cannot
+    // be moved out — clone what the row needs and let the rest be scrubbed.
     repo.principal_did()
         .add(
             rng,
@@ -157,13 +159,13 @@ pub async fn ensure_principal_did_minted(
             user,
             audience.to_owned(),
             prepared.did.clone(),
-            prepared.did_public_key_multibase,
-            prepared.update_public_key_multibase,
+            prepared.did_public_key_multibase.clone(),
+            prepared.update_public_key_multibase.clone(),
             update_secret_b64,
-            Some(prepared.version_id),
+            Some(prepared.version_id.clone()),
         )
         .await
         .map_err(|e| SolandWebvhError::Storage(e.to_string()))?;
 
-    Ok(prepared.did)
+    Ok(prepared.did.clone())
 }

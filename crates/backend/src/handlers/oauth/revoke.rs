@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock};
 use coauth_keystore::Encrypter;
+use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
+use coauth_oauth_types::requests::RevocationRequest;
 use coauth_principal::ConnectorAdmin;
-use oauth_types::errors::{ClientError, ClientErrorCode};
-use oauth_types::requests::RevocationRequest;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use salvo::Extractible;

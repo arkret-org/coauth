@@ -11,8 +11,8 @@ use coauth_data::{
     RepositoryFactory as _, UserEmailPatch, UserPatch, UserProfilePatch,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_oauth_types::scope::{OPENID, Scope};
 use diesel_async::RunQueryDsl;
-use oauth_types::scope::{OPENID, Scope};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 

@@ -25,7 +25,7 @@ mod tests {
         UpstreamOAuthProviderTokenAuthMethod,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
-    use oauth_types::scope::{OPENID, Scope};
+    use coauth_oauth_types::scope::{OPENID, Scope};
     use rand_core::SeedableRng;
 
     use crate::PgRepositoryFactory;
@@ -196,7 +196,7 @@ mod tests {
             .await
             .unwrap();
 
-        // TODO(COA-HYG-02): we should also try other combinations of the filter
+        // TODO: we should also try other combinations of the filter
         let filter = UpstreamOAuthLinkFilter::new()
             .for_user(&user)
             .for_provider(&provider)

@@ -151,7 +151,7 @@ const DEVICE_SCOPE_PREFIXES: &[&str] = &[
 ];
 
 /// Extract a device ID from a scope token if it has a known device prefix.
-fn extract_device_id(token: &oauth_types::scope::ScopeToken) -> Option<&str> {
+fn extract_device_id(token: &coauth_oauth_types::scope::ScopeToken) -> Option<&str> {
     let s = token.as_str();
     DEVICE_SCOPE_PREFIXES
         .iter()

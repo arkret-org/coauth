@@ -2,11 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Integration tests for the admin users endpoints.
-//!
-//! Was the larger half of the original `admin/v1/users.rs`. Wrapping the
-//! body in a single `mod tests` keeps the original imports and helper
-//! visibility intact, so the move is purely textual.
+//! Integration tests for the admin accounts endpoints that were folded in
+//! from the removed `/_coauth/admin/users/*` tree (create / batch-invite /
+//! profile patch / set-password). The pre-existing accounts lifecycle and
+//! risk-action workflow tests live inline in `accounts.rs`.
 
 #[cfg(test)]
 #[allow(clippy::module_inception)]
@@ -27,7 +26,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn test_add_user() {
+    async fn test_add_account() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -35,20 +34,19 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request =
-            Request::post("/_coauth/admin/users")
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "username": "alice",
-                }));
+        let request = Request::post("/_coauth/admin/accounts")
+            .bearer(&token)
+            .json(serde_json::json!({
+                "handle": "alice",
+            }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
 
         let body: serde_json::Value = response.json();
-        assert_eq!(body["data"]["type"], "user");
+        assert_eq!(body["data"]["type"], "account");
         let id = body["data"]["id"].as_str().unwrap();
-        assert_eq!(body["data"]["attributes"]["username"], "alice");
+        assert_eq!(body["data"]["attributes"]["handle"], "alice");
 
         // Check that the user was created in the database
         let mut repo = state.repository().await.unwrap();
@@ -67,7 +65,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_add_user_invalid_username() {
+    async fn test_add_account_invalid_username() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -75,12 +73,11 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request =
-            Request::post("/_coauth/admin/users")
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "username": "this is invalid",
-                }));
+        let request = Request::post("/_coauth/admin/accounts")
+            .bearer(&token)
+            .json(serde_json::json!({
+                "handle": "this is invalid",
+            }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::BAD_REQUEST);
@@ -90,7 +87,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_add_user_exists() {
+    async fn test_add_account_exists() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -98,244 +95,30 @@ mod tests {
         let mut state = TestState::from_pool(pool.clone()).await.unwrap();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request =
-            Request::post("/_coauth/admin/users")
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "username": "alice",
-                }));
+        let request = Request::post("/_coauth/admin/accounts")
+            .bearer(&token)
+            .json(serde_json::json!({
+                "handle": "alice",
+            }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::CREATED);
 
         let body: serde_json::Value = response.json();
-        assert_eq!(body["data"]["type"], "user");
-        assert_eq!(body["data"]["attributes"]["username"], "alice");
+        assert_eq!(body["data"]["type"], "account");
+        assert_eq!(body["data"]["attributes"]["handle"], "alice");
 
-        let request =
-            Request::post("/_coauth/admin/users")
-                .bearer(&token)
-                .json(serde_json::json!({
-                    "username": "alice",
-                }));
+        let request = Request::post("/_coauth/admin/accounts")
+            .bearer(&token)
+            .json(serde_json::json!({
+                "handle": "alice",
+            }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::CONFLICT);
 
         let body: serde_json::Value = response.json();
         assert_eq!(body["errors"][0]["title"], "User already exists");
-    }
-
-    #[tokio::test]
-    async fn test_list_users() {
-        setup();
-        let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
-            return;
-        };
-        let mut state = TestState::from_pool(pool.clone()).await.unwrap();
-        let token = state.token_with_scope("urn:coauth:admin").await;
-        let mut rng = state.rng();
-
-        // Provision two users
-        let mut repo = state.repository().await.unwrap();
-        repo.user()
-            .add(&mut rng, &state.clock, "alice".to_owned())
-            .await
-            .unwrap();
-        repo.user()
-            .add(&mut rng, &state.clock, "bob".to_owned())
-            .await
-            .unwrap();
-        repo.save().await.unwrap();
-
-        // Test default behavior (count=true)
-        let request = Request::get("/_coauth/admin/users").bearer(&token).empty();
-        let response = state.request(request).await;
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
-        {
-          "meta": {
-            "count": 2
-          },
-          "data": [
-            {
-              "type": "user",
-              "id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
-              "attributes": {
-                "username": "bob",
-                "created_at": "2022-01-16T14:40:00Z",
-                "locked_at": null,
-                "deactivated_at": null,
-                "admin": false
-              },
-              "links": {
-                "self": "/_coauth/admin/users/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
-              },
-              "meta": {
-                "page": {
-                  "cursor": "01FSHN9AG0AJ6AC5HQ9X6H4RP4"
-                }
-              }
-            },
-            {
-              "type": "user",
-              "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-              "attributes": {
-                "username": "alice",
-                "created_at": "2022-01-16T14:40:00Z",
-                "locked_at": null,
-                "deactivated_at": null,
-                "admin": false
-              },
-              "links": {
-                "self": "/_coauth/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
-              },
-              "meta": {
-                "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
-                }
-              }
-            }
-          ],
-          "links": {
-            "self": "/_coauth/admin/users?page[first]=10",
-            "first": "/_coauth/admin/users?page[first]=10",
-            "last": "/_coauth/admin/users?page[last]=10"
-          }
-        }
-        "#);
-
-        // Test count=false
-        let request = Request::get("/_coauth/admin/users?count=false")
-            .bearer(&token)
-            .empty();
-        let response = state.request(request).await;
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": [
-            {
-              "type": "user",
-              "id": "01FSHN9AG0AJ6AC5HQ9X6H4RP4",
-              "attributes": {
-                "username": "bob",
-                "created_at": "2022-01-16T14:40:00Z",
-                "locked_at": null,
-                "deactivated_at": null,
-                "admin": false
-              },
-              "links": {
-                "self": "/_coauth/admin/users/01FSHN9AG0AJ6AC5HQ9X6H4RP4"
-              },
-              "meta": {
-                "page": {
-                  "cursor": "01FSHN9AG0AJ6AC5HQ9X6H4RP4"
-                }
-              }
-            },
-            {
-              "type": "user",
-              "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-              "attributes": {
-                "username": "alice",
-                "created_at": "2022-01-16T14:40:00Z",
-                "locked_at": null,
-                "deactivated_at": null,
-                "admin": false
-              },
-              "links": {
-                "self": "/_coauth/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
-              },
-              "meta": {
-                "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
-                }
-              }
-            }
-          ],
-          "links": {
-            "self": "/_coauth/admin/users?count=false&page[first]=10",
-            "first": "/_coauth/admin/users?count=false&page[first]=10",
-            "last": "/_coauth/admin/users?count=false&page[last]=10"
-          }
-        }
-        "#);
-
-        // Test count=only
-        let request = Request::get("/_coauth/admin/users?count=only")
-            .bearer(&token)
-            .empty();
-        let response = state.request(request).await;
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r###"
-        {
-          "meta": {
-            "count": 2
-          },
-          "links": {
-            "self": "/_coauth/admin/users?count=only"
-          }
-        }
-        "###);
-
-        // Test count=false with filtering
-        let request = Request::get("/_coauth/admin/users?count=false&filter[search]=alice")
-            .bearer(&token)
-            .empty();
-        let response = state.request(request).await;
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
-        {
-          "data": [
-            {
-              "type": "user",
-              "id": "01FSHN9AG0MZAA6S4AF7CTV32E",
-              "attributes": {
-                "username": "alice",
-                "created_at": "2022-01-16T14:40:00Z",
-                "locked_at": null,
-                "deactivated_at": null,
-                "admin": false
-              },
-              "links": {
-                "self": "/_coauth/admin/users/01FSHN9AG0MZAA6S4AF7CTV32E"
-              },
-              "meta": {
-                "page": {
-                  "cursor": "01FSHN9AG0MZAA6S4AF7CTV32E"
-                }
-              }
-            }
-          ],
-          "links": {
-            "self": "/_coauth/admin/users?filter[search]=alice&count=false&page[first]=10",
-            "first": "/_coauth/admin/users?filter[search]=alice&count=false&page[first]=10",
-            "last": "/_coauth/admin/users?filter[search]=alice&count=false&page[last]=10"
-          }
-        }
-        "#);
-
-        // Test count=only with filtering
-        let request = Request::get("/_coauth/admin/users?count=only&filter[search]=alice")
-            .bearer(&token)
-            .empty();
-        let response = state.request(request).await;
-        response.assert_status(StatusCode::OK);
-        let body: serde_json::Value = response.json();
-        insta::assert_json_snapshot!(body, @r#"
-        {
-          "meta": {
-            "count": 1
-          },
-          "links": {
-            "self": "/_coauth/admin/users?filter[search]=alice&count=only"
-          }
-        }
-        "#);
     }
 
     #[tokio::test]
@@ -364,7 +147,7 @@ mod tests {
         let user_id = user.id;
 
         // Set the password through the API
-        let request = Request::post(format!("/_coauth/admin/users/{user_id}/set-password"))
+        let request = Request::post(format!("/_coauth/admin/accounts/{user_id}/set-password"))
             .bearer(&token)
             .json(serde_json::json!({
                 "password": "this is a good enough password",
@@ -410,7 +193,7 @@ mod tests {
         let user_id = user.id;
 
         // Set a weak password through the API
-        let request = Request::post(format!("/_coauth/admin/users/{user_id}/set-password"))
+        let request = Request::post(format!("/_coauth/admin/accounts/{user_id}/set-password"))
             .bearer(&token)
             .json(serde_json::json!({
                 "password": "password",
@@ -426,7 +209,7 @@ mod tests {
         repo.save().await.unwrap();
 
         // Now try with the skip_password_check flag
-        let request = Request::post(format!("/_coauth/admin/users/{user_id}/set-password"))
+        let request = Request::post(format!("/_coauth/admin/accounts/{user_id}/set-password"))
             .bearer(&token)
             .json(serde_json::json!({
                 "password": "password",
@@ -453,7 +236,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_unknown_user() {
+    async fn test_unknown_account() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -462,11 +245,12 @@ mod tests {
         let token = state.token_with_scope("urn:coauth:admin").await;
 
         // Set the password through the API
-        let request = Request::post("/_coauth/admin/users/01040G2081040G2081040G2081/set-password")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "password": "this is a good enough password",
-            }));
+        let request =
+            Request::post("/_coauth/admin/accounts/01040G2081040G2081040G2081/set-password")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "password": "this is a good enough password",
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::NOT_FOUND);
@@ -474,7 +258,7 @@ mod tests {
         let body: serde_json::Value = response.json();
         assert_eq!(
             body["errors"][0]["title"],
-            "User ID 01040G2081040G2081040G2081 not found"
+            "Account ID 01040G2081040G2081040G2081 not found"
         );
     }
 
@@ -488,11 +272,12 @@ mod tests {
         state.password_manager = PasswordManager::disabled();
         let token = state.token_with_scope("urn:coauth:admin").await;
 
-        let request = Request::post("/_coauth/admin/users/01040G2081040G2081040G2081/set-password")
-            .bearer(&token)
-            .json(serde_json::json!({
-                "password": "hunter2",
-            }));
+        let request =
+            Request::post("/_coauth/admin/accounts/01040G2081040G2081040G2081/set-password")
+                .bearer(&token)
+                .json(serde_json::json!({
+                    "password": "hunter2",
+                }));
 
         let response = state.request(request).await;
         response.assert_status(StatusCode::FORBIDDEN);
@@ -502,7 +287,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_patch_user_profile_and_state() {
+    async fn test_patch_account_profile_and_state() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -527,7 +312,7 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        let request = Request::patch(format!("/_coauth/admin/users/{}", user.id))
+        let request = Request::patch(format!("/_coauth/admin/accounts/{}", user.id))
             .bearer(&token)
             .json(serde_json::json!({
                 "display_name": "Alice Admin",
@@ -554,7 +339,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_patch_user_reactivate() {
+    async fn test_patch_account_reactivate() {
         setup();
         let Some(pool) = coauth_data::test_utils::setup_test_pool().await else {
             return;
@@ -586,7 +371,7 @@ mod tests {
             .await
             .unwrap();
 
-        let request = Request::patch(format!("/_coauth/admin/users/{}", user.id))
+        let request = Request::patch(format!("/_coauth/admin/accounts/{}", user.id))
             .bearer(&token)
             .json(serde_json::json!({
                 "deactivated": false

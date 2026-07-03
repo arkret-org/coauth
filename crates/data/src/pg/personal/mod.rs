@@ -17,7 +17,7 @@ mod tests {
     };
     use coauth_data::user::UserRepository;
     use coauth_data::{Clock, Pagination, RepositoryAccess as _, RepositoryFactory as _};
-    use oauth_types::scope::{OPENID, PROFILE, Scope};
+    use coauth_oauth_types::scope::{OPENID, PROFILE, Scope};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 

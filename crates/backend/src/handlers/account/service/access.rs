@@ -29,12 +29,8 @@ pub enum PasswordLoginOutcome {
     Disabled,
     InvalidCredentials,
     RateLimited,
-    AccountDeactivated {
-        user: User,
-    },
-    AccountLocked {
-        user: User,
-    },
+    AccountDeactivated,
+    AccountLocked,
     Authenticated {
         user: User,
         user_session: BrowserSession,
@@ -144,11 +140,11 @@ pub async fn login_with_password(
     };
 
     if user.deactivated_at.is_some() {
-        return Ok(PasswordLoginOutcome::AccountDeactivated { user });
+        return Ok(PasswordLoginOutcome::AccountDeactivated);
     }
 
     if user.locked_at.is_some() {
-        return Ok(PasswordLoginOutcome::AccountLocked { user });
+        return Ok(PasswordLoginOutcome::AccountLocked);
     }
 
     debug_assert!(user.is_valid());
@@ -224,8 +220,7 @@ async fn find_user_by_login_identifier(
     repo: &mut BoxRepository,
     identifier: &str,
 ) -> Result<Option<User>, RepositoryError> {
-    if let Some(user_id) = cokret::parse_local_user_did_for(url_builder, cokret_config, identifier)
-    {
+    if let Some(user_id) = cokret::parse_local_user_did_for(cokret_config, identifier) {
         return repo.user().lookup(user_id).await;
     }
 

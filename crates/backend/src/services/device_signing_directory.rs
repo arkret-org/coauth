@@ -22,7 +22,7 @@ use thiserror::Error;
 
 use crate::outbound_http;
 
-// RULING (_fix_plan.md "## R1/R2 协同落地" / R2): this read is a
+// RULING: this read is a
 // deployment-internal server-to-server directory lookup, NOT a protocol
 // responsibility — so the `/_soland/*` S2S edge below is the correct, compliant
 // surface, not a "violation" to be migrated off.

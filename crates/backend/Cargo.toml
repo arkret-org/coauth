@@ -71,7 +71,7 @@ listenfd = {workspace = true}
 mime = {workspace = true}
 minijinja = {workspace = true}
 minijinja-contrib = {workspace = true}
-oauth-types = {workspace = true}
+coauth-oauth-types = {workspace = true}
 opendal = {workspace = true}
 opentelemetry = {workspace = true}
 opentelemetry-http = {workspace = true}
@@ -109,6 +109,7 @@ sha1 = {workspace = true,features = ["oid"]}
 sha2 = {workspace = true}
 signature = {workspace = true}
 socket2 = {workspace = true}
+soland-core = {workspace = true}
 subtle = {workspace = true}
 thiserror = {workspace = true}
 time = {workspace = true}

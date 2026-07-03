@@ -229,12 +229,12 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             res.render(Json(LoginOutcome::error("rate_limited")));
             Ok(())
         }
-        PasswordLoginOutcome::AccountDeactivated { .. } => {
+        PasswordLoginOutcome::AccountDeactivated => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
             res.render(Json(LoginOutcome::error("account_deactivated")));
             Ok(())
         }
-        PasswordLoginOutcome::AccountLocked { .. } => {
+        PasswordLoginOutcome::AccountLocked => {
             PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
             res.render(Json(LoginOutcome::error("account_locked")));
             Ok(())

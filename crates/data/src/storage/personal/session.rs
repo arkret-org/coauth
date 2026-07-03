@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::personal::PersonalAccessToken;
 use coauth_data::personal::session::{PersonalSession, PersonalSessionOwner};
 use coauth_data::{Client, Clock, User};
-use oauth_types::scope::Scope;
+use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 

@@ -1,37 +1,3 @@
-/// Get ISO date string for 90 days ago (for inactive session filter).
-pub fn get_ninety_days_ago() -> String {
-    let now = chrono::Utc::now();
-    let ninety_days_ago = now - chrono::Duration::days(90);
-    ninety_days_ago.format("%Y-%m-%dT00:00:00Z").to_string()
-}
-
-/// Extract device ID from a Cokret OAuth scope string.
-pub fn device_id_from_scope(scope: &str) -> Option<String> {
-    for part in scope.split_whitespace() {
-        if let Some(device_id) = part.strip_prefix("urn:cokret:client:device:")
-            && !device_id.is_empty()
-        {
-            return Some(device_id.to_owned());
-        }
-    }
-    None
-}
-
-/// Simplify a URL by removing protocol, trailing slash, search and hash.
-pub fn simplify_url(url: &str) -> String {
-    let simplified = url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .trim_end_matches('/');
-    if let Some(pos) = simplified.find('?') {
-        return simplified[..pos].to_string();
-    }
-    if let Some(pos) = simplified.find('#') {
-        return simplified[..pos].to_string();
-    }
-    simplified.to_owned()
-}
-
 /// Format a relative time string from a datetime string.
 pub fn format_last_active(datetime: &str) -> String {
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(datetime) {

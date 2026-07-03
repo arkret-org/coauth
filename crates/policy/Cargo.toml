@@ -29,7 +29,7 @@ async-trait = {workspace = true}
 cedar-policy = {workspace = true,optional = true}
 chrono = {workspace = true,optional = true}
 coauth-data = {workspace = true}
-oauth-types = {workspace = true}
+coauth-oauth-types = {workspace = true}
 reqwest = {workspace = true,optional = true}
 schemars = {workspace = true}
 serde = {workspace = true}

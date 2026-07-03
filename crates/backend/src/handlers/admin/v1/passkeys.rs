@@ -142,8 +142,7 @@ fn audit_signing_context(
 ) -> Result<(coauth_keystore::Keystore, String, bool), AppError> {
     let key_store = depot.key_store()?;
     let cokret_config = depot.cokret_config()?;
-    let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let service_did = service_did_for(&cokret_config);
     Ok((
         key_store,
         service_did,

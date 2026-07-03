@@ -1,7 +1,7 @@
 //! `refresh_token` grant-type exchange.
 
 use coauth_data::{BoxRepository, Client, Clock, RefreshToken, RefreshTokenState, SiteConfig};
-use oauth_types::requests::{AccessTokenResponse, GrantType, RefreshTokenGrant};
+use coauth_oauth_types::requests::{AccessTokenResponse, GrantType, RefreshTokenGrant};
 use tracing::warn;
 
 use super::RefreshTokenExchangeError;

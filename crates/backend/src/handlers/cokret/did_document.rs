@@ -6,6 +6,14 @@
 //! and their user-document builders were removed. DID hosting is the
 //! principal server's job (soland embedded webvh / external starid); coauth
 //! artefacts are verified via introspection + OAuth JWKS instead.
+//!
+//! NOTE (CAU-DRY-02, kept by ruling): this is intentionally NOT the SDK
+//! `cokret_core::identity::DidDocument`. The SDK type is a simplified product
+//! contract (verification methods collapsed to a map); this one is the
+//! full-document wire shape consumed from external resolvers (JWK
+//! verification methods, `service` entries, holder-preference metadata).
+//! Reach for the SDK type for product contracts — do not grow this one into
+//! a second general-purpose DID model.
 
 use coauth_jose::jwk::PublicJsonWebKey;
 use serde::{Deserialize, Serialize};

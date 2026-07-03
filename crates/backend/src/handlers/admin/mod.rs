@@ -55,7 +55,7 @@ pub const COKRET_ADMIN_SCOPE: &str = "urn:cokret:admin:*";
 /// sub-scopes must be authorized explicitly by their own predicate, never by
 /// virtue of sharing the admin URN prefix.
 #[must_use]
-pub fn has_admin_scope(scope: &oauth_types::scope::Scope) -> bool {
+pub fn has_admin_scope(scope: &coauth_oauth_types::scope::Scope) -> bool {
     scope.contains(ADMIN_SCOPE) || scope.contains(COKRET_ADMIN_SCOPE)
 }
 

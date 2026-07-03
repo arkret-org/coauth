@@ -10,8 +10,8 @@ use coauth_data::TokenType;
 use coauth_data::personal::PersonalSessionFilter;
 use coauth_data::personal::session::PersonalSessionOwner;
 use coauth_data::queue::{QueueJobRepositoryExt as _, SyncDevicesJob};
+use coauth_oauth_types::scope::{Scope, ScopeToken};
 use coauth_principal::ConnectorAdmin;
-use oauth_types::scope::{Scope, ScopeToken};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -564,9 +564,9 @@ mod tests {
     use chrono::Duration;
     use coauth_data::Clock;
     use coauth_data::personal::session::PersonalSessionOwner;
+    use coauth_oauth_types::scope::{OPENID, Scope};
     use hyper::{Request, StatusCode};
     use insta::assert_json_snapshot;
-    use oauth_types::scope::{OPENID, Scope};
     use serde_json::{Value, json};
     use ulid::Ulid;
 

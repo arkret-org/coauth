@@ -32,6 +32,7 @@ use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
 use serde_json::{Value, json};
 use signature::RandomizedSigner as _;
+use soland_core::capability_fanout::CapabilityFanoutBody;
 use ulid::Ulid;
 
 use crate::JsonResult;
@@ -131,8 +132,7 @@ pub async fn create_handler(
         .map_or_else(|| "service".to_owned(), |u| format!("user:{}", u.id));
 
     let cokret_config = depot.cokret_config()?;
-    let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let service_did = service_did_for(&cokret_config);
     let key_store = depot.key_store()?;
     let capability_grant_id = GrantId::new(new_prefixed_uuid7("ck:grant:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?
@@ -254,8 +254,7 @@ pub async fn revoke_handler(
     match revoked {
         Some(revoked) => {
             let cokret_config = depot.cokret_config()?;
-            let url_builder = depot.url_builder()?;
-            let service_did = service_did_for(&url_builder, &cokret_config);
+            let service_did = service_did_for(&cokret_config);
             let key_store = depot.key_store()?;
             let revoke_fanout_payload = build_revoke_fanout_payload(
                 &revoke_event_id,
@@ -300,6 +299,11 @@ pub async fn revoke_handler(
         }
     }
 }
+
+/// Fanout envelope kind expected by soland's
+/// `/_soland/root/authz/capability-fanout` handler (shared contract in
+/// `soland_core::capability_fanout`).
+const CAPABILITY_FANOUT_KIND: &str = "ck.coauth.collaboration_capability.fanout.v1";
 
 fn build_grant_fanout_payload(
     grant_event_id: &str,
@@ -351,19 +355,20 @@ fn build_grant_fanout_payload(
     let mut signed_grant = unsigned_payload["grant"].clone();
     signed_grant["proofs"] = json!([proof]);
 
-    Ok(json!({
-        "kind": "org.cokret.coauth.collaboration_capability.fanout.v1",
-        "operation": "grant",
-        "issuer_service_did": service_did,
-        "event_kind": "ck.capability.grant",
-        "event_id": grant_event_id,
-        "capability_grant_id": capability_grant_id,
-        "payload": {
+    let body = CapabilityFanoutBody {
+        kind: CAPABILITY_FANOUT_KIND.to_owned(),
+        operation: "grant".to_owned(),
+        issuer_service_did: service_did.to_owned(),
+        event_kind: "ck.capability.grant".to_owned(),
+        event_id: grant_event_id.to_owned(),
+        capability_grant_id: capability_grant_id.to_owned(),
+        payload: json!({
             "grant_id": capability_grant_id,
             "grant": signed_grant,
-        },
-        "principal_servers": principal_servers(cokret_config),
-    }))
+        }),
+        principal_servers: principal_servers(cokret_config),
+    };
+    serde_json::to_value(&body).map_err(AppError::internal)
 }
 
 fn build_revoke_fanout_payload(
@@ -391,16 +396,17 @@ fn build_revoke_fanout_payload(
     )?;
     revoke_payload["proofs"] = json!([proof]);
 
-    Ok(json!({
-        "kind": "org.cokret.coauth.collaboration_capability.fanout.v1",
-        "operation": "revoke",
-        "issuer_service_did": service_did,
-        "event_kind": "ck.capability.revoke",
-        "event_id": revoke_event_id,
-        "capability_grant_id": capability_grant_id,
-        "payload": revoke_payload,
-        "principal_servers": principal_servers(cokret_config),
-    }))
+    let body = CapabilityFanoutBody {
+        kind: CAPABILITY_FANOUT_KIND.to_owned(),
+        operation: "revoke".to_owned(),
+        issuer_service_did: service_did.to_owned(),
+        event_kind: "ck.capability.revoke".to_owned(),
+        event_id: revoke_event_id.to_owned(),
+        capability_grant_id: capability_grant_id.to_owned(),
+        payload: revoke_payload,
+        principal_servers: principal_servers(cokret_config),
+    };
+    serde_json::to_value(&body).map_err(AppError::internal)
 }
 
 fn sign_fanout_proof(

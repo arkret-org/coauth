@@ -83,9 +83,6 @@ fn notify(states: &[sd_notify::NotifyState]) {
     }
 }
 
-#[cfg(not(unix))]
-fn notify(_states: &[&str]) {}
-
 impl LifecycleManager {
     /// Create a new shutdown manager, installing the signal handlers
     ///

@@ -282,7 +282,6 @@ pub async fn complete_registration(
             .await?;
     }
 
-    let mut password_authenticated = false;
     if let Some(password) = registration.password.clone() {
         let user_password = repo
             .user_password()
@@ -299,8 +298,6 @@ pub async fn complete_registration(
         repo.browser_session()
             .authenticate_with_password(rng, clock, &user_session, &user_password)
             .await?;
-
-        password_authenticated = true;
     }
 
     if let Some((upstream_session, upstream_link)) = request.upstream_oauth {
@@ -342,7 +339,6 @@ pub async fn complete_registration(
         registration,
         user,
         user_session,
-        password_authenticated,
     })
 }
 

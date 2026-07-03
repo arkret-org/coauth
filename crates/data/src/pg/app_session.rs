@@ -7,9 +7,9 @@ use coauth_data::app_session::{
 };
 use coauth_data::pagination::PaginationDirection;
 use coauth_data::{Clock, Page, Pagination, Session, SessionState, User};
+use coauth_oauth_types::scope::{Scope, ScopeToken};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use oauth_types::scope::{Scope, ScopeToken};
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -240,8 +240,8 @@ mod tests {
     use coauth_data::clock::MockClock;
     use coauth_data::oauth::OAuthSessionRepository;
     use coauth_data::{Pagination, RepositoryAccess as _, RepositoryFactory as _};
-    use oauth_types::requests::GrantType;
-    use oauth_types::scope::{OPENID, Scope};
+    use coauth_oauth_types::requests::GrantType;
+    use coauth_oauth_types::scope::{OPENID, Scope};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 

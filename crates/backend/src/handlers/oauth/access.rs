@@ -12,9 +12,9 @@ use coauth_data::{
     Client, Clock, PrincipalUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
 };
 use coauth_keystore::Keystore;
+use coauth_oauth_types::requests::AuthorizationResponse;
 use coauth_policy::{PolicyFactory, PolicyInstance};
 use coauth_principal::ConnectorAdmin;
-use oauth_types::requests::AuthorizationResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -228,11 +228,8 @@ pub async fn accept_authorization_consent(
             .browser_session()
             .get_last_authentication(browser_session)
             .await?;
-        let subject_did = crate::handlers::cokret::oidc_subject_for_user(
-            url_builder,
-            cokret_config,
-            &browser_session.user,
-        );
+        let subject_did =
+            crate::handlers::cokret::oidc_subject_for_user(cokret_config, &browser_session.user);
         let principal_did = crate::handlers::cokret::published_principal_did_for_user(
             &mut repo,
             cokret_config,
@@ -414,7 +411,7 @@ async fn has_policy_violation(
     policy_factory: &PolicyFactory,
     browser_session: &BrowserSession,
     client: &Client,
-    scope: &oauth_types::scope::Scope,
+    scope: &coauth_oauth_types::scope::Scope,
     grant_type: coauth_policy::GrantType,
     requester_ip: Option<IpAddr>,
     user_agent: Option<String>,

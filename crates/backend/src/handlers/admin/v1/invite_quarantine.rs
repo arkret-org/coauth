@@ -42,7 +42,7 @@ use crate::handlers::admin::audit_helper::record_admin_operation;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::UserRegistrationToken;
 use crate::handlers::admin::response::SingleOutcome;
-use crate::handlers::admin::v1::users::create::{
+use crate::handlers::admin::v1::accounts::create::{
     MintRegistrationTokensParams, mint_registration_tokens,
 };
 use crate::handlers::common::DepotExt;
@@ -326,7 +326,7 @@ pub async fn resolve_invite_quarantine(
 
 /// Pull mint parameters out of the queue row's `payload` JSON. The
 /// shape is the one written in
-/// `handlers::admin::v1::users::create::batch_invite` at quarantine
+/// `handlers::admin::v1::accounts::create::batch_invite` at quarantine
 /// time:
 ///
 /// ```json
@@ -360,7 +360,7 @@ fn mint_params_from_payload(payload: &serde_json::Value) -> Option<MintRegistrat
 mod tests {
     //! Pure-helper tests for wire-type mapping. End-to-end coverage of
     //! the list/resolve handlers requires the test-db harness; the
-    //! `batch_invite` wiring tests in `users::tests` already exercise the
+    //! `batch_invite` wiring tests in `accounts::tests` already exercise the
     //! enqueue path on the same harness.
 
     use super::*;

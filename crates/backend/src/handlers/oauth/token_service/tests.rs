@@ -16,13 +16,13 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
 use coauth_jose::jwt::Jwt;
 use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
-use coauth_principal::ConnectorAdmin;
-use coauth_templates::{SiteBranding, SiteFeatures, Templates};
-use oauth_types::pkce::CodeChallengeMethodExt as _;
-use oauth_types::requests::{
+use coauth_oauth_types::pkce::CodeChallengeMethodExt as _;
+use coauth_oauth_types::requests::{
     AccessTokenResponse, AuthorizationCodeGrant, GrantType, RefreshTokenGrant, ResponseMode,
 };
-use oauth_types::scope::{OPENID, Scope};
+use coauth_oauth_types::scope::{OPENID, Scope};
+use coauth_principal::ConnectorAdmin;
+use coauth_templates::{SiteBranding, SiteFeatures, Templates};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 use serde_json::Value;
@@ -249,8 +249,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
         .expect("id_token should be a JWT");
     jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
 
-    let expected_subject =
-        crate::handlers::cokret::oidc_subject_for_user(&url_builder, &cokret_config, &user);
+    let expected_subject = crate::handlers::cokret::oidc_subject_for_user(&cokret_config, &user);
     assert_eq!(
         jwt.payload().get("sub").and_then(Value::as_str),
         Some(expected_subject.as_str())

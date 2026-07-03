@@ -90,8 +90,8 @@ cokret:
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
 
-  service_did: did:web:auth.example.com
-  issuer_did: did:web:auth.example.com
+  service_did: did:webvh:<scid>:auth.example.com:webvh:service
+  issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
   admin_audience: https://auth.example.com/_cokret
   session_grant_ttl: 300
 ```

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Creation endpoints: `POST /users` and `POST /users/batch-invite`.
+//! Creation endpoints: `POST /accounts` and `POST /accounts/batch-invite`.
 
 use chrono::Duration;
 use coauth_config::CokretConfig;
@@ -17,22 +17,23 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 use url::Url;
 
+use super::AccountRecord;
 use crate::handlers::account::consent_cell_query::{
     InviteGateDecision, evaluate_invite_gate, query_consent_cell,
 };
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::{User, UserRegistrationToken};
+use crate::handlers::admin::model::UserRegistrationToken;
 use crate::handlers::admin::response::SingleOutcome;
 use crate::handlers::common::DepotExt;
 use crate::services::invite_quarantine::EnqueueInviteQuarantine;
 use crate::util::handle_valid;
 use crate::{AppError, CreatedJsonResult};
 
-/// # JSON payload for the `POST /_coauth/admin/users` endpoint
+/// # JSON payload for the `POST /_coauth/admin/accounts` endpoint
 #[derive(Deserialize, JsonSchema)]
-#[serde(rename = "AddUserRequest")]
+#[serde(rename = "AddAccountRequest")]
 pub struct AddRequestBody {
-    /// The handle of the user to add.
+    /// The handle of the account to add.
     handle: String,
 
     /// Skip checking with the `PrincipalServer` whether the username is
@@ -46,8 +47,11 @@ pub struct AddRequestBody {
 }
 
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.users.add", skip_all)]
-pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<SingleOutcome<User>> {
+#[tracing::instrument(name = "handler.admin.v1.accounts.add", skip_all)]
+pub async fn add_account(
+    req: &mut Request,
+    depot: &Depot,
+) -> CreatedJsonResult<SingleOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -57,6 +61,8 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
     let principal_server = depot.principal_server()?;
+    let cokret_config = depot.cokret_config()?;
+    let did_resolver = depot.did_resolver_service()?;
     let params: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     if repo.user().exists(&params.handle).await? {
@@ -108,7 +114,7 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
         &*clock,
         admin_user.as_ref(),
         AdminOperation::UserCreated,
-        "user",
+        "account",
         Some(user.id),
         serde_json::json!({ "handle": user.localpart }),
     )
@@ -117,11 +123,13 @@ pub async fn add_user(req: &mut Request, depot: &Depot) -> CreatedJsonResult<Sin
     repo.save().await?;
 
     Ok(crate::handlers::admin::CreatedJson(
-        SingleOutcome::new_canonical(User::from(user)),
+        SingleOutcome::new_canonical(
+            AccountRecord::from_user(user, &cokret_config, did_resolver.as_ref()).await?,
+        ),
     ))
 }
 
-/// # JSON payload for the `POST /_coauth/admin/users/batch-invite` endpoint
+/// # JSON payload for the `POST /_coauth/admin/accounts/batch-invite` endpoint
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename = "BatchInviteRequestBody")]
 pub struct BatchInviteRequestBody {
@@ -357,7 +365,7 @@ pub async fn mint_registration_tokens(
 }
 
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.users.batch_invite", skip_all)]
+#[tracing::instrument(name = "handler.admin.v1.accounts.batch_invite", skip_all)]
 pub async fn batch_invite(
     req: &mut Request,
     depot: &Depot,
@@ -491,7 +499,7 @@ mod consent_gate_tests {
     //! soland stub, mirroring the per-recipient relay tests.
     //!
     //! The full Salvo handler is covered by integration tests in
-    //! `users::tests`; here we only need to confirm the gate logic
+    //! `accounts::tests`; here we only need to confirm the gate logic
     //! routes the three outcomes correctly given the principal-server
     //! response.
     use coauth_config::CokretConfig;

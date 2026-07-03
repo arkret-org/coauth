@@ -219,7 +219,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
             // Principal Server identity-root operations), mirroring how
             // `account/session-grants` below avoids the `gate/` classifier.
             Router::with_path("account/identity/primary-handle")
-                .patch(cokret::patch_primary_handle_preference),
+                .patch(crate::handlers::account::primary_handle::patch_primary_handle_preference),
         )
         .push(
             // Product-private account-management UI surface: `list` and
@@ -232,8 +232,8 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
             // `/_coauth/account/*` so the `gate/account/*` vocabulary stays
             // reserved for the canonical `/_cokret` operations.
             Router::with_path("account/session-grants")
-                .get(cokret::list_session_grants)
-                .push(Router::with_path("{id}/revoke").post(cokret::revoke_session_grant)),
+                .get(crate::handlers::account::session_grants::list_session_grants)
+                .push(Router::with_path("{id}/revoke").post(crate::handlers::account::session_grants::revoke_session_grant)),
         )
         // Viewer
         .push(
@@ -468,7 +468,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         notification_channels, notification_templates, oauth_clients, oauth_clients_i18n,
         oauth_clients_register, oauth_sessions, organizations, passkeys, personal_sessions,
         policy_checks, policy_data, site_config, upstream_oauth_links, upstream_oauth_providers,
-        user_emails, user_registration_tokens, user_sessions, users, version,
+        user_emails, user_registration_tokens, user_sessions, version,
     };
 
     let admin_router = Router::with_path("/_coauth/admin")
@@ -558,9 +558,20 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         .push(
             Router::with_path("accounts")
                 .get(accounts::list_accounts)
+                .post(accounts::create::add_account)
+                .push(
+                    Router::with_path("by-username/{username}")
+                        .get(accounts::get_account_by_username),
+                )
+                .push(Router::with_path("batch-invite").post(accounts::create::batch_invite))
                 .push(
                     Router::with_path("{id}")
                         .get(accounts::get_account)
+                        .patch(accounts::update::update_account)
+                        .push(
+                            Router::with_path("set-password")
+                                .post(accounts::security::set_password),
+                        )
                         .push(Router::with_path("claims").get(accounts::list_account_claims))
                         .push(
                             Router::with_path("session-grants")
@@ -619,21 +630,10 @@ pub(super) fn build_admin_router(router: Router) -> Router {
                         ),
                 ),
         )
-        // Users
-        .push(
-            Router::with_path("users")
-                .get(users::list_users)
-                .post(users::add_user)
-                .push(Router::with_path("by-username/{username}").get(users::get_by_username))
-                .push(Router::with_path("batch-invite").post(users::batch_invite))
-                .push(
-                    Router::with_path("{id}")
-                        .get(users::get_user)
-                        .patch(users::update_user)
-                        .push(Router::with_path("set-password").post(users::set_password))
-                        .push(Router::with_path("risk-action").post(users::risk_action)),
-                ),
-        )
+        // The former `/_coauth/admin/users/*` tree is gone: accounts (above)
+        // is the single admin resource tree over the users table, and the
+        // unaccountable immediate risk-action executor was replaced by the
+        // accounts propose -> approve -> execute workflow.
         // User emails
         .push(
             Router::with_path("user-emails")

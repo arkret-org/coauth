@@ -36,7 +36,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use coauth_config::CokretConfig;
-use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory, UrlBuilder};
+use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory};
 use coauth_keystore::Keystore;
 use cokret_core::{
     Did, PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
@@ -74,7 +74,6 @@ pub async fn post_policy_check(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<PolicyCheckOutcome>, CokretRouteError> {
-    let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     require_policy_check_bearer(req, &cokret_config)?;
     let key_store = depot.key_store()?;
@@ -123,7 +122,6 @@ pub async fn post_policy_check(
 
     let response = build_policy_check_response(
         &body,
-        &url_builder,
         &cokret_config,
         &key_store,
         &frontier_source,
@@ -163,7 +161,6 @@ fn require_policy_check_bearer(
 /// full salvo Depot.
 pub(crate) async fn build_policy_check_response(
     request: &PolicyCheckRequestBody,
-    url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     frontier_source: &dyn FrontierSource,
@@ -171,7 +168,7 @@ pub(crate) async fn build_policy_check_response(
 ) -> Result<PolicyCheckOutcome, CokretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
-    let policy_server_did = cokret::service_did_for(url_builder, cokret_config);
+    let policy_server_did = cokret::service_did_for(cokret_config);
     let policy_server_id = Did::new(policy_server_did.clone()).map_err(|e| {
         CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
             "policy server DID failed SDK validation: {e}"
@@ -322,7 +319,6 @@ pub(crate) async fn build_policy_check_response(
 #[allow(dead_code)]
 pub(crate) async fn build_policy_check_response_with_defaults(
     request: &PolicyCheckRequestBody,
-    url_builder: &UrlBuilder,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
     http_client: &reqwest::Client,
@@ -335,7 +331,6 @@ pub(crate) async fn build_policy_check_response_with_defaults(
     let evaluator = RuleEvaluator::new(repository_factory);
     build_policy_check_response(
         request,
-        url_builder,
         cokret_config,
         key_store,
         &frontier_source,
@@ -496,18 +491,17 @@ mod tests {
                 .with_alg(JsonWebSignatureAlg::EdDsa),
         ]));
         let request = req();
-        let url_builder = UrlBuilder::new(
-            url::Url::parse("https://coauth.example/").unwrap(),
-            None,
-            None,
-        );
-        let cokret_config = CokretConfig::default();
+        // `service_did` is mandatory (no derived fallback): pin the value the
+        // old host derivation produced for this test base URL.
+        let cokret_config = CokretConfig {
+            service_did: Some("did:web:coauth.example".to_owned()),
+            ..CokretConfig::default()
+        };
         let frontier_source = StaticFrontierSource::new(Frontier::empty());
         let evaluator = FixedEvaluator(PolicyDecision::allow("policy-v1".into()));
 
         let response = build_policy_check_response(
             &request,
-            &url_builder,
             &cokret_config,
             &key_store,
             &frontier_source,

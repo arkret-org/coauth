@@ -31,6 +31,13 @@ impl RiskActionStateService for AuditLogRiskActionStateService {
             "disable" => "disable",
             "erase" => "erase",
             "reset_recovery" => "reset-recovery",
+            // Workflow-only actions (folded in from the removed immediate
+            // `users/{id}/risk-action` endpoint): they have no direct
+            // mutation endpoint, the risk-action execute step is the only
+            // way to run them.
+            "force_password_reset" | "terminate_sessions" => {
+                return Ok(format!("/_coauth/admin/accounts/{account_id}/risk-action"));
+            }
             other => {
                 return Err(AppError::bad_request(format!(
                     "Unknown account risk action: {other}"

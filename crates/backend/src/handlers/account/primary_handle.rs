@@ -1,8 +1,15 @@
+//! Product-face (`/_coauth/account/identity/primary-handle`) self-service
+//! holder preference endpoint. Not a `/_cokret` protocol operation — it only
+//! reuses the protocol module's canonical-handle validation and wire types.
+
 use coauth_data::NewUserPrimaryHandlePreference;
 use salvo::prelude::*;
 
-use super::*;
-use crate::handlers::cokret::*;
+use crate::handlers::account::DepotExt as _;
+use crate::handlers::cokret::{
+    CokretRouteError, PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome,
+    require_canonical_handle,
+};
 
 /// `PATCH /_coauth/account/identity/primary-handle` — self-service holder
 /// preference for DID `metadata.primary_handle`.

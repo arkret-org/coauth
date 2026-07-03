@@ -7,10 +7,10 @@ use coauth_data::pagination::{Node, PaginationDirection};
 use coauth_data::{
     BrowserSession, Client, Clock, Page, Pagination, Session, SessionState, User, new_id,
 };
+use coauth_oauth_types::scope::{Scope, ScopeToken};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use ipnetwork::IpNetwork;
-use oauth_types::scope::{Scope, ScopeToken};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;

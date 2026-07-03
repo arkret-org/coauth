@@ -16,7 +16,7 @@
 //!
 //! [Discovery]: https://openid.net/specs/openid-connect-discovery-1_0.html
 
-use oauth_types::oidc::{ProviderMetadata, VerifiedProviderMetadata};
+use coauth_oauth_types::oidc::{ProviderMetadata, VerifiedProviderMetadata};
 use url::Url;
 
 use super::super::error::DiscoveryError;

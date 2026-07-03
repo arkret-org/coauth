@@ -28,7 +28,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::audit::AdminOperation;
 use coauth_data::oauth::OAuthClientRepository;
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
-use oauth_types::requests::GrantType;
+use coauth_oauth_types::requests::GrantType;
 use rand::distributions::{Alphanumeric, DistString};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;

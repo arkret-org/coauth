@@ -9,9 +9,9 @@ use coauth_data::{
     UpstreamOAuthProviderTokenAuthMethod,
 };
 use coauth_jose::claims::TokenHash;
+use coauth_oauth_types::errors::ClientErrorCode;
+use coauth_oauth_types::requests::AccessTokenRequest;
 use coauth_templates::FormPostContext;
-use oauth_types::errors::ClientErrorCode;
-use oauth_types::requests::AccessTokenRequest;
 use opentelemetry::metrics::Counter;
 use opentelemetry::{Key, KeyValue};
 use salvo::prelude::*;
@@ -762,7 +762,7 @@ pub async fn handler(
                 client_credentials,
                 lazy_metadata.token_endpoint().await?,
                 AccessTokenRequest::AuthorizationCode(
-                    oauth_types::requests::AuthorizationCodeGrant {
+                    coauth_oauth_types::requests::AuthorizationCodeGrant {
                         code: code.clone(),
                         redirect_uri: Some(redirect_uri),
                         code_verifier: session.code_challenge_verifier.clone(),

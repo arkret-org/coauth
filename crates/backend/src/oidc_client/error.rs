@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use coauth_jose::claims::ClaimError;
 use coauth_jose::jwa::InvalidAlgorithm;
 use coauth_jose::jwt::{JwtDecodeError, JwtSignatureError, NoKeyWorked};
-use oauth_types::oidc::ProviderMetadataVerificationError;
-use oauth_types::pkce::CodeChallengeError;
+use coauth_oauth_types::oidc::ProviderMetadataVerificationError;
+use coauth_oauth_types::pkce::CodeChallengeError;
 use serde::Deserialize;
 use thiserror::Error;
 

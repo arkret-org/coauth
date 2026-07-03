@@ -177,8 +177,7 @@ pub async fn post_accountability_grant(
     let capabilities_digest =
         accountability_capabilities_digest(&agent_principal_id, &controller_did, &capabilities)?;
     let idempotency_key = accountability_grant_idempotency_key(&accountability_grant_id);
-    let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let service_did = service_did_for(&cokret_config);
     let fanout_payload =
         build_soland_fanout_payload(&response, &raw_payload_digest, &service_did, &cokret_config)?;
 

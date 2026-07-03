@@ -18,12 +18,6 @@ pub enum DeactivateAccountOutcome {
 
 #[derive(Debug, Error)]
 pub enum AccountProfileError {
-    #[error("not found")]
-    NotFound,
-
-    #[error("unauthorized")]
-    Unauthorized,
-
     #[error("browser session required")]
     BrowserSessionRequired,
 

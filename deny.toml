@@ -61,44 +61,116 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 
 [bans]
 deny = [
-    # We should never depend on openssl — use rustls instead
-    { name = "openssl" },
-    { name = "openssl-sys" },
+    # We should never depend on openssl — use rustls instead.
+    # Exception for the webauthn-rs 0.5.x subtree only — remove once upstream
+    # drops openssl (tracking: webauthn-rs RustCrypto migration).
+    # `wrappers` lists the only crates allowed to depend on the banned crate
+    # directly; any other dependent still fails the check.
+    { name = "openssl", wrappers = [
+        "webauthn-attestation-ca",
+        "webauthn-rs-core",
+    ] },
+    { name = "openssl-sys", wrappers = [
+        "openssl",
+        "webauthn-attestation-ca",
+        "webauthn-rs-core",
+    ] },
     { name = "native-tls" },
+    # Guard against the legacy `time 0.1` line (RUSTSEC-2020-0071 era). This
+    # replaces the former chrono `oldtime` feature ban: since chrono 0.4.30
+    # `oldtime` is an empty no-op feature (the time 0.1 dependency was
+    # removed), and it is enabled transitively via chrono's `default` feature
+    # by third-party dependencies (e.g. salvo-oapi), so it cannot be disabled
+    # on our side. Banning `time < 0.2` enforces the actual security intent.
+    { name = "time", version = "<0.2" },
 ]
 
 # Track and minimize duplicate crate versions
 multiple-versions = "deny"
 
 skip = [
-    # zxcvbn depends on the old itertools version
-    { name = "itertools", version = "0.13.0" },
     # Several crates still pull in an older hashbrown
     { name = "hashbrown", version = "0.14.5" },
     # Some crates still use thiserror 1.x
     { name = "thiserror", version = "1.0.69" },
     { name = "thiserror-impl", version = "1.0.69" },
-    # Some proc-macro crates use the old heck version
-    { name = "heck", version = "0.4.1" },
-    # pad depends on an older unicode-width
-    { name = "unicode-width", version = "0.1.14" },
-    # cron depends on an older winnow:
-    # https://github.com/zslayton/cron/pull/137
-    { name = "winnow", version = "0.6.20" },
     # Workspace crates stay on rand 0.8 / rand_core 0.6 while upstream
     # dependencies transition through newer rand stacks.
     { name = "rand", version = "0.8.5" },
     { name = "rand_chacha", version = "0.3.1" },
     { name = "rand_core", version = "0.6.4" },
     { name = "getrandom", version = "0.2.15" },
+    # rand 0.9 stack pulled by opentelemetry_sdk 0.31 while the rest of the
+    # tree has moved on to rand 0.10.
+    { name = "rand", version = "0.9.4" },
+    { name = "rand_core", version = "0.9.5" },
+    { name = "getrandom", version = "0.3.4" },
+
+    # RustCrypto 0.10-series line kept by argon2/aes-gcm/cookie/webauthn/
+    # chacha20poly1305/postgres and our own backend, while the cokret SDK and
+    # bcrypt/blowfish are already on the 0.11 pre-release line. Remove these
+    # as the ecosystem converges on the new RustCrypto releases.
+    { name = "base64", version = "0.21.7" },       # base64urlsafedata (webauthn-rs subtree)
+    { name = "block-buffer", version = "0.10.4" },
+    { name = "chacha20", version = "0.9.1" },      # chacha20poly1305 0.10 (coauth-keystore)
+    { name = "cipher", version = "0.4.4" },        # aes / aes-gcm 0.10
+    { name = "const-oid", version = "0.9.6" },     # der/pkcs8 0.7 line (coauth-keystore)
+    { name = "cpufeatures", version = "0.2.17" },
+    { name = "crypto-common", version = "0.1.6" },
+    { name = "digest", version = "0.10.7" },
+    { name = "hkdf", version = "0.12.4" },         # cookie 0.18
+    { name = "hmac", version = "0.12.1" },
+    { name = "inout", version = "0.1.4" },
+    { name = "sha1", version = "0.10.6" },
+    { name = "sha2", version = "0.10.9" },
+
+    # Older icu 1.x utility crates pulled via fluent-langneg 0.14 -> icu_locid
+    # 1.5 (fluent i18n stack), while the main tree uses icu 2.x.
+    { name = "litemap", version = "0.7.5" },
+    { name = "tinystr", version = "0.7.6" },
+    { name = "writeable", version = "0.5.5" },
+    # fluent-bundle 0.16 still uses the older fluent-langneg
+    { name = "fluent-langneg", version = "0.13.1" },
+
+    # darling: derive_builder 0.20 pins 0.20.x, diesel_derives (dsl_auto_type)
+    # pins 0.21.x; the rest of the tree is on 0.23.
+    { name = "darling", version = "0.20.11" },
+    { name = "darling_core", version = "0.20.11" },
+    { name = "darling_macro", version = "0.20.11" },
+    { name = "darling", version = "0.21.3" },
+    { name = "darling_core", version = "0.21.3" },
+    { name = "darling_macro", version = "0.21.3" },
+
+    # phf: cron 0.16 pins 0.11.x, chrono-tz 0.10 pins 0.12.x; newest is 0.13.
+    { name = "phf", version = "0.11.3" },
+    { name = "phf_shared", version = "0.11.3" },
+    { name = "phf", version = "0.12.1" },
+    { name = "phf_shared", version = "0.12.1" },
+
+    # Dioxus 0.7 subtree (coauth-frontend): manganis pulls both const-serialize
+    # lines; dioxus-web/devtools pin older gloo-timers/rustc-hash/tungstenite.
+    { name = "const-serialize", version = "0.7.2" },
+    { name = "const-serialize-macro", version = "0.7.2" },
+    { name = "gloo-timers", version = "0.3.0" },
+    { name = "rustc-hash", version = "1.1.0" },
+    { name = "tungstenite", version = "0.28.0" },
+
+    # nom 7 pulled by the x509 parsing stack (asn1-rs/der-parser); nom 8 by
+    # newer parsers.
+    { name = "nom", version = "7.1.3" },
+    # opendal-core 0.57 pins the older quick-xml
+    { name = "quick-xml", version = "0.39.4" },
+    # opentelemetry-http 0.31 still uses reqwest 0.12
+    { name = "reqwest", version = "0.12.28" },
+    # lazy_static (via num-bigint-dig) pins the older spin
+    { name = "spin", version = "0.9.8" },
+    # migrations_internals (diesel) uses toml 0.9 -> toml_datetime 0.7
+    { name = "toml_datetime", version = "0.7.5" },
+    # cron 0.16 pins the older winnow
+    { name = "winnow", version = "0.7.15" },
 ]
 
 skip-tree = []
-
-# Ensure the `oldtime` feature of chrono is never enabled
-[[bans.features]]
-name = "chrono"
-deny = ["oldtime"]
 
 # ── Sources ─────────────────────────────────────────────────────────────────
 

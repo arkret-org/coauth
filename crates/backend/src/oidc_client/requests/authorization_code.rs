@@ -22,14 +22,14 @@ use base64ct::{Base64UrlUnpadded, Encoding};
 use chrono::{DateTime, Utc};
 use coauth_iana::oauth::{OAuthAuthorizationEndpointResponseType, PkceCodeChallengeMethod};
 use coauth_jose::claims::{self, TokenHash};
-use language_tags::LanguageTag;
-use oauth_types::pkce;
-use oauth_types::prelude::CodeChallengeMethodExt;
-use oauth_types::requests::{
+use coauth_oauth_types::pkce;
+use coauth_oauth_types::prelude::CodeChallengeMethodExt;
+use coauth_oauth_types::requests::{
     AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant, AuthorizationRequest, Display,
     Prompt, ResponseMode,
 };
-use oauth_types::scope::{OPENID, Scope};
+use coauth_oauth_types::scope::{OPENID, Scope};
+use language_tags::LanguageTag;
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 use url::Url;
@@ -356,8 +356,8 @@ fn build_authorization_request(
 ///
 /// Returns an error if preparing the URL fails.
 ///
-/// [`VerifiedClientMetadata`]: oauth_types::registration::VerifiedClientMetadata
-/// [`ClientErrorCode`]: oauth_types::errors::ClientErrorCode
+/// [`VerifiedClientMetadata`]: coauth_oauth_types::registration::VerifiedClientMetadata
+/// [`ClientErrorCode`]: coauth_oauth_types::errors::ClientErrorCode
 pub fn build_authorization_url(
     authorization_endpoint: Url,
     authorization_data: AuthorizationRequestData,

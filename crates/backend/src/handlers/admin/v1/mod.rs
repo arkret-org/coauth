@@ -25,5 +25,4 @@ pub mod upstream_oauth_providers;
 pub mod user_emails;
 pub mod user_registration_tokens;
 pub mod user_sessions;
-pub mod users;
 pub mod version;

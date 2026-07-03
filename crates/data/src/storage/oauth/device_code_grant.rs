@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use async_trait::async_trait;
 use chrono::Duration;
 use coauth_data::{BrowserSession, Client, Clock, DeviceCodeGrant, Session};
-use oauth_types::scope::Scope;
+use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 

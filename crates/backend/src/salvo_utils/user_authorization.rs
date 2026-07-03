@@ -4,11 +4,11 @@ use std::sync::LazyLock;
 
 use coauth_data::oauth::{OAuthAccessTokenRepository, OAuthSessionRepository};
 use coauth_data::{Clock, RepositoryAccess, Session};
+use coauth_oauth_types::scope::ScopeToken;
 use headers::authorization::{Bearer, Credentials};
 use headers::{Header, HeaderMapExt, HeaderName};
 use http::header::WWW_AUTHENTICATE;
 use http::{HeaderMap, HeaderValue, StatusCode};
-use oauth_types::scope::ScopeToken;
 use salvo::extract::{Extractible, Metadata};
 use salvo::prelude::*;
 use serde::Deserialize;

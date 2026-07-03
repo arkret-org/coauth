@@ -58,7 +58,7 @@ pub(crate) fn issue_handle_claim(
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
     use crate::services::handle_subject_validator::ensure_subject_is_principal_did;
 
-    let issuer_service_did = service_did_for(url_builder, cokret_config);
+    let issuer_service_did = service_did_for(cokret_config);
     // The subject is the user's MINTED principal DID (`did:webvh:…` hosted
     // by the principal server), supplied by the caller. coauth used to
     // derive it via `user_did_for` (`did:web:<coauth-host>:users:<ulid>`),

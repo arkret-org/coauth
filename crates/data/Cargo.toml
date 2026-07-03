@@ -36,7 +36,7 @@ futures-util = {workspace = true}
 ipnetwork = {workspace = true}
 language-tags = {workspace = true}
 lettre = {workspace = true}
-oauth-types = {workspace = true}
+coauth-oauth-types = {workspace = true}
 opentelemetry = {workspace = true}
 opentelemetry-semantic-conventions = {workspace = true}
 rand = {workspace = true}

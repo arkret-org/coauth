@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use chrono::Duration;
 use coauth_data::{AuthorizationGrant, Client, DeviceCodeGrant, PostAuthAction, PrincipalUser};
-use oauth_types::scope::OPENID;
+use coauth_oauth_types::scope::OPENID;
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 

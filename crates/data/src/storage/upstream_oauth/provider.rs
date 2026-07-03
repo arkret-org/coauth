@@ -8,7 +8,7 @@ use coauth_data::{
     UpstreamOAuthProviderTokenAuthMethod,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
-use oauth_types::scope::Scope;
+use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;

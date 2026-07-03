@@ -26,21 +26,6 @@ impl PaginationState {
             direction: PaginationDirection::LastPage,
         }
     }
-
-    /// Build the query parameters for this pagination state.
-    pub fn to_variables(&self) -> serde_json::Value {
-        match &self.direction {
-            PaginationDirection::LastPage => {
-                serde_json::json!({ "last": self.page_size })
-            }
-            PaginationDirection::Forward(cursor) => {
-                serde_json::json!({ "first": self.page_size, "after": cursor })
-            }
-            PaginationDirection::Backward(cursor) => {
-                serde_json::json!({ "last": self.page_size, "before": cursor })
-            }
-        }
-    }
 }
 
 /// The "Show inactive (90+ days)" filter toggle shared by the session list

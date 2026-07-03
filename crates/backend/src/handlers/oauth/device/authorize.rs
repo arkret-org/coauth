@@ -1,8 +1,10 @@
 use chrono::Duration;
 use coauth_data::oauth::OAuthDeviceCodeGrantParams;
-use oauth_types::errors::{ClientError, ClientErrorCode};
-use oauth_types::requests::{DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType};
-use oauth_types::scope::ScopeToken;
+use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
+use coauth_oauth_types::requests::{
+    DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType,
+};
+use coauth_oauth_types::scope::ScopeToken;
 use rand::distributions::{Alphanumeric, DistString};
 use salvo::Extractible;
 use salvo::prelude::*;
@@ -145,7 +147,7 @@ async fn handle_post(
     let scope = client_authorization
         .form
         .and_then(|f| f.scope)
-        // TODO(COA-HYG-02): Is this really how we do empty scopes?
+        // TODO: Is this really how we do empty scopes?
         .unwrap_or(std::iter::empty::<ScopeToken>().collect());
 
     let expires_in = Duration::microseconds(20 * 60 * 1000 * 1000);
@@ -194,9 +196,9 @@ async fn handle_post(
 
 #[cfg(test)]
 mod tests {
+    use coauth_oauth_types::registration::ClientRegistrationResponse;
+    use coauth_oauth_types::requests::DeviceAuthorizationResponse;
     use hyper::{Request, StatusCode};
-    use oauth_types::registration::ClientRegistrationResponse;
-    use oauth_types::requests::DeviceAuthorizationResponse;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 

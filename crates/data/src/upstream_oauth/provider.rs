@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use coauth_iana::jose::JsonWebSignatureAlg;
-use oauth_types::scope::Scope;
+use coauth_oauth_types::scope::Scope;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ulid::Ulid;
@@ -124,11 +124,11 @@ pub enum ResponseMode {
     FormPost,
 }
 
-impl From<ResponseMode> for oauth_types::requests::ResponseMode {
+impl From<ResponseMode> for coauth_oauth_types::requests::ResponseMode {
     fn from(value: ResponseMode) -> Self {
         match value {
-            ResponseMode::Query => oauth_types::requests::ResponseMode::Query,
-            ResponseMode::FormPost => oauth_types::requests::ResponseMode::FormPost,
+            ResponseMode::Query => coauth_oauth_types::requests::ResponseMode::Query,
+            ResponseMode::FormPost => coauth_oauth_types::requests::ResponseMode::FormPost,
         }
     }
 }

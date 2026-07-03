@@ -13,7 +13,7 @@ use coauth_data::{
     UpstreamOAuthProviderTokenAuthMethod,
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
-use oauth_types::scope::Scope;
+use coauth_oauth_types::scope::Scope;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -533,8 +533,8 @@ mod tests {
         UpstreamOAuthProviderPkceMode, UpstreamOAuthProviderTokenAuthMethod,
     };
     use coauth_iana::jose::JsonWebSignatureAlg;
+    use coauth_oauth_types::scope::{OPENID, Scope};
     use hyper::{Request, StatusCode};
-    use oauth_types::scope::{OPENID, Scope};
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};

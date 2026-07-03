@@ -10,7 +10,7 @@ use coauth_data::{
     UrlBuilder,
 };
 use coauth_iana::oauth::OAuthTokenTypeHint;
-use oauth_types::requests::IntrospectionResponse;
+use coauth_oauth_types::requests::IntrospectionResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -106,7 +106,7 @@ pub async fn introspect_token(
         return Err(IntrospectionError::UnexpectedTokenType);
     }
 
-    // TODO(COA-HYG-02): we should get the IP from the client introspecting the token
+    // TODO: we should get the IP from the client introspecting the token
     let ip = None;
 
     let reply = match token_type {
@@ -154,7 +154,7 @@ pub async fn introspect_token(
                     return Err(IntrospectionError::InvalidUser(user.id));
                 }
 
-                let sub = principal_subject_for_user(url_builder, cokret_config, &user);
+                let sub = principal_subject_for_user(cokret_config, &user);
                 let principal_did =
                     cokret::published_principal_did_for_user(repo, cokret_config, &user).await?;
                 (Some(sub), Some(user.localpart), principal_did)
@@ -228,7 +228,7 @@ pub async fn introspect_token(
                     return Err(IntrospectionError::InvalidUser(user.id));
                 }
 
-                let sub = principal_subject_for_user(url_builder, cokret_config, &user);
+                let sub = principal_subject_for_user(cokret_config, &user);
                 let principal_did =
                     cokret::published_principal_did_for_user(repo, cokret_config, &user).await?;
                 (Some(sub), Some(user.localpart), principal_did)
@@ -328,8 +328,7 @@ pub async fn introspect_token(
 
             let device_id = cokret::primary_device_id(&session.scope);
             let scope = session.scope;
-            let actor_user_sub =
-                principal_subject_for_user(url_builder, cokret_config, &actor_user);
+            let actor_user_sub = principal_subject_for_user(cokret_config, &actor_user);
             let actor_principal_did =
                 cokret::published_principal_did_for_user(repo, cokret_config, &actor_user).await?;
 
@@ -363,10 +362,6 @@ pub async fn introspect_token(
     Ok(reply)
 }
 
-fn principal_subject_for_user(
-    url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
-    user: &coauth_data::User,
-) -> String {
-    cokret::oidc_subject_for_user(url_builder, cokret_config, user)
+fn principal_subject_for_user(cokret_config: &CokretConfig, user: &coauth_data::User) -> String {
+    cokret::oidc_subject_for_user(cokret_config, user)
 }

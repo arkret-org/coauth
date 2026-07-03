@@ -135,29 +135,3 @@ pub async fn api_delete<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, S
         .await
         .map_err(|e| format!("Failed to parse API response: {e}"))
 }
-
-/// Execute a DELETE request with a JSON body.
-pub async fn api_delete_with_body<T: for<'de> Deserialize<'de>>(
-    path: &str,
-    body: Value,
-) -> Result<T, String> {
-    let url = format!("{}{}", api_base_url(), path);
-    let client = make_client();
-
-    let response = client
-        .delete(&url)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("API request failed: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(extract_error(response).await);
-    }
-
-    response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse API response: {e}"))
-}

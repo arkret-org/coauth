@@ -1316,6 +1316,22 @@
             "$ref": "#/definitions/PrincipalServerConfig"
           }
         },
+        "deployment_profile": {
+          "description": "Deployment profile that gates principal DID method choices.\n\n`did:web` is only valid for principal DIDs when this is\n`personal_node` and `principal_method` is explicitly `did:web`.\nOther built-in profiles use `did:webvh` for coauth-managed\nprincipal issuance.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DeploymentProfileConfig"
+            }
+          ]
+        },
+        "principal_method": {
+          "description": "Principal DID method selected by this deployment.\n\nDefaults to `did:webvh`; setting `did:web` is accepted only for\n`deployment_profile=personal_node`.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/PrincipalMethodConfig"
+            }
+          ]
+        },
         "identity_registry": {
           "description": "External DID / identity registry resolver used for Cokret identity\nbinding workflows.",
           "anyOf": [
@@ -1328,7 +1344,7 @@
           ]
         },
         "starid": {
-          "description": "`starid` registry endpoint used by onboarding / recovery strands to\nmint and verify managed `did:webvh` identifiers for principals.\nWhen omitted, principal-DID minting falls back to the local\n`did:web` derivation in [`crate::services::did_resolver`].",
+          "description": "`starid` registry endpoint used by onboarding / recovery strands to\nmint and verify managed `did:webvh` identifiers for principals.\nWhen omitted, coauth cannot mint default `did:webvh` principal DIDs.\nThe local `did:web` derivation is only allowed when the deployment\nexplicitly selects the personal-node exception.",
           "anyOf": [
             {
               "$ref": "#/definitions/StaridConfig"
@@ -1339,7 +1355,7 @@
           ]
         },
         "service_did": {
-          "description": "Optional explicit service DID for the coauth deployment.\n\nWhen omitted, the backend derives a `did:web` identifier from\n`http.public_base`.",
+          "description": "Explicit service DID for the coauth deployment.\n\nRequired: startup validation fails fast when omitted — there is no\nhost-derived `did:web` fallback. Deployments MUST configure a\n`did:webvh` service DID; the only `did:web` exception is the explicit\npersonal-node no-history profile selected by\n`deployment_profile=personal_node` and `principal_method=did:web`.",
           "type": [
             "string",
             "null"
@@ -1437,7 +1453,7 @@
           "type": "string"
         },
         "audience": {
-          "description": "Audience string used when validating tokens or session grants for this\nPrincipal Server.",
+          "description": "Service DID audience used when validating tokens or session grants for\nthis Principal Server.",
           "type": "string"
         },
         "endpoint": {
@@ -1453,7 +1469,7 @@
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint\n(`/_cokret/gate/account/session-grants/introspect`). This avoids\nrequiring a DB-backed PAT/OAuth-session for the server-to-server hop,\nwhich is awkward in dev when the coauth DB is reset frequently.",
+          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint or Auth-side logout\nsub-operation (`/_cokret/gate/account/session-grants/introspect`,\n`/_cokret/gate/account/auth-sessions/logout`). This avoids requiring a\nDB-backed PAT/OAuth-session for the server-to-server hop, which is\nawkward in dev when the coauth DB is reset frequently.",
           "type": [
             "string",
             "null"
@@ -1471,6 +1487,51 @@
         "name",
         "audience",
         "endpoint"
+      ]
+    },
+    "DeploymentProfileConfig": {
+      "description": "Deployment profile used to constrain Cokret identity and trust choices.",
+      "oneOf": [
+        {
+          "description": "Single-user node profile that may opt into local `did:web` principals.",
+          "type": "string",
+          "const": "personal_node"
+        },
+        {
+          "description": "Small team deployment with managed principal issuance.",
+          "type": "string",
+          "const": "small_team"
+        },
+        {
+          "description": "Default organization deployment profile.",
+          "type": "string",
+          "const": "organization"
+        },
+        {
+          "description": "Organization profile for stricter operational controls.",
+          "type": "string",
+          "const": "high_security_organization"
+        },
+        {
+          "description": "Sovereign deployment profile for isolated trust domains.",
+          "type": "string",
+          "const": "sovereign_deployment"
+        }
+      ]
+    },
+    "PrincipalMethodConfig": {
+      "description": "Principal DID method selected for coauth-managed principals.",
+      "oneOf": [
+        {
+          "description": "Use `did:webvh` principal DIDs.",
+          "type": "string",
+          "const": "did:webvh"
+        },
+        {
+          "description": "Use `did:web` principal DIDs.",
+          "type": "string",
+          "const": "did:web"
+        }
       ]
     },
     "IdentityRegistryConfig": {
@@ -2585,11 +2646,11 @@
           "type": "string"
         },
         "sign_name": {
-          "description": "Aliyun sign name (签名)",
+          "description": "Aliyun sign name",
           "type": "string"
         },
         "template_code": {
-          "description": "Aliyun template code (模板编号)",
+          "description": "Aliyun template code",
           "type": "string"
         }
       },
@@ -2617,11 +2678,11 @@
           "type": "string"
         },
         "sign_name": {
-          "description": "Tencent Cloud sign name (签名)",
+          "description": "Tencent Cloud sign name",
           "type": "string"
         },
         "template_id": {
-          "description": "Tencent Cloud template ID (模板 ID)",
+          "description": "Tencent Cloud template id",
           "type": "string"
         }
       },
@@ -2998,6 +3059,20 @@
             }
           ]
         },
+        "directory_lookup": {
+          "description": "Directory lookup rate limits. Applies to public handle resolution\nsurfaces that can otherwise be abused for account enumeration.",
+          "default": {
+            "per_ip": {
+              "burst": 20,
+              "per_second": 0.3333333333333333
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/DirectoryLookupRateLimitingConfig"
+            }
+          ]
+        },
         "did_binding": {
           "description": "DID-binding rate limits. Applies to admin-driven attach/remove\nof principal DIDs on accounts.",
           "default": {
@@ -3208,6 +3283,23 @@
           "default": {
             "burst": 10,
             "per_second": 0.016666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "DirectoryLookupRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Controls how many directory handle lookups are permitted from a\nsingle source IP over the sliding window.",
+          "default": {
+            "burst": 20,
+            "per_second": 0.3333333333333333
           },
           "allOf": [
             {
@@ -4042,11 +4134,11 @@
       "type": "object",
       "properties": {
         "access_token_ttl": {
-          "description": "Lifetime of access tokens (seconds). Default: 300 (5 min).",
+          "description": "Lifetime of access tokens (seconds). Default: 300 (5 min). Hard-capped\nat 900 (15 min): bearer access tokens must be short-lived, matching the\n`capped_bearer_expiry <= 15min` rule enforced on the soland side. The\nissuance path additionally clamps to this ceiling as a defence in depth.",
           "type": "integer",
           "format": "uint64",
           "minimum": 60,
-          "maximum": 86400
+          "maximum": 900
         },
         "inactive_session_expiration": {
           "description": "Opt-in automatic expiration of sessions that have been idle",
@@ -4060,7 +4152,7 @@
           ]
         },
         "plan_management_iframe_uri": {
-          "description": "URI for an embeddable plan-management interface (forwarded to the\nclient verbatim without validation)",
+          "description": "URI for an embeddable plan-management interface. Forwarded to the\nclient and injected into an `iframe src`, so it is validated at\nconfig load time: it MUST parse as an absolute URL with an `https`\nscheme. Non-`https` schemes (notably `javascript:` / `data:`) are\nrejected to prevent script injection / phishing through the embed.",
           "type": [
             "string",
             "null"

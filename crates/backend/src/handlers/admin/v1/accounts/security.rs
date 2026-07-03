@@ -2,65 +2,34 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Security endpoints: `POST /users/{id}/risk-action` and
-//! `POST /users/{id}/set-password`.
+//! Security endpoint: `POST /accounts/{id}/set-password`.
 //!
-//! Both endpoints require admin auth and write to the audit log; they are
-//! grouped here to keep the security-sensitive code paths together.
+//! Requires admin auth and writes to the audit log. The former immediate
+//! `users/{id}/risk-action` endpoint was removed: risk actions (lock /
+//! force_password_reset / terminate_sessions / disable / erase /
+//! reset_recovery) go through the accountable propose -> approve -> execute
+//! workflow in `accounts/risk_action.rs`.
 
 use coauth_data::audit::AdminOperation;
 use salvo::http::StatusCode;
-use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use zeroize::Zeroizing;
 
 use crate::handlers::admin::audit_helper::record_admin_operation_signed;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::model::User;
 use crate::handlers::admin::params::extract_ulid_param;
-use crate::handlers::admin::response::SingleOutcome;
 use crate::handlers::cokret::service_did_for;
 use crate::handlers::common::DepotExt;
-use crate::{AppError, AppResult, JsonResult};
-
-/// # JSON payload for the `POST /_coauth/admin/users/:id/risk-action` endpoint
-#[derive(Deserialize, JsonSchema)]
-#[serde(rename = "RiskActionRequestBody")]
-pub struct RiskActionRequestBody {
-    /// The risk action to perform: "lock", "`force_password_reset`", or
-    /// "`terminate_sessions`"
-    action: String,
-
-    /// The reason for the risk action
-    reason: Option<String>,
-}
-
-/// Response indicating which risk action was taken
-#[derive(Serialize, JsonSchema, ToSchema)]
-pub struct RiskActionOutcome {
-    /// The action that was performed
-    action: String,
-
-    /// The reason provided for the action
-    reason: Option<String>,
-
-    /// The user the action was performed on
-    user: SingleOutcome<User>,
-
-    /// Number of sessions terminated (only for `terminate_sessions` action)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sessions_terminated: Option<usize>,
-}
+use crate::{AppError, AppResult};
 
 fn audit_signing_context(
     depot: &Depot,
 ) -> Result<(coauth_keystore::Keystore, String, bool), AppError> {
     let key_store = depot.key_store()?;
     let cokret_config = depot.cokret_config()?;
-    let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let service_did = service_did_for(&cokret_config);
     Ok((
         key_store,
         service_did,
@@ -68,95 +37,9 @@ fn audit_signing_context(
     ))
 }
 
-#[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.users.risk_action", skip_all)]
-pub async fn risk_action(req: &mut Request, depot: &Depot) -> JsonResult<RiskActionOutcome> {
-    let call_context = extract_call_context(req, depot).await?;
-    let crate::handlers::admin::call_context::CallContext {
-        mut repo,
-        clock,
-        user: admin_user,
-        ..
-    } = call_context;
-    let id = extract_ulid_param(req)?;
-    let mut rng = crate::handlers::account::make_rng();
-    let params: RiskActionRequestBody = req.parse_json().await.map_err(AppError::internal)?;
-
-    let user = repo
-        .user()
-        .lookup(id)
-        .await?
-        .ok_or_else(|| AppError::not_found(format!("User ID {id} not found")))?;
-
-    let mut sessions_terminated = None;
-
-    let user = match params.action.as_str() {
-        "lock" => repo.user().lock(&clock, user).await?,
-
-        "force_password_reset" => {
-            // Lock the user account so they must reset their password
-
-            repo.user().lock(&clock, user).await?
-        }
-
-        "terminate_sessions" => {
-            use coauth_data::user::BrowserSessionFilter;
-
-            let filter = BrowserSessionFilter::new().for_user(&user).active_only();
-            let count = repo.browser_session().finish_bulk(&clock, filter).await?;
-            sessions_terminated = Some(count);
-            user
-        }
-
-        other => {
-            return Err(AppError::bad_request(format!(
-                "Unknown risk action: {other}"
-            )));
-        }
-    };
-
-    let operation = match params.action.as_str() {
-        "lock" | "force_password_reset" => AdminOperation::UserLocked,
-        "terminate_sessions" => AdminOperation::Other("terminate_sessions".into()),
-        _ => AdminOperation::Other(params.action.clone()),
-    };
-    let (key_store, service_did, audit_fail_closed) = audit_signing_context(depot)?;
-    record_admin_operation_signed(
-        &mut repo,
-        &mut rng,
-        &*clock,
-        &key_store,
-        &service_did,
-        audit_fail_closed,
-        admin_user.as_ref(),
-        operation,
-        "user",
-        Some(user.id),
-        serde_json::json!({
-            "action": params.action,
-            "reason": params.reason,
-        }),
-    )
-    .await?;
-
-    repo.save().await?;
-
-    let user_response = SingleOutcome::new(
-        User::from(user),
-        format!("/_coauth/admin/users/{id}/risk-action"),
-    );
-
-    Ok(Json(RiskActionOutcome {
-        action: params.action,
-        reason: params.reason,
-        user: user_response,
-        sessions_terminated,
-    }))
-}
-
-/// # JSON payload for the `POST /_coauth/admin/users/:id/set-password` endpoint
+/// # JSON payload for the `POST /_coauth/admin/accounts/:id/set-password` endpoint
 #[derive(Deserialize, JsonSchema)]
-#[schemars(rename = "SetUserPasswordRequest")]
+#[schemars(rename = "SetAccountPasswordRequest")]
 pub struct SetPasswordRequestBody {
     /// The password to set for the user
     #[schemars(example = &"hunter2")]
@@ -167,7 +50,7 @@ pub struct SetPasswordRequestBody {
 }
 
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.users.set_password", skip_all)]
+#[tracing::instrument(name = "handler.admin.v1.accounts.set_password", skip_all)]
 pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusCode> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
@@ -189,7 +72,7 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
         .user()
         .lookup(id)
         .await?
-        .ok_or_else(|| AppError::not_found(format!("User ID {id} not found")))?;
+        .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     let skip_password_check = params.skip_password_check.unwrap_or(false);
     tracing::info!(skip_password_check, "skip_password_check");
@@ -229,7 +112,7 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
         audit_fail_closed,
         admin_user.as_ref(),
         AdminOperation::UserPasswordSet,
-        "user",
+        "account",
         Some(user.id),
         serde_json::json!({}),
     )

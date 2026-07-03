@@ -1,5 +1,5 @@
 use hyper::{Request, StatusCode, header::CONTENT_TYPE};
-use oauth_types::scope::{OPENID, Scope};
+use coauth_oauth_types::scope::{OPENID, Scope};
 use coauth_data::{
     UpstreamOAuthAuthorizationSession, UpstreamOAuthLink, UpstreamOAuthProviderClaimsImports,
     UpstreamOAuthProviderImportPreference, UpstreamOAuthProviderHandlePreference,

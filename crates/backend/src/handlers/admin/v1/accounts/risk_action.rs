@@ -102,52 +102,110 @@ pub struct AccountRiskActionExecuteOutcome {
 // example payload and admin bridge discovery response in one shared
 // contract.
 
+/// How the execute step applies an approved risk action.
+enum AccountRiskActionOperation {
+    /// Patch the account row through `services::user_admin::patch_user`.
+    PatchUser {
+        patch: AdminUserPatch,
+        principal_erase: bool,
+    },
+    /// Bulk-finish the account's active browser sessions (the former
+    /// immediate `users/{id}/risk-action` `terminate_sessions` action,
+    /// folded into this accountable workflow).
+    TerminateSessions,
+}
+
 struct AccountRiskActionMutation {
-    patch: AdminUserPatch,
-    principal_erase: bool,
+    operation: AccountRiskActionOperation,
     mutation_kind: &'static str,
     mutation_description: &'static str,
+}
+
+impl AccountRiskActionMutation {
+    fn principal_erase(&self) -> bool {
+        matches!(
+            self.operation,
+            AccountRiskActionOperation::PatchUser {
+                principal_erase: true,
+                ..
+            }
+        )
+    }
+
+    fn execution_mode(&self) -> &'static str {
+        match self.operation {
+            AccountRiskActionOperation::PatchUser { .. } => "services.user_admin.patch_user",
+            AccountRiskActionOperation::TerminateSessions => {
+                "repository.browser_session.finish_bulk"
+            }
+        }
+    }
+}
+
+fn lock_patch() -> AdminUserPatch {
+    AdminUserPatch {
+        status: Some(cokret_core::AccountStatus::Locked),
+        locked: Some(true),
+        ..AdminUserPatch::default()
+    }
 }
 
 fn account_risk_action_mutation(action: &str) -> Result<AccountRiskActionMutation, AppError> {
     match action {
         "lock" => Ok(AccountRiskActionMutation {
-            patch: AdminUserPatch {
-                status: Some(cokret_core::AccountStatus::Locked),
-                locked: Some(true),
-                ..AdminUserPatch::default()
+            operation: AccountRiskActionOperation::PatchUser {
+                patch: lock_patch(),
+                principal_erase: false,
             },
-            principal_erase: false,
             mutation_kind: "account_locked",
             mutation_description: "account locked through services.user_admin",
         }),
-        "disable" => Ok(AccountRiskActionMutation {
-            patch: AdminUserPatch {
-                status: Some(cokret_core::AccountStatus::Deactivated),
-                deactivated: Some(true),
-                ..AdminUserPatch::default()
+        // Former `users` immediate risk action: lock the account so the
+        // holder must run a password reset. Low-risk tier (single approval).
+        "force_password_reset" => Ok(AccountRiskActionMutation {
+            operation: AccountRiskActionOperation::PatchUser {
+                patch: lock_patch(),
+                principal_erase: false,
             },
-            principal_erase: false,
+            mutation_kind: "account_locked_pending_password_reset",
+            mutation_description: "account locked pending a password reset",
+        }),
+        // Former `users` immediate risk action: end every active browser
+        // session for the account. Low-risk tier (single approval).
+        "terminate_sessions" => Ok(AccountRiskActionMutation {
+            operation: AccountRiskActionOperation::TerminateSessions,
+            mutation_kind: "account_sessions_terminated",
+            mutation_description: "active browser sessions bulk-finished",
+        }),
+        "disable" => Ok(AccountRiskActionMutation {
+            operation: AccountRiskActionOperation::PatchUser {
+                patch: AdminUserPatch {
+                    status: Some(cokret_core::AccountStatus::Deactivated),
+                    deactivated: Some(true),
+                    ..AdminUserPatch::default()
+                },
+                principal_erase: false,
+            },
             mutation_kind: "account_disabled",
             mutation_description: "account disabled through services.user_admin",
         }),
         "erase" => Ok(AccountRiskActionMutation {
-            patch: AdminUserPatch {
-                status: Some(cokret_core::AccountStatus::ErasurePending),
-                deactivated: Some(true),
-                ..AdminUserPatch::default()
+            operation: AccountRiskActionOperation::PatchUser {
+                patch: AdminUserPatch {
+                    status: Some(cokret_core::AccountStatus::ErasurePending),
+                    deactivated: Some(true),
+                    ..AdminUserPatch::default()
+                },
+                principal_erase: true,
             },
-            principal_erase: true,
             mutation_kind: "account_erasure_scheduled",
             mutation_description: "account disabled and PrincipalServer erasure job scheduled through services.user_admin",
         }),
         "reset_recovery" => Ok(AccountRiskActionMutation {
-            patch: AdminUserPatch {
-                status: Some(cokret_core::AccountStatus::Locked),
-                locked: Some(true),
-                ..AdminUserPatch::default()
+            operation: AccountRiskActionOperation::PatchUser {
+                patch: lock_patch(),
+                principal_erase: false,
             },
-            principal_erase: false,
             mutation_kind: "account_locked_pending_recovery_reset",
             mutation_description: "account locked pending dedicated recovery reset workflow",
         }),
@@ -393,8 +451,7 @@ pub async fn propose(
     let cokret_config = depot.cokret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let key_store = depot.key_store()?;
-    let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let service_did = service_did_for(&cokret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -528,7 +585,7 @@ pub async fn approve(
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let service_did = service_did_for(&cokret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
         clock,
@@ -745,8 +802,7 @@ pub async fn execute(
     let did_resolver = depot.did_resolver_service()?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
-    let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let service_did = service_did_for(&cokret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_did: &service_did,
@@ -785,19 +841,35 @@ pub async fn execute(
     let state_revision = state_revision_for(&executed_proposal);
     let todo = "Durable proposal consumed before controlled account mutation.".to_owned();
     let mut rng = crate::handlers::account::make_rng();
-    let updated_account = crate::services::user_admin::patch_user(
-        &mut repo,
-        &mut rng,
-        &*clock,
-        principal_server.as_ref(),
-        admin_user.as_ref(),
-        account.id,
-        mutation.patch,
-        mutation.principal_erase,
-        Some(audit_signing),
-    )
-    .await
-    .map_err(super::map_service_error)?;
+    let mut sessions_terminated = None;
+    let principal_erase = mutation.principal_erase();
+    let execution_mode = mutation.execution_mode();
+    let updated_account = match mutation.operation {
+        AccountRiskActionOperation::PatchUser {
+            patch,
+            principal_erase,
+        } => crate::services::user_admin::patch_user(
+            &mut repo,
+            &mut rng,
+            &*clock,
+            principal_server.as_ref(),
+            admin_user.as_ref(),
+            account.id,
+            patch,
+            principal_erase,
+            Some(audit_signing),
+        )
+        .await
+        .map_err(super::map_service_error)?,
+        AccountRiskActionOperation::TerminateSessions => {
+            use coauth_data::user::BrowserSessionFilter;
+
+            let filter = BrowserSessionFilter::new().for_user(&account).active_only();
+            let count = repo.browser_session().finish_bulk(&clock, filter).await?;
+            sessions_terminated = Some(count);
+            account.clone()
+        }
+    };
 
     record_admin_operation_signed(
         &mut repo,
@@ -821,7 +893,8 @@ pub async fn execute(
             "next_state": "mutation_recorded",
             "mutation_kind": mutation.mutation_kind,
             "mutation_description": mutation.mutation_description,
-            "principal_erase": mutation.principal_erase,
+            "principal_erase": principal_erase,
+            "sessions_terminated": sessions_terminated,
             "ticket": params.ticket,
             "executed_by": admin_user.as_ref().map(|user| user.id.to_string()),
             "executed_by_handle": admin_user.as_ref().map(|user| user.localpart.as_str()),
@@ -851,7 +924,7 @@ pub async fn execute(
         state_revision,
         transition_kind: "proposal_executed".to_owned(),
         executed_at,
-        execution_mode: "services.user_admin.patch_user".to_owned(),
+        execution_mode: execution_mode.to_owned(),
         execution_note: params.execution_note,
         account: account_response,
         mutation_endpoint,

@@ -28,8 +28,8 @@ mod tests {
         AuthorizationCode, Clock, Pagination, RefreshTokenState, RepositoryAccess as _,
         RepositoryFactory as _,
     };
-    use oauth_types::requests::{GrantType, ResponseMode};
-    use oauth_types::scope::{EMAIL, OPENID, PROFILE, Scope};
+    use coauth_oauth_types::requests::{GrantType, ResponseMode};
+    use coauth_oauth_types::scope::{EMAIL, OPENID, PROFILE, Scope};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use ulid::Ulid;
@@ -311,7 +311,7 @@ mod tests {
         clock.advance(Duration::try_minutes(6).unwrap());
         assert!(!access_token.is_valid(clock.now()));
 
-        // TODO(COA-HYG-02): we might want to create a new access token
+        // TODO: we might want to create a new access token
         clock.advance(Duration::try_minutes(-6).unwrap()); // Go back in time
         assert!(access_token.is_valid(clock.now()));
 

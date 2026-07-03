@@ -1,6 +1,18 @@
 //! Cokret account administration endpoints.
+//!
+//! This is the ONLY admin resource tree over the users table: the former
+//! MAS-inherited `/_coauth/admin/users/*` tree was folded in here
+//! (create / by-username / batch-invite / profile patch / set-password),
+//! and its unaccountable immediate `risk-action` endpoint was replaced by
+//! the propose -> approve -> execute workflow in [`risk_action`].
 
+pub mod create;
 pub mod risk_action;
+pub mod security;
+pub mod update;
+
+#[cfg(test)]
+mod api_tests;
 
 use chrono::{DateTime, Utc};
 use coauth_admin_types::{
@@ -285,6 +297,35 @@ pub async fn admin_bridge_describe(
 }
 
 #[endpoint]
+#[tracing::instrument(name = "handler.admin.v1.accounts.by_username", skip_all)]
+pub async fn get_account_by_username(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<SingleOutcome<AccountRecord>> {
+    let call_context = extract_call_context(req, depot).await?;
+    let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
+    let cokret_config = depot.cokret_config()?;
+    let did_resolver = depot.did_resolver_service()?;
+    let username: String = req
+        .param::<String>("username")
+        .ok_or_else(|| AppError::not_found(r#"Account with username "unknown" not found"#))?;
+
+    let self_path = format!("/_coauth/admin/accounts/by-username/{username}");
+    let account = repo
+        .user()
+        .find_by_handle(&username)
+        .await?
+        .ok_or_else(|| {
+            AppError::not_found(format!("Account with username {username:?} not found"))
+        })?;
+
+    Ok(Json(SingleOutcome::new(
+        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await?,
+        self_path,
+    )))
+}
+
+#[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.accounts.get", skip_all)]
 pub async fn get_account(
     req: &mut Request,
@@ -458,8 +499,7 @@ async fn patch_account(
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
-    let url_builder = depot.url_builder()?;
-    let service_did = service_did_for(&url_builder, &cokret_config);
+    let service_did = service_did_for(&cokret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_did: &service_did,
@@ -597,23 +637,10 @@ async fn map_page_async(
     })
 }
 
-fn map_service_error(error: crate::services::user_admin::UserAdminServiceError) -> AppError {
-    match error {
-        crate::services::user_admin::UserAdminServiceError::UserNotFound(id) => {
-            AppError::not_found(format!("Account ID {id} not found"))
-        }
-        crate::services::user_admin::UserAdminServiceError::InvalidDisplayName => {
-            AppError::bad_request("Invalid display name")
-        }
-        crate::services::user_admin::UserAdminServiceError::PrincipalServer(error) => {
-            AppError::internal(std::io::Error::other(error.to_string()))
-        }
-        crate::services::user_admin::UserAdminServiceError::Repository(error) => {
-            AppError::internal(error)
-        }
-        other => AppError::bad_request(other.to_string()),
-    }
-}
+// The exhaustive `UserAdminServiceError` -> `AppError` mapper lives in
+// `update.rs` next to the PATCH endpoint; the lifecycle mutation endpoints
+// above share it.
+use update::map_service_error;
 
 fn admin_account_status(status: cokret_core::AccountStatus) -> AccountStatus {
     match status {
@@ -1107,8 +1134,7 @@ mod tests {
         assert_eq!(body["data"][0]["active"], true);
         assert_eq!(body["meta"]["supports_write_operations"], true);
 
-        let recovery_did =
-            crate::handlers::cokret::service_did_for(&state.url_builder, &state.cokret_config);
+        let recovery_did = crate::handlers::cokret::service_did_for(&state.cokret_config);
         let nonce = "did-binding-add-nonce";
         let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
         let response = state
@@ -1241,8 +1267,7 @@ mod tests {
         // identity-did §5.1 / §3.6: bind the proof to this receiver (local
         // service DID) and this deployment (trust_domain), with a bounded
         // freshness window (exp - iat <= 300s).
-        let audience =
-            crate::handlers::cokret::service_did_for(&state.url_builder, &state.cokret_config);
+        let audience = crate::handlers::cokret::service_did_for(&state.cokret_config);
         let trust_domain =
             crate::handlers::cokret::trust_domain_for(&state.url_builder, &state.cokret_config);
         let iat = state.clock.now();

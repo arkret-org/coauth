@@ -6,9 +6,9 @@ use coauth_iana::oauth::{
 };
 use coauth_jose::jwa::SUPPORTED_SIGNING_ALGORITHMS;
 use coauth_keystore::Keystore;
-use oauth_types::oidc::{ClaimType, ProviderMetadata, SubjectType};
-use oauth_types::requests::{Display, GrantType, Prompt, ResponseMode};
-use oauth_types::scope;
+use coauth_oauth_types::oidc::{ClaimType, ProviderMetadata, SubjectType};
+use coauth_oauth_types::requests::{Display, GrantType, Prompt, ResponseMode};
+use coauth_oauth_types::scope;
 use salvo::prelude::*;
 use serde::Serialize;
 
@@ -309,7 +309,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         ],
         cokret_api_endpoint: url_builder.absolute_url("/_cokret").to_string(),
         cokret_server_describe: url_builder.absolute_url("/_cokret/describe").to_string(),
-        cokret_service_did: cokret::service_did_for(url_builder, &cokret_config),
+        cokret_service_did: cokret::service_did_for(&cokret_config),
         cokret_did_binding_methods: vec!["session_grant".to_owned()],
         cokret_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),

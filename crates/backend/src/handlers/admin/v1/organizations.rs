@@ -382,10 +382,9 @@ pub async fn issue_statement_handler(
         .transpose()
         .map_err(|e| AppError::bad_request(format!("invalid realm_frontier_digest: {e}")))?;
 
-    let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
-    let service_did = crate::handlers::cokret::service_did_for(&url_builder, &cokret_config);
+    let service_did = crate::handlers::cokret::service_did_for(&cokret_config);
 
     let call_context = extract_call_context(req, depot).await?;
     let executed_by = call_context

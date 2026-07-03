@@ -1293,6 +1293,7 @@ dependencies = [
  "coauth-jose",
  "coauth-keystore",
  "coauth-messaging",
+ "coauth-oauth-types",
  "coauth-policy",
  "coauth-principal",
  "coauth-tasks",
@@ -1331,7 +1332,6 @@ dependencies = [
  "mime",
  "minijinja",
  "minijinja-contrib",
- "oauth-types",
  "opendal",
  "opentelemetry",
  "opentelemetry-http",
@@ -1370,6 +1370,7 @@ dependencies = [
  "sha2 0.10.9",
  "signature",
  "socket2",
+ "soland-core",
  "subtle",
  "thiserror 2.0.18",
  "time",
@@ -1437,6 +1438,7 @@ dependencies = [
  "chrono",
  "coauth-iana",
  "coauth-jose",
+ "coauth-oauth-types",
  "cokret-core",
  "crc",
  "diesel",
@@ -1446,7 +1448,6 @@ dependencies = [
  "ipnetwork",
  "language-tags",
  "lettre",
- "oauth-types",
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "rand 0.8.5",
@@ -1618,6 +1619,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "coauth-oauth-types"
+version = "0.3.0"
+dependencies = [
+ "assert_matches",
+ "base64ct",
+ "chrono",
+ "coauth-iana",
+ "coauth-jose",
+ "indexmap 2.14.0",
+ "insta",
+ "language-tags",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_with",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
 name = "coauth-policy"
 version = "0.3.0"
 dependencies = [
@@ -1626,7 +1648,7 @@ dependencies = [
  "cedar-policy",
  "chrono",
  "coauth-data",
- "oauth-types",
+ "coauth-oauth-types",
  "reqwest 0.13.4",
  "schemars 1.2.1",
  "serde",
@@ -1656,13 +1678,13 @@ dependencies = [
  "coauth-data",
  "coauth-i18n",
  "coauth-messaging",
+ "coauth-oauth-types",
  "coauth-principal",
  "coauth-templates",
  "cokret-core",
  "cron",
  "diesel",
  "diesel-async",
- "oauth-types",
  "opentelemetry",
  "opentelemetry-semantic-conventions",
  "rand 0.8.5",
@@ -1690,12 +1712,12 @@ dependencies = [
  "coauth-data",
  "coauth-i18n",
  "coauth-iana",
+ "coauth-oauth-types",
  "coauth-policy",
  "fluent-bundle",
  "http",
  "minijinja",
  "minijinja-contrib",
- "oauth-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
@@ -1754,6 +1776,7 @@ dependencies = [
  "cokret-identifiers",
  "getrandom 0.4.2",
  "hex",
+ "hmac 0.13.0",
  "regex",
  "serde",
  "serde_json",
@@ -1831,6 +1854,7 @@ dependencies = [
  "subtle",
  "thiserror 2.0.18",
  "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -5680,27 +5704,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oauth-types"
-version = "0.3.0"
-dependencies = [
- "assert_matches",
- "base64ct",
- "chrono",
- "coauth-iana",
- "coauth-jose",
- "indexmap 2.14.0",
- "insta",
- "language-tags",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with",
- "sha2 0.10.9",
- "thiserror 2.0.18",
- "url",
-]
-
-[[package]]
 name = "objc2"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8488,6 +8491,15 @@ checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "soland-core"
+version = "0.3.0"
+dependencies = [
+ "cokret-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

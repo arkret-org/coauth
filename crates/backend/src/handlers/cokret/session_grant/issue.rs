@@ -238,7 +238,7 @@ async fn issue_agent_key_proof_session_grant(
     // the DID maps to a coauth-hosted account. Bind the lookup to an owned
     // value so the sub-repo borrow is released before `repo.cancel()`.
     let controller_blocked = if let Some(user_id) =
-        parse_local_user_did_for(&url_builder, &cokret_config, &authorization.controller_did)
+        parse_local_user_did_for(&cokret_config, &authorization.controller_did)
     {
         let user = repo
             .user()
@@ -273,7 +273,6 @@ async fn issue_agent_key_proof_session_grant(
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(error))
     })?;
     let material = mint_agent_session_grant(
-        &url_builder,
         &cokret_config,
         &key_store,
         &authorization.agent_principal_id,

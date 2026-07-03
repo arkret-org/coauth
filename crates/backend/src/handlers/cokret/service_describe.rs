@@ -414,12 +414,12 @@ fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -
         .to_string();
     let origin = url_builder.http_base().to_string();
     let origin = origin.strip_suffix('/').unwrap_or(&origin).to_owned();
-    let service_did = service_did_for(url_builder, cokret_config);
+    let service_did = service_did_for(cokret_config);
 
     let mut extra = std::collections::BTreeMap::new();
     extra.insert(
         "issuer_did".to_owned(),
-        json!(issuer_did_for(url_builder, cokret_config)),
+        json!(issuer_did_for(cokret_config)),
     );
     extra.insert(
         "token_endpoint_auth_methods".to_owned(),
@@ -539,7 +539,7 @@ pub(crate) fn service_describe_response(
     let admin_audience = required_audience_for(url_builder, cokret_config);
 
     ServiceDescribeOutcome {
-        service_did: service_did_for(url_builder, cokret_config),
+        service_did: service_did_for(cokret_config),
         // Round 4 — surface the deployment trust domain so federation
         // peers can verify cross-deployment replay protection (see
         // `cokret-spec` round-4 §f9bd7eb).
@@ -732,7 +732,7 @@ pub async fn server_describe(
             client.grant_types.iter().any(|grant_type| {
                 matches!(
                     grant_type,
-                    oauth_types::requests::GrantType::AuthorizationCode
+                    coauth_oauth_types::requests::GrantType::AuthorizationCode
                 )
             })
         })

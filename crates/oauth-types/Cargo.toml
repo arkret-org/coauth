@@ -1,5 +1,5 @@
 [package]
-name = "oauth-types"
+name = "coauth-oauth-types"
 description = "OAuth and OpenID Connect wire types for coauth"
 version.workspace = true
 authors.workspace = true

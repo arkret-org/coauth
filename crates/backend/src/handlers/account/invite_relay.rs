@@ -317,7 +317,7 @@ pub async fn post_invite_relay(
         }
     }
 
-    let service_did = cokret::service_did_for(&url_builder, &cokret_config);
+    let service_did = cokret::service_did_for(&cokret_config);
     let trust_domain = cokret::trust_domain_for(&url_builder, &cokret_config);
     let destination_service_did = params.invite_delivery.as_ref().map_or_else(
         || service_did.clone(),

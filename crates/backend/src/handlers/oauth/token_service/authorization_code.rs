@@ -7,10 +7,10 @@ use coauth_config::CokretConfig;
 use coauth_data::{AuthorizationGrantStage, BoxRepository, Client, Clock, SiteConfig, UrlBuilder};
 use coauth_i18n::Locale;
 use coauth_keystore::Keystore;
+use coauth_oauth_types::requests::{AccessTokenResponse, AuthorizationCodeGrant, GrantType};
+use coauth_oauth_types::scope;
 use coauth_principal::ConnectorAdmin;
 use coauth_templates::{DeviceNameContext, TemplateContext as _, Templates};
-use oauth_types::requests::{AccessTokenResponse, AuthorizationCodeGrant, GrantType};
-use oauth_types::scope;
 use tracing::{debug, error, warn};
 
 use super::{
@@ -297,11 +297,8 @@ pub async fn exchange_authorization_code(
             browser_session.id = %browser_session.id,
             "Generating ID token because openid scope is present"
         );
-        let subject_did = crate::handlers::cokret::oidc_subject_for_user(
-            url_builder,
-            cokret_config,
-            &browser_session.user,
-        );
+        let subject_did =
+            crate::handlers::cokret::oidc_subject_for_user(cokret_config, &browser_session.user);
         let principal_did = crate::handlers::cokret::published_principal_did_for_user(
             &mut repo,
             cokret_config,
@@ -392,7 +389,7 @@ pub async fn exchange_authorization_code(
         .exchange(clock, authz_grant)
         .await?;
 
-    // TODO(COA-HYG-02): there is a potential (but unlikely) race here, where the activity for
+    // TODO: there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
     // save the repository here to fix that.
     activity_tracker.record_oauth_session(clock, &session).await;

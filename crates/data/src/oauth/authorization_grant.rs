@@ -2,9 +2,9 @@ use std::str::FromStr as _;
 
 use chrono::{DateTime, Utc};
 use coauth_iana::oauth::PkceCodeChallengeMethod;
-use oauth_types::pkce::{CodeChallengeError, CodeChallengeMethodExt};
-use oauth_types::requests::ResponseMode;
-use oauth_types::scope::{OPENID, PROFILE, Scope};
+use coauth_oauth_types::pkce::{CodeChallengeError, CodeChallengeMethodExt};
+use coauth_oauth_types::requests::ResponseMode;
+use coauth_oauth_types::scope::{OPENID, PROFILE, Scope};
 use rand_core::RngCore;
 use serde::Serialize;
 use ulid::Ulid;

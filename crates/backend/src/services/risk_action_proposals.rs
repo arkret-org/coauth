@@ -540,6 +540,10 @@ mod tests {
         assert!(is_high_risk_action("erase"));
         assert!(is_high_risk_action("reset_recovery"));
         assert!(!is_high_risk_action("lock"));
+        // Folded in from the removed immediate `users/{id}/risk-action`
+        // endpoint: low-risk tier, single approval.
+        assert!(!is_high_risk_action("force_password_reset"));
+        assert!(!is_high_risk_action("terminate_sessions"));
         assert!(!is_high_risk_action("unknown"));
     }
 

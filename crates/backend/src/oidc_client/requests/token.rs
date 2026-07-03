@@ -15,9 +15,9 @@
 //! Requests for the Token endpoint.
 
 use chrono::{DateTime, Utc};
+use coauth_oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
-use oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
 use rand_core::RngCore as Rng;
 use url::Url;
 

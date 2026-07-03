@@ -33,7 +33,22 @@ pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15
 const AGENT_KEY_SCOPE_ACCOUNT: &str = "account";
 const AGENT_KEY_SCOPE_REALM: &str = "realm";
 const AGENT_KEY_SCOPE_APPLET: &str = "applet";
-const AGENT_KEY_SCOPE_LIMITED: &str = "limited";
+pub(super) const AGENT_KEY_SCOPE_LIMITED: &str = "limited";
+
+/// Closed action set of the `limited` tier (CKP-0008 §4.5 baseline). Shared
+/// with `key_pair.rs`, which projects the same set into the spec-typed
+/// `agent_key_scope.actions` on the `ck.agent.key.authorize` fan-out payload.
+pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
+    "ck.self.events.query.describe",
+    "ck.self.events.command.submit",
+    "ck.self.events.resource.get",
+    "ck.self.events.query.resolve",
+    "ck.self.events.query.scan",
+    "ck.self.events.stream.subscribe",
+    "ck.self.events.query.frontier",
+    "ck.message.create",
+    "ck.reaction.add",
+];
 
 /// Outcome of validating an `agent_key_proof` session-grant request.
 pub struct AgentSessionAuthorization {
@@ -960,18 +975,7 @@ fn scope_token_allowed_by_agent_key_scope(agent_key_scope: &str, token: &str) ->
 }
 
 fn limited_agent_scope_token_allowed(token: &str) -> bool {
-    matches!(
-        token,
-        "ck.self.events.query.describe"
-            | "ck.self.events.command.submit"
-            | "ck.self.events.resource.get"
-            | "ck.self.events.query.resolve"
-            | "ck.self.events.query.scan"
-            | "ck.self.events.stream.subscribe"
-            | "ck.self.events.query.frontier"
-            | "ck.message.create"
-            | "ck.reaction.add"
-    )
+    LIMITED_AGENT_SCOPE_ACTIONS.contains(&token)
 }
 
 fn applet_agent_scope_token_allowed(token: &str) -> bool {
