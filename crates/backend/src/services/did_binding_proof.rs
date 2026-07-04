@@ -1212,8 +1212,14 @@ mod tests {
 
         let compact = attach_detached_jws(&vector.proof.jws, &vector.detached_payload_b64u);
         let jwt: Jwt<'_, serde_json::Value> = Jwt::try_from(compact.as_str()).unwrap();
-        let kid = jwt.header().kid().expect("fixture JWS must carry kid");
-        assert_eq!(kid, vector.proof.verification_method);
+        // encoding.md §2: the detached-JWS protected header is fixed to
+        // {"alg":"EdDSA"} with no kid; the verification method is carried in the
+        // proof object and the signed binding, not the header.
+        assert!(
+            jwt.header().kid().is_none(),
+            "spec-fixed Event proof header carries no kid"
+        );
+        let kid = vector.proof.verification_method.as_str();
         assert_eq!(kid, vector.did_document_fragment.id);
         assert_eq!(
             vector
