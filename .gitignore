@@ -16,7 +16,6 @@ dist
 _*.*
 !_todos.md
 .cladue
-config.dev.yaml
 *.log
 .sqlx
 *.py

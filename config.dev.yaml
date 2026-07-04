@@ -1,0 +1,149 @@
+http:
+  listeners:
+  - name: web
+    resources:
+    - name: discovery
+    - name: human
+    - name: oauth
+    - name: restapi
+    - name: assets
+    - name: health
+    binds:
+    - address: '127.0.0.1:7080'
+    proxy_protocol: false
+  trusted_proxies:
+  - 192.168.0.0/16
+  - 172.16.0.0/12
+  - 10.0.0.0/10
+  - 127.0.0.1/8
+  - fd00::/8
+  - ::1/128
+  public_base: https://auth.local.host/
+  issuer: https://auth.local.host/
+  csp_html: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
+clients:
+- client_id: 01GFWR28C4KNE04WG3HKXB7C9R
+  client_name: Yougen Dev
+  client_auth_method: none
+  redirect_uris:
+  - http://127.0.0.1/auth/callback
+  - http://localhost/auth/callback
+database:
+  uri: postgresql://postgres:root@localhost/coauth_dev
+  max_connections: 10
+  min_connections: 0
+  connect_timeout: 30
+  idle_timeout: 600
+  max_lifetime: 1800
+# email:
+#   from: '"coauth" <coauth@cokret.org>'
+#   reply_to: '"coauth" <coauth@cokret.org>'
+#   provider:
+#     type: smtp
+#     mode: tls
+#     hostname: smtp.gmail.com
+#     port: 465
+#     username: chris@cokret.org
+#     password: PASSWORD
+secrets:
+  encryption: 144d85d6edcbf6d8f646e3e5e9e9afc0c6ec8842421fc5a4fbb21b7f77b98157
+  keys:
+  - key: |
+      -----BEGIN RSA PRIVATE KEY-----
+      MIIEowIBAAKCAQEAr67PkGL2mduWM1IzXtDkmSyAaWPrei5mLxmQ+QdNBOj9BmeV
+      Dq0khBz9aO0rGtpyQHvt0FWx4GBk0rN1cFngF1BJ4ZzgMQTYJIvqFiezY5YOqBPK
+      V9dpjfBC53ykt7WccIeOSUDXYFx7luEF0OpoHoQCbUiQV67KWeHz8XG4BUy+tGcC
+      gTar9g0IHYV6zzapR//5VQfjPqSTkYr+R3r6wBseb8xSHayZAYoYZUUnxkvlQfkb
+      TLHbcZfv/rSBoW23xTFv7C3uch7pEWo5VQK2C+efeJUHYv7zlnlNdYaUV1sB/Ud6
+      e4WdGbWDradPE1NuteW/NYnTevSPTThbCRHkqQIDAQABAoIBAGCgl41kwRnSywQj
+      PBn0bydIcMCGsqebCZzyROiTeWsv8qspIbTWynTXtRGXENROPfT1tNGXsKQmoI27
+      IubOqBBqmpg6vpx3e6JuSiwxXdtyV1FewTYbRvVIpqPHzJk2jHrgNARaY5uegmN0
+      FMzZgLb4CJWvCaUQgD97pb6wu3Q93g8kUI1KcxywBgAyB73fkOMdi+wWWd//kh87
+      wWK5OOVoiRTqaDOKzisEv7kxTDd9CjVgNHFSpIYCs+J0fHVx5lgYXyQcI4pFdRW4
+      fNykYqO+0F+KswOFRx0CqI9AtjC3rbsNADiZ8iw0UbnZZTh5VbEt+jPpcr/cTpCV
+      usdzmgECgYEA4cwJqHzbaLimJ+PBv/VsaaLS1B7iSTTs+UVvVMgSwImrAbtroTG2
+      6dqZ3rClMOTNBuJPB1Q1/VtcL/LI7u4o6b2+YMMhKhPSKfNBrhAWqQjZrZEzl6jc
+      xQud8gDPwgOQpVuaVpfFmcFk0MiOcMiMTMMOdGlmZC1OBUUBmTJv7mECgYEAxy62
+      +0OzFWUt7UcS1TMyBKafQOXZbPADAuPvrpCsywwOmQIiaZp6XdIiMKhx2RM6tJi4
+      HOiKB7M8i93leRc/qhfDzPOlzeHWLO9xuCHCFTiQqgdYqyfFzueC+4lUVaJBNEIm
+      FC7J+pR67ZIb5oDDeyHffghESLrfUvThS7kgy0kCgYBp3yrUJp8WLiYyY/dv01qe
+      +WqTbVu66acHhkgaX6lzP9m/+SoRLedPJWGqafc6wr1jse9OR2z9O74w+Uy/w0nJ
+      t18xray6Nwr/AoFUZVTKs0yltoSTYukJN1Y6p6jClrtW3WmzmnxbiLOFtdQcC9zF
+      DVyUtur8o8WGcQG73EthYQKBgCQK1PukpXxCocvk54iCyhNDX1/r96sZx0G3o0Bw
+      V4Qqe12+oCGB3ZCqnJs3b9p6+02AsRgyEAASs+sPTR3bUh7iTAEDOcaGji31ahuK
+      qEcUxECwMaBPAyFMjUwc7pDMWoYtThyq1susII5quPe95yGZ4Io6zrhmcFDflQER
+      z9hZAoGBAL5gndoDKC28fSj1NR1p0xxuRVDY85Y+dB97Qk7cy6nTByQtDoat3duc
+      k1iP5HnaiEm2lqnV7FH4ie6rKy7vAHQyxe7uzU70az67Z+a0TGO59wD9Kt3+4DRE
+      wkQ+acd/5+c9VVt8kDL4X+U7WT5Pkae6j4BGkiv+KILnDnr8vkNh
+      -----END RSA PRIVATE KEY-----
+  - key: |
+      -----BEGIN EC PRIVATE KEY-----
+      MHcCAQEEIJ/2pGuvW2JtKJgLTn48nz05RRIMpv+774Zs2Wc2ABy4oAoGCCqGSM49
+      AwEHoUQDQgAEO4jHncdKfygiCeaVPKIsg7pAjv7aSV9AoptTNrfOT6Hfh6J9oBwF
+      RFXwWOUJHxJtW6Zg4Kh9MU6VeyosNt0cVQ==
+      -----END EC PRIVATE KEY-----
+  - key: |
+      -----BEGIN EC PRIVATE KEY-----
+      MIGkAgEBBDAOVSe+F3ceZn3bBHvC8TRKXh5V8Kz4xjjo8LTitG+ypLB3WsV5Obin
+      invYhbBclD2gBwYFK4EEACKhZANiAATkka2jiwEcoyFmx4FBU+nuccohpGEHCYcb
+      3FY/1EmB1HAVqz/ehvlX9PkkJVnJofDnaN9ait3eMDOnPRCvXze5UnD/xsOWeMJG
+      cAYszHKHeKHd8zJs521PLU99fSWOkLI=
+      -----END EC PRIVATE KEY-----
+  - key: |
+      -----BEGIN EC PRIVATE KEY-----
+      MHQCAQEEII7Dkp0vvYMyCg57K6p4gSfVsTvdPO7ZX3icSLogrK9ooAcGBSuBBAAK
+      oUQDQgAEeibK9H46/WG0q0u+AhrnALVQeK4ny5XDhEiEQG5iNbewL8Vkzbl/w9xQ
+      VBcGmfUG9zJBQYztKW5Eqc7M+62eBQ==
+      -----END EC PRIVATE KEY-----
+sms:
+  transport: blackhole
+  # transport: twilio
+  # account_sid: "ACxxxx"
+  # auth_token: "your_auth_token"
+  # from_number: "+1234567890"
+  # transport: http_webhook
+  # api_url: "https://your-sms-gateway.example.com/send"
+  # api_key: "your_api_key"
+  # from_number: "+1234567890"
+account:
+  password_registration_enabled: true
+  registration_email_delivery_bypass_allowed: true
+  registration_token_required: false
+  bootstrap_admin_token: admin
+passwords:
+  enabled: true
+  schemes:
+  - version: 1
+    algorithm: argon2id
+  minimum_complexity: 3
+rate_limiting:
+  # Dev-only: registration/login/email limits raised far above production so
+  # iterative local testing (repeated register + login from one IP) is not
+  # throttled with `rate_limited`. Do NOT copy these values to production.
+  registration:
+    burst: 100000
+    per_second: 100000
+  login:
+    per_ip:
+      burst: 100000
+      per_second: 100000
+    per_account:
+      burst: 100000
+      per_second: 100000
+  email_authentication:
+    per_ip:
+      burst: 100000
+      per_second: 100000
+    per_address:
+      burst: 100000
+      per_second: 100000
+cokret:
+  service_did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service
+  principal_server_url: https://local.host/
+  principal_servers:
+  - name: soland-dev
+    audience: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service
+    endpoint: https://local.host/
+    did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:service
+    session_grant_introspection_bearer: local-coauth-session-grant-introspection
+    embedded_webvh_registration_bearer: local-soland-webvh-registration
