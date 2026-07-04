@@ -721,6 +721,17 @@ pub async fn post_webvh_finish(
         .trim_start_matches('@')
         .to_ascii_lowercase();
     let also_known_as = [format!("acct:{local_id}")];
+    // The minted principal DID document MUST designate coauth as the
+    // CokretDeviceEnrollmentAuthority; without it soland rejects every device
+    // authorization event with `device_enrollment_authority_not_designated`, so
+    // the account can never enroll a device or publish an MLS KeyPackage. The
+    // OIDC login path already injects this (auth/oidc_bridge.rs); the password
+    // registration path previously hardcoded `None`, silently minting accounts
+    // that could authenticate but never participate in MLS. Mirror the OIDC path.
+    let enrollment_authority_did =
+        crate::services::device_enrollment_authority::enrollment_authority()
+            .did()
+            .to_owned();
     let webvh = soland_webvh::prepare_supplied_inception(&SuppliedInceptionInput {
         principal_endpoint: &target.endpoint,
         local_id: registration.localpart.as_str(),
@@ -731,7 +742,7 @@ pub async fn post_webvh_finish(
         did_key_fragment: input.did_key_id.as_deref(),
         update_key_fragment: input.update_key_id.as_deref(),
         proof: webvh_proof,
-        enrollment_authority_did: None,
+        enrollment_authority_did: Some(enrollment_authority_did.as_str()),
     })
     .map_err(|error| RouteError::BadRequest(format!("embedded_webvh_provider_invalid:{error}")))?;
     soland_webvh::submit_did_operation(

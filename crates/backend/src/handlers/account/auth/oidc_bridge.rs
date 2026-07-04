@@ -447,7 +447,7 @@ pub(super) async fn ensure_principal_did_for_user(
 /// local update-key row durable as soon as that side effect succeeds so a later
 /// account-registration or session-grant failure cannot make the next retry
 /// mint a second principal DID for the same user/audience.
-pub(super) async fn ensure_principal_did_for_user_committed(
+pub(crate) async fn ensure_principal_did_for_user_committed(
     depot: &Depot,
     rng: &mut coauth_data::BoxRng,
     clock: &coauth_data::BoxClock,

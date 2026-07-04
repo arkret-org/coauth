@@ -934,6 +934,9 @@ pub async fn debug_issue_dpop_grant(
         .audience
         .clone()
         .unwrap_or_else(|| required_audience_for(&url_builder, &cokret_config));
+    // Retained for the principal-DID mint below (the grant issuance moves
+    // `audience`).
+    let principal_did_audience = audience.clone();
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
             format!("urn:cokret:client:device:{}", body.device_id),
@@ -962,6 +965,38 @@ pub async fn debug_issue_dpop_grant(
     repo.save()
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+    // Note: `repo.save()` consumes the repository handle above, so this
+    // handler's connection is already released before the committed helper
+    // below opens its own transaction to mint the principal DID.
+
+    // Mint the principal DID document with a `CokretDeviceEnrollmentAuthority`
+    // designation, mirroring the OIDC login path (account/auth/oidc_bridge.rs).
+    // The cotest DPoP debug seam previously issued a grant WITHOUT ever minting
+    // this document, so soland rejected the account's device-authorization event
+    // with `device_enrollment_authority_not_designated` and it could never
+    // publish an MLS KeyPackage — every harness account could authenticate but
+    // never participate in MLS. `ensure_principal_did_for_user_committed` is
+    // idempotent, so re-issuing a grant reuses the already-minted DID.
+    let http_client = depot.http_client()?;
+    let encrypter = depot.encrypter()?;
+    if let Err(message) =
+        crate::handlers::account::auth::oidc_bridge::ensure_principal_did_for_user_committed(
+            depot,
+            &mut rng,
+            &clock,
+            &encrypter,
+            &http_client,
+            &url_builder,
+            &cokret_config,
+            &user,
+            &principal_did_audience,
+        )
+        .await
+    {
+        return Err(CokretRouteError::Internal(
+            format!("principal DID minting failed: {message}").into(),
+        ));
+    }
 
     Ok(Json(DebugIssueDpopGrantOutcome {
         grant_id: persisted.grant_id.to_string(),
