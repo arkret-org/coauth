@@ -20,8 +20,8 @@ mod agent_auth_error_matrix_tests {
         let bad_vm = "did:web:other.example#key-1";
         let err = enforce_verification_method_binding(bad_vm, agent_did).expect_err("must reject");
         assert_eq!(
-            err.code(),
-            "verification_method_principal_mismatch",
+            err.reason_code(),
+            Some("verification_method_principal_mismatch"),
             "must surface the canonical wire code"
         );
         assert_eq!(err.http_status(), http::StatusCode::UNAUTHORIZED);
@@ -37,14 +37,14 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn deactivated_takes_priority_over_paused() {
         let err = enforce_agent_lifecycle_gate(true, true).expect_err("must reject");
-        assert_eq!(err.code(), "agent_deactivated");
+        assert_eq!(err.reason_code(), Some("agent_deactivated"));
         assert_eq!(err.http_status(), http::StatusCode::FORBIDDEN);
     }
 
     #[test]
     fn paused_alone_yields_agent_paused() {
         let err = enforce_agent_lifecycle_gate(true, false).expect_err("must reject");
-        assert_eq!(err.code(), "agent_paused");
+        assert_eq!(err.reason_code(), Some("agent_paused"));
     }
 
     #[test]
@@ -53,7 +53,7 @@ mod agent_auth_error_matrix_tests {
         let just_paused = paused_at + chrono::Duration::seconds(5);
         let err = enforce_paused_revocation_freshness(paused_at, just_paused)
             .expect_err("must reject inside window");
-        assert_eq!(err.code(), "agent_paused");
+        assert_eq!(err.reason_code(), Some("agent_paused"));
     }
 
     #[test]
@@ -76,7 +76,7 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn accountability_grant_missing_renders_as_failed_precondition() {
         let err = AgentAuthRejection::AccountabilityGrantMissing;
-        assert_eq!(err.code(), "accountability_grant_missing");
+        assert_eq!(err.reason_code(), Some("accountability_grant_missing"));
         assert_eq!(err.http_status(), http::StatusCode::BAD_REQUEST);
     }
 
@@ -141,7 +141,7 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn pairing_request_expired_is_401() {
         let err = AgentAuthRejection::PairingRequestExpired;
-        assert_eq!(err.code(), "pairing_request_expired");
+        assert_eq!(err.reason_code(), Some("pairing_request_expired"));
         assert_eq!(err.http_status(), http::StatusCode::UNAUTHORIZED);
     }
 

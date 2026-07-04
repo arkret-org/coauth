@@ -351,7 +351,15 @@ mod tests {
             "site_config",
             crate::handlers::test_utils::test_site_config(),
         );
-        depot.insert("cokret_config", CokretConfig::default());
+        depot.insert(
+            "cokret_config",
+            CokretConfig {
+                service_did: Some(
+                    "did:webvh:ztest:auth.example.com:webvh:service".to_owned(),
+                ),
+                ..CokretConfig::default()
+            },
+        );
         depot
     }
 

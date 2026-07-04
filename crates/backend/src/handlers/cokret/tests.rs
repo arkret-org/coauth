@@ -76,8 +76,20 @@ fn assert_subject_did_occurs_once(raw_payload: &serde_json::Value, subject: &str
 
 fn personal_node_did_web_config() -> CokretConfig {
     CokretConfig {
+        // Personal-node no-history profile legitimately advertises a did:web
+        // service DID (spec identity-did.md §3.1 personal_node exception).
+        service_did: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
+        ..CokretConfig::default()
+    }
+}
+
+/// Test config with the now-mandatory service_did set (the backend no longer
+/// derives a did:web default; startup validation enforces it in production).
+fn test_cokret_config() -> CokretConfig {
+    CokretConfig {
+        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         ..CokretConfig::default()
     }
 }
@@ -168,7 +180,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert_eq!(body["trust_domain"], "ck:trust_domain:auth.example.com");
     assert_eq!(body["service_type"], "auth_server");
-    assert_eq!(body["admin_audience"], "https://auth.example.com/api/admin");
+    assert_eq!(body["x_coauth_admin_audience"], "https://auth.example.com/api/admin");
     assert_eq!(
         body["auth_metadata"]["issuer_did"],
         "did:webvh:ztest:issuer.example.com:webvh:issuer"
@@ -178,27 +190,27 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         PRINCIPAL_SERVER_SESSION_BIND_SCOPE
     );
     assert_eq!(
-        body["principal_server_delegation_targets"][0]["audience"],
+        body["x_coauth_principal_server_delegation_targets"][0]["audience"],
         "https://soland.example.com/api"
     );
     assert_eq!(
-        body["identity_registry_resolver"]["mode"],
+        body["x_coauth_identity_registry_resolver"]["mode"],
         "delegated_resolver"
     );
     assert_eq!(
-        body["identity_registry_resolver"]["endpoint"],
-        "https://auth.example.com/api/v1/identity/resolve"
+        body["x_coauth_identity_registry_resolver"]["endpoint"],
+        "https://auth.example.com/_cokret/root/identity/resolve"
     );
     assert_eq!(
-        body["identity_registry_resolver"]["delegated_resolver"]["kind"],
+        body["x_coauth_identity_registry_resolver"]["delegated_resolver"]["kind"],
         "public_did_resolver"
     );
     assert_eq!(
-        body["identity_registry_resolver"]["delegated_resolver"]["resolver"],
+        body["x_coauth_identity_registry_resolver"]["delegated_resolver"]["resolver"],
         "https://resolver.example.com/resolve"
     );
     assert_eq!(
-        body["standard_error_envelope"]["example"],
+        body["x_coauth_standard_error_envelope"]["example"],
         serde_json::json!({
             "ok": false,
             "error": {
@@ -211,13 +223,13 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 
     let supported_profiles = body["supported_profiles"].as_array().unwrap();
     assert!(supported_profiles.is_empty());
-    let supported_reducer_profiles = body["supported_reducer_profiles"].as_array().unwrap();
+    let supported_reducer_profiles = body["x_coauth_supported_reducer_profiles"].as_array().unwrap();
     assert!(supported_reducer_profiles.contains(&serde_json::json!("ck.reducer.v1")));
     // T6.3 — `ck.schema.v1` was a coauth-only placeholder. The actual
     // schemas this surface emits are `ck.schema.core.v1` (umbrella
     // core schemas, soland / SDK convention) and
     // `ck.schema.service_describe.v1` (this very payload).
-    let supported_schema_profiles = body["supported_schema_profiles"].as_array().unwrap();
+    let supported_schema_profiles = body["x_coauth_supported_schema_profiles"].as_array().unwrap();
     assert!(supported_schema_profiles.contains(&serde_json::json!("ck.schema.core.v1")));
     assert!(
         supported_schema_profiles.contains(&serde_json::json!("ck.schema.service_describe.v1"))
@@ -231,7 +243,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         supported_operations.contains(&serde_json::json!("ck.self.policy.query.check")),
         "implemented POST /api/v1/policy/check MUST be advertised as ck.self.policy.query.check"
     );
-    let not_authoritative_for = body["service_boundary"]["not_authoritative_for"]
+    let not_authoritative_for = body["x_coauth_service_boundary"]["not_authoritative_for"]
         .as_array()
         .unwrap();
     assert!(not_authoritative_for.contains(&serde_json::json!("did_key_log")));
@@ -239,7 +251,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 
     // T6.3 — service_roles must list every role coauth carries.
     // Boundary check: account_registry + auth_server + identity_resolver.
-    let service_roles = body["service_roles"]
+    let service_roles = body["x_coauth_service_roles"]
         .as_array()
         .expect("service_roles array present");
     assert!(service_roles.contains(&serde_json::json!("auth_server")));
@@ -391,7 +403,7 @@ fn describe_separates_claim_levels() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
-        &CokretConfig::default(),
+        &test_cokret_config(),
         &[],
     ))
     .unwrap();
@@ -488,6 +500,7 @@ fn service_describe_emits_trust_domain_when_configured() {
         None,
     );
     let config = CokretConfig {
+        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         trust_domain: Some("ck:trust_domain:example.net".to_owned()),
         ..Default::default()
     };
@@ -505,7 +518,7 @@ fn service_describe_derives_trust_domain_from_public_host_when_unset() {
     );
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
-        &CokretConfig::default(),
+        &test_cokret_config(),
         &[],
     ))
     .unwrap();
@@ -517,7 +530,7 @@ fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
     let url_builder = UrlBuilder::new("https://[::1]/coauth/".parse().unwrap(), None, None);
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
-        &CokretConfig::default(),
+        &test_cokret_config(),
         &[],
     ))
     .unwrap();
@@ -535,17 +548,17 @@ fn service_describe_defaults_to_local_identity_binding_resolver() {
 
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
-        &CokretConfig::default(),
+        &test_cokret_config(),
         &[],
     ))
     .unwrap();
 
-    assert_eq!(body["identity_registry_resolver"]["mode"], "local_bindings");
+    assert_eq!(body["x_coauth_identity_registry_resolver"]["mode"], "local_bindings");
     assert_eq!(
-        body["identity_registry_resolver"]["endpoint"],
-        "https://auth.example.com/coauth/api/v1/identity/resolve"
+        body["x_coauth_identity_registry_resolver"]["endpoint"],
+        "https://auth.example.com/coauth/_cokret/root/identity/resolve"
     );
-    assert!(body["identity_registry_resolver"]["delegated_resolver"].is_null());
+    assert!(body["x_coauth_identity_registry_resolver"]["delegated_resolver"].is_null());
 }
 
 #[test]
@@ -556,6 +569,7 @@ fn service_describe_advertises_configured_session_grant_ttl() {
         None,
     );
     let config = CokretConfig {
+        service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
         ..CokretConfig::default()
     };
@@ -643,7 +657,13 @@ fn session_grant_is_signed_for_the_user_did() {
 fn session_grant_rejects_implicit_did_web_fallback() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig::default();
+    // A did:web service DID derives a did:web user principal; without an
+    // explicit `did_web_principal_allowed` opt-in the grant MUST be rejected
+    // with `DidWebPrincipalNotExplicit`.
+    let cokret_config = CokretConfig {
+        service_did: Some("did:web:auth.example.com".to_owned()),
+        ..CokretConfig::default()
+    };
     let key_store = test_keystore();
     let now = clock.now();
     let mut fixture_rng = ChaChaRng::seed_from_u64(9);
@@ -678,6 +698,9 @@ fn session_grant_uses_configured_ttl() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let cokret_config = CokretConfig {
+        // Personal-node no-history profile legitimately advertises a did:web
+        // service DID (spec identity-did.md §3.1 personal_node exception).
+        service_did: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
@@ -1515,7 +1538,7 @@ fn require_canonical_handle_accepts_canonical_form() {
 fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     use coauth_data::clock::MockClock;
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig::default();
+    let cokret_config = test_cokret_config();
     let mut rng = ChaChaRng::seed_from_u64(0xc15a);
     let clock = MockClock::default();
     let now = clock.now();
@@ -1616,7 +1639,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
 fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gate() {
     use coauth_data::clock::MockClock;
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig::default();
+    let cokret_config = test_cokret_config();
     let mut rng = ChaChaRng::seed_from_u64(0xc15c);
     let clock = MockClock::default();
     let now = clock.now();
@@ -1654,7 +1677,7 @@ fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gat
 fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     use coauth_data::clock::MockClock;
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig::default();
+    let cokret_config = test_cokret_config();
     let mut rng = ChaChaRng::seed_from_u64(0xc15b);
     let clock = MockClock::default();
     let now = clock.now();

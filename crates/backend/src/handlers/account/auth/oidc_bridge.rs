@@ -1656,11 +1656,14 @@ mod tests {
     #[test]
     fn returned_nonce_validation_is_exact() {
         assert!(validate_returned_nonce(Some("nonce"), "nonce").is_ok());
+        // Mismatch and missing both reject with a generic message; the recorded
+        // nonce value is an internal binding secret (COA-SEC-04) and MUST NOT be
+        // echoed into the client-facing error (it is only logged at debug).
         let error = validate_returned_nonce(Some("other"), "nonce").unwrap_err();
         assert!(error.contains("nonce mismatch"));
-        assert!(error.contains("other"));
+        assert!(!error.contains("other"));
         let error = validate_returned_nonce(None, "nonce").unwrap_err();
-        assert!(error.contains("missing"));
+        assert!(error.contains("nonce mismatch"));
     }
 
     #[test]

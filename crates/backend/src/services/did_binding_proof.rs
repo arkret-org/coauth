@@ -218,6 +218,15 @@ pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofErr
             "did {trimmed:?} fails round-4 DID regex (^did:[a-z0-9]+:[^\\s]+$)"
         )));
     }
+    // `did:uuid` is a valid identifier method (accepted by `Did::new`) but is
+    // not a resolvable identity method: a binding proof MUST reference a DID
+    // whose controller key can be resolved (web / webvh / key / plc), so uuid
+    // is rejected on this path (Round 4 reserves it).
+    if trimmed.starts_with("did:uuid:") {
+        return Err(DidBindingProofError::InvalidJws(
+            "did:uuid is not a resolvable binding-proof DID method".to_owned(),
+        ));
+    }
     Ok(trimmed.to_owned())
 }
 
@@ -1117,9 +1126,13 @@ mod tests {
         ));
     }
 
+    // The fixture also carries ES256 / ML-DSA-65 vectors with a different
+    // field set (they are wire-reserved, unverifiable by this Ed25519-only
+    // proof path). Parse vectors loosely and select the Ed25519 one before
+    // deserializing into the strongly-typed shape.
     #[derive(serde::Deserialize)]
     struct CryptoSignatureFixture {
-        vectors: Vec<CryptoSignatureVector>,
+        vectors: Vec<serde_json::Value>,
     }
 
     #[derive(serde::Deserialize)]
@@ -1176,11 +1189,16 @@ mod tests {
         };
 
         let fixture: CryptoSignatureFixture = serde_json::from_str(&raw).unwrap();
-        let vector = fixture
+        let vector_value = fixture
             .vectors
             .iter()
-            .find(|vector| vector.name == "ck.vector.encoding.crypto.ed25519_detached_jws.v1")
+            .find(|vector| {
+                vector.get("name").and_then(serde_json::Value::as_str)
+                    == Some("ck.vector.encoding.crypto.ed25519_detached_jws.v1")
+            })
             .expect("expected Ed25519 detached JWS binding vector");
+        let vector: CryptoSignatureVector =
+            serde_json::from_value(vector_value.clone()).expect("Ed25519 vector shape");
 
         let canonical = canonical_json_bytes(&vector.binding_object).unwrap();
         assert_eq!(

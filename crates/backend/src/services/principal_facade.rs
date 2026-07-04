@@ -30,7 +30,7 @@ use coauth_principal::{
     PrincipalCapabilityFanoutOperation, PrincipalCapabilityFanoutRequest,
 };
 use serde_json::Value;
-use soland_core::capability_fanout::CapabilityFanoutResponse;
+use soland_core::capability_fanout::{CapabilityFanoutAuthzState, CapabilityFanoutResponse};
 use url::Url;
 
 /// `ConnectorAdmin` backed by coauth's own Postgres (`users`).
@@ -365,6 +365,7 @@ mod tests {
             duplicate: Vec::new(),
             event_id: EVENT.to_owned(),
             capability_grant_id: GRANT.to_owned(),
+            operation: "grant".to_owned(),
             authz_state: CapabilityFanoutAuthzState {
                 projected: true,
                 effective: false,

@@ -1,5 +1,5 @@
 {%- if browser_session is defined -%}
-  {%- set handle = browser_session.user.handle -%}
+  {%- set handle = browser_session.user.localpart -%}
 {%- elif user_registration is defined -%}
   {%- set handle = user_registration.handle -%}
 {%- endif -%}
