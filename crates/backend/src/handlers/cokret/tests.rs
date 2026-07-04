@@ -1132,8 +1132,11 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     .unwrap();
     repo.save().await.unwrap();
 
-    // ① A `cnf`-bound grant introspected WITHOUT a holder proof must fail
-    // closed: `proof_required: true`, not usable, and no grant metadata.
+    // ① A `cnf`-bound grant introspected WITHOUT a client-carried holder proof
+    // still reports active WITH metadata over the authenticated S2S channel:
+    // the Principal Server binds the request DPoP to the returned `cnf_jkt`
+    // itself (service-operation-dtos.schema.json). `proof_required` is an
+    // advisory flag only — the default grant+DPoP path ignores it.
     let response = state
         .request(
             Request::post("/api/v1/session-grants/introspect").json(serde_json::json!({
@@ -1144,10 +1147,10 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["active"], false);
-    assert_eq!(body["status"], "proof_required");
+    assert_eq!(body["active"], true);
+    assert_eq!(body["status"], "active");
     assert_eq!(body["proof_required"], true);
-    assert_eq!(body["grant"], serde_json::Value::Null);
+    assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
 
     // ② With a device-signed holder proof the bound grant introspects active
     // and exposes `cnf.jkt` to the Principal Server.

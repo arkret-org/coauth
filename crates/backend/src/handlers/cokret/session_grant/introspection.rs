@@ -281,12 +281,17 @@ pub async fn introspect_session_grant(
             Some(proof) => {
                 status = verify_session_grant_introspection_proof(&grant, proof, clock.now());
             }
-            // A `cnf`-bound grant must not report usable without its holder
-            // proof: surface `proof_required` so the caller re-introspects
-            // with a device-signed proof instead of trusting bearer-only
-            // possession.
+            // A `cnf`-bound grant surfaces `proof_required` as an ADVISORY
+            // signal: a stricter caller MAY re-introspect with a device-signed
+            // holder proof. But per `service-operation-dtos.schema.json`, the
+            // default Principal Server grant+DPoP path does NOT require this
+            // client-carried introspection proof — it verifies the request DPoP
+            // locally against the returned `cnf_jkt`. So the grant MUST still
+            // report active WITH metadata over this authenticated S2S channel;
+            // only the advisory flag is raised. (Forcing `active=false` /
+            // withholding metadata here broke every Principal Server session:
+            // soland never reached its own DPoP check and read "not active".)
             None if session_grant_has_holder_binding(&grant) => {
-                status = SessionGrantIntrospectStatus::ProofRequired;
                 proof_required = true;
             }
             // Unbound grant: the holder proof is genuinely optional.
@@ -310,11 +315,14 @@ pub async fn introspect_session_grant(
         }
     }
 
-    // Fail closed on metadata too: a bound grant introspected without its
-    // holder proof discloses no grant record until the proof is presented.
+    // Non-secret grant metadata (subject / device_id / audience / scopes /
+    // expiry / session_public_key / cnf_jkt) is returned over this authenticated
+    // S2S channel so the Principal Server can bind the request DPoP to `cnf_jkt`.
+    // Only NotFound / AudienceMismatch withhold it — a `proof_required` advisory
+    // does NOT, or the default grant+DPoP path could never obtain the cnf_jkt it
+    // must verify against.
     let grant_record = (status != SessionGrantIntrospectStatus::NotFound
-        && status != SessionGrantIntrospectStatus::AudienceMismatch
-        && status != SessionGrantIntrospectStatus::ProofRequired)
+        && status != SessionGrantIntrospectStatus::AudienceMismatch)
         .then(|| introspection_grant_record(&grant, browser_session.as_ref()))
         .transpose()?;
 
