@@ -101,3 +101,4 @@ docker = ["coauth-config/docker"]
 # Policy engine backends
 cedar = ["coauth-backend/cedar"]
 remote = ["coauth-backend/remote"]
+password-bootstrap = ["coauth-backend/password-bootstrap"]

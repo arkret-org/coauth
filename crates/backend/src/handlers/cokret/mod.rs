@@ -950,26 +950,27 @@ pub async fn debug_issue_dpop_grant(
     // device or publish an MLS KeyPackage.
     let http_client = depot.http_client()?;
     let encrypter = depot.encrypter()?;
-    let principal_did = match crate::handlers::account::auth::oidc_bridge::ensure_principal_did_for_user_committed(
-        depot,
-        &mut rng,
-        &clock,
-        &encrypter,
-        &http_client,
-        &url_builder,
-        &cokret_config,
-        &user,
-        &audience,
-    )
-    .await
-    {
-        Ok(did) => did,
-        Err(message) => {
-            return Err(CokretRouteError::Internal(
-                format!("principal DID minting failed: {message}").into(),
-            ));
-        }
-    };
+    let principal_did =
+        match crate::handlers::account::auth::oidc_bridge::ensure_principal_did_for_user_committed(
+            depot,
+            &mut rng,
+            &clock,
+            &encrypter,
+            &http_client,
+            &url_builder,
+            &cokret_config,
+            &user,
+            &audience,
+        )
+        .await
+        {
+            Ok(did) => did,
+            Err(message) => {
+                return Err(CokretRouteError::Internal(
+                    format!("principal DID minting failed: {message}").into(),
+                ));
+            }
+        };
 
     // Issue + persist the grant against a fresh repo, binding the subject to the
     // minted principal DID.

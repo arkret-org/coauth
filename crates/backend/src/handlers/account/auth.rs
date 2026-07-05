@@ -431,14 +431,13 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 }
                 let session_grant = cokret::issue_session_grant_for_audience(
                     &clock,
-                    &url_builder,
                     &cokret_config,
                     &key_store,
                     &user_session,
                     dpop_binding.public_jwk,
                     grant_target.audience.clone(),
                     oidc_bridge::principal_session_grant_scopes(device_id.as_str()),
-                    Some(&principal_did),
+                    Some(principal_did.as_str()),
                     Some(dpop_binding.jkt),
                 )
                 .map_err(|error| RouteError::Internal(Box::new(error)))?;
@@ -467,7 +466,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         }),
                         Some(SessionGrantOneShotInfo {
                             kind: SessionGrantKind::PrincipalSession,
-                            id: persisted_session_grant.id.to_string(),
+                            id: persisted_session_grant.grant_id.to_string(),
                             grant_jwt: session_grant.grant_jwt,
                             session_public_key: session_grant.session_public_key,
                             expires_at: session_grant.expires_at,

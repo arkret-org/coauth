@@ -18,7 +18,6 @@ use coauth_data::audit::AdminOperation;
 use cokret_core::identifiers::new_prefixed_uuid7;
 use salvo::prelude::*;
 use serde::Deserialize;
-
 use sha2::Digest as _;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};

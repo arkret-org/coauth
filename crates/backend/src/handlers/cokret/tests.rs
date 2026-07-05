@@ -180,7 +180,10 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert_eq!(body["trust_domain"], "ck:trust_domain:auth.example.com");
     assert_eq!(body["service_type"], "auth_server");
-    assert_eq!(body["x_coauth_admin_audience"], "https://auth.example.com/api/admin");
+    assert_eq!(
+        body["x_coauth_admin_audience"],
+        "https://auth.example.com/api/admin"
+    );
     assert_eq!(
         body["auth_metadata"]["issuer_did"],
         "did:webvh:ztest:issuer.example.com:webvh:issuer"
@@ -223,13 +226,17 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 
     let supported_profiles = body["supported_profiles"].as_array().unwrap();
     assert!(supported_profiles.is_empty());
-    let supported_reducer_profiles = body["x_coauth_supported_reducer_profiles"].as_array().unwrap();
+    let supported_reducer_profiles = body["x_coauth_supported_reducer_profiles"]
+        .as_array()
+        .unwrap();
     assert!(supported_reducer_profiles.contains(&serde_json::json!("ck.reducer.v1")));
     // T6.3 — `ck.schema.v1` was a coauth-only placeholder. The actual
     // schemas this surface emits are `ck.schema.core.v1` (umbrella
     // core schemas, soland / SDK convention) and
     // `ck.schema.service_describe.v1` (this very payload).
-    let supported_schema_profiles = body["x_coauth_supported_schema_profiles"].as_array().unwrap();
+    let supported_schema_profiles = body["x_coauth_supported_schema_profiles"]
+        .as_array()
+        .unwrap();
     assert!(supported_schema_profiles.contains(&serde_json::json!("ck.schema.core.v1")));
     assert!(
         supported_schema_profiles.contains(&serde_json::json!("ck.schema.service_describe.v1"))
@@ -553,7 +560,10 @@ fn service_describe_defaults_to_local_identity_binding_resolver() {
     ))
     .unwrap();
 
-    assert_eq!(body["x_coauth_identity_registry_resolver"]["mode"], "local_bindings");
+    assert_eq!(
+        body["x_coauth_identity_registry_resolver"]["mode"],
+        "local_bindings"
+    );
     assert_eq!(
         body["x_coauth_identity_registry_resolver"]["endpoint"],
         "https://auth.example.com/coauth/_cokret/root/identity/resolve"

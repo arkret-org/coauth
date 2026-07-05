@@ -354,9 +354,7 @@ mod tests {
         depot.insert(
             "cokret_config",
             CokretConfig {
-                service_did: Some(
-                    "did:webvh:ztest:auth.example.com:webvh:service".to_owned(),
-                ),
+                service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
                 ..CokretConfig::default()
             },
         );

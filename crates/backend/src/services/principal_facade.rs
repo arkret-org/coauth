@@ -67,7 +67,6 @@ struct CapabilityFanoutTarget {
     bearer: String,
 }
 
-
 pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
     http_client: &reqwest::Client,
     cokret_config: &CokretConfig,
