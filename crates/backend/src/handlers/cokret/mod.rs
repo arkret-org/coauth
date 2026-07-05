@@ -855,6 +855,13 @@ pub struct DebugIssueDpopGrantOutcome {
     pub audience: String,
     pub scopes: Vec<String>,
     pub expires_at: String,
+    /// The minted `did:webvh:…:webvh:<ulid>` principal DID this grant's subject
+    /// is bound to (model B). The cotest harness MUST adopt this as the account
+    /// identity so device enrollment / MLS KeyPackage publish resolve the DID
+    /// document that designates coauth's enrollment authority — rather than the
+    /// coauth-local `user_did_for` fallback (`…:users:<ulid>`, model A) whose
+    /// soland document carries no such designation.
+    pub principal_did: String,
 }
 
 /// Returns true when test-only endpoints are explicitly allowed at runtime.
@@ -907,42 +914,72 @@ pub async fn debug_issue_dpop_grant(
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
-    let mut repo = depot.repo().await?;
-
-    // We need a browser session for the underlying grant row. Pick the
-    // most recent one for the user identified by `actor_id`, or fail
-    // closed when none exists. The cotest harness registers the user
-    // first, so a session always exists in practice.
+    // Resolve the user identified by `actor_id` (the coauth-local
+    // `user_did_for` form the harness passes). Scoped so its repo connection is
+    // released before the principal-DID mint below opens its own transaction.
     let user_id = parse_local_user_did_for(&cokret_config, &body.actor_id).ok_or_else(|| {
         CokretRouteError::BadRequest("actor_id is not a local Cokret user DID".to_owned())
     })?;
-    let user = repo
-        .user()
-        .lookup(user_id)
-        .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
-        .ok_or_else(|| CokretRouteError::NotFound)?;
-
-    let user_agent = Some(format!("coauth-test-harness/device:{}", body.device_id));
-    let browser_session = repo
-        .browser_session()
-        .add(&mut rng, &*clock, &user, user_agent)
-        .await
-        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
+    let user = {
+        let mut repo = depot.repo().await?;
+        repo.user()
+            .lookup(user_id)
+            .await
+            .map_err(|error| CokretRouteError::Internal(Box::new(error)))?
+            .ok_or(CokretRouteError::NotFound)?
+    };
 
     let audience = body
         .audience
         .clone()
         .unwrap_or_else(|| required_audience_for(&url_builder, &cokret_config));
-    // Retained for the principal-DID mint below (the grant issuance moves
-    // `audience`).
-    let principal_did_audience = audience.clone();
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
             format!("urn:cokret:client:device:{}", body.device_id),
             PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
         ]
     });
+
+    // Mint (or reuse) the model-B principal DID, whose document designates
+    // coauth's `CokretDeviceEnrollmentAuthority`, BEFORE issuing the grant. The
+    // grant subject MUST be this minted `did:webvh:…:webvh:<ulid>` (mirroring the
+    // OIDC/password-login path, account/auth.rs), NOT the coauth-local
+    // `user_did_for` fallback (`…:users:<ulid>`) whose soland document carries no
+    // enrollment-authority designation. Binding the subject to the fallback is
+    // exactly why the cotest DPoP debug seam could authenticate but never enroll a
+    // device or publish an MLS KeyPackage.
+    let http_client = depot.http_client()?;
+    let encrypter = depot.encrypter()?;
+    let principal_did = match crate::handlers::account::auth::oidc_bridge::ensure_principal_did_for_user_committed(
+        depot,
+        &mut rng,
+        &clock,
+        &encrypter,
+        &http_client,
+        &url_builder,
+        &cokret_config,
+        &user,
+        &audience,
+    )
+    .await
+    {
+        Ok(did) => did,
+        Err(message) => {
+            return Err(CokretRouteError::Internal(
+                format!("principal DID minting failed: {message}").into(),
+            ));
+        }
+    };
+
+    // Issue + persist the grant against a fresh repo, binding the subject to the
+    // minted principal DID.
+    let mut repo = depot.repo().await?;
+    let user_agent = Some(format!("coauth-test-harness/device:{}", body.device_id));
+    let browser_session = repo
+        .browser_session()
+        .add(&mut rng, &*clock, &user, user_agent)
+        .await
+        .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     let material = issue_test_session_grant_for_audience(
         &*clock,
@@ -952,7 +989,7 @@ pub async fn debug_issue_dpop_grant(
         public_jwk,
         audience,
         scopes,
-        Some(&body.actor_id),
+        Some(&principal_did),
         Some(jkt.clone()),
     )
     .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
@@ -965,38 +1002,6 @@ pub async fn debug_issue_dpop_grant(
     repo.save()
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
-    // Note: `repo.save()` consumes the repository handle above, so this
-    // handler's connection is already released before the committed helper
-    // below opens its own transaction to mint the principal DID.
-
-    // Mint the principal DID document with a `CokretDeviceEnrollmentAuthority`
-    // designation, mirroring the OIDC login path (account/auth/oidc_bridge.rs).
-    // The cotest DPoP debug seam previously issued a grant WITHOUT ever minting
-    // this document, so soland rejected the account's device-authorization event
-    // with `device_enrollment_authority_not_designated` and it could never
-    // publish an MLS KeyPackage — every harness account could authenticate but
-    // never participate in MLS. `ensure_principal_did_for_user_committed` is
-    // idempotent, so re-issuing a grant reuses the already-minted DID.
-    let http_client = depot.http_client()?;
-    let encrypter = depot.encrypter()?;
-    if let Err(message) =
-        crate::handlers::account::auth::oidc_bridge::ensure_principal_did_for_user_committed(
-            depot,
-            &mut rng,
-            &clock,
-            &encrypter,
-            &http_client,
-            &url_builder,
-            &cokret_config,
-            &user,
-            &principal_did_audience,
-        )
-        .await
-    {
-        return Err(CokretRouteError::Internal(
-            format!("principal DID minting failed: {message}").into(),
-        ));
-    }
 
     Ok(Json(DebugIssueDpopGrantOutcome {
         grant_id: persisted.grant_id.to_string(),
@@ -1005,5 +1010,6 @@ pub async fn debug_issue_dpop_grant(
         audience: material.audience,
         scopes: material.scopes,
         expires_at: material.expires_at,
+        principal_did,
     }))
 }
