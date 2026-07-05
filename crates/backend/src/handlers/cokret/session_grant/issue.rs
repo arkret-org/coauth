@@ -36,7 +36,7 @@ pub async fn issue_session_grant_endpoint(
 
     let url_builder = depot.url_builder()?;
 
-    // Holder proof (DPoP) extraction. A present-but-malformed proof is a hard
+    // Grant-binding proof (DPoP) extraction. A present-but-malformed proof is a hard
     // rejection: an OIDC-issued grant MUST be device-bound (`cnf.jkt`).
     let dpop_binding = extract_dpop_binding_for_kickoff(req, depot, &url_builder)
         .await
@@ -44,7 +44,7 @@ pub async fn issue_session_grant_endpoint(
             CokretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
                 ERROR_CODE_INVALID_SIGNATURE,
-                format!("reason_code=proof_invalid; invalid DPoP holder proof: {error}"),
+                format!("reason_code=proof_invalid; invalid grant-binding DPoP proof: {error}"),
             )
         })?;
 
@@ -124,14 +124,14 @@ pub async fn issue_session_grant_endpoint(
         }
         cokret_core::SessionGrantProofKind::AgentKeyProof => {
             // CKP-0008 §4.6: independent agent_key_proof validator. MUST NOT
-            // fall back to any human proof validator. The DPoP holder proof is
+            // fall back to any human proof validator. The grant-binding DPoP proof is
             // still required so the issued grant is device/runtime-bound
             // (`cnf.jkt`), exactly like the OIDC branch.
             let binding = dpop_binding.ok_or_else(|| {
                 CokretRouteError::coded(
                     StatusCode::UNAUTHORIZED,
                     cokret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
-                    "agent_key_proof session grant requires a DPoP holder proof",
+                    "agent_key_proof session grant requires a grant-binding DPoP proof",
                 )
             })?;
             issue_agent_key_proof_session_grant(req, depot, binding, &body).await

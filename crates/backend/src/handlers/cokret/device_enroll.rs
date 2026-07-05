@@ -219,18 +219,18 @@ pub async fn device_enroll_endpoint(
     let mut rng = crate::handlers::make_rng();
 
     // 1. Durable-session auth: the caller presents its `ck.session.grant` (`Authorization: Bearer`)
-    //    plus a `DPoP` holder proof bound to the grant's `cnf.jkt`. This is the same
-    //    proof-of-possession path as session-grant refresh / logout (device-lifecycle §5.4 holder
-    //    proof), NOT the short-lived OAuth access token: device enrollment is retried on every
-    //    connect for the whole life of the session, and the access token may already have expired
-    //    on a later boot while the durable grant is still valid. The grant `subject` IS the
+    //    plus a grant-binding `DPoP` proof bound to the grant's `cnf.jkt`. This is the same
+    //    proof-of-possession path as session-grant refresh / logout (device-lifecycle §5.4
+    //    grant-binding proof), NOT the short-lived OAuth access token: device enrollment is retried
+    //    on every connect for the whole life of the session, and the access token may already have
+    //    expired on a later boot while the durable grant is still valid. The grant `subject` IS the
     //    principal DID, and the DB lookup below proves coauth issued it.
     let grant_jwt = bearer_token_from_request(req)?;
     let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_DID_PROOF_REQUIRED,
-            "session-grant holder proof (DPoP) required",
+            "session-grant grant-binding DPoP proof required",
         )
     })?;
 

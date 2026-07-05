@@ -54,7 +54,7 @@ pub struct SessionGrantPayload {
 }
 
 /// RFC 9449 / RFC 7800 confirmation claim, carrying the JWK thumbprint
-/// that binds an access token (here a session grant) to the holder's
+/// that binds an access token (here a session grant) to the grant-binding key's
 /// proof-of-possession key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionGrantConfirmation {

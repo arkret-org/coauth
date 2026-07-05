@@ -566,7 +566,7 @@ pub(super) async fn ensure_soland_account_registered(
 ///    federated upstream) and derives `token_endpoint` / `userinfo_endpoint` from it,
 /// 2. exchanges `authorization_code` + `code_verifier` at the `token_endpoint`,
 /// 3. validates issuer / state / nonce / redirect_uri / id_token nonce / principal binding / device
-///    binding (`cnf.jkt` from the DPoP holder key) / audience, and
+///    binding (`cnf.jkt` from the grant-binding DPoP key) / audience, and
 /// 4. mints + persists a device-bound `ck.session.grant`.
 ///
 /// Binding failures surface as `proof_invalid`; transport / discovery failures
@@ -609,12 +609,12 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         .await
         .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
 
-    // The DPoP holder proof is what binds the issued grant to the device key
+    // The grant-binding DPoP proof is what binds the issued grant to `cnf.jkt`
     // (`cnf.jkt`). It is mandatory for an OIDC-issued session grant — without
     // it there is no device binding to validate.
     let Some(dpop_binding) = dpop_binding else {
         return Err(OidcExchangeError::proof_invalid(
-            "OIDC session grants require a valid DPoP holder proof for device binding",
+            "OIDC session grants require a valid grant-binding DPoP proof for session binding",
         ));
     };
 
@@ -1836,7 +1836,7 @@ mod tests {
     }
 
     /// The canonical Account Authority grant endpoint rejects an
-    /// `oidc_code_exchange` proof that arrives without a DPoP holder proof:
+    /// `oidc_code_exchange` proof that arrives without a grant-binding DPoP proof:
     /// the grant has no device key to bind to (`proof_invalid`). Exercised
     /// against the real router so the route wiring is covered too.
     #[tokio::test]

@@ -43,7 +43,7 @@ struct SoftLogoutRestoreRequestDigest<'a> {
     pub principal_id: &'a str,
     pub device_id: &'a str,
     pub audience: &'a str,
-    pub holder_key_id: &'a str,
+    pub grant_binding_key_id: &'a str,
 }
 
 fn shared_soft_logout_did_proof_nonce_store() -> &'static Arc<NonceStore> {
@@ -206,7 +206,7 @@ fn soft_logout_restore_request_canonical_digest(
     principal_id: &str,
     device_id: &str,
     audience: &str,
-    holder_key_id: &str,
+    grant_binding_key_id: &str,
 ) -> Result<String, CokretRouteError> {
     canonical_sha256(&SoftLogoutRestoreRequestDigest {
         operation: SOFT_LOGOUT_RESTORE_OPERATION,
@@ -214,7 +214,7 @@ fn soft_logout_restore_request_canonical_digest(
         principal_id,
         device_id,
         audience,
-        holder_key_id,
+        grant_binding_key_id,
     })
     .map_err(|error| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -336,13 +336,13 @@ async fn verify_soft_logout_did_proof(
         )))
     })?;
 
-    // Holder-key source of truth is the Principal Server's device directory, NOT
-    // the principal DID document. The device signing key was authorized by a
-    // `ck.device.authorize` event and projected into soland's device directory;
-    // a `ck.device.revoke` masks it. Resolve the authorized, non-revoked key for
-    // this `(principal, device)` and verify the detached holder-proof JWS against
-    // it. The directory only surfaces verified, non-revoked devices, so a
-    // resolved key is itself proof the device is currently authorized.
+    // Device-identity source of truth is the Principal Server's device directory,
+    // NOT the principal DID document. The device signing key was authorized by a
+    // `ck.device.authorize` event and projected into soland's device directory; a
+    // `ck.device.revoke` masks it. Resolve the authorized, non-revoked key for
+    // this `(principal, device)` and verify the detached DID-proof JWS against it.
+    // The directory only surfaces verified, non-revoked devices, so a resolved
+    // key is itself proof the device is currently authorized.
     let resolved = resolve_authorized_device_signing_key(
         http_client,
         cokret_config,
@@ -355,7 +355,7 @@ async fn verify_soft_logout_did_proof(
 
     let verification_method =
         verify_detached_jws_with_device_key(proof_jws, &payload, &resolved.multibase)
-            .map_err(|error| did_proof_invalid(format!("holder proof JWS invalid: {error}")))?;
+            .map_err(|error| did_proof_invalid(format!("DID proof JWS invalid: {error}")))?;
     if let Some(expected_method) = proof
         .verification_method
         .as_deref()
@@ -364,7 +364,7 @@ async fn verify_soft_logout_did_proof(
         && expected_method != verification_method.as_str()
     {
         return Err(did_proof_invalid(
-            "holder proof verification_method does not match the detached JWS kid",
+            "DID proof verification_method does not match the detached JWS kid",
         ));
     }
     // The kid principal MUST still be the session-grant subject, so a proof
@@ -377,7 +377,7 @@ async fn verify_soft_logout_did_proof(
         kid_principal.starts_with("did:webvh:") || kid_principal.starts_with("did:web:");
     if kid_is_principal_prefixed && kid_principal != prior_grant.subject {
         return Err(did_proof_invalid(
-            "holder proof verification_method principal does not match the session grant subject",
+            "DID proof verification_method principal does not match the session grant subject",
         ));
     }
     if !kid_is_principal_prefixed
@@ -385,7 +385,7 @@ async fn verify_soft_logout_did_proof(
         && verification_method.as_str() != resolved.device_signing_key_did
     {
         return Err(did_proof_invalid(
-            "holder proof verification_method does not match the authorized device signing key",
+            "DID proof verification_method does not match the authorized device signing key",
         ));
     }
 
@@ -454,12 +454,12 @@ pub async fn refresh_session_grant(
     // 1. DPoP proof must be present — the refresh endpoint is the canonical proof-of-possession
     //    check.
     let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
-        // Holder proof (the device's DPoP) is the authorization for this
-        // operation; its absence is an auth failure, not a malformed body.
+        // The grant-binding DPoP proof authorizes this operation; its absence is
+        // an auth failure, not a malformed body.
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
             ERROR_CODE_DID_PROOF_REQUIRED,
-            "session-grant holder proof (DPoP) required",
+            "session-grant grant-binding DPoP proof required",
         )
     })?;
 
@@ -777,7 +777,7 @@ mod tests {
     }
 
     #[test]
-    fn soft_logout_restore_request_digest_binds_device_and_holder_key() {
+    fn soft_logout_restore_request_digest_binds_device_and_grant_binding_key() {
         let base = soft_logout_restore_request_canonical_digest(
             "grant.jwt.value",
             "did:web:alice.example",
@@ -796,7 +796,7 @@ mod tests {
             "did:web:alice.example#device-key-1",
         )
         .expect("request digest should compute");
-        let other_holder = soft_logout_restore_request_canonical_digest(
+        let other_grant_binding_key = soft_logout_restore_request_canonical_digest(
             "grant.jwt.value",
             "did:web:alice.example",
             DEVICE_ID,
@@ -806,6 +806,6 @@ mod tests {
         .expect("request digest should compute");
 
         assert_ne!(base, other_device);
-        assert_ne!(base, other_holder);
+        assert_ne!(base, other_grant_binding_key);
     }
 }

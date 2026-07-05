@@ -643,7 +643,7 @@ fn session_grant_is_signed_for_the_user_did() {
     assert_subject_did_occurs_once(&raw_payload, &payload.subject);
     assert!(
         raw_payload.get("session_public_key").is_none(),
-        "session grant JWT must bind holder keys with cnf.jkt, not inline the full JWK"
+        "session grant JWT must bind grant-binding keys with cnf.jkt, not inline the full JWK"
     );
     assert!(raw_payload.get("cnf").is_none());
     assert!(
@@ -887,7 +887,7 @@ async fn seed_persisted_session_grant(
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert!(
         raw_payload.get("session_public_key").is_none(),
-        "session grant JWT must not inline the full holder JWK"
+        "session grant JWT must not inline the full grant-binding JWK"
     );
     assert!(raw_payload.get("cnf").is_none());
     let grant = persist_session_grant(
@@ -1118,7 +1118,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
     assert!(
         raw_payload.get("session_public_key").is_none(),
-        "DPoP-bound grant JWT must not inline the full holder JWK"
+        "DPoP-bound grant JWT must not inline the full grant-binding JWK"
     );
     assert_eq!(raw_payload["cnf"]["jkt"].as_str(), Some(bound_jkt.as_str()));
     let grant = persist_session_grant(
@@ -1132,7 +1132,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     .unwrap();
     repo.save().await.unwrap();
 
-    // ① A `cnf`-bound grant introspected WITHOUT a client-carried holder proof
+    // ① A `cnf`-bound grant introspected WITHOUT a client-carried grant-binding DPoP proof
     // still reports active WITH metadata over the authenticated S2S channel:
     // the Principal Server binds the request DPoP to the returned `cnf_jkt`
     // itself (service-operation-dtos.schema.json). `proof_required` is an
@@ -1152,7 +1152,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     assert_eq!(body["proof_required"], true);
     assert_eq!(body["grant"]["cnf_jkt"], bound_jkt);
 
-    // ② With a device-signed holder proof the bound grant introspects active
+    // ② With a grant-binding DPoP proof the bound grant introspects active
     // and exposes `cnf.jkt` to the Principal Server.
     let challenge = format!("introspect-{}", grant.grant_id);
     let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
@@ -1221,7 +1221,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     assert_subject_did_occurs_once(&raw_payload, "did:web:agent.example");
     assert!(
         raw_payload.get("session_public_key").is_none(),
-        "agent session grant JWT must not inline the full holder JWK"
+        "agent session grant JWT must not inline the full grant-binding JWK"
     );
     assert_eq!(
         raw_payload["cnf"]["jkt"].as_str(),
@@ -1234,7 +1234,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     repo.save().await.unwrap();
 
     // The agent grant is `cnf`-bound, so a proofless introspection reports
-    // `proof_required` — present the runtime-key holder proof.
+    // `proof_required` — present the runtime grant-binding proof.
     let challenge = format!("introspect-{}", persisted.grant_id);
     let proof_jwt =
         session_grant_introspection_proof(&persisted, &material, &session_key, &challenge);

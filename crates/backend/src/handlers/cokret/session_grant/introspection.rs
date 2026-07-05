@@ -122,11 +122,11 @@ pub(crate) fn session_grant_jwt_hash(grant_jwt: &str) -> String {
     )
 }
 
-/// Whether the persisted grant carries a holder/device binding: a `cnf`
+/// Whether the persisted grant carries a grant-binding confirmation key: a `cnf`
 /// confirmation claim inside the signed grant payload. A bound grant MUST NOT
-/// introspect as usable without a holder proof; an unbound grant has no
-/// device-bound confirmation key, so its holder proof stays optional.
-fn session_grant_has_holder_binding(grant: &SessionGrant) -> bool {
+/// introspect as usable without a grant-binding DPoP proof; an unbound grant has no
+/// grant-bound confirmation key, so its grant-binding proof stays optional.
+fn session_grant_has_grant_binding(grant: &SessionGrant) -> bool {
     Jwt::<SessionGrantPayload>::try_from(grant.grant_jwt.as_str())
         .ok()
         .is_some_and(|jwt| jwt.payload().cnf.is_some())
@@ -283,7 +283,7 @@ pub async fn introspect_session_grant(
             }
             // A `cnf`-bound grant surfaces `proof_required` as an ADVISORY
             // signal: a stricter caller MAY re-introspect with a device-signed
-            // holder proof. But per `service-operation-dtos.schema.json`, the
+            // grant-binding proof. But per `service-operation-dtos.schema.json`, the
             // default Principal Server grant+DPoP path does NOT require this
             // client-carried introspection proof — it verifies the request DPoP
             // locally against the returned `cnf_jkt`. So the grant MUST still
@@ -291,10 +291,10 @@ pub async fn introspect_session_grant(
             // only the advisory flag is raised. (Forcing `active=false` /
             // withholding metadata here broke every Principal Server session:
             // soland never reached its own DPoP check and read "not active".)
-            None if session_grant_has_holder_binding(&grant) => {
+            None if session_grant_has_grant_binding(&grant) => {
                 proof_required = true;
             }
-            // Unbound grant: the holder proof is genuinely optional.
+            // Unbound grant: the grant-binding proof is genuinely optional.
             None => {}
         }
     }
@@ -328,7 +328,7 @@ pub async fn introspect_session_grant(
 
     // Introspection is READ-ONLY. The session grant is the (minutes-to-hours,
     // multi-day-via-rotation) refresh credential: the legitimate device
-    // re-exchanges it for fresh short bearers, each presenting a fresh holder
+    // re-exchanges it for fresh short bearers, each presenting a fresh grant-binding
     // proof, so it MUST remain valid within its TTL. Consumption/rotation is the
     // `session-grants/refresh` endpoint's job (revoke-old + issue-new), NOT
     // introspection's — revoking here made the grant single-use at the first

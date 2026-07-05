@@ -1,7 +1,7 @@
 //! Resolve an authorized device signing key from the Principal Server's
 //! device directory (`POST /_soland/gate/account/device-signing-keys/query`).
 //!
-//! A device holder proof (session-grant refresh / soft-logout restore) is
+//! A device-identity DID proof (session-grant refresh / soft-logout restore) is
 //! signed by the device's `ck.device.authorize`-authorized signing key. That
 //! key is NOT a verificationMethod in the principal's DID document — the DID
 //! document only carries the inception / control keys. The source of truth for
@@ -34,7 +34,7 @@ use crate::outbound_http;
 // requester and the queried `principal_id` (realm co-membership the requester
 // is still `join`ed to, or a shared call/session/contact context), else it
 // MUST fail indistinguishably from "not found". coauth, verifying a device
-// holder proof during session-grant refresh / soft-logout restore, acts as the
+// device-identity DID proof during session-grant refresh / soft-logout restore, acts as the
 // Auth Server: it holds no principal session and is not a realm co-member, so
 // it is *not* an eligible caller of that protocol operation — by design, not by
 // a missing exemption. There is no spec gap and no protocol S2S directory-read
