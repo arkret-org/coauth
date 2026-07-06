@@ -30,6 +30,68 @@ impl<'c> PgAgentKeyAuthorizationRepository<'c> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use coauth_data::clock::MockClock;
+    use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng;
+
+    use super::*;
+    use crate::PgRepositoryFactory;
+
+    fn unique_label(name: &str) -> String {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time is after unix epoch")
+            .as_nanos();
+        format!("{name}-{nanos}")
+    }
+
+    fn proof_replay(label: &str, clock: &dyn Clock) -> NewAgentSessionProofReplay {
+        let now = clock.now();
+        NewAgentSessionProofReplay {
+            agent_principal_id: format!("did:web:{label}-agent.example"),
+            verification_method: format!("did:web:{label}-agent.example#runtime-key-1"),
+            challenge: format!("challenge-{label}"),
+            nonce: format!("nonce-{label}"),
+            request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
+            audience: "https://cokret.example/_cokret".to_owned(),
+            proof_expires_at: now + chrono::Duration::minutes(5),
+            prune_after: now + chrono::Duration::minutes(10),
+        }
+    }
+
+    #[tokio::test]
+    async fn proof_challenge_consumption_rejects_replay() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let mut repo = PgRepositoryFactory::new(pool).create().await.unwrap();
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(0xa91e);
+        let replay = proof_replay(&unique_label("agent-proof-replay"), &clock);
+
+        let first = repo
+            .agent_key_authorization()
+            .consume_proof_challenge(&mut rng, &clock, replay.clone())
+            .await
+            .unwrap();
+        let second = repo
+            .agent_key_authorization()
+            .consume_proof_challenge(&mut rng, &clock, replay)
+            .await
+            .unwrap();
+
+        assert!(first, "first challenge consumption must win");
+        assert!(!second, "replayed challenge must fail closed");
+
+        repo.cancel().await.unwrap();
+    }
+}
+
 #[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = agent_key_authorizations)]
 struct AgentKeyAuthorizationRow {

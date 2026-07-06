@@ -197,25 +197,13 @@ pub async fn validate_agent_session_proof(
         .map_err(|_| AgentAuthRejection::ProofInvalid)?
         .ok_or(AgentAuthRejection::ProofInvalid)?;
 
-    if authorization.revoked_at.is_some() {
-        return Err(AgentAuthRejection::AgentDeactivated.into());
-    }
-    if authorization.expires_at <= now {
-        return Err(AgentAuthRejection::ProofInvalid.into());
-    }
-    if !authorization
-        .audience
-        .iter()
-        .any(|audience| audience == &proof.audience)
-    {
-        return Err(AgentAuthRejection::ProofInvalid.into());
-    }
-    // The authorization MUST belong to this agent + verification method.
-    if authorization.agent_principal_id != agent_principal_id
-        || authorization.verification_method != verification_method
-    {
-        return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch.into());
-    }
+    validate_agent_key_authorization_binding(
+        &authorization,
+        now,
+        &agent_principal_id,
+        verification_method,
+        &proof.audience,
+    )?;
     // Verify the proof signature over the same canonical signed-fields shape
     // the pairing PoP used, against the authorized public key.
     let signed_fields = ProofSignedFields {
@@ -405,6 +393,34 @@ fn canonical_session_grant_request_digest_without_signature(
     proof.remove("signature");
     proof.remove("request_canonical_digest");
     canonical_sha256(&value).map_err(|_| AgentAuthRejection::ProofInvalid)
+}
+
+fn validate_agent_key_authorization_binding(
+    authorization: &coauth_data::agent_key::AgentKeyAuthorization,
+    now: chrono::DateTime<chrono::Utc>,
+    agent_principal_id: &str,
+    verification_method: &str,
+    audience: &str,
+) -> Result<(), AgentAuthRejection> {
+    if authorization.revoked_at.is_some() {
+        return Err(AgentAuthRejection::AgentDeactivated);
+    }
+    if authorization.expires_at <= now {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    if !authorization
+        .audience
+        .iter()
+        .any(|authorized| authorized == audience)
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    if authorization.agent_principal_id != agent_principal_id
+        || authorization.verification_method != verification_method
+    {
+        return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch);
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1130,6 +1146,128 @@ mod tests {
             policy_refs: set(&["policy:2026-06-19"]),
             ..AgentSessionRealmPolicy::default()
         }
+    }
+
+    fn agent_key_authorization(
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> coauth_data::agent_key::AgentKeyAuthorization {
+        coauth_data::agent_key::AgentKeyAuthorization {
+            id: coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
+            authorized_event_id: "ck:event:01970000-0000-7000-8000-000000000021".to_owned(),
+            agent_principal_id: "did:web:agent.example".to_owned(),
+            key_id: "runtime-key-1".to_owned(),
+            verification_method: "did:web:agent.example#runtime-key-1".to_owned(),
+            public_key: serde_json::json!({
+                "id": "did:web:agent.example#runtime-key-1",
+                "type": "Multikey",
+                "controller": "did:web:agent.example",
+                "publicKeyMultibase": "z6MksG8zH7ZkUVGqdnqQWUV7s6jVMrptHToH6aQahJ2HWaW1",
+            }),
+            accountable_principal_id: "did:web:controller.example".to_owned(),
+            agent_key_scope: AGENT_KEY_SCOPE_LIMITED.to_owned(),
+            audience: vec!["https://cokret.example/_cokret".to_owned()],
+            issued_at: now,
+            expires_at: now + chrono::Duration::minutes(15),
+            pairing_request_id: "ck:pairing:01970000-0000-7000-8000-000000000020".to_owned(),
+            request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
+            revoked_at: None,
+            revoked_reason: None,
+            raw_payload_digest: format!("sha256:{}", "2".repeat(64)),
+            soland_fanout_state:
+                coauth_data::accountability::AccountabilityGrantFanoutState::Queued,
+            soland_fanout_idempotency_key: "coauth:agent_key_authorize:test".to_owned(),
+            soland_fanout_payload: serde_json::json!({}),
+            soland_fanout_attempt: 0,
+            soland_fanout_next_retry_at: None,
+            soland_fanout_dead_letter_reason: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    #[test]
+    fn authorization_binding_accepts_active_matching_key() {
+        let now = chrono::Utc::now();
+        let authorization = agent_key_authorization(now);
+
+        validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#runtime-key-1",
+            "https://cokret.example/_cokret",
+        )
+        .expect("active matching authorization should pass");
+    }
+
+    #[test]
+    fn authorization_binding_rejects_revoked_key() {
+        let now = chrono::Utc::now();
+        let mut authorization = agent_key_authorization(now);
+        authorization.revoked_at = Some(now);
+
+        let err = validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#runtime-key-1",
+            "https://cokret.example/_cokret",
+        )
+        .expect_err("revoked runtime keys must fail closed");
+
+        assert_eq!(err, AgentAuthRejection::AgentDeactivated);
+    }
+
+    #[test]
+    fn authorization_binding_rejects_expired_authorization() {
+        let now = chrono::Utc::now();
+        let mut authorization = agent_key_authorization(now);
+        authorization.expires_at = now;
+
+        let err = validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#runtime-key-1",
+            "https://cokret.example/_cokret",
+        )
+        .expect_err("expired agent key authorization must fail closed");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+    }
+
+    #[test]
+    fn authorization_binding_rejects_wrong_audience() {
+        let now = chrono::Utc::now();
+        let authorization = agent_key_authorization(now);
+
+        let err = validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#runtime-key-1",
+            "https://evil.example/_cokret",
+        )
+        .expect_err("authorization audience must bind the target service");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+    }
+
+    #[test]
+    fn authorization_binding_rejects_mismatched_verification_method() {
+        let now = chrono::Utc::now();
+        let authorization = agent_key_authorization(now);
+
+        let err = validate_agent_key_authorization_binding(
+            &authorization,
+            now,
+            "did:web:agent.example",
+            "did:web:agent.example#other-key",
+            "https://cokret.example/_cokret",
+        )
+        .expect_err("authorization must bind the exact runtime verification method");
+
+        assert_eq!(err, AgentAuthRejection::VerificationMethodPrincipalMismatch);
     }
 
     #[test]
