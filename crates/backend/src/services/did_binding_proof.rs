@@ -1137,7 +1137,6 @@ mod tests {
 
     #[derive(serde::Deserialize)]
     struct CryptoSignatureVector {
-        name: String,
         did_document_fragment: FixtureDidDocumentFragment,
         binding_object: serde_json::Value,
         canonical_binding_payload: String,
