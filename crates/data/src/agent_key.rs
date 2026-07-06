@@ -29,8 +29,8 @@ pub struct AgentKeyAuthorization {
     pub key_id: String,
     /// DID URL of the authorized verification method.
     pub verification_method: String,
-    /// Multibase-encoded Ed25519 public key submitted at pairing.
-    pub public_key_multibase: String,
+    /// Spec `PublicKey` JSON object submitted at pairing.
+    pub public_key: serde_json::Value,
     /// Controller DID accountable for the agent.
     pub accountable_principal_id: String,
     /// Authorized key scope tier.

@@ -44,6 +44,7 @@ use crate::services::dpop::{DpopError, dpop_header_from_request, dpop_htu};
 
 #[derive(Clone)]
 pub(crate) struct DpopSessionBinding {
+    pub proof_jwt: String,
     pub jkt: String,
     pub public_jwk: PublicJsonWebKey,
 }
@@ -75,6 +76,7 @@ pub(crate) async fn extract_dpop_binding_for_kickoff(
     let htu = dpop_htu(&public_base, req);
     let result = verifier.verify(&header, &htm, &htu, now, None).await?;
     Ok(Some(DpopSessionBinding {
+        proof_jwt: header,
         jkt: result.jkt,
         public_jwk: result.jwk,
     }))

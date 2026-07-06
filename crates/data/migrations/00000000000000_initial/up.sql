@@ -85,7 +85,7 @@ CREATE TABLE public.agent_key_authorizations (
     agent_principal_id text NOT NULL,
     key_id text NOT NULL,
     verification_method text NOT NULL,
-    public_key_multibase text NOT NULL,
+    public_key jsonb NOT NULL,
     accountable_principal_id text NOT NULL,
     agent_key_scope text NOT NULL,
     audience text[] NOT NULL,

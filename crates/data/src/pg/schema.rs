@@ -98,7 +98,7 @@ diesel::table! {
         agent_principal_id -> Text,
         key_id -> Text,
         verification_method -> Text,
-        public_key_multibase -> Text,
+        public_key -> Jsonb,
         accountable_principal_id -> Text,
         agent_key_scope -> Text,
         audience -> Array<Text>,
