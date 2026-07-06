@@ -127,27 +127,10 @@ pub async fn issue_session_grant_endpoint(
             // fall back to any human proof validator. The grant-binding DPoP proof is
             // still required so the issued grant is device/runtime-bound
             // (`cnf.jkt`), exactly like the OIDC branch.
-            let binding = dpop_binding.ok_or_else(|| {
-                CokretRouteError::coded(
-                    StatusCode::UNAUTHORIZED,
-                    cokret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
-                    "agent_key_proof session grant requires a grant-binding DPoP proof",
-                )
-            })?;
-            let body_binding = body.dpop_binding_proof.as_ref().ok_or_else(|| {
-                CokretRouteError::coded(
-                    StatusCode::UNAUTHORIZED,
-                    ERROR_CODE_INVALID_SIGNATURE,
-                    "reason_code=proof_invalid; agent_key_proof body must carry dpop_binding_proof",
-                )
-            })?;
-            if body_binding.proof_jwt != binding.proof_jwt {
-                return Err(CokretRouteError::coded(
-                    StatusCode::UNAUTHORIZED,
-                    ERROR_CODE_INVALID_SIGNATURE,
-                    "reason_code=proof_invalid; DPoP header does not match body dpop_binding_proof",
-                ));
-            }
+            let binding = require_agent_key_proof_dpop_binding(
+                dpop_binding,
+                body.dpop_binding_proof.as_ref(),
+            )?;
             issue_agent_key_proof_session_grant(req, depot, binding, &body).await
         }
         other => Err(CokretRouteError::coded(
@@ -158,6 +141,34 @@ pub async fn issue_session_grant_endpoint(
             ),
         )),
     }
+}
+
+fn require_agent_key_proof_dpop_binding(
+    binding: Option<crate::handlers::account::auth::DpopSessionBinding>,
+    body_binding: Option<&cokret_core::SessionGrantDpopBindingProof>,
+) -> Result<crate::handlers::account::auth::DpopSessionBinding, CokretRouteError> {
+    let binding = binding.ok_or_else(|| {
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            cokret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
+            "agent_key_proof session grant requires a grant-binding DPoP proof",
+        )
+    })?;
+    let body_binding = body_binding.ok_or_else(|| {
+        CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_INVALID_SIGNATURE,
+            "reason_code=proof_invalid; agent_key_proof body must carry dpop_binding_proof",
+        )
+    })?;
+    if body_binding.proof_jwt != binding.proof_jwt {
+        return Err(CokretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            ERROR_CODE_INVALID_SIGNATURE,
+            "reason_code=proof_invalid; DPoP header does not match body dpop_binding_proof",
+        ));
+    }
+    Ok(binding)
 }
 
 /// CKP-0008 §4.6 agent runtime authentication branch. Validates the
@@ -388,8 +399,45 @@ fn map_oidc_exchange_error(
 
 #[cfg(test)]
 mod tests {
+    use coauth_iana::jose::JsonWebSignatureAlg;
+    use coauth_jose::jwk::{JsonWebKeyPublicParameters, PublicJsonWebKey};
+    use ed25519_dalek::SigningKey;
+    use rand_core::OsRng;
+
     use super::*;
+    use crate::handlers::account::auth::DpopSessionBinding;
     use crate::handlers::account::auth::oidc_bridge::OidcExchangeError;
+
+    fn test_dpop_binding(proof_jwt: &str) -> DpopSessionBinding {
+        let signing = SigningKey::generate(&mut OsRng);
+        let public_jwk =
+            PublicJsonWebKey::new(JsonWebKeyPublicParameters::from(&signing.verifying_key()))
+                .with_alg(JsonWebSignatureAlg::EdDsa);
+        DpopSessionBinding {
+            proof_jwt: proof_jwt.to_owned(),
+            jkt: "test-jkt".to_owned(),
+            public_jwk,
+        }
+    }
+
+    fn assert_coded(error: CokretRouteError, expected_status: StatusCode, expected_code: &str) {
+        match error {
+            CokretRouteError::Coded { status, code, .. } => {
+                assert_eq!(status, expected_status);
+                assert_eq!(code, expected_code);
+            }
+            other => panic!("expected coded error, got {other:?}"),
+        }
+    }
+
+    fn unwrap_binding_error(
+        result: Result<DpopSessionBinding, CokretRouteError>,
+    ) -> CokretRouteError {
+        match result {
+            Ok(_) => panic!("expected DPoP binding rejection"),
+            Err(error) => error,
+        }
+    }
 
     #[test]
     fn oidc_exchange_binding_errors_surface_as_proof_invalid() {
@@ -410,5 +458,43 @@ mod tests {
             }
             other => panic!("expected coded error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn agent_key_proof_session_grant_requires_dpop_header_binding() {
+        let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
+            None,
+            Some(&cokret_core::SessionGrantDpopBindingProof {
+                proof_jwt: "proof.jwt".to_owned(),
+            }),
+        ));
+
+        assert_coded(
+            err,
+            StatusCode::UNAUTHORIZED,
+            cokret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
+        );
+    }
+
+    #[test]
+    fn agent_key_proof_session_grant_requires_body_dpop_binding() {
+        let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
+            Some(test_dpop_binding("proof.jwt")),
+            None,
+        ));
+
+        assert_coded(err, StatusCode::UNAUTHORIZED, ERROR_CODE_INVALID_SIGNATURE);
+    }
+
+    #[test]
+    fn agent_key_proof_session_grant_rejects_mismatched_body_dpop_binding() {
+        let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
+            Some(test_dpop_binding("header.proof.jwt")),
+            Some(&cokret_core::SessionGrantDpopBindingProof {
+                proof_jwt: "body.proof.jwt".to_owned(),
+            }),
+        ));
+
+        assert_coded(err, StatusCode::UNAUTHORIZED, ERROR_CODE_INVALID_SIGNATURE);
     }
 }

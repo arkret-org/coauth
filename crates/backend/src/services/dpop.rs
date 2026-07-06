@@ -708,6 +708,46 @@ mod tests {
             .expect("ath matches");
     }
 
+    #[tokio::test]
+    async fn rejects_ath_for_a_different_access_token() {
+        let signing = SigningKey::generate(&mut OsRng);
+        let now = Utc::now();
+        let claims = DpopClaims {
+            jti: "test-jti-ath-mismatch".to_owned(),
+            htm: "POST".to_owned(),
+            htu: "https://example.test/_cokret/gate/account/session-grants/refresh".to_owned(),
+            iat: now.timestamp(),
+            ath: Some(access_token_hash("bound-access-token")),
+            nonce: None,
+        };
+        let proof = sign_proof(&claims, &signing);
+
+        let verifier = DpopVerifier::new();
+        let result = verifier
+            .verify(
+                &proof,
+                "POST",
+                "https://example.test/_cokret/gate/account/session-grants/refresh",
+                now,
+                Some("other-access-token"),
+            )
+            .await;
+        assert!(matches!(result, Err(DpopError::AthMismatch)));
+    }
+
+    #[test]
+    fn rejects_jkt_mismatch_against_bound_session_grant() {
+        let result = DpopVerifier::require_matching_jkt("runtime-jkt", "grant-bound-jkt");
+
+        assert!(matches!(
+            result,
+            Err(DpopError::JktMismatch {
+                expected,
+                actual,
+            }) if expected == "grant-bound-jkt" && actual == "runtime-jkt"
+        ));
+    }
+
     #[test]
     fn canonicalize_htu_strips_query_fragment_and_lowercases_host() {
         let canon = canonicalize_htu("HTTPS://Example.TEST:8443/api/v1/Refresh?a=1#frag");

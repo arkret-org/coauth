@@ -562,3 +562,107 @@ pub async fn revoke_session_grant_endpoint(
 
     Ok(Json(revoked_outcome(revoked)))
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, Utc};
+    use coauth_config::{CokretConfig, DeploymentProfileConfig, PrincipalMethodConfig};
+    use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
+    use coauth_oauth_types::scope::Scope;
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng;
+
+    use super::*;
+
+    fn test_keystore() -> Keystore {
+        let mut rng = ChaChaRng::seed_from_u64(0x4e17);
+        let eddsa = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid("test-eddsa");
+        Keystore::new(JsonWebKeySet::new(vec![eddsa]))
+    }
+
+    fn personal_did_web_config() -> CokretConfig {
+        CokretConfig {
+            deployment_profile: DeploymentProfileConfig::PersonalNode,
+            principal_method: PrincipalMethodConfig::DidWeb,
+            service_did: Some("did:web:auth.example".to_owned()),
+            ..CokretConfig::default()
+        }
+    }
+
+    fn agent_session_grant(controller_did: &str) -> SessionGrant {
+        let now = Utc::now();
+        let material = mint_agent_session_grant(
+            &personal_did_web_config(),
+            &test_keystore(),
+            "did:web:agent.example",
+            "did:web:soland.example".to_owned(),
+            vec!["ck.self.events.stream.subscribe".to_owned()],
+            "runtime-dpop-jkt".to_owned(),
+            "{\"kty\":\"OKP\"}".to_owned(),
+            serde_json::json!({
+                "controller_did": controller_did,
+                "resources": {
+                    "realm_refs": ["ck:realm:team"],
+                },
+            }),
+            now,
+            now + Duration::minutes(15),
+        )
+        .expect("agent grant should mint");
+
+        SessionGrant {
+            id: ulid::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
+            grant_id: material.grant_id,
+            browser_session_id: None,
+            issuer: material.issuer,
+            subject: material.subject,
+            device_id: None,
+            applet_id: None,
+            effective_scope: None,
+            registration_epoch: None,
+            service_did: None,
+            capability_grant_refs: Vec::new(),
+            audience: material.audience,
+            scope: Scope::from_iter(["ck.self.events.stream.subscribe".parse().unwrap()]),
+            grant_jwt: material.grant_jwt,
+            session_public_key: material.session_public_key,
+            created_at: now,
+            expires_at: now + Duration::minutes(15),
+            revoked_at: None,
+        }
+    }
+
+    #[test]
+    fn agent_key_proof_grant_is_owned_by_accountable_controller_only() {
+        let grant = agent_session_grant("did:web:controller.example");
+
+        assert!(grant_is_agent_delegated_to_controller(
+            &grant,
+            "did:web:controller.example"
+        ));
+        assert!(grant_is_owned_by_current_principal(
+            &grant,
+            "did:web:controller.example"
+        ));
+        assert!(!grant_is_agent_delegated_to_controller(
+            &grant,
+            "did:web:other-controller.example"
+        ));
+        assert!(!grant_is_owned_by_current_principal(
+            &grant,
+            "did:web:other-controller.example"
+        ));
+    }
+
+    #[test]
+    fn malformed_or_non_agent_grant_is_not_controller_delegated() {
+        let mut grant = agent_session_grant("did:web:controller.example");
+        grant.grant_jwt = "header.payload.signature".to_owned();
+
+        assert!(!grant_is_agent_delegated_to_controller(
+            &grant,
+            "did:web:controller.example"
+        ));
+    }
+}
