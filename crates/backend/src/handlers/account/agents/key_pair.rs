@@ -1,28 +1,24 @@
 //! CKP-0008 §4.5 runtime key pairing (`ck.gate.account.command.pair_agent_key`).
 //!
 //! `POST /_cokret/gate/account/agent-key-pair`. The agent runtime generated a
-//! key pair locally and submits the public key plus a proof-of-possession. This
-//! endpoint validates the DID binding + PoP, then writes a durable
-//! `agent_key_authorization` row and fans the `ck.agent.key.authorize` event out
-//! to soland (the reducer authority) over the same retryable queue mechanism the
-//! accountability-grant path uses. coauth is the local PoP / session-issuance
-//! authority; soland projects the durable event and clears
-//! `effective_after_first_authorized_key` flags.
+//! key pair locally and submits the public key plus a proof-of-possession. The
+//! controller supplies the signed `ck.agent.key.authorize` event; coauth only
+//! validates the request binding, persists the accepted authorization for
+//! `agent_key_proof`, and queues the signed event for soland projection.
 
+use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::accountability::{AccountabilityGrantFanoutState, AccountabilitySubjectKind};
 use coauth_data::agent_key::NewAgentKeyAuthorization;
 use coauth_data::audit::AdminOperation;
-use cokret_core::identifiers::new_prefixed_uuid7;
 use salvo::prelude::*;
 use serde::Deserialize;
-use sha2::Digest as _;
+use serde_json::Value;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};
 use super::proof::{ProofSignedFields, canonical_digest, verify_proof_signature};
-use super::session_proof::{AGENT_KEY_SCOPE_LIMITED, LIMITED_AGENT_SCOPE_ACTIONS};
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
@@ -36,15 +32,23 @@ const RUNTIME_ATTESTATION_SELF_ASSERTED: &str = "self_asserted";
 
 const AGENT_KEY_AUTHORIZE_FANOUT_QUEUE: &str = "soland-agent-key-authorize-fanout";
 
-/// Internal coauth→soland fan-out envelope kind wrapping the spec-typed
-/// `ck.agent.key.authorize` payload.
+/// Internal coauth→soland fan-out envelope kind wrapping the controller-signed
+/// `ck.agent.key.authorize` event.
 const AGENT_KEY_AUTHORIZE_FANOUT_KIND: &str = "org.cokret.coauth.agent_key_authorize.fanout.v1";
 
 /// Ed25519 public key submitted at pairing (CKP-0008 §4.5 `public_key`).
 #[derive(Debug, Clone, Deserialize)]
 struct AgentPublicKeyInput {
-    key_type: String,
-    public_key_multibase: String,
+    kty: String,
+    kid: String,
+    alg: String,
+    key: String,
+}
+
+#[derive(Debug)]
+struct ValidatedRuntimePublicKey {
+    public_key: Value,
+    verification_public_key: String,
 }
 
 /// Proof-of-possession over the pairing request (CKP-0008 §4.5
@@ -64,17 +68,6 @@ struct ProofOfPossessionInput {
 #[derive(Debug, Clone, Deserialize)]
 struct RuntimeAttestationInput {
     kind: String,
-}
-
-/// Strip DID URL `#fragment` and `?query`, returning the bare DID.
-fn did_without_fragment_query(did_url: &str) -> &str {
-    did_url
-        .split('#')
-        .next()
-        .unwrap_or("")
-        .split('?')
-        .next()
-        .unwrap_or("")
 }
 
 /// `POST /_cokret/gate/account/agent-key-pair`
@@ -100,28 +93,21 @@ pub async fn post_agent_key_pair(
 
     let agent_principal_id = normalize_did_for_binding(body.agent_principal_id.as_str())
         .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
+    ensure_body_pairing_request_id_present(&body.pairing_request_id)?;
 
-    // AUTH-1: fail-closed DID binding BEFORE any crypto runs. The
-    // verification_method DID part (fragment/query stripped) MUST be
-    // bit-identical to the agent principal.
-    let vm_did = did_without_fragment_query(&body.verification_method);
     enforce_verification_method_binding(&body.verification_method, &agent_principal_id)
         .map_err(AgentAuthRejection::into_app_error)?;
-    let _ = vm_did;
 
-    let public_key: AgentPublicKeyInput = serde_json::from_value(body.public_key.clone())
-        .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
-    if !public_key.key_type.eq_ignore_ascii_case("Ed25519") {
-        // v1 pairing accepts Ed25519 runtime keys only; unknown key types fail
-        // closed rather than being silently treated as Ed25519.
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
-    }
+    let public_key = validate_runtime_public_key(&body.public_key, &body.verification_method)?;
 
     let pop: ProofOfPossessionInput = serde_json::from_value(body.proof_of_possession.clone())
         .map_err(|error| AppError::bad_request(format!("proof_of_possession invalid: {error}")))?;
+    if pop.challenge != body.pairing_request_id {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+    }
 
     // runtime_attestation: v1 baseline accepts only `kind=self_asserted`. Any
-    // present-but-unknown kind fails closed (CKP-0008 §4.5 / Non-Goals).
+    // present-but-unknown kind fails closed.
     if let Some(attestation_value) = body.runtime_attestation.clone() {
         let attestation: RuntimeAttestationInput = serde_json::from_value(attestation_value)
             .map_err(|error| {
@@ -155,6 +141,23 @@ pub async fn post_agent_key_pair(
     if !pop.request_canonical_digest.starts_with("sha256:") {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error());
     }
+    let agent_id = cokret_core::Did::new(agent_principal_id.clone())
+        .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
+    let expected_pop_digest = cokret::agent::agent_key_pair_proof_request_binding_digest(
+        &body.pairing_request_id,
+        &agent_id,
+        &body.verification_method,
+        &body.public_key,
+        body.runtime_attestation.as_ref(),
+    )
+    .map_err(|error| {
+        AppError::bad_request(format!(
+            "proof_of_possession request binding failed: {error}"
+        ))
+    })?;
+    if pop.request_canonical_digest != expected_pop_digest.as_str() {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+    }
 
     let signed_fields = ProofSignedFields {
         audience: &pop.audience,
@@ -165,21 +168,25 @@ pub async fn post_agent_key_pair(
         verification_method: &body.verification_method,
     };
     verify_proof_signature(
-        &public_key.public_key_multibase,
+        &public_key.verification_public_key,
         &signed_fields,
         &pop.signature,
     )
     .map_err(AgentAuthRejection::into_app_error)?;
 
-    // The accountable controller for this agent: derive from the active
-    // accountability grant coauth issued at provisioning. Without one, the key
-    // authorization has nothing to be accountable to — fail closed.
-    let pairing_request_id = req
-        .query::<String>("pairing_request_id")
-        .unwrap_or_default();
-
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
+
+    let runtime_public_key_digest =
+        runtime_public_key_digest(&body.public_key, &body.verification_method)?;
+    let authorize_event = validate_controller_authorize_event(
+        &body.authorize_event,
+        &agent_principal_id,
+        &body.verification_method,
+        &runtime_public_key_digest,
+        &body.pairing_request_id,
+        &pop.audience,
+    )?;
 
     let accountable_grants = repo
         .accountability_grant()
@@ -188,49 +195,35 @@ pub async fn post_agent_key_pair(
             &agent_principal_id,
         )
         .await?;
-    let Some(accountability) = accountable_grants.into_iter().next() else {
+    if accountable_grants
+        .into_iter()
+        .find(|grant| grant.controller_did == authorize_event.controller_did)
+        .is_none()
+    {
         repo.cancel().await.ok();
         return Err(AgentAuthRejection::AccountabilityGrantMissing.into_app_error());
     };
-    let controller_did = accountability.controller_did.clone();
 
-    // Mint the durable authorization event id coauth returns and binds the
-    // session branch's `agent_key_authorization_ref` against. The `key_id` is
-    // the verification method DID URL.
-    let authorized_event_id = new_prefixed_uuid7("ck:event:");
-    let key_id = body.verification_method.clone();
-    let issued_at = now;
-    let expires_at = now + chrono::Duration::days(30);
+    let key_id = authorize_event.key_id.clone();
+    let authorized_event_id = authorize_event.event_id.clone();
+    let issued_at = authorize_event.issued_at;
+    let expires_at = authorize_event.expires_at;
 
     let service_did = service_did_for(&cokret_config);
     let outcome_event_id = cokret_core::EventId::new(authorized_event_id.clone())
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
-    // §4.5: the authorized key inherits the controller-approved scope; coauth
-    // stores the broadest tier the accountability grant covers and soland's
-    // evaluator intersects it down per-resource. v1 baseline tier is `limited`;
-    // the fan-out carries the spec-typed object form of that tier.
-    let agent_key_scope = limited_agent_key_scope(&pop.audience, &service_did, &cokret_config)?;
-
     let fanout_payload = build_agent_key_authorize_fanout_payload(
         &authorized_event_id,
-        &agent_principal_id,
-        &key_id,
-        &body.verification_method,
-        &public_key.public_key_multibase,
-        &controller_did,
-        agent_key_scope,
-        &pop.audience,
-        issued_at,
-        expires_at,
-        &accountability.accountability_grant_id,
-        &pairing_request_id,
-        &pop.request_canonical_digest,
+        &body.pairing_request_id,
+        &body.authorize_event,
         &service_did,
         &cokret_config,
-    )?;
+    );
     let raw_payload_digest = canonical_digest(&fanout_payload)?;
     let idempotency_key = format!("coauth:agent_key_authorize:{authorized_event_id}");
+    let agent_key_scope = serde_json::to_string(authorize_event.agent_key_scope)
+        .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
     repo.agent_key_authorization()
         .add(
@@ -241,13 +234,13 @@ pub async fn post_agent_key_pair(
                 agent_principal_id: agent_principal_id.clone(),
                 key_id: key_id.clone(),
                 verification_method: body.verification_method.clone(),
-                public_key_multibase: public_key.public_key_multibase.clone(),
-                accountable_principal_id: controller_did.clone(),
-                agent_key_scope: AGENT_KEY_SCOPE_LIMITED.to_owned(),
+                public_key: public_key.public_key.clone(),
+                accountable_principal_id: authorize_event.controller_did.clone(),
+                agent_key_scope,
                 audience: vec![pop.audience.clone()],
                 issued_at,
                 expires_at,
-                pairing_request_id: pairing_request_id.clone(),
+                pairing_request_id: body.pairing_request_id.clone(),
                 request_canonical_digest: pop.request_canonical_digest.clone(),
                 raw_payload_digest: raw_payload_digest.clone(),
                 soland_fanout_state: AccountabilityGrantFanoutState::Queued,
@@ -265,7 +258,7 @@ pub async fn post_agent_key_pair(
         "operation": "agent_key_authorize_issued",
         "authorized_event_id": &authorized_event_id,
         "agent_principal_id": &agent_principal_id,
-        "controller_did": &controller_did,
+        "controller_did": &authorize_event.controller_did,
         "verification_method": &body.verification_method,
         "audience": &pop.audience,
         "issued_at": issued_at,
@@ -316,62 +309,270 @@ pub async fn post_agent_key_pair(
     }))
 }
 
-/// Spec-typed `agent_key_scope` object for the v1 `limited` baseline tier:
-/// the closed limited action set (shared with the session-proof tier
-/// evaluator), scoped to the principal service the pairing audience resolves
-/// to (falling back to this coauth deployment's own service DID).
-fn limited_agent_key_scope(
-    audience: &str,
-    service_did: &str,
-    cokret_config: &CokretConfig,
-) -> Result<cokret_core::AgentKeyScope, AppError> {
-    let scoped_service_did = cokret_config
-        .principal_servers
-        .iter()
-        .find(|server| server.audience == audience)
-        .and_then(|server| server.did.clone())
-        .unwrap_or_else(|| service_did.to_owned());
-    let scoped_service_did = cokret_core::Did::new(scoped_service_did)
-        .map_err(|err| AppError::internal_box(Box::new(err)))?;
+#[derive(Debug)]
+struct ValidatedAuthorizeEvent<'a> {
+    event_id: String,
+    controller_did: String,
+    key_id: String,
+    agent_key_scope: &'a Value,
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+}
 
-    Ok(cokret_core::AgentKeyScope {
-        actions: LIMITED_AGENT_SCOPE_ACTIONS
-            .iter()
-            .map(|action| (*action).to_owned())
-            .collect(),
-        resources: vec![cokret_core::AgentKeyScopeResource {
-            kind: cokret_core::AgentKeyScopeResourceKind::Service,
-            realm_id: None,
-            r#ref: None,
-            operation: None,
-            service_did: Some(scoped_service_did),
-        }],
-        constraints: Vec::new(),
+fn validate_runtime_public_key(
+    public_key: &Value,
+    verification_method: &str,
+) -> Result<ValidatedRuntimePublicKey, AppError> {
+    let key: AgentPublicKeyInput = serde_json::from_value(public_key.clone())
+        .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
+    if key.kty != "OKP" {
+        return Err(AppError::bad_request("public_key.kty must be OKP"));
+    }
+    if key.kid != verification_method {
+        return Err(AppError::bad_request(
+            "public_key.kid must match verification_method",
+        ));
+    }
+    if key.alg != "Ed25519" && key.alg != "EdDSA" {
+        return Err(AppError::bad_request(
+            "public_key.alg must be Ed25519 or EdDSA",
+        ));
+    }
+    let raw = Base64UrlUnpadded::decode_vec(&key.key)
+        .map_err(|_| AppError::bad_request("public_key.key must be base64url"))?;
+    let raw: [u8; 32] = raw
+        .try_into()
+        .map_err(|_| AppError::bad_request("public_key.key must decode to 32 bytes"))?;
+    Ok(ValidatedRuntimePublicKey {
+        public_key: public_key.clone(),
+        verification_public_key: cokret_core::ed25519_pubkey_to_did_key_multibase(&raw),
     })
 }
 
+fn runtime_public_key_digest(
+    public_key: &Value,
+    verification_method: &str,
+) -> Result<String, AppError> {
+    validate_runtime_public_key(public_key, verification_method)?;
+    cokret::agent::agent_runtime_public_key_digest(public_key)
+        .map(|digest| digest.as_str().to_owned())
+        .map_err(|error| AppError::bad_request(format!("public_key is invalid: {error}")))
+}
+
+fn validate_controller_authorize_event<'a>(
+    envelope: &'a Value,
+    agent_principal_id: &str,
+    verification_method: &str,
+    runtime_public_key_digest: &str,
+    pairing_request_id: &str,
+    audience: &str,
+) -> Result<ValidatedAuthorizeEvent<'a>, AppError> {
+    if !envelope.is_object() {
+        return Err(AppError::bad_request(
+            "authorize_event must be a controller-signed event object",
+        ));
+    }
+    if envelope.get("kind").and_then(Value::as_str) != Some("ck.agent.key.authorize") {
+        return Err(AppError::bad_request(
+            "authorize_event.kind must be ck.agent.key.authorize",
+        ));
+    }
+
+    let event_id = envelope
+        .get("event_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| AppError::bad_request("authorize_event.event_id is required"))?;
+    cokret_core::EventId::new(event_id.to_owned())
+        .map_err(|err| AppError::bad_request(format!("authorize_event.event_id invalid: {err}")))?;
+    let controller_did = envelope
+        .get("actor_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| AppError::bad_request("authorize_event.actor_id is required"))?;
+    cokret_core::Did::new(controller_did.to_owned())
+        .map_err(|err| AppError::bad_request(format!("authorize_event.actor_id invalid: {err}")))?;
+    ensure_authorize_event_has_controller_signature(envelope, controller_did)?;
+
+    let payload = envelope
+        .get("payload")
+        .ok_or_else(|| AppError::bad_request("authorize_event.payload is required"))?;
+    if payload.get("agent_principal_id").and_then(Value::as_str) != Some(agent_principal_id) {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.agent_principal_id must match the request",
+        ));
+    }
+    if payload.get("verification_method").and_then(Value::as_str) != Some(verification_method) {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.verification_method must match the request",
+        ));
+    }
+    if payload
+        .get("accountable_principal_id")
+        .and_then(Value::as_str)
+        != Some(controller_did)
+    {
+        return Err(AppError::forbidden(
+            "authorize_event.payload.accountable_principal_id must match actor_id",
+        ));
+    }
+    if payload.get("public_key_digest").and_then(Value::as_str) != Some(runtime_public_key_digest) {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.public_key_digest must bind the runtime public_key",
+        ));
+    }
+    let payload_audience = payload
+        .get("audience")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AppError::bad_request("authorize_event.payload.audience is required"))?;
+    if !payload_audience
+        .iter()
+        .any(|value| value.as_str() == Some(audience))
+    {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.audience must include proof_of_possession.audience",
+        ));
+    }
+
+    let key_id = payload
+        .get("key_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| AppError::bad_request("authorize_event.payload.key_id is required"))?;
+    let agent_key_scope = payload.get("agent_key_scope").ok_or_else(|| {
+        AppError::bad_request("authorize_event.payload.agent_key_scope is required")
+    })?;
+    ensure_authorize_event_scope_is_action_object(agent_key_scope)?;
+    let issued_at = payload
+        .get("issued_at")
+        .and_then(Value::as_str)
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .map(|timestamp| timestamp.with_timezone(&Utc))
+        .ok_or_else(|| {
+            AppError::bad_request("authorize_event.payload.issued_at must be rfc3339")
+        })?;
+    let expires_at = payload
+        .get("expires_at")
+        .and_then(Value::as_str)
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .map(|timestamp| timestamp.with_timezone(&Utc))
+        .ok_or_else(|| {
+            AppError::bad_request("authorize_event.payload.expires_at must be rfc3339")
+        })?;
+    if expires_at <= Utc::now() {
+        return Err(AgentAuthRejection::PairingRequestExpired.into_app_error());
+    }
+    let approval = payload.get("approval_evidence").ok_or_else(|| {
+        AppError::bad_request("authorize_event.payload.approval_evidence is required")
+    })?;
+    if approval
+        .get("request_canonical_digest")
+        .and_then(Value::as_str)
+        .is_none()
+    {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.approval_evidence.request_canonical_digest is required",
+        ));
+    }
+    if approval.get("pairing_request_id").and_then(Value::as_str) != Some(pairing_request_id) {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.approval_evidence.pairing_request_id must match the request",
+        ));
+    }
+    if let Some(approved_by) = approval.get("approved_by").and_then(Value::as_str)
+        && approved_by != controller_did
+    {
+        return Err(AppError::forbidden(
+            "authorize_event.payload.approval_evidence.approved_by must match actor_id",
+        ));
+    }
+
+    Ok(ValidatedAuthorizeEvent {
+        event_id: event_id.to_owned(),
+        controller_did: controller_did.to_owned(),
+        key_id: key_id.to_owned(),
+        agent_key_scope,
+        issued_at,
+        expires_at,
+    })
+}
+
+fn ensure_body_pairing_request_id_present(pairing_request_id: &str) -> Result<(), AppError> {
+    if pairing_request_id.trim().is_empty() {
+        return Err(AppError::bad_request("pairing_request_id is required"));
+    }
+    Ok(())
+}
+
+fn ensure_authorize_event_has_controller_signature(
+    envelope: &Value,
+    controller_did: &str,
+) -> Result<(), AppError> {
+    let proofs = envelope
+        .get("proofs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            AppError::bad_request("authorize_event must carry controller signature proofs")
+        })?;
+    if proofs.is_empty() {
+        return Err(AppError::bad_request(
+            "authorize_event must carry controller signature proofs",
+        ));
+    }
+    let signed_by_controller = proofs.iter().any(|proof| {
+        proof
+            .get("verification_method")
+            .and_then(Value::as_str)
+            .is_some_and(|verification_method| {
+                verification_method_controller(verification_method) == controller_did
+            })
+    });
+    if !signed_by_controller {
+        return Err(AppError::bad_request(
+            "authorize_event proof verification_method must be controlled by actor_id",
+        ));
+    }
+    Ok(())
+}
+
+fn verification_method_controller(verification_method: &str) -> &str {
+    verification_method
+        .split('#')
+        .next()
+        .unwrap_or("")
+        .split('?')
+        .next()
+        .unwrap_or("")
+}
+
+fn ensure_authorize_event_scope_is_action_object(scope: &Value) -> Result<(), AppError> {
+    let actions = scope
+        .get("actions")
+        .and_then(Value::as_array)
+        .filter(|actions| !actions.is_empty())
+        .ok_or_else(|| {
+            AppError::bad_request("authorize_event.payload.agent_key_scope.actions is required")
+        })?;
+    if actions
+        .iter()
+        .any(|action| action.as_str().is_none_or(|value| value.trim().is_empty()))
+    {
+        return Err(AppError::bad_request(
+            "authorize_event.payload.agent_key_scope.actions must be non-empty strings",
+        ));
+    }
+    Ok(())
+}
+
 /// Build the canonical `ck.agent.key.authorize` fan-out payload for soland.
-/// The inner `payload` is the SDK [`cokret_core::AgentKeyAuthorizePayload`]
-/// (truth source `event-payload.schema.json#/$defs/agent_key_authorize_payload`);
-/// the wrapping envelope is coauth-internal queue metadata.
-#[allow(clippy::too_many_arguments)]
+/// The wrapping envelope is coauth-internal queue metadata.
 fn build_agent_key_authorize_fanout_payload(
     authorized_event_id: &str,
-    agent_principal_id: &str,
-    key_id: &str,
-    verification_method: &str,
-    public_key_multibase: &str,
-    accountable_principal_id: &str,
-    agent_key_scope: cokret_core::AgentKeyScope,
-    audience: &str,
-    issued_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
-    accountability_grant_id: &str,
     pairing_request_id: &str,
-    request_canonical_digest: &str,
+    authorize_event: &Value,
     service_did: &str,
     cokret_config: &CokretConfig,
-) -> Result<serde_json::Value, AppError> {
+) -> serde_json::Value {
     let principal_servers: Vec<_> = cokret_config
         .principal_servers
         .iter()
@@ -385,71 +586,140 @@ fn build_agent_key_authorize_fanout_payload(
         })
         .collect();
 
-    // sha256 digest of the raw Ed25519 public key bytes behind
-    // `verification_method` (spec `public_key_digest` hash form).
-    let public_key_bytes = cokret_core::multibase::decode_ed25519_multibase(public_key_multibase)
-        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-    let public_key_digest = cokret_core::Hash::new(format!(
-        "sha256:{}",
-        hex::encode(sha2::Sha256::digest(public_key_bytes))
-    ))
-    .map_err(|err| AppError::internal_box(Box::new(err)))?;
-
-    // The client-supplied pairing digest was prefix-checked earlier; the SDK
-    // `Hash` constructor enforces the full `sha256:<64 hex>` shape fail-closed.
-    let request_canonical_digest = cokret_core::Hash::new(request_canonical_digest.to_owned())
-        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-
-    // SDK drift: `AgentKeyAuthorizePayload.verification_method` is typed `Did`,
-    // but the spec `$defs/verification_method` REQUIRES a `#fragment` DID URL,
-    // which `Did` rejects. Until the SDK grows a DID-URL type we construct the
-    // typed payload with the bare agent DID and patch the serialized field to
-    // the real verification-method DID URL below.
-    let payload = cokret_core::AgentKeyAuthorizePayload {
-        agent_principal_id: cokret_core::Did::new(agent_principal_id.to_owned())
-            .map_err(|err| AppError::internal_box(Box::new(err)))?,
-        key_id: key_id.to_owned(),
-        verification_method: cokret_core::Did::new(agent_principal_id.to_owned())
-            .map_err(|err| AppError::internal_box(Box::new(err)))?,
-        public_key_digest: Some(public_key_digest),
-        accountable_principal_id: cokret_core::Did::new(accountable_principal_id.to_owned())
-            .map_err(|err| AppError::internal_box(Box::new(err)))?,
-        agent_key_scope,
-        audience: vec![audience.to_owned()],
-        issued_at,
-        expires_at,
-        // The controller-accepted accountability grant (`ck:grant:<uuid7>`) is
-        // the durable evidence that authorized this key; the raw pairing
-        // request id travels on the envelope for traceability only.
-        approval_evidence: cokret_core::AgentKeyApprovalEvidence {
-            kind: cokret_core::AgentKeyApprovalEvidenceKind::CapabilityGrant,
-            r#ref: accountability_grant_id.to_owned(),
-            request_canonical_digest: Some(request_canonical_digest),
-            approved_by: Some(
-                cokret_core::Did::new(accountable_principal_id.to_owned())
-                    .map_err(|err| AppError::internal_box(Box::new(err)))?,
-            ),
-        },
-        revocation_check_ref: None,
-        runtime_attestation: Some(cokret_core::AgentKeyAuthorizePayloadRuntimeAttestation {
-            kind: cokret_core::AgentKeyRuntimeAttestationKind::SelfAsserted,
-            software: None,
-            version: None,
-            attestation_digest: None,
-            evidence_ref: None,
-        }),
-    };
-    let mut payload =
-        serde_json::to_value(&payload).map_err(|err| AppError::internal_box(Box::new(err)))?;
-    // See the SDK-drift note above: restore the spec-required DID URL form.
-    payload["verification_method"] = serde_json::Value::String(verification_method.to_owned());
-
-    Ok(serde_json::json!({
+    serde_json::json!({
         "kind": AGENT_KEY_AUTHORIZE_FANOUT_KIND,
         "issuer_service_did": service_did,
         "authorized_event_id": authorized_event_id,
         "pairing_request_id": pairing_request_id,
-        "payload": payload,
+        "authorize_event": authorize_event,
         "principal_servers": principal_servers,
-    }))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
+    use serde_json::json;
+
+    use super::*;
+
+    const AGENT: &str = "did:web:agent.example";
+    const CONTROLLER: &str = "did:web:controller.example";
+    const VM: &str = "did:web:agent.example#runtime-key-1";
+    const AUDIENCE: &str = "did:web:soland.local";
+    const PAIRING_REQUEST_ID: &str = "agent_pairing_request:01999999-0000-7000-8000-00000000feed";
+    const PUBLIC_KEY_DIGEST: &str =
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    fn valid_public_key() -> Value {
+        json!({
+            "kty": "OKP",
+            "kid": VM,
+            "alg": "Ed25519",
+            "key": Base64UrlUnpadded::encode_string(&[42u8; 32]),
+        })
+    }
+
+    fn valid_authorize_event(pairing_request_id: &str) -> Value {
+        json!({
+            "event_id": "ck:event:01999999-0000-7000-8000-000000000001",
+            "kind": "ck.agent.key.authorize",
+            "realm_id": "ck:realm:01999999-0000-7000-8000-000000000010",
+            "actor_id": CONTROLLER,
+            "actor_seq": 1,
+            "created_at": "2026-07-06T00:00:00Z",
+            "hlc": "019999990000-0000-000000000000",
+            "prev_refs": [],
+            "payload": {
+                "agent_principal_id": AGENT,
+                "key_id": "runtime-key-1",
+                "verification_method": VM,
+                "public_key_digest": PUBLIC_KEY_DIGEST,
+                "accountable_principal_id": CONTROLLER,
+                "agent_key_scope": {
+                    "actions": [
+                        "ck.self.events.stream.subscribe",
+                        "ck.event.read"
+                    ],
+                    "resources": []
+                },
+                "audience": [AUDIENCE],
+                "issued_at": "2026-07-06T00:00:00Z",
+                "expires_at": "2999-01-01T00:00:00Z",
+                "approval_evidence": {
+                    "kind": "approval_event",
+                    "ref": "ck:event:01999999-0000-7000-8000-000000000099",
+                    "request_canonical_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "pairing_request_id": pairing_request_id,
+                    "approved_by": CONTROLLER
+                }
+            },
+            "proofs": [{
+                "kind": "detached_jws",
+                "verification_method": "did:web:controller.example#key-1",
+                "jws": "header..signature"
+            }]
+        })
+    }
+
+    #[test]
+    fn runtime_public_key_requires_spec_okp_shape() {
+        validate_runtime_public_key(&valid_public_key(), VM).expect("spec public_key accepts");
+
+        let legacy = json!({
+            "key_type": "Ed25519",
+            "public_key_multibase": "z6Mki6bBq1N3X3G3sT2xLwSPrm5Tg7EwjZwJ4oXb9qQ7z1Uu",
+        });
+        let err = validate_runtime_public_key(&legacy, VM)
+            .expect_err("legacy multibase pairing key shape must reject");
+        assert!(err.message().contains("public_key invalid"));
+    }
+
+    #[test]
+    fn agent_key_pair_rejects_missing_authorize_event() {
+        let err = validate_controller_authorize_event(
+            &Value::Null,
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+        )
+        .expect_err("missing authorize_event must fail closed");
+
+        assert!(err.message().contains("authorize_event"));
+    }
+
+    #[test]
+    fn agent_key_pair_rejects_query_only_pairing_id() {
+        let err = ensure_body_pairing_request_id_present("")
+            .expect_err("body pairing_request_id is required");
+
+        assert_eq!(err.message(), "pairing_request_id is required");
+    }
+
+    #[test]
+    fn authorize_event_binds_body_pairing_request_id() {
+        validate_controller_authorize_event(
+            &valid_authorize_event(PAIRING_REQUEST_ID),
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+        )
+        .expect("matching pairing_request_id accepts");
+
+        let err = validate_controller_authorize_event(
+            &valid_authorize_event("agent_pairing_request:wrong"),
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+        )
+        .expect_err("authorize_event pairing id mismatch must reject");
+
+        assert!(err.message().contains("pairing_request_id"));
+    }
 }

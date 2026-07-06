@@ -16,7 +16,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::error_matrix::{AgentAuthRejection, enforce_verification_method_binding};
-use super::proof::{ProofSignedFields, verify_proof_signature};
+use super::proof::{
+    ProofSignedFields, runtime_public_key_material_from_spec, verify_proof_signature,
+};
 use crate::handlers::cokret::is_allowed_session_grant_audience;
 
 /// Replay grace window appended to the proof `expires_at` (CKP-0008 §4.6:
@@ -224,11 +226,9 @@ pub async fn validate_agent_session_proof(
         request_canonical_digest: proof.request_canonical_digest.as_str(),
         verification_method,
     };
-    verify_proof_signature(
-        &authorization.public_key_multibase,
-        &signed_fields,
-        &proof.signature,
-    )?;
+    let verification_public_key =
+        runtime_public_key_material_from_spec(&authorization.public_key, verification_method)?;
+    verify_proof_signature(&verification_public_key, &signed_fields, &proof.signature)?;
 
     // Replay defense: consume the challenge exactly once. A replayed challenge
     // (or one already consumed within the grace window) fails closed.
@@ -619,6 +619,16 @@ fn intersect_requested_scope_with_agent_key_scope(
         return Err(AgentAuthRejection::ProofInvalid);
     }
 
+    if let Some(authorized_actions) = parse_agent_key_scope_actions(agent_key_scope)? {
+        for token in &normalized {
+            if !authorized_actions.contains(token) || !registered_agent_session_scope_token(token)?
+            {
+                return Err(AgentAuthRejection::ProofInvalid);
+            }
+        }
+        return Ok(normalized);
+    }
+
     if normalized
         .iter()
         .any(|token| !scope_token_allowed_by_agent_key_scope(agent_key_scope, token))
@@ -627,6 +637,43 @@ fn intersect_requested_scope_with_agent_key_scope(
     }
 
     Ok(normalized)
+}
+
+fn parse_agent_key_scope_actions(
+    agent_key_scope: &str,
+) -> Result<Option<BTreeSet<String>>, AgentAuthRejection> {
+    let trimmed = agent_key_scope.trim();
+    if !trimmed.starts_with('{') {
+        return Ok(None);
+    }
+    let value: Value =
+        serde_json::from_str(trimmed).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let actions = value
+        .get("actions")
+        .and_then(Value::as_array)
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    if actions.is_empty() {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    let mut normalized = BTreeSet::new();
+    for action in actions {
+        let Some(action) = action
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Err(AgentAuthRejection::ProofInvalid);
+        };
+        normalized.insert(action.to_owned());
+    }
+    Ok(Some(normalized))
+}
+
+fn registered_agent_session_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
+    if service_surface_scope_token(token) {
+        return Ok(true);
+    }
+    content_capability_scope_token(token)
 }
 
 fn normalize_requested_scope(scope: &[String]) -> Vec<String> {
@@ -1106,6 +1153,41 @@ mod tests {
                 "ck.self.events.command.submit".to_owned(),
             ]
         );
+    }
+
+    #[test]
+    fn spec_agent_key_scope_object_limits_requested_actions() {
+        let agent_key_scope = serde_json::json!({
+            "actions": [
+                "ck.self.events.stream.subscribe",
+                "ck.event.read"
+            ],
+            "resources": []
+        })
+        .to_string();
+
+        let scope = intersect_requested_scope_with_agent_key_scope(
+            &agent_key_scope,
+            &[
+                "ck.self.events.stream.subscribe".to_owned(),
+                "ck.event.read".to_owned(),
+            ],
+        )
+        .expect("spec agent_key_scope object should act as the runtime ceiling");
+        assert_eq!(
+            scope,
+            vec![
+                "ck.event.read".to_owned(),
+                "ck.self.events.stream.subscribe".to_owned(),
+            ]
+        );
+
+        let err = intersect_requested_scope_with_agent_key_scope(
+            &agent_key_scope,
+            &["ck.self.events.command.submit".to_owned()],
+        )
+        .expect_err("actions outside the signed agent_key_scope must reject");
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
     }
 
     #[test]

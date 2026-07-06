@@ -4,10 +4,12 @@
 //! branch (§4.6) sign over the same canonical signed-fields shape, so the
 //! verification routine lives here and is shared by both handlers.
 
+use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use cokret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::AgentAuthRejection;
 use crate::AppError;
@@ -30,20 +32,52 @@ pub(super) struct ProofSignedFields<'a> {
 /// Verify an Ed25519 PoP signature (base64url, unpadded or padded) over the
 /// canonical signed-fields bytes against a multibase Ed25519 public key.
 pub(super) fn verify_proof_signature(
-    public_key_multibase: &str,
+    verification_public_key: &str,
     signed_fields: &ProofSignedFields<'_>,
     signature_b64: &str,
 ) -> Result<(), AgentAuthRejection> {
     let message =
         canonical_json_bytes(signed_fields).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let public_key = PublicKeyMaterial::Ed25519Multibase {
-        value: public_key_multibase.to_owned(),
+        value: verification_public_key.to_owned(),
     };
     if verify_detached_ed25519_signature(&public_key, &message, signature_b64) {
         Ok(())
     } else {
         Err(AgentAuthRejection::ProofInvalid)
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct AgentRuntimePublicKey {
+    kty: String,
+    kid: String,
+    alg: String,
+    key: String,
+}
+
+/// Convert the spec `PublicKey` object accepted at pairing into the Ed25519
+/// material the detached-signature verifier consumes. This is intentionally
+/// not a legacy wire parser: only `{kty:"OKP", alg:"Ed25519"|"EdDSA",
+/// kid:<verification_method>, key:<base64url raw Ed25519>}` is accepted.
+pub(super) fn runtime_public_key_material_from_spec(
+    public_key: &Value,
+    verification_method: &str,
+) -> Result<String, AgentAuthRejection> {
+    let key: AgentRuntimePublicKey =
+        serde_json::from_value(public_key.clone()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    if key.kty != "OKP"
+        || key.kid != verification_method
+        || (key.alg != "Ed25519" && key.alg != "EdDSA")
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    let raw =
+        Base64UrlUnpadded::decode_vec(&key.key).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let raw: [u8; 32] = raw
+        .try_into()
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    Ok(cokret_core::ed25519_pubkey_to_did_key_multibase(&raw))
 }
 
 /// Compute the canonical SHA-256 digest of `value`, mapping the canonical

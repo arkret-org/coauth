@@ -134,6 +134,20 @@ pub async fn issue_session_grant_endpoint(
                     "agent_key_proof session grant requires a grant-binding DPoP proof",
                 )
             })?;
+            let body_binding = body.dpop_binding_proof.as_ref().ok_or_else(|| {
+                CokretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    ERROR_CODE_INVALID_SIGNATURE,
+                    "reason_code=proof_invalid; agent_key_proof body must carry dpop_binding_proof",
+                )
+            })?;
+            if body_binding.proof_jwt != binding.proof_jwt {
+                return Err(CokretRouteError::coded(
+                    StatusCode::UNAUTHORIZED,
+                    ERROR_CODE_INVALID_SIGNATURE,
+                    "reason_code=proof_invalid; DPoP header does not match body dpop_binding_proof",
+                ));
+            }
             issue_agent_key_proof_session_grant(req, depot, binding, &body).await
         }
         other => Err(CokretRouteError::coded(
