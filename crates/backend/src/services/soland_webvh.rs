@@ -124,13 +124,19 @@ pub async fn ensure_principal_did_minted(
     also_known_as: &[String],
     enrollment_authority_did: &str,
 ) -> Result<String, SolandWebvhError> {
-    if let Some(existing) = repo
-        .principal_did()
-        .get_for_user_and_audience(user, audience)
-        .await
-        .map_err(|e| SolandWebvhError::Storage(e.to_string()))?
     {
-        return Ok(existing.did);
+        let mut principal_did_repo = repo.principal_did();
+        principal_did_repo
+            .acquire_mint_lock(user, audience)
+            .await
+            .map_err(|e| SolandWebvhError::Storage(e.to_string()))?;
+        if let Some(existing) = principal_did_repo
+            .get_for_user_and_audience(user, audience)
+            .await
+            .map_err(|e| SolandWebvhError::Storage(e.to_string()))?
+        {
+            return Ok(existing.did);
+        }
     }
 
     let local_id = user.id.to_string().to_ascii_lowercase();

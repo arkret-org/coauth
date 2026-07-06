@@ -5,6 +5,7 @@ use coauth_data::{Clock, PrincipalDidUpdateKey, User, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
+use sha2::{Digest as _, Sha256};
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -54,6 +55,16 @@ impl From<PrincipalDidLookup> for PrincipalDidUpdateKey {
             updated_at: row.updated_at,
         }
     }
+}
+
+fn principal_did_mint_lock_id(user: &User, audience: &str) -> i64 {
+    let mut hasher = Sha256::new();
+    hasher.update(b"coauth:principal-did-mint-lock:v1");
+    hasher.update(user.id.to_string().as_bytes());
+    hasher.update([0]);
+    hasher.update(audience.as_bytes());
+    let digest = hasher.finalize();
+    i64::from_be_bytes(digest[..8].try_into().expect("sha256 digest has 32 bytes"))
 }
 
 #[derive(Insertable)]
@@ -116,6 +127,21 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
     }
 
     #[tracing::instrument(
+        name = "db.principal_did.acquire_mint_lock",
+        skip_all,
+        fields(%user.id, %user.localpart, audience = audience),
+        err,
+    )]
+    async fn acquire_mint_lock(&mut self, user: &User, audience: &str) -> Result<(), Self::Error> {
+        let lock_id = principal_did_mint_lock_id(user, audience);
+        diesel::sql_query("SELECT pg_advisory_xact_lock($1)")
+            .bind::<diesel::sql_types::BigInt, _>(lock_id)
+            .execute(self.conn)
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(
         name = "db.principal_did.add",
         skip_all,
         fields(%user.id, %user.localpart, audience = audience, principal_did.id),
@@ -150,10 +176,25 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             updated_at: created_at,
         };
 
-        diesel::insert_into(principal_did_update_keys::table)
+        let inserted = diesel::insert_into(principal_did_update_keys::table)
             .values(&new_row)
+            .on_conflict((
+                principal_did_update_keys::user_id,
+                principal_did_update_keys::audience,
+            ))
+            .do_nothing()
             .execute(self.conn)
             .await?;
+
+        if inserted == 0 {
+            let row = principal_did_update_keys::table
+                .filter(principal_did_update_keys::user_id.eq(Uuid::from(user.id)))
+                .filter(principal_did_update_keys::audience.eq(&audience))
+                .select(PrincipalDidLookup::as_select())
+                .first::<PrincipalDidLookup>(self.conn)
+                .await?;
+            return Ok(row.into());
+        }
 
         Ok(PrincipalDidUpdateKey {
             id,

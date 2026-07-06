@@ -39,10 +39,18 @@ pub trait PrincipalDidRepository: Send + Sync {
     async fn get_by_did(&mut self, did: &str)
     -> Result<Option<PrincipalDidUpdateKey>, Self::Error>;
 
-    /// Insert a freshly-minted DID. The `(user_id, audience)` unique
-    /// constraint and the `(did)` unique constraint surface conflicts as
-    /// errors — callers should pre-check via `get_for_user_and_audience` to
-    /// keep the embedded webvh `cas_conflict` semantics clean.
+    /// Acquire a transaction-scoped lock for the `(user, audience)` mint path.
+    /// Callers must take this before lookup-or-mint so only one external DID
+    /// inception can be in flight for the same account and principal server.
+    ///
+    /// # Errors
+    /// Returns [`Self::Error`] if the underlying repository fails.
+    async fn acquire_mint_lock(&mut self, user: &User, audience: &str) -> Result<(), Self::Error>;
+
+    /// Insert a freshly-minted DID. Concurrent inserts for the same
+    /// `(user_id, audience)` return the already-persisted row so lookup-or-mint
+    /// flows remain idempotent; unrelated uniqueness conflicts, such as a DID
+    /// collision, still surface as errors.
     ///
     /// # Errors
     /// Returns [`Self::Error`] if the underlying repository fails.
@@ -71,6 +79,11 @@ repository_impl!(PrincipalDidRepository:
         &mut self,
         did: &str,
     ) -> Result<Option<PrincipalDidUpdateKey>, Self::Error>;
+    async fn acquire_mint_lock(
+        &mut self,
+        user: &User,
+        audience: &str,
+    ) -> Result<(), Self::Error>;
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),
