@@ -82,9 +82,9 @@ fn did_proof_replay_window_exceeded(message: impl Into<String>) -> CokretRouteEr
 fn required_soft_logout_proof(
     body: &SessionGrantRefreshRequestBody,
 ) -> Result<&SessionGrantRefreshProof, CokretRouteError> {
-    body.proof
-        .as_ref()
-        .ok_or_else(|| did_proof_required("soft logout recovery requires a fresh DID proof"))
+    body.proof.as_ref().ok_or_else(|| {
+        did_proof_required("human soft logout recovery requires a fresh device DID proof")
+    })
 }
 
 fn required_proof_str<'a>(
@@ -340,7 +340,8 @@ async fn verify_soft_logout_did_proof(
     // NOT the principal DID document. The device signing key was authorized by a
     // `ck.device.authorize` event and projected into soland's device directory; a
     // `ck.device.revoke` masks it. Resolve the authorized, non-revoked key for
-    // this `(principal, device)` and verify the detached DID-proof JWS against it.
+    // this human `(principal, device)` and verify the detached DID-proof JWS
+    // against it. Agent runtimes use the separate `agent_key_proof` branch.
     // The directory only surfaces verified, non-revoked devices, so a resolved
     // key is itself proof the device is currently authorized.
     let resolved = resolve_authorized_device_signing_key(
@@ -431,8 +432,8 @@ async fn verify_soft_logout_did_proof(
 ///
 /// * A `DPoP` header that proves possession of the same key the existing grant is bound to
 ///   (`cnf.jkt` on the old grant must match the new proof's `jkt`).
-/// * A request body carrying the prior grant JWT, the bound `device_id`, and a fresh DID proof over
-///   the soft-logout restore transcript.
+/// * A request body carrying the prior grant JWT, the bound `device_id`, and a fresh human-device
+///   DID proof over the soft-logout restore transcript.
 ///
 /// On success the old grant is revoked (single-use semantics — its
 /// `revoked_at` is persisted) and a new grant is issued with the same

@@ -35,6 +35,16 @@ const AGENT_KEY_SCOPE_REALM: &str = "realm";
 const AGENT_KEY_SCOPE_APPLET: &str = "applet";
 pub(super) const AGENT_KEY_SCOPE_LIMITED: &str = "limited";
 
+const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
+    "ck.self.events.query.describe",
+    "ck.self.events.command.submit",
+    "ck.self.events.resource.get",
+    "ck.self.events.query.resolve",
+    "ck.self.events.query.scan",
+    "ck.self.events.stream.subscribe",
+    "ck.self.events.query.frontier",
+];
+
 /// Closed action set of the `limited` tier (CKP-0008 §4.5 baseline). Shared
 /// with `key_pair.rs`, which projects the same set into the spec-typed
 /// `agent_key_scope.actions` on the `ck.agent.key.authorize` fan-out payload.
@@ -46,6 +56,7 @@ pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
     "ck.self.events.query.scan",
     "ck.self.events.stream.subscribe",
     "ck.self.events.query.frontier",
+    "ck.event.read",
     "ck.message.create",
     "ck.reaction.add",
 ];
@@ -56,8 +67,9 @@ pub struct AgentSessionAuthorization {
     pub agent_principal_id: String,
     /// Controller DID accountable for the agent.
     pub controller_did: String,
-    /// Effective granted scope (intersection of requested scope, the authorized
-    /// key scope, active capability grants, and Realm policy).
+    /// Effective granted scope. Service-surface tokens are intersected with the
+    /// authorized key scope and policy/resource constraints; content capability
+    /// tokens are additionally intersected with active capability grants.
     pub granted_scope: Vec<String>,
     /// Materialized `scope_details` overlay baked into the session-grant JWT
     /// payload (canonical resource constraints + optional participation
@@ -322,11 +334,16 @@ pub async fn validate_agent_session_proof(
     }
 
     let mut scope_details = serde_json::json!({
-        "realm_ids": effective_scope.realm_ids,
-        "strand_ids": effective_scope.strand_ids,
+        "controller_did": &controller_did,
+        "realm_ids": &effective_scope.realm_ids,
+        "strand_ids": &effective_scope.strand_ids,
+        "resources": {
+            "realm_refs": &effective_scope.realm_ids,
+            "strand_refs": &effective_scope.strand_ids,
+        },
         "constraints": constraints,
-        "capability_grant_refs": effective_scope.capability_grant_refs,
-        "policy_refs": effective_scope.policy_refs,
+        "capability_grant_refs": &effective_scope.capability_grant_refs,
+        "policy_refs": &effective_scope.policy_refs,
     });
     if !scope_request.participation.is_empty() {
         scope_details["participation"] = serde_json::to_value(&scope_request.participation)
@@ -336,10 +353,9 @@ pub async fn validate_agent_session_proof(
     // Spec-typed wire overlay returned in `SessionGrantOutcome.scope_details`.
     // Only the four agent-only fields the spec allows
     // (`additionalProperties:false`): realm_ids / strand_ids / track_names /
-    // participation. The canonical constraint projection
-    // (allowed_tracks/data_classes/endpoints, capability_grant_refs,
-    // policy_refs) rides the JWT-internal `scope_details` above, never the
-    // wire DTO. `track_names` mirrors the materialized `allowed_tracks`.
+    // participation. The controller/resource/policy projection and canonical
+    // constraints ride the JWT-internal `scope_details` above, never the wire
+    // DTO. `track_names` mirrors the materialized `allowed_tracks`.
     let wire_realm_ids = effective_scope
         .realm_ids
         .iter()
@@ -469,12 +485,27 @@ fn intersect_agent_session_scope(
 ) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
     let key_scope =
         intersect_requested_scope_with_agent_key_scope(agent_key_scope, requested_scope)?;
-    let mut granted_scope = key_scope
-        .into_iter()
-        .filter(|token| capability_scope.actions.contains(token))
-        .collect::<Vec<_>>();
+    let mut denied_content_scope = false;
+    let mut granted_scope = Vec::new();
+    for token in key_scope {
+        if service_surface_scope_token(&token) {
+            granted_scope.push(token);
+        } else if content_capability_scope_token(&token)? {
+            if capability_scope.actions.contains(&token) {
+                granted_scope.push(token);
+            } else {
+                denied_content_scope = true;
+            }
+        } else {
+            return Err(AgentAuthRejection::ProofInvalid);
+        }
+    }
     if granted_scope.is_empty() {
-        return Err(AgentAuthRejection::CapabilityDenied);
+        return if denied_content_scope {
+            Err(AgentAuthRejection::CapabilityDenied)
+        } else {
+            Err(AgentAuthRejection::ProofInvalid)
+        };
     }
 
     if let Some(policy) = realm_policy
@@ -618,9 +649,30 @@ fn normalize_string_set(values: &[String]) -> BTreeSet<String> {
         .collect()
 }
 
+fn service_surface_scope_token(token: &str) -> bool {
+    AGENT_SERVICE_SCOPE_ACTIONS.contains(&token) || applet_service_scope_token(token)
+}
+
+fn applet_service_scope_token(token: &str) -> bool {
+    matches!(
+        token,
+        "ck.applet.query.describe"
+            | "ck.applet.resource.get"
+            | "ck.applet.command.invoke"
+            | "ck.applet.action.request"
+    )
+}
+
+fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
+    cokret_core::schema::embedded_capability_action(token)
+        .map(|descriptor| descriptor.is_some())
+        .map_err(|_| AgentAuthRejection::ProofInvalid)
+}
+
 fn realm_resource_scope_token(token: &str) -> bool {
     token.starts_with("ck.self.events.")
         || token.starts_with("ck.applet.")
+        || token.starts_with("ck.event.")
         || token.starts_with("ck.message.")
         || token.starts_with("ck.reaction.")
         || token.starts_with("ck.strand.")
@@ -979,14 +1031,7 @@ fn limited_agent_scope_token_allowed(token: &str) -> bool {
 }
 
 fn applet_agent_scope_token_allowed(token: &str) -> bool {
-    limited_agent_scope_token_allowed(token)
-        || matches!(
-            token,
-            "ck.applet.query.describe"
-                | "ck.applet.resource.get"
-                | "ck.applet.command.invoke"
-                | "ck.applet.action.request"
-        )
+    limited_agent_scope_token_allowed(token) || applet_service_scope_token(token)
 }
 
 fn realm_agent_scope_token_allowed(token: &str) -> bool {
@@ -999,14 +1044,7 @@ fn realm_agent_scope_token_allowed(token: &str) -> bool {
     }
 
     limited_agent_scope_token_allowed(token)
-        || token.starts_with("ck.message.")
-        || token.starts_with("ck.reaction.")
-        || token.starts_with("ck.strand.")
-        || token.starts_with("ck.space.")
-        || token.starts_with("ck.blob.")
-        || token.starts_with("ck.call.")
-        || token.starts_with("ck.morph.")
-        || token.starts_with("ck.relation.")
+        || content_capability_scope_token(token).unwrap_or(false)
 }
 
 fn account_agent_scope_token_allowed(token: &str) -> bool {
@@ -1017,7 +1055,7 @@ fn account_agent_scope_token_allowed(token: &str) -> bool {
         return false;
     }
 
-    token.starts_with("ck.self.events.")
+    service_surface_scope_token(token)
         || token.starts_with("ck.self.account.")
         || token.starts_with("ck.account.")
         || realm_agent_scope_token_allowed(token)
@@ -1093,6 +1131,37 @@ mod tests {
     }
 
     #[test]
+    fn realm_agent_key_scope_rejects_unknown_content_action() {
+        let err = intersect_requested_scope_with_agent_key_scope(
+            AGENT_KEY_SCOPE_REALM,
+            &["ck.message.not_registered".to_owned()],
+        )
+        .expect_err("unknown content actions must fail closed");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+    }
+
+    #[test]
+    fn legacy_events_subscribe_scope_rejects_fail_closed() {
+        let legacy_scope = format!("ck.self.events.{}", "subscribe");
+        let err = intersect_requested_scope_with_agent_key_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            std::slice::from_ref(&legacy_scope),
+        )
+        .expect_err("legacy unregistered service token must fail closed");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+
+        let err = intersect_requested_scope_with_agent_key_scope(
+            AGENT_KEY_SCOPE_ACCOUNT,
+            std::slice::from_ref(&legacy_scope),
+        )
+        .expect_err("account-tier keys must also reject the legacy service token");
+
+        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+    }
+
+    #[test]
     fn unknown_agent_key_scope_rejects_fail_closed() {
         let err = intersect_requested_scope_with_agent_key_scope(
             "delegated-root",
@@ -1150,6 +1219,131 @@ mod tests {
             vec!["ck:grant:capability"]
         );
         assert_eq!(effective_scope.policy_refs, vec!["policy:2026-06-19"]);
+    }
+
+    #[test]
+    fn stream_service_scope_is_not_filtered_by_content_grants() {
+        let mut capability_scope = capability_scope(&["ck.event.read"]);
+        capability_scope.realm_ids = Some(set(&["realm-a"]));
+
+        let mut policy_scope = policy_scope(None);
+        policy_scope.realm_ids = Some(set(&["realm-a"]));
+
+        let scope_request = AgentScopeRequestInput {
+            realm_ids: vec!["realm-a".to_owned()],
+            ..AgentScopeRequestInput::default()
+        };
+        let policy_data = serde_json::json!({});
+
+        let effective_scope = intersect_agent_session_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &[
+                "ck.self.events.stream.subscribe".to_owned(),
+                "ck.event.read".to_owned(),
+            ],
+            &scope_request,
+            &capability_scope,
+            Some(&policy_scope),
+            Some(&policy_data),
+            "did:example:agent",
+        )
+        .expect("stream service scope and read content grant should both survive");
+
+        assert_eq!(
+            effective_scope.granted_scope,
+            vec![
+                "ck.event.read".to_owned(),
+                "ck.self.events.stream.subscribe".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn stream_service_scope_survives_without_read_content_grant() {
+        let mut capability_scope = capability_scope(&["ck.reaction.add"]);
+        capability_scope.realm_ids = Some(set(&["realm-a"]));
+
+        let mut policy_scope = policy_scope(None);
+        policy_scope.realm_ids = Some(set(&["realm-a"]));
+
+        let scope_request = AgentScopeRequestInput {
+            realm_ids: vec!["realm-a".to_owned()],
+            ..AgentScopeRequestInput::default()
+        };
+        let policy_data = serde_json::json!({});
+
+        let effective_scope = intersect_agent_session_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &[
+                "ck.self.events.stream.subscribe".to_owned(),
+                "ck.event.read".to_owned(),
+            ],
+            &scope_request,
+            &capability_scope,
+            Some(&policy_scope),
+            Some(&policy_data),
+            "did:example:agent",
+        )
+        .expect("service-surface access must not depend on content read grants");
+
+        assert_eq!(
+            effective_scope.granted_scope,
+            vec!["ck.self.events.stream.subscribe"]
+        );
+    }
+
+    #[test]
+    fn submit_service_scope_survives_without_message_create_content_grant() {
+        let mut capability_scope = capability_scope(&["ck.event.read"]);
+        capability_scope.realm_ids = Some(set(&["realm-a"]));
+
+        let mut policy_scope = policy_scope(None);
+        policy_scope.realm_ids = Some(set(&["realm-a"]));
+
+        let scope_request = AgentScopeRequestInput {
+            realm_ids: vec!["realm-a".to_owned()],
+            ..AgentScopeRequestInput::default()
+        };
+        let policy_data = serde_json::json!({});
+
+        let effective_scope = intersect_agent_session_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &[
+                "ck.self.events.command.submit".to_owned(),
+                "ck.message.create".to_owned(),
+            ],
+            &scope_request,
+            &capability_scope,
+            Some(&policy_scope),
+            Some(&policy_data),
+            "did:example:agent",
+        )
+        .expect("submit service scope should survive without message.create content grant");
+
+        assert_eq!(
+            effective_scope.granted_scope,
+            vec!["ck.self.events.command.submit"]
+        );
+    }
+
+    #[test]
+    fn content_only_scope_without_capability_grant_rejects_fail_closed() {
+        let capability_scope = capability_scope(&["ck.event.read"]);
+        let scope_request = AgentScopeRequestInput::default();
+        let policy_data = serde_json::json!({});
+
+        let err = intersect_agent_session_scope(
+            AGENT_KEY_SCOPE_LIMITED,
+            &["ck.message.create".to_owned()],
+            &scope_request,
+            &capability_scope,
+            None,
+            Some(&policy_data),
+            "did:example:agent",
+        )
+        .expect_err("content action without matching capability grant must fail closed");
+
+        assert_eq!(err, AgentAuthRejection::CapabilityDenied);
     }
 
     #[test]
