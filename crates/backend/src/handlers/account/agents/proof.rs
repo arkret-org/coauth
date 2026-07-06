@@ -8,7 +8,7 @@ use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use cokret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 
 use super::AgentAuthRejection;
@@ -48,14 +48,6 @@ pub(super) fn verify_proof_signature(
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct AgentRuntimePublicKey {
-    kty: String,
-    kid: String,
-    alg: String,
-    key: String,
-}
-
 /// Convert the spec `PublicKey` object accepted at pairing into the Ed25519
 /// material the detached-signature verifier consumes. This is intentionally
 /// not a legacy wire parser: only `{kty:"OKP", alg:"Ed25519"|"EdDSA",
@@ -64,7 +56,7 @@ pub(super) fn runtime_public_key_material_from_spec(
     public_key: &Value,
     verification_method: &str,
 ) -> Result<String, AgentAuthRejection> {
-    let key: AgentRuntimePublicKey =
+    let key: cokret_core::PublicKey =
         serde_json::from_value(public_key.clone()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     if key.kty != "OKP"
         || key.kid != verification_method

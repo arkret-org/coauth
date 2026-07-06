@@ -36,15 +36,6 @@ const AGENT_KEY_AUTHORIZE_FANOUT_QUEUE: &str = "soland-agent-key-authorize-fanou
 /// `ck.agent.key.authorize` event.
 const AGENT_KEY_AUTHORIZE_FANOUT_KIND: &str = "org.cokret.coauth.agent_key_authorize.fanout.v1";
 
-/// Ed25519 public key submitted at pairing (CKP-0008 §4.5 `public_key`).
-#[derive(Debug, Clone, Deserialize)]
-struct AgentPublicKeyInput {
-    kty: String,
-    kid: String,
-    alg: String,
-    key: String,
-}
-
 #[derive(Debug)]
 struct ValidatedRuntimePublicKey {
     public_key: Value,
@@ -323,7 +314,7 @@ fn validate_runtime_public_key(
     public_key: &Value,
     verification_method: &str,
 ) -> Result<ValidatedRuntimePublicKey, AppError> {
-    let key: AgentPublicKeyInput = serde_json::from_value(public_key.clone())
+    let key: cokret_core::PublicKey = serde_json::from_value(public_key.clone())
         .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
     if key.kty != "OKP" {
         return Err(AppError::bad_request("public_key.kty must be OKP"));
