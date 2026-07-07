@@ -9,10 +9,12 @@
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
-use coauth_data::RepositoryAccess;
 use coauth_data::accountability::{AccountabilityGrantFanoutState, AccountabilitySubjectKind};
 use coauth_data::agent_key::NewAgentKeyAuthorization;
 use coauth_data::audit::AdminOperation;
+use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder};
+use coauth_keystore::Keystore;
+use cokret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use salvo::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
@@ -22,8 +24,11 @@ use super::proof::{ProofSignedFields, canonical_digest, verify_proof_signature};
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
-use crate::handlers::cokret::{is_allowed_session_grant_audience, service_did_for};
+use crate::handlers::cokret::{
+    VerificationMethod, is_allowed_session_grant_audience, service_did_for,
+};
 use crate::services::did_binding_proof::normalize_did_for_binding;
+use crate::services::did_resolver::DidResolverService;
 use crate::{AppError, CreatedJsonResult};
 
 /// CKP-0008 §4.5 baseline runtime attestation kind. v1 only accepts
@@ -35,6 +40,11 @@ const AGENT_KEY_AUTHORIZE_FANOUT_QUEUE: &str = "soland-agent-key-authorize-fanou
 /// Internal coauth→soland fan-out envelope kind wrapping the controller-signed
 /// `ck.agent.key.authorize` event.
 const AGENT_KEY_AUTHORIZE_FANOUT_KIND: &str = "org.cokret.coauth.agent_key_authorize.fanout.v1";
+
+/// CKP-0008 agent runtime authorizations are short-lived; session grants minted
+/// from them are capped at 15 minutes, so the root key authorization uses the
+/// same hard ceiling rather than accepting effectively permanent keys.
+const AGENT_KEY_AUTHORIZATION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
 
 #[derive(Debug)]
 struct ValidatedRuntimePublicKey {
@@ -76,6 +86,9 @@ pub async fn post_agent_key_pair(
 ) -> CreatedJsonResult<cokret_core::AgentKeyPairOutcome> {
     let url_builder = depot.url_builder()?;
     let cokret_config = depot.cokret_config()?;
+    let http_client = depot.http_client()?;
+    let key_store = depot.key_store()?;
+    let did_resolver = depot.did_resolver_service()?;
 
     let body: cokret_core::AgentKeyPairRequestBody = req
         .parse_json()
@@ -165,7 +178,6 @@ pub async fn post_agent_key_pair(
     )
     .map_err(AgentAuthRejection::into_app_error)?;
 
-    let mut rng = make_rng();
     let mut repo = depot.repo().await?;
 
     let runtime_public_key_digest =
@@ -177,7 +189,24 @@ pub async fn post_agent_key_pair(
         &runtime_public_key_digest,
         &body.pairing_request_id,
         &pop.audience,
+        now,
     )?;
+
+    if let Err(error) = verify_authorize_event_controller_signature(
+        &body.authorize_event,
+        &authorize_event.controller_did,
+        &http_client,
+        &url_builder,
+        &cokret_config,
+        &key_store,
+        &mut repo,
+        did_resolver.as_ref(),
+    )
+    .await
+    {
+        repo.cancel().await.ok();
+        return Err(error);
+    }
 
     let accountable_grants = repo
         .accountability_grant()
@@ -195,6 +224,7 @@ pub async fn post_agent_key_pair(
         return Err(AgentAuthRejection::AccountabilityGrantMissing.into_app_error());
     };
 
+    let mut rng = make_rng();
     let key_id = authorize_event.key_id.clone();
     let authorized_event_id = authorize_event.event_id.clone();
     let issued_at = authorize_event.issued_at;
@@ -357,6 +387,7 @@ fn validate_controller_authorize_event<'a>(
     runtime_public_key_digest: &str,
     pairing_request_id: &str,
     audience: &str,
+    now: DateTime<Utc>,
 ) -> Result<ValidatedAuthorizeEvent<'a>, AppError> {
     if !envelope.is_object() {
         return Err(AppError::bad_request(
@@ -450,8 +481,17 @@ fn validate_controller_authorize_event<'a>(
         .ok_or_else(|| {
             AppError::bad_request("authorize_event.payload.expires_at must be rfc3339")
         })?;
-    if expires_at <= Utc::now() {
+    if expires_at <= now {
         return Err(AgentAuthRejection::PairingRequestExpired.into_app_error());
+    }
+    let authorization_lifetime = expires_at.signed_duration_since(issued_at);
+    if authorization_lifetime <= chrono::Duration::zero()
+        || authorization_lifetime > AGENT_KEY_AUTHORIZATION_MAX_TTL
+    {
+        return Err(AppError::bad_request(format!(
+            "authorize_event.payload.expires_at must be after issued_at and within {} seconds",
+            AGENT_KEY_AUTHORIZATION_MAX_TTL.num_seconds()
+        )));
     }
     let approval = payload.get("approval_evidence").ok_or_else(|| {
         AppError::bad_request("authorize_event.payload.approval_evidence is required")
@@ -526,6 +566,107 @@ fn ensure_authorize_event_has_controller_signature(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn verify_authorize_event_controller_signature(
+    envelope: &Value,
+    controller_did: &str,
+    http_client: &reqwest::Client,
+    url_builder: &UrlBuilder,
+    cokret_config: &CokretConfig,
+    key_store: &Keystore,
+    repo: &mut BoxRepository,
+    did_resolver: &dyn DidResolverService,
+) -> Result<(), AppError> {
+    let resolution = did_resolver
+        .resolve_did_document(
+            http_client,
+            url_builder,
+            cokret_config,
+            key_store,
+            repo,
+            controller_did,
+        )
+        .await
+        .map_err(|error| {
+            AppError::unauthorized(format!(
+                "proof_invalid: authorize_event controller DID could not be resolved: {error}"
+            ))
+        })?;
+    if let Some(rejection) = resolution.identity_fact_rejection() {
+        return Err(AppError::unauthorized(format!(
+            "proof_invalid: authorize_event controller DID resolution is degraded: {}",
+            rejection.as_str()
+        )));
+    }
+    verify_authorize_event_controller_signature_with_methods(
+        envelope,
+        controller_did,
+        &resolution.document.verification_method,
+    )
+}
+
+fn verify_authorize_event_controller_signature_with_methods(
+    envelope: &Value,
+    controller_did: &str,
+    verification_methods: &[VerificationMethod],
+) -> Result<(), AppError> {
+    let event: cokret_core::Event = serde_json::from_value(envelope.clone()).map_err(|error| {
+        AppError::bad_request(format!(
+            "authorize_event must be a complete signed Event envelope: {error}"
+        ))
+    })?;
+    if event.actor_id.as_str() != controller_did {
+        return Err(AppError::bad_request(
+            "authorize_event.actor_id must match the resolved controller DID",
+        ));
+    }
+    event.validate_proof_bindings().map_err(|error| {
+        AppError::bad_request(format!("authorize_event proof binding invalid: {error}"))
+    })?;
+    let digest_payload = event.digest_payload().map_err(|error| {
+        AppError::bad_request(format!(
+            "authorize_event digest payload could not be built: {error}"
+        ))
+    })?;
+    let canonical_bytes =
+        cokret_core::canonical::canonical_json_bytes(&digest_payload).map_err(|error| {
+            AppError::bad_request(format!(
+                "authorize_event canonical payload could not be encoded: {error}"
+            ))
+        })?;
+
+    let mut saw_controller_proof = false;
+    for proof in &event.proofs {
+        if verification_method_controller(&proof.verification_method) != controller_did {
+            continue;
+        }
+        saw_controller_proof = true;
+        let Some(method) = verification_methods
+            .iter()
+            .find(|method| method.id == proof.verification_method)
+        else {
+            continue;
+        };
+        let jwk_value = serde_json::to_value(&method.public_key_jwk).map_err(|error| {
+            AppError::bad_request(format!("authorize_event controller JWK invalid: {error}"))
+        })?;
+        let public_key = PublicKeyMaterial::Jwk { value: jwk_value };
+        if verify_eddsa_detached_jws_proof(proof, &canonical_bytes, &event.actor_id, &public_key)
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    if saw_controller_proof {
+        Err(AgentAuthRejection::ProofInvalid.into_app_error())
+    } else {
+        Err(AppError::bad_request(
+            "authorize_event proof verification_method must be controlled by actor_id",
+        ))
+    }
+}
+
 fn verification_method_controller(verification_method: &str) -> &str {
     verification_method
         .split('#')
@@ -590,6 +731,7 @@ fn build_agent_key_authorize_fanout_payload(
 #[cfg(test)]
 mod tests {
     use base64ct::{Base64UrlUnpadded, Encoding as _};
+    use chrono::DateTime;
     use serde_json::json;
 
     use super::*;
@@ -611,6 +753,12 @@ mod tests {
         })
     }
 
+    fn test_now() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-07-06T00:05:00Z")
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
     fn valid_authorize_event(pairing_request_id: &str) -> Value {
         json!({
             "event_id": "ck:event:01999999-0000-7000-8000-000000000001",
@@ -619,7 +767,7 @@ mod tests {
             "actor_id": CONTROLLER,
             "actor_seq": 1,
             "created_at": "2026-07-06T00:00:00Z",
-            "hlc": "019999990000-0000-000000000000",
+            "hlc": "01970e589d21-0001-a13f9c2e",
             "prev_refs": [],
             "payload": {
                 "agent_principal_id": AGENT,
@@ -636,7 +784,7 @@ mod tests {
                 },
                 "audience": [AUDIENCE],
                 "issued_at": "2026-07-06T00:00:00Z",
-                "expires_at": "2999-01-01T00:00:00Z",
+                "expires_at": "2026-07-06T00:10:00Z",
                 "approval_evidence": {
                     "kind": "approval_event",
                     "ref": "ck:event:01999999-0000-7000-8000-000000000099",
@@ -675,6 +823,7 @@ mod tests {
             PUBLIC_KEY_DIGEST,
             PAIRING_REQUEST_ID,
             AUDIENCE,
+            test_now(),
         )
         .expect_err("missing authorize_event must fail closed");
 
@@ -698,6 +847,7 @@ mod tests {
             PUBLIC_KEY_DIGEST,
             PAIRING_REQUEST_ID,
             AUDIENCE,
+            test_now(),
         )
         .expect("matching pairing_request_id accepts");
 
@@ -708,9 +858,74 @@ mod tests {
             PUBLIC_KEY_DIGEST,
             PAIRING_REQUEST_ID,
             AUDIENCE,
+            test_now(),
         )
         .expect_err("authorize_event pairing id mismatch must reject");
 
         assert!(err.message().contains("pairing_request_id"));
+    }
+
+    #[test]
+    fn authorize_event_rejects_unbounded_authorization_lifetime() {
+        let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
+        event["payload"]["expires_at"] = json!("2026-07-06T00:16:00Z");
+
+        let err = validate_controller_authorize_event(
+            &event,
+            AGENT,
+            VM,
+            PUBLIC_KEY_DIGEST,
+            PAIRING_REQUEST_ID,
+            AUDIENCE,
+            test_now(),
+        )
+        .expect_err("agent key authorization lifetime must be bounded");
+
+        assert!(err.message().contains("within 900 seconds"));
+    }
+
+    #[test]
+    fn authorize_event_rejects_fake_controller_jws() {
+        let event = full_fake_signed_authorize_event();
+        let method = controller_verification_method();
+
+        let err = verify_authorize_event_controller_signature_with_methods(
+            &event,
+            CONTROLLER,
+            std::slice::from_ref(&method),
+        )
+        .expect_err("fake detached JWS must fail closed");
+
+        assert_eq!(err.status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    fn full_fake_signed_authorize_event() -> Value {
+        let mut event = valid_authorize_event(PAIRING_REQUEST_ID);
+        event["proofs"] = json!([{
+            "kind": "detached_jws",
+            "alg": "EdDSA",
+            "verification_method": "did:web:controller.example#key-1",
+            "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "created_at": "2026-07-06T00:01:00Z",
+            "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
+        }]);
+        let parsed: cokret_core::Event = serde_json::from_value(event.clone()).unwrap();
+        event["proofs"][0]["event_digest"] = json!(parsed.event_digest().unwrap());
+        event
+    }
+
+    fn controller_verification_method() -> VerificationMethod {
+        let x = Base64UrlUnpadded::encode_string(&[7u8; 32]);
+        VerificationMethod {
+            id: "did:web:controller.example#key-1".to_owned(),
+            kind: "JsonWebKey2020".to_owned(),
+            controller: CONTROLLER.to_owned(),
+            public_key_jwk: serde_json::from_value(json!({
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": x,
+            }))
+            .unwrap(),
+        }
     }
 }
