@@ -215,10 +215,9 @@ pub async fn post_agent_key_pair(
             &agent_principal_id,
         )
         .await?;
-    if accountable_grants
-        .into_iter()
-        .find(|grant| grant.controller_did == authorize_event.controller_did)
-        .is_none()
+    if !accountable_grants
+        .iter()
+        .any(|grant| grant.controller_did == authorize_event.controller_did)
     {
         repo.cancel().await.ok();
         return Err(AgentAuthRejection::AccountabilityGrantMissing.into_app_error());
