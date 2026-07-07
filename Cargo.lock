@@ -1460,6 +1460,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sha2 0.10.9",
+ "soland-core",
  "subtle",
  "thiserror 2.0.18",
  "tokio",
@@ -1664,7 +1665,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "serde_json",
+ "soland-core",
  "tokio",
 ]
 

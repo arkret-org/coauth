@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use coauth_data::RepositoryAccess;
 use coauth_data::audit::AdminOperation;
+use coauth_data::{PolicyDataDocument, RepositoryAccess};
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -61,7 +61,7 @@ fn data_example() -> serde_json::Value {
 #[serde(rename = "SetPolicyDataRequestBody")]
 pub struct SetPolicyDataRequestBody {
     #[schemars(example = data_example())]
-    pub data: serde_json::Value,
+    pub data: PolicyDataDocument,
 }
 
 /// Store a new policy data snapshot, replacing the active policy in memory.
@@ -141,7 +141,7 @@ mod tests {
             .set(
                 &mut rng,
                 &state.clock,
-                serde_json::json!({"hello": "world"}),
+                serde_json::json!({"hello": "world"}).into(),
             )
             .await
             .unwrap();
@@ -218,7 +218,7 @@ mod tests {
             .set(
                 &mut rng,
                 &state.clock,
-                serde_json::json!({"hello": "world"}),
+                serde_json::json!({"hello": "world"}).into(),
             )
             .await
             .unwrap();

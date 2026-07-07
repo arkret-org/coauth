@@ -4,7 +4,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::policy_data::PolicyDataRepository;
-use coauth_data::{Clock, PolicyData, new_id};
+use coauth_data::{Clock, PolicyData, PolicyDataDocument, new_id};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
@@ -42,7 +42,7 @@ impl From<PolicyDataRow> for PolicyData {
         PolicyData {
             id: value.id.into(),
             created_at: value.created_at,
-            data: value.data,
+            data: PolicyDataDocument::from_json(value.data),
         }
     }
 }
@@ -77,7 +77,7 @@ impl PolicyDataRepository for PgPolicyDataRepository<'_> {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        data: Value,
+        data: PolicyDataDocument,
     ) -> Result<PolicyData, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
@@ -85,7 +85,7 @@ impl PolicyDataRepository for PgPolicyDataRepository<'_> {
         let new_row = NewPolicyData {
             id: Uuid::from(id),
             created_at,
-            data: data.clone(),
+            data: data.as_json().clone(),
         };
 
         diesel::insert_into(policy_data::table)
@@ -157,10 +157,10 @@ mod tests {
         let value1 = json!({"hello": "world"});
         let policy_data1 = repo
             .policy_data()
-            .set(&mut rng, &clock, value1.clone())
+            .set(&mut rng, &clock, value1.clone().into())
             .await
             .unwrap();
-        assert_eq!(policy_data1.data, value1);
+        assert_eq!(policy_data1.data.as_json(), &value1);
 
         let data_fetched1 = repo.policy_data().get().await.unwrap().unwrap();
         assert_eq!(policy_data1, data_fetched1);
@@ -170,10 +170,10 @@ mod tests {
         let value2 = json!({"foo": "bar"});
         let policy_data2 = repo
             .policy_data()
-            .set(&mut rng, &clock, value2.clone())
+            .set(&mut rng, &clock, value2.clone().into())
             .await
             .unwrap();
-        assert_eq!(policy_data2.data, value2);
+        assert_eq!(policy_data2.data.as_json(), &value2);
 
         // Check the new data is fetched
         let data_fetched2 = repo.policy_data().get().await.unwrap().unwrap();

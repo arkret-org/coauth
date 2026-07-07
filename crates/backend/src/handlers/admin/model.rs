@@ -7,6 +7,7 @@ use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
 pub use coauth_admin_types::Resource;
+use coauth_data::PolicyDataDocument;
 use coauth_data::personal::PersonalAccessToken as DataModelPersonalAccessToken;
 use coauth_data::personal::session::{
     PersonalSession as DataModelPersonalSession, PersonalSessionOwner,
@@ -242,7 +243,7 @@ pub struct PolicyData {
     created_at: DateTime<Utc>,
 
     /// The policy data content
-    data: serde_json::Value,
+    data: PolicyDataDocument,
 }
 
 impl From<coauth_data::PolicyData> for PolicyData {

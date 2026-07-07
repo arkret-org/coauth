@@ -58,3 +58,4 @@ ulid = {workspace = true}
 url = {workspace = true}
 uuid = {workspace = true}
 woothee = {workspace = true}
+soland-core = {workspace = true}

@@ -1,7 +1,7 @@
 //! Policy dry-run and decision-audit contract endpoints.
 
-use coauth_data::RepositoryAccess;
 use coauth_data::audit::{AdminOperation, NewAdminOperationLog};
+use coauth_data::{PolicyDataDocument, RepositoryAccess};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -213,9 +213,10 @@ impl PolicyDryRunRequestBody {
 
 fn evaluate_policy_dry_run(
     request: &NormalizedPolicyDryRunRequestBody,
-    policy_data: Option<&serde_json::Value>,
+    policy_data: Option<&PolicyDataDocument>,
 ) -> PolicyDryRunDecision {
     let matching_rule = policy_data
+        .map(PolicyDataDocument::as_json)
         .and_then(policy_rules)
         .and_then(|rules| rules.iter().find(|rule| rule_matches(rule, request)));
 
@@ -259,10 +260,12 @@ fn evaluate_policy_dry_run(
     PolicyDryRunDecision {
         effect,
         policy_id: policy_data
+            .map(PolicyDataDocument::as_json)
             .and_then(|data| data.get("policy_id").or_else(|| data.get("id")))
             .and_then(|v| v.as_str())
             .map(ToOwned::to_owned),
         policy_version: policy_data
+            .map(PolicyDataDocument::as_json)
             .and_then(|data| data.get("policy_version").or_else(|| data.get("version")))
             .and_then(|v| v.as_str())
             .map(ToOwned::to_owned),
@@ -363,7 +366,8 @@ mod tests {
             }]
         });
 
-        let decision = evaluate_policy_dry_run(&request, Some(&data));
+        let policy_data = PolicyDataDocument::from_json(data);
+        let decision = evaluate_policy_dry_run(&request, Some(&policy_data));
 
         assert!(matches!(decision.effect, PolicyEffect::Deny));
         assert_eq!(decision.policy_id.as_deref(), Some("policy.demo"));
@@ -422,7 +426,8 @@ mod tests {
                         "policy_version": "v1",
                         "reason": "blocked in test"
                     }]
-                }),
+                })
+                .into(),
             )
             .await
             .unwrap();

@@ -317,7 +317,7 @@ fn build_grant_fanout_payload(
     service_did: &str,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
-) -> Result<Value, AppError> {
+) -> Result<CapabilityFanoutBody, AppError> {
     let mut grant = json!({
         "id": capability_grant_id,
         "schema": "ck.schema.capability.v1",
@@ -355,7 +355,7 @@ fn build_grant_fanout_payload(
     let mut signed_grant = unsigned_payload["grant"].clone();
     signed_grant["proofs"] = json!([proof]);
 
-    let body = CapabilityFanoutBody {
+    Ok(CapabilityFanoutBody {
         kind: CAPABILITY_FANOUT_KIND.to_owned(),
         operation: "grant".to_owned(),
         issuer_service_did: service_did.to_owned(),
@@ -367,8 +367,7 @@ fn build_grant_fanout_payload(
             "grant": signed_grant,
         }),
         principal_servers: principal_servers(cokret_config),
-    };
-    serde_json::to_value(&body).map_err(AppError::internal)
+    })
 }
 
 fn build_revoke_fanout_payload(
@@ -379,7 +378,7 @@ fn build_revoke_fanout_payload(
     service_did: &str,
     cokret_config: &CokretConfig,
     key_store: &Keystore,
-) -> Result<Value, AppError> {
+) -> Result<CapabilityFanoutBody, AppError> {
     let mut revoke_payload = json!({
         "grant_id": capability_grant_id,
         "realm_id": realm_id,
@@ -396,7 +395,7 @@ fn build_revoke_fanout_payload(
     )?;
     revoke_payload["proofs"] = json!([proof]);
 
-    let body = CapabilityFanoutBody {
+    Ok(CapabilityFanoutBody {
         kind: CAPABILITY_FANOUT_KIND.to_owned(),
         operation: "revoke".to_owned(),
         issuer_service_did: service_did.to_owned(),
@@ -405,8 +404,7 @@ fn build_revoke_fanout_payload(
         capability_grant_id: capability_grant_id.to_owned(),
         payload: revoke_payload,
         principal_servers: principal_servers(cokret_config),
-    };
-    serde_json::to_value(&body).map_err(AppError::internal)
+    })
 }
 
 fn sign_fanout_proof(
@@ -582,24 +580,15 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(payload["event_kind"], "ck.capability.grant");
+        assert_eq!(payload.event_kind, "ck.capability.grant");
         assert_eq!(
-            payload["payload"]["grant_id"],
+            payload.payload["grant_id"],
             "ck:grant:01904100-0000-7000-8000-000000000010"
         );
-        assert_eq!(
-            payload["payload"]["grant"]["issuer"],
-            "did:web:coauth.example"
-        );
-        assert_eq!(
-            payload["payload"]["grant"]["actions"],
-            json!(["ck.pin.add"])
-        );
-        assert_eq!(
-            payload["principal_servers"][0]["did"],
-            "did:web:soland.test"
-        );
-        let proof = &payload["payload"]["grant"]["proofs"][0];
+        assert_eq!(payload.payload["grant"]["issuer"], "did:web:coauth.example");
+        assert_eq!(payload.payload["grant"]["actions"], json!(["ck.pin.add"]));
+        assert_eq!(payload.principal_servers[0]["did"], "did:web:soland.test");
+        let proof = &payload.payload["grant"]["proofs"][0];
         assert_eq!(proof["alg"], "EdDSA");
         assert_eq!(
             proof["verification_method"],
@@ -630,16 +619,16 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(payload["event_kind"], "ck.capability.revoke");
+        assert_eq!(payload.event_kind, "ck.capability.revoke");
         assert_eq!(
-            payload["payload"]["grant_id"],
+            payload.payload["grant_id"],
             "ck:grant:01904100-0000-7000-8000-000000000010"
         );
         assert_eq!(
-            payload["payload"]["realm_id"],
+            payload.payload["realm_id"],
             "ck:realm:01904100-0000-7000-8000-000000000001"
         );
-        let proof = &payload["payload"]["proofs"][0];
+        let proof = &payload.payload["proofs"][0];
         assert_eq!(proof["alg"], "EdDSA");
         assert_ne!(proof["jws"], "queued-for-service-signature");
         assert!(proof["jws"].as_str().unwrap().contains(".."));

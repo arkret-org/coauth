@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use coauth_data::queue::{
     CollaborationCapabilityFanoutJob, CollaborationCapabilityFanoutOperation,
 };
-use coauth_principal::{PrincipalCapabilityFanoutOperation, PrincipalCapabilityFanoutRequest};
+use coauth_principal::PrincipalCapabilityFanoutRequest;
 use cokret_core::canonical::canonical_sha256;
 
 use crate::State;
@@ -22,7 +22,7 @@ impl RunnableJob for CollaborationCapabilityFanoutJob {
         skip_all,
     )]
     async fn run(&self, state: &State, _ctx: JobContext) -> Result<(), JobError> {
-        let computed_digest = canonical_sha256(self.payload()).map_err(JobError::fail)?;
+        let computed_digest = canonical_sha256(self.body()).map_err(JobError::fail)?;
         if computed_digest != self.raw_payload_digest() {
             return Err(JobError::fail(anyhow::anyhow!(
                 "collaboration capability fanout payload digest mismatch: expected {}, got {}",
@@ -31,21 +31,21 @@ impl RunnableJob for CollaborationCapabilityFanoutJob {
             )));
         }
 
-        let operation = match self.operation() {
-            CollaborationCapabilityFanoutOperation::Grant => {
-                PrincipalCapabilityFanoutOperation::Grant
-            }
-            CollaborationCapabilityFanoutOperation::Revoke => {
-                PrincipalCapabilityFanoutOperation::Revoke
-            }
+        let expected_operation = match self.operation() {
+            CollaborationCapabilityFanoutOperation::Grant => "grant",
+            CollaborationCapabilityFanoutOperation::Revoke => "revoke",
         };
+        if self.body().operation != expected_operation {
+            return Err(JobError::fail(anyhow::anyhow!(
+                "collaboration capability fanout operation mismatch: expected {}, got {}",
+                expected_operation,
+                self.body().operation
+            )));
+        }
         let request = PrincipalCapabilityFanoutRequest::new(
-            operation,
             self.idempotency_key().to_owned(),
-            self.capability_grant_id().to_owned(),
-            self.event_id().to_owned(),
             self.raw_payload_digest().to_owned(),
-            self.payload().clone(),
+            self.body().clone(),
         );
 
         state

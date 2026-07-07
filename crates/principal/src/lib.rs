@@ -7,7 +7,7 @@ pub mod registry;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use serde_json::Value;
+use soland_core::capability_fanout::CapabilityFanoutBody;
 
 pub use self::registry::ConnectorRegistry;
 
@@ -206,64 +206,34 @@ impl ConnectorProvisionRequest {
     }
 }
 
-/// Operation for materializing a collaboration capability grant/revoke on a
-/// downstream principal system.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrincipalCapabilityFanoutOperation {
-    /// Materialize a standard `ck.capability.grant` event.
-    Grant,
-    /// Materialize a standard `ck.capability.revoke` event.
-    Revoke,
-}
-
-impl PrincipalCapabilityFanoutOperation {
-    /// Wire value used in downstream audit metadata.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Grant => "grant",
-            Self::Revoke => "revoke",
-        }
-    }
-}
-
 /// Request to submit a collaboration capability grant/revoke fan-out payload to
 /// the configured principal system.
 #[derive(Debug, Clone)]
 pub struct PrincipalCapabilityFanoutRequest {
-    operation: PrincipalCapabilityFanoutOperation,
     idempotency_key: String,
-    capability_grant_id: String,
-    event_id: String,
     raw_payload_digest: String,
-    payload: Value,
+    body: CapabilityFanoutBody,
 }
 
 impl PrincipalCapabilityFanoutRequest {
     /// Create a new collaboration capability fan-out request.
     #[must_use]
     pub fn new(
-        operation: PrincipalCapabilityFanoutOperation,
         idempotency_key: String,
-        capability_grant_id: String,
-        event_id: String,
         raw_payload_digest: String,
-        payload: Value,
+        body: CapabilityFanoutBody,
     ) -> Self {
         Self {
-            operation,
             idempotency_key,
-            capability_grant_id,
-            event_id,
             raw_payload_digest,
-            payload,
+            body,
         }
     }
 
-    /// Fan-out operation.
+    /// Fan-out operation wire value (`grant` / `revoke`).
     #[must_use]
-    pub const fn operation(&self) -> PrincipalCapabilityFanoutOperation {
-        self.operation
+    pub fn operation(&self) -> &str {
+        self.body.operation.as_str()
     }
 
     /// Idempotency key for downstream delivery.
@@ -275,25 +245,25 @@ impl PrincipalCapabilityFanoutRequest {
     /// Standard capability grant id.
     #[must_use]
     pub fn capability_grant_id(&self) -> &str {
-        &self.capability_grant_id
+        self.body.capability_grant_id.as_str()
     }
 
     /// Standard capability grant/revoke event id.
     #[must_use]
     pub fn event_id(&self) -> &str {
-        &self.event_id
+        self.body.event_id.as_str()
     }
 
-    /// Canonical digest of [`Self::payload`].
+    /// Canonical digest of [`Self::body`].
     #[must_use]
     pub fn raw_payload_digest(&self) -> &str {
         &self.raw_payload_digest
     }
 
-    /// Fan-out payload to submit.
+    /// Fan-out body to submit.
     #[must_use]
-    pub fn payload(&self) -> &Value {
-        &self.payload
+    pub fn body(&self) -> &CapabilityFanoutBody {
+        &self.body
     }
 }
 
