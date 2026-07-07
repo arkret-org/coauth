@@ -1,7 +1,7 @@
 //! Repositories to interact with the policy data saved in the storage backend.
 
 use async_trait::async_trait;
-use coauth_data::{Clock, PolicyData};
+use coauth_data::{Clock, PolicyData, PolicyDataDocument};
 use rand_core::RngCore;
 
 use crate::repository_impl;
@@ -40,7 +40,7 @@ pub trait PolicyDataRepository: Send + Sync {
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        data: serde_json::Value,
+        data: PolicyDataDocument,
     ) -> Result<PolicyData, Self::Error>;
 
     /// Prune old policy data
@@ -64,7 +64,7 @@ repository_impl!(PolicyDataRepository:
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        data: serde_json::Value,
+        data: PolicyDataDocument,
     ) -> Result<PolicyData, Self::Error>;
 
     async fn prune(&mut self, keep: usize) -> Result<usize, Self::Error>;

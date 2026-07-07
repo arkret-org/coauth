@@ -168,7 +168,7 @@ pub use self::organization_control::{
     OrganizationPrincipalControl, PRINCIPAL_CONTROL_REALM_BOOTSTRAP_PURPOSE,
 };
 pub(crate) use self::pg::DatabaseInconsistencyError;
-pub use self::policy_data::PolicyData;
+pub use self::policy_data::{PolicyData, PolicyDataDocument};
 pub use self::post_auth_action::{AccountAction, PostAuthAction};
 pub use self::site_config::{
     CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,

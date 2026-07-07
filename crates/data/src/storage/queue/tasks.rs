@@ -4,7 +4,7 @@ use coauth_data::{
     UserRecoverySession,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use soland_core::capability_fanout::CapabilityFanoutBody;
 use ulid::Ulid;
 
 use super::InsertableJob;
@@ -232,7 +232,7 @@ pub struct CollaborationCapabilityFanoutJob {
     capability_grant_id: String,
     event_id: String,
     raw_payload_digest: String,
-    payload: Value,
+    body: CapabilityFanoutBody,
 }
 
 impl CollaborationCapabilityFanoutJob {
@@ -243,7 +243,7 @@ impl CollaborationCapabilityFanoutJob {
         capability_grant_id: String,
         grant_event_id: String,
         raw_payload_digest: String,
-        payload: Value,
+        body: CapabilityFanoutBody,
     ) -> Self {
         Self {
             operation: CollaborationCapabilityFanoutOperation::Grant,
@@ -251,7 +251,7 @@ impl CollaborationCapabilityFanoutJob {
             capability_grant_id,
             event_id: grant_event_id,
             raw_payload_digest,
-            payload,
+            body,
         }
     }
 
@@ -262,7 +262,7 @@ impl CollaborationCapabilityFanoutJob {
         capability_grant_id: String,
         revoke_event_id: String,
         raw_payload_digest: String,
-        payload: Value,
+        body: CapabilityFanoutBody,
     ) -> Self {
         Self {
             operation: CollaborationCapabilityFanoutOperation::Revoke,
@@ -270,7 +270,7 @@ impl CollaborationCapabilityFanoutJob {
             capability_grant_id,
             event_id: revoke_event_id,
             raw_payload_digest,
-            payload,
+            body,
         }
     }
 
@@ -298,16 +298,16 @@ impl CollaborationCapabilityFanoutJob {
         &self.event_id
     }
 
-    /// Canonical digest of [`Self::payload`].
+    /// Canonical digest of [`Self::body`].
     #[must_use]
     pub fn raw_payload_digest(&self) -> &str {
         &self.raw_payload_digest
     }
 
-    /// Fan-out payload to submit.
+    /// Fan-out body to submit.
     #[must_use]
-    pub fn payload(&self) -> &Value {
-        &self.payload
+    pub fn body(&self) -> &CapabilityFanoutBody {
+        &self.body
     }
 }
 

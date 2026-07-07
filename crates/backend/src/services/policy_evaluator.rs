@@ -318,7 +318,7 @@ impl PolicyEvaluator for RuleEvaluator {
 
             let policy_version = rules.id.to_string();
             let decision = match_rules_with_grants(
-                &rules.data,
+                rules.data.as_json(),
                 request,
                 frontier,
                 &policy_version,

@@ -295,11 +295,13 @@ pub async fn validate_agent_session_proof(
         .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
     let mut realm_policy = policy_snapshot
         .as_ref()
-        .and_then(|snapshot| AgentSessionRealmPolicy::from_policy_data(&snapshot.data));
+        .and_then(|snapshot| AgentSessionRealmPolicy::from_policy_data(snapshot.data.as_json()));
     if let (Some(snapshot), Some(policy)) = (policy_snapshot.as_ref(), realm_policy.as_mut()) {
         policy.policy_refs.insert(snapshot.id.to_string());
     }
-    let policy_data = policy_snapshot.as_ref().map(|snapshot| &snapshot.data);
+    let policy_data = policy_snapshot
+        .as_ref()
+        .map(|snapshot| snapshot.data.as_json());
 
     let effective_scope = intersect_agent_session_scope(
         authorization.agent_key_scope.as_str(),

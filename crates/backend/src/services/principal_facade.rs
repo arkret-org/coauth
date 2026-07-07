@@ -27,10 +27,9 @@ use coauth_config::{CokretConfig, PrincipalServerConfig};
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess};
 use coauth_principal::{
     ConnectorAccountProfile, ConnectorAdmin, ConnectorProvisionRequest,
-    PrincipalCapabilityFanoutOperation, PrincipalCapabilityFanoutRequest,
+    PrincipalCapabilityFanoutRequest,
 };
-use serde_json::Value;
-use soland_core::capability_fanout::CapabilityFanoutResponse;
+use soland_core::capability_fanout::{CapabilityFanoutBody, CapabilityFanoutResponse};
 use url::Url;
 
 /// `ConnectorAdmin` backed by coauth's own Postgres (`users`).
@@ -72,7 +71,7 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
     cokret_config: &CokretConfig,
     request: &PrincipalCapabilityFanoutRequest,
 ) -> Result<(), anyhow::Error> {
-    let targets = capability_fanout_targets(cokret_config, request.payload())?;
+    let targets = capability_fanout_targets(cokret_config, request.body())?;
     if targets.is_empty() {
         tracing::warn!(
             event_id = request.event_id(),
@@ -134,7 +133,7 @@ async fn submit_collaboration_capability_fanout_to_target(
             "x-cokret-capability-grant-id",
             request.capability_grant_id(),
         )
-        .json(request.payload())
+        .json(request.body())
         .send()
         .await
         .with_context(|| format!("send capability fanout to {}", target.name))?;
@@ -160,7 +159,7 @@ async fn submit_collaboration_capability_fanout_to_target(
     tracing::info!(
         principal_server = target.name,
         endpoint = %url,
-        operation = request.operation().as_str(),
+        operation = request.operation(),
         event_id = request.event_id(),
         capability_grant_id = request.capability_grant_id(),
         "delivered collaboration capability fanout to principal server"
@@ -170,11 +169,12 @@ async fn submit_collaboration_capability_fanout_to_target(
 
 fn capability_fanout_targets(
     cokret_config: &CokretConfig,
-    payload: &Value,
+    body: &CapabilityFanoutBody,
 ) -> Result<Vec<CapabilityFanoutTarget>, anyhow::Error> {
-    let Some(entries) = payload.get("principal_servers").and_then(Value::as_array) else {
+    let entries = &body.principal_servers;
+    if entries.is_empty() {
         return Ok(Vec::new());
-    };
+    }
     let mut targets = Vec::with_capacity(entries.len());
     for entry in entries {
         let object = entry
@@ -182,13 +182,13 @@ fn capability_fanout_targets(
             .context("principal_servers[] entries must be objects")?;
         let name = object
             .get("name")
-            .and_then(Value::as_str)
+            .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .context("principal_servers[].name is required")?;
         let endpoint_raw = object
             .get("endpoint")
-            .and_then(Value::as_str)
+            .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .context("principal_servers[].endpoint is required")?;
@@ -273,18 +273,19 @@ fn validate_capability_fanout_response(
     anyhow::ensure!(returned_event, "response did not acknowledge event_id");
     anyhow::ensure!(response.authz_state.projected, "authz state not projected");
     match request.operation() {
-        PrincipalCapabilityFanoutOperation::Grant => {
+        "grant" => {
             anyhow::ensure!(
                 response.authz_state.effective && !response.authz_state.revoked,
                 "grant fanout did not become effective"
             );
         }
-        PrincipalCapabilityFanoutOperation::Revoke => {
+        "revoke" => {
             anyhow::ensure!(
                 response.authz_state.revoked && !response.authz_state.effective,
                 "revoke fanout did not revoke grant"
             );
         }
+        operation => anyhow::bail!("unknown fanout operation {operation}"),
     }
     Ok(())
 }
@@ -323,31 +324,35 @@ mod tests {
         }
     }
 
-    fn payload() -> Value {
-        json!({
-            "principal_servers": [{
+    fn body() -> CapabilityFanoutBody {
+        CapabilityFanoutBody {
+            kind: "ck.coauth.collaboration_capability.fanout.v1".to_owned(),
+            operation: "grant".to_owned(),
+            issuer_service_did: "did:web:coauth.example".to_owned(),
+            event_kind: "ck.capability.grant".to_owned(),
+            event_id: EVENT.to_owned(),
+            capability_grant_id: GRANT.to_owned(),
+            payload: json!({}),
+            principal_servers: vec![json!({
                 "name": "soland-dev",
                 "audience": "soland",
                 "endpoint": "http://127.0.0.1:3322/",
                 "did": "did:web:soland.example"
-            }]
-        })
+            })],
+        }
     }
 
     fn request() -> PrincipalCapabilityFanoutRequest {
         PrincipalCapabilityFanoutRequest::new(
-            PrincipalCapabilityFanoutOperation::Grant,
             "capability-fanout:test".to_owned(),
-            GRANT.to_owned(),
-            EVENT.to_owned(),
             "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
-            payload(),
+            body(),
         )
     }
 
     #[test]
     fn fanout_targets_resolve_payload_principal_servers_to_configured_bearer() {
-        let targets = capability_fanout_targets(&cokret_config(), &payload()).unwrap();
+        let targets = capability_fanout_targets(&cokret_config(), &body()).unwrap();
 
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].name, "soland-dev");
@@ -483,7 +488,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
         )
         .await?;
         tracing::info!(
-            operation = request.operation().as_str(),
+            operation = request.operation(),
             idempotency_key = request.idempotency_key(),
             capability_grant_id = request.capability_grant_id(),
             event_id = request.event_id(),
