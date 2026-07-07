@@ -933,6 +933,9 @@ pub async fn debug_issue_dpop_grant(
         .audience
         .clone()
         .unwrap_or_else(|| required_audience_for(&url_builder, &cokret_config));
+    let grant_target =
+        password_login_session_grant_target(&url_builder, &cokret_config, Some(&audience))
+            .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
             format!("urn:cokret:client:device:{}", body.device_id),
@@ -971,6 +974,33 @@ pub async fn debug_issue_dpop_grant(
                 ));
             }
         };
+
+    let account_handle =
+        crate::handlers::account::auth::oidc_bridge::registration_handle_for_principal_endpoint(
+            grant_target.principal_server_endpoint.as_deref(),
+            &user.localpart,
+        );
+    let localpart_sync_bearer =
+        crate::handlers::account::auth::oidc_bridge::principal_server_operation_bearer(
+            &cokret_config,
+            &grant_target.audience,
+        );
+    crate::handlers::account::auth::oidc_bridge::ensure_soland_account_registered(
+        &http_client,
+        grant_target.principal_server_endpoint.as_deref(),
+        &principal_did,
+        localpart_sync_bearer,
+        Some(&user.localpart),
+        account_handle.as_deref(),
+        user.display_name.as_deref(),
+        Some(body.device_id.as_str()),
+    )
+    .await
+    .map_err(|message| {
+        CokretRouteError::Internal(
+            format!("principal account registration failed: {message}").into(),
+        )
+    })?;
 
     // Issue + persist the grant against a fresh repo, binding the subject to the
     // minted principal DID.

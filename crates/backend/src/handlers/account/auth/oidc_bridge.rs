@@ -191,7 +191,7 @@ fn soland_account_localparts_endpoint(
         .map_err(|error| format!("invalid principal account localparts endpoint: {error}"))
 }
 
-pub(super) fn principal_server_operation_bearer<'a>(
+pub(crate) fn principal_server_operation_bearer<'a>(
     cokret_config: &'a coauth_config::CokretConfig,
     audience: &str,
 ) -> Option<&'a str> {
@@ -493,7 +493,7 @@ pub(crate) async fn ensure_principal_did_for_user_committed(
 /// own host, not the OIDC issuer host (`auth.<domain>`) and not a domain
 /// inferred from a DID method-specific identifier. soland owns principal DID
 /// issuance, so coauth must not couple handle publication to `did:web`.
-pub(super) fn registration_handle_for_principal_endpoint(
+pub(crate) fn registration_handle_for_principal_endpoint(
     principal_endpoint: Option<&str>,
     localpart: &str,
 ) -> Option<String> {
@@ -510,7 +510,7 @@ fn principal_handle_domain_for_endpoint(principal_endpoint: &str) -> Option<Stri
     Some(host.to_ascii_lowercase().replace(':', "."))
 }
 
-pub(super) async fn ensure_soland_account_registered(
+pub(crate) async fn ensure_soland_account_registered(
     http_client: &reqwest::Client,
     principal_endpoint: Option<&str>,
     principal_did: &str,
