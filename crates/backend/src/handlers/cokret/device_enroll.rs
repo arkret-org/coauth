@@ -433,7 +433,7 @@ pub async fn device_enroll_endpoint(
         seal_basis: None,
         requirements: EventRequirements::default(),
         redacts: None,
-        content,
+        payload: content,
         executed_by: Some(authority_did.clone()),
         authorization_ref: Some(authorization_ref.clone()),
         applet_id: None,
