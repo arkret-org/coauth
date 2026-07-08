@@ -5,7 +5,7 @@
 //! Per-recipient invite-relay handler (consent-gated forward).
 //!
 //! Per the Move/Anchor/Lattice spec (`cokret-spec` 2026-05-08,
-//! `consent-model.md` §3-§9), before an actor (coauth admin / yougen UI /
+//! `consent-model.md` §3-§9), before an actor (coauth admin / inkson UI /
 //! sodmin operator) can deliver an invite to a target principal, coauth
 //! must consult the holder's consent-grant cell on the target's principal
 //! server (`soland`). The previous task added the read+gate helper in
@@ -29,7 +29,7 @@
 //!
 //! Consent grants/revokes on the holder's cell are constructed and signed
 //! by the **holder** when they accept an invite — they're separate Moves
-//! posted by yougen, not by coauth. coauth's only responsibility here is
+//! posted by inkson, not by coauth. coauth's only responsibility here is
 //! the gate-check + forward; it never signs Moves on the holder's behalf.
 
 use salvo::oapi::ToSchema;

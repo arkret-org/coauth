@@ -7,7 +7,7 @@
 //! When the consent gate in `batch_invite` returns `Quarantined` (and the
 //! per-recipient relay path returns `Quarantine`), spec §6.1 says the
 //! invite intent should be persisted to a holder-side queue rather than
-//! immediately rejected. Sodmin / yougen review the queue and either
+//! immediately rejected. Sodmin / inkson review the queue and either
 //! re-run the original invite or mark it rejected.
 //!
 //! This module is the persistence layer for that queue. The admin review

@@ -423,7 +423,7 @@ pub async fn batch_invite(
             // Spec §6.1 default-profile path: no consent + no
             // require_consent flag → route to the holder's quarantine
             // outbox. As of round 20 we persist the intent to
-            // `invite_quarantine_queue` so admins (sodmin / yougen)
+            // `invite_quarantine_queue` so admins (sodmin / inkson)
             // can review and either re-run the invite or reject it.
             //
             // The outcome on the wire is still 422 + `quarantined`:

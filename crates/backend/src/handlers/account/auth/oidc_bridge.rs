@@ -1636,7 +1636,7 @@ mod tests {
         assert!(is_protocol_device_id(
             "ck:device:01964137-0000-7000-8000-000000000001"
         ));
-        assert!(!is_protocol_device_id("dev_yougen"));
+        assert!(!is_protocol_device_id("dev_inkson"));
         assert!(!is_protocol_device_id(
             "ck:device:01964137-0000-6000-8000-000000000001"
         ));
@@ -1859,7 +1859,7 @@ mod tests {
                         "audience": "https://soland.example.com/api",
                         "signature": "unused-for-oidc",
                         "issuer": "https://offline.invalid",
-                        "client_id": "yougen",
+                        "client_id": "inkson",
                         "redirect_uri": "http://localhost:8080/auth/callback",
                         "state": "ck-state-0123456789abcdef",
                         "nonce": "ck-nonce-0123456789abcdef",

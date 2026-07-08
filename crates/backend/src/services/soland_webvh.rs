@@ -2,7 +2,7 @@
 //!
 //! The pure build + cryptography path (keygen, SCID derivation, eddsa-jcs-2022
 //! proof, document skeleton) now lives in the shared SDK at
-//! [`cokret_signatures::webvh`] so clients (sodmin / yougen) and servers
+//! [`cokret_signatures::webvh`] so clients (sodmin / inkson) and servers
 //! (soland / coauth) all mint byte-for-byte identical inception entries. This
 //! module keeps only coauth-specific concerns: the HTTP submission to soland's
 //! protocol DID operation endpoint and the lookup-or-mint persistence flow.

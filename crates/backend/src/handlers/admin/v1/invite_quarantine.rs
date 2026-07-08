@@ -8,7 +8,7 @@
 //! path. When the consent gate in `batch_invite` returns `Quarantined`,
 //! the invite intent is persisted to `invite_quarantine_queue` (see
 //! `crates/backend/src/services/invite_quarantine.rs`). Operators
-//! (sodmin / yougen) review the queue here.
+//! (sodmin / inkson) review the queue here.
 //!
 //! Endpoints:
 //!
@@ -202,7 +202,7 @@ pub async fn list_invite_quarantine(
 /// Round-21 update: `approve` now actually re-runs the original
 /// `batch_invite` using the parameters captured in `payload` at enqueue
 /// time. The minted tokens are returned in `ResolveOutcome.minted_tokens`
-/// so the caller (sodmin / yougen) doesn't need a follow-up call. The
+/// so the caller (sodmin / inkson) doesn't need a follow-up call. The
 /// consent gate is not re-evaluated — the operator approving the queue
 /// row has explicitly vouched for the consent decision out of band.
 ///

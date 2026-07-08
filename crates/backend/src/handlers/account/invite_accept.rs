@@ -16,7 +16,7 @@
 //! This is the **pure verifier** form: the handler takes the two JWS
 //! proofs + the presenter DID, runs `verify_invite`, and on success
 //! returns a JSON summary of the verified invite. It does NOT forward
-//! to soland — that's the consumer's job (typically yougen), which
+//! to soland — that's the consumer's job (typically inkson), which
 //! then submits a separate `ck.invite.claim` via soland's existing
 //! invite-acceptance reducer per the contract in
 //! `cotest/e2e/scenarios/invites/third-party.md` Phase C.

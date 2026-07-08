@@ -518,7 +518,7 @@ mod tests {
                             "audience": "https://soland.example.com/api",
                             "signature": "unused-for-oidc",
                             "issuer": "https://offline.invalid",
-                            "client_id": "yougen",
+                            "client_id": "inkson",
                             "redirect_uri": "http://127.0.0.1:8080/auth/callback",
                             "state": "ck-state-0123456789abcdef",
                             "nonce": "ck-nonce-0123456789abcdef",

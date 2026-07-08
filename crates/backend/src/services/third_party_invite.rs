@@ -280,7 +280,7 @@ pub fn schedule_terminal_zeroize(rec: &ThirdPartyInviteRecord) -> Option<DateTim
 /// `binding_proof` covers the *verification-service* side of the chain
 /// (auth server attesting the 3PID was verified). `subject_proof` is
 /// produced by the claimant device — see the partner crate
-/// `yougen-client::claim_invite` which is **not** part of coauth's
+/// `inkson-client::claim_invite` which is **not** part of coauth's
 /// build.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InviteClaimBindingProof {

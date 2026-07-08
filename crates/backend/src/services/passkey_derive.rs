@@ -29,7 +29,7 @@
 //! SDK-10 migration (2026-05-18): the multibase / multicodec envelope
 //! is now produced by
 //! `cokret::identity::binding::multicodec_ed25519_from_bytes` so coauth,
-//! yougen, and any other consumer reach the same bytes for the same 32-byte
+//! inkson, and any other consumer reach the same bytes for the same 32-byte
 //! input. The COSE→32-byte digest step stays here because it's coupled to
 //! webauthn-rs's `Passkey` / `COSEKey` types (which are coauth-specific deps).
 

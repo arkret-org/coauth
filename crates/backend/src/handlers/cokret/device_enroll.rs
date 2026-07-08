@@ -5,7 +5,7 @@
 //! coauth signs exactly one shape: a `service_attested` `ck.device.authorize`
 //! for **the calling user's own device**, under the user's principal DID. It
 //! never acts as a general signing oracle and never contacts soland — the
-//! signed Event is returned to the client (yougen) which submits it to
+//! signed Event is returned to the client (inkson) which submits it to
 //! `/_cokret/self/events`.
 //!
 //! Flow:
