@@ -23,7 +23,7 @@ http:
   csp_html: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
 clients:
 - client_id: 01GFWR28C4KNE04WG3HKXB7C9R
-  client_name: Yougen Dev
+  client_name: Inkson Dev
   client_auth_method: none
   redirect_uris:
   - http://127.0.0.1/auth/callback
