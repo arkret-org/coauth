@@ -387,10 +387,22 @@ mod tests {
     }
 
     fn payload() -> serde_json::Value {
-        serde_json::json!({
-            "kind": "ck.invite.create",
-            "from": "did:web:inviter",
-        })
+        cokret_core::InviteCreatePayload::new(
+            cokret_core::InviteId::new("ck:invite:0196419b-0000-7000-8000-000000000001").unwrap(),
+            cokret_core::Did::new("did:web:holder").unwrap(),
+            cokret_core::InviteDeliveryTarget::principal_server(
+                cokret_core::Did::new("did:web:auth.example").unwrap(),
+            ),
+            cokret_core::Hash::new(
+                "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            )
+            .unwrap(),
+            chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+        )
+        .to_value()
+        .unwrap()
     }
 
     fn invite_delivery() -> cokret_core::InviteDeliveryRequest {
