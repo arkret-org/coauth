@@ -6,7 +6,7 @@
 
 Requests an OpenID Connect `id_token` and allows access to the userinfo
 endpoint. This is the baseline scope for interactive OIDC clients such as
-`yougen`.
+`inkson`.
 
 ## `email`
 

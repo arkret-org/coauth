@@ -4,7 +4,7 @@
 
 ## `openid`
 
-请求 OpenID Connect `id_token`，并允许访问 userinfo endpoint。这是 `yougen`
+请求 OpenID Connect `id_token`，并允许访问 userinfo endpoint。这是 `inkson`
 等交互式 OIDC client 的基础 scope。
 
 ## `email`

@@ -117,7 +117,7 @@ work that affects wire shape is tracked in [`../cokret-spec/spec/v1/`](../cokret
 
 ## Integration model
 
-- `yougen` acts as a public/native Cokret client and consumes OIDC tokens.
+- `inkson` acts as a public/native Cokret client and consumes OIDC tokens.
 - Principal Servers such as `soland` consume session grants and account
   metadata from `coauth`.
 - `sodmin` uses the admin API with `urn:coauth:admin` or
