@@ -404,7 +404,7 @@ mod tests {
         );
         let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
         let url = base
-            .join("/_arkret/peer/snapshot/head?realm_id=ck:realm:test")
+            .join("/_arkret/peer/snapshot/head?realm_id=ak:realm:test")
             .unwrap();
 
         let signed = peer.signed_request("GET", &url, None, None).unwrap();

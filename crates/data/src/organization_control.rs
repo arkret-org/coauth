@@ -102,7 +102,7 @@ pub struct OrganizationPrincipalControl {
     /// (`principal_control_realm_id`).
     pub principal_control_realm_id: String,
     /// Optional reference to the control stream / PCR genesis event
-    /// (`ck:event:...` or equivalent control-state ref).
+    /// (`ak:event:...` or equivalent control-state ref).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control_stream_ref: Option<String>,
     /// Optional digest / ref of the most recent control frontier the
@@ -173,7 +173,7 @@ pub struct OrganizationDelegation {
     /// ULID of the delegation row itself.
     pub id: String,
     /// Object ref clients put into `authorization.delegation_ref`
-    /// (e.g. `ck:grant:<uuid7>` or a DID-document delegation URL). Unique.
+    /// (e.g. `ak:grant:<uuid7>` or a DID-document delegation URL). Unique.
     pub delegation_ref: String,
     /// Organization principal DID the delegation is anchored to.
     pub organization_did: String,

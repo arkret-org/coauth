@@ -87,7 +87,7 @@ pub fn handle_valid(handle: &str) -> bool {
 /// rebased onto `UUIDv7` in 2026-05). coauth's internal admin tokens and
 /// personal session ids stay ULID; this helper is for the few admin /
 /// session-grant handler call-sites that consume Arkret wire ids
-/// (`ck:device:<uuid7>`, `ck:space:<uuid7>`, `ck:cell:<family>:<id>`,
+/// (`ak:device:<uuid7>`, `ak:space:<uuid7>`, `ak:cell:<family>:<id>`,
 /// etc.) from external requests.
 ///
 /// ULID bodies are intentionally rejected. Callers that must accept ULID
@@ -124,7 +124,7 @@ pub fn is_typed_uuid7(s: &str, prefix: &str) -> bool {
         return false;
     };
 
-    // Cell-family ids (`ck:cell:<family>:<uuid>`) are intentionally
+    // Cell-family ids (`ak:cell:<family>:<uuid>`) are intentionally
     // rejected here — pass `prefix = "cell:<family>"` if you need a
     // cell-family-specific check, or use a dedicated parser.
     if body.contains(':') {

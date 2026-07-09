@@ -85,7 +85,7 @@ pub struct AccountabilityGrantRequestBody {
 /// Response payload for `POST /_coauth/self/agents/{id}/accountability-grant`.
 ///
 /// CKP-0008 (`id-kind-registry.json`): the wire shape carries the
-/// freshly minted `ck:grant:<uuid7>` typed id, the
+/// freshly minted `ak:grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
 /// `ck.agent.*` set before issuing the response; soland still verifies
@@ -98,7 +98,7 @@ pub struct AccountabilityGrantRequestBody {
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantOutcome {
     /// Typed id of the issued grant. Wire form:
-    /// `ck:grant:<uuid7>`.
+    /// `ak:grant:<uuid7>`.
     pub accountability_grant_id: String,
 
     /// Agent principal DID this grant authorizes capability actions on.

@@ -59,7 +59,7 @@ pub(crate) struct OidcCodeExchangeInput {
     pub state: String,
     /// `proof.nonce` — bound to the authorization request and id_token.
     pub nonce: String,
-    /// `body.device_id` — the protocol device id (`ck:device:<uuidv7>`) the
+    /// `body.device_id` — the protocol device id (`ak:device:<uuidv7>`) the
     /// grant is bound to via `cnf.jkt`.
     pub device_id: String,
     /// `body.principal_id` — the principal DID the client expects the grant
@@ -639,7 +639,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     let device_id = input.device_id.trim().to_owned();
     if !is_protocol_device_id(&device_id) {
         return Err(OidcExchangeError::proof_invalid(
-            "device_id must be a ck:device:<uuidv7> protocol identifier",
+            "device_id must be a ak:device:<uuidv7> protocol identifier",
         ));
     }
 
@@ -1649,7 +1649,7 @@ mod tests {
 
         assert!(scopes.contains(&arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()));
         assert!(scopes.contains(
-            &"urn:arkret:client:device:ck:device:01964137-0000-7000-8000-000000000001".to_owned()
+            &"urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned()
         ));
     }
 

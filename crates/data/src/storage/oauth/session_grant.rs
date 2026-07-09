@@ -161,7 +161,7 @@ impl<'a> SessionGrantFilter<'a> {
 #[derive(Debug)]
 /// Parameters for creating a persisted Arkret session grant.
 pub struct NewSessionGrant<'a> {
-    /// Protocol-visible session grant id (`ck:grant:<uuidv7>`).
+    /// Protocol-visible session grant id (`ak:grant:<uuidv7>`).
     pub grant_id: GrantId,
     /// Browser session that the grant is bound to.
     pub browser_session_id: Option<Ulid>,

@@ -18,10 +18,10 @@
 //!
 //! ## Why both realm_id and trust_domain?
 //!
-//! - `realm_id` scopes the link to a single Realm policy graph: a link valid for `ck:realm:r1` MUST
-//!   NOT enable joining `ck:realm:r2`.
-//! - `trust_domain` scopes the link to a deployment: a link minted in `ck:trust_domain:tenant-a`
-//!   MUST NOT be replayable into `ck:trust_domain:tenant-b` even when the realm UUID happens to
+//! - `realm_id` scopes the link to a single Realm policy graph: a link valid for `ak:realm:r1` MUST
+//!   NOT enable joining `ak:realm:r2`.
+//! - `trust_domain` scopes the link to a deployment: a link minted in `ak:trust_domain:tenant-a`
+//!   MUST NOT be replayable into `ak:trust_domain:tenant-b` even when the realm UUID happens to
 //!   collide (e.g. dev / staging / prod sharing a fixture realm).
 //!
 //! See `arkret-spec` round-4 §7fae9ba "Enhance third-party invites +

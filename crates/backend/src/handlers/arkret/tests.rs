@@ -605,7 +605,7 @@ fn session_grant_is_signed_for_the_user_did() {
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
 
-    let device_scope = "urn:arkret:client:device:ck:device:01964137-0000-7000-8000-000000000001";
+    let device_scope = "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001";
     let grant = issue_session_grant(
         &mut signing_rng,
         &clock,

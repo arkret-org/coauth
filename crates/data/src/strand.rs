@@ -10,7 +10,7 @@
 //!
 //! NOTE: the "Strand" in this module is coauth's **internal authentication-strand
 //! engine** (registration / recovery / MFA / OAuth consent). It is unrelated
-//! to the Arkret protocol `ck:strand:` collaboration object — these types never
+//! to the Arkret protocol `ak:strand:` collaboration object — these types never
 //! touch the Arkret wire, and the protocol's `stage`/`state`/`status` axis
 //! rules do not govern them. The name collision is purely nominal; do not
 //! conflate `StrandSession` here with a protocol Strand durable object.

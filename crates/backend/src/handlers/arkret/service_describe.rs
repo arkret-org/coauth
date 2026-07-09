@@ -146,7 +146,7 @@ pub(crate) struct ServiceDescribeOutcome {
     //     property order (see service-describe.schema.json). ---
     service_did: String,
     /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
-    /// form `ck:trust_domain:<scope>`). Explicit configuration wins;
+    /// form `ak:trust_domain:<scope>`). Explicit configuration wins;
     /// otherwise coauth derives a stable deployment-local value from the
     /// public host so the service-describe schema can require it.
     trust_domain: String,

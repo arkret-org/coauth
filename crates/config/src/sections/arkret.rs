@@ -8,7 +8,7 @@ use super::ConfigurationSection;
 
 /// Round R2/R3 (2026-05-20) — deployment-scope trust-domain prefix.
 ///
-/// A `trust_domain` value MUST match `ck:trust_domain:<scope>` where
+/// A `trust_domain` value MUST match `ak:trust_domain:<scope>` where
 /// `<scope>` is `[a-z0-9._:-]{1,128}`. This mirrors the SDK validator
 /// `arkret_core::TypedTrustDomainId` so coauth and the Realm policy
 /// engine agree on the exact byte-form. Validate via
@@ -189,7 +189,7 @@ pub struct CokretConfig {
     /// Round R2/R3 (2026-05-20) — deployment trust-domain identifier
     /// injected into Realm policy and the server-describe document.
     ///
-    /// Wire form: `ck:trust_domain:<scope>` where `<scope>` matches
+    /// Wire form: `ak:trust_domain:<scope>` where `<scope>` matches
     /// `[a-z0-9._:-]{1,128}`. This value enters the canonical transcript
     /// of every `ck.cross_signing.reset` proof; **changing
     /// `trust_domain` invalidates existing cross-signing reset proofs**
@@ -421,7 +421,7 @@ impl CokretConfig {
     }
 
     /// Validate the configured `trust_domain` (if any) against the SDK
-    /// `ck:trust_domain:<scope>` wire format. Returns the borrowed
+    /// `ak:trust_domain:<scope>` wire format. Returns the borrowed
     /// scope half on success so call-sites can build the
     /// `TypedTrustDomainId` directly. Delegates the acceptance check to
     /// the SDK validator `arkret_identifiers::is_trust_domain` so the
@@ -431,18 +431,18 @@ impl CokretConfig {
     /// # Errors
     ///
     /// Returns a static string when the value is not a well-formed
-    /// `ck:trust_domain:<scope>` (missing prefix, empty/oversized scope,
+    /// `ak:trust_domain:<scope>` (missing prefix, empty/oversized scope,
     /// bad leading byte, or any byte outside `[a-z0-9._:-]`).
     pub fn validate_trust_domain(value: &str) -> Result<&str, &'static str> {
         if !arkret_identifiers::is_trust_domain(value) {
             return Err(
-                "trust_domain MUST be `ck:trust_domain:<scope>` with scope `[a-z0-9][a-z0-9._:-]{0,127}`",
+                "trust_domain MUST be `ak:trust_domain:<scope>` with scope `[a-z0-9][a-z0-9._:-]{0,127}`",
             );
         }
         // `is_trust_domain` already guaranteed the prefix is present.
         value
             .strip_prefix(TRUST_DOMAIN_PREFIX)
-            .ok_or("trust_domain MUST start with `ck:trust_domain:`")
+            .ok_or("trust_domain MUST start with `ak:trust_domain:`")
     }
 }
 

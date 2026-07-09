@@ -10,7 +10,7 @@
 //! `server_name`. It is an `OrSet` cell:
 //!
 //! ```text
-//! ck:cell:ck.component.consent.grant.v1:<consent_id>
+//! ak:cell:ck.component.consent.grant.v1:<consent_id>
 //! ```
 //!
 //! `grant` adds a tag, `revoke` removes a tag. Whether an invite is allowed

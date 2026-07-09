@@ -12,7 +12,7 @@ use crate::repository_impl;
 /// Parameters used to persist an accepted agent key authorization.
 #[derive(Debug, Clone)]
 pub struct NewAgentKeyAuthorization {
-    /// Minted `ck:event:<uuid7>` authorization event id.
+    /// Minted `ak:event:<uuid7>` authorization event id.
     pub authorized_event_id: String,
     /// Agent principal DID the authorized key belongs to.
     pub agent_principal_id: String,
@@ -89,7 +89,7 @@ pub trait AgentKeyAuthorizationRepository: Send + Sync {
         params: NewAgentKeyAuthorization,
     ) -> Result<AgentKeyAuthorization, Self::Error>;
 
-    /// Look up an authorization by its minted `ck:event:<uuid7>` id.
+    /// Look up an authorization by its minted `ak:event:<uuid7>` id.
     async fn lookup_by_event_id(
         &mut self,
         authorized_event_id: &str,

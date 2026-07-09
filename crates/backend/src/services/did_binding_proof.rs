@@ -10,7 +10,7 @@
 //!   "account_did": "<account DID>",
 //!   "verification_method": "<DID URL from verificationMethod.id>",
 //!   "audience": "<local coauth service DID>",
-//!   "trust_domain": "<local deployment ck:trust_domain:...>",
+//!   "trust_domain": "<local deployment ak:trust_domain:...>",
 //!   "nonce": "<opaque single-use nonce>",
 //!   "iat": "<RFC3339 timestamp>",
 //!   "exp": "<RFC3339 timestamp; exp - iat <= 300s>"

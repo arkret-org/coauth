@@ -19,7 +19,7 @@ pub use crate::storage::agent_key::*;
 pub struct AgentKeyAuthorization {
     /// Storage row id.
     pub id: Ulid,
-    /// Minted `ck:event:<uuid7>` id the soland fan-out materializes as the
+    /// Minted `ak:event:<uuid7>` id the soland fan-out materializes as the
     /// durable `ck.agent.key.authorize` event. The session-grant agent branch
     /// resolves `agent_key_authorization_ref` against this id.
     pub authorized_event_id: String,
