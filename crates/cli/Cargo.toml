@@ -92,6 +92,8 @@ sd-notify = {workspace = true}
 anyhow = {workspace = true}
 
 [features]
+default = ["cedar"]
+
 # Features used for the prebuilt binaries
 dist = ["coauth-config/dist"]
 
