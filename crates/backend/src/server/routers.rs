@@ -171,7 +171,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // Canonical Account Authority session-grant issuance
         // (service-surface.md §2.5.1): the single client-visible bridge from a
         // standard auth result (OIDC code exchange) into a device-bound
-        // `ck.session.grant`. Body = SDK `SessionGrantRequestBody`,
+        // `ak.session.grant`. Body = SDK `SessionGrantRequestBody`,
         // `proof.proof_kind=oidc_code_exchange`. Replaces the deleted
         // `/_coauth/.../auth/oidc/exchange` bridge.
         .push(

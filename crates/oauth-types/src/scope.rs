@@ -90,7 +90,7 @@ pub const ARKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:arkret:admin:*
 /// / rotate_key + sidecar_thread.* lifecycle hooks). Issued by coauth as
 /// part of the accountability_grant strand; consumed by soland's agent
 /// runtime authn path. Phase P2 (B-A / `_before_todos.md` §1.4).
-pub const CK_AGENT_MANAGE: ScopeToken = ScopeToken::from_static("ck.agent.manage");
+pub const CK_AGENT_MANAGE: ScopeToken = ScopeToken::from_static("ak.agent.manage");
 
 /// Check whether a character belongs to the NQCHAR set defined in
 /// [RFC 6749 Appendix A]:

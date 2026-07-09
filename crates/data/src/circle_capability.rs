@@ -28,27 +28,27 @@ pub use crate::storage::circle_capability::*;
 #[serde(rename_all = "snake_case")]
 pub enum CircleCapabilityAction {
     /// `ck.circle.create` — create new Circles in the target realm.
-    #[serde(rename = "ck.circle.create")]
+    #[serde(rename = "ak.circle.create")]
     Create,
     /// `ck.circle.manage` — update / archive / restore / tombstone an
     /// existing Circle. Requires `allowed_circle_ids` constraint.
-    #[serde(rename = "ck.circle.manage")]
+    #[serde(rename = "ak.circle.manage")]
     Manage,
     /// `ck.circle.member.add` — add the *authenticated principal* to a
     /// Circle (i.e. join with a capability).
-    #[serde(rename = "ck.circle.member.add")]
+    #[serde(rename = "ak.circle.member.add")]
     MemberAdd,
     /// `ck.circle.member.manage` — change member state (role, leave,
     /// kick) for members of a constrained Circle set.
-    #[serde(rename = "ck.circle.member.manage")]
+    #[serde(rename = "ak.circle.member.manage")]
     MemberManage,
     /// `ck.circle.member.add.others` — invite/add other principals into a
     /// Circle. High-risk; always requires `allowed_circle_ids`.
-    #[serde(rename = "ck.circle.member.add.others")]
+    #[serde(rename = "ak.circle.member.add.others")]
     MemberAddOthers,
     /// `ck.circle.audit` — read audit events for the Circle. Paired with
     /// the `audit_pair_required` evaluator check.
-    #[serde(rename = "ck.circle.audit")]
+    #[serde(rename = "ak.circle.audit")]
     Audit,
 }
 
@@ -71,12 +71,12 @@ impl CircleCapabilityAction {
     #[must_use]
     pub fn as_action_str(&self) -> &'static str {
         match self {
-            Self::Create => "ck.circle.create",
-            Self::Manage => "ck.circle.manage",
-            Self::MemberAdd => "ck.circle.member.add",
-            Self::MemberManage => "ck.circle.member.manage",
-            Self::MemberAddOthers => "ck.circle.member.add.others",
-            Self::Audit => "ck.circle.audit",
+            Self::Create => "ak.circle.create",
+            Self::Manage => "ak.circle.manage",
+            Self::MemberAdd => "ak.circle.member.add",
+            Self::MemberManage => "ak.circle.member.manage",
+            Self::MemberAddOthers => "ak.circle.member.add.others",
+            Self::Audit => "ak.circle.audit",
         }
     }
 
@@ -113,12 +113,12 @@ impl std::str::FromStr for CircleCapabilityAction {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "ck.circle.create" => Ok(Self::Create),
-            "ck.circle.manage" => Ok(Self::Manage),
-            "ck.circle.member.add" => Ok(Self::MemberAdd),
-            "ck.circle.member.manage" => Ok(Self::MemberManage),
-            "ck.circle.member.add.others" => Ok(Self::MemberAddOthers),
-            "ck.circle.audit" => Ok(Self::Audit),
+            "ak.circle.create" => Ok(Self::Create),
+            "ak.circle.manage" => Ok(Self::Manage),
+            "ak.circle.member.add" => Ok(Self::MemberAdd),
+            "ak.circle.member.manage" => Ok(Self::MemberManage),
+            "ak.circle.member.add.others" => Ok(Self::MemberAddOthers),
+            "ak.circle.audit" => Ok(Self::Audit),
             _ => Err(ParseCircleCapabilityActionError),
         }
     }
@@ -184,27 +184,27 @@ mod tests {
         // and MUST NOT drift.
         assert_eq!(
             CircleCapabilityAction::Create.as_action_str(),
-            "ck.circle.create"
+            "ak.circle.create"
         );
         assert_eq!(
             CircleCapabilityAction::Manage.as_action_str(),
-            "ck.circle.manage"
+            "ak.circle.manage"
         );
         assert_eq!(
             CircleCapabilityAction::MemberAdd.as_action_str(),
-            "ck.circle.member.add"
+            "ak.circle.member.add"
         );
         assert_eq!(
             CircleCapabilityAction::MemberManage.as_action_str(),
-            "ck.circle.member.manage"
+            "ak.circle.member.manage"
         );
         assert_eq!(
             CircleCapabilityAction::MemberAddOthers.as_action_str(),
-            "ck.circle.member.add.others"
+            "ak.circle.member.add.others"
         );
         assert_eq!(
             CircleCapabilityAction::Audit.as_action_str(),
-            "ck.circle.audit"
+            "ak.circle.audit"
         );
     }
 

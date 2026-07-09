@@ -62,8 +62,8 @@ use crate::services::policy_frontier::Frontier;
 /// they are kept as local constants rather than aliased to SDK symbols.
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
-const CANDIDATE_JOIN_POLICY_REVIEW_ACTION: &str = "ck.realm.join.review";
-const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ck.profile.candidate.join_policy.v1";
+const CANDIDATE_JOIN_POLICY_REVIEW_ACTION: &str = "ak.realm.join.review";
+const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ak.profile.candidate.join_policy.v1";
 
 /// CKP-0010 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — call /
 /// media capability actions registered in
@@ -110,7 +110,7 @@ pub fn is_circle_selector(selector: &str) -> bool {
 /// strip.
 #[must_use]
 pub fn strict_reject_profile_active(profile_ids: &[&str]) -> bool {
-    profile_ids.contains(&"ck.profile.accountable_principals.strict_reject.v1")
+    profile_ids.contains(&"ak.profile.accountable_principals.strict_reject.v1")
 }
 
 #[derive(Debug, Error)]
@@ -217,7 +217,7 @@ impl PolicyDecision {
                 expires_at: None,
                 payload: serde_json::json!({
                     "reason": arkret_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING,
-                    "profile": "ck.profile.accountable_principals.strict_reject.v1",
+                    "profile": "ak.profile.accountable_principals.strict_reject.v1",
                 }),
             }],
             policy_version,
@@ -355,7 +355,7 @@ fn match_rules_with_grants(
     // unverified `accountable_principal_ids[]` entry must hard deny with
     // `failed_precondition / accountability_grant_missing`.
     if strict_reject_enabled(data)
-        && action_str.starts_with("ck.actor.profile.")
+        && action_str.starts_with("ak.actor.profile.")
         && request
             .event_preview
             .get("accountable_principal_ids_unverified")
@@ -485,7 +485,7 @@ fn capability_action_gate_decision(
     action: &str,
     policy_version: &str,
 ) -> Option<PolicyDecision> {
-    if action.starts_with("ck.actor.profile.") {
+    if action.starts_with("ak.actor.profile.") {
         return None;
     }
     if is_candidate_join_policy_action(action) {
@@ -532,8 +532,8 @@ fn is_candidate_join_policy_action(action: &str) -> bool {
         || action.starts_with("realm.join_policy.")
         || action == "member.application"
         || action.starts_with("member.application.")
-        || action == "ck.member.application"
-        || action.starts_with("ck.member.application.")
+        || action == "ak.member.application"
+        || action.starts_with("ak.member.application.")
 }
 
 fn profile_declared_for_policy(data: &Value, scopes: &[&Value], profile: &str) -> bool {
@@ -560,11 +560,11 @@ fn strict_reject_enabled(data: &Value) -> bool {
         .unwrap_or(false)
         || profile_list_contains(
             data.get("enabled_profile_refs"),
-            "ck.profile.accountable_principals.strict_reject.v1",
+            "ak.profile.accountable_principals.strict_reject.v1",
         )
         || profile_list_contains(
             data.get("claimed_profiles"),
-            "ck.profile.accountable_principals.strict_reject.v1",
+            "ak.profile.accountable_principals.strict_reject.v1",
         )
 }
 
@@ -584,11 +584,11 @@ fn freshness_requires_fail_closed(freshness_state: FreshnessState, action: &str)
 fn is_local_pending_action(action: &str) -> bool {
     matches!(
         action,
-        "ck.message.create"
-            | "ck.reaction.add"
-            | "ck.read_cursor.advance"
-            | "ck.strand.move"
-            | "ck.strand.reorder"
+        "ak.message.create"
+            | "ak.reaction.add"
+            | "ak.read_cursor.advance"
+            | "ak.strand.move"
+            | "ak.strand.reorder"
     )
 }
 
@@ -662,7 +662,7 @@ mod tests {
     #[test]
     fn empty_rules_yield_allow() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "ck.message.create");
+        let r = req("did:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
         assert_eq!(d.reason_code, "ok");
@@ -670,7 +670,7 @@ mod tests {
 
     #[test]
     fn absent_rules_still_reject_candidate_join_policy_profile_action() {
-        let r = req("did:web:alice.example", "ck.realm.join.review");
+        let r = req("did:web:alice.example", "ak.realm.join.review");
         let d = match_rules(
             &Value::Null,
             &r,
@@ -684,9 +684,9 @@ mod tests {
     #[test]
     fn candidate_join_policy_profile_action_cannot_be_enabled_by_loose_rules() {
         let data = serde_json::json!({
-            "require_review_actions": ["ck.realm.join.review"]
+            "require_review_actions": ["ak.realm.join.review"]
         });
-        let r = req("did:web:alice.example", "ck.realm.join.review");
+        let r = req("did:web:alice.example", "ak.realm.join.review");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "unsupported_feature");
@@ -695,10 +695,10 @@ mod tests {
     #[test]
     fn candidate_join_policy_profile_action_cannot_be_enabled_by_profile_claim() {
         let data = serde_json::json!({
-            "enabled_profile_refs": ["ck.profile.candidate.join_policy.v1"],
-            "require_review_actions": ["ck.realm.join.review"]
+            "enabled_profile_refs": ["ak.profile.candidate.join_policy.v1"],
+            "require_review_actions": ["ak.realm.join.review"]
         });
-        let r = req("did:web:alice.example", "ck.realm.join.review");
+        let r = req("did:web:alice.example", "ak.realm.join.review");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "unsupported_feature");
@@ -716,7 +716,7 @@ mod tests {
     #[test]
     fn unknown_capability_action_fails_closed() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "ck.not_registered.action");
+        let r = req("did:web:alice.example", "ak.not_registered.action");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "unsupported_feature");
@@ -724,7 +724,7 @@ mod tests {
 
     #[test]
     fn profile_capability_action_requires_declared_profile_and_grant() {
-        let r = req("did:web:alice.example", "ck.pin.add");
+        let r = req("did:web:alice.example", "ak.pin.add");
 
         let denied = match_rules(
             &serde_json::json!({}),
@@ -737,7 +737,7 @@ mod tests {
 
         let missing_grant = match_rules(
             &serde_json::json!({
-                "enabled_profile_refs": ["ck.profile.pinned_items.v1"]
+                "enabled_profile_refs": ["ak.profile.pinned_items.v1"]
             }),
             &r,
             &frontier(FreshnessState::Fresh),
@@ -749,7 +749,7 @@ mod tests {
         let grant = collaboration_grant(CollaborationCapabilityAction::PinAdd);
         let allowed = match_rules_with_grants(
             &serde_json::json!({
-                "enabled_profile_refs": ["ck.profile.pinned_items.v1"]
+                "enabled_profile_refs": ["ak.profile.pinned_items.v1"]
             }),
             &r,
             &frontier(FreshnessState::Fresh),
@@ -762,13 +762,13 @@ mod tests {
 
     #[test]
     fn expired_collaboration_capability_grant_denies() {
-        let r = req("did:web:alice.example", "ck.pin.add");
+        let r = req("did:web:alice.example", "ak.pin.add");
         let mut grant = collaboration_grant(CollaborationCapabilityAction::PinAdd);
         grant.expires_at = Some(Utc::now() - chrono::Duration::seconds(1));
 
         let denied = match_rules_with_grants(
             &serde_json::json!({
-                "enabled_profile_refs": ["ck.profile.pinned_items.v1"]
+                "enabled_profile_refs": ["ak.profile.pinned_items.v1"]
             }),
             &r,
             &frontier(FreshnessState::Fresh),
@@ -784,7 +784,7 @@ mod tests {
         let data = serde_json::json!({
             "deny_actors": ["did:web:mallory.example"]
         });
-        let r = req("did:web:mallory.example", "ck.message.create");
+        let r = req("did:web:mallory.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "policy_violation");
@@ -793,9 +793,9 @@ mod tests {
     #[test]
     fn deny_action_matches() {
         let data = serde_json::json!({
-            "deny_actions": ["ck.invite.create"]
+            "deny_actions": ["ak.invite.create"]
         });
-        let r = req("did:web:alice.example", "ck.invite.create");
+        let r = req("did:web:alice.example", "ak.invite.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
     }
@@ -803,9 +803,9 @@ mod tests {
     #[test]
     fn require_review_action_matches() {
         let data = serde_json::json!({
-            "require_review_actions": ["ck.invite.create"]
+            "require_review_actions": ["ak.invite.create"]
         });
-        let r = req("did:web:alice.example", "ck.invite.create");
+        let r = req("did:web:alice.example", "ak.invite.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::RequireReview));
         assert_eq!(d.reason_code, "policy_review_required");
@@ -814,7 +814,7 @@ mod tests {
     #[test]
     fn unknown_freshness_fails_closed_for_high_risk_action() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "ck.capability.revoke");
+        let r = req("did:web:alice.example", "ak.capability.revoke");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Unknown), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "revocation_freshness_unknown");
@@ -824,7 +824,7 @@ mod tests {
     #[test]
     fn unknown_freshness_keeps_local_pending_actions_out_of_high_risk_bucket() {
         let data = serde_json::json!({});
-        let r = req("did:web:alice.example", "ck.message.create");
+        let r = req("did:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Unknown), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
         assert_eq!(d.reason_code, "ok");
@@ -839,31 +839,31 @@ mod tests {
                     // Realm-specific scope: NO deny_actors, so alice is
                     // allowed in this realm even though the default
                     // scope would deny her.
-                    "deny_actions": ["ck.evil"]
+                    "deny_actions": ["ak.evil"]
                 }
             }
         });
-        let r = req("did:web:alice.example", "ck.message.create");
+        let r = req("did:web:alice.example", "ak.message.create");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));
     }
 
     #[test]
     fn cap1_recognises_call_actions() {
-        assert!(is_recognised_call_capability_action("ck.call.join"));
-        assert!(is_recognised_call_capability_action("ck.call.screen_share"));
-        assert!(is_recognised_call_capability_action("ck.call.record"));
-        assert!(is_recognised_call_capability_action("ck.call.transcribe"));
-        assert!(is_recognised_call_capability_action("ck.call.moderate"));
-        assert!(!is_recognised_call_capability_action("ck.message.create"));
+        assert!(is_recognised_call_capability_action("ak.call.join"));
+        assert!(is_recognised_call_capability_action("ak.call.screen_share"));
+        assert!(is_recognised_call_capability_action("ak.call.record"));
+        assert!(is_recognised_call_capability_action("ak.call.transcribe"));
+        assert!(is_recognised_call_capability_action("ak.call.moderate"));
+        assert!(!is_recognised_call_capability_action("ak.message.create"));
     }
 
     #[test]
     fn cap1_deny_action_on_cx_call_join_matches() {
         let data = serde_json::json!({
-            "deny_actions": ["ck.call.join"]
+            "deny_actions": ["ak.call.join"]
         });
-        let r = req("did:web:alice.example", "ck.call.join");
+        let r = req("did:web:alice.example", "ak.call.join");
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
         assert_eq!(d.reason_code, "policy_violation");
@@ -886,11 +886,11 @@ mod tests {
         let data = serde_json::json!({
             "circles": {
                 circle_id: {
-                    "deny_actions": ["ck.call.record"],
+                    "deny_actions": ["ak.call.record"],
                 }
             }
         });
-        let mut r = req("did:web:alice.example", "ck.call.record");
+        let mut r = req("did:web:alice.example", "ak.call.record");
         r.auth_context = serde_json::json!({ "circle_id": circle_id });
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
@@ -901,7 +901,7 @@ mod tests {
         let data = serde_json::json!({
             "strict_reject_profile": true,
         });
-        let mut r = req("did:web:alice.example", "ck.actor.profile.update");
+        let mut r = req("did:web:alice.example", "ak.actor.profile.update");
         r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::HardDeny));
@@ -913,7 +913,7 @@ mod tests {
     #[test]
     fn policy1_strict_reject_inert_when_profile_off() {
         let data = serde_json::json!({});
-        let mut r = req("did:web:alice.example", "ck.actor.profile.update");
+        let mut r = req("did:web:alice.example", "ak.actor.profile.update");
         r.event_preview = serde_json::json!({ "accountable_principal_ids_unverified": true });
         let d = match_rules(&data, &r, &frontier(FreshnessState::Fresh), "v");
         assert!(matches!(d.decision, AuthzDecision::Allow));

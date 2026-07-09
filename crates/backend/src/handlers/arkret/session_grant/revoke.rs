@@ -597,7 +597,7 @@ mod tests {
             &test_keystore(),
             "did:web:agent.example",
             "did:web:soland.example".to_owned(),
-            vec!["ck.self.events.stream.subscribe".to_owned()],
+            vec!["ak.self.events.stream.subscribe".to_owned()],
             "runtime-dpop-jkt".to_owned(),
             "{\"kty\":\"OKP\"}".to_owned(),
             serde_json::json!({
@@ -624,7 +624,7 @@ mod tests {
             service_did: None,
             capability_grant_refs: Vec::new(),
             audience: material.audience,
-            scope: Scope::from_iter(["ck.self.events.stream.subscribe".parse().unwrap()]),
+            scope: Scope::from_iter(["ak.self.events.stream.subscribe".parse().unwrap()]),
             grant_jwt: material.grant_jwt,
             session_public_key: material.session_public_key,
             created_at: now,

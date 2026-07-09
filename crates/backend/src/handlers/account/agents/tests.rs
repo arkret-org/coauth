@@ -82,7 +82,7 @@ mod agent_auth_error_matrix_tests {
 
     #[test]
     fn unknown_accountability_grant_action_is_rejected() {
-        let err = normalize_capabilities(vec!["ck.agent.unregistered".to_owned()])
+        let err = normalize_capabilities(vec!["ak.agent.unregistered".to_owned()])
             .expect_err("unknown action must fail closed");
         assert_eq!(err.status(), http::StatusCode::BAD_REQUEST);
         assert!(
@@ -95,15 +95,15 @@ mod agent_auth_error_matrix_tests {
     fn capability_set_is_trimmed_sorted_and_deduplicated() {
         let normalized = normalize_capabilities(vec![
             " ck.self.agent.command.resume ".to_owned(),
-            "ck.self.agent.command.provision".to_owned(),
-            "ck.self.agent.command.resume".to_owned(),
+            "ak.self.agent.command.provision".to_owned(),
+            "ak.self.agent.command.resume".to_owned(),
         ])
         .expect("registered actions normalize");
         assert_eq!(
             normalized,
             vec![
-                "ck.self.agent.command.provision".to_owned(),
-                "ck.self.agent.command.resume".to_owned()
+                "ak.self.agent.command.provision".to_owned(),
+                "ak.self.agent.command.resume".to_owned()
             ]
         );
     }
@@ -111,14 +111,14 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn capability_digest_is_stable_after_normalization() {
         let left = normalize_capabilities(vec![
-            "ck.self.agent.command.resume".to_owned(),
-            "ck.self.agent.command.provision".to_owned(),
+            "ak.self.agent.command.resume".to_owned(),
+            "ak.self.agent.command.provision".to_owned(),
         ])
         .unwrap();
         let right = normalize_capabilities(vec![
             " ck.self.agent.command.provision ".to_owned(),
-            "ck.self.agent.command.resume".to_owned(),
-            "ck.self.agent.command.resume".to_owned(),
+            "ak.self.agent.command.resume".to_owned(),
+            "ak.self.agent.command.resume".to_owned(),
         ])
         .unwrap();
         assert_eq!(left, right);

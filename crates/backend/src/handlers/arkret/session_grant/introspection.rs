@@ -155,7 +155,7 @@ fn verify_session_grant_introspection_proof(
 
     let claims = jwt.payload();
     let max_future_skew = Duration::try_seconds(30).unwrap();
-    if claims.kind != "ck.session_grant.introspection_proof.v1"
+    if claims.kind != "ak.session_grant.introspection_proof.v1"
         || claims.grant_id != grant.grant_id.to_string()
         || claims.grant_jwt_hash != session_grant_jwt_hash(&grant.grant_jwt)
         || claims.audience != grant.audience

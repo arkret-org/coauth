@@ -99,7 +99,7 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
 // (submitting a `ck.capability.grant` Event) is gated to `user_session` /
 // `device_proof` / a principal-authorised delegated service signature
 // (service-http-binding.md §2.1 row `self/events` + §189; api-conventions.md
-// requires `ck.session.grant` + DPoP). A bare service with no principal context
+// requires `ak.session.grant` + DPoP). A bare service with no principal context
 // is, by spec, not an eligible caller of that protocol surface. Separately, the
 // DataEvent submit outcome is eventually-consistent (operations-sync.md §3:
 // a DataEvent enters the accepted set without waiting on a Seal), so the generic
@@ -326,10 +326,10 @@ mod tests {
 
     fn body() -> CapabilityFanoutBody {
         CapabilityFanoutBody {
-            kind: "ck.coauth.collaboration_capability.fanout.v1".to_owned(),
+            kind: "ak.coauth.collaboration_capability.fanout.v1".to_owned(),
             operation: "grant".to_owned(),
             issuer_service_did: "did:web:coauth.example".to_owned(),
-            event_kind: "ck.capability.grant".to_owned(),
+            event_kind: "ak.capability.grant".to_owned(),
             event_id: EVENT.to_owned(),
             capability_grant_id: GRANT.to_owned(),
             payload: json!({}),

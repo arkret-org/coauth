@@ -229,7 +229,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     let supported_reducer_profiles = body["x_coauth_supported_reducer_profiles"]
         .as_array()
         .unwrap();
-    assert!(supported_reducer_profiles.contains(&serde_json::json!("ck.reducer.v1")));
+    assert!(supported_reducer_profiles.contains(&serde_json::json!("ak.reducer.v1")));
     // T6.3 — `ck.schema.v1` was a coauth-only placeholder. The actual
     // schemas this surface emits are `ck.schema.core.v1` (umbrella
     // core schemas, soland / SDK convention) and
@@ -237,17 +237,17 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     let supported_schema_profiles = body["x_coauth_supported_schema_profiles"]
         .as_array()
         .unwrap();
-    assert!(supported_schema_profiles.contains(&serde_json::json!("ck.schema.core.v1")));
+    assert!(supported_schema_profiles.contains(&serde_json::json!("ak.schema.core.v1")));
     assert!(
-        supported_schema_profiles.contains(&serde_json::json!("ck.schema.service_describe.v1"))
+        supported_schema_profiles.contains(&serde_json::json!("ak.schema.service_describe.v1"))
     );
     assert!(
-        !supported_schema_profiles.contains(&serde_json::json!("ck.schema.v1")),
+        !supported_schema_profiles.contains(&serde_json::json!("ak.schema.v1")),
         "the removed `ck.schema.v1` placeholder MUST NOT be advertised"
     );
     let supported_operations = body["supported_operations"].as_array().unwrap();
     assert!(
-        supported_operations.contains(&serde_json::json!("ck.self.policy.query.check")),
+        supported_operations.contains(&serde_json::json!("ak.self.policy.query.check")),
         "implemented POST /api/v1/policy/check MUST be advertised as ck.self.policy.query.check"
     );
     let not_authoritative_for = body["x_coauth_service_boundary"]["not_authoritative_for"]
@@ -277,13 +277,13 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         .filter_map(|entry| Some((entry["name"].as_str()?, entry["notes"].as_str()?)))
         .collect();
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "ck.root.identity.query.resolve" && notes.contains("delegated-resolver")
+        *name == "ak.root.identity.query.resolve" && notes.contains("delegated-resolver")
     }));
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "ck.root.identity.document.resource.get" && notes.contains("delegated-resolver")
+        *name == "ak.root.identity.document.resource.get" && notes.contains("delegated-resolver")
     }));
     assert!(compat.iter().any(|(name, notes)| {
-        *name == "ck.root.identity.registry.query.describe" && notes.contains("delegated-resolver")
+        *name == "ak.root.identity.registry.query.describe" && notes.contains("delegated-resolver")
     }));
     // verified_profiles MUST NOT include ck.profile.identity_registry.v1
     // because coauth is a delegated resolver, not a registry.
@@ -292,7 +292,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         .expect("verified_profiles array present");
     for entry in verified {
         assert_ne!(
-            entry["profile_id"], "ck.profile.identity_registry.v1",
+            entry["profile_id"], "ak.profile.identity_registry.v1",
             "coauth MUST NOT advertise canonical identity registry conformance"
         );
     }
@@ -348,18 +348,18 @@ fn service_describe_advertises_auth_session_logout_boundary() {
 
     assert!(
         supported_operations.contains(&serde_json::json!(
-            "ck.gate.account.command.logout_auth_session"
+            "ak.gate.account.command.logout_auth_session"
         )),
         "coauth exposes only the Auth-side hard logout sub-operation"
     );
     assert!(
         !supported_operations.contains(&serde_json::json!(
-            "ck.gate.account.command.logout_session_grant"
+            "ak.gate.account.command.logout_session_grant"
         )),
         "the removed grant-only logout operation MUST NOT be advertised"
     );
     assert!(
-        !supported_operations.contains(&serde_json::json!("ck.gate.account.command.logout")),
+        !supported_operations.contains(&serde_json::json!("ak.gate.account.command.logout")),
         "the client-visible account logout operation belongs to the Account Authority"
     );
 }
@@ -491,7 +491,7 @@ fn describe_separates_claim_levels() {
     let supported_operations = body["supported_operations"]
         .as_array()
         .expect("supported_operations array present");
-    assert!(supported_operations.contains(&serde_json::json!("ck.self.policy.query.check")));
+    assert!(supported_operations.contains(&serde_json::json!("ak.self.policy.query.check")));
 }
 
 #[test]
@@ -625,7 +625,7 @@ fn session_grant_is_signed_for_the_user_did() {
     jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
 
     let payload = jwt.payload();
-    assert_eq!(payload.kind, "ck.session.grant");
+    assert_eq!(payload.kind, "ak.session.grant");
     assert_eq!(payload.grant_id, grant.grant_id);
     assert_eq!(
         payload.subject,
@@ -926,7 +926,7 @@ fn session_grant_introspection_proof(
         .unwrap();
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::EdDsa);
     let claims = SessionGrantIntrospectionProofClaims {
-        kind: "ck.session_grant.introspection_proof.v1".to_owned(),
+        kind: "ak.session_grant.introspection_proof.v1".to_owned(),
         grant_id: grant.grant_id.to_string(),
         grant_jwt_hash: session_grant_jwt_hash(&material.grant_jwt),
         audience: grant.audience.clone(),
@@ -1218,7 +1218,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         &state.key_store,
         "did:web:agent.example",
         audience.clone(),
-        vec!["ck.agent.action:message.send".to_owned()],
+        vec!["ak.agent.action:message.send".to_owned()],
         "agent-runtime-dpop-jkt".to_owned(),
         session_public_key.clone(),
         scope_details.clone(),
@@ -1594,7 +1594,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let acct = user_handle_acct_alias(&url_builder, &user);
     // Spec 7157ee8 §3.1 — canonical `<localpart>:<domain>` form on
     // the wire `handle` field.
-    assert_eq!(material.payload.schema, "ck.schema.handle_claim.v1");
+    assert_eq!(material.payload.schema, "ak.schema.handle_claim.v1");
     let payload_value = serde_json::to_value(&material.payload).unwrap();
     assert!(payload_value.get("type").is_none());
     let handle = material.payload.handle.as_ref().unwrap();

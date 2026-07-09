@@ -303,7 +303,7 @@ pub async fn revoke_handler(
 /// Fanout envelope kind expected by soland's
 /// `/_soland/root/authz/capability-fanout` handler (shared contract in
 /// `soland_core::capability_fanout`).
-const CAPABILITY_FANOUT_KIND: &str = "ck.coauth.collaboration_capability.fanout.v1";
+const CAPABILITY_FANOUT_KIND: &str = "ak.coauth.collaboration_capability.fanout.v1";
 
 fn build_grant_fanout_payload(
     grant_event_id: &str,
@@ -320,7 +320,7 @@ fn build_grant_fanout_payload(
 ) -> Result<CapabilityFanoutBody, AppError> {
     let mut grant = json!({
         "id": capability_grant_id,
-        "schema": "ck.schema.capability.v1",
+        "schema": "ak.schema.capability.v1",
         "realm_id": realm_id,
         "issuer": service_did,
         "subject": subject,
@@ -346,7 +346,7 @@ fn build_grant_fanout_payload(
     let proof = sign_fanout_proof(
         key_store,
         service_did,
-        "ck.capability.grant",
+        "ak.capability.grant",
         grant_event_id,
         capability_grant_id,
         &unsigned_payload,
@@ -359,7 +359,7 @@ fn build_grant_fanout_payload(
         kind: CAPABILITY_FANOUT_KIND.to_owned(),
         operation: "grant".to_owned(),
         issuer_service_did: service_did.to_owned(),
-        event_kind: "ck.capability.grant".to_owned(),
+        event_kind: "ak.capability.grant".to_owned(),
         event_id: grant_event_id.to_owned(),
         capability_grant_id: capability_grant_id.to_owned(),
         payload: json!({
@@ -387,7 +387,7 @@ fn build_revoke_fanout_payload(
     let proof = sign_fanout_proof(
         key_store,
         service_did,
-        "ck.capability.revoke",
+        "ak.capability.revoke",
         revoke_event_id,
         capability_grant_id,
         &revoke_payload,
@@ -399,7 +399,7 @@ fn build_revoke_fanout_payload(
         kind: CAPABILITY_FANOUT_KIND.to_owned(),
         operation: "revoke".to_owned(),
         issuer_service_did: service_did.to_owned(),
-        event_kind: "ck.capability.revoke".to_owned(),
+        event_kind: "ak.capability.revoke".to_owned(),
         event_id: revoke_event_id.to_owned(),
         capability_grant_id: capability_grant_id.to_owned(),
         payload: revoke_payload,
@@ -580,13 +580,13 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(payload.event_kind, "ck.capability.grant");
+        assert_eq!(payload.event_kind, "ak.capability.grant");
         assert_eq!(
             payload.payload["grant_id"],
             "ak:grant:01904100-0000-7000-8000-000000000010"
         );
         assert_eq!(payload.payload["grant"]["issuer"], "did:web:coauth.example");
-        assert_eq!(payload.payload["grant"]["actions"], json!(["ck.pin.add"]));
+        assert_eq!(payload.payload["grant"]["actions"], json!(["ak.pin.add"]));
         assert_eq!(payload.principal_servers[0]["did"], "did:web:soland.test");
         let proof = &payload.payload["grant"]["proofs"][0];
         assert_eq!(proof["alg"], "EdDSA");
@@ -619,7 +619,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(payload.event_kind, "ck.capability.revoke");
+        assert_eq!(payload.event_kind, "ak.capability.revoke");
         assert_eq!(
             payload.payload["grant_id"],
             "ak:grant:01904100-0000-7000-8000-000000000010"

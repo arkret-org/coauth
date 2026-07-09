@@ -209,7 +209,7 @@ mod tests {
         PolicyCheckBoundTo {
             realm_id: RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap(),
             actor_id: Did::new("did:web:alice.example").unwrap(),
-            action: "ck.message.create".into(),
+            action: "ak.message.create".into(),
             request_canonical_digest: empty_sha256(),
             policy_server_id: Did::new("did:web:coauth.example").unwrap(),
         }
@@ -223,7 +223,7 @@ mod tests {
         let mem = empty_sha256();
         let obligations: Vec<serde_json::Value> = Vec::new();
         let transcript = DecisionTranscript {
-            kind: "ck.policy.check.transcript.v1",
+            kind: "ak.policy.check.transcript.v1",
             request_id: "req-1",
             decision: &AuthzDecision::Allow,
             bound_to: &bound,
@@ -242,7 +242,7 @@ mod tests {
         // the version tag verbatim.
         assert!(a.starts_with(b"{"));
         let s = std::str::from_utf8(&a).unwrap();
-        assert!(s.contains("ck.policy.check.transcript.v1"));
+        assert!(s.contains("ak.policy.check.transcript.v1"));
         // Lexicographic key order: `auth_state_digest` precedes `bound_to`
         // precedes `decision`; the serializer
         // sorts keys so we can spot-check the prefix.
@@ -255,7 +255,7 @@ mod tests {
         let h = empty_sha256();
         let obligations: Vec<serde_json::Value> = Vec::new();
         let mut transcript = DecisionTranscript {
-            kind: "ck.policy.check.transcript.v1",
+            kind: "ak.policy.check.transcript.v1",
             request_id: "req-1",
             decision: &AuthzDecision::Allow,
             bound_to: &bound,

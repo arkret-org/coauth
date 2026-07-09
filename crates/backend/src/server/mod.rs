@@ -520,8 +520,8 @@ mod tests {
                             "issuer": "https://offline.invalid",
                             "client_id": "inkson",
                             "redirect_uri": "http://127.0.0.1:8080/auth/callback",
-                            "state": "ck-state-0123456789abcdef",
-                            "nonce": "ck-nonce-0123456789abcdef",
+                            "state": "ak.state-0123456789abcdef",
+                            "nonce": "ak.nonce-0123456789abcdef",
                             "authorization_code": "stale-code",
                             "code_verifier": "0123456789012345678901234567890123456789012"
                         }

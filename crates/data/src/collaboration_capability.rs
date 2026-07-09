@@ -22,22 +22,22 @@ pub use crate::storage::collaboration_capability::*;
 #[serde(rename_all = "snake_case")]
 pub enum CollaborationCapabilityAction {
     /// `ck.rsvp.set` — write RSVP state for calendar events.
-    #[serde(rename = "ck.rsvp.set")]
+    #[serde(rename = "ak.rsvp.set")]
     RsvpSet,
     /// `ck.pin.add` — add or update a pinned item.
-    #[serde(rename = "ck.pin.add")]
+    #[serde(rename = "ak.pin.add")]
     PinAdd,
     /// `ck.pin.remove` — remove a pinned item.
-    #[serde(rename = "ck.pin.remove")]
+    #[serde(rename = "ak.pin.remove")]
     PinRemove,
     /// `ck.pin.reorder` — update pinned-item ordering.
-    #[serde(rename = "ck.pin.reorder")]
+    #[serde(rename = "ak.pin.reorder")]
     PinReorder,
     /// `ck.realm.disappearing_policy` — manage disappearing-message policy.
-    #[serde(rename = "ck.realm.disappearing_policy")]
+    #[serde(rename = "ak.realm.disappearing_policy")]
     RealmDisappearingPolicy,
     /// `ck.realm.search_policy` — manage blind-search policy.
-    #[serde(rename = "ck.realm.search_policy")]
+    #[serde(rename = "ak.realm.search_policy")]
     RealmSearchPolicy,
 }
 
@@ -59,12 +59,12 @@ impl CollaborationCapabilityAction {
     #[must_use]
     pub fn as_action_str(&self) -> &'static str {
         match self {
-            Self::RsvpSet => "ck.rsvp.set",
-            Self::PinAdd => "ck.pin.add",
-            Self::PinRemove => "ck.pin.remove",
-            Self::PinReorder => "ck.pin.reorder",
-            Self::RealmDisappearingPolicy => "ck.realm.disappearing_policy",
-            Self::RealmSearchPolicy => "ck.realm.search_policy",
+            Self::RsvpSet => "ak.rsvp.set",
+            Self::PinAdd => "ak.pin.add",
+            Self::PinRemove => "ak.pin.remove",
+            Self::PinReorder => "ak.pin.reorder",
+            Self::RealmDisappearingPolicy => "ak.realm.disappearing_policy",
+            Self::RealmSearchPolicy => "ak.realm.search_policy",
         }
     }
 
@@ -101,10 +101,10 @@ impl CollaborationCapabilityAction {
     #[must_use]
     pub fn profile(&self) -> &'static str {
         match self {
-            Self::RsvpSet => "ck.profile.calendar_event.v1",
-            Self::PinAdd | Self::PinRemove | Self::PinReorder => "ck.profile.pinned_items.v1",
-            Self::RealmDisappearingPolicy => "ck.profile.disappearing.v1",
-            Self::RealmSearchPolicy => "ck.profile.search.blind_index.v1",
+            Self::RsvpSet => "ak.profile.calendar_event.v1",
+            Self::PinAdd | Self::PinRemove | Self::PinReorder => "ak.profile.pinned_items.v1",
+            Self::RealmDisappearingPolicy => "ak.profile.disappearing.v1",
+            Self::RealmSearchPolicy => "ak.profile.search.blind_index.v1",
         }
     }
 
@@ -132,12 +132,12 @@ impl std::str::FromStr for CollaborationCapabilityAction {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "ck.rsvp.set" => Ok(Self::RsvpSet),
-            "ck.pin.add" => Ok(Self::PinAdd),
-            "ck.pin.remove" => Ok(Self::PinRemove),
-            "ck.pin.reorder" => Ok(Self::PinReorder),
-            "ck.realm.disappearing_policy" => Ok(Self::RealmDisappearingPolicy),
-            "ck.realm.search_policy" => Ok(Self::RealmSearchPolicy),
+            "ak.rsvp.set" => Ok(Self::RsvpSet),
+            "ak.pin.add" => Ok(Self::PinAdd),
+            "ak.pin.remove" => Ok(Self::PinRemove),
+            "ak.pin.reorder" => Ok(Self::PinReorder),
+            "ak.realm.disappearing_policy" => Ok(Self::RealmDisappearingPolicy),
+            "ak.realm.search_policy" => Ok(Self::RealmSearchPolicy),
             _ => Err(ParseCollaborationCapabilityActionError),
         }
     }
@@ -227,12 +227,12 @@ mod tests {
         assert_eq!(
             actual,
             vec![
-                "ck.rsvp.set",
-                "ck.pin.add",
-                "ck.pin.remove",
-                "ck.pin.reorder",
-                "ck.realm.disappearing_policy",
-                "ck.realm.search_policy",
+                "ak.rsvp.set",
+                "ak.pin.add",
+                "ak.pin.remove",
+                "ak.pin.reorder",
+                "ak.realm.disappearing_policy",
+                "ak.realm.search_policy",
             ]
         );
     }

@@ -91,7 +91,7 @@ pub(crate) fn issue_handle_claim(
     // The proof block then carries that hash; the JWT signs the complete
     // payload.
     let payload_no_proofs = HandleClaimPayload {
-        schema: "ck.schema.handle_claim.v1".to_owned(),
+        schema: "ak.schema.handle_claim.v1".to_owned(),
         handle: Some(handle),
         handle_aliases: aliases.clone(),
         subject: Some(subject),

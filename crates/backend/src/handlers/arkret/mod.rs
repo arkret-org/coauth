@@ -77,7 +77,7 @@ pub enum SessionGrantError {
     /// deployment self-reports.
     ///
     /// NOTE (honest boundary): coauth does not currently issue any
-    /// `ck.session.grant` signed by a client inception key (grants are signed
+    /// `ak.session.grant` signed by a client inception key (grants are signed
     /// by the deployment service key over an authenticated browser session),
     /// so this variant is not produced by the present issuance path. It exists
     /// as the typed rejection surface for a future genuine inception-key-signed

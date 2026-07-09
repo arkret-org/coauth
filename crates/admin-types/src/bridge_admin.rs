@@ -25,7 +25,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const ADMIN_BRIDGE_CONTRACT: &str = "ck.contract.coauth_admin_bridge.v1";
+pub const ADMIN_BRIDGE_CONTRACT: &str = "ak.contract.coauth_admin_bridge.v1";
 pub const ADMIN_BRIDGE_VERSION: &str = "0.2.0-durable-proposals";
 pub const ADMIN_BRIDGE_API_BASE_PATH: &str = "/_coauth/admin";
 pub const ADMIN_BRIDGE_ACCOUNTS_PATH: &str = "/_coauth/admin/accounts";

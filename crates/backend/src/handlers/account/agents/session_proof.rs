@@ -38,29 +38,29 @@ const AGENT_KEY_SCOPE_APPLET: &str = "applet";
 pub(super) const AGENT_KEY_SCOPE_LIMITED: &str = "limited";
 
 const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
-    "ck.self.events.query.describe",
-    "ck.self.events.command.submit",
-    "ck.self.events.resource.get",
-    "ck.self.events.query.resolve",
-    "ck.self.events.query.scan",
-    "ck.self.events.stream.subscribe",
-    "ck.self.events.query.frontier",
+    "ak.self.events.query.describe",
+    "ak.self.events.command.submit",
+    "ak.self.events.resource.get",
+    "ak.self.events.query.resolve",
+    "ak.self.events.query.scan",
+    "ak.self.events.stream.subscribe",
+    "ak.self.events.query.frontier",
 ];
 
 /// Closed action set of the `limited` tier (CKP-0008 §4.5 baseline). Shared
 /// with `key_pair.rs`, which projects the same set into the spec-typed
 /// `agent_key_scope.actions` on the `ck.agent.key.authorize` fan-out payload.
 pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
-    "ck.self.events.query.describe",
-    "ck.self.events.command.submit",
-    "ck.self.events.resource.get",
-    "ck.self.events.query.resolve",
-    "ck.self.events.query.scan",
-    "ck.self.events.stream.subscribe",
-    "ck.self.events.query.frontier",
-    "ck.event.read",
-    "ck.message.create",
-    "ck.reaction.add",
+    "ak.self.events.query.describe",
+    "ak.self.events.command.submit",
+    "ak.self.events.resource.get",
+    "ak.self.events.query.resolve",
+    "ak.self.events.query.scan",
+    "ak.self.events.stream.subscribe",
+    "ak.self.events.query.frontier",
+    "ak.event.read",
+    "ak.message.create",
+    "ak.reaction.add",
 ];
 
 /// Outcome of validating an `agent_key_proof` session-grant request.
@@ -721,10 +721,10 @@ fn service_surface_scope_token(token: &str) -> bool {
 fn applet_service_scope_token(token: &str) -> bool {
     matches!(
         token,
-        "ck.applet.query.describe"
-            | "ck.applet.resource.get"
-            | "ck.applet.command.invoke"
-            | "ck.applet.action.request"
+        "ak.applet.query.describe"
+            | "ak.applet.resource.get"
+            | "ak.applet.command.invoke"
+            | "ak.applet.action.request"
     )
 }
 
@@ -735,17 +735,17 @@ fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejectio
 }
 
 fn realm_resource_scope_token(token: &str) -> bool {
-    token.starts_with("ck.self.events.")
-        || token.starts_with("ck.applet.")
-        || token.starts_with("ck.event.")
-        || token.starts_with("ck.message.")
-        || token.starts_with("ck.reaction.")
-        || token.starts_with("ck.strand.")
-        || token.starts_with("ck.space.")
-        || token.starts_with("ck.blob.")
-        || token.starts_with("ck.call.")
-        || token.starts_with("ck.morph.")
-        || token.starts_with("ck.relation.")
+    token.starts_with("ak.self.events.")
+        || token.starts_with("ak.applet.")
+        || token.starts_with("ak.event.")
+        || token.starts_with("ak.message.")
+        || token.starts_with("ak.reaction.")
+        || token.starts_with("ak.strand.")
+        || token.starts_with("ak.space.")
+        || token.starts_with("ak.blob.")
+        || token.starts_with("ak.call.")
+        || token.starts_with("ak.morph.")
+        || token.starts_with("ak.relation.")
 }
 
 fn scope_request_has_resource_selectors(scope_request: &AgentScopeRequestInput) -> bool {
@@ -1100,10 +1100,10 @@ fn applet_agent_scope_token_allowed(token: &str) -> bool {
 }
 
 fn realm_agent_scope_token_allowed(token: &str) -> bool {
-    if token.starts_with("ck.account.")
-        || token.starts_with("ck.admin.")
-        || token.starts_with("ck.self.agent.")
-        || token.starts_with("ck.gate.")
+    if token.starts_with("ak.account.")
+        || token.starts_with("ak.admin.")
+        || token.starts_with("ak.self.agent.")
+        || token.starts_with("ak.gate.")
     {
         return false;
     }
@@ -1113,16 +1113,16 @@ fn realm_agent_scope_token_allowed(token: &str) -> bool {
 }
 
 fn account_agent_scope_token_allowed(token: &str) -> bool {
-    if token.starts_with("ck.admin.")
-        || token.starts_with("ck.gate.")
-        || token.starts_with("ck.self.agent.")
+    if token.starts_with("ak.admin.")
+        || token.starts_with("ak.gate.")
+        || token.starts_with("ak.self.agent.")
     {
         return false;
     }
 
     service_surface_scope_token(token)
-        || token.starts_with("ck.self.account.")
-        || token.starts_with("ck.account.")
+        || token.starts_with("ak.self.account.")
+        || token.starts_with("ak.account.")
         || realm_agent_scope_token_allowed(token)
 }
 
@@ -1278,9 +1278,9 @@ mod tests {
             AGENT_KEY_SCOPE_LIMITED,
             &[
                 " ck.self.events.command.submit ".to_owned(),
-                "ck.message.create".to_owned(),
-                "ck.self.events.command.submit".to_owned(),
-                "ck.reaction.add".to_owned(),
+                "ak.message.create".to_owned(),
+                "ak.self.events.command.submit".to_owned(),
+                "ak.reaction.add".to_owned(),
             ],
         )
         .expect("limited runtime scope should be accepted");
@@ -1288,9 +1288,9 @@ mod tests {
         assert_eq!(
             scope,
             vec![
-                "ck.message.create".to_owned(),
-                "ck.reaction.add".to_owned(),
-                "ck.self.events.command.submit".to_owned(),
+                "ak.message.create".to_owned(),
+                "ak.reaction.add".to_owned(),
+                "ak.self.events.command.submit".to_owned(),
             ]
         );
     }
@@ -1299,8 +1299,8 @@ mod tests {
     fn spec_agent_key_scope_object_limits_requested_actions() {
         let agent_key_scope = serde_json::json!({
             "actions": [
-                "ck.self.events.stream.subscribe",
-                "ck.event.read"
+                "ak.self.events.stream.subscribe",
+                "ak.event.read"
             ],
             "resources": []
         })
@@ -1309,22 +1309,22 @@ mod tests {
         let scope = intersect_requested_scope_with_agent_key_scope(
             &agent_key_scope,
             &[
-                "ck.self.events.stream.subscribe".to_owned(),
-                "ck.event.read".to_owned(),
+                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.event.read".to_owned(),
             ],
         )
         .expect("spec agent_key_scope object should act as the runtime ceiling");
         assert_eq!(
             scope,
             vec![
-                "ck.event.read".to_owned(),
-                "ck.self.events.stream.subscribe".to_owned(),
+                "ak.event.read".to_owned(),
+                "ak.self.events.stream.subscribe".to_owned(),
             ]
         );
 
         let err = intersect_requested_scope_with_agent_key_scope(
             &agent_key_scope,
-            &["ck.self.events.command.submit".to_owned()],
+            &["ak.self.events.command.submit".to_owned()],
         )
         .expect_err("actions outside the signed agent_key_scope must reject");
         assert_eq!(err, AgentAuthRejection::ProofInvalid);
@@ -1334,7 +1334,7 @@ mod tests {
     fn limited_agent_key_scope_rejects_admin_or_control_surface() {
         let err = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_LIMITED,
-            &["ck.self.agent.command.deactivate".to_owned()],
+            &["ak.self.agent.command.deactivate".to_owned()],
         )
         .expect_err("limited key must not mint control-plane scope");
 
@@ -1345,7 +1345,7 @@ mod tests {
     fn realm_agent_key_scope_rejects_account_surface() {
         let err = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ck.account.status".to_owned()],
+            &["ak.account.status".to_owned()],
         )
         .expect_err("realm key must not mint account-surface scope");
 
@@ -1356,7 +1356,7 @@ mod tests {
     fn realm_agent_key_scope_rejects_unknown_content_action() {
         let err = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ck.message.not_registered".to_owned()],
+            &["ak.message.not_registered".to_owned()],
         )
         .expect_err("unknown content actions must fail closed");
 
@@ -1365,7 +1365,7 @@ mod tests {
 
     #[test]
     fn legacy_events_subscribe_scope_rejects_fail_closed() {
-        let legacy_scope = format!("ck.self.events.{}", "subscribe");
+        let legacy_scope = format!("ak.self.events.{}", "subscribe");
         let err = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_LIMITED,
             std::slice::from_ref(&legacy_scope),
@@ -1387,7 +1387,7 @@ mod tests {
     fn unknown_agent_key_scope_rejects_fail_closed() {
         let err = intersect_requested_scope_with_agent_key_scope(
             "delegated-root",
-            &["ck.self.events.query.scan".to_owned()],
+            &["ak.self.events.query.scan".to_owned()],
         )
         .expect_err("unknown key tiers must fail closed");
 
@@ -1407,11 +1407,11 @@ mod tests {
 
     #[test]
     fn session_scope_is_requested_key_grant_policy_intersection() {
-        let mut capability_scope = capability_scope(&["ck.message.create", "ck.reaction.add"]);
+        let mut capability_scope = capability_scope(&["ak.message.create", "ck.reaction.add"]);
         capability_scope.realm_ids = Some(set(&["realm-a", "realm-b"]));
         capability_scope.allowed_tracks = Some(set(&["main", "ops"]));
 
-        let mut policy_scope = policy_scope(Some(&["ck.message.create"]));
+        let mut policy_scope = policy_scope(Some(&["ak.message.create"]));
         policy_scope.realm_ids = Some(set(&["realm-b", "realm-c"]));
         policy_scope.allowed_tracks = Some(set(&["main"]));
 
@@ -1424,7 +1424,7 @@ mod tests {
 
         let effective_scope = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ck.message.create".to_owned(), "ck.reaction.add".to_owned()],
+            &["ak.message.create".to_owned(), "ck.reaction.add".to_owned()],
             &scope_request,
             &capability_scope,
             Some(&policy_scope),
@@ -1433,7 +1433,7 @@ mod tests {
         )
         .expect("session scope should be narrowed to the four-way intersection");
 
-        assert_eq!(effective_scope.granted_scope, vec!["ck.message.create"]);
+        assert_eq!(effective_scope.granted_scope, vec!["ak.message.create"]);
         assert_eq!(effective_scope.realm_ids, vec!["realm-b"]);
         assert_eq!(effective_scope.allowed_tracks, vec!["main"]);
         assert_eq!(
@@ -1445,7 +1445,7 @@ mod tests {
 
     #[test]
     fn stream_service_scope_is_not_filtered_by_content_grants() {
-        let mut capability_scope = capability_scope(&["ck.event.read"]);
+        let mut capability_scope = capability_scope(&["ak.event.read"]);
         capability_scope.realm_ids = Some(set(&["realm-a"]));
 
         let mut policy_scope = policy_scope(None);
@@ -1460,8 +1460,8 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_LIMITED,
             &[
-                "ck.self.events.stream.subscribe".to_owned(),
-                "ck.event.read".to_owned(),
+                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.event.read".to_owned(),
             ],
             &scope_request,
             &capability_scope,
@@ -1474,15 +1474,15 @@ mod tests {
         assert_eq!(
             effective_scope.granted_scope,
             vec![
-                "ck.event.read".to_owned(),
-                "ck.self.events.stream.subscribe".to_owned()
+                "ak.event.read".to_owned(),
+                "ak.self.events.stream.subscribe".to_owned()
             ]
         );
     }
 
     #[test]
     fn stream_service_scope_survives_without_read_content_grant() {
-        let mut capability_scope = capability_scope(&["ck.reaction.add"]);
+        let mut capability_scope = capability_scope(&["ak.reaction.add"]);
         capability_scope.realm_ids = Some(set(&["realm-a"]));
 
         let mut policy_scope = policy_scope(None);
@@ -1497,8 +1497,8 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_LIMITED,
             &[
-                "ck.self.events.stream.subscribe".to_owned(),
-                "ck.event.read".to_owned(),
+                "ak.self.events.stream.subscribe".to_owned(),
+                "ak.event.read".to_owned(),
             ],
             &scope_request,
             &capability_scope,
@@ -1510,13 +1510,13 @@ mod tests {
 
         assert_eq!(
             effective_scope.granted_scope,
-            vec!["ck.self.events.stream.subscribe"]
+            vec!["ak.self.events.stream.subscribe"]
         );
     }
 
     #[test]
     fn submit_service_scope_survives_without_message_create_content_grant() {
-        let mut capability_scope = capability_scope(&["ck.event.read"]);
+        let mut capability_scope = capability_scope(&["ak.event.read"]);
         capability_scope.realm_ids = Some(set(&["realm-a"]));
 
         let mut policy_scope = policy_scope(None);
@@ -1531,8 +1531,8 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_LIMITED,
             &[
-                "ck.self.events.command.submit".to_owned(),
-                "ck.message.create".to_owned(),
+                "ak.self.events.command.submit".to_owned(),
+                "ak.message.create".to_owned(),
             ],
             &scope_request,
             &capability_scope,
@@ -1544,19 +1544,19 @@ mod tests {
 
         assert_eq!(
             effective_scope.granted_scope,
-            vec!["ck.self.events.command.submit"]
+            vec!["ak.self.events.command.submit"]
         );
     }
 
     #[test]
     fn content_only_scope_without_capability_grant_rejects_fail_closed() {
-        let capability_scope = capability_scope(&["ck.event.read"]);
+        let capability_scope = capability_scope(&["ak.event.read"]);
         let scope_request = AgentScopeRequestInput::default();
         let policy_data = serde_json::json!({});
 
         let err = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_LIMITED,
-            &["ck.message.create".to_owned()],
+            &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
             None,
@@ -1570,8 +1570,8 @@ mod tests {
 
     #[test]
     fn resource_scope_without_capability_selector_rejects_fail_closed() {
-        let capability_scope = capability_scope(&["ck.message.create"]);
-        let mut policy_scope = policy_scope(Some(&["ck.message.create"]));
+        let capability_scope = capability_scope(&["ak.message.create"]);
+        let mut policy_scope = policy_scope(Some(&["ak.message.create"]));
         policy_scope.realm_ids = Some(set(&["realm-a"]));
         let scope_request = AgentScopeRequestInput {
             realm_ids: vec!["realm-a".to_owned()],
@@ -1581,7 +1581,7 @@ mod tests {
 
         let err = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ck.message.create".to_owned()],
+            &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
             Some(&policy_scope),
@@ -1595,7 +1595,7 @@ mod tests {
 
     #[test]
     fn resource_scope_without_realm_policy_rejects_fail_closed() {
-        let mut capability_scope = capability_scope(&["ck.message.create"]);
+        let mut capability_scope = capability_scope(&["ak.message.create"]);
         capability_scope.realm_ids = Some(set(&["realm-a"]));
         let scope_request = AgentScopeRequestInput {
             realm_ids: vec!["realm-a".to_owned()],
@@ -1604,7 +1604,7 @@ mod tests {
 
         let err = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ck.message.create".to_owned()],
+            &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
             None,
@@ -1618,10 +1618,10 @@ mod tests {
 
     #[test]
     fn realm_policy_deny_action_rejects_effective_scope() {
-        let mut capability_scope = capability_scope(&["ck.message.create"]);
+        let mut capability_scope = capability_scope(&["ak.message.create"]);
         capability_scope.realm_ids = Some(set(&["realm-a"]));
 
-        let mut policy_scope = policy_scope(Some(&["ck.message.create"]));
+        let mut policy_scope = policy_scope(Some(&["ak.message.create"]));
         policy_scope.realm_ids = Some(set(&["realm-a"]));
 
         let scope_request = AgentScopeRequestInput {
@@ -1631,14 +1631,14 @@ mod tests {
         let policy_data = serde_json::json!({
             "realms": {
                 "realm-a": {
-                    "deny_actions": ["ck.message.create"]
+                    "deny_actions": ["ak.message.create"]
                 }
             }
         });
 
         let err = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ck.message.create".to_owned()],
+            &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
             Some(&policy_scope),
@@ -1652,11 +1652,11 @@ mod tests {
 
     #[test]
     fn requested_track_without_policy_coverage_rejects_fail_closed() {
-        let mut capability_scope = capability_scope(&["ck.message.create"]);
+        let mut capability_scope = capability_scope(&["ak.message.create"]);
         capability_scope.realm_ids = Some(set(&["realm-a"]));
         capability_scope.allowed_tracks = Some(set(&["main"]));
 
-        let mut policy_scope = policy_scope(Some(&["ck.message.create"]));
+        let mut policy_scope = policy_scope(Some(&["ak.message.create"]));
         policy_scope.realm_ids = Some(set(&["realm-a"]));
         policy_scope.allowed_tracks = Some(set(&["ops"]));
 
@@ -1669,7 +1669,7 @@ mod tests {
 
         let err = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ck.message.create".to_owned()],
+            &["ak.message.create".to_owned()],
             &scope_request,
             &capability_scope,
             Some(&policy_scope),
@@ -1686,7 +1686,7 @@ mod tests {
         let mut body = arkret_core::SessionGrantRequestBody {
             principal_id: Some(arkret_core::Did::new("did:web:agent.example").unwrap()),
             device_id: None,
-            requested_scope: vec!["ck.message.create".to_owned()],
+            requested_scope: vec!["ak.message.create".to_owned()],
             agent_key_authorization_ref: Some(
                 "ak:event:01970000-0000-7000-8000-000000000021".to_owned(),
             ),
@@ -1730,7 +1730,7 @@ mod tests {
         let mut scope_changed = body.clone();
         scope_changed
             .requested_scope
-            .push("ck.reaction.add".to_owned());
+            .push("ak.reaction.add".to_owned());
         assert_ne!(
             canonical_session_grant_request_digest_without_signature(&scope_changed).unwrap(),
             digest

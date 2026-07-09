@@ -13,7 +13,7 @@ use crate::handlers::arkret::*;
 //
 // `POST /_arkret/gate/account/session-grants` — the single client-visible
 // bridge from a standard authentication result into a Arkret
-// `ck.session.grant` (service-surface.md §2.5.1). The request body is the
+// `ak.session.grant` (service-surface.md §2.5.1). The request body is the
 // SDK-canonical `SessionGrantRequestBody`; the proof's `proof_kind` selects
 // the validator. coauth implements the `oidc_code_exchange` branch (the
 // former `/_coauth/.../auth/oidc/exchange` bridge logic, now moved here):
@@ -285,7 +285,7 @@ async fn issue_agent_key_proof_session_grant(
 
     // The agent runtime authenticates with its own key, not a human browser
     // session, so there is no browser-session anchor to persist against. The
-    // grant is a self-validating signed `ck.session.grant` JWT bound to the
+    // grant is a self-validating signed `ak.session.grant` JWT bound to the
     // runtime's DPoP key with the capped agent TTL; soland verifies the coauth
     // issuer signature and rechecks agent status inside the revocation
     // freshness window (CKP-0008 §4.11 natural-expiry path), bounded by the

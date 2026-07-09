@@ -18,7 +18,7 @@ use serde::Serialize;
 use super::*;
 use crate::handlers::common::DepotExt;
 
-const CLAIMED_PROFILE_IDS: &[&str] = &["ck.profile.auth_server.v1"];
+const CLAIMED_PROFILE_IDS: &[&str] = &["ak.profile.auth_server.v1"];
 
 const SUPPORTED_OPERATIONS: &[&str] = &[
     OP_SERVER_DESCRIBE,
@@ -29,17 +29,17 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
     OP_DIRECTORY_RESOLVE_HANDLE,
     OP_POLICY_CHECK,
     OP_ACCOUNT_ISSUE_SESSION_GRANT,
-    "ck.gate.account.command.refresh_session_grant",
-    "ck.gate.account.command.logout_auth_session",
-    "ck.gate.account.command.introspect_session_grant",
+    "ak.gate.account.command.refresh_session_grant",
+    "ak.gate.account.command.logout_auth_session",
+    "ak.gate.account.command.introspect_session_grant",
     OP_ACCOUNT_AGENT_KEY_PAIR,
     OP_ACCOUNT_DEVICE_ENROLL,
 ];
 
-const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ck.session.grant"];
+const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ak.session.grant"];
 
 const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] =
-    &["ck.schema.handle_claim.v1", "ck.schema.service_describe.v1"];
+    &["ak.schema.handle_claim.v1", "ck.schema.service_describe.v1"];
 
 #[derive(Debug, Serialize)]
 struct SupportedBinding {
@@ -321,7 +321,7 @@ fn service_boundary_descriptor() -> ServiceBoundaryDescriptor {
 
 fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
     StandardErrorEnvelopeDescriptor {
-        schema: "ck.error.envelope.v1",
+        schema: "ak.error.envelope.v1",
         content_type: "application/json",
         example: StandardErrorEnvelopeExample {
             ok: false,
@@ -574,7 +574,7 @@ pub(crate) fn service_describe_response(
             "claim_attestation",
             "policy_hook",
         ],
-        supported_reducer_profiles: vec!["ck.reducer.v1"],
+        supported_reducer_profiles: vec!["ak.reducer.v1"],
         // T6.3 — replace the historical `ck.schema.v1` placeholder with
         // the actual spec-declared schemas this surface emits. The
         // `ck.schema.service_describe.v1` schema covers the very
@@ -582,7 +582,7 @@ pub(crate) fn service_describe_response(
         // soland / SDK convention for the core-event-store schema
         // profile and is the umbrella the OIDC + account artefacts hash
         // under. Older `ck.schema.v1` is no longer published.
-        supported_schema_profiles: vec!["ck.schema.core.v1", "ck.schema.service_describe.v1"],
+        supported_schema_profiles: vec!["ak.schema.core.v1", "ck.schema.service_describe.v1"],
         supported_bindings: vec![SupportedBinding {
             kind: ARKRET_HTTP_BINDING,
             base_url: url_builder.http_base().to_string(),
@@ -641,7 +641,7 @@ pub(crate) fn service_describe_response(
             profile_id: CLAIMED_PROFILE_IDS[0],
             claim_kind: "self_claimed",
             notes: Some(
-                "Auth-server-shaped profile: issues short-lived audience-bound ck.session.grant, exposes ck.server.query.describe, MAY expose ck.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",
+                "Auth-server-shaped profile: issues short-lived audience-bound ak.session.grant, exposes ck.server.query.describe, MAY expose ck.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",
             ),
         }],
         // G4.T3 — verified_profiles populated by the cotest artifact loader
@@ -675,21 +675,21 @@ pub(crate) fn service_describe_response(
         // each note preserves the delegated-resolver boundary explicitly.
         compat_surfaces: vec![
             CompatSurfaceDescriptor {
-                name: "ck.root.identity.registry.query.describe",
+                name: "ak.root.identity.registry.query.describe",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: reports the upstream registry coauth proxies to; does not assert canonical ownership.",
                 ),
             },
             CompatSurfaceDescriptor {
-                name: "ck.root.identity.query.resolve",
+                name: "ak.root.identity.query.resolve",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: DID resolution is performed against the configured identity_registry_resolver; coauth caches but does not author DID documents.",
                 ),
             },
             CompatSurfaceDescriptor {
-                name: "ck.root.identity.document.resource.get",
+                name: "ak.root.identity.document.resource.get",
                 kind: "external_interop",
                 notes: Some(
                     "delegated-resolver interop: returns the cached/resolved DID document; coauth holds no authoritative key log for external DIDs.",

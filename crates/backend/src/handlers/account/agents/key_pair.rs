@@ -393,7 +393,7 @@ fn validate_controller_authorize_event<'a>(
             "authorize_event must be a controller-signed event object",
         ));
     }
-    if envelope.get("kind").and_then(Value::as_str) != Some("ck.agent.key.authorize") {
+    if envelope.get("kind").and_then(Value::as_str) != Some("ak.agent.key.authorize") {
         return Err(AppError::bad_request(
             "authorize_event.kind must be ck.agent.key.authorize",
         ));
@@ -761,7 +761,7 @@ mod tests {
     fn valid_authorize_event(pairing_request_id: &str) -> Value {
         json!({
             "event_id": "ak:event:01999999-0000-7000-8000-000000000001",
-            "kind": "ck.agent.key.authorize",
+            "kind": "ak.agent.key.authorize",
             "realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
             "actor_id": CONTROLLER,
             "actor_seq": 1,
@@ -776,8 +776,8 @@ mod tests {
                 "accountable_principal_id": CONTROLLER,
                 "agent_key_scope": {
                     "actions": [
-                        "ck.self.events.stream.subscribe",
-                        "ck.event.read"
+                        "ak.self.events.stream.subscribe",
+                        "ak.event.read"
                     ],
                     "resources": []
                 },

@@ -341,7 +341,7 @@ pub struct SubjectProofClaims {
 
 /// Constant for the subject-proof type discriminator. Kept as a
 /// `const` so callers can re-use it without typos.
-pub const SUBJECT_PROOF_KIND: &str = "ck.invite.subject_proof.v1";
+pub const SUBJECT_PROOF_KIND: &str = "ak.invite.subject_proof.v1";
 
 /// Inputs to [`verify_invite`].
 ///
@@ -1007,7 +1007,7 @@ mod tests {
     #[test]
     fn subject_proof_kind_constant_is_stable() {
         // Tripwire: any rename of the kind discriminator is a wire break.
-        assert_eq!(SUBJECT_PROOF_KIND, "ck.invite.subject_proof.v1");
+        assert_eq!(SUBJECT_PROOF_KIND, "ak.invite.subject_proof.v1");
     }
 
     #[test]

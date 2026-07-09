@@ -141,12 +141,12 @@ mod tests {
         assert_eq!(
             actual,
             vec![
-                "ck.rsvp.set",
-                "ck.pin.add",
-                "ck.pin.remove",
-                "ck.pin.reorder",
-                "ck.realm.disappearing_policy",
-                "ck.realm.search_policy",
+                "ak.rsvp.set",
+                "ak.pin.add",
+                "ak.pin.remove",
+                "ak.pin.reorder",
+                "ak.realm.disappearing_policy",
+                "ak.realm.search_policy",
             ]
         );
     }
@@ -161,8 +161,8 @@ mod tests {
         assert_eq!(rsvp.category, CapabilityCategory::Discussion);
         assert_eq!(rsvp.risk_tier, RiskTier::Low);
         assert!(rsvp.required_constraints.is_empty());
-        assert_eq!(rsvp.target_event_kinds, vec!["ck.rsvp.set"]);
-        assert_eq!(rsvp.profile, "ck.profile.calendar_event.v1");
+        assert_eq!(rsvp.target_event_kinds, vec!["ak.rsvp.set"]);
+        assert_eq!(rsvp.profile, "ak.profile.calendar_event.v1");
         assert_eq!(rsvp.event_mapping_kind, "same_name");
 
         let search_policy = templates.last().unwrap();
@@ -174,9 +174,9 @@ mod tests {
         assert_eq!(search_policy.risk_tier, RiskTier::High);
         assert_eq!(
             search_policy.target_event_kinds,
-            vec!["ck.realm.search_policy"]
+            vec!["ak.realm.search_policy"]
         );
-        assert_eq!(search_policy.profile, "ck.profile.search.blind_index.v1");
+        assert_eq!(search_policy.profile, "ak.profile.search.blind_index.v1");
         assert!(search_policy.requires_approval);
         assert!(search_policy.requires_expires_at);
     }
@@ -185,8 +185,8 @@ mod tests {
     fn wildcard_actions_are_not_grantable() {
         use std::str::FromStr;
 
-        assert!(CollaborationCapabilityAction::from_str("ck.pin.*").is_err());
-        assert!(CollaborationCapabilityAction::from_str("ck.realm.*").is_err());
+        assert!(CollaborationCapabilityAction::from_str("ak.pin.*").is_err());
+        assert!(CollaborationCapabilityAction::from_str("ak.realm.*").is_err());
     }
 
     #[test]

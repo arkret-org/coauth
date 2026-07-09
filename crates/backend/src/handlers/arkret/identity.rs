@@ -138,7 +138,7 @@ pub async fn directory_describe(
                     "invalid trust_domain: {error}"
                 ))))
             })?;
-    let supported_profiles = vec!["ck.profile.directory_service.v1".to_owned()];
+    let supported_profiles = vec!["ak.profile.directory_service.v1".to_owned()];
     let supported_features = vec![
         "directory.resolve".to_owned(),
         "directory.handle_lookup".to_owned(),
@@ -150,8 +150,8 @@ pub async fn directory_describe(
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.clone(),
         supported_operations: vec![
-            "ck.find.directory.query.describe".to_owned(),
-            "ck.find.directory.query.resolve_handle".to_owned(),
+            "ak.find.directory.query.describe".to_owned(),
+            "ak.find.directory.query.resolve_handle".to_owned(),
         ],
         supported_bindings: vec![
             arkret_core::SupportedBinding::new("http_json")

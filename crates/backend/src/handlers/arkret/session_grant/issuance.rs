@@ -137,7 +137,7 @@ fn issue_session_grant_for_audience_inner(
         .as_ref()
         .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
     let payload = SessionGrantPayload {
-        kind: "ck.session.grant".to_owned(),
+        kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
         subject: subject.clone(),
         audience: audience.clone(),
@@ -247,7 +247,7 @@ where
     persist_session_grant_with_browser_session_id(repo, rng, clock, None, material).await
 }
 
-/// Mint a signed agent `ck.session.grant` JWT bound to the agent principal as
+/// Mint a signed agent `ak.session.grant` JWT bound to the agent principal as
 /// subject and the runtime's DPoP key (`cnf.jkt`). No browser session is
 /// involved; `session_id` carries the grant id so the payload shape stays
 /// uniform without repeating the agent principal DID outside `subject`.
@@ -273,7 +273,7 @@ pub(crate) fn mint_agent_session_grant(
     let session_id = grant_id.to_string();
     let scope_details = compact_agent_scope_details(scope_details);
     let payload = SessionGrantPayload {
-        kind: "ck.session.grant".to_owned(),
+        kind: "ak.session.grant".to_owned(),
         grant_id: grant_id.clone(),
         subject: agent_principal_id.to_owned(),
         audience: audience.clone(),

@@ -6,7 +6,7 @@
 //!
 //! ```json
 //! {
-//!   "schema": "ck.schema.did_binding_control_proof.v1",
+//!   "schema": "ak.schema.did_binding_control_proof.v1",
 //!   "account_did": "<account DID>",
 //!   "verification_method": "<DID URL from verificationMethod.id>",
 //!   "audience": "<local coauth service DID>",
@@ -86,7 +86,7 @@ use crate::services::did_resolver::{
     DidResolution, DidResolutionIdentityFactRejection, DidResolveError, DidResolverService,
 };
 
-pub const DID_BINDING_CONTROL_PROOF_SCHEMA: &str = "ck.schema.did_binding_control_proof.v1";
+pub const DID_BINDING_CONTROL_PROOF_SCHEMA: &str = "ak.schema.did_binding_control_proof.v1";
 
 /// Canonical binding statement claims embedded in a proof JWS.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1193,7 +1193,7 @@ mod tests {
             .iter()
             .find(|vector| {
                 vector.get("name").and_then(serde_json::Value::as_str)
-                    == Some("ck.vector.encoding.crypto.ed25519_detached_jws.v1")
+                    == Some("ak.vector.encoding.crypto.ed25519_detached_jws.v1")
             })
             .expect("expected Ed25519 detached JWS binding vector");
         let vector: CryptoSignatureVector =

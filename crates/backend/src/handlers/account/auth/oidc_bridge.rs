@@ -1,4 +1,4 @@
-//! OIDC authorization-code → `ck.session.grant` exchange core.
+//! OIDC authorization-code → `ak.session.grant` exchange core.
 //!
 //! This module is the Account Authority's OIDC proof validator. It used to
 //! also serve the product-private `/_coauth/.../auth/oidc/{browser-bridge,
@@ -556,7 +556,7 @@ pub(crate) async fn ensure_soland_account_registered(
     }
 }
 
-/// Account Authority OIDC authorization-code → `ck.session.grant` exchange.
+/// Account Authority OIDC authorization-code → `ak.session.grant` exchange.
 ///
 /// This is the core that the canonical
 /// `POST /_arkret/gate/account/session-grants`
@@ -567,7 +567,7 @@ pub(crate) async fn ensure_soland_account_registered(
 /// 2. exchanges `authorization_code` + `code_verifier` at the `token_endpoint`,
 /// 3. validates issuer / state / nonce / redirect_uri / id_token nonce / principal binding / device
 ///    binding (`cnf.jkt` from the grant-binding DPoP key) / audience, and
-/// 4. mints + persists a device-bound `ck.session.grant`.
+/// 4. mints + persists a device-bound `ak.session.grant`.
 ///
 /// Binding failures surface as `proof_invalid`; transport / discovery failures
 /// surface as their own registry codes.
@@ -1500,9 +1500,9 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "session_grants".to_owned(),
                 method: "POST".to_owned(),
                 path: "/_arkret/gate/account/session-grants".to_owned(),
-                contract: "ck.gate.account.command.issue_session_grant".to_owned(),
+                contract: "ak.gate.account.command.issue_session_grant".to_owned(),
                 stability: "validated".to_owned(),
-                todo: "canonical Account Authority grant issuance; proof.proof_kind=oidc_code_exchange exchanges the OIDC authorization code, validates issuer/state/nonce/redirect_uri/principal/device/audience, and mints the device-bound ck.session.grant.".to_owned(),
+                todo: "canonical Account Authority grant issuance; proof.proof_kind=oidc_code_exchange exchanges the OIDC authorization code, validates issuer/state/nonce/redirect_uri/principal/device/audience, and mints the device-bound ak.session.grant.".to_owned(),
             },
             IntegrationManifestSurface {
                 name: "passkey_auth".to_owned(),
@@ -1861,8 +1861,8 @@ mod tests {
                         "issuer": "https://offline.invalid",
                         "client_id": "inkson",
                         "redirect_uri": "http://localhost:8080/auth/callback",
-                        "state": "ck-state-0123456789abcdef",
-                        "nonce": "ck-nonce-0123456789abcdef",
+                        "state": "ak.state-0123456789abcdef",
+                        "nonce": "ak.nonce-0123456789abcdef",
                         "authorization_code": "stale-code",
                         "code_verifier": "0123456789012345678901234567890123456789012"
                     }

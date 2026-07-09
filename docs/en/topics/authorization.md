@@ -22,7 +22,7 @@ bind together:
 
 ### Arkret session grants
 
-Principal Servers should validate `ck.session.grant` records for downstream
+Principal Servers should validate `ak.session.grant` records for downstream
 account and device access. The grant payload includes issuer service DID,
 subject principal DID, service account ID, optional device ID, audience,
 scopes, expiry, revocation reference, and a proof block.

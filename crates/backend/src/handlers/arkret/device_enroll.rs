@@ -39,12 +39,12 @@ use super::{CokretRouteError, SessionGrantPayload};
 use crate::handlers::common::DepotExt;
 use crate::services::device_enrollment_authority::enrollment_authority;
 
-const DEVICE_AUTHORIZE_KIND: &str = "ck.device.authorize";
+const DEVICE_AUTHORIZE_KIND: &str = "ak.device.authorize";
 const ENROLLMENT_AUTHORITY_SERVICE_FRAGMENT: &str = "#enrollment-authority";
 const ENROLLMENT_BINDING_KIND: &str = "service_attested";
 
 /// Extract the `Authorization: Bearer <token>` value (the caller's
-/// `ck.session.grant`), or a 401.
+/// `ak.session.grant`), or a 401.
 fn bearer_token_from_request(req: &Request) -> Result<String, CokretRouteError> {
     let header = req
         .headers()
@@ -218,7 +218,7 @@ pub async fn device_enroll_endpoint(
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
-    // 1. Durable-session auth: the caller presents its `ck.session.grant` (`Authorization: Bearer`)
+    // 1. Durable-session auth: the caller presents its `ak.session.grant` (`Authorization: Bearer`)
     //    plus a grant-binding `DPoP` proof bound to the grant's `cnf.jkt`. This is the same
     //    proof-of-possession path as session-grant refresh / logout (device-lifecycle §5.4
     //    grant-binding proof), NOT the short-lived OAuth access token: device enrollment is retried

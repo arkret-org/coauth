@@ -262,7 +262,7 @@ pub(crate) async fn build_policy_check_response(
     // captures the request id plus every signed response field, so a
     // verifier can rebuild these bytes from the wire request + response.
     let transcript = DecisionTranscript {
-        kind: "ck.policy.check.transcript.v1",
+        kind: "ak.policy.check.transcript.v1",
         request_id: request.request_id.as_str(),
         decision: &decision.decision,
         bound_to: &bound_to,
@@ -363,7 +363,7 @@ fn emit_audit_record(transcript: &DecisionTranscript<'_>, signature: &PolicyChec
     let canonical_str = String::from_utf8(canonical_bytes).unwrap_or_default();
     tracing::info!(
         target: "policy_audit",
-        kind = "ck.self.policy.query.check",
+        kind = "ak.self.policy.query.check",
         request_id = transcript.request_id,
         decision = ?transcript.decision,
         realm_id = transcript.bound_to.realm_id.as_str(),
@@ -405,7 +405,7 @@ mod tests {
             realm_id: realm(),
             actor_id: Did::new("did:web:alice.example").unwrap(),
             device_id: None,
-            action: "ck.message.create".into(),
+            action: "ak.message.create".into(),
             request_canonical_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
             source: PolicyCheckSource {
                 service_did: Did::new("did:web:soland.example").unwrap(),
@@ -526,7 +526,7 @@ mod tests {
             serde_json::Value::String(expires_at_str.clone())
         );
         let transcript = DecisionTranscript {
-            kind: "ck.policy.check.transcript.v1",
+            kind: "ak.policy.check.transcript.v1",
             request_id: request.request_id.as_str(),
             decision: &response.decision,
             bound_to: &response.bound_to,
