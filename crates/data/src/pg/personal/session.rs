@@ -365,7 +365,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
         }
 
         if let Some(device) = filter.device() {
-            let device_scope = format!("urn:cokret:client:device:{device}");
+            let device_scope = format!("urn:arkret:client:device:{device}");
             sub = sub.filter(
                 diesel::dsl::sql::<diesel::sql_types::Bool>("")
                     .bind::<diesel::sql_types::Text, _>(device_scope)
@@ -454,7 +454,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
         }
 
         if let Some(device) = filter.device() {
-            let device_scope = format!("urn:cokret:client:device:{device}");
+            let device_scope = format!("urn:arkret:client:device:{device}");
             query = query.filter(
                 diesel::dsl::sql::<diesel::sql_types::Bool>("")
                     .bind::<diesel::sql_types::Text, _>(device_scope)
@@ -558,7 +558,7 @@ impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
         }
 
         if let Some(device) = filter.device() {
-            let device_scope = format!("urn:cokret:client:device:{device}");
+            let device_scope = format!("urn:arkret:client:device:{device}");
             query = query.filter(
                 diesel::dsl::sql::<diesel::sql_types::Bool>("")
                     .bind::<diesel::sql_types::Text, _>(device_scope)

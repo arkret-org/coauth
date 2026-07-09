@@ -13,7 +13,7 @@ use serde_with::skip_serializing_none;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::cokret;
+use crate::handlers::arkret;
 use crate::salvo_utils::user_authorization::{AuthorizationVerificationError, UserAuthorization};
 
 #[skip_serializing_none]
@@ -22,12 +22,12 @@ struct UserInfo {
     sub: String,
     username: String,
     preferred_username: String,
-    #[serde(rename = "org.cokret.principal_did")]
+    #[serde(rename = "org.arkret.principal_did")]
     principal_did: Option<String>,
-    #[serde(rename = "org.cokret.device_id")]
+    #[serde(rename = "org.arkret.device_id")]
     #[serde(skip_serializing_if = "Option::is_none")]
     device_id: Option<String>,
-    #[serde(rename = "org.cokret.session_id")]
+    #[serde(rename = "org.arkret.session_id")]
     session_id: String,
     name: Option<String>,
     picture: Option<String>,
@@ -169,9 +169,9 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         .lookup(user_id)
         .await?
         .ok_or(RouteError::NoSuchUser(user_id))?;
-    let subject_did = cokret::oidc_subject_for_user(&cokret_config, &user);
+    let subject_did = arkret::oidc_subject_for_user(&cokret_config, &user);
     let principal_did =
-        cokret::published_principal_did_for_user(&mut repo, &cokret_config, &user).await?;
+        arkret::published_principal_did_for_user(&mut repo, &cokret_config, &user).await?;
 
     let user_info = UserInfo {
         sub: subject_did.clone(),
@@ -179,9 +179,9 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         // OIDC `preferred_username` keeps the human-readable `local@host`
         // display form (spec 7157ee8 retires the URI form but the display
         // shape stays for OIDC client compatibility).
-        preferred_username: cokret::user_handle_display(&url_builder, &user),
+        preferred_username: arkret::user_handle_display(&url_builder, &user),
         principal_did,
-        device_id: cokret::primary_device_id(&session.scope),
+        device_id: arkret::primary_device_id(&session.scope),
         session_id: session.id.to_string(),
         name: user.display_name.clone(),
         picture: user.avatar_url.clone(),

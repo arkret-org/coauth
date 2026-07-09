@@ -322,7 +322,7 @@ pub struct HttpConfig {
 
     /// Maximum accepted request-body size, in bytes. Requests exceeding this
     /// limit are rejected with `413 Payload Too Large` before they reach a
-    /// handler. Defaults to 1 MiB to match the Cokret
+    /// handler. Defaults to 1 MiB to match the Arkret
     /// `ck.server.query.describe.limits.max_body_bytes` advertisement.
     #[serde(default = "default_max_body_bytes")]
     pub max_body_bytes: u64,

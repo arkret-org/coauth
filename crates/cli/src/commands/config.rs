@@ -31,11 +31,11 @@ const DEFAULT_SERVICE_DID_PATH: &str = "webvh/service";
 const SCID_PLACEHOLDER: &str = "{SCID}";
 const WEBVH_METHOD_VERSION: &str = "did:webvh:1.0";
 const SERVICE_DID_MISSING_HELP: &str = concat!(
-    "coauth config generate requires cokret.service_did for organization deployments. ",
+    "coauth config generate requires arkret.service_did for organization deployments. ",
     "For local development run `coauth config generate --dev -o config.dev.yaml`. ",
     "For production run `coauth config service-did init --starid-url <https://starid.example> ",
     "--host <auth.example.com> --key-output <service-did-keys.yaml>` and copy the emitted ",
-    "`cokret.service_did` into your config."
+    "`arkret.service_did` into your config."
 );
 
 #[derive(Parser, Debug)]
@@ -84,7 +84,7 @@ struct GenerateOptions {
     #[clap(long)]
     dev: bool,
 
-    /// Service DID to write into cokret.service_did for production configs
+    /// Service DID to write into arkret.service_did for production configs
     #[clap(long)]
     service_did: Option<String>,
 
@@ -260,15 +260,15 @@ fn apply_generated_config_options(
             .unwrap_or_else(|| DEV_PUBLIC_BASE.parse().expect("valid dev public base"));
         config.http.public_base = public_base.clone();
         config.http.issuer = Some(public_base);
-        config.cokret.service_did = Some(
+        config.arkret.service_did = Some(
             options
                 .service_did
                 .clone()
                 .unwrap_or_else(|| DEV_SERVICE_DID.to_owned()),
         );
-        config.cokret.principal_server_url =
+        config.arkret.principal_server_url =
             Some(DEV_SOLAND_URL.parse().expect("valid dev soland URL"));
-        config.cokret.principal_servers = vec![PrincipalServerConfig {
+        config.arkret.principal_servers = vec![PrincipalServerConfig {
             name: "soland-dev".to_owned(),
             audience: DEV_SOLAND_SERVICE_DID.to_owned(),
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
@@ -279,7 +279,7 @@ fn apply_generated_config_options(
             ),
         }];
     } else {
-        config.cokret.service_did = options.service_did.clone();
+        config.arkret.service_did = options.service_did.clone();
         if let Some(public_base) = options.public_base.clone() {
             config.http.public_base = public_base.clone();
             config.http.issuer = Some(public_base);
@@ -650,7 +650,7 @@ fn service_did_public_output(
 ) -> anyhow::Result<String> {
     match output {
         ServiceDidOutput::Yaml => Ok(serde_yaml_ng::to_string(&json!({
-            "cokret": {
+            "arkret": {
                 "service_did": did,
             }
         }))?),

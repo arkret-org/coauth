@@ -1,4 +1,4 @@
-//! Cokret claim and attestation administration endpoints.
+//! Arkret claim and attestation administration endpoints.
 
 use chrono::{DateTime, Utc};
 use coauth_data::RepositoryAccess;

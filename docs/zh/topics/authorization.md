@@ -1,6 +1,6 @@
 # 授权与会话
 
-`coauth` 负责认证用户和客户端，然后签发 OAuth/OIDC token 或 Cokret
+`coauth` 负责认证用户和客户端，然后签发 OAuth/OIDC token 或 Arkret
 session grant，供下游服务验证。
 
 ## 会话类型
@@ -18,14 +18,14 @@ OAuth 会话在客户端完成授权流程后创建，关联以下信息：
 - 已授予的 scope
 - access token 与 refresh token
 
-### Cokret Session Grant
+### Arkret Session Grant
 
 Principal Server 应验证 `ck.session.grant` 来执行下游账号和设备访问。grant payload
 包含 issuer service DID、subject principal DID、service account ID、可选 device
 ID、audience、scope、expiry、revocation reference 以及 proof block。
 
 session-grant JWT 默认生命周期为 28800 秒（8 小时），可通过配置文件中的
-`cokret.session_grant_ttl` 调整。
+`arkret.session_grant_ttl` 调整。
 
 `POST /_cokret/gate/account/session-grants/introspect` 接受 grant ID 或 signed grant JWT，并可附带
 audience。响应只返回 `active`、标准状态（`active`、`revoked`、`expired`、`locked`、

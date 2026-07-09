@@ -14,7 +14,7 @@ use cokret_core::error::{
 use crate::AppError;
 
 // ─────────────────────────────────────────────────────────────────────────
-// R3 spec-sync (2026-05-27, cokret-spec b47ff6ec) — agent auth error matrix.
+// R3 spec-sync (2026-05-27, arkret-spec b47ff6ec) — agent auth error matrix.
 //
 // AUTH-1: `ck.gate.account.command.pair_agent_key` error matrix. Before invoking the
 // proof         validator, fail-closed DID match →
@@ -44,7 +44,7 @@ use crate::AppError;
 /// Wire-level rejection reasons for the `ck.gate.account.command.pair_agent_key`
 /// operation and the agent branch of `ck.gate.account.command.issue_session_grant`.
 /// Each variant renders to a canonical error code from
-/// `cokret-spec/v1/artifacts/error-code-registry.json` v2026-05-27.
+/// `arkret-spec/v1/artifacts/error-code-registry.json` v2026-05-27.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentAuthRejection {
     /// `verification_method_principal_mismatch` — the proof's
@@ -161,7 +161,7 @@ impl AgentAuthRejection {
 /// strategy (the full ceiling tunable lives on the deployment config and is
 /// surfaced under `ck.profile.agent_runtime.v1` in a follow-up).
 // TODO(R3.1): plumb a deployment-config override
-// (`cokret.agent_runtime.revocation_freshness_window_seconds`) so SREs
+// (`arkret.agent_runtime.revocation_freshness_window_seconds`) so SREs
 // can dial this in for tighter / looser windows.
 pub const PAUSED_REVOCATION_FRESHNESS_WINDOW: chrono::Duration = chrono::Duration::seconds(30);
 

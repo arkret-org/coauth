@@ -1,6 +1,6 @@
 # OAuth scopes
 
-`coauth` treats coauth and Cokret scopes as the supported scope surface.
+`coauth` treats coauth and Arkret scopes as the supported scope surface.
 
 ## `openid`
 
@@ -18,42 +18,42 @@ The scope is typically paired with `openid`.
 Canonical coauth admin scope. This grants access to the coauth admin API and is
 the preferred scope for stable admin tooling.
 
-## `urn:cokret:admin:*`
+## `urn:arkret:admin:*`
 
-Cokret admin capability family. `coauth` accepts the wildcard family and
-`urn:cokret:admin:<capability>` prefixes as administrative access.
+Arkret admin capability family. `coauth` accepts the wildcard family and
+`urn:arkret:admin:<capability>` prefixes as administrative access.
 
-Use this family for Cokret-native admin integrations such as `sodmin` or
-internal automation that wants a Cokret namespace instead of the coauth one.
+Use this family for Arkret-native admin integrations such as `sodmin` or
+internal automation that wants a Arkret namespace instead of the coauth one.
 
-## `urn:cokret:client:*`
+## `urn:arkret:client:*`
 
-Cokret client capability family for first-party or trusted Cokret clients.
+Arkret client capability family for first-party or trusted Arkret clients.
 
-## `urn:cokret:client:device:[device id]`
+## `urn:arkret:client:device:[device id]`
 
-Cokret device-binding scope. It associates the OAuth session with the client
+Arkret device-binding scope. It associates the OAuth session with the client
 device identifier used by downstream Principal Servers.
 
-## `urn:cokret:principal-server:*`
+## `urn:arkret:principal-server:*`
 
 Principal Server capability family. This namespace is intended for trusted
 Principal Server integrations that need scoped access beyond a generic OIDC
 login.
 
-## `urn:cokret:principal-server:session.bind`
+## `urn:arkret:principal-server:session.bind`
 
-Requests or describes the ability to mint a short-lived Cokret session grant
+Requests or describes the ability to mint a short-lived Arkret session grant
 for the authenticated browser session. This is the scope `coauth` uses when it
 issues a session grant for a trusted Principal Server.
 
-## Cokret Claims
+## Arkret Claims
 
 When applicable, ID tokens, userinfo responses, and introspection responses can
-expose these Cokret claims:
+expose these Arkret claims:
 
-- `org.cokret.principal_did`
-- `org.cokret.device_id`
-- `org.cokret.session_id`
+- `org.arkret.principal_did`
+- `org.arkret.device_id`
+- `org.arkret.session_id`
 
 `device_id` is only present when the session is bound to a device identifier.

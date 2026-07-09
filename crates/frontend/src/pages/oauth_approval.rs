@@ -195,16 +195,16 @@ fn scope_description(scope: &str) -> String {
         "email" => "View your verified email address".to_owned(),
         "phone" => "View your phone number".to_owned(),
         "address" => "View your address".to_owned(),
-        "urn:cokret:principal-server:session.bind" => {
+        "urn:arkret:principal-server:session.bind" => {
             "Receive a short-lived session grant bound to this login session".to_owned()
         }
-        other if other.starts_with("urn:cokret:principal-server:") => {
+        other if other.starts_with("urn:arkret:principal-server:") => {
             "Act as a trusted Principal Server integration".to_owned()
         }
-        other if other.starts_with("urn:cokret:client:") => {
-            "Use Cokret client capabilities on your behalf".to_owned()
+        other if other.starts_with("urn:arkret:client:") => {
+            "Use Arkret client capabilities on your behalf".to_owned()
         }
-        other if other == "urn:coauth:admin" || other.starts_with("urn:cokret:admin:") => {
+        other if other == "urn:coauth:admin" || other.starts_with("urn:arkret:admin:") => {
             "Administrative access to coauth management APIs".to_owned()
         }
         other => other.to_owned(),

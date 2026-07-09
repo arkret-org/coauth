@@ -173,7 +173,7 @@ pub(crate) struct ServiceDescribeOutcome {
     /// T6.1 — features the service exposes but does NOT promise stable
     /// interop for.
     experimental_features: Vec<&'static str>,
-    /// T6.1 — external interop surfaces outside Cokret v1 conformance.
+    /// T6.1 — external interop surfaces outside Arkret v1 conformance.
     compat_surfaces: Vec<CompatSurfaceDescriptor>,
     /// Mirror of the service's development-mode flag. coauth has no
     /// dedicated dev toggle today, so this is always `false`; if a toggle
@@ -193,7 +193,7 @@ pub(crate) struct ServiceDescribeOutcome {
     //     namespace, which the schema's `^x_[a-z][a-z0-9_]*$`
     //     patternProperties allow. Kept as the service's richer
     //     self-description. ---
-    /// T6.3 — explicit Cokret v1 role declaration. A coauth instance can
+    /// T6.3 — explicit Arkret v1 role declaration. A coauth instance can
     /// simultaneously act as `auth_server` (OIDC token issuer),
     /// `identity_resolver` (DID / handle resolution proxy), and
     /// `account_registry` (internal service-account management).
@@ -329,7 +329,7 @@ fn standard_error_envelope_descriptor() -> StandardErrorEnvelopeDescriptor {
                 code: "machine_readable_code",
                 message: "human-readable message",
             },
-            request_id: "ck:request:01964137-0000-7000-8000-000000000000",
+            request_id: "ak:request:01964137-0000-7000-8000-000000000000",
         },
         codes: vec!["bad_json", "not_found", "internal_error"],
     }
@@ -542,7 +542,7 @@ pub(crate) fn service_describe_response(
         service_did: service_did_for(cokret_config),
         // Round 4 — surface the deployment trust domain so federation
         // peers can verify cross-deployment replay protection (see
-        // `cokret-spec` round-4 §f9bd7eb).
+        // `arkret-spec` round-4 §f9bd7eb).
         trust_domain: trust_domain_for(url_builder, cokret_config),
         // service_type is the SDK-side `ServiceType` discriminant. coauth's
         // primary role is OIDC issuance, so this is kept as "auth_server".
@@ -561,7 +561,7 @@ pub(crate) fn service_describe_response(
         //   - "account_registry"   : internal service-account / recovery / claim-attestation
         //     management.
         service_roles: vec!["auth_server", "identity_resolver", "account_registry"],
-        protocol_version: COKRET_PROTOCOL_VERSION,
+        protocol_version: ARKRET_PROTOCOL_VERSION,
         supported_profiles: Vec::new(),
         supported_features: vec![
             "oidc",
@@ -584,7 +584,7 @@ pub(crate) fn service_describe_response(
         // under. Older `ck.schema.v1` is no longer published.
         supported_schema_profiles: vec!["ck.schema.core.v1", "ck.schema.service_describe.v1"],
         supported_bindings: vec![SupportedBinding {
-            kind: COKRET_HTTP_BINDING,
+            kind: ARKRET_HTTP_BINDING,
             base_url: url_builder.http_base().to_string(),
         }],
         supported_operations: SUPPORTED_OPERATIONS.to_vec(),
@@ -618,7 +618,7 @@ pub(crate) fn service_describe_response(
         // coauth wears three roles (see `service_roles` above). The only
         // canonical v1 profile whose role + required surface coauth
         // actually serves is `ck.profile.auth_server.v1` (added under
-        // G3.C3 to `cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json`).
+        // G3.C3 to `arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json`).
         // The other directory-role profiles that would superficially
         // apply are NOT claimed and the reason is documented inline:
         //

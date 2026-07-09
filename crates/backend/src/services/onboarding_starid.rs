@@ -52,7 +52,7 @@ pub struct PrincipalDidUpdate {
 /// `user.starid_backend = true` in the same repository transaction.
 ///
 /// Returns `Ok(None)` when no `StaridRegistryHandle` is wired into the
-/// request (i.e., `[cokret.starid]` unset). The caller should treat
+/// request (i.e., `[arkret.starid]` unset). The caller should treat
 /// `None` as "starid integration disabled" and continue without a
 /// managed DID — the account stays on the local derivation.
 pub async fn mint_principal_did_for_first_credential(
@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(result.version_id, "2-zrotated");
     }
 
-    /// When `starid_backend = true` and `[cokret.starid]` is configured,
+    /// When `starid_backend = true` and `[arkret.starid]` is configured,
     /// `DefaultDidResolverService::primary_did_for_user` returns the
     /// deterministic `did:web:<host>:<path_prefix>:<slug>` form (the
     /// alias of what starid minted).
@@ -295,7 +295,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             error,
-            crate::handlers::cokret::SessionGrantError::DidWebPrincipalNotExplicit
+            crate::handlers::arkret::SessionGrantError::DidWebPrincipalNotExplicit
         ));
     }
 

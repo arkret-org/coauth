@@ -1,20 +1,20 @@
 # Contributing to coauth
 
-Thanks for your interest in coauth — the Cokret OIDC / OAuth 2.1 identity
+Thanks for your interest in coauth — the Arkret OIDC / OAuth 2.1 identity
 service. This file describes the project values, the local development loop,
 and the sign-off / security expectations for patches.
 
 ## Project values
 
-- **Spec-faithful.** coauth implements the relevant slice of cokret-spec
+- **Spec-faithful.** coauth implements the relevant slice of arkret-spec
   exactly. Behaviour that drifts from the spec is a bug, even when the spec
   is awkward — fix the spec first.
 - **Conformance over convenience.** Every wire-level change is validated
-  against the OIDC conformance suite and against `cokret-spec`'s JSON
+  against the OIDC conformance suite and against `arkret-spec`'s JSON
   schemas before it merges.
 - **No quiet failures.** Authentication errors must be explicit; never log
   a credential or proxy a request without trace context.
-- **Boring crypto.** Pin algorithms in `cokret-spec`; do not invent.
+- **Boring crypto.** Pin algorithms in `arkret-spec`; do not invent.
 
 ## Local development
 

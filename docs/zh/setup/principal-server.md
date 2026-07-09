@@ -1,15 +1,15 @@
 # Principal Server 配置
 
-coauth 现在作为 Cokret Auth Server 运行。Soland 等下游 Principal Server 消费
-OAuth/OIDC token 和 Cokret session grant；coauth 不再连接已退役的 delegated-auth
+coauth 现在作为 Arkret Auth Server 运行。Soland 等下游 Principal Server 消费
+OAuth/OIDC token 和 Arkret session grant；coauth 不再连接已退役的 delegated-auth
 adapter。
 
 ## 配置 Soland Principal Server
 
-在 `cokret.principal_servers` 中声明受信任的 Principal Server：
+在 `arkret.principal_servers` 中声明受信任的 Principal Server：
 
 ```yaml
-cokret:
+arkret:
   principal_servers:
     - name: soland
       audience: did:webvh:<scid>:soland.example.com:webvh:service
@@ -19,7 +19,7 @@ cokret:
 
 - `name`：面向运维的 Principal Server 标识。
 - `audience`：该服务器验证 token/session grant 时使用的 service DID audience。
-- `endpoint`：通过 Cokret/OIDC discovery 发布的基础 URL。
+- `endpoint`：通过 Arkret/OIDC discovery 发布的基础 URL。
 - `did`：可选的 Principal Server DID。
 
 ## 服务间信任边界（部署内 S2S）
@@ -31,13 +31,13 @@ coauth 以 Auth Server 角色对 Principal Server 发起两类**无 principal se
 
 | coauth 调用 | Principal Server 端点 | Operation id | 时机 |
 | --- | --- | --- | --- |
-| 设备验签公钥目录查询 | `POST /_soland/gate/account/device-signing-keys/query` | `org.cokret.soland.gate.account.device_signing_keys.query` | 在 session-grant 刷新 / soft-logout 恢复时验证设备 holder proof |
-| 协作 capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.cokret.soland.root.authz.capability_fanout.submit` | 物化 coauth 签发的 `ck.capability.grant` / `ck.capability.revoke` |
+| 设备验签公钥目录查询 | `POST /_soland/gate/account/device-signing-keys/query` | `org.arkret.soland.gate.account.device_signing_keys.query` | 在 session-grant 刷新 / soft-logout 恢复时验证设备 holder proof |
+| 协作 capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | 物化 coauth 签发的 `ck.capability.grant` / `ck.capability.revoke` |
 
 两条边都用对应 `principal_servers` 条目上配置的共享 bearer 鉴权：
 
 ```yaml
-cokret:
+arkret:
   principal_servers:
     - name: soland
       # ...
@@ -51,7 +51,7 @@ coauth↔Principal Server 这一跳限于受信部署网络内。Principal Serve
 
 ## Discovery
 
-coauth 通过标准 OpenID discovery 和 Cokret server describe 接口发布 Principal
+coauth 通过标准 OpenID discovery 和 Arkret server describe 接口发布 Principal
 Server 元数据：
 
 - `/.well-known/openid-configuration`

@@ -56,7 +56,7 @@ pub struct PrincipalUser {
 pub struct User {
     pub id: Ulid,
     /// Bare handle localpart (e.g. `alice` — no `@`, no `:domain`). The
-    /// canonical Cokret handle `<localpart>:<domain>` is derived at read
+    /// canonical Arkret handle `<localpart>:<domain>` is derived at read
     /// time via [`Self::canonical_handle`] using the public host name, so a
     /// service domain rename never rewrites this column. Wire/UI types keep
     /// the field name `handle` for the value the user types.
@@ -77,7 +77,7 @@ pub struct User {
     /// `did:webvh:…` minted by `starid` during onboarding (see
     /// [`crate::services::starid_adapter::StaridRegistry::create_principal_did`]).
     /// False for accounts that pre-date the starid integration or were
-    /// created when `[cokret.starid]` config was absent. Those accounts only
+    /// created when `[arkret.starid]` config was absent. Those accounts only
     /// use the local `did:web:coauth.invalid:…` derivation when the
     /// deployment explicitly selects the personal-node `did:web` principal
     /// method; other profiles must load a persisted `did:webvh` row.
@@ -88,7 +88,7 @@ pub struct User {
     pub starid_backend: bool,
     /// Interop alias handles for this user (e.g. `acct:<local>@<host>`).
     ///
-    /// Spec 7157ee8 §3.1 — the canonical Cokret handle form is
+    /// Spec 7157ee8 §3.1 — the canonical Arkret handle form is
     /// `<localpart>:<domain>`, derived at read time from `localpart` + the
     /// public host name (see [`Self::canonical_handle`]). Aliases are
     /// *additional* identifiers kept for RFC 7565 / WebFinger interop and
@@ -214,7 +214,7 @@ impl Node<Ulid> for User {
 /// Error code surfaced when callers supply a non-canonical handle string.
 pub const HANDLE_NOT_CANONICAL_CODE: &str = "invalid_param";
 
-/// Validate that an input string is already the SDK-canonical Cokret handle.
+/// Validate that an input string is already the SDK-canonical Arkret handle.
 pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, String)> {
     let trimmed = value.trim();
     let handle =
@@ -229,7 +229,7 @@ pub fn validate_canonical_handle(value: &str) -> Result<&str, (&'static str, Str
 }
 
 impl User {
-    /// Canonical Cokret handle per spec 7157ee8:
+    /// Canonical Arkret handle per spec 7157ee8:
     /// `<lowercase-localpart>:<lowercase-domain>`.
     ///
     /// The host is supplied by the caller (typically the URL builder's

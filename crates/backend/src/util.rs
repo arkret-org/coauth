@@ -80,13 +80,13 @@ pub fn handle_valid(handle: &str) -> bool {
     true
 }
 
-/// Validate that a string is a Cokret typed wire id of shape
+/// Validate that a string is a Arkret typed wire id of shape
 /// `ck:<prefix>:<uuid-v7>`, where `<uuid-v7>` parses as a strict v7 UUID.
 ///
 /// This is the Move/Anchor/Lattice typed-id surface (spec `wire-ids.md` —
 /// rebased onto `UUIDv7` in 2026-05). coauth's internal admin tokens and
 /// personal session ids stay ULID; this helper is for the few admin /
-/// session-grant handler call-sites that consume Cokret wire ids
+/// session-grant handler call-sites that consume Arkret wire ids
 /// (`ck:device:<uuid7>`, `ck:space:<uuid7>`, `ck:cell:<family>:<id>`,
 /// etc.) from external requests.
 ///
@@ -98,23 +98,23 @@ pub fn handle_valid(handle: &str) -> bool {
 /// use coauth_backend::util::is_typed_uuid7;
 /// // valid v7 uuid (timestamp + version bits)
 /// assert!(is_typed_uuid7(
-///     "ck:device:0190a3c0-0000-7000-8000-000000000000",
+///     "ak:device:0190a3c0-0000-7000-8000-000000000000",
 ///     "device"
 /// ));
 /// // wrong prefix → false
 /// assert!(!is_typed_uuid7(
-///     "ck:space:0190a3c0-0000-7000-8000-000000000000",
+///     "ak:space:0190a3c0-0000-7000-8000-000000000000",
 ///     "device"
 /// ));
 /// // ULID body -> false
 /// assert!(!is_typed_uuid7(
-///     "ck:device:01JS0SP000000000000000000",
+///     "ak:device:01JS0SP000000000000000000",
 ///     "device"
 /// ));
 /// ```
 #[must_use]
 pub fn is_typed_uuid7(s: &str, prefix: &str) -> bool {
-    let Some(rest) = s.strip_prefix("ck:") else {
+    let Some(rest) = s.strip_prefix("ak:") else {
         return false;
     };
     let Some(rest) = rest.strip_prefix(prefix) else {
@@ -864,21 +864,21 @@ mod tests {
     #[test]
     fn typed_uuid7_accepts_valid_v7_with_matching_prefix() {
         let id = Uuid::now_v7();
-        let s = format!("ck:device:{id}");
+        let s = format!("ak:device:{id}");
         assert!(super::is_typed_uuid7(&s, "device"));
     }
 
     #[test]
     fn typed_uuid7_rejects_wrong_prefix() {
         let id = Uuid::now_v7();
-        let s = format!("ck:space:{id}");
+        let s = format!("ak:space:{id}");
         assert!(!super::is_typed_uuid7(&s, "device"));
     }
 
     #[test]
     fn typed_uuid7_rejects_v4_uuid() {
         // Random v4 — must be rejected since the spec mandates v7.
-        let s = "ck:device:550e8400-e29b-41d4-a716-446655440000";
+        let s = "ak:device:550e8400-e29b-41d4-a716-446655440000";
         assert!(!super::is_typed_uuid7(s, "device"));
     }
 
@@ -893,12 +893,12 @@ mod tests {
     fn typed_uuid7_rejects_extra_segments() {
         // Cell-family ids have more colons; the basic helper rejects them.
         let id = Uuid::now_v7();
-        let s = format!("ck:cell:ck.component.consent.grant.v1:{id}");
+        let s = format!("ak:cell:ck.component.consent.grant.v1:{id}");
         assert!(!super::is_typed_uuid7(&s, "cell"));
     }
 
     #[test]
     fn typed_uuid7_rejects_empty_body() {
-        assert!(!super::is_typed_uuid7("ck:device:", "device"));
+        assert!(!super::is_typed_uuid7("ak:device:", "device"));
     }
 }

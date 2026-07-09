@@ -24,7 +24,7 @@ use crate::handlers::admin::audit_helper::{AdminAuditSigning, record_admin_opera
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
 use crate::handlers::admin::response::SingleOutcome;
-use crate::handlers::cokret::service_did_for;
+use crate::handlers::arkret::service_did_for;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
 use crate::services::did_resolver::DidResolverService;
@@ -326,7 +326,7 @@ pub(crate) fn risk_action_approval_transcript(
     approved_by: &str,
 ) -> RiskActionApprovalTranscript {
     RiskActionApprovalTranscript {
-        kind: "org.cokret.coauth.account_risk_action.approval.v1",
+        kind: "org.arkret.coauth.account_risk_action.approval.v1",
         proposal_id: proposal_id.to_owned(),
         account_id: account_id.to_string(),
         action: action.to_owned(),

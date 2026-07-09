@@ -41,12 +41,12 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v4
 
-      - name: Check out Cokret Rust SDK
+      - name: Check out Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN }}
           GITHUB_REPOSITORY_OWNER: ${{ gitea.repository_owner }}
           GITHUB_SERVER_URL: ${{ gitea.server_url }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up Rust with llvm-tools
         uses: dtolnay/rust-toolchain@stable

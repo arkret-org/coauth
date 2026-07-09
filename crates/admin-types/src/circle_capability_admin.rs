@@ -13,7 +13,7 @@
 //! | `ck.circle.member.add.others`| high   | `allowed_circle_ids`     |
 //! | `ck.circle.audit`            | high   | (none, requires pairing) |
 //!
-//! Source: cokret-spec
+//! Source: arkret-spec
 //! `spec/v1/artifacts/registry/capability-action-registry.json`.
 //!
 //! The shared domain types ([`CircleCapabilityAction`], [`RiskTier`],
@@ -86,7 +86,7 @@ mod tests {
     fn validate_rejects_missing_constraint() {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
-            realm_id: "ck:realm:1".into(),
+            realm_id: "ak:realm:1".into(),
             action: CircleCapabilityAction::Manage,
             allowed_circle_ids: vec![],
         };
@@ -97,9 +97,9 @@ mod tests {
     fn validate_accepts_scoped_grant() {
         let req = CreateCircleCapabilityGrant {
             subject: "user:alice".into(),
-            realm_id: "ck:realm:1".into(),
+            realm_id: "ak:realm:1".into(),
             action: CircleCapabilityAction::Manage,
-            allowed_circle_ids: vec!["ck:circle:abc".into()],
+            allowed_circle_ids: vec!["ak:circle:abc".into()],
         };
         assert!(req.validate().is_ok());
     }

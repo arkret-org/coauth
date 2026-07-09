@@ -3,7 +3,7 @@
 //! # Scope
 //!
 //! The scope of this crate is to support the OIDC and OAuth features
-//! needed by the Cokret/Soland auth strands.
+//! needed by the Arkret/Soland auth strands.
 //!
 //! # OpenID Connect and OAuth Features
 //!

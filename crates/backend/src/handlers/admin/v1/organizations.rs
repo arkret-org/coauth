@@ -384,7 +384,7 @@ pub async fn issue_statement_handler(
 
     let cokret_config = depot.cokret_config()?;
     let key_store = depot.key_store()?;
-    let service_did = crate::handlers::cokret::service_did_for(&cokret_config);
+    let service_did = crate::handlers::arkret::service_did_for(&cokret_config);
 
     let call_context = extract_call_context(req, depot).await?;
     let executed_by = call_context
@@ -413,7 +413,7 @@ pub async fn issue_statement_handler(
 
     let statement_id = body
         .statement_id
-        .unwrap_or_else(|| new_prefixed_uuid7("ck:orgstmt:"));
+        .unwrap_or_else(|| new_prefixed_uuid7("ak:orgstmt:"));
 
     let request = OrganizationStatementRequest {
         statement_id,

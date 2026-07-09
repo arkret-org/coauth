@@ -370,7 +370,7 @@ pub async fn device_enroll_endpoint(
         "{}{ENROLLMENT_AUTHORITY_SERVICE_FRAGMENT}",
         principal_id.as_str()
     );
-    let realm_id_string = cokret::auth::principal_control_realm_id(&principal_id);
+    let realm_id_string = arkret::auth::principal_control_realm_id(&principal_id);
     let realm_id = RealmId::new(realm_id_string).map_err(|error| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "derived principal-control realm id is invalid: {error}"
@@ -410,7 +410,7 @@ pub async fn device_enroll_endpoint(
     })?;
 
     let mut event = Event {
-        event_id: EventId::new(cokret_core::identifiers::new_prefixed_uuid7("ck:event:")).map_err(
+        event_id: EventId::new(cokret_core::identifiers::new_prefixed_uuid7("ak:event:")).map_err(
             |error| {
                 CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                     format!("failed to mint event id: {error}"),

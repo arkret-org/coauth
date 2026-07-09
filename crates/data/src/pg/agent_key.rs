@@ -58,7 +58,7 @@ mod tests {
             challenge: format!("challenge-{label}"),
             nonce: format!("nonce-{label}"),
             request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
-            audience: "https://cokret.example/_cokret".to_owned(),
+            audience: "https://arkret.example/_cokret".to_owned(),
             proof_expires_at: now + chrono::Duration::minutes(5),
             prune_after: now + chrono::Duration::minutes(10),
         }

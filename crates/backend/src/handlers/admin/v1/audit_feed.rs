@@ -18,7 +18,7 @@ use crate::handlers::admin::audit_helper::{
     AuditSignatureStatus, verify_admin_operation_signature,
 };
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::cokret::service_did_for;
+use crate::handlers::arkret::service_did_for;
 use crate::handlers::common::DepotExt;
 
 /// A single entry in the admin audit feed.

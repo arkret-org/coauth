@@ -7,12 +7,12 @@ use cokret_core::error::{
 use salvo::prelude::*;
 
 use super::*;
-use crate::handlers::cokret::*;
+use crate::handlers::arkret::*;
 
 // ── Canonical Account Authority session-grant issuance ─────────────
 //
 // `POST /_cokret/gate/account/session-grants` — the single client-visible
-// bridge from a standard authentication result into a Cokret
+// bridge from a standard authentication result into a Arkret
 // `ck.session.grant` (service-surface.md §2.5.1). The request body is the
 // SDK-canonical `SessionGrantRequestBody`; the proof's `proof_kind` selects
 // the validator. coauth implements the `oidc_code_exchange` branch (the

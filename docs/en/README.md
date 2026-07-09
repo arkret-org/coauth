@@ -1,11 +1,11 @@
 # About this documentation
 
-This documentation describes `coauth`, the Cokret Auth / Account Server. It is
+This documentation describes `coauth`, the Arkret Auth / Account Server. It is
 intended for operators, administrators, and developers integrating coauth with
-Cokret Principal Servers, public DID resolver services, `sodmin`, and first-party clients.
+Arkret Principal Servers, public DID resolver services, `sodmin`, and first-party clients.
 
 `coauth` is an OAuth and OpenID Connect provider. Its primary product
-surface is Cokret-native account, session, DID-binding, claim, and admin
+surface is Arkret-native account, session, DID-binding, claim, and admin
 integration.
 
 The documentation itself is built using [mdBook](https://rust-lang.github.io/mdBook/).

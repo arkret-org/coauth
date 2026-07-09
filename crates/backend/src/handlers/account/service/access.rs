@@ -13,7 +13,7 @@ use ulid::Ulid;
 use zeroize::Zeroizing;
 
 use crate::handlers::passwords::{PasswordManager, PasswordVerificationResult};
-use crate::handlers::{Limiter, RequesterFingerprint, cokret};
+use crate::handlers::{Limiter, RequesterFingerprint, arkret};
 
 #[derive(Debug)]
 pub struct PasswordLoginRequestBody {
@@ -220,11 +220,11 @@ async fn find_user_by_login_identifier(
     repo: &mut BoxRepository,
     identifier: &str,
 ) -> Result<Option<User>, RepositoryError> {
-    if let Some(user_id) = cokret::parse_local_user_did_for(cokret_config, identifier) {
+    if let Some(user_id) = arkret::parse_local_user_did_for(cokret_config, identifier) {
         return repo.user().lookup(user_id).await;
     }
 
-    if let Some(username) = cokret::parse_local_handle(url_builder, identifier)
+    if let Some(username) = arkret::parse_local_handle(url_builder, identifier)
         && let Some(user) = repo.user().find_by_handle(&username).await?
     {
         return Ok(Some(user));

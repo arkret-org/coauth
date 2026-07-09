@@ -24,7 +24,7 @@
 //!   MUST NOT be replayable into `ck:trust_domain:tenant-b` even when the realm UUID happens to
 //!   collide (e.g. dev / staging / prod sharing a fixture realm).
 //!
-//! See `cokret-spec` round-4 §7fae9ba "Enhance third-party invites +
+//! See `arkret-spec` round-4 §7fae9ba "Enhance third-party invites +
 //! transport bindings" — the same dual-scoping rule applies here.
 
 use chrono::{DateTime, Utc};
@@ -118,8 +118,8 @@ mod tests {
     }
     fn envelope() -> IdentityLinkEnvelope {
         IdentityLinkEnvelope {
-            realm_id: realm("ck:realm:01904100-0000-7000-8000-000000000001"),
-            trust_domain: td("ck:trust_domain:example.net"),
+            realm_id: realm("ak:realm:01904100-0000-7000-8000-000000000001"),
+            trust_domain: td("ak:trust_domain:example.net"),
             encrypted_payload: "ct-bytes".to_owned(),
             expires_at: Utc::now() + Duration::hours(1),
         }
@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn rejects_cross_realm_replay() {
         let env = envelope();
-        let other = realm("ck:realm:01904100-0000-7000-8000-000000000002");
+        let other = realm("ak:realm:01904100-0000-7000-8000-000000000002");
         let now = Utc::now();
         let err = env
             .validate_for_recipient(&other, &env.trust_domain.clone(), now)
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn rejects_cross_trust_domain_replay() {
         let env = envelope();
-        let other = td("ck:trust_domain:other.example");
+        let other = td("ak:trust_domain:other.example");
         let now = Utc::now();
         let err = env
             .validate_for_recipient(&env.realm_id.clone(), &other, now)

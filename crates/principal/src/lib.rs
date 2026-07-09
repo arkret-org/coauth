@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Cokret Authors.
+// Copyright (c) 2026 Arkret Authors.
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
@@ -268,10 +268,10 @@ impl PrincipalCapabilityFanoutRequest {
 }
 
 /// Trait defining account and device synchronization hooks for a downstream
-/// Cokret principal system.
+/// Arkret principal system.
 ///
 /// This trait keeps account-lifecycle call sites testable while
-/// Cokret/Soland integrations use session grants and downstream discovery.
+/// Arkret/Soland integrations use session grants and downstream discovery.
 #[async_trait::async_trait]
 pub trait ConnectorAdmin: Send + Sync {
     /// Get the principal system authority used for generated account
@@ -586,7 +586,7 @@ where
 /// provision users into, query state from, and synchronize with.
 ///
 /// [`ConnectorAdmin`] is the primary implementation of this trait
-/// for Cokret/Soland-facing principal connectors.
+/// for Arkret/Soland-facing principal connectors.
 pub trait ConnectorProvider: ConnectorAdmin {
     /// A human-readable name for this connector (e.g. "soland").
     fn provider_name(&self) -> &str;

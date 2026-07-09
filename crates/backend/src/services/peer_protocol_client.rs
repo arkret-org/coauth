@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Typed client helpers for the Cokret `/_cokret/peer/*` protocol surface.
+//! Typed client helpers for the Arkret `/_cokret/peer/*` protocol surface.
 
 use std::time::Duration;
 
@@ -356,7 +356,7 @@ mod tests {
         let keystore = test_keystore();
         let identity = PeerProtocolIdentity::same_destination(
             "did:web:auth.example",
-            "ck:trust_domain:auth.example",
+            "ak:trust_domain:auth.example",
         );
         let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
         let body = br#"{"a":1}"#;
@@ -400,7 +400,7 @@ mod tests {
         let keystore = test_keystore();
         let identity = PeerProtocolIdentity::same_destination(
             "did:web:auth.example",
-            "ck:trust_domain:auth.example",
+            "ak:trust_domain:auth.example",
         );
         let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
         let url = base

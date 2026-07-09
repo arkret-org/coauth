@@ -29,10 +29,10 @@ pwsh -File ./misc/device-code-grant.ps1 https://auth.example.com/
 sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
 ```
 
-Cokret-native 集成应使用 Cokret scope：
+Arkret-native 集成应使用 Arkret scope：
 
 ```bash
-sh ./misc/device-code-grant.sh https://auth.example.com/ urn:cokret:admin:* urn:cokret:principal-server:session.bind
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:arkret:admin:* urn:arkret:principal-server:session.bind
 ```
 
 ## 自动化

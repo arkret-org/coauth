@@ -93,7 +93,7 @@ pub(super) async fn verify_revocation_approval_proof(
         .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?;
 
     let transcript = RevocationApprovalTranscript {
-        kind: "org.cokret.coauth.admin_revocation.approval.v1",
+        kind: "org.arkret.coauth.admin_revocation.approval.v1",
         operation,
         target,
         account_id,

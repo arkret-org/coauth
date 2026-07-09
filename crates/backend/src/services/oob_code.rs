@@ -38,7 +38,7 @@
 //! (and stored on the invite row) but never returned. Constants are
 //! re-exported from `cokret_core::error` to keep parity with the SDK.
 //!
-//! See `cokret-spec` 2026-05-20 §T15 ("OOB token state machine") for
+//! See `arkret-spec` 2026-05-20 §T15 ("OOB token state machine") for
 //! the wire contract this module implements.
 
 use std::time::Duration;
@@ -128,7 +128,7 @@ impl OobCodeKind {
 /// caller logs the variant via `internal_reason_code` and feeds the
 /// outcome into the response-pad delay.
 ///
-/// See `cokret-spec` 2026-05-20 §T15.
+/// See `arkret-spec` 2026-05-20 §T15.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OobInviteFailure {
     /// The token's `expires_at` is in the past.

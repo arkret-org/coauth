@@ -123,13 +123,13 @@ pub async fn add_session(
         )
         .await?;
 
-    // Provision any Cokret devices declared through scope entries.
+    // Provision any Arkret devices declared through scope entries.
     if new_session.has_device() {
         repo.user().acquire_lock_for_sync(&target_user).await?;
 
         for scope_token in &*new_session.scope {
             let raw = scope_token.as_str();
-            if let Some(device_id) = raw.strip_prefix("urn:cokret:client:device:") {
+            if let Some(device_id) = raw.strip_prefix("urn:arkret:client:device:") {
                 principal_server
                     .upsert_device(&target_user.localpart, device_id, None)
                     .await

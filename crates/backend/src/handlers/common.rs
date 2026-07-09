@@ -269,7 +269,7 @@ pub trait DepotExt {
         &self,
     ) -> Result<crate::services::did_resolver::DidResolverServiceHandle, RouteError>;
     fn dpop_verifier(&self) -> Result<DpopVerifier, RouteError>;
-    /// `Some(handle)` when `[cokret.starid]` is configured and the
+    /// `Some(handle)` when `[arkret.starid]` is configured and the
     /// adapter constructed cleanly during `inject_app_state`. `None`
     /// otherwise — handlers should treat the absence as "starid
     /// integration disabled" rather than an error.

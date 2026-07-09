@@ -15,7 +15,7 @@ mod account;
 mod branding;
 mod captcha;
 mod clients;
-mod cokret;
+mod arkret;
 mod database;
 mod email;
 mod experimental;
@@ -36,7 +36,7 @@ pub use self::account::AccountConfig;
 pub use self::branding::BrandingConfig;
 pub use self::captcha::{CaptchaConfig, CaptchaServiceKind};
 pub use self::clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig};
-pub use self::cokret::{
+pub use self::arkret::{
     CokretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
     PrincipalMethodConfig, PrincipalServerConfig, StaridConfig,
 };
@@ -177,9 +177,9 @@ pub struct RootConfig {
     #[serde(default)]
     pub database: DatabaseConfig,
 
-    /// Cokret-specific audiences, DIDs, and downstream integration metadata
+    /// Arkret-specific audiences, DIDs, and downstream integration metadata
     #[serde(default, skip_serializing_if = "CokretConfig::is_default")]
-    pub cokret: CokretConfig,
+    pub arkret: CokretConfig,
 
     /// Configuration related to sending monitoring data
     #[serde(default, skip_serializing_if = "TelemetryConfig::is_default")]
@@ -256,7 +256,7 @@ impl ConfigurationSection for RootConfig {
             &|f| self.clients.validate(f),
             &|f| self.http.validate(f),
             &|f| self.database.validate(f),
-            &|f| self.cokret.validate(f),
+            &|f| self.arkret.validate(f),
             &|f| self.telemetry.validate(f),
             &|f| self.templates.validate(f),
             &|f| self.email.validate(f),
@@ -297,7 +297,7 @@ impl RootConfig {
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
-            cokret: CokretConfig::default(),
+            arkret: CokretConfig::default(),
             telemetry: TelemetryConfig::default(),
             templates: TemplatesConfig::default(),
             email: EmailConfig::default(),
@@ -322,7 +322,7 @@ impl RootConfig {
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
-            cokret: CokretConfig::default(),
+            arkret: CokretConfig::default(),
             telemetry: TelemetryConfig::default(),
             templates: TemplatesConfig::default(),
             passwords: PasswordsConfig::default(),
@@ -353,7 +353,7 @@ pub struct AppConfig {
     pub database: DatabaseConfig,
 
     #[serde(default)]
-    pub cokret: CokretConfig,
+    pub arkret: CokretConfig,
 
     #[serde(default)]
     pub templates: TemplatesConfig,
@@ -400,7 +400,7 @@ impl ConfigurationSection for AppConfig {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         self.http.validate(figment)?;
         self.database.validate(figment)?;
-        self.cokret.validate(figment)?;
+        self.arkret.validate(figment)?;
         self.templates.validate(figment)?;
         self.email.validate(figment)?;
         self.sms.validate(figment)?;

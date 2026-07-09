@@ -31,7 +31,7 @@ coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
 console = {workspace = true}
-cokret-core = {workspace = true}
+arkret-core = {workspace = true}
 crc = {workspace = true}
 deadpool = {workspace = true}
 dialoguer = {workspace = true}

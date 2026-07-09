@@ -31,10 +31,10 @@ Use `urn:coauth:admin` for the stable coauth admin API:
 sh ./misc/device-code-grant.sh https://auth.example.com/ urn:coauth:admin
 ```
 
-Use Cokret scopes for Cokret-native integrations:
+Use Arkret scopes for Arkret-native integrations:
 
 ```sh
-sh ./misc/device-code-grant.sh https://auth.example.com/ urn:cokret:admin:* urn:cokret:principal-server:session.bind
+sh ./misc/device-code-grant.sh https://auth.example.com/ urn:arkret:admin:* urn:arkret:principal-server:session.bind
 ```
 
 ## Automation

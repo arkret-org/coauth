@@ -64,7 +64,7 @@ pub enum Rejection {
     LoadUser(Ulid),
 
     /// The session does not have the required admin scope
-    #[error("Missing admin scope (expected urn:coauth:admin or urn:cokret:admin:*)")]
+    #[error("Missing admin scope (expected urn:coauth:admin or urn:arkret:admin:*)")]
     MissingScope,
 
     /// The request was scoped to an organization this deployment does not
@@ -124,7 +124,7 @@ impl Scribe for Rejection {
 /// multi-tenant: first-class entities do not carry per-row `org_id`.
 /// To avoid pretending cross-tenant isolation exists, Admin API calls
 /// support only a configured deployment org. If
-/// `cokret.admin_org_id` is set, every admin request MUST carry the
+/// `arkret.admin_org_id` is set, every admin request MUST carry the
 /// matching `x-coauth-org-id`; a different value or missing header is
 /// rejected before any resource lookup. Requests that carry an org
 /// header when the deployment has no configured org are also rejected.
@@ -335,12 +335,12 @@ mod tests {
     #[test]
     fn admin_org_guard_requires_exact_configured_org() {
         assert_eq!(
-            validate_admin_org(Some("ck:org:alpha"), Some("ck:org:alpha")).unwrap(),
-            Some("ck:org:alpha".to_owned())
+            validate_admin_org(Some("ak:org:alpha"), Some("ak:org:alpha")).unwrap(),
+            Some("ak:org:alpha".to_owned())
         );
-        assert!(validate_admin_org(Some("ck:org:alpha"), None).is_err());
-        assert!(validate_admin_org(Some("ck:org:alpha"), Some("ck:org:beta")).is_err());
-        assert!(validate_admin_org(None, Some("ck:org:alpha")).is_err());
+        assert!(validate_admin_org(Some("ak:org:alpha"), None).is_err());
+        assert!(validate_admin_org(Some("ak:org:alpha"), Some("ak:org:beta")).is_err());
+        assert!(validate_admin_org(None, Some("ak:org:alpha")).is_err());
         assert_eq!(validate_admin_org(None, None).unwrap(), None);
     }
 }

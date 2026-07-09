@@ -44,7 +44,7 @@ use crate::outbound_http;
 //
 // soland therefore exposes this as a product-surface S2S contract on its own
 // negative-space root: `POST /_soland/gate/account/device-signing-keys/query`,
-// op `org.cokret.soland.gate.account.device_signing_keys.query`, bearer-gated by
+// op `org.arkret.soland.gate.account.device_signing_keys.query`, bearer-gated by
 // the shared `embedded_webvh_registration_bearer`. Per service-http-binding.md
 // §2.1.3(b) a deployment-private capability MUST live on the implementation's
 // own `/_soland/*` root and MUST NOT occupy a `/_cokret/*` protocol segment.

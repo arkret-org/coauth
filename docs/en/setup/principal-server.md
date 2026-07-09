@@ -1,16 +1,16 @@
 # Principal Server configuration
 
-coauth now runs as the Cokret Auth Server. Downstream Principal Servers such as
-Soland consume OAuth/OIDC tokens and Cokret session grants; coauth no longer
+coauth now runs as the Arkret Auth Server. Downstream Principal Servers such as
+Soland consume OAuth/OIDC tokens and Arkret session grants; coauth no longer
 connects to the retired delegated-auth adapter.
 
 ## Configure Soland as a Principal Server
 
-Declare each trusted Principal Server in the `cokret.principal_servers`
+Declare each trusted Principal Server in the `arkret.principal_servers`
 section:
 
 ```yaml
-cokret:
+arkret:
   principal_servers:
     - name: soland
       audience: did:webvh:<scid>:soland.example.com:webvh:service
@@ -20,7 +20,7 @@ cokret:
 
 - `name`: operator-facing identifier for the Principal Server.
 - `audience`: service DID audience expected by that server.
-- `endpoint`: base URL advertised through Cokret/OIDC discovery.
+- `endpoint`: base URL advertised through Arkret/OIDC discovery.
 - `did`: optional DID advertised for the Principal Server.
 
 ## Server-to-server trust boundary (deployment-internal)
@@ -34,14 +34,14 @@ v1 protocol operations:
 
 | coauth call | Principal Server endpoint | Operation id | When |
 | --- | --- | --- | --- |
-| Device signing-key directory lookup | `POST /_soland/gate/account/device-signing-keys/query` | `org.cokret.soland.gate.account.device_signing_keys.query` | Verifying a device holder proof during session-grant refresh / soft-logout restore |
-| Collaboration capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.cokret.soland.root.authz.capability_fanout.submit` | Materialising a coauth-issued `ck.capability.grant` / `ck.capability.revoke` |
+| Device signing-key directory lookup | `POST /_soland/gate/account/device-signing-keys/query` | `org.arkret.soland.gate.account.device_signing_keys.query` | Verifying a device holder proof during session-grant refresh / soft-logout restore |
+| Collaboration capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | Materialising a coauth-issued `ck.capability.grant` / `ck.capability.revoke` |
 
 Both edges are authenticated with the shared bearer configured on the matching
 `principal_servers` entry:
 
 ```yaml
-cokret:
+arkret:
   principal_servers:
     - name: soland
       # ...
@@ -59,7 +59,7 @@ endpoints as deployment-local product surface and never exposes them on its
 ## Discovery
 
 coauth publishes Principal Server metadata through the standard OpenID
-discovery document and the Cokret server description endpoint:
+discovery document and the Arkret server description endpoint:
 
 - `/.well-known/openid-configuration`
 - `/_cokret/describe`

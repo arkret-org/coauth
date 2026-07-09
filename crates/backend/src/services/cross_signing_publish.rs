@@ -27,7 +27,7 @@
 //! [`CrossSigningPublishError::GenerationUnknown`] rather than guess.
 
 use chrono::{DateTime, Utc};
-use cokret::crypto_protocol::{
+use arkret::crypto_protocol::{
     CrossSigningKeyRecord, CrossSigningPublishContent, SignedCrossSigningKey,
     cross_signing_publish_cell_subject,
 };
@@ -93,7 +93,7 @@ pub fn publish_cell_subject(principal_id: &Did, expected_previous_generation: u6
 
 #[cfg(test)]
 mod tests {
-    use cokret::crypto_protocol::CrossSigningBinding;
+    use arkret::crypto_protocol::CrossSigningBinding;
 
     use super::*;
 
@@ -102,7 +102,7 @@ mod tests {
     }
 
     fn td() -> TypedTrustDomainId {
-        TypedTrustDomainId::new("ck:trust_domain:example.net").unwrap()
+        TypedTrustDomainId::new("ak:trust_domain:example.net").unwrap()
     }
 
     fn psk(kid: &str) -> CrossSigningKeyRecord {

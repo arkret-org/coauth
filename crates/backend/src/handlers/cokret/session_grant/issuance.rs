@@ -16,10 +16,10 @@ use rand_core::RngCore;
 use ulid::Ulid;
 
 use super::*;
-use crate::handlers::cokret::*;
+use crate::handlers::arkret::*;
 
 fn new_session_grant_id() -> GrantId {
-    GrantId::new(new_prefixed_uuid7("ck:grant:"))
+    GrantId::new(new_prefixed_uuid7("ak:grant:"))
         .expect("generated ck:grant uuidv7 id must be valid")
 }
 

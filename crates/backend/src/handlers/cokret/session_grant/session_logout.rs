@@ -3,7 +3,7 @@ use cokret_core::{AuthSessionLogoutOutcome, AuthSessionLogoutRequestBody};
 use salvo::prelude::*;
 
 use super::*;
-use crate::handlers::cokret::*;
+use crate::handlers::arkret::*;
 
 /// `POST /_cokret/gate/account/auth-sessions/logout` — Auth-side S2S logout
 /// sub-operation used by the Account Authority after it has validated the

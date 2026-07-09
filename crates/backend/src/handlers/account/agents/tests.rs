@@ -148,14 +148,14 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn proof_signature_round_trips_over_canonical_signed_fields() {
         use base64ct::Encoding as _;
-        use cokret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
+        use arkret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
         use ed25519_dalek::Signer as _;
 
         let signing_key = derive_ed25519_from_seed(&[7u8; 32]);
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let fields = ProofSignedFields {
-            audience: "https://cokret.example/_cokret",
+            audience: "https://arkret.example/_cokret",
             challenge: "challenge-abc",
             nonce: Some("nonce-abc"),
             expires_at,
@@ -172,14 +172,14 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn proof_signature_rejects_tampered_field() {
         use base64ct::Encoding as _;
-        use cokret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
+        use arkret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
         use ed25519_dalek::Signer as _;
 
         let signing_key = derive_ed25519_from_seed(&[9u8; 32]);
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let signed = ProofSignedFields {
-            audience: "https://cokret.example/_cokret",
+            audience: "https://arkret.example/_cokret",
             challenge: "challenge-abc",
             nonce: Some("nonce-abc"),
             expires_at,
@@ -207,14 +207,14 @@ mod agent_auth_error_matrix_tests {
     #[test]
     fn proof_signature_rejects_tampered_nonce() {
         use base64ct::Encoding as _;
-        use cokret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
+        use arkret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
         use ed25519_dalek::Signer as _;
 
         let signing_key = derive_ed25519_from_seed(&[10u8; 32]);
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let signed = ProofSignedFields {
-            audience: "https://cokret.example/_cokret",
+            audience: "https://arkret.example/_cokret",
             challenge: "challenge-abc",
             nonce: Some("nonce-abc"),
             expires_at,

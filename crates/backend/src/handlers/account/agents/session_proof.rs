@@ -19,7 +19,7 @@ use super::error_matrix::{AgentAuthRejection, enforce_verification_method_bindin
 use super::proof::{
     ProofSignedFields, runtime_public_key_material_from_spec, verify_proof_signature,
 };
-use crate::handlers::cokret::is_allowed_session_grant_audience;
+use crate::handlers::arkret::is_allowed_session_grant_audience;
 
 /// Replay grace window appended to the proof `expires_at` (CKP-0008 §4.6:
 /// "at least covers the proof expiry plus a replay grace window"). A consumed
@@ -29,7 +29,7 @@ const AGENT_PROOF_REPLAY_GRACE: chrono::Duration = chrono::Duration::minutes(5);
 
 /// Spec ceiling on the default agent session TTL (CKP-0008 §4.6 / key-management
 /// §3.6.1: default SHOULD be ≤ 15 minutes). coauth caps the agent branch to
-/// this regardless of the (human-oriented) `cokret.session_grant_ttl`.
+/// this regardless of the (human-oriented) `arkret.session_grant_ttl`.
 pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
 
 const AGENT_KEY_SCOPE_ACCOUNT: &str = "account";
@@ -1137,7 +1137,7 @@ mod tests {
     fn capability_scope(actions: &[&str]) -> AgentSessionCapabilityScope {
         AgentSessionCapabilityScope {
             actions: set(actions),
-            grant_refs: set(&["ck:grant:capability"]),
+            grant_refs: set(&["ak:grant:capability"]),
             ..AgentSessionCapabilityScope::default()
         }
     }
@@ -1155,7 +1155,7 @@ mod tests {
     ) -> coauth_data::agent_key::AgentKeyAuthorization {
         coauth_data::agent_key::AgentKeyAuthorization {
             id: coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-            authorized_event_id: "ck:event:01970000-0000-7000-8000-000000000021".to_owned(),
+            authorized_event_id: "ak:event:01970000-0000-7000-8000-000000000021".to_owned(),
             agent_principal_id: "did:web:agent.example".to_owned(),
             key_id: "runtime-key-1".to_owned(),
             verification_method: "did:web:agent.example#runtime-key-1".to_owned(),
@@ -1167,10 +1167,10 @@ mod tests {
             }),
             accountable_principal_id: "did:web:controller.example".to_owned(),
             agent_key_scope: AGENT_KEY_SCOPE_LIMITED.to_owned(),
-            audience: vec!["https://cokret.example/_cokret".to_owned()],
+            audience: vec!["https://arkret.example/_cokret".to_owned()],
             issued_at: now,
             expires_at: now + chrono::Duration::minutes(15),
-            pairing_request_id: "ck:pairing:01970000-0000-7000-8000-000000000020".to_owned(),
+            pairing_request_id: "ak:pairing:01970000-0000-7000-8000-000000000020".to_owned(),
             request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
             revoked_at: None,
             revoked_reason: None,
@@ -1197,7 +1197,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#runtime-key-1",
-            "https://cokret.example/_cokret",
+            "https://arkret.example/_cokret",
         )
         .expect("active matching authorization should pass");
     }
@@ -1213,7 +1213,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#runtime-key-1",
-            "https://cokret.example/_cokret",
+            "https://arkret.example/_cokret",
         )
         .expect_err("revoked runtime keys must fail closed");
 
@@ -1231,7 +1231,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#runtime-key-1",
-            "https://cokret.example/_cokret",
+            "https://arkret.example/_cokret",
         )
         .expect_err("expired agent key authorization must fail closed");
 
@@ -1265,7 +1265,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#other-key",
-            "https://cokret.example/_cokret",
+            "https://arkret.example/_cokret",
         )
         .expect_err("authorization must bind the exact runtime verification method");
 
@@ -1438,7 +1438,7 @@ mod tests {
         assert_eq!(effective_scope.allowed_tracks, vec!["main"]);
         assert_eq!(
             effective_scope.capability_grant_refs,
-            vec!["ck:grant:capability"]
+            vec!["ak:grant:capability"]
         );
         assert_eq!(effective_scope.policy_refs, vec!["policy:2026-06-19"]);
     }
@@ -1688,10 +1688,10 @@ mod tests {
             device_id: None,
             requested_scope: vec!["ck.message.create".to_owned()],
             agent_key_authorization_ref: Some(
-                "ck:event:01970000-0000-7000-8000-000000000021".to_owned(),
+                "ak:event:01970000-0000-7000-8000-000000000021".to_owned(),
             ),
             agent_scope_request: serde_json::json!({
-                "realm_ids": ["ck:realm:01970000-0000-7000-8000-000000000000"]
+                "realm_ids": ["ak:realm:01970000-0000-7000-8000-000000000000"]
             }),
             dpop_binding_proof: None,
             applet_delegation: None,
@@ -1703,7 +1703,7 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: "https://cokret.example/_cokret".to_owned(),
+                audience: "https://arkret.example/_cokret".to_owned(),
                 expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
                 signature: "sig-a".to_owned(),
                 verification_method: Some("did:web:agent.example#runtime-key-1".to_owned()),

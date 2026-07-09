@@ -24,7 +24,7 @@ use super::proof::{ProofSignedFields, canonical_digest, verify_proof_signature};
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
-use crate::handlers::cokret::{
+use crate::handlers::arkret::{
     VerificationMethod, is_allowed_session_grant_audience, service_did_for,
 };
 use crate::services::did_binding_proof::normalize_did_for_binding;
@@ -39,7 +39,7 @@ const AGENT_KEY_AUTHORIZE_FANOUT_QUEUE: &str = "soland-agent-key-authorize-fanou
 
 /// Internal coauth→soland fan-out envelope kind wrapping the controller-signed
 /// `ck.agent.key.authorize` event.
-const AGENT_KEY_AUTHORIZE_FANOUT_KIND: &str = "org.cokret.coauth.agent_key_authorize.fanout.v1";
+const AGENT_KEY_AUTHORIZE_FANOUT_KIND: &str = "org.arkret.coauth.agent_key_authorize.fanout.v1";
 
 /// CKP-0008 agent runtime authorizations are short-lived; session grants minted
 /// from them are capped at 15 minutes, so the root key authorization uses the
@@ -147,7 +147,7 @@ pub async fn post_agent_key_pair(
     }
     let agent_id = cokret_core::Did::new(agent_principal_id.clone())
         .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
-    let expected_pop_digest = cokret::agent::agent_key_pair_proof_request_binding_digest(
+    let expected_pop_digest = arkret::agent::agent_key_pair_proof_request_binding_digest(
         &body.pairing_request_id,
         &agent_id,
         &body.verification_method,
@@ -374,7 +374,7 @@ fn runtime_public_key_digest(
     verification_method: &str,
 ) -> Result<String, AppError> {
     validate_runtime_public_key(public_key, verification_method)?;
-    cokret::agent::agent_runtime_public_key_digest(public_key)
+    arkret::agent::agent_runtime_public_key_digest(public_key)
         .map(|digest| digest.as_str().to_owned())
         .map_err(|error| AppError::bad_request(format!("public_key is invalid: {error}")))
 }
@@ -760,9 +760,9 @@ mod tests {
 
     fn valid_authorize_event(pairing_request_id: &str) -> Value {
         json!({
-            "event_id": "ck:event:01999999-0000-7000-8000-000000000001",
+            "event_id": "ak:event:01999999-0000-7000-8000-000000000001",
             "kind": "ck.agent.key.authorize",
-            "realm_id": "ck:realm:01999999-0000-7000-8000-000000000010",
+            "realm_id": "ak:realm:01999999-0000-7000-8000-000000000010",
             "actor_id": CONTROLLER,
             "actor_seq": 1,
             "created_at": "2026-07-06T00:00:00Z",
@@ -786,7 +786,7 @@ mod tests {
                 "expires_at": "2026-07-06T00:10:00Z",
                 "approval_evidence": {
                     "kind": "approval_event",
-                    "ref": "ck:event:01999999-0000-7000-8000-000000000099",
+                    "ref": "ak:event:01999999-0000-7000-8000-000000000099",
                     "request_canonical_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "pairing_request_id": pairing_request_id,
                     "approved_by": CONTROLLER

@@ -36,7 +36,7 @@ use crate::handlers::account::service::registration::{
     submit_registration_phone_code,
 };
 use crate::handlers::notification_dispatch::{NotificationIntent, schedule_notification};
-use crate::handlers::{RequesterFingerprint, cokret};
+use crate::handlers::{RequesterFingerprint, arkret};
 use crate::salvo_utils::SessionInfoExt;
 use crate::services::soland_webvh::{self, SuppliedInceptionInput};
 
@@ -255,7 +255,7 @@ pub async fn post_webvh_start(
             error: Some("username_required".into()),
         }));
     }
-    // HDL-1 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) —
+    // HDL-1 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) —
     // wire-level handle normalize / homograph check via the SDK helper.
     // MUST run before any storage lookup so confusable handles never
     // hit `repo.user().exists(...)` or the principal server.
@@ -1462,7 +1462,7 @@ pub async fn post_finish(
     cookie_jar.write_to_response(res);
 
     let post_auth_action = completed.registration.post_auth_action.clone();
-    let did = cokret::user_did_for(&cokret_config, &completed.user);
+    let did = arkret::user_did_for(&cokret_config, &completed.user);
 
     Ok(Json(FinishRegistrationOutcome {
         status: "success",

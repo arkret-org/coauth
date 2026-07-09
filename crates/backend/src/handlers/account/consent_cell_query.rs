@@ -5,7 +5,7 @@
 //! Cross-service helper that consults the holder's consent cell on the
 //! `server_name` (`soland`) before coauth admits or relays an invite.
 //!
-//! Per the Move/Anchor/Lattice spec (`cokret-spec` 2026-05-08,
+//! Per the Move/Anchor/Lattice spec (`arkret-spec` 2026-05-08,
 //! `consent-model.md` §3–§9), consent is no longer reducer state on the
 //! `server_name`. It is an `OrSet` cell:
 //!
@@ -357,14 +357,14 @@ mod tests {
     fn active_cell(scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ck:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "cell_id": format!("ak:cell:ck.component.consent.grant.v1:c-{scope}"),
             "holder_did": "did:web:holder",
             "peer_did": "did:web:peer",
             "consent_scope": scope,
             "state": "active",
             "updated_at": "2026-05-01T00:00:00Z",
-            "active_grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
-            "grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "active_grant_dots": ["ak:event:0196419b-0000-7000-8000-000000000001:0"],
+            "grant_dots": ["ak:event:0196419b-0000-7000-8000-000000000001:0"],
             "revoked_dots": [],
         })
     }
@@ -372,15 +372,15 @@ mod tests {
     fn revoked_cell(scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ck:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "cell_id": format!("ak:cell:ck.component.consent.grant.v1:c-{scope}"),
             "holder_did": "did:web:holder",
             "peer_did": "did:web:peer",
             "consent_scope": scope,
             "state": "revoked",
             "updated_at": "2026-05-01T00:00:00Z",
             "active_grant_dots": [],
-            "grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
-            "revoked_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "grant_dots": ["ak:event:0196419b-0000-7000-8000-000000000001:0"],
+            "revoked_dots": ["ak:event:0196419b-0000-7000-8000-000000000001:0"],
         })
     }
 

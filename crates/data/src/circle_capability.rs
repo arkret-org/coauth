@@ -18,7 +18,7 @@ pub use crate::storage::circle_capability::*;
 /// One of the six CKP-0007 capability actions. Stored as the literal
 /// registry string so the wire shape is stable across rollouts.
 ///
-/// Source: cokret-spec
+/// Source: arkret-spec
 /// `spec/v1/artifacts/registry/capability-action-registry.json`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn registry_action_strings_match_spec() {
         // These six strings come directly from
-        // cokret-spec/spec/v1/artifacts/registry/capability-action-registry.json
+        // arkret-spec/spec/v1/artifacts/registry/capability-action-registry.json
         // and MUST NOT drift.
         assert_eq!(
             CircleCapabilityAction::Create.as_action_str(),

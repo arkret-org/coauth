@@ -1,7 +1,7 @@
 # 升级
 
 `coauth` 在 HTTP 契约上遵循 [SemVer](https://semver.org/)。Patch / minor
-升级永远不会破坏 OIDC / OAuth / Cokret 已有 surface；major 升级会在至少
+升级永远不会破坏 OIDC / OAuth / Arkret 已有 surface；major 升级会在至少
 一个 minor 版本之前预先标记 deprecation。
 
 ## 常规升级流程
@@ -29,7 +29,7 @@
 跟踪的兼容契约：
 
 - `/.well-known/openid-configuration`
-- `/.well-known/cokret/openapi.yaml`
+- `/.well-known/arkret/openapi.yaml`
 - `/_coauth/admin/openapi.yaml`
 - `/_cokret/describe` 与 `/_cokret/*` 其余路径
 - CLI 子命令（`server`、`worker`、`manage`、`database`、`config`、

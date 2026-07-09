@@ -429,7 +429,7 @@ pub(crate) enum SdkJwsVerifyError {
 /// `cokret_signatures::proof::verify_detached_ed25519_signature` call.
 pub(crate) fn verify_compact_jws_with_sdk(
     proof_jws: &str,
-    verification_methods: &[crate::handlers::cokret::VerificationMethod],
+    verification_methods: &[crate::handlers::arkret::VerificationMethod],
     verification_method_id: &str,
 ) -> Result<(), SdkJwsVerifyError> {
     let mut parts = proof_jws.split('.');
@@ -488,7 +488,7 @@ pub(crate) fn verify_compact_jws_with_sdk(
 pub(crate) fn verify_detached_jws_with_sdk(
     detached_jws: &str,
     payload_bytes: &[u8],
-    verification_methods: &[crate::handlers::cokret::VerificationMethod],
+    verification_methods: &[crate::handlers::arkret::VerificationMethod],
 ) -> Result<String, SdkJwsVerifyError> {
     let mut parts = detached_jws.split('.');
     let header_b64u = parts
@@ -769,7 +769,7 @@ mod tests {
     use super::*;
 
     const TEST_AUDIENCE: &str = "did:web:auth.acme.example";
-    const TEST_TRUST_DOMAIN: &str = "ck:trust_domain:auth.acme.example";
+    const TEST_TRUST_DOMAIN: &str = "ak:trust_domain:auth.acme.example";
 
     fn statement_claims_default() -> BindingStatementClaims {
         let iat = chrono::DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
@@ -789,7 +789,7 @@ mod tests {
         rejection: DidResolutionIdentityFactRejection,
     ) -> DidResolution {
         DidResolution {
-            document: crate::handlers::cokret::DidDocument {
+            document: crate::handlers::arkret::DidDocument {
                 id: "did:webvh:ztest:resolver.example:users:alice".to_owned(),
                 also_known_as: Vec::new(),
                 verification_method: Vec::new(),
@@ -999,7 +999,7 @@ mod tests {
             "did:web:alice.example",
             "nonce-123",
             TEST_AUDIENCE,
-            "ck:trust_domain:other-deployment.example",
+            "ak:trust_domain:other-deployment.example",
             claims.iat,
         )
         .expect_err("trust_domain mismatch must reject");
@@ -1166,7 +1166,7 @@ mod tests {
             .join("..")
             .join("..")
             .join("..")
-            .join("cokret-spec")
+            .join("arkret-spec")
             .join("spec")
             .join("v1")
             .join("artifacts")
@@ -1176,13 +1176,13 @@ mod tests {
             Ok(raw) => raw,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 eprintln!(
-                    "skipping cokret-spec fixture test; missing {}",
+                    "skipping arkret-spec fixture test; missing {}",
                     fixture_path.as_str()
                 );
                 return;
             }
             Err(error) => panic!(
-                "failed reading cokret-spec fixture {}: {error}",
+                "failed reading arkret-spec fixture {}: {error}",
                 fixture_path.as_str()
             ),
         };
@@ -1228,7 +1228,7 @@ mod tests {
             Some(kid)
         );
 
-        let method = crate::handlers::cokret::VerificationMethod {
+        let method = crate::handlers::arkret::VerificationMethod {
             id: vector.did_document_fragment.id.clone(),
             kind: vector.did_document_fragment.kind.clone(),
             controller: vector.did_document_fragment.controller.clone(),

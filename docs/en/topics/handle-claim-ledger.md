@@ -1,19 +1,19 @@
 # Handle-claim ledger (issuer-internal)
 
 coauth is a **handle-claim issuer**, not a handle **directory**. This page
-records the R3.2 (cokret-spec @ `b56cab1`) scope decision for the
+records the R3.2 (arkret-spec @ `b56cab1`) scope decision for the
 `ck.find.directory.query.list_handles_for_subject` directory operation.
 
 ## Decision: coauth does NOT implement `ck.find.directory.query.list_handles_for_subject`
 
-R3.2 of the Cokret spec introduced
+R3.2 of the Arkret spec introduced
 [`ck.find.directory.query.list_handles_for_subject`][op] — given a known
 holder/principal DID, return the current context-visible set of signed
 `ck.schema.handle_claim.v1` evidence (the inverse of `resolve_handle`,
 which maps a handle string to a subject).
 
 **`ck.find.directory.query.list_handles_for_subject` is a directory-service
-operation.** In a standard Cokret deployment that role is carried by the
+operation.** In a standard Arkret deployment that role is carried by the
 directory service (teabay), which applies disclosure policy, issuer-trust
 filtering, audience scoping, and `as_of` historical replay across all
 issuers visible in a Realm. coauth deliberately does **not** expose this
@@ -34,7 +34,7 @@ service (teabay), not coauth.
 
 coauth retains an **issuer-internal ledger** of the handle claims it has
 minted. The signed `ck.schema.handle_claim.v1` artefacts coauth produces
-(see [`issue_handle_claim`][src] in `crates/backend/src/handlers/cokret.rs`)
+(see [`issue_handle_claim`][src] in `crates/backend/src/handlers/arkret.rs`)
 are the only authoritative wire form for a handle; everything else
 (roster hints, mention `handle_at_time`, etc.) is a derived projection or
 audit metadata.
@@ -62,5 +62,5 @@ Per the R3.2 issuer hardening:
 > claims surface already covers operator audit needs; add it only if a
 > concrete operator workflow requires it.
 
-[op]: https://github.com/cokret/cokret-spec
-[src]: ../../../crates/backend/src/handlers/cokret.rs
+[op]: https://github.com/arkret/arkret-spec
+[src]: ../../../crates/backend/src/handlers/arkret.rs

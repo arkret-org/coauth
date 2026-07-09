@@ -249,14 +249,14 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
         .expect("id_token should be a JWT");
     jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
 
-    let expected_subject = crate::handlers::cokret::oidc_subject_for_user(&cokret_config, &user);
+    let expected_subject = crate::handlers::arkret::oidc_subject_for_user(&cokret_config, &user);
     assert_eq!(
         jwt.payload().get("sub").and_then(Value::as_str),
         Some(expected_subject.as_str())
     );
     assert!(
         !jwt.payload()
-            .contains_key(crate::handlers::cokret::CLAIM_PRINCIPAL_DID)
+            .contains_key(crate::handlers::arkret::CLAIM_PRINCIPAL_DID)
     );
 
     cancellation_token.cancel();
@@ -347,7 +347,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
             &*clock,
             NewSessionGrant {
                 grant_id: cokret_core::GrantId::new(
-                    "ck:grant:0196419b-0000-7000-8000-000000000204".to_owned(),
+                    "ak:grant:0196419b-0000-7000-8000-000000000204".to_owned(),
                 )
                 .unwrap(),
                 browser_session_id: Some(browser_session.id),

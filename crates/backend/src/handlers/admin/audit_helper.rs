@@ -24,7 +24,7 @@ use signature::{RandomizedSigner as _, Verifier as _};
 use ulid::Ulid;
 use uuid::Uuid;
 
-const AUDIT_TRANSCRIPT_KIND: &str = "org.cokret.coauth.audit.admin_operation.v1";
+const AUDIT_TRANSCRIPT_KIND: &str = "org.arkret.coauth.audit.admin_operation.v1";
 const AUDIT_TRANSCRIPT_SCHEMA_VERSION: u32 = 1;
 
 /// Verification state returned on admin audit read/export surfaces.
@@ -508,7 +508,7 @@ mod tests {
             "agent",
             None,
             serde_json::json!({
-                "accountability_grant_id": "ck:grant:test",
+                "accountability_grant_id": "ak:grant:test",
                 "agent_principal_id": "did:web:agent.example",
             }),
         )

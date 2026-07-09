@@ -424,7 +424,7 @@ mod tests {
 
         // The protocol-surface well-known path must NOT be served by the admin
         // router — it is published by the account/protocol router instead.
-        let not_found = TestClient::get("http://127.0.0.1:8698/.well-known/cokret/openapi.yaml")
+        let not_found = TestClient::get("http://127.0.0.1:8698/.well-known/arkret/openapi.yaml")
             .send(&service)
             .await;
         assert_eq!(not_found.status_code, Some(StatusCode::NOT_FOUND));
@@ -434,7 +434,7 @@ mod tests {
     async fn cokret_protocol_openapi_yaml_is_served_from_well_known_path() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
 
-        let mut response = TestClient::get("http://127.0.0.1:8698/.well-known/cokret/openapi.yaml")
+        let mut response = TestClient::get("http://127.0.0.1:8698/.well-known/arkret/openapi.yaml")
             .send(&service)
             .await;
 
@@ -455,7 +455,7 @@ mod tests {
         // an (intentionally) empty `paths` until the protocol handlers gain
         // OpenAPI annotations. The load-bearing contract today is that this
         // path no longer leaks the admin API.
-        assert!(body.contains("title: Cokret Protocol API"), "{body}");
+        assert!(body.contains("title: Arkret Protocol API"), "{body}");
         assert!(!body.contains("title: coauth Admin API"), "{body}");
         assert!(!body.contains("/_coauth/admin/"), "{body}");
     }
@@ -510,7 +510,7 @@ mod tests {
                 .body(
                     serde_json::json!({
                         "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
-                        "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
+                        "device_id": "ak:device:01964137-0000-7000-8000-000000000001",
                         "proof": {
                             "proof_kind": "oidc_code_exchange",
                             "challenge": "0123456789abcdef0123",

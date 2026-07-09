@@ -2,8 +2,8 @@
 //!
 //! Scope: coauth-private browser/account REST endpoints served under
 //! `/_coauth`, such as `/_coauth/gate/account/auth/login`. Protocol-level
-//! Cokret endpoints served under `/_cokret` continue to use types from
-//! `cokret-rust-sdk`.
+//! Arkret endpoints served under `/_cokret` continue to use types from
+//! `arkret-rust-sdk`.
 
 pub mod passkey;
 

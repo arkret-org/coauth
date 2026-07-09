@@ -6,7 +6,7 @@ use coauth_data::NewUserPrimaryHandlePreference;
 use salvo::prelude::*;
 
 use crate::handlers::account::DepotExt as _;
-use crate::handlers::cokret::{
+use crate::handlers::arkret::{
     CokretRouteError, PatchPrimaryHandlePreferenceRequestBody, PrimaryHandlePreferenceOutcome,
     require_canonical_handle,
 };

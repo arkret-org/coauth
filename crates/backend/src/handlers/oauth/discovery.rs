@@ -12,7 +12,7 @@ use coauth_oauth_types::scope;
 use salvo::prelude::*;
 use serde::Serialize;
 
-use crate::handlers::cokret;
+use crate::handlers::arkret;
 
 #[derive(Debug, Serialize)]
 struct DiscoveryDocument {
@@ -23,28 +23,28 @@ struct DiscoveryDocument {
     account_management_uri: url::Url,
     account_management_actions_supported: Vec<String>,
 
-    #[serde(rename = "org.cokret.api_endpoint")]
+    #[serde(rename = "org.arkret.api_endpoint")]
     cokret_api_endpoint: String,
 
-    #[serde(rename = "org.cokret.server_describe")]
+    #[serde(rename = "org.arkret.server_describe")]
     cokret_server_describe: String,
 
-    #[serde(rename = "org.cokret.service_did")]
+    #[serde(rename = "org.arkret.service_did")]
     cokret_service_did: String,
 
-    #[serde(rename = "org.cokret.did_binding_methods")]
+    #[serde(rename = "org.arkret.did_binding_methods")]
     cokret_did_binding_methods: Vec<String>,
 
-    #[serde(rename = "org.cokret.supported_scopes")]
+    #[serde(rename = "org.arkret.supported_scopes")]
     cokret_supported_scopes: Vec<String>,
 
-    #[serde(rename = "org.cokret.admin_audience")]
+    #[serde(rename = "org.arkret.admin_audience")]
     cokret_admin_audience: String,
 
-    #[serde(rename = "org.cokret.principal_servers")]
+    #[serde(rename = "org.arkret.principal_servers")]
     cokret_principal_servers: Vec<PrincipalServerMetadata>,
 
-    #[serde(rename = "org.cokret.identity_registry")]
+    #[serde(rename = "org.arkret.identity_registry")]
     #[serde(skip_serializing_if = "Option::is_none")]
     cokret_identity_registry: Option<IdentityRegistryMetadata>,
 }
@@ -67,7 +67,7 @@ struct IdentityRegistryMetadata {
 /// Process-wide cache of the serialized OIDC discovery document.
 ///
 /// Every input to the discovery document — the URL builder, site config,
-/// cokret config and the keystore's available signing algorithms — is fixed
+/// arkret config and the keystore's available signing algorithms — is fixed
 /// for the lifetime of the process (a single config per process). So the
 /// document only needs to be built once; subsequent requests clone the cached
 /// JSON value instead of rebuilding the whole `DiscoveryDocument` and
@@ -148,10 +148,10 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         scope::OPENID.to_string(),
         scope::PROFILE.to_string(),
         scope::COAUTH_ADMIN.to_string(),
-        scope::COKRET_ADMIN.to_string(),
-        scope::COKRET_CLIENT.to_string(),
-        scope::COKRET_PRINCIPAL_SERVER.to_string(),
-        scope::COKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
+        scope::ARKRET_ADMIN.to_string(),
+        scope::ARKRET_CLIENT.to_string(),
+        scope::ARKRET_PRINCIPAL_SERVER.to_string(),
+        scope::ARKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
     ]);
 
     let response_types_supported = Some(vec![
@@ -221,9 +221,9 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         "name".to_owned(),
         "picture".to_owned(),
         "locale".to_owned(),
-        cokret::CLAIM_PRINCIPAL_DID.to_owned(),
-        cokret::CLAIM_DEVICE_ID.to_owned(),
-        cokret::CLAIM_SESSION_ID.to_owned(),
+        arkret::CLAIM_PRINCIPAL_DID.to_owned(),
+        arkret::CLAIM_DEVICE_ID.to_owned(),
+        arkret::CLAIM_SESSION_ID.to_owned(),
     ]);
 
     let claims_parameter_supported = Some(false);
@@ -309,16 +309,16 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         ],
         cokret_api_endpoint: url_builder.absolute_url("/_cokret").to_string(),
         cokret_server_describe: url_builder.absolute_url("/_cokret/describe").to_string(),
-        cokret_service_did: cokret::service_did_for(&cokret_config),
+        cokret_service_did: arkret::service_did_for(&cokret_config),
         cokret_did_binding_methods: vec!["session_grant".to_owned()],
         cokret_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),
-            scope::COKRET_ADMIN.to_string(),
-            scope::COKRET_CLIENT.to_string(),
-            scope::COKRET_PRINCIPAL_SERVER.to_string(),
-            scope::COKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
+            scope::ARKRET_ADMIN.to_string(),
+            scope::ARKRET_CLIENT.to_string(),
+            scope::ARKRET_PRINCIPAL_SERVER.to_string(),
+            scope::ARKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
         ],
-        cokret_admin_audience: cokret::required_audience_for(url_builder, &cokret_config),
+        cokret_admin_audience: arkret::required_audience_for(url_builder, &cokret_config),
         cokret_principal_servers,
         cokret_identity_registry,
     })
@@ -398,34 +398,34 @@ mod tests {
 
         let scopes = body["scopes_supported"].as_array().unwrap();
         assert!(scopes.iter().any(|scope| scope == "urn:coauth:admin"));
-        assert!(scopes.iter().any(|scope| scope == "urn:cokret:admin:*"));
-        assert!(scopes.iter().any(|scope| scope == "urn:cokret:client:*"));
+        assert!(scopes.iter().any(|scope| scope == "urn:arkret:admin:*"));
+        assert!(scopes.iter().any(|scope| scope == "urn:arkret:client:*"));
         assert!(
             scopes
                 .iter()
-                .any(|scope| scope == "urn:cokret:principal-server:*")
+                .any(|scope| scope == "urn:arkret:principal-server:*")
         );
         assert!(
             scopes
                 .iter()
-                .any(|scope| scope == "urn:cokret:principal-server:session.bind")
+                .any(|scope| scope == "urn:arkret:principal-server:session.bind")
         );
 
-        let cokret_scopes = body["org.cokret.supported_scopes"].as_array().unwrap();
+        let cokret_scopes = body["org.arkret.supported_scopes"].as_array().unwrap();
         assert!(
             cokret_scopes
                 .iter()
-                .any(|scope| scope == "urn:cokret:principal-server:session.bind")
+                .any(|scope| scope == "urn:arkret:principal-server:session.bind")
         );
 
         let claims = body["claims_supported"].as_array().unwrap();
         assert!(
             claims
                 .iter()
-                .any(|claim| claim == cokret::CLAIM_PRINCIPAL_DID)
+                .any(|claim| claim == arkret::CLAIM_PRINCIPAL_DID)
         );
-        assert!(claims.iter().any(|claim| claim == cokret::CLAIM_DEVICE_ID));
-        assert!(claims.iter().any(|claim| claim == cokret::CLAIM_SESSION_ID));
+        assert!(claims.iter().any(|claim| claim == arkret::CLAIM_DEVICE_ID));
+        assert!(claims.iter().any(|claim| claim == arkret::CLAIM_SESSION_ID));
     }
 
     /// Round 25 production-stability audit: `email` scope and

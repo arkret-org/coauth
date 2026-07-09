@@ -218,8 +218,8 @@ coauth-registration-token-headline = Registration token
 coauth-scope-coauth-admin = Manage coauth accounts (urn:coauth:admin)
 coauth-scope-edit-profile = Edit your profile and contact details
 coauth-scope-manage-sessions = Manage your devices and sessions
-coauth-scope-send-messages = Send Cokret messages on your behalf
-coauth-scope-view-messages = Read Cokret message metadata
+coauth-scope-send-messages = Send Arkret messages on your behalf
+coauth-scope-view-messages = Read Arkret message metadata
 # Displayed when the 'openid' scope is requested
 coauth-scope-view-profile = See your coauth profile info and contact details
 # Page shown when the user tries to link an upstream account that is already linked to another account

@@ -1,4 +1,4 @@
-//! Cokret device administration endpoints.
+//! Arkret device administration endpoints.
 
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
@@ -529,7 +529,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let scope: Scope = "urn:cokret:principal-server:session.bind".parse().unwrap();
+        let scope: Scope = "urn:arkret:principal-server:session.bind".parse().unwrap();
         let grant = repo
             .oauth_session_grant()
             .add(
@@ -537,7 +537,7 @@ mod tests {
                 &*state.clock,
                 NewSessionGrant {
                     grant_id: cokret_core::GrantId::new(
-                        "ck:grant:0196419b-0000-7000-8000-000000000203".to_owned(),
+                        "ak:grant:0196419b-0000-7000-8000-000000000203".to_owned(),
                     )
                     .unwrap(),
                     browser_session_id: Some(browser_session.id),

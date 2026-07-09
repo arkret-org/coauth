@@ -1,6 +1,6 @@
 # 安装部署概述
 
-coauth 是 Cokret Auth Server，负责用户认证、OAuth/OIDC、账号会话和 Cokret
+coauth 是 Arkret Auth Server，负责用户认证、OAuth/OIDC、账号会话和 Arkret
 session grant。
 
 ## 部署架构

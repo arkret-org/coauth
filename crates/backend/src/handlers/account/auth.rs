@@ -38,7 +38,7 @@ use crate::handlers::account::service::access::{
     PasswordLoginOutcome, PasswordLoginRequestBody, load_enabled_upstream_providers,
     login_with_password, logout_browser_session,
 };
-use crate::handlers::{METER, RequesterFingerprint, cokret};
+use crate::handlers::{METER, RequesterFingerprint, arkret};
 use crate::salvo_utils::session::SessionInfoExt;
 use crate::services::dpop::{DpopError, dpop_header_from_request, dpop_htu};
 
@@ -266,7 +266,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
 
             if !session_grants_enabled {
                 let mut viewer_repo = depot.repo().await?;
-                let viewer_did = cokret::published_principal_did_for_user(
+                let viewer_did = arkret::published_principal_did_for_user(
                     &mut viewer_repo,
                     &cokret_config,
                     &user,
@@ -280,7 +280,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                             id: NodeType::User.serialize(user.id),
                             handle: user.localpart.clone(),
                             did: viewer_did,
-                            federated_handle: cokret::user_handle(&url_builder, &user),
+                            federated_handle: arkret::user_handle(&url_builder, &user),
                             principal_id: principal_server.principal_id(&user.localpart),
                             display_name,
                         }),
@@ -331,7 +331,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         return Ok(());
                     }
                 };
-                let grant_target = match cokret::password_login_session_grant_target(
+                let grant_target = match arkret::password_login_session_grant_target(
                     &url_builder,
                     &cokret_config,
                     requested_audience.as_deref(),
@@ -347,7 +347,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                         return Ok(());
                     }
                 };
-                // TODO(cokret): replace password bootstrap minting with the real
+                // TODO(arkret): replace password bootstrap minting with the real
                 // coauth-owned OIDC/passkey exchange and proof-bound grant issuance.
                 //
                 // STATUS: scaffold — disabled by default; NOT for production.
@@ -361,7 +361,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 //   keeps the development loop short, but MUST be replaced
                 //   before any external relying party trusts these grants. The
                 //   handler now requires
-                //   `cokret.password_login_session_grants_enabled=true` and a
+                //   `arkret.password_login_session_grants_enabled=true` and a
                 //   valid DPoP proof before this branch can run.
                 // PRE-PROD CHECKLIST:
                 //   - swap to passkey / OIDC exchange via
@@ -431,7 +431,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     ));
                     return Ok(());
                 }
-                let session_grant = cokret::issue_session_grant_for_audience(
+                let session_grant = arkret::issue_session_grant_for_audience(
                     &clock,
                     &cokret_config,
                     &key_store,
@@ -445,7 +445,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
                 let mut grant_repo = depot.repo().await?;
-                let persisted_session_grant = cokret::persist_session_grant(
+                let persisted_session_grant = arkret::persist_session_grant(
                     &mut grant_repo,
                     &mut rng,
                     &clock,
@@ -462,7 +462,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                             id: NodeType::User.serialize(user.id),
                             handle: user.localpart.clone(),
                             did: Some(principal_did),
-                            federated_handle: cokret::user_handle(&url_builder, &user),
+                            federated_handle: arkret::user_handle(&url_builder, &user),
                             principal_id: principal_server.principal_id(&user.localpart),
                             display_name,
                         }),
@@ -557,7 +557,7 @@ pub async fn providers(
             CurrentAccountInfo {
                 id: NodeType::User.serialize(user.id),
                 username: user.localpart.clone(),
-                handle: cokret::user_handle(&url_builder, &user),
+                handle: arkret::user_handle(&url_builder, &user),
                 display_name: user.display_name,
             }
         });
@@ -623,7 +623,7 @@ fn password_form_login_hint(
         _ => grant
             .login_hint
             .as_deref()
-            .and_then(|hint| cokret::parse_local_handle(url_builder, hint)),
+            .and_then(|hint| arkret::parse_local_handle(url_builder, hint)),
     }
 }
 

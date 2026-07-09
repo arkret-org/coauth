@@ -11,7 +11,7 @@ use crate::storage::Pagination;
 use crate::{Clock, SessionGrant, repository_impl};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-/// Filters used when listing persisted Cokret session grants.
+/// Filters used when listing persisted Arkret session grants.
 pub struct SessionGrantFilter<'a> {
     browser_session_id: Option<Ulid>,
     /// Owning account, resolved through the grant's browser session
@@ -78,7 +78,7 @@ impl<'a> SessionGrantFilter<'a> {
         self.subject
     }
 
-    /// Restrict results to a Cokret client device id.
+    /// Restrict results to a Arkret client device id.
     #[must_use]
     pub fn for_device(mut self, device_id: &'a str) -> Self {
         self.device_id = Some(device_id);
@@ -159,7 +159,7 @@ impl<'a> SessionGrantFilter<'a> {
 }
 
 #[derive(Debug)]
-/// Parameters for creating a persisted Cokret session grant.
+/// Parameters for creating a persisted Arkret session grant.
 pub struct NewSessionGrant<'a> {
     /// Protocol-visible session grant id (`ck:grant:<uuidv7>`).
     pub grant_id: GrantId,
@@ -169,7 +169,7 @@ pub struct NewSessionGrant<'a> {
     pub issuer: &'a str,
     /// DID subject authorized by the grant.
     pub subject: &'a str,
-    /// Optional Cokret client device id.
+    /// Optional Arkret client device id.
     pub device_id: Option<&'a str>,
     /// Applet effective install id, for applet-specific delegated sessions.
     pub applet_id: Option<&'a str>,
@@ -194,7 +194,7 @@ pub struct NewSessionGrant<'a> {
 }
 
 #[async_trait]
-/// Repository for persisted Cokret session grants.
+/// Repository for persisted Arkret session grants.
 pub trait SessionGrantRepository: Send + Sync {
     /// Repository-specific error type.
     type Error;

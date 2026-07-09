@@ -251,7 +251,7 @@ mod tests {
     fn delegation(status: OrganizationDelegationStatus) -> OrganizationDelegation {
         OrganizationDelegation {
             id: "01J0".to_owned(),
-            delegation_ref: "ck:grant:01904100-0000-7000-8000-000000000001".to_owned(),
+            delegation_ref: "ak:grant:01904100-0000-7000-8000-000000000001".to_owned(),
             organization_did: "did:webvh:example.test:orgs:org1".to_owned(),
             delegate_did: "did:web:server.acme.example".to_owned(),
             issuer_role: RealmOrganizationIssuerRole::GovernanceService,

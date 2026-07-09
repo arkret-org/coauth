@@ -146,7 +146,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         principal_servers: vec![PrincipalServerConfig {
             name: "soland-prod".to_owned(),
             audience: "https://soland.example.com/api".to_owned(),
-            endpoint: "https://soland.example.com/cokret".parse().unwrap(),
+            endpoint: "https://soland.example.com/arkret".parse().unwrap(),
             did: Some("did:web:soland.example.com".to_owned()),
             session_grant_introspection_bearer: None,
             embedded_webvh_registration_bearer: None,
@@ -178,7 +178,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         body["service_did"],
         "did:webvh:ztest:auth.example.com:webvh:service"
     );
-    assert_eq!(body["trust_domain"], "ck:trust_domain:auth.example.com");
+    assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
     assert_eq!(body["service_type"], "auth_server");
     assert_eq!(
         body["x_coauth_admin_audience"],
@@ -220,7 +220,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
                 "code": "machine_readable_code",
                 "message": "human-readable message"
             },
-            "request_id": "ck:request:01964137-0000-7000-8000-000000000000"
+            "request_id": "ak:request:01964137-0000-7000-8000-000000000000"
         })
     );
 
@@ -508,12 +508,12 @@ fn service_describe_emits_trust_domain_when_configured() {
     );
     let config = CokretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
-        trust_domain: Some("ck:trust_domain:example.net".to_owned()),
+        trust_domain: Some("ak:trust_domain:example.net".to_owned()),
         ..Default::default()
     };
 
     let body = serde_json::to_value(service_describe_response(&url_builder, &config, &[])).unwrap();
-    assert_eq!(body["trust_domain"], "ck:trust_domain:example.net");
+    assert_eq!(body["trust_domain"], "ak:trust_domain:example.net");
 }
 
 #[test]
@@ -529,7 +529,7 @@ fn service_describe_derives_trust_domain_from_public_host_when_unset() {
         &[],
     ))
     .unwrap();
-    assert_eq!(body["trust_domain"], "ck:trust_domain:auth.example.com");
+    assert_eq!(body["trust_domain"], "ak:trust_domain:auth.example.com");
 }
 
 #[test]
@@ -541,7 +541,7 @@ fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
         &[],
     ))
     .unwrap();
-    assert_eq!(body["trust_domain"], "ck:trust_domain:host-::1");
+    assert_eq!(body["trust_domain"], "ak:trust_domain:host-::1");
     CokretConfig::validate_trust_domain(body["trust_domain"].as_str().unwrap()).unwrap();
 }
 
@@ -605,7 +605,7 @@ fn session_grant_is_signed_for_the_user_did() {
     let session_key = PrivateKey::generate_ed25519(&mut signing_rng);
     let session_public_key = test_session_public_jwk(&session_key, "test-session-key");
 
-    let device_scope = "urn:cokret:client:device:ck:device:01964137-0000-7000-8000-000000000001";
+    let device_scope = "urn:arkret:client:device:ck:device:01964137-0000-7000-8000-000000000001";
     let grant = issue_session_grant(
         &mut signing_rng,
         &clock,
@@ -642,7 +642,7 @@ fn session_grant_is_signed_for_the_user_did() {
     assert_eq!(payload.session_id, browser_session.id.to_string());
     assert_eq!(
         grant.device_id.as_deref(),
-        Some("ck:device:01964137-0000-7000-8000-000000000001")
+        Some("ak:device:01964137-0000-7000-8000-000000000001")
     );
     assert_eq!(
         payload.expires_at - payload.not_before,
@@ -754,7 +754,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
     let grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
         grant_id: cokret_core::GrantId::new(
-            "ck:grant:0196419b-0000-7000-8000-000000000205".to_owned(),
+            "ak:grant:0196419b-0000-7000-8000-000000000205".to_owned(),
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
@@ -795,7 +795,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
     let mut grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
         grant_id: cokret_core::GrantId::new(
-            "ck:grant:0196419b-0000-7000-8000-000000000206".to_owned(),
+            "ak:grant:0196419b-0000-7000-8000-000000000206".to_owned(),
         )
         .unwrap(),
         browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
@@ -1210,7 +1210,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     let scope_details = serde_json::json!({
         "controller_did": "did:web:alice.example",
         "resources": {
-            "realm_refs": ["ck:realm:team"],
+            "realm_refs": ["ak:realm:team"],
         },
     });
     let material = mint_agent_session_grant(
@@ -1604,8 +1604,8 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         "handle MUST be the canonical `<localpart>:<domain>` form"
     );
     assert!(
-        !handle.canonical().starts_with("cokret://"),
-        "handle MUST NOT carry the retired cokret:// URI form"
+        !handle.canonical().starts_with("arkret://"),
+        "handle MUST NOT carry the retired arkret:// URI form"
     );
     assert!(
         !handle.canonical().starts_with("acct:"),

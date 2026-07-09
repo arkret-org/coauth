@@ -17,7 +17,7 @@ use serde::Serialize;
 use sha2::Digest as _;
 
 use super::*;
-use crate::handlers::cokret::*;
+use crate::handlers::arkret::*;
 use crate::services::device_signing_directory::resolve_authorized_device_signing_key;
 use crate::services::third_party_invite::NonceStore;
 
@@ -687,8 +687,8 @@ mod tests {
 
     use super::*;
 
-    const DEVICE_ID: &str = "ck:device:0196419b-0000-7000-8000-000000000001";
-    const OTHER_DEVICE_ID: &str = "ck:device:0196419b-0000-7000-8000-000000000002";
+    const DEVICE_ID: &str = "ak:device:0196419b-0000-7000-8000-000000000001";
+    const OTHER_DEVICE_ID: &str = "ak:device:0196419b-0000-7000-8000-000000000002";
 
     fn ts(seconds: i64) -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(seconds, 0).expect("test timestamp must be valid")

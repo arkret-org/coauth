@@ -29,7 +29,7 @@ use super::proof::canonical_digest;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
-use crate::handlers::cokret::service_did_for;
+use crate::handlers::arkret::service_did_for;
 use crate::services::did_binding_proof::normalize_did_for_binding;
 use crate::{AppError, CreatedJsonResult};
 
@@ -94,7 +94,7 @@ pub struct AccountabilityGrantRequestBody {
 /// `accountability_grant_id` and `agent_principal_id` are emitted as
 /// raw strings in the OpenAPI surface — the grant id is construction-validated
 /// by the SDK typed id helper, while `agent_principal_id` is a DID-as-id per
-/// `cokret-spec` common-fields §4.2.
+/// `arkret-spec` common-fields §4.2.
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountabilityGrantOutcome {
     /// Typed id of the issued grant. Wire form:
@@ -124,7 +124,7 @@ pub struct AccountabilityGrantOutcome {
 ///
 /// Internal CKP-0008 grant-issuance endpoint. Accepts only the soland /
 /// sodmin static bearer token (matched against any
-/// `cokret.principal_servers[].session_grant_introspection_bearer`
+/// `arkret.principal_servers[].session_grant_introspection_bearer`
 /// configured for the deployment); browser sessions and end-user
 /// bearers are rejected with 401.
 ///
@@ -161,7 +161,7 @@ pub async fn post_accountability_grant(
     let clock = make_clock();
     let mut rng = make_rng();
     let issued_at = clock.now();
-    let accountability_grant_id = GrantId::new(new_prefixed_uuid7("ck:grant:"))
+    let accountability_grant_id = GrantId::new(new_prefixed_uuid7("ak:grant:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
     let accountability_grant_id = accountability_grant_id.into_string();
     let response = AccountabilityGrantOutcome {
@@ -333,7 +333,7 @@ pub(super) fn accountability_capabilities_digest(
     capabilities: &[String],
 ) -> Result<String, AppError> {
     canonical_digest(&CapabilityDigestInput {
-        kind: "org.cokret.coauth.accountability_grant.capabilities.v1",
+        kind: "org.arkret.coauth.accountability_grant.capabilities.v1",
         agent_principal_id,
         controller_did,
         capabilities,
@@ -364,7 +364,7 @@ fn build_soland_fanout_payload(
         .collect();
 
     Ok(serde_json::json!({
-        "kind": "org.cokret.coauth.accountability_grant.fanout.v1",
+        "kind": "org.arkret.coauth.accountability_grant.fanout.v1",
         "issuer_service_did": service_did,
         "raw_payload_digest": raw_payload_digest,
         "grant": response,
@@ -443,7 +443,7 @@ pub async fn revoke_accountability_grant_by_id(
 /// Reject any caller that isn't soland / sodmin (no browser session, no
 /// end-user bearer). The single accepted credential is the static
 /// bearer configured under
-/// `cokret.principal_servers[].session_grant_introspection_bearer` —
+/// `arkret.principal_servers[].session_grant_introspection_bearer` —
 /// shared with the existing session-grant introspection path.
 fn authn_internal_caller(req: &Request, cokret_config: &CokretConfig) -> Result<(), AppError> {
     let authorization = req

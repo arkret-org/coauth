@@ -1,7 +1,7 @@
 # 升级到 Round R4
 
-Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
-审中确定的工作。它对直接消费 Cokret 账户、身份、邀请或策
+Round R4 收尾了 `coauth` 与 Arkret 协议在 2026-05-20 协议评
+审中确定的工作。它对直接消费 Arkret 账户、身份、邀请或策
 略接口的客户端与下游服务而言是破坏性更新。OIDC/OAuth 端点
 仍保持原有的兼容性策略。
 
@@ -28,11 +28,11 @@ Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
   `^did:[a-z0-9]+:[^\s]+$` 形态中的 method 名。
 
 完整的 R4 变更列表以对应构建发布说明和匹配的
-`cokret-spec/spec/v1/` 修订为准。
+`arkret-spec/spec/v1/` 修订为准。
 
 ## Trust domain 轮换
 
-`cokret.trust_domain` 是每一条 `ck.cross_signing.reset` 证明
+`arkret.trust_domain` 是每一条 `ck.cross_signing.reset` 证明
 的规范 transcript 的一部分。变更该值会令使用旧 trust domain
 签发的 reset 证明失效。
 
@@ -48,7 +48,7 @@ Round R4 收尾了 `coauth` 与 Cokret 协议在 2026-05-20 协议评
 
 轮换过程中：
 
-1. 在 `cokret.trust_domain` 中写入新值。
+1. 在 `arkret.trust_domain` 中写入新值。
 2. 重启一个 `coauth` 副本，确认
    `/_cokret/describe` 公布了新值。
 3. 滚动重启其余副本。

@@ -1,8 +1,8 @@
 # Upgrade to Round R4
 
 Round R4 closes the 2026-05-20 protocol review work in `coauth` and
-the Cokret protocol. It is wire-breaking for clients or downstream
-services that consume Cokret account, identity, invite, or policy
+the Arkret protocol. It is wire-breaking for clients or downstream
+services that consume Arkret account, identity, invite, or policy
 surfaces directly. OIDC/OAuth endpoints remain on their normal
 compatibility track.
 
@@ -30,11 +30,11 @@ Read this page before enabling a build that includes the R4 changes.
   `^did:[a-z0-9]+:[^\s]+$` shape.
 
 Use the release notes attached to the build and the matching
-`cokret-spec/spec/v1/` revision for the complete R4 change list.
+`arkret-spec/spec/v1/` revision for the complete R4 change list.
 
 ## Trust domain rotation
 
-`cokret.trust_domain` is part of the canonical transcript for every
+`arkret.trust_domain` is part of the canonical transcript for every
 `ck.cross_signing.reset` proof. Changing it invalidates reset proofs
 that were issued under the previous trust domain.
 
@@ -51,7 +51,7 @@ Before rotating:
 
 During rotation:
 
-1. Set the new value in `cokret.trust_domain`.
+1. Set the new value in `arkret.trust_domain`.
 2. Restart one `coauth` replica and verify `/_cokret/describe`
    advertises the new value.
 3. Roll the remaining replicas.

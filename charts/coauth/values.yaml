@@ -8,7 +8,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 image:
-  repository: ghcr.io/cokret/coauth
+  repository: ghcr.io/arkret/coauth
   tag: ""  # Defaults to .Chart.AppVersion
   pullPolicy: IfNotPresent
 

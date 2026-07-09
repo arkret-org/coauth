@@ -13,7 +13,7 @@ use super::ConfigurationSection;
 /// `cokret_core::TypedTrustDomainId` so coauth and the Realm policy
 /// engine agree on the exact byte-form. Validate via
 /// [`validate_trust_domain`].
-const TRUST_DOMAIN_PREFIX: &str = "ck:trust_domain:";
+const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";
 // 8 hours. The session grant is the refresh credential for a device session;
 // the access bearers minted from it are short-lived (capped server-side), so a
 // multi-hour grant gives a normal working-session length WITHOUT long-lived
@@ -27,7 +27,7 @@ const SERVICE_DID_BOOTSTRAP_HELP: &str = concat!(
     "Local development: run `coauth config generate --dev -o config.dev.yaml`. ",
     "Production: run `coauth config service-did init --starid-url <https://starid.example> ",
     "--host <auth.example.com> --key-output <service-did-keys.yaml>` and copy the emitted ",
-    "`cokret.service_did` into your config."
+    "`arkret.service_did` into your config."
 );
 
 fn default_session_grant_ttl() -> Duration {
@@ -38,7 +38,7 @@ fn session_grant_ttl_is_default(ttl: &Duration) -> bool {
     *ttl == default_session_grant_ttl()
 }
 
-/// Deployment profile used to constrain Cokret identity and trust choices.
+/// Deployment profile used to constrain Arkret identity and trust choices.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DeploymentProfileConfig {
@@ -92,7 +92,7 @@ impl PrincipalMethodConfig {
     }
 }
 
-/// Cokret-specific deployment settings layered on top of the generic OIDC
+/// Arkret-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -118,7 +118,7 @@ pub struct CokretConfig {
     #[serde(default, skip_serializing_if = "PrincipalMethodConfig::is_default")]
     pub principal_method: PrincipalMethodConfig,
 
-    /// External DID / identity registry resolver used for Cokret identity
+    /// External DID / identity registry resolver used for Arkret identity
     /// binding workflows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_registry: Option<IdentityRegistryConfig>,
@@ -141,12 +141,12 @@ pub struct CokretConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_did: Option<String>,
 
-    /// Optional issuer DID to embed in Cokret session grants and discovery
+    /// Optional issuer DID to embed in Arkret session grants and discovery
     /// documents. Defaults to `service_did`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer_did: Option<String>,
 
-    /// Lifetime of Cokret session grants, in seconds.
+    /// Lifetime of Arkret session grants, in seconds.
     ///
     /// These are the DPoP-bound JWT grants returned by the REST auth bridge
     /// login/exchange paths and rotated through
@@ -162,7 +162,7 @@ pub struct CokretConfig {
     #[serde_as(as = "serde_with::DurationSeconds<i64>")]
     pub session_grant_ttl: Duration,
 
-    /// Audience string expected by Cokret admin integrations.
+    /// Audience string expected by Arkret admin integrations.
     ///
     /// When omitted, the backend falls back to the local `/_cokret` endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -217,7 +217,7 @@ pub struct CokretConfig {
     pub oob_code_kind: OobCodeKindConfig,
 
     /// Fail-closed gate for the temporary password-login bridge that returns a
-    /// Cokret principal-server session grant directly from
+    /// Arkret principal-server session grant directly from
     /// `POST /_coauth/gate/account/auth/login`.
     ///
     /// Defaults to `false`: production callers must use the OIDC/passkey bridge
@@ -308,7 +308,7 @@ impl Default for CokretConfig {
 }
 
 impl CokretConfig {
-    /// Returns `true` when the Cokret section carries no explicit overrides.
+    /// Returns `true` when the Arkret section carries no explicit overrides.
     #[must_use]
     pub fn is_default(&self) -> bool {
         self.principal_servers.is_empty()
@@ -461,7 +461,7 @@ pub enum OobCodeKindConfig {
 }
 
 impl ConfigurationSection for CokretConfig {
-    const PATH: &'static str = "cokret";
+    const PATH: &'static str = "arkret";
 
     fn validate(
         &self,
@@ -471,7 +471,7 @@ impl ConfigurationSection for CokretConfig {
         let max_ttl = Duration::try_seconds(SESSION_GRANT_TTL_MAX_SECONDS).unwrap();
         if self.session_grant_ttl < min_ttl || self.session_grant_ttl > max_ttl {
             return Err(std::io::Error::other(
-                "cokret.session_grant_ttl must be between 60 and 86400 seconds",
+                "arkret.session_grant_ttl must be between 60 and 86400 seconds",
             )
             .into());
         }
@@ -483,7 +483,7 @@ impl ConfigurationSection for CokretConfig {
             )
         {
             return Err(std::io::Error::other(
-                "cokret.principal_method=did:web requires cokret.deployment_profile=personal_node",
+                "arkret.principal_method=did:web requires arkret.deployment_profile=personal_node",
             )
             .into());
         }
@@ -491,7 +491,7 @@ impl ConfigurationSection for CokretConfig {
         match self.service_did.as_deref().map(str::trim) {
             Some("") => {
                 return Err(std::io::Error::other(format!(
-                    "cokret.service_did must not be empty. {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "arkret.service_did must not be empty. {SERVICE_DID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
@@ -500,13 +500,13 @@ impl ConfigurationSection for CokretConfig {
                 if service_did.starts_with("did:web:") && self.did_web_service_did_allowed() => {}
             Some(service_did) if service_did.starts_with("did:web:") => {
                 return Err(std::io::Error::other(format!(
-                    "cokret.service_did=did:web requires the explicit personal-node no-history profile. {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "arkret.service_did=did:web requires the explicit personal-node no-history profile. {SERVICE_DID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
             Some(_) => {
                 return Err(std::io::Error::other(format!(
-                    "cokret.service_did must use did:webvh, except explicit personal-node no-history did:web. {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "arkret.service_did must use did:webvh, except explicit personal-node no-history did:web. {SERVICE_DID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
@@ -516,7 +516,7 @@ impl ConfigurationSection for CokretConfig {
             // a request path silently minting a downgraded identity.
             None => {
                 return Err(std::io::Error::other(format!(
-                    "cokret.service_did is required (did:webvh by default; explicit did:web only for the personal-node no-history profile). {SERVICE_DID_BOOTSTRAP_HELP}"
+                    "arkret.service_did is required (did:webvh by default; explicit did:web only for the personal-node no-history profile). {SERVICE_DID_BOOTSTRAP_HELP}"
                 ))
                 .into());
             }
@@ -527,7 +527,7 @@ impl ConfigurationSection for CokretConfig {
             && !self.did_web_service_did_allowed()
         {
             return Err(std::io::Error::other(
-                "cokret.issuer_did=did:web requires the explicit personal-node no-history profile",
+                "arkret.issuer_did=did:web requires the explicit personal-node no-history profile",
             )
             .into());
         }
@@ -538,7 +538,7 @@ impl ConfigurationSection for CokretConfig {
 
         if matches!(self.oob_code_kind, OobCodeKindConfig::Lookup) {
             return Err(std::io::Error::other(
-                "cokret.oob_code_kind=lookup is disabled until lookup-mode strike counters are durable",
+                "arkret.oob_code_kind=lookup is disabled until lookup-mode strike counters are durable",
             )
             .into());
         }
@@ -546,7 +546,7 @@ impl ConfigurationSection for CokretConfig {
         if let Some(org_id) = self.admin_org_id.as_deref()
             && org_id.trim().is_empty()
         {
-            return Err(std::io::Error::other("cokret.admin_org_id must not be empty").into());
+            return Err(std::io::Error::other("arkret.admin_org_id must not be empty").into());
         }
 
         // Fail closed: `password_login_session_grants_enabled` activates the
@@ -562,7 +562,7 @@ impl ConfigurationSection for CokretConfig {
             && std::env::var_os(PASSWORD_BOOTSTRAP_ESCAPE_HATCH).is_none()
         {
             return Err(std::io::Error::other(format!(
-                "cokret.password_login_session_grants_enabled is enabled but the dev-only escape \
+                "arkret.password_login_session_grants_enabled is enabled but the dev-only escape \
                  hatch {PASSWORD_BOOTSTRAP_ESCAPE_HATCH} is not set; this password-bootstrap \
                  scaffold is for dev/test only and must never run in production"
             ))
@@ -575,12 +575,12 @@ impl ConfigurationSection for CokretConfig {
 
 /// Dev-only escape hatch gating the P0 password-bootstrap session-grant
 /// scaffold. Production deployments must never set
-/// `cokret.password_login_session_grants_enabled=true`; requiring this
+/// `arkret.password_login_session_grants_enabled=true`; requiring this
 /// environment variable makes a mis-configured production process fail
 /// closed at startup.
 const PASSWORD_BOOTSTRAP_ESCAPE_HATCH: &str = "COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP";
 
-/// Trusted Principal Server metadata published through Cokret discovery.
+/// Trusted Principal Server metadata published through Arkret discovery.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PrincipalServerConfig {
     /// Human-readable identifier for the consumer, such as `soland-prod`.
@@ -691,32 +691,32 @@ mod tests {
 
     #[test]
     fn trust_domain_accepts_well_formed_scope() {
-        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:example.net").is_ok());
-        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:soland-prod.eu").is_ok());
-        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:tenant_a.shard_1").is_ok());
+        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:example.net").is_ok());
+        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:soland-prod.eu").is_ok());
+        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:tenant_a.shard_1").is_ok());
     }
 
     #[test]
     fn trust_domain_rejects_uppercase_and_empty() {
-        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:Example").is_err());
-        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:").is_err());
+        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:Example").is_err());
+        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:").is_err());
         assert!(CokretConfig::validate_trust_domain("example.net").is_err());
     }
 
     #[test]
     fn trust_domain_rejects_overlong_scope() {
-        let too_long = format!("ck:trust_domain:{}", "a".repeat(129));
+        let too_long = format!("ak:trust_domain:{}", "a".repeat(129));
         assert!(CokretConfig::validate_trust_domain(&too_long).is_err());
-        let just_right = format!("ck:trust_domain:{}", "a".repeat(128));
+        let just_right = format!("ak:trust_domain:{}", "a".repeat(128));
         assert!(CokretConfig::validate_trust_domain(&just_right).is_ok());
     }
 
     #[test]
     fn trust_domain_rejects_disallowed_chars() {
-        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:bad space").is_err());
-        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:bad/slash").is_err());
+        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:bad space").is_err());
+        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:bad/slash").is_err());
         // Scope MUST start with [a-z0-9], not a separator.
-        assert!(CokretConfig::validate_trust_domain("ck:trust_domain:.dotleader").is_err());
+        assert!(CokretConfig::validate_trust_domain("ak:trust_domain:.dotleader").is_err());
     }
 
     #[test]

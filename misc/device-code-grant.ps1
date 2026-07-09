@@ -95,7 +95,7 @@ $metadata = Invoke-JsonRequest -Method GET -Url "$baseUrl/.well-known/openid-con
 Write-Host "Registering the client"
 $registration = Invoke-JsonRequest -Method POST -Url $metadata.registration_endpoint -Body @{
     client_name                = "CLI tool"
-    client_uri                 = "https://github.com/cokret/coauth/"
+    client_uri                 = "https://github.com/arkret/coauth/"
     grant_types                = @("urn:ietf:params:oauth:grant-type:device_code", "refresh_token")
     application_type           = "native"
     token_endpoint_auth_method = "none"

@@ -8,11 +8,11 @@ resolver = "3"
 
 [workspace.package]
 version = "0.3.0"
-authors = ["Cokret Team"]
+authors = ["Arkret Team"]
 edition = "2024"
 rust-version = "1.96"
-homepage = "https://cokret.dev/docs/"
-repository = "https://github.com/cokret/coauth/"
+homepage = "https://arkret.dev/docs/"
+repository = "https://github.com/arkret/coauth/"
 license = "AGPL-3.0-only"
 publish = false
 
@@ -113,22 +113,22 @@ coauth-policy = {version = "=0.3.0",path = "crates/policy"}
 coauth-principal = {version = "=0.3.0",path = "crates/principal"}
 coauth-tasks = {version = "=0.3.0",path = "crates/tasks"}
 coauth-templates = {version = "=0.3.0",path = "crates/templates"}
-# Umbrella `cokret` SDK pulled in for the pure-protocol modules that don't
-# have a smaller-crate home: today just `cokret::identity::binding` (consumed
+# Umbrella `arkret` SDK pulled in for the pure-protocol modules that don't
+# have a smaller-crate home: today just `arkret::identity::binding` (consumed
 # by `services::passkey_derive`). Default features pull in the heavy
 # client / openmls / sync surface, so opt into only `full-surface` (gates the
 # identity tree).
-cokret = {version = "0.3.0",path = "../cokret-rust-sdk/crates/sdk",default-features = false,features = ["full-surface"]}
-# Cokret v1 protocol SDK pieces — `cokret-core` exposes the typed
+arkret = {version = "0.3.0",path = "../arkret-rust-sdk/crates/sdk",default-features = false,features = ["full-surface"]}
+# Arkret v1 protocol SDK pieces — `arkret-core` exposes the typed
 # identifiers + the `MoveSigner` trait + `UnsignedMove` builder, while
-# `cokret-signatures` (with the `signer` feature) provides the production
+# `arkret-signatures` (with the `signer` feature) provides the production
 # Ed25519 backend used by `anchor_pending_move`.
-cokret-core = {version = "0.3.0",path = "../cokret-rust-sdk/crates/core",default-features = false}
+arkret-core = {version = "0.3.0",path = "../arkret-rust-sdk/crates/core",default-features = false}
 # Lightweight typed-identifier validators (no heavy transitive deps beyond
-# what `cokret-core` already pulls in). Used by `coauth-config` for the
+# what `arkret-core` already pulls in). Used by `coauth-config` for the
 # `ck:trust_domain:<scope>` wire-form check so config and SDK never drift.
-cokret-identifiers = {version = "0.3.0",path = "../cokret-rust-sdk/crates/identifiers",default-features = false}
-cokret-signatures = {version = "0.3.0",path = "../cokret-rust-sdk/crates/signatures",default-features = false,features = ["signer"]}
+arkret-identifiers = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identifiers",default-features = false}
+arkret-signatures = {version = "0.3.0",path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["signer"]}
 compact_str = "0.9.1"
 console = "0.16.3"
 const-oid = {version = "0.9.6",features = ["std"]}

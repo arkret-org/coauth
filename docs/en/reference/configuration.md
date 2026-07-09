@@ -48,7 +48,7 @@ Common resource names:
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `http.max_body_bytes` | `1048576` (1 MiB) | Maximum accepted request-body size. Matches the Cokret `ck.server.query.describe.limits.max_body_bytes` advertisement. |
+| `http.max_body_bytes` | `1048576` (1 MiB) | Maximum accepted request-body size. Matches the Arkret `ck.server.query.describe.limits.max_body_bytes` advertisement. |
 | `http.request_timeout_seconds` | `30` | Per-request handling deadline. Set to `0` to disable. |
 | `http.shutdown_grace_seconds` | `30` | Grace period granted to in-flight requests on SIGTERM/SIGINT. |
 | `http.trusted_proxies` | RFC1918 + loopback | CIDR ranges trusted to set `X-Forwarded-For`. See [reverse-proxy](../setup/reverse-proxy.md). |
@@ -70,12 +70,12 @@ database:
 deployment because the service uses PostgreSQL features that require session
 semantics.
 
-## `cokret`
+## `arkret`
 
-Cokret-specific deployment metadata layered on top of the generic OIDC server.
+Arkret-specific deployment metadata layered on top of the generic OIDC server.
 
 ```yaml
-cokret:
+arkret:
   deployment_profile: organization
   principal_method: did:webvh
 
@@ -97,7 +97,7 @@ cokret:
 ```
 
 - `principal_servers`: trusted Principal Server descriptors published through
-  Cokret discovery
+  Arkret discovery
 - `deployment_profile`: identity deployment profile. `did:web` principal DIDs
   are accepted only for `personal_node`.
 - `principal_method`: principal DID method. Defaults to `did:webvh`; `did:web`
@@ -105,9 +105,9 @@ cokret:
 - `identity_registry`: delegated DID / identity resolver, typically a public DID resolver service
 - `service_did`: explicit service DID, otherwise derived from `http.public_base`
 - `issuer_did`: DID emitted in session grants, defaults to `service_did`
-- `admin_audience`: audience expected by Cokret admin integrations, defaults
+- `admin_audience`: audience expected by Arkret admin integrations, defaults
   to the local `/_cokret` endpoint
-- `session_grant_ttl`: lifetime in seconds for Cokret session-grant JWTs
+- `session_grant_ttl`: lifetime in seconds for Arkret session-grant JWTs
   returned by the REST auth bridge login/exchange paths and refresh endpoint.
   Default: `300` (5 minutes).
 
@@ -149,7 +149,7 @@ secrets:
 ```
 
 At least one signing key should be configured. `coauth` uses these keys for ID
-tokens, signed userinfo responses, JWKS publication, and Cokret session
+tokens, signed userinfo responses, JWKS publication, and Arkret session
 grants.
 
 ## `passwords`

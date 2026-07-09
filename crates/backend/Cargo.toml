@@ -11,10 +11,10 @@ workspace = true
 [dependencies]
 
 
-# Cokret v1 SDK: shared protocol DTOs, RFC 9421 signatures, and typed
+# Arkret v1 SDK: shared protocol DTOs, RFC 9421 signatures, and typed
 # identity helpers used by the account, peer-protocol, and WebVH bridges.
-# Umbrella `cokret` SDK — currently consumed only for
-# `cokret::identity::binding::*` (multicodec helpers used by
+# Umbrella `arkret` SDK — currently consumed only for
+# `arkret::identity::binding::*` (multicodec helpers used by
 # `services::passkey_derive`). Opted in via workspace declaration with
 # default features off + `full-surface` on, so the heavier client /
 # openmls / sync surface stays out of the backend build.
@@ -39,9 +39,9 @@ coauth-policy = {workspace = true}
 coauth-principal = {workspace = true}
 coauth-tasks = {workspace = true}
 coauth-templates = {workspace = true}
-cokret = {workspace = true}
-cokret-core = {workspace = true}
-cokret-signatures = {workspace = true,features = ["signer"]}
+arkret = {workspace = true}
+arkret-core = {workspace = true}
+arkret-signatures = {workspace = true,features = ["signer"]}
 cookie = {workspace = true}
 data-encoding = {workspace = true}
 deadpool = {workspace = true}
@@ -154,6 +154,6 @@ remote = ["coauth-policy/remote"]
 # login, bypassing the canonical OIDC `authorize -> token` ceremony. It is
 # compiled OUT of the binary unless this feature is explicitly enabled, so a
 # production build cannot be coaxed into the path by config alone (the
-# `cokret.password_login_session_grants_enabled` runtime flag is only honoured
+# `arkret.password_login_session_grants_enabled` runtime flag is only honoured
 # when this feature is present). Never enable for production.
 password-bootstrap = []

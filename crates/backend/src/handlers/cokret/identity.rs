@@ -36,7 +36,7 @@ pub async fn identity_describe(
         service_did: parse_did_field("service_did", service_did_for(&cokret_config))?,
         registry_mode: registry_mode.to_owned(),
         supported_receipts: Vec::new(),
-        protocol_version: COKRET_PROTOCOL_VERSION.to_owned(),
+        protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         profiles: Vec::new(),
     })))
 }
@@ -147,7 +147,7 @@ pub async fn directory_describe(
         service_did,
         trust_domain,
         service_type: "directory_service".to_owned(),
-        protocol_version: COKRET_PROTOCOL_VERSION.to_owned(),
+        protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
         supported_profiles: supported_profiles.clone(),
         supported_operations: vec![
             "ck.find.directory.query.describe".to_owned(),

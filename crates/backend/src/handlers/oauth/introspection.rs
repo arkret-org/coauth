@@ -209,7 +209,7 @@ async fn handle_post(
     let mut repo: BoxRepository = repo_factory.create().await?;
 
     // Only the trusted Principal Server (homeserver bearer) is entitled to
-    // the cokret device/principal/session association fields; arbitrary
+    // the arkret device/principal/session association fields; arbitrary
     // confidential OIDC clients get the redacted RFC 7662 view.
     let disclosure = if let Some(token) = credentials.bearer_token() {
         if !principal_server

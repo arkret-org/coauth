@@ -6,7 +6,7 @@
 //! service-surface.md §2.5.1). The canonical entry point is now the spec
 //! operation `POST /_cokret/gate/account/session-grants` with
 //! `proof.proof_kind = "oidc_code_exchange"` — see
-//! [`crate::handlers::cokret::session_grant::issue_session_grant`], which
+//! [`crate::handlers::arkret::session_grant::issue_session_grant`], which
 //! calls [`exchange_oidc_code_for_session_grant`] here.
 
 // `IntegrationManifest` (and the nested `IntegrationManifestDependency`
@@ -30,7 +30,7 @@ use mime::APPLICATION_JSON;
 use salvo::prelude::*;
 
 use super::{DepotExt, DpopSessionBinding, RouteError, make_clock, make_rng};
-use crate::handlers::cokret::{self, SessionGrantMaterial};
+use crate::handlers::arkret::{self, SessionGrantMaterial};
 use crate::oidc_client::requests::discovery;
 use crate::oidc_client::types::client_credentials::ClientCredentials;
 use crate::outbound_http::{self, RequestBuilderExt as _};
@@ -127,7 +127,7 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
 }
 
 pub(crate) fn is_protocol_device_id(value: &str) -> bool {
-    let Some(uuid) = value.strip_prefix("ck:device:") else {
+    let Some(uuid) = value.strip_prefix("ak:device:") else {
         return false;
     };
     is_lowercase_uuidv7(uuid)
@@ -154,8 +154,8 @@ fn is_lowercase_uuidv7(value: &str) -> bool {
 
 pub(super) fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
     vec![
-        cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
-        format!("urn:cokret:client:device:{device_id}"),
+        arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
+        format!("urn:arkret:client:device:{device_id}"),
     ]
 }
 
@@ -419,7 +419,7 @@ pub(super) async fn ensure_principal_did_for_user(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let also_known_as = vec![cokret::user_handle(url_builder, user)];
+    let also_known_as = vec![arkret::user_handle(url_builder, user)];
     let enrollment_authority_did =
         crate::services::device_enrollment_authority::enrollment_authority()
             .did()
@@ -906,7 +906,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             OidcExchangeError::new("principal_account_registration_failed", message)
         })?;
 
-        let session_grant = cokret::issue_session_grant_for_audience(
+        let session_grant = arkret::issue_session_grant_for_audience(
             &*clock,
             &cokret_config,
             &key_store,
@@ -918,7 +918,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             Some(dpop_binding.jkt.clone()),
         )
         .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
-        let persisted = cokret::persist_session_grant(
+        let persisted = arkret::persist_session_grant(
             &mut repo,
             &mut rng,
             &*clock,
@@ -1211,7 +1211,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 format!("authorization_code references missing browser_session={user_session_id}"),
             )
         })?;
-    let expected_subject = cokret::user_did_for(&cokret_config, &browser_session.user);
+    let expected_subject = arkret::user_did_for(&cokret_config, &browser_session.user);
     let expected_issuer = url_builder.oidc_issuer();
     let oauth_introspection = match crate::handlers::oauth::introspection_service::introspect_token(
         &mut repo,
@@ -1341,7 +1341,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             expected_subject, oauth_userinfo.sub
         )));
     }
-    // `org.cokret.principal_did` is optional and only carries a persisted,
+    // `org.arkret.principal_did` is optional and only carries a persisted,
     // method-allowed principal DID. The local OAuth proof binds the account
     // with `sub` + session id; the audience-specific principal DID is minted
     // or loaded below before issuing the session grant.
@@ -1399,7 +1399,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     .await
     .map_err(|message| OidcExchangeError::new("principal_account_registration_failed", message))?;
 
-    let session_grant = cokret::issue_session_grant_for_audience(
+    let session_grant = arkret::issue_session_grant_for_audience(
         &clock,
         &cokret_config,
         &key_store,
@@ -1411,7 +1411,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         Some(dpop_binding.jkt),
     )
     .map_err(|error| OidcExchangeError::new("session_grant_denied", error.to_string()))?;
-    let persisted = cokret::persist_session_grant(
+    let persisted = arkret::persist_session_grant(
         &mut repo,
         &mut rng,
         &clock,
@@ -1473,7 +1473,7 @@ fn validate_expected_principal(
 #[endpoint]
 pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteError> {
     Ok(Json(IntegrationManifest {
-        contract: "cokret.rest.integration_manifest.v1".to_owned(),
+        contract: "arkret.rest.integration_manifest.v1".to_owned(),
         version: "2026-05-17-validated".to_owned(),
         service: "coauth".to_owned(),
         service_kind: "account_authority".to_owned(),
@@ -1483,7 +1483,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestDependency {
                 service: "soland".to_owned(),
                 purpose: "principal_server_session_exchange".to_owned(),
-                required_contract: "cokret.rest.principal_bridge.v1".to_owned(),
+                required_contract: "arkret.rest.principal_bridge.v1".to_owned(),
                 discovery_path: "/_cokret/describe".to_owned(),
                 mode: "remote_service_contract".to_owned(),
             },
@@ -1508,7 +1508,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "passkey_auth".to_owned(),
                 method: "POST".to_owned(),
                 path: "/_coauth/account/auth/passkey/{register,auth}/{start,finish}".to_owned(),
-                contract: "cokret.rest.passkey_auth.v1".to_owned(),
+                contract: "arkret.rest.passkey_auth.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "WebAuthn challenge and finish use the production passkey service; finish currently returns credential identity and still relies on the session-grant follow-up path.".to_owned(),
             },
@@ -1516,7 +1516,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "admin_bridge".to_owned(),
                 method: "GET".to_owned(),
                 path: "/_coauth/admin/bridge/describe".to_owned(),
-                contract: "cokret.rest.coauth_admin_bridge.v1".to_owned(),
+                contract: "arkret.rest.coauth_admin_bridge.v1".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "risk-action proposals and approvals are persisted with admin audit trail.".to_owned(),
             },
@@ -1524,7 +1524,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "account_claims".to_owned(),
                 method: "GET".to_owned(),
                 path: "/_coauth/admin/accounts/{account_id}/claims".to_owned(),
-                contract: "cokret.rest.coauth_account_claims.v1".to_owned(),
+                contract: "arkret.rest.coauth_account_claims.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "claim inventory is backed by account-claims service and subject to PG isolation coverage.".to_owned(),
             },
@@ -1532,7 +1532,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 name: "account_session_grants".to_owned(),
                 method: "GET".to_owned(),
                 path: "/_coauth/admin/accounts/{account_id}/session-grants".to_owned(),
-                contract: "cokret.rest.coauth_account_session_grants.v1".to_owned(),
+                contract: "arkret.rest.coauth_account_session_grants.v1".to_owned(),
                 stability: "preview".to_owned(),
                 todo: "session-grant inventory exposes persisted grant metadata and will gain broader PG isolation coverage.".to_owned(),
             },
@@ -1578,7 +1578,7 @@ mod tests {
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
 
     const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
-    const TEST_DEVICE_ID: &str = "ck:device:01964137-0000-7000-8000-000000000001";
+    const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
     const TEST_LOCALPARTS_BEARER: &str = "localparts-secret";
     const ACCOUNT_REGISTER_PATH: &str = "/_cokret/gate/account/register";
 
@@ -1595,7 +1595,7 @@ mod tests {
                 "code": code,
                 "message": message,
             },
-            "request_id": "ck:request:01964137-0000-7000-8000-000000000001",
+            "request_id": "ak:request:01964137-0000-7000-8000-000000000001",
         })
     }
 
@@ -1634,22 +1634,22 @@ mod tests {
     #[test]
     fn protocol_device_id_validation_matches_soland_boundary() {
         assert!(is_protocol_device_id(
-            "ck:device:01964137-0000-7000-8000-000000000001"
+            "ak:device:01964137-0000-7000-8000-000000000001"
         ));
         assert!(!is_protocol_device_id("dev_inkson"));
         assert!(!is_protocol_device_id(
-            "ck:device:01964137-0000-6000-8000-000000000001"
+            "ak:device:01964137-0000-6000-8000-000000000001"
         ));
     }
 
     #[test]
     fn principal_session_grant_scopes_include_device_binding() {
         let scopes =
-            principal_session_grant_scopes("ck:device:01964137-0000-7000-8000-000000000001");
+            principal_session_grant_scopes("ak:device:01964137-0000-7000-8000-000000000001");
 
-        assert!(scopes.contains(&cokret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()));
+        assert!(scopes.contains(&arkret::PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned()));
         assert!(scopes.contains(
-            &"urn:cokret:client:device:ck:device:01964137-0000-7000-8000-000000000001".to_owned()
+            &"urn:arkret:client:device:ck:device:01964137-0000-7000-8000-000000000001".to_owned()
         ));
     }
 
@@ -1810,7 +1810,7 @@ mod tests {
             .and(request_has_localpart("alice"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "localpart": {
-                    "id": "ck:account_localpart:01964137-0000-7000-8000-000000000002",
+                    "id": "ak:account_localpart:01964137-0000-7000-8000-000000000002",
                     "localpart": "alice",
                     "is_primary": true,
                     "created_at": "2026-01-01T00:00:00Z",
@@ -1851,7 +1851,7 @@ mod tests {
             .request(Request::post("/_cokret/gate/account/session-grants").json(
                 serde_json::json!({
                     "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
-                    "device_id": "ck:device:01964137-0000-7000-8000-000000000001",
+                    "device_id": "ak:device:01964137-0000-7000-8000-000000000001",
                     "proof": {
                         "proof_kind": "oidc_code_exchange",
                         "challenge": "0123456789abcdef0123",

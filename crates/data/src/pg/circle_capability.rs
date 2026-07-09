@@ -191,9 +191,9 @@ mod tests {
     fn sample(label: &str) -> NewCircleCapabilityGrant {
         NewCircleCapabilityGrant {
             subject: format!("did:web:{label}.example"),
-            realm_id: format!("ck:realm:{label}"),
+            realm_id: format!("ak:realm:{label}"),
             action: CircleCapabilityAction::Manage,
-            allowed_circle_ids: vec![format!("ck:circle:{label}")],
+            allowed_circle_ids: vec![format!("ak:circle:{label}")],
             granted_by: "did:web:admin.example".to_owned(),
         }
     }

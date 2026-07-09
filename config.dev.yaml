@@ -36,14 +36,14 @@ database:
   idle_timeout: 600
   max_lifetime: 1800
 # email:
-#   from: '"coauth" <coauth@cokret.org>'
-#   reply_to: '"coauth" <coauth@cokret.org>'
+#   from: '"coauth" <coauth@arkret.org>'
+#   reply_to: '"coauth" <coauth@arkret.org>'
 #   provider:
 #     type: smtp
 #     mode: tls
 #     hostname: smtp.gmail.com
 #     port: 465
-#     username: chris@cokret.org
+#     username: chris@arkret.org
 #     password: PASSWORD
 secrets:
   encryption: 144d85d6edcbf6d8f646e3e5e9e9afc0c6ec8842421fc5a4fbb21b7f77b98157
@@ -137,7 +137,7 @@ rate_limiting:
     per_address:
       burst: 100000
       per_second: 100000
-cokret:
+arkret:
   service_did: did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:auth.local.host:webvh:service
   principal_server_url: https://local.host/
   principal_servers:

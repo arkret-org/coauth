@@ -1,4 +1,4 @@
-//! R3.2 (cokret-spec @ b56cab1) handle-claim issuer guards.
+//! R3.2 (arkret-spec @ b56cab1) handle-claim issuer guards.
 //!
 //! The normative subject validator is shared by every coauth code path
 //! that mints a `ck.handle.claim` artefact. A handle claim subject MUST be a holder / principal
@@ -28,7 +28,7 @@ pub enum HandleClaimSubjectError {
 ///
 /// Delegates to the SDK's [`cokret_core::validate_handle_claim_subject`]
 /// so the rejection logic (and thus the wire code) matches the spec and
-/// the other Cokret services. The input is parsed through
+/// the other Arkret services. The input is parsed through
 /// [`cokret_core::Did::new`] first; a value that is not even a structural
 /// DID is rejected with the same `handle_claim_subject_not_principal_did`
 /// code (a `ck:actor:`/`ck:account:` typed id is not a `did:` and would be
@@ -59,13 +59,13 @@ mod tests {
 
     #[test]
     fn rejects_actor_and_account_typed_ids() {
-        let actor = ensure_subject_is_principal_did("ck:actor:01ABCDEF").unwrap_err();
+        let actor = ensure_subject_is_principal_did("ak:actor:01ABCDEF").unwrap_err();
         assert!(
             actor
                 .to_string()
                 .starts_with(HANDLE_CLAIM_SUBJECT_NOT_PRINCIPAL_DID_CODE)
         );
-        let account = ensure_subject_is_principal_did("ck:account:01ABCDEF").unwrap_err();
+        let account = ensure_subject_is_principal_did("ak:account:01ABCDEF").unwrap_err();
         assert!(
             account
                 .to_string()

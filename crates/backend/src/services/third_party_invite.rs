@@ -1013,7 +1013,7 @@ mod tests {
     #[test]
     fn degraded_resolution_cannot_back_invite_capability_proofs() {
         let resolution = crate::services::did_resolver::DidResolution {
-            document: crate::handlers::cokret::DidDocument {
+            document: crate::handlers::arkret::DidDocument {
                 id: "did:webvh:ztest:resolver.example:users:alice".to_owned(),
                 also_known_as: Vec::new(),
                 verification_method: Vec::new(),
@@ -1052,8 +1052,8 @@ mod tests {
 }
 
 // Inline reference: spec doc anchors for reviewers.
-//   `cokret-spec/spec/v1/artifacts/schemas/invite.schema.json`
-// $defs.third_party_invite   `cokret-spec/spec/v1/zh/identity/
-// 3pid-invite-engine.md` (round-4 SP3.4)   `cokret-spec/spec/v1/zh/sync/
+//   `arkret-spec/spec/v1/artifacts/schemas/invite.schema.json`
+// $defs.third_party_invite   `arkret-spec/spec/v1/zh/identity/
+// 3pid-invite-engine.md` (round-4 SP3.4)   `arkret-spec/spec/v1/zh/sync/
 // third-party-invites.md` §3-§4 (binding /     subject proof chain — invite
 // verifier)

@@ -38,7 +38,7 @@ use ulid::Ulid;
 use crate::JsonResult;
 use crate::error::AppError;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::cokret::service_did_for;
+use crate::handlers::arkret::service_did_for;
 use crate::handlers::common::{DepotExt, make_clock, make_rng};
 
 #[endpoint]
@@ -134,10 +134,10 @@ pub async fn create_handler(
     let cokret_config = depot.cokret_config()?;
     let service_did = service_did_for(&cokret_config);
     let key_store = depot.key_store()?;
-    let capability_grant_id = GrantId::new(new_prefixed_uuid7("ck:grant:"))
+    let capability_grant_id = GrantId::new(new_prefixed_uuid7("ak:grant:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?
         .into_string();
-    let grant_event_id = EventId::new(new_prefixed_uuid7("ck:event:"))
+    let grant_event_id = EventId::new(new_prefixed_uuid7("ak:event:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?
         .into_string();
     let issued_at = call_context.clock.now();
@@ -234,7 +234,7 @@ pub async fn revoke_handler(
     let mut repo = extract_call_context(req, depot).await?.repo;
     let grant_id = grant_id.into_inner();
     let clock = make_clock();
-    let revoke_event_id = EventId::new(new_prefixed_uuid7("ck:event:"))
+    let revoke_event_id = EventId::new(new_prefixed_uuid7("ak:event:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?
         .into_string();
 
@@ -417,7 +417,7 @@ fn sign_fanout_proof(
     created_at: DateTime<Utc>,
 ) -> Result<Value, AppError> {
     let transcript = json!({
-        "kind": "org.cokret.coauth.collaboration_capability.proof.v1",
+        "kind": "org.arkret.coauth.collaboration_capability.proof.v1",
         "event_kind": event_kind,
         "event_id": event_id,
         "capability_grant_id": capability_grant_id,
@@ -532,7 +532,7 @@ mod tests {
     fn high_risk_request_validation_stays_in_body_shape() {
         let req = CreateCollaborationCapabilityGrant {
             subject: "did:web:alice.example".into(),
-            realm_id: "ck:realm:demo".into(),
+            realm_id: "ak:realm:demo".into(),
             action: CollaborationCapabilityAction::RealmSearchPolicy,
             expires_at: None,
             approval_evidence_ref: None,
@@ -566,10 +566,10 @@ mod tests {
         let issued_at = Utc.with_ymd_and_hms(2026, 6, 1, 1, 2, 3).unwrap();
         let key_store = key_store();
         let payload = build_grant_fanout_payload(
-            "ck:event:01904100-0000-7000-8000-000000000011",
-            "ck:grant:01904100-0000-7000-8000-000000000010",
+            "ak:event:01904100-0000-7000-8000-000000000011",
+            "ak:grant:01904100-0000-7000-8000-000000000010",
             "did:web:alice.example",
-            "ck:realm:01904100-0000-7000-8000-000000000001",
+            "ak:realm:01904100-0000-7000-8000-000000000001",
             CollaborationCapabilityAction::PinAdd,
             None,
             None,
@@ -583,7 +583,7 @@ mod tests {
         assert_eq!(payload.event_kind, "ck.capability.grant");
         assert_eq!(
             payload.payload["grant_id"],
-            "ck:grant:01904100-0000-7000-8000-000000000010"
+            "ak:grant:01904100-0000-7000-8000-000000000010"
         );
         assert_eq!(payload.payload["grant"]["issuer"], "did:web:coauth.example");
         assert_eq!(payload.payload["grant"]["actions"], json!(["ck.pin.add"]));
@@ -609,9 +609,9 @@ mod tests {
         let revoked_at = Utc.with_ymd_and_hms(2026, 6, 1, 1, 2, 3).unwrap();
         let key_store = key_store();
         let payload = build_revoke_fanout_payload(
-            "ck:event:01904100-0000-7000-8000-000000000012",
-            "ck:grant:01904100-0000-7000-8000-000000000010",
-            "ck:realm:01904100-0000-7000-8000-000000000001",
+            "ak:event:01904100-0000-7000-8000-000000000012",
+            "ak:grant:01904100-0000-7000-8000-000000000010",
+            "ak:realm:01904100-0000-7000-8000-000000000001",
             revoked_at,
             "did:web:coauth.example",
             &config(),
@@ -622,11 +622,11 @@ mod tests {
         assert_eq!(payload.event_kind, "ck.capability.revoke");
         assert_eq!(
             payload.payload["grant_id"],
-            "ck:grant:01904100-0000-7000-8000-000000000010"
+            "ak:grant:01904100-0000-7000-8000-000000000010"
         );
         assert_eq!(
             payload.payload["realm_id"],
-            "ck:realm:01904100-0000-7000-8000-000000000001"
+            "ak:realm:01904100-0000-7000-8000-000000000001"
         );
         let proof = &payload.payload["proofs"][0];
         assert_eq!(proof["alg"], "EdDSA");

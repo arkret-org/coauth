@@ -4,7 +4,7 @@
 
 //! Per-recipient invite-relay handler (consent-gated forward).
 //!
-//! Per the Move/Anchor/Lattice spec (`cokret-spec` 2026-05-08,
+//! Per the Move/Anchor/Lattice spec (`arkret-spec` 2026-05-08,
 //! `consent-model.md` §3-§9), before an actor (coauth admin / inkson UI /
 //! sodmin operator) can deliver an invite to a target principal, coauth
 //! must consult the holder's consent-grant cell on the target's principal
@@ -45,7 +45,7 @@ use super::{
 use crate::handlers::account::consent_cell_query::{
     InviteGateDecision, evaluate_invite_gate, query_consent_cell,
 };
-use crate::handlers::cokret;
+use crate::handlers::arkret;
 use crate::services::peer_protocol_client::{
     PeerProtocolClient, PeerProtocolClientError, PeerProtocolIdentity,
 };
@@ -73,7 +73,7 @@ pub struct InviteRelayRequestBody {
     pub target_principal_url: Option<Url>,
 
     /// DID of the holder whose cell we're consulting. Embedded in the
-    /// `X-Cokret-Holder-Did` header on the soland query.
+    /// `X-Arkret-Holder-Did` header on the soland query.
     pub target_holder_did: String,
 
     /// Consent-cell identifier per spec §6.
@@ -273,7 +273,7 @@ pub async fn post_invite_relay(
     // any `inviter_did`. The body-supplied `inviter_did` is otherwise never
     // trusted as authentication.
     if !requester.is_admin() {
-        let caller_did = cokret::published_principal_did_for_user(&mut repo, &cokret_config, user)
+        let caller_did = arkret::published_principal_did_for_user(&mut repo, &cokret_config, user)
             .await?
             .ok_or(RouteError::Unauthorized)?;
         if caller_did != params.inviter_did {
@@ -317,8 +317,8 @@ pub async fn post_invite_relay(
         }
     }
 
-    let service_did = cokret::service_did_for(&cokret_config);
-    let trust_domain = cokret::trust_domain_for(&url_builder, &cokret_config);
+    let service_did = arkret::service_did_for(&cokret_config);
+    let trust_domain = arkret::trust_domain_for(&url_builder, &cokret_config);
     let destination_service_did = params.invite_delivery.as_ref().map_or_else(
         || service_did.clone(),
         |delivery| {
@@ -382,13 +382,13 @@ mod tests {
     fn peer_identity() -> PeerProtocolIdentity {
         PeerProtocolIdentity::same_destination(
             "did:web:auth.example",
-            "ck:trust_domain:auth.example",
+            "ak:trust_domain:auth.example",
         )
     }
 
     fn payload() -> serde_json::Value {
         cokret_core::InviteCreatePayload::new(
-            cokret_core::InviteId::new("ck:invite:0196419b-0000-7000-8000-000000000001").unwrap(),
+            cokret_core::InviteId::new("ak:invite:0196419b-0000-7000-8000-000000000001").unwrap(),
             cokret_core::Did::new("did:web:holder").unwrap(),
             cokret_core::InviteDeliveryTarget::principal_server(
                 cokret_core::Did::new("did:web:auth.example").unwrap(),
@@ -420,14 +420,14 @@ mod tests {
     fn active_cell(scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ck:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "cell_id": format!("ak:cell:ck.component.consent.grant.v1:c-{scope}"),
             "holder_did": "did:web:holder",
             "peer_did": "did:web:inviter",
             "consent_scope": scope,
             "state": "active",
             "updated_at": "2026-05-01T00:00:00Z",
-            "active_grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
-            "grant_dots": ["ck:event:0196419b-0000-7000-8000-000000000001:0"],
+            "active_grant_dots": ["ak:event:0196419b-0000-7000-8000-000000000001:0"],
+            "grant_dots": ["ak:event:0196419b-0000-7000-8000-000000000001:0"],
             "revoked_dots": [],
         })
     }

@@ -7,10 +7,10 @@ expression: snapshot
     "openid",
     "profile",
     "urn:coauth:admin",
-    "urn:cokret:admin:*",
-    "urn:cokret:client:*",
-    "urn:cokret:principal-server:*",
-    "urn:cokret:principal-server:session.bind"
+    "urn:arkret:admin:*",
+    "urn:arkret:client:*",
+    "urn:arkret:principal-server:*",
+    "urn:arkret:principal-server:session.bind"
   ],
   "claims_supported": [
     "at_hash",
@@ -23,9 +23,9 @@ expression: snapshot
     "locale",
     "name",
     "nonce",
-    "org.cokret.device_id",
-    "org.cokret.principal_did",
-    "org.cokret.session_id",
+    "org.arkret.device_id",
+    "org.arkret.principal_did",
+    "org.arkret.session_id",
     "picture",
     "preferred_username",
     "sub"

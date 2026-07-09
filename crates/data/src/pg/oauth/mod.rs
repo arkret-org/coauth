@@ -431,7 +431,7 @@ mod tests {
                 &clock,
                 NewSessionGrant {
                     grant_id: cokret_core::GrantId::new(
-                        "ck:grant:0196419b-0000-7000-8000-000000000201".to_owned(),
+                        "ak:grant:0196419b-0000-7000-8000-000000000201".to_owned(),
                     )
                     .unwrap(),
                     browser_session_id: Some(user_session.id),
@@ -631,7 +631,7 @@ mod tests {
                 &clock,
                 NewSessionGrant {
                     grant_id: cokret_core::GrantId::new(
-                        "ck:grant:0196419b-0000-7000-8000-000000000202".to_owned(),
+                        "ak:grant:0196419b-0000-7000-8000-000000000202".to_owned(),
                     )
                     .unwrap(),
                     browser_session_id: Some(browser_session.id),

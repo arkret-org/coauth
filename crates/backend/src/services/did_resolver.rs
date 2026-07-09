@@ -12,7 +12,7 @@ use thiserror::Error;
 use ulid::Ulid;
 use url::Url;
 
-use crate::handlers::cokret::{
+use crate::handlers::arkret::{
     DidDocument, SessionGrantError, VerificationMethod, issuer_did_for, service_did_for,
     user_did_for,
 };
@@ -129,7 +129,7 @@ pub enum DidResolveError {
     DocumentTooLarge { limit: usize },
 
     #[error(
-        "did:web principal requires cokret.deployment_profile=personal_node and cokret.principal_method=did:web"
+        "did:web principal requires arkret.deployment_profile=personal_node and arkret.principal_method=did:web"
     )]
     DidWebPrincipalNotExplicit,
 }
@@ -365,12 +365,12 @@ fn local_primary_account_did_document(
 
     DidDocument {
         id: did.to_owned(),
-        also_known_as: vec![crate::handlers::cokret::user_handle(url_builder, user)],
+        also_known_as: vec![crate::handlers::arkret::user_handle(url_builder, user)],
         verification_method,
         authentication,
         assertion_method,
         service: Vec::new(),
-        metadata: Some(crate::handlers::cokret::DidDocumentMetadata::current_for_holder(None)),
+        metadata: Some(crate::handlers::arkret::DidDocumentMetadata::current_for_holder(None)),
     }
 }
 

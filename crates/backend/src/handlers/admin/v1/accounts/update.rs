@@ -13,7 +13,7 @@ use crate::handlers::admin::audit_helper::AdminAuditSigning;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
 use crate::handlers::admin::response::SingleOutcome;
-use crate::handlers::cokret::service_did_for;
+use crate::handlers::arkret::service_did_for;
 use crate::handlers::common::DepotExt;
 use crate::{AppError, JsonResult};
 

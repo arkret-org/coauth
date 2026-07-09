@@ -247,10 +247,10 @@ mod tests {
 
     fn sample(label: &str) -> NewCollaborationCapabilityGrant {
         NewCollaborationCapabilityGrant {
-            capability_grant_id: format!("ck:grant:{label}"),
-            grant_event_id: format!("ck:event:{label}"),
+            capability_grant_id: format!("ak:grant:{label}"),
+            grant_event_id: format!("ak:event:{label}"),
             subject: format!("did:web:{label}.example"),
-            realm_id: format!("ck:realm:{label}"),
+            realm_id: format!("ak:realm:{label}"),
             action: CollaborationCapabilityAction::PinAdd,
             expires_at: None,
             approval_evidence_ref: None,
@@ -291,7 +291,7 @@ mod tests {
                 &clock,
                 &grant.id,
                 CollaborationCapabilityRevokeFanout {
-                    revoke_event_id: format!("ck:event:{label}-revoke"),
+                    revoke_event_id: format!("ak:event:{label}-revoke"),
                 },
             )
             .await

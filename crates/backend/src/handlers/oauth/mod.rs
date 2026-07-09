@@ -32,7 +32,7 @@ use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use thiserror::Error;
 
-use crate::handlers::cokret;
+use crate::handlers::arkret;
 
 /// Authorization endpoint (user consent and code issuance).
 pub mod authorization;
@@ -91,7 +91,7 @@ pub(crate) fn generate_id_token(
     claims::SUB.insert(&mut claims, subject_did.to_owned())?;
     if let Some(principal_did) = principal_did {
         claims.insert(
-            cokret::CLAIM_PRINCIPAL_DID.to_owned(),
+            arkret::CLAIM_PRINCIPAL_DID.to_owned(),
             serde_json::Value::String(principal_did.to_owned()),
         );
     }
@@ -101,13 +101,13 @@ pub(crate) fn generate_id_token(
 
     if let Some(session) = session {
         claims.insert(
-            cokret::CLAIM_SESSION_ID.to_owned(),
+            arkret::CLAIM_SESSION_ID.to_owned(),
             serde_json::Value::String(session.id.to_string()),
         );
 
-        if let Some(device_id) = cokret::primary_device_id(&session.scope) {
+        if let Some(device_id) = arkret::primary_device_id(&session.scope) {
             claims.insert(
-                cokret::CLAIM_DEVICE_ID.to_owned(),
+                arkret::CLAIM_DEVICE_ID.to_owned(),
                 serde_json::Value::String(device_id),
             );
         }
@@ -268,7 +268,7 @@ mod tests {
         );
         assert_eq!(
             payload
-                .get(cokret::CLAIM_PRINCIPAL_DID)
+                .get(arkret::CLAIM_PRINCIPAL_DID)
                 .and_then(Value::as_str),
             Some(principal_did)
         );
@@ -338,7 +338,7 @@ mod tests {
             jwt.payload().get("sub").and_then(Value::as_str),
             Some(subject)
         );
-        assert!(!jwt.payload().contains_key(cokret::CLAIM_PRINCIPAL_DID));
+        assert!(!jwt.payload().contains_key(arkret::CLAIM_PRINCIPAL_DID));
     }
 
     #[test]

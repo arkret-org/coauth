@@ -50,8 +50,8 @@ cleanup_time_cursor_job!(
     done = "cleaned up inactive user session IPs",
 );
 
-// Cokret session grants have a short TTL (5 min in
-// `handlers::cokret::SESSION_GRANT_TTL_MINUTES`) and are revoked on
+// Arkret session grants have a short TTL (5 min in
+// `handlers::arkret::SESSION_GRANT_TTL_MINUTES`) and are revoked on
 // successful introspection — but invalid-proof / unexchanged grants
 // still accumulate. Drop anything that's been expired for more than
 // an hour so introspection-side replay/audit windows still work but

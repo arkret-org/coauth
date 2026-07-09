@@ -117,18 +117,18 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         invite_relay, linked_accounts, notification_prefs, oauth_clients, openapi, password,
         recovery, register, sessions, site_config, strand, upstream_oauth, users, viewer,
     };
-    use crate::handlers::{cokret, policy_check};
+    use crate::handlers::{arkret, policy_check};
 
     let cokret_router = Router::with_path("/_cokret")
         .hoop(public_oidc_browser_cors())
-        .push(Router::with_path("describe").get(cokret::server_describe))
-        .push(Router::with_path("root/identity/describe").get(cokret::identity_describe))
-        .push(Router::with_path("root/identity/resolve").post(cokret::identity_resolve))
-        .push(Router::with_path("root/identity/document").get(cokret::identity_document))
-        .push(Router::with_path("find/directory/describe").get(cokret::directory_describe))
+        .push(Router::with_path("describe").get(arkret::server_describe))
+        .push(Router::with_path("root/identity/describe").get(arkret::identity_describe))
+        .push(Router::with_path("root/identity/resolve").post(arkret::identity_resolve))
+        .push(Router::with_path("root/identity/document").get(arkret::identity_document))
+        .push(Router::with_path("find/directory/describe").get(arkret::directory_describe))
         .push(
             Router::with_path("find/directory/resolve-handle")
-                .post(cokret::directory_resolve_handle),
+                .post(arkret::directory_resolve_handle),
         )
         // Protocol surface for DPoP-bound session-grant rotation. The grant is
         // the (minutes-to-hours) refresh credential; an authorized device
@@ -141,12 +141,12 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         .push(
             Router::with_path("gate/account/session-grants/refresh")
                 .options(oidc_preflight_handler)
-                .post(cokret::refresh_session_grant),
+                .post(arkret::refresh_session_grant),
         )
         .push(
             Router::with_path("gate/account/session-grants/revoke")
                 .options(oidc_preflight_handler)
-                .post(cokret::revoke_session_grant_endpoint),
+                .post(arkret::revoke_session_grant_endpoint),
         )
         // Auth-side hard logout sub-operation (account-lifecycle §4.1).
         // This is an internal Account Authority -> Auth Server service call:
@@ -155,7 +155,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // call this path directly.
         .push(
             Router::with_path("gate/account/auth-sessions/logout")
-                .post(cokret::logout_auth_session),
+                .post(arkret::logout_auth_session),
         )
         // Server-to-server session-grant introspection (RFC 7662-style): the
         // Principal Server validating a presented grant calls this to learn
@@ -166,7 +166,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // `session_grant_introspection_bearer` (or an admin scope).
         .push(
             Router::with_path("gate/account/session-grants/introspect")
-                .post(cokret::introspect_session_grant),
+                .post(arkret::introspect_session_grant),
         )
         // Canonical Account Authority session-grant issuance
         // (service-surface.md §2.5.1): the single client-visible bridge from a
@@ -177,7 +177,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         .push(
             Router::with_path("gate/account/session-grants")
                 .options(oidc_preflight_handler)
-                .post(cokret::issue_session_grant_endpoint),
+                .post(arkret::issue_session_grant_endpoint),
         )
         // CKP-0008 §4.5 runtime key pairing
         // (`ck.gate.account.command.pair_agent_key`): the agent runtime submits
@@ -199,13 +199,13 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         .push(
             Router::with_path("gate/account/device-enroll")
                 .options(oidc_preflight_handler)
-                .post(cokret::device_enroll_endpoint),
+                .post(arkret::device_enroll_endpoint),
         )
         .push(Router::with_path("self/policy/check").post(policy_check::post_policy_check));
 
     let mut coauth_router = Router::with_path("/_coauth")
         .hoop(public_oidc_browser_cors())
-        // Product-private surface only. Protocol-standard Cokret endpoints
+        // Product-private surface only. Protocol-standard Arkret endpoints
         // are served solely under `/_cokret` above; the former `/_coauth`
         // protocol mirror (describe, root/identity/{describe,resolve,
         // document}, find/directory/{describe,resolve-handle},
@@ -432,17 +432,17 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         );
 
     #[cfg(debug_assertions)]
-    if cokret::test_endpoints_enabled() {
+    if arkret::test_endpoints_enabled() {
         coauth_router = coauth_router.push(
             Router::with_path("account/test/debug/issue-dpop-grant")
-                .post(cokret::debug_issue_dpop_grant),
+                .post(arkret::debug_issue_dpop_grant),
         );
     }
 
     let docs_router = openapi::build_openapi_router(&coauth_router);
 
-    // The `/.well-known/cokret/openapi.yaml` path is a *protocol-surface*
-    // contract: it MUST publish the Cokret protocol API (`/_cokret/*`), not the
+    // The `/.well-known/arkret/openapi.yaml` path is a *protocol-surface*
+    // contract: it MUST publish the Arkret protocol API (`/_cokret/*`), not the
     // product-private admin API. Generate the protocol-face OpenAPI document
     // from `cokret_router` and serve it from the well-known path here, keeping
     // the admin document (`/_coauth/admin/openapi.yaml`) strictly separate.
@@ -453,11 +453,11 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         .push(cokret_router)
         .push(coauth_router)
         .push(docs_router)
-        .push(Router::with_path("/.well-known/cokret/openapi.yaml").get(cokret_doc_yaml))
+        .push(Router::with_path("/.well-known/arkret/openapi.yaml").get(cokret_doc_yaml))
 }
 
 pub(super) fn build_cokret_protocol_openapi_doc(cokret_router: &Router) -> salvo::oapi::OpenApi {
-    salvo::oapi::OpenApi::new("Cokret Protocol API", env!("CARGO_PKG_VERSION"))
+    salvo::oapi::OpenApi::new("Arkret Protocol API", env!("CARGO_PKG_VERSION"))
         .merge_router(cokret_router)
 }
 
@@ -553,7 +553,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
                         .post(invite_quarantine::resolve_invite_quarantine),
                 ),
         )
-        // Cokret accounts
+        // Arkret accounts
         .push(Router::with_path("bridge/describe").get(accounts::admin_bridge_describe))
         .push(
             Router::with_path("accounts")
@@ -699,7 +699,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
                         .push(Router::with_path("revoke").post(personal_sessions::revoke_session)),
                 ),
         )
-        // Cokret devices
+        // Arkret devices
         .push(
             Router::with_path("devices")
                 .get(devices::list_devices)
@@ -763,7 +763,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
                 .push(Router::with_path("{id}").get(policy_data::get_by_id))
                 .put(policy_data::set_data),
         )
-        // Cokret claims and policy checks
+        // Arkret claims and policy checks
         .push(
             Router::with_path("claims")
                 .post(claims::issue_claim)

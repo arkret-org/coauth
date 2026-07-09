@@ -12,7 +12,7 @@ use salvo::prelude::*;
 use sha2::Digest as _;
 
 use super::*;
-use crate::handlers::cokret::*;
+use crate::handlers::arkret::*;
 
 fn introspection_grant_record(
     grant: &SessionGrant,
@@ -40,8 +40,8 @@ fn introspection_grant_record(
         .unwrap_or_else(|| grant.subject.clone());
     let revocation_ref = grant
         .browser_session_id
-        .map(|id| format!("ck:session:{id}"))
-        .unwrap_or_else(|| format!("ck:session-grant:{}", grant.grant_id));
+        .map(|id| format!("ak:session:{id}"))
+        .unwrap_or_else(|| format!("ak:session-grant:{}", grant.grant_id));
     let scope_details = parsed_payload
         .as_ref()
         .map_or(serde_json::Value::Null, |payload| {

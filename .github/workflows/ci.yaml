@@ -37,10 +37,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Cokret Rust SDK
+      - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up nightly Rust for rustfmt
         uses: dtolnay/rust-toolchain@nightly
@@ -62,10 +62,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Cokret Rust SDK
+      - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up Rust 1.93.0 with Clippy
         uses: dtolnay/rust-toolchain@1.93.0
@@ -113,10 +113,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Cokret Rust SDK
+      - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Audit with cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2.0.14
@@ -136,10 +136,10 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v6
 
-      - name: Fetch Cokret Rust SDK
+      - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@stable

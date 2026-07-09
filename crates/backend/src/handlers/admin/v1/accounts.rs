@@ -1,4 +1,4 @@
-//! Cokret account administration endpoints.
+//! Arkret account administration endpoints.
 //!
 //! This is the ONLY admin resource tree over the users table: the former
 //! MAS-inherited `/_coauth/admin/users/*` tree was folded in here
@@ -36,7 +36,7 @@ use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
 use crate::handlers::admin::v1::account_dids::{preview_bindings_for_user, primary_did_for_user};
-use crate::handlers::cokret::service_did_for;
+use crate::handlers::arkret::service_did_for;
 use crate::handlers::common::DepotExt;
 use crate::services::account_claims::{
     AccountClaimFilter, AccountClaimRecord as StoredAccountClaimRecord,
@@ -283,7 +283,7 @@ pub async fn admin_bridge_describe(
     // (risk-action state-store kind / bridge capabilities), so it MUST be
     // gated behind the same admin authorization as every other admin
     // handler. `extract_call_context` validates the bearer token, its
-    // session, expiry, and the `urn:coauth:admin` / `urn:cokret:admin:*`
+    // session, expiry, and the `urn:coauth:admin` / `urn:arkret:admin:*`
     // scope before we read any deployment state. We drop the repository
     // transaction immediately since this handler does no DB work.
     let crate::handlers::admin::call_context::CallContext { repo, .. } =
@@ -691,7 +691,7 @@ fn admin_session_grant_records(account: &AccountRecord) -> Vec<AccountSessionGra
     vec![AccountSessionGrantRecord {
         grant_id: format!("sg-scaffold-{}", account.id),
         subject: account.primary_principal_id().map(str::to_owned),
-        scope: Some("urn:cokret:principal-server:session.bind".to_owned()),
+        scope: Some("urn:arkret:principal-server:session.bind".to_owned()),
         state: Some("inventory_scaffold".to_owned()),
         issued_at: account.updated_at(),
     }]
@@ -1134,7 +1134,7 @@ mod tests {
         assert_eq!(body["data"][0]["active"], true);
         assert_eq!(body["meta"]["supports_write_operations"], true);
 
-        let recovery_did = crate::handlers::cokret::service_did_for(&state.cokret_config);
+        let recovery_did = crate::handlers::arkret::service_did_for(&state.cokret_config);
         let nonce = "did-binding-add-nonce";
         let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
         let response = state
@@ -1267,9 +1267,9 @@ mod tests {
         // identity-did §5.1 / §3.6: bind the proof to this receiver (local
         // service DID) and this deployment (trust_domain), with a bounded
         // freshness window (exp - iat <= 300s).
-        let audience = crate::handlers::cokret::service_did_for(&state.cokret_config);
+        let audience = crate::handlers::arkret::service_did_for(&state.cokret_config);
         let trust_domain =
-            crate::handlers::cokret::trust_domain_for(&state.url_builder, &state.cokret_config);
+            crate::handlers::arkret::trust_domain_for(&state.url_builder, &state.cokret_config);
         let iat = state.clock.now();
         let claims = BindingStatementClaims {
             schema: DID_BINDING_CONTROL_PROOF_SCHEMA.to_owned(),

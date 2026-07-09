@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Cokret Authors. Licensed under the Apache License,
+// Copyright (c) 2026 Arkret Authors. Licensed under the Apache License,
 // Version 2.0; see LICENSE-APACHE for details.
 
 // ── OAuth Client Configuration ──

@@ -229,8 +229,8 @@ pub async fn accept_authorization_consent(
             .get_last_authentication(browser_session)
             .await?;
         let subject_did =
-            crate::handlers::cokret::oidc_subject_for_user(cokret_config, &browser_session.user);
-        let principal_did = crate::handlers::cokret::published_principal_did_for_user(
+            crate::handlers::arkret::oidc_subject_for_user(cokret_config, &browser_session.user);
+        let principal_did = crate::handlers::arkret::published_principal_did_for_user(
             &mut repo,
             cokret_config,
             &browser_session.user,

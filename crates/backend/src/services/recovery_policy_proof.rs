@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! REC-1 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — recovery-policy
+//! REC-1 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — recovery-policy
 //! `proof_kind` enum guard.
 //!
 //! coauth's first-class recovery strand today is the password-reset / email-OOB

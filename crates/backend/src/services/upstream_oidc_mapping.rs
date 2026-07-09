@@ -1,7 +1,7 @@
 //! Trusted-issuer policy mapping for inbound upstream OIDC `id_token`s.
 //!
 //! Round 25 introduces a typed mapping layer between an upstream OIDC
-//! provider's raw `id_token` claims and the local Cokret identity model.
+//! provider's raw `id_token` claims and the local Arkret identity model.
 //!
 //! Unlike the existing `upstream_oidc.rs` strand — which orchestrates the OAuth
 //! authorization-code dance with a *configured* upstream provider — this
@@ -37,7 +37,7 @@ use crate::oidc_client::requests::jose::{JwtVerificationData, verify_signed_jwt}
 /// local clock (5 minutes).
 pub const MAX_TOKEN_CLOCK_SKEW: Duration = Duration::minutes(5);
 
-/// Mapping rule: which raw upstream claim feeds which canonical Cokret field.
+/// Mapping rule: which raw upstream claim feeds which canonical Arkret field.
 ///
 /// Each `Option<String>` is the *raw claim name in the upstream `id_token`*; if
 /// it is `None`, the field is not extracted and stays `None` on the mapped
@@ -115,7 +115,7 @@ impl TrustedIssuerPolicySet {
     }
 }
 
-/// Typed Cokret-side identity projected from an upstream `id_token`.
+/// Typed Arkret-side identity projected from an upstream `id_token`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MappedUpstreamIdentity {
     pub sub: String,

@@ -108,7 +108,7 @@ within the audit retention window (default 90 days; check your tenant
 SLA).
 
 Signed admin audit rows use transcript schema
-`org.cokret.coauth.audit.admin_operation.v1`. The detached signature binds the
+`org.arkret.coauth.audit.admin_operation.v1`. The detached signature binds the
 repository row id, `created_at`, `admin_user_id`, operation, resource type,
 resource id, details, IP address, user agent, and schema version. Admin audit
 read/export surfaces return `signature_status`:
@@ -119,10 +119,10 @@ read/export surfaces return `signature_status`:
 - `key_unavailable` — the row references a service DID/kid that this process
   cannot verify.
 
-Keep `cokret.audit_signature_fail_closed: false` while rolling out signing
+Keep `arkret.audit_signature_fail_closed: false` while rolling out signing
 keys. For production regulated workloads, publish the service JWKS, verify the
 audit feed reports `verified` for new rows, then set
-`cokret.audit_signature_fail_closed: true` so sensitive admin mutations fail
+`arkret.audit_signature_fail_closed: true` so sensitive admin mutations fail
 closed when coauth cannot produce a signed audit row.
 
 During key rotation, keep retired public keys in the deployment JWKS until the

@@ -685,7 +685,7 @@ CREATE TABLE public.user_primary_handle_preferences (
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT user_primary_handle_preferences_check CHECK (((replaced_at IS NULL) OR (replaced_at > effective_at))),
     CONSTRAINT user_primary_handle_preferences_check1 CHECK (((handle IS NULL) OR ((source_claim_id IS NOT NULL) AND (source_claim_digest IS NOT NULL)))),
-    CONSTRAINT user_primary_handle_preferences_handle_check CHECK (((handle IS NULL) OR ((POSITION((':'::text) IN (handle)) > 1) AND (handle = lower(handle)) AND (handle !~~ 'acct:%'::text) AND (handle !~~ 'cokret://%'::text))))
+    CONSTRAINT user_primary_handle_preferences_handle_check CHECK (((handle IS NULL) OR ((POSITION((':'::text) IN (handle)) > 1) AND (handle = lower(handle)) AND (handle !~~ 'acct:%'::text) AND (handle !~~ 'arkret://%'::text))))
 );
 
 CREATE TABLE public.user_recovery_sessions (

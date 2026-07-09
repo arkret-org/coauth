@@ -1,7 +1,7 @@
 # Authorization and sessions
 
 `coauth` authenticates users and clients, then issues OAuth/OIDC tokens or
-Cokret session grants that downstream services can validate.
+Arkret session grants that downstream services can validate.
 
 ## Session Types
 
@@ -20,7 +20,7 @@ bind together:
 - the granted scopes
 - access and refresh tokens
 
-### Cokret session grants
+### Arkret session grants
 
 Principal Servers should validate `ck.session.grant` records for downstream
 account and device access. The grant payload includes issuer service DID,
@@ -28,7 +28,7 @@ subject principal DID, service account ID, optional device ID, audience,
 scopes, expiry, revocation reference, and a proof block.
 
 Session-grant JWTs default to a 28800-second (8h) lifetime and can be tuned
-with `cokret.session_grant_ttl` in the configuration file.
+with `arkret.session_grant_ttl` in the configuration file.
 
 `POST /_cokret/gate/account/session-grants/introspect` accepts either a grant ID or signed
 grant JWT plus an optional audience. It returns `active`, a standard status

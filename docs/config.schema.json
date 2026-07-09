@@ -95,8 +95,8 @@
         }
       ]
     },
-    "cokret": {
-      "description": "Cokret-specific audiences, DIDs, and downstream integration metadata",
+    "arkret": {
+      "description": "Arkret-specific audiences, DIDs, and downstream integration metadata",
       "allOf": [
         {
           "$ref": "#/definitions/CokretConfig"
@@ -719,7 +719,7 @@
           "format": "uri"
         },
         "max_body_bytes": {
-          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Cokret\n`ck.server.query.describe.limits.max_body_bytes` advertisement.",
+          "description": "Maximum accepted request-body size, in bytes. Requests exceeding this\nlimit are rejected with `413 Payload Too Large` before they reach a\nhandler. Defaults to 1 MiB to match the Arkret\n`ck.server.query.describe.limits.max_body_bytes` advertisement.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0,
@@ -1306,7 +1306,7 @@
       ]
     },
     "CokretConfig": {
-      "description": "Cokret-specific deployment settings layered on top of the generic OIDC\nand account-management configuration.",
+      "description": "Arkret-specific deployment settings layered on top of the generic OIDC\nand account-management configuration.",
       "type": "object",
       "properties": {
         "principal_servers": {
@@ -1333,7 +1333,7 @@
           ]
         },
         "identity_registry": {
-          "description": "External DID / identity registry resolver used for Cokret identity\nbinding workflows.",
+          "description": "External DID / identity registry resolver used for Arkret identity\nbinding workflows.",
           "anyOf": [
             {
               "$ref": "#/definitions/IdentityRegistryConfig"
@@ -1362,21 +1362,21 @@
           ]
         },
         "issuer_did": {
-          "description": "Optional issuer DID to embed in Cokret session grants and discovery\ndocuments. Defaults to `service_did`.",
+          "description": "Optional issuer DID to embed in Arkret session grants and discovery\ndocuments. Defaults to `service_did`.",
           "type": [
             "string",
             "null"
           ]
         },
         "session_grant_ttl": {
-          "description": "Lifetime of Cokret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and rotated through\n`/_cokret/gate/account/session-grants/refresh`. Default: 28800 (8h) —\naccess bearers minted from a grant are short-lived (capped Principal-Server\nside), so a multi-hour grant gives a normal working session without\nlong-lived bearers, within the spec ceiling (minutes-to-hours).",
+          "description": "Lifetime of Arkret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and rotated through\n`/_cokret/gate/account/session-grants/refresh`. Default: 28800 (8h) —\naccess bearers minted from a grant are short-lived (capped Principal-Server\nside), so a multi-hour grant gives a normal working session without\nlong-lived bearers, within the spec ceiling (minutes-to-hours).",
           "type": "integer",
           "format": "uint64",
           "minimum": 60,
           "maximum": 86400
         },
         "admin_audience": {
-          "description": "Audience string expected by Cokret admin integrations.\n\nWhen omitted, the backend falls back to the local `/_cokret` endpoint.",
+          "description": "Audience string expected by Arkret admin integrations.\n\nWhen omitted, the backend falls back to the local `/_cokret` endpoint.",
           "type": [
             "string",
             "null"
@@ -1445,7 +1445,7 @@
       }
     },
     "PrincipalServerConfig": {
-      "description": "Trusted Principal Server metadata published through Cokret discovery.",
+      "description": "Trusted Principal Server metadata published through Arkret discovery.",
       "type": "object",
       "properties": {
         "name": {
@@ -1490,7 +1490,7 @@
       ]
     },
     "DeploymentProfileConfig": {
-      "description": "Deployment profile used to constrain Cokret identity and trust choices.",
+      "description": "Deployment profile used to constrain Arkret identity and trust choices.",
       "oneOf": [
         {
           "description": "Single-user node profile that may opt into local `did:web` principals.",

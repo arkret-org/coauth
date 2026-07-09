@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: coauth
-          image: ghcr.io/cokret/coauth:latest
+          image: ghcr.io/arkret/coauth:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

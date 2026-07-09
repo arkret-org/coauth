@@ -231,7 +231,7 @@ pub fn offline_resolver() -> NoDelegationResolver {
 
 /// Pick the preferred service signing key from the keystore — identical key
 /// selection to [`crate::services::policy_signer`] and
-/// `handlers::cokret::preferred_signing_key`, so coauth signs organization
+/// `handlers::arkret::preferred_signing_key`, so coauth signs organization
 /// statements with the same key it uses for every other service artefact.
 fn preferred_service_signing_key(
     key_store: &Keystore,
@@ -268,7 +268,7 @@ mod tests {
     use super::*;
 
     fn realm_id() -> RealmId {
-        RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000010").unwrap()
+        RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000010").unwrap()
     }
 
     fn org_did() -> Did {
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn delegated_statement_with_live_delegation_self_verifies() {
-        let reference = "ck:grant:01904100-0000-7000-8000-000000000001";
+        let reference = "ak:grant:01904100-0000-7000-8000-000000000001";
         let mut request = base_request();
         request.issuer_role = RealmOrganizationIssuerRole::GovernanceService;
         request.delegation_ref = Some(reference.to_owned());
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn delegated_statement_with_expired_delegation_fails_self_verify() {
-        let reference = "ck:grant:01904100-0000-7000-8000-000000000002";
+        let reference = "ak:grant:01904100-0000-7000-8000-000000000002";
         let mut request = base_request();
         request.issuer_role = RealmOrganizationIssuerRole::AccountAuthority;
         request.delegation_ref = Some(reference.to_owned());
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn delegated_statement_with_wrong_org_fails_self_verify() {
-        let reference = "ck:grant:01904100-0000-7000-8000-000000000003";
+        let reference = "ak:grant:01904100-0000-7000-8000-000000000003";
         let mut request = base_request();
         request.issuer_role = RealmOrganizationIssuerRole::GovernanceService;
         request.delegation_ref = Some(reference.to_owned());

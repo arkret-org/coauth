@@ -65,7 +65,7 @@ const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
 const CANDIDATE_JOIN_POLICY_REVIEW_ACTION: &str = "ck.realm.join.review";
 const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ck.profile.candidate.join_policy.v1";
 
-/// CKP-0010 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — call /
+/// CKP-0010 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — call /
 /// media capability actions registered in
 /// `capability-action-registry.json`. CAP-1: capability evaluator MUST
 /// recognise these five actions so deny/review/allow rules can target
@@ -611,7 +611,7 @@ mod tests {
     fn req(actor: &str, action: &str) -> PolicyCheckRequestBody {
         PolicyCheckRequestBody {
             request_id: "req-1".into(),
-            realm_id: RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap(),
+            realm_id: RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap(),
             actor_id: Did::new(actor.to_owned()).unwrap(),
             device_id: None,
             action: action.to_owned(),
@@ -641,11 +641,11 @@ mod tests {
     fn collaboration_grant(action: CollaborationCapabilityAction) -> CollaborationCapabilityGrant {
         CollaborationCapabilityGrant {
             id: "01HY0000000000000000000000".to_owned(),
-            capability_grant_id: "ck:grant:01904100-0000-7000-8000-000000000010".to_owned(),
-            grant_event_id: "ck:event:01904100-0000-7000-8000-000000000011".to_owned(),
+            capability_grant_id: "ak:grant:01904100-0000-7000-8000-000000000010".to_owned(),
+            grant_event_id: "ak:event:01904100-0000-7000-8000-000000000011".to_owned(),
             revoke_event_id: None,
             subject: "did:web:alice.example".to_owned(),
-            realm_id: "ck:realm:01904100-0000-7000-8000-000000000001".to_owned(),
+            realm_id: "ak:realm:01904100-0000-7000-8000-000000000001".to_owned(),
             action,
             expires_at: None,
             approval_evidence_ref: None,
@@ -835,7 +835,7 @@ mod tests {
         let data = serde_json::json!({
             "deny_actors": ["did:web:alice.example"],
             "realms": {
-                "ck:realm:01904100-0000-7000-8000-000000000001": {
+                "ak:realm:01904100-0000-7000-8000-000000000001": {
                     // Realm-specific scope: NO deny_actors, so alice is
                     // allowed in this realm even though the default
                     // scope would deny her.
@@ -872,17 +872,17 @@ mod tests {
     #[test]
     fn cap2_circle_selector_accepts_valid_typed_id() {
         assert!(is_circle_selector(
-            "ck:circle:01904100-0000-7000-8000-000000000001"
+            "ak:circle:01904100-0000-7000-8000-000000000001"
         ));
         assert!(!is_circle_selector("not-a-circle"));
         assert!(!is_circle_selector(
-            "ck:space:01904100-0000-7000-8000-000000000001"
+            "ak:space:01904100-0000-7000-8000-000000000001"
         ));
     }
 
     #[test]
     fn cap2_circle_scoped_deny_overrides_realm_default() {
-        let circle_id = "ck:circle:01904100-0000-7000-8000-000000000002";
+        let circle_id = "ak:circle:01904100-0000-7000-8000-000000000002";
         let data = serde_json::json!({
             "circles": {
                 circle_id: {

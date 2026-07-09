@@ -11,7 +11,7 @@ use super::{
     extract_session_info, get_requester, make_clock, parse_user_agent,
 };
 use crate::handlers::account::service::connections::load_linked_accounts;
-use crate::handlers::cokret;
+use crate::handlers::arkret;
 use crate::services::user_profile::{UserProfileServiceError, load_viewer_profile};
 
 // ── Response types ─────────────────────────────────────────────
@@ -155,7 +155,7 @@ pub async fn get_viewer(
             let total = email_edges.len() as i64;
 
             let has_password = profile.has_password;
-            let did = cokret::published_principal_did_for_user(&mut repo, &cokret_config, user)
+            let did = arkret::published_principal_did_for_user(&mut repo, &cokret_config, user)
                 .await?
                 .ok_or_else(|| {
                     RouteError::Internal(Box::new(std::io::Error::other(format!(
@@ -183,7 +183,7 @@ pub async fn get_viewer(
                 id: NodeType::User.serialize(user.id),
                 username: user.localpart.clone(),
                 did,
-                handle: cokret::user_handle(&url_builder, user),
+                handle: arkret::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,
                 profile: UserProfileData {

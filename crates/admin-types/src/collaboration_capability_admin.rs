@@ -2,7 +2,7 @@
 //! productivity / policy profiles.
 //!
 //! Source of truth:
-//! `cokret-spec/spec/v1/artifacts/registry/capability-action-registry.json`.
+//! `arkret-spec/spec/v1/artifacts/registry/capability-action-registry.json`.
 //! These actions intentionally use the exact registry action string; admin
 //! tooling MUST NOT grant umbrella strings such as `ck.pin.*`.
 
@@ -193,7 +193,7 @@ mod tests {
     fn high_risk_policy_actions_require_expiry_and_approval() {
         let req = CreateCollaborationCapabilityGrant {
             subject: "did:web:admin.example".into(),
-            realm_id: "ck:realm:01JS0SP000000000000000000".into(),
+            realm_id: "ak:realm:01JS0SP000000000000000000".into(),
             action: CollaborationCapabilityAction::RealmDisappearingPolicy,
             expires_at: None,
             approval_evidence_ref: None,
@@ -221,7 +221,7 @@ mod tests {
         ] {
             let req = CreateCollaborationCapabilityGrant {
                 subject: "did:web:alice.example".into(),
-                realm_id: "ck:realm:01JS0SP000000000000000000".into(),
+                realm_id: "ak:realm:01JS0SP000000000000000000".into(),
                 action,
                 expires_at: None,
                 approval_evidence_ref: None,

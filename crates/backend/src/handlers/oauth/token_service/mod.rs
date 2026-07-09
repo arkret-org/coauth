@@ -234,7 +234,7 @@ fn client_device_ids(scope: &scope::Scope) -> Vec<String> {
         .filter_map(|token| {
             let token = token.as_str();
             token
-                .strip_prefix("urn:cokret:client:device:")
+                .strip_prefix("urn:arkret:client:device:")
                 .map(str::to_owned)
         })
         .collect()

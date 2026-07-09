@@ -3,7 +3,7 @@
 ## Generate an initial config
 
 The service needs signing keys, an encryption secret, database settings, and
-Cokret deployment metadata before it can start.
+Arkret deployment metadata before it can start.
 
 Use the generator to produce a complete config file with defaults:
 
@@ -18,11 +18,11 @@ sections you override and remove the untouched defaults.
 
 - `http.public_base`
 - `database`
-- `cokret.principal_servers`
-- `cokret.identity_registry`
-- `cokret.service_did`
-- `cokret.issuer_did`
-- `cokret.admin_audience`
+- `arkret.principal_servers`
+- `arkret.identity_registry`
+- `arkret.service_did`
+- `arkret.issuer_did`
+- `arkret.admin_audience`
 - `secrets`
 - `passwords`
 

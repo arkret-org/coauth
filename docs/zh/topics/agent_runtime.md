@@ -18,7 +18,7 @@ controller DID、agent principal id，以及一组规范化的 `ck.agent.*`
 
 该接口仅用于服务到服务调用：
 
-- 只接受 `cokret.principal_servers[].session_grant_introspection_bearer`
+- 只接受 `arkret.principal_servers[].session_grant_introspection_bearer`
   中配置的 soland/sodmin 静态 bearer；
 - 浏览器 session 与终端用户 OAuth token 会被拒绝；
 - 路径 `{id}` 必须是 agent principal DID，并按单个 URL path segment 做 percent-encoding；

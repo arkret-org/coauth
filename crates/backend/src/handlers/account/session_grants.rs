@@ -1,6 +1,6 @@
 //! Product-face (`/_coauth/account/session-grants`) session-grant admin
 //! endpoints: list and revoke. These are NOT `/_cokret` protocol operations
-//! (issue / refresh / introspect / logout live in `handlers::cokret`); they
+//! (issue / refresh / introspect / logout live in `handlers::arkret`); they
 //! reuse the protocol module's caller authorization plumbing only.
 
 use coauth_data::Pagination;
@@ -10,7 +10,7 @@ use serde::Serialize;
 use ulid::Ulid;
 
 use crate::handlers::account::DepotExt as _;
-use crate::handlers::cokret::{
+use crate::handlers::arkret::{
     CokretRouteError, SessionGrantAuthz, SessionGrantRecord, require_session_grant_caller,
 };
 

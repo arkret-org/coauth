@@ -30,7 +30,7 @@ use crate::did_binding_admin::AccountDidBindingPreview;
 
 /// Lifecycle bucket for a coauth account. Wire format is the canonical
 /// account-lifecycle `status` axis from
-/// `cokret-spec/spec/v1/zh/identity/account-lifecycle.md`:
+/// `arkret-spec/spec/v1/zh/identity/account-lifecycle.md`:
 /// `active` / `soft_logged_out` / `locked` / `suspended` / `deactivated` /
 /// `erasure_pending`.
 ///
@@ -128,7 +128,7 @@ pub struct AdminAccountAttributes {
     #[serde(default)]
     pub handle: String,
 
-    /// Cokret account lifecycle state.
+    /// Arkret account lifecycle state.
     #[serde(default)]
     pub status: AdminAccountStatus,
 

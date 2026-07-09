@@ -35,21 +35,21 @@ use ulid::Ulid;
 
 use crate::handlers::common::{DepotExt, RouteError};
 
-const COKRET_PROTOCOL_VERSION: &str = "1.0";
+const ARKRET_PROTOCOL_VERSION: &str = "1.0";
 
-const COKRET_HTTP_BINDING: &str = "http_json";
+const ARKRET_HTTP_BINDING: &str = "http_json";
 
-pub const CLAIM_PRINCIPAL_DID: &str = "org.cokret.principal_did";
+pub const CLAIM_PRINCIPAL_DID: &str = "org.arkret.principal_did";
 
-pub const CLAIM_DEVICE_ID: &str = "org.cokret.device_id";
+pub const CLAIM_DEVICE_ID: &str = "org.arkret.device_id";
 
-pub const CLAIM_SESSION_ID: &str = "org.cokret.session_id";
+pub const CLAIM_SESSION_ID: &str = "org.arkret.session_id";
 
-pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:cokret:principal-server:session.bind";
+pub const PRINCIPAL_SERVER_SESSION_BIND_SCOPE: &str = "urn:arkret:principal-server:session.bind";
 
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
-    #[error("no signing key is configured for Cokret session grants")]
+    #[error("no signing key is configured for Arkret session grants")]
     NoSigningKey,
 
     #[error(transparent)]
@@ -95,7 +95,7 @@ pub enum SessionGrantError {
     HandleClaimSubject(#[from] crate::services::handle_subject_validator::HandleClaimSubjectError),
 
     #[error(
-        "did:web principal requires cokret.deployment_profile=personal_node and cokret.principal_method=did:web"
+        "did:web principal requires arkret.deployment_profile=personal_node and arkret.principal_method=did:web"
     )]
     DidWebPrincipalNotExplicit,
 
@@ -270,7 +270,7 @@ pub(crate) async fn require_session_grant_caller(
         .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
 
     // Static bearer fallback: a Principal Server may authenticate with a
-    // token configured in `cokret.principal_servers[].
+    // token configured in `arkret.principal_servers[].
     // session_grant_introspection_bearer`. This lets a server-to-server caller
     // skip the DB-backed PAT/OAuth-session lookup. Grants `PrincipalServer`
     // authz only — never `Admin` — so it cannot revoke session grants. The
@@ -448,7 +448,7 @@ impl Scribe for CokretRouteError {
             // challenge so the caller can negotiate.
             res.headers_mut().insert(
                 http::header::WWW_AUTHENTICATE,
-                http::HeaderValue::from_static("Bearer realm=\"cokret\", error=\"invalid_token\""),
+                http::HeaderValue::from_static("Bearer realm=\"arkret\", error=\"invalid_token\""),
             );
         }
 
@@ -483,13 +483,13 @@ fn map_did_resolve_error(
 /// There is deliberately NO host-derived `did:web` fallback here:
 /// `identity-did.md` §3 makes `did:webvh` the default service DID method and
 /// any `did:web` downgrade an explicit no-history choice, so an unconfigured
-/// `cokret.service_did` fails startup validation instead of silently minting
+/// `arkret.service_did` fails startup validation instead of silently minting
 /// a `did:web` identity (see `CokretConfig::validate`).
 pub(crate) fn service_did_for(cokret_config: &CokretConfig) -> String {
     cokret_config
         .service_did
         .clone()
-        .expect("cokret.service_did is enforced by startup configuration validation")
+        .expect("arkret.service_did is enforced by startup configuration validation")
 }
 
 pub(crate) fn issuer_did_for(cokret_config: &CokretConfig) -> String {
@@ -599,7 +599,7 @@ pub(crate) fn user_handle_display(url_builder: &UrlBuilder, user: &User) -> Stri
     )
 }
 
-/// Canonical Cokret handle for a user per spec 7157ee8 §3.1:
+/// Canonical Arkret handle for a user per spec 7157ee8 §3.1:
 /// `<lowercase-localpart>:<lowercase-domain>`. This is the form that MUST
 /// appear in `alsoKnownAs`, on any handle claim `handle` field, and as
 /// directory cache key. `acct:<local>@<host>` is interop-only and lives in
@@ -623,7 +623,7 @@ pub(crate) fn user_handle_acct_alias(url_builder: &UrlBuilder, user: &User) -> S
 }
 
 /// Stable wire-level error code returned when a caller passes a non-canonical
-/// handle string (`cokret://` URI, `acct:` alias, or other malformed input).
+/// handle string (`arkret://` URI, `acct:` alias, or other malformed input).
 pub const HANDLE_NOT_CANONICAL_CODE: &str = ERROR_CODE_INVALID_PARAM;
 
 /// Reject any inbound `handle` that is not in the canonical
@@ -647,7 +647,7 @@ pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
 pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {
     cokret_config.trust_domain.clone().unwrap_or_else(|| {
         let scope = derived_trust_domain_scope(url_builder.public_hostname());
-        let trust_domain = format!("ck:trust_domain:{scope}");
+        let trust_domain = format!("ak:trust_domain:{scope}");
         debug_assert!(CokretConfig::validate_trust_domain(&trust_domain).is_ok());
         trust_domain
     })
@@ -773,7 +773,7 @@ pub(crate) fn password_login_session_grant_target(
 fn primary_device_id_from_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) -> Option<String> {
     tokens.into_iter().find_map(|token| {
         token
-            .strip_prefix("urn:cokret:client:device:")
+            .strip_prefix("urn:arkret:client:device:")
             .map(ToOwned::to_owned)
     })
 }
@@ -918,7 +918,7 @@ pub async fn debug_issue_dpop_grant(
     // `user_did_for` form the harness passes). Scoped so its repo connection is
     // released before the principal-DID mint below opens its own transaction.
     let user_id = parse_local_user_did_for(&cokret_config, &body.actor_id).ok_or_else(|| {
-        CokretRouteError::BadRequest("actor_id is not a local Cokret user DID".to_owned())
+        CokretRouteError::BadRequest("actor_id is not a local Arkret user DID".to_owned())
     })?;
     let user = {
         let mut repo = depot.repo().await?;
@@ -938,7 +938,7 @@ pub async fn debug_issue_dpop_grant(
             .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
-            format!("urn:cokret:client:device:{}", body.device_id),
+            format!("urn:arkret:client:device:{}", body.device_id),
             PRINCIPAL_SERVER_SESSION_BIND_SCOPE.to_owned(),
         ]
     });

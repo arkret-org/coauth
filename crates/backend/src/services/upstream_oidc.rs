@@ -13,7 +13,7 @@ use coauth_oauth_types::requests::{
 use serde::Deserialize;
 use url::Url;
 
-use crate::handlers::cokret;
+use crate::handlers::arkret;
 use crate::oidc_client::requests::jose::{
     JwtVerificationData, fetch_jwks, verify_id_token, verify_signed_jwt,
 };
@@ -29,10 +29,10 @@ pub struct OidcUserinfoClaims {
     pub email: Option<String>,
     #[serde(default)]
     pub preferred_username: Option<String>,
-    #[serde(rename = "org.cokret.principal_did")]
+    #[serde(rename = "org.arkret.principal_did")]
     #[serde(default)]
     pub principal_did: Option<String>,
-    #[serde(rename = "org.cokret.session_id")]
+    #[serde(rename = "org.arkret.session_id")]
     #[serde(default)]
     pub session_id: Option<String>,
 }
@@ -269,12 +269,12 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                 });
             }
 
-            if cokret::is_allowed_session_grant_audience(
+            if arkret::is_allowed_session_grant_audience(
                 url_builder,
                 cokret_config,
                 requested_audience,
             ) {
-                let local_audience = cokret::required_audience_for(url_builder, cokret_config);
+                let local_audience = arkret::required_audience_for(url_builder, cokret_config);
                 return Ok(UpstreamOidcSessionGrantTarget {
                     audience: local_audience,
                     principal_server_name: None,
@@ -287,7 +287,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
             ));
         }
 
-        let grant_target = cokret::password_login_session_grant_target(
+        let grant_target = arkret::password_login_session_grant_target(
             url_builder,
             cokret_config,
             None,

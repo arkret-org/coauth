@@ -14,7 +14,7 @@ use coauth_oauth_types::requests::IntrospectionResponse;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::{ActivityTracker, cokret};
+use crate::handlers::{ActivityTracker, arkret};
 
 /// Errors that can occur during token introspection business logic.
 #[derive(Debug, Error)]
@@ -61,11 +61,11 @@ pub enum IntrospectionError {
 ///
 /// The caller is responsible for client authentication and HTTP-level
 /// concerns. This function only touches the repository.
-/// Whether the introspecting caller is entitled to the cokret
+/// Whether the introspecting caller is entitled to the arkret
 /// device/principal/session association fields.
 ///
 /// RFC 7662 introspection defaults to `sub`/`scope`/`exp`-style claims.
-/// The cokret extension fields (`cokret_principal_did`, `device_id`,
+/// The arkret extension fields (`cokret_principal_did`, `device_id`,
 /// `cokret_device_id`, `cokret_session_id`) link a token to a concrete
 /// device + principal + local session and materially widen the
 /// de-anonymisation surface. They are S2S material for the trusted
@@ -79,7 +79,7 @@ pub enum IntrospectionError {
 pub enum CokretAssociationDisclosure {
     /// Return the full device/principal/session association.
     Full,
-    /// Omit cokret association fields; only standard RFC 7662 claims.
+    /// Omit arkret association fields; only standard RFC 7662 claims.
     Redacted,
 }
 
@@ -156,7 +156,7 @@ pub async fn introspect_token(
 
                 let sub = principal_subject_for_user(cokret_config, &user);
                 let principal_did =
-                    cokret::published_principal_did_for_user(repo, cokret_config, &user).await?;
+                    arkret::published_principal_did_for_user(repo, cokret_config, &user).await?;
                 (Some(sub), Some(user.localpart), principal_did)
             } else {
                 (None, None, None)
@@ -166,7 +166,7 @@ pub async fn introspect_token(
                 .record_oauth_session(clock, &session, ip)
                 .await;
 
-            let device_id = cokret::primary_device_id(&session.scope);
+            let device_id = arkret::primary_device_id(&session.scope);
             let scope = session.scope;
 
             IntrospectionResponse {
@@ -230,7 +230,7 @@ pub async fn introspect_token(
 
                 let sub = principal_subject_for_user(cokret_config, &user);
                 let principal_did =
-                    cokret::published_principal_did_for_user(repo, cokret_config, &user).await?;
+                    arkret::published_principal_did_for_user(repo, cokret_config, &user).await?;
                 (Some(sub), Some(user.localpart), principal_did)
             } else {
                 (None, None, None)
@@ -240,7 +240,7 @@ pub async fn introspect_token(
                 .record_oauth_session(clock, &session, ip)
                 .await;
 
-            let device_id = cokret::primary_device_id(&session.scope);
+            let device_id = arkret::primary_device_id(&session.scope);
             let scope = session.scope;
 
             IntrospectionResponse {
@@ -326,11 +326,11 @@ pub async fn introspect_token(
                 .record_personal_session(clock, &session, ip)
                 .await;
 
-            let device_id = cokret::primary_device_id(&session.scope);
+            let device_id = arkret::primary_device_id(&session.scope);
             let scope = session.scope;
             let actor_user_sub = principal_subject_for_user(cokret_config, &actor_user);
             let actor_principal_did =
-                cokret::published_principal_did_for_user(repo, cokret_config, &actor_user).await?;
+                arkret::published_principal_did_for_user(repo, cokret_config, &actor_user).await?;
 
             IntrospectionResponse {
                 active: true,
@@ -363,5 +363,5 @@ pub async fn introspect_token(
 }
 
 fn principal_subject_for_user(cokret_config: &CokretConfig, user: &coauth_data::User) -> String {
-    cokret::oidc_subject_for_user(cokret_config, user)
+    arkret::oidc_subject_for_user(cokret_config, user)
 }

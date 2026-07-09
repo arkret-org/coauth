@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Cokret Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
+# Copyright (c) 2026 Arkret Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
 
 name: Gitea Continuous Integration
 
@@ -35,12 +35,12 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v4
 
-      - name: Check out Cokret Rust SDK
+      - name: Check out Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN }}
           GITHUB_REPOSITORY_OWNER: ${{ gitea.repository_owner }}
           GITHUB_SERVER_URL: ${{ gitea.server_url }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up nightly Rust for rustfmt
         uses: dtolnay/rust-toolchain@nightly
@@ -61,12 +61,12 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v4
 
-      - name: Check out Cokret Rust SDK
+      - name: Check out Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN }}
           GITHUB_REPOSITORY_OWNER: ${{ gitea.repository_owner }}
           GITHUB_SERVER_URL: ${{ gitea.server_url }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up Rust with Clippy
         uses: dtolnay/rust-toolchain@stable
@@ -130,12 +130,12 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v4
 
-      - name: Check out Cokret Rust SDK
+      - name: Check out Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN }}
           GITHUB_REPOSITORY_OWNER: ${{ gitea.repository_owner }}
           GITHUB_SERVER_URL: ${{ gitea.server_url }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Audit with cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2.0.14
@@ -153,12 +153,12 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@v4
 
-      - name: Check out Cokret Rust SDK
+      - name: Check out Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN }}
           GITHUB_REPOSITORY_OWNER: ${{ gitea.repository_owner }}
           GITHUB_SERVER_URL: ${{ gitea.server_url }}
-        run: bash .ci/checkout-sibling.sh cokret-rust-sdk ../cokret-rust-sdk
+        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@stable

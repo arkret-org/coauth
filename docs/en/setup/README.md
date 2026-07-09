@@ -3,9 +3,9 @@
 This part of the documentation goes through installing the service, the important parts of the configuration file, and how to run the service.
 
 Before going through the installation, it is important to understand the main
-Cokret components and how they interact with each other.
+Arkret components and how they interact with each other.
 coauth is the Auth Server: it owns authentication, OAuth/OIDC, account sessions,
-and Cokret session grants.
+and Arkret session grants.
 
 Downstream Principal Servers such as Soland trust coauth-issued tokens and
 session grants instead of receiving direct account-provisioning calls from

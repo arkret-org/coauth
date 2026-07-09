@@ -45,7 +45,7 @@ use salvo::prelude::*;
 use serde_json::Value;
 
 use crate::app_state::DepotExt as AppStateDepotExt;
-use crate::handlers::cokret::{self, CokretRouteError};
+use crate::handlers::arkret::{self, CokretRouteError};
 use crate::handlers::common::DepotExt;
 use crate::services::policy_evaluator::{
     EvaluatorError, PolicyDecision, PolicyEvaluator, PolicyObligation, RuleEvaluator,
@@ -146,7 +146,7 @@ fn require_policy_check_bearer(
         .strip_prefix("Bearer ")
         .or_else(|| auth_str.strip_prefix("bearer "))
         .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
-    if cokret::principal_server_static_session_grant_bearer_matches(cokret_config, token) {
+    if arkret::principal_server_static_session_grant_bearer_matches(cokret_config, token) {
         Ok(())
     } else {
         Err(CokretRouteError::Unauthorized(
@@ -168,7 +168,7 @@ pub(crate) async fn build_policy_check_response(
 ) -> Result<PolicyCheckOutcome, CokretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
-    let policy_server_did = cokret::service_did_for(cokret_config);
+    let policy_server_did = arkret::service_did_for(cokret_config);
     let policy_server_id = Did::new(policy_server_did.clone()).map_err(|e| {
         CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
             "policy server DID failed SDK validation: {e}"
@@ -396,7 +396,7 @@ mod tests {
     use crate::services::policy_frontier::StaticFrontierSource;
 
     fn realm() -> RealmId {
-        RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap()
+        RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap()
     }
 
     fn req() -> PolicyCheckRequestBody {

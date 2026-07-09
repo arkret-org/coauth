@@ -56,7 +56,7 @@ pub enum BeginPasswordRegistrationIssue {
     RegistrationDisabled,
     HandleRequired,
     HandleExists,
-    /// HDL-1 (R3 spec-sync 2026-05-27, cokret-spec b47ff6ec) — the
+    /// HDL-1 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — the
     /// candidate handle localpart failed the wire-level homograph guard
     /// (NFC + UTS#39 confusable + script-mixed). Renders as the
     /// canonical `handle_homograph_forbidden` wire code from the SDK

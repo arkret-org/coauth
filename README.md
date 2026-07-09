@@ -1,6 +1,6 @@
 # coauth
 
-> **Spec target**: [cokret-spec @ 5d66aeb](../cokret-spec) (v1 sync 2026-06-21)
+> **Spec target**: [arkret-spec @ 5d66aeb](../arkret-spec) (v1 sync 2026-06-21)
 
 ## Pre-commit hook setup
 
@@ -13,7 +13,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on a
 branch, copy it from
-[`cokret-rust-sdk`](https://github.com/cokret/cokret-rust-sdk) and
+[`arkret-rust-sdk`](https://github.com/arkret/arkret-rust-sdk) and
 adapt the package list to coauth's workspace.
 
 > **DO NOT commit secrets.** Files like `config.dev.yaml`, `config.local.*`,
@@ -23,9 +23,9 @@ adapt the package list to coauth's workspace.
 > [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) fails the build
 > if anything that looks like a credential lands in a tracked path.
 
-`coauth` is the Cokret Auth / Account Server. It provides OIDC/OAuth login,
+`coauth` is the Arkret Auth / Account Server. It provides OIDC/OAuth login,
 account lifecycle management, short-lived session grants, policy hooks,
-notifications, and a stable admin API for Cokret deployments.
+notifications, and a stable admin API for Arkret deployments.
 
 `coauth` is not a DID registry. It proves who authenticated to which local
 account, device, and session, then publishes that state to Principal Servers
@@ -44,10 +44,10 @@ inside a Realm and inherit its auth context.
 ## Trust domain rotation
 
 Round R2/R3 (2026-05-20) introduces the deployment-level `trust_domain`
-config knob (`cokret.trust_domain` in `config.yaml`):
+config knob (`arkret.trust_domain` in `config.yaml`):
 
 ```yaml
-cokret:
+arkret:
   trust_domain: ck:trust_domain:soland-prod.eu
 ```
 
@@ -82,13 +82,13 @@ Both forms run the same 7-trigger non-enumerable failure state machine
 (byte-identical `{"error":"not_found"}` body, ≤50 ms constant-time
 padding) so external observers cannot distinguish "expired" from
 "never existed". The normative source is the v1 spec under
-[`../cokret-spec/spec/v1/`](../cokret-spec/spec/v1/).
+[`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
 
 ## Round R4 (protocol review closures)
 
 Spec round 4 layers on top of the R2/R3 trust-domain and OOB-invite work.
 The canonical wire-breaking list lives in the v1 spec artifacts and prose
-under [`../cokret-spec/spec/v1/`](../cokret-spec/spec/v1/).
+under [`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
 
 - **3PID OOB invite has two wire modes.** Either `offline_token`
   (`token_commitment` + `token_salt_id` + `token_entropy_bits ≥ 128`,
@@ -113,20 +113,20 @@ under [`../cokret-spec/spec/v1/`](../cokret-spec/spec/v1/).
 ## Cross-project task tracking
 
 Per-project task lists are maintained outside this repository. Protocol
-work that affects wire shape is tracked in [`../cokret-spec/spec/v1/`](../cokret-spec/spec/v1/).
+work that affects wire shape is tracked in [`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
 
 ## Integration model
 
-- `inkson` acts as a public/native Cokret client and consumes OIDC tokens.
+- `inkson` acts as a public/native Arkret client and consumes OIDC tokens.
 - Principal Servers such as `soland` consume session grants and account
   metadata from `coauth`.
 - `sodmin` uses the admin API with `urn:coauth:admin` or
-  `urn:cokret:admin:*`.
+  `urn:arkret:admin:*`.
 - A delegated/public DID resolver remains the identity registry / resolver source.
 
 ## Current status
 
-The primary Cokret paths include:
+The primary Arkret paths include:
 
 - `/.well-known/openid-configuration`
 - `/_cokret/describe`
@@ -144,7 +144,7 @@ verified via the introspection endpoints and the OAuth JWKS.
 
 - OpenID Connect provider with authorization code, refresh token, client
   credentials, and device code grants
-- Cokret discovery, service DID documents, handle resolution, and short-lived
+- Arkret discovery, service DID documents, handle resolution, and short-lived
   session grants with Principal Server introspection
 - Local account lifecycle, password auth, upstream OAuth federation, and
   recovery workflows
@@ -170,7 +170,7 @@ http:
 database:
   uri: postgresql://coauth:password@localhost/coauth
 
-cokret:
+arkret:
   principal_servers:
     - name: soland
       audience: did:webvh:<scid>:soland.example.com:webvh:service
@@ -207,7 +207,7 @@ launches the background worker unless disabled with flags.
 `coauth` is a Rust workspace. The frontend is a Dioxus app.
 
 ```bash
-git clone https://github.com/cokret/coauth.git
+git clone https://github.com/arkret/coauth.git
 cd coauth
 
 # Backend binary only. The default configuration uses the Cedar policy engine.
@@ -222,13 +222,13 @@ just build-all
 | Endpoint | Purpose |
 |----------|---------|
 | `/.well-known/openid-configuration` | OIDC discovery |
-| `/_cokret/describe` | Cokret service metadata |
+| `/_cokret/describe` | Arkret service metadata |
 | `/_cokret/root/identity/describe` | Identity-registry contract |
 | `/_cokret/find/directory/resolve-handle` | Handle -> DID resolution |
 | `/_cokret/gate/account/session-grants/introspect` | Principal Server session grant validation |
 | `/_coauth/admin/*` | Admin API for `sodmin` and service automation |
 | `/_coauth/admin/openapi.yaml` | Coauth admin API OpenAPI document |
-| `/.well-known/cokret/openapi.yaml` | Admin API discovery document for `sodmin` |
+| `/.well-known/arkret/openapi.yaml` | Admin API discovery document for `sodmin` |
 
 ## Documentation
 
@@ -262,5 +262,5 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_coauth_todos.md` in the parent `cokret/` directory for the
+> `_coauth_todos.md` in the parent `arkret/` directory for the
 > circle-rollout (CKP-0007) work item list and per-stage checkpoints.

@@ -21,7 +21,7 @@
 //! This module owns:
 //!
 //! - canonical-transcript serialisation (no nondeterministic ordering),
-//! - key selection (mirrors `handlers::cokret::preferred_signing_key`),
+//! - key selection (mirrors `handlers::arkret::preferred_signing_key`),
 //! - DID-URL `kid` construction (`<policy_server_did>#<jwk_kid>`),
 //! - signature emission as base64url-unpadded.
 //!
@@ -157,7 +157,7 @@ pub struct DecisionTranscript<'a> {
 }
 
 /// Pick the preferred service signing key from the keystore. Mirrors
-/// `handlers::cokret::preferred_signing_key` so the policy decision
+/// `handlers::arkret::preferred_signing_key` so the policy decision
 /// signer uses the *same* key the rest of coauth uses for
 /// service-issued artefacts (session grant JWTs, handle-claim proofs).
 ///
@@ -207,7 +207,7 @@ mod tests {
 
     fn bound_to() -> PolicyCheckBoundTo {
         PolicyCheckBoundTo {
-            realm_id: RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap(),
+            realm_id: RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap(),
             actor_id: Did::new("did:web:alice.example").unwrap(),
             action: "ck.message.create".into(),
             request_canonical_digest: empty_sha256(),

@@ -2,7 +2,7 @@
 
 `coauth` follows [Semantic Versioning](https://semver.org/) for the HTTP
 contracts. Patch and minor releases never break compatibility with the
-existing OIDC / OAuth / Cokret surfaces. Major releases may remove
+existing OIDC / OAuth / Arkret surfaces. Major releases may remove
 deprecated paths after at least one minor release of warning.
 
 ## Routine upgrades
@@ -38,7 +38,7 @@ through your orchestrator is supported on every minor release.
 The following surfaces are tracked compatibility contracts:
 
 - `/.well-known/openid-configuration`
-- `/.well-known/cokret/openapi.yaml`
+- `/.well-known/arkret/openapi.yaml`
 - `/_coauth/admin/openapi.yaml` (the canonical `sodmin` integration
   contract)
 - `/_cokret/describe` and the rest of `/_cokret/*`

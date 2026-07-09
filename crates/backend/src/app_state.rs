@@ -92,7 +92,7 @@ pub struct AppState {
     /// startup. Filtered to entries whose `service_role == "auth_server"`
     /// and additionally cross-checked against coauth's hard-coded
     /// `claimed_profiles[]` set inside
-    /// `handlers::cokret::build_verified_profile_descriptors`. Empty
+    /// `handlers::arkret::build_verified_profile_descriptors`. Empty
     /// when the env var is unset / file missing / file malformed — the
     /// dev-mode invariant in service-surface.md §3.0.
     ///
@@ -223,7 +223,7 @@ pub async fn inject_app_state(
     depot.insert("frontend_script_src", state.frontend_script_src.clone());
     // G4.T3 — loaded at process boot from
     // `COAUTH_VERIFIED_PROFILES_ARTIFACT`. Consumed by
-    // `handlers::cokret::server_describe` to populate the wire
+    // `handlers::arkret::server_describe` to populate the wire
     // `verified_profiles[]`. Empty Arc when the env var is unset.
     depot.insert("verified_profiles", state.verified_profiles.clone());
     depot.insert(
@@ -251,7 +251,7 @@ pub async fn inject_app_state(
         TrustedIssuerPolicySet::default(),
     );
     depot.insert("did_resolver_service", default_did_resolver_service());
-    // C35.0: when `[cokret.starid]` is configured, build a single
+    // C35.0: when `[arkret.starid]` is configured, build a single
     // `StaridResolver` per request from the shared http_client. The
     // handle is `Option<StaridRegistryHandle>` in the depot — handlers
     // that need it (today: the onboarding `user_write` strand stage) read
@@ -280,7 +280,7 @@ pub async fn inject_app_state(
     {
         let rp_id = state.url_builder.public_hostname().to_owned();
         let rp_origin = state.url_builder.http_base();
-        let rp_name = "Cokret";
+        let rp_name = "Arkret";
         match webauthn_service(
             &rp_id,
             &rp_origin,

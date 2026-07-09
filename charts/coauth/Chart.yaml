@@ -1,7 +1,7 @@
 apiVersion: v2
 name: coauth
 description: |
-  Helm chart for the Cokret coauth authorization service.
+  Helm chart for the Arkret coauth authorization service.
   Operators should customize values.yaml, provide an external PostgreSQL
   secret, and enable NetworkPolicy/HPA controls for production clusters.
 type: application
@@ -11,12 +11,12 @@ keywords:
   - oauth
   - oidc
   - authentication
-  - cokret
-home: https://github.com/cokret/coauth
+  - arkret
+home: https://github.com/arkret/coauth
 sources:
-  - https://github.com/cokret/coauth
+  - https://github.com/arkret/coauth
 maintainers:
-  - name: Cokret Authors
-icon: https://cokret.dev/icon.png
+  - name: Arkret Authors
+icon: https://arkret.dev/icon.png
 annotations:
   category: Security

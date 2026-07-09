@@ -811,17 +811,17 @@ pub struct IntrospectionResponse {
     /// Only used for compatibility access and refresh tokens.
     pub device_id: Option<String>,
 
-    /// Cokret extension: principal DID associated with the token subject.
-    #[serde(rename = "org.cokret.principal_did")]
+    /// Arkret extension: principal DID associated with the token subject.
+    #[serde(rename = "org.arkret.principal_did")]
     pub cokret_principal_did: Option<String>,
 
-    /// Cokret extension: normalized device identifier associated with the
+    /// Arkret extension: normalized device identifier associated with the
     /// session, when present.
-    #[serde(rename = "org.cokret.device_id")]
+    #[serde(rename = "org.arkret.device_id")]
     pub cokret_device_id: Option<String>,
 
-    /// Cokret extension: session identifier associated with the token.
-    #[serde(rename = "org.cokret.session_id")]
+    /// Arkret extension: session identifier associated with the token.
+    #[serde(rename = "org.arkret.session_id")]
     pub cokret_session_id: Option<String>,
 }
 

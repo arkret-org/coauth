@@ -27,7 +27,7 @@ base64ct = {workspace = true}
 chrono = {workspace = true}
 coauth-iana = {workspace = true}
 coauth-jose = {workspace = true}
-cokret-core = {workspace = true}
+arkret-core = {workspace = true}
 crc = {workspace = true}
 diesel = {workspace = true}
 diesel-async = {workspace = true}

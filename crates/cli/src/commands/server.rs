@@ -156,7 +156,7 @@ impl Options {
         let (principal_server_admin, connector_registry) = principal_server_connection_from_config(
             &site_config,
             PgRepositoryFactory::new(pool.clone()).boxed(),
-            config.cokret.clone(),
+            config.arkret.clone(),
             http_client.clone(),
         );
 
@@ -256,7 +256,7 @@ impl Options {
         let email_webhook_service =
             EmailWebhookService::from_email_config(&config.email, http_client.clone())
                 .context("invalid email webhook configuration")?;
-        let cokret_config = config.cokret.clone();
+        let cokret_config = config.arkret.clone();
 
         // Explicitly the config to properly zeroize secret keys
         drop(config);

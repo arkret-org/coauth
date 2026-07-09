@@ -1,6 +1,6 @@
 //! Deployment health-check diagnostics
 //!
-//! Validates Cokret/OIDC discovery surfaces exposed by the coauth server.
+//! Validates Arkret/OIDC discovery surfaces exposed by the coauth server.
 // CLI diagnostic checks use raw `reqwest` so they don't pull in the
 // outbound-http tracing layer required by the server runtime.
 #![allow(clippy::disallowed_methods)]
@@ -19,7 +19,7 @@ pub(super) struct Options {}
 impl Options {
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
         let _span = info_span!("cli.doctor").entered();
-        info!("Running Cokret auth server diagnostics.");
+        info!("Running Arkret auth server diagnostics.");
 
         let config = RootConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
 
@@ -38,17 +38,17 @@ impl Options {
             );
         }
 
-        if config.cokret.principal_servers.is_empty() {
+        if config.arkret.principal_servers.is_empty() {
             warn!(
-                "No Cokret principal servers are configured (`cokret.principal_servers` is empty)."
+                "No Arkret principal servers are configured (`arkret.principal_servers` is empty)."
             );
         } else {
-            for server in &config.cokret.principal_servers {
+            for server in &config.arkret.principal_servers {
                 info!(
                     name = %server.name,
                     audience = %server.audience,
                     endpoint = %server.endpoint,
-                    "Configured Cokret principal server"
+                    "Configured Arkret principal server"
                 );
             }
         }
@@ -116,24 +116,24 @@ async fn check_cokret_server_describe(http: &reqwest::Client, public_base: &Url)
     let url = match public_base.join("/_cokret/describe") {
         Ok(url) => url,
         Err(error) => {
-            error!(%error, "Unable to construct Cokret server description URL");
+            error!(%error, "Unable to construct Arkret server description URL");
             return;
         }
     };
 
     match http.get(url.as_str()).send().await {
         Ok(response) if response.status().is_success() => {
-            info!(%url, "Cokret server description endpoint is reachable");
+            info!(%url, "Arkret server description endpoint is reachable");
         }
         Ok(response) => {
             warn!(
                 %url,
                 status = %response.status(),
-                "Cokret server description endpoint did not return success"
+                "Arkret server description endpoint did not return success"
             );
         }
         Err(error) => {
-            warn!(%url, %error, "Could not fetch Cokret server description");
+            warn!(%url, %error, "Could not fetch Arkret server description");
         }
     }
 }

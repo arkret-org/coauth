@@ -15,7 +15,7 @@ use cokret_core::{
 use salvo::prelude::*;
 
 use super::*;
-use crate::handlers::cokret::*;
+use crate::handlers::arkret::*;
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
 use crate::services::third_party_invite::NonceStore;
 
@@ -603,7 +603,7 @@ mod tests {
             serde_json::json!({
                 "controller_did": controller_did,
                 "resources": {
-                    "realm_refs": ["ck:realm:team"],
+                    "realm_refs": ["ak:realm:team"],
                 },
             }),
             now,

@@ -109,7 +109,7 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
 // Both facts point to the same ruling: this belongs on soland's own
 // negative-space root per service-http-binding.md §2.1.3(b) (product /
 // deployment-private capability MUST NOT occupy a `/_cokret/*` protocol
-// segment). soland exposes it as `org.cokret.soland.root.authz.capability_fanout
+// segment). soland exposes it as `org.arkret.soland.root.authz.capability_fanout
 // .submit`, bearer-gated by the shared `embedded_webvh_registration_bearer`,
 // returning an explicit `authz_state` projection ack. The coauth↔soland S2S
 // trust boundary is registered in `docs/{zh,en}/setup/principal-server.md`.
@@ -125,12 +125,12 @@ async fn submit_collaboration_capability_fanout_to_target(
         .bearer_auth(&target.bearer)
         .header("idempotency-key", request.idempotency_key())
         .header(
-            "x-cokret-capability-fanout-digest",
+            "x-arkret-capability-fanout-digest",
             request.raw_payload_digest(),
         )
-        .header("x-cokret-capability-event-id", request.event_id())
+        .header("x-arkret-capability-event-id", request.event_id())
         .header(
-            "x-cokret-capability-grant-id",
+            "x-arkret-capability-grant-id",
             request.capability_grant_id(),
         )
         .json(request.body())
@@ -307,8 +307,8 @@ mod tests {
 
     use super::*;
 
-    const EVENT: &str = "ck:event:01970000-0000-7000-8000-000000000001";
-    const GRANT: &str = "ck:grant:01970000-0000-7000-8000-000000000002";
+    const EVENT: &str = "ak:event:01970000-0000-7000-8000-000000000001";
+    const GRANT: &str = "ak:grant:01970000-0000-7000-8000-000000000002";
 
     fn cokret_config() -> CokretConfig {
         CokretConfig {

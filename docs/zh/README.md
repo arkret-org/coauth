@@ -1,9 +1,9 @@
 # 关于本文档
 
-本文档介绍 `coauth`，即 Cokret Auth / Account Server。它面向运维人员、管理员，以及
-需要把 coauth 接入 Cokret Principal Server、public DID resolver 服务、`sodmin` 和第一方客户端的开发者。
+本文档介绍 `coauth`，即 Arkret Auth / Account Server。它面向运维人员、管理员，以及
+需要把 coauth 接入 Arkret Principal Server、public DID resolver 服务、`sodmin` 和第一方客户端的开发者。
 
-`coauth` 是 OAuth 和 OpenID Connect Provider。它的主产品接口是 Cokret-native
+`coauth` 是 OAuth 和 OpenID Connect Provider。它的主产品接口是 Arkret-native
 账户、会话、DID 绑定、claim 和 admin 集成。
 
 本文档使用 [mdBook](https://rust-lang.github.io/mdBook/) 构建。

@@ -107,7 +107,7 @@ skip = [
     { name = "getrandom", version = "0.3.4" },
 
     # RustCrypto 0.10-series line kept by argon2/aes-gcm/cookie/webauthn/
-    # chacha20poly1305/postgres and our own backend, while the cokret SDK and
+    # chacha20poly1305/postgres and our own backend, while the arkret SDK and
     # bcrypt/blowfish are already on the 0.11 pre-release line. Remove these
     # as the ecosystem converges on the new RustCrypto releases.
     { name = "base64", version = "0.21.7" },       # base64urlsafedata (webauthn-rs subtree)

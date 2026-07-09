@@ -70,19 +70,19 @@ pub const OFFLINE_ACCESS: ScopeToken = ScopeToken::from_static("offline_access")
 /// `urn:coauth:admin` — canonical coauth admin scope.
 pub const COAUTH_ADMIN: ScopeToken = ScopeToken::from_static("urn:coauth:admin");
 
-/// `urn:cokret:client:*` — Cokret client capability family.
-pub const COKRET_CLIENT: ScopeToken = ScopeToken::from_static("urn:cokret:client:*");
+/// `urn:arkret:client:*` — Arkret client capability family.
+pub const ARKRET_CLIENT: ScopeToken = ScopeToken::from_static("urn:arkret:client:*");
 
-/// `urn:cokret:principal-server:*` — Principal Server capability family.
-pub const COKRET_PRINCIPAL_SERVER: ScopeToken =
-    ScopeToken::from_static("urn:cokret:principal-server:*");
+/// `urn:arkret:principal-server:*` — Principal Server capability family.
+pub const ARKRET_PRINCIPAL_SERVER: ScopeToken =
+    ScopeToken::from_static("urn:arkret:principal-server:*");
 
-/// `urn:cokret:principal-server:session.bind` — session-grant binding scope.
-pub const COKRET_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
-    ScopeToken::from_static("urn:cokret:principal-server:session.bind");
+/// `urn:arkret:principal-server:session.bind` — session-grant binding scope.
+pub const ARKRET_PRINCIPAL_SERVER_SESSION_BIND: ScopeToken =
+    ScopeToken::from_static("urn:arkret:principal-server:session.bind");
 
-/// `urn:cokret:admin:*` — Cokret admin capability family.
-pub const COKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:cokret:admin:*");
+/// `urn:arkret:admin:*` — Arkret admin capability family.
+pub const ARKRET_ADMIN: ScopeToken = ScopeToken::from_static("urn:arkret:admin:*");
 
 /// `ck.agent.manage` — CKP-0008 controller-approval scope. Covers the
 /// admin subset of the 14 personal-agent capability actions
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn scope_accepts_uris() {
         assert!(Scope::from_str("http://example.com").is_ok());
-        assert!(Scope::from_str("urn:cokret:client:api:*").is_ok());
-        assert!(Scope::from_str("urn:cokret:client:device:DEVICE").is_ok());
+        assert!(Scope::from_str("urn:arkret:client:api:*").is_ok());
+        assert!(Scope::from_str("urn:arkret:client:device:DEVICE").is_ok());
     }
 }

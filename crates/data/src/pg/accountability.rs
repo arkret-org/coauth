@@ -57,7 +57,7 @@ mod tests {
     }
 
     fn grant_id(rng: &mut impl RngCore, clock: &dyn Clock) -> String {
-        format!("ck:grant:{}", uuid::Uuid::from(new_id(clock.now(), rng)))
+        format!("ak:grant:{}", uuid::Uuid::from(new_id(clock.now(), rng)))
     }
 
     fn agent_did(label: &str) -> String {
@@ -84,7 +84,7 @@ mod tests {
             soland_fanout_state: AccountabilityGrantFanoutState::Queued,
             soland_fanout_idempotency_key: format!("idem-{label}"),
             soland_fanout_payload: serde_json::json!({
-                "kind": "org.cokret.coauth.accountability_grant.fanout.v1",
+                "kind": "org.arkret.coauth.accountability_grant.fanout.v1",
                 "label": label,
             }),
             soland_fanout_attempt: 0,
