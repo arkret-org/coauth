@@ -6,7 +6,7 @@ use coauth_data::Clock;
 use coauth_data::organization_control::{
     OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationPrincipalControl,
 };
-use cokret_core::models::{
+use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
 use rand_core::RngCore;

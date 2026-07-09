@@ -1,11 +1,11 @@
 use coauth_jose::jwt::Jwt;
-use cokret_core::{AuthSessionLogoutOutcome, AuthSessionLogoutRequestBody};
+use arkret_core::{AuthSessionLogoutOutcome, AuthSessionLogoutRequestBody};
 use salvo::prelude::*;
 
 use super::*;
 use crate::handlers::arkret::*;
 
-/// `POST /_cokret/gate/account/auth-sessions/logout` — Auth-side S2S logout
+/// `POST /_arkret/gate/account/auth-sessions/logout` — Auth-side S2S logout
 /// sub-operation used by the Account Authority after it has validated the
 /// client-visible `ck.gate.account.command.logout` request.
 #[handler]
@@ -56,8 +56,8 @@ fn require_auth_session_logout_service_caller(
         ));
     }
 
-    let cokret_config = depot.cokret_config()?;
-    if super::super::principal_server_static_session_grant_bearer_matches(&cokret_config, token) {
+    let arkret_config = depot.arkret_config()?;
+    if super::super::principal_server_static_session_grant_bearer_matches(&arkret_config, token) {
         return Ok(());
     }
 

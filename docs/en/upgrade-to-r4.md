@@ -41,7 +41,7 @@ that were issued under the previous trust domain.
 Before rotating:
 
 1. Record the current configured value and confirm it matches
-   `/_cokret/describe`.
+   `/_arkret/describe`.
 2. Pause or reject in-flight cross-signing reset approvals minted under
    the old value.
 3. Snapshot the database and keep the previous config alongside the
@@ -52,7 +52,7 @@ Before rotating:
 During rotation:
 
 1. Set the new value in `arkret.trust_domain`.
-2. Restart one `coauth` replica and verify `/_cokret/describe`
+2. Restart one `coauth` replica and verify `/_arkret/describe`
    advertises the new value.
 3. Roll the remaining replicas.
 4. Reissue reset proofs through the device recovery strand. The affected

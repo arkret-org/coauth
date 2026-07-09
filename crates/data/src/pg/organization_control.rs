@@ -9,7 +9,7 @@ use coauth_data::organization_control::{
     OrganizationPrincipalControl,
 };
 use coauth_data::{Clock, new_id};
-use cokret_core::models::{
+use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
 use diesel::prelude::*;

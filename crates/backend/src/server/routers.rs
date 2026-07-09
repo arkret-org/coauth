@@ -119,7 +119,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
     };
     use crate::handlers::{arkret, policy_check};
 
-    let cokret_router = Router::with_path("/_cokret")
+    let arkret_router = Router::with_path("/_arkret")
         .hoop(public_oidc_browser_cors())
         .push(Router::with_path("describe").get(arkret::server_describe))
         .push(Router::with_path("root/identity/describe").get(arkret::identity_describe))
@@ -136,7 +136,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // rotates onto a fresh grant without re-running OIDC — this is what
         // lets a device session live for days while access bearers stay short.
         // It is a spec operation (service-http-binding session-grants surface),
-        // so it is exposed under `/_cokret` (not the product-private `/_coauth`)
+        // so it is exposed under `/_arkret` (not the product-private `/_coauth`)
         // and clients reach it as a protocol path.
         .push(
             Router::with_path("gate/account/session-grants/refresh")
@@ -151,7 +151,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // Auth-side hard logout sub-operation (account-lifecycle §4.1).
         // This is an internal Account Authority -> Auth Server service call:
         // the client-visible hard logout endpoint is the Principal/Account
-        // Authority `POST /_cokret/gate/account/logout`, and clients must not
+        // Authority `POST /_arkret/gate/account/logout`, and clients must not
         // call this path directly.
         .push(
             Router::with_path("gate/account/auth-sessions/logout")
@@ -162,7 +162,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // whether it is active and to obtain the session public key for RFC 9421
         // PoP verification. It is a spec operation
         // (`ck.gate.account.command.introspect_session_grant`), so it lives under
-        // `/_cokret`; the handler self-authorizes via the configured
+        // `/_arkret`; the handler self-authorizes via the configured
         // `session_grant_introspection_bearer` (or an admin scope).
         .push(
             Router::with_path("gate/account/session-grants/introspect")
@@ -206,16 +206,16 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
     let mut coauth_router = Router::with_path("/_coauth")
         .hoop(public_oidc_browser_cors())
         // Product-private surface only. Protocol-standard Arkret endpoints
-        // are served solely under `/_cokret` above; the former `/_coauth`
+        // are served solely under `/_arkret` above; the former `/_coauth`
         // protocol mirror (describe, root/identity/{describe,resolve,
         // document}, find/directory/{describe,resolve-handle},
         // self/policy/check) was a backward-compatibility shim and has been
-        // removed — clients must use `/_cokret`.
+        // removed — clients must use `/_arkret`.
         .push(
             // `account/identity/primary-handle` is a coauth product-private
             // path (not a spec operation). It deliberately avoids the protocol
             // trust-surface classifier `root/identity/` (reserved for the
-            // canonical `/_cokret/root/identity/{describe,resolve,document}`
+            // canonical `/_arkret/root/identity/{describe,resolve,document}`
             // Principal Server identity-root operations), mirroring how
             // `account/session-grants` below avoids the `gate/` classifier.
             Router::with_path("account/identity/primary-handle")
@@ -224,13 +224,13 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         .push(
             // Product-private account-management UI surface: `list` and
             // `{id}/revoke`. `introspect` is the spec operation served under
-            // `/_cokret` above; the DPoP-bound `refresh` / hard-logout `revoke`
-            // are protocol operations and live under `/_cokret` only.
+            // `/_arkret` above; the DPoP-bound `refresh` / hard-logout `revoke`
+            // are protocol operations and live under `/_arkret` only.
             //
             // Product-private paths deliberately avoid the protocol
             // trust-surface classifier `gate/`; they live under
             // `/_coauth/account/*` so the `gate/account/*` vocabulary stays
-            // reserved for the canonical `/_cokret` operations.
+            // reserved for the canonical `/_arkret` operations.
             Router::with_path("account/session-grants")
                 .get(crate::handlers::account::session_grants::list_session_grants)
                 .push(Router::with_path("{id}/revoke").post(crate::handlers::account::session_grants::revoke_session_grant)),
@@ -296,7 +296,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // `oidc/exchange`) were removed (account-lifecycle §4.1,
         // service-surface.md §2.5.1). Clients now run standard OIDC discovery
         // + authorize against the issuer and submit the code to the canonical
-        // `POST /_cokret/gate/account/session-grants`
+        // `POST /_arkret/gate/account/session-grants`
         // (`proof.proof_kind=oidc_code_exchange`). Passkey + standard OIDC
         // (`/authorize`, `/oauth/token`, `/.well-known/openid-configuration`)
         // are unchanged.
@@ -442,23 +442,23 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
     let docs_router = openapi::build_openapi_router(&coauth_router);
 
     // The `/.well-known/arkret/openapi.yaml` path is a *protocol-surface*
-    // contract: it MUST publish the Arkret protocol API (`/_cokret/*`), not the
+    // contract: it MUST publish the Arkret protocol API (`/_arkret/*`), not the
     // product-private admin API. Generate the protocol-face OpenAPI document
-    // from `cokret_router` and serve it from the well-known path here, keeping
+    // from `arkret_router` and serve it from the well-known path here, keeping
     // the admin document (`/_coauth/admin/openapi.yaml`) strictly separate.
-    let cokret_doc = build_cokret_protocol_openapi_doc(&cokret_router);
-    let cokret_doc_yaml = OpenApiYaml::from_doc(&cokret_doc);
+    let arkret_doc = build_arkret_protocol_openapi_doc(&arkret_router);
+    let arkret_doc_yaml = OpenApiYaml::from_doc(&arkret_doc);
 
     router
-        .push(cokret_router)
+        .push(arkret_router)
         .push(coauth_router)
         .push(docs_router)
-        .push(Router::with_path("/.well-known/arkret/openapi.yaml").get(cokret_doc_yaml))
+        .push(Router::with_path("/.well-known/arkret/openapi.yaml").get(arkret_doc_yaml))
 }
 
-pub(super) fn build_cokret_protocol_openapi_doc(cokret_router: &Router) -> salvo::oapi::OpenApi {
+pub(super) fn build_arkret_protocol_openapi_doc(arkret_router: &Router) -> salvo::oapi::OpenApi {
     salvo::oapi::OpenApi::new("Arkret Protocol API", env!("CARGO_PKG_VERSION"))
-        .merge_router(cokret_router)
+        .merge_router(arkret_router)
 }
 
 pub(super) fn build_admin_router(router: Router) -> Router {

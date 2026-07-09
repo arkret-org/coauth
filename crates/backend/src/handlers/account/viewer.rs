@@ -114,7 +114,7 @@ pub async fn get_viewer(
     let repo_factory = depot.repo_factory()?;
     let config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let principal_server = depot.principal_server()?;
     let clock = make_clock();
 
@@ -155,7 +155,7 @@ pub async fn get_viewer(
             let total = email_edges.len() as i64;
 
             let has_password = profile.has_password;
-            let did = arkret::published_principal_did_for_user(&mut repo, &cokret_config, user)
+            let did = arkret::published_principal_did_for_user(&mut repo, &arkret_config, user)
                 .await?
                 .ok_or_else(|| {
                     RouteError::Internal(Box::new(std::io::Error::other(format!(

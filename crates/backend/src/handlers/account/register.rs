@@ -259,7 +259,7 @@ pub async fn post_webvh_start(
     // wire-level handle normalize / homograph check via the SDK helper.
     // MUST run before any storage lookup so confusable handles never
     // hit `repo.user().exists(...)` or the principal server.
-    if cokret_core::normalize_handle_localpart(&username).is_err() {
+    if arkret_core::normalize_handle_localpart(&username).is_err() {
         return Ok(Json(WebvhRegistrationStartOutcome {
             status: "error",
             registration_id: None,
@@ -650,7 +650,7 @@ pub async fn post_webvh_finish(
 
     let repo_factory = depot.repo_factory()?;
     let principal_server = depot.principal_server()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let clock = make_clock();
     let mut rng = make_rng();
@@ -665,7 +665,7 @@ pub async fn post_webvh_finish(
         return Err(RouteError::NotFound);
     };
     let principal_url = registration_webvh_principal_url(&registration.post_auth_action);
-    let target = resolve_webvh_provider(&cokret_config, principal_url.as_deref())
+    let target = resolve_webvh_provider(&arkret_config, principal_url.as_deref())
         .map_err(RouteError::BadRequest)?;
 
     // Pre-flight the registration-finish eligibility *before* writing the
@@ -1390,7 +1390,7 @@ pub async fn post_finish(
     let site_config = depot.site_config()?;
     let principal_server = depot.principal_server()?;
     let repo_factory = depot.repo_factory()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let input = if req
         .payload()
         .await
@@ -1462,7 +1462,7 @@ pub async fn post_finish(
     cookie_jar.write_to_response(res);
 
     let post_auth_action = completed.registration.post_auth_action.clone();
-    let did = arkret::user_did_for(&cokret_config, &completed.user);
+    let did = arkret::user_did_for(&arkret_config, &completed.user);
 
     Ok(Json(FinishRegistrationOutcome {
         status: "success",

@@ -306,8 +306,8 @@ async fn handle_service_did_init(options: ServiceDidInitOptions) -> anyhow::Resu
     let did_signing = SigningKey::generate(&mut rng);
     let update_signing = SigningKey::generate(&mut rng);
     let did_public_key_multibase =
-        cokret_core::ed25519_pubkey_to_did_key_multibase(&did_signing.verifying_key().to_bytes());
-    let update_public_key_multibase = cokret_core::ed25519_pubkey_to_did_key_multibase(
+        arkret_core::ed25519_pubkey_to_did_key_multibase(&did_signing.verifying_key().to_bytes());
+    let update_public_key_multibase = arkret_core::ed25519_pubkey_to_did_key_multibase(
         &update_signing.verifying_key().to_bytes(),
     );
     let version_time = Utc::now();
@@ -443,7 +443,7 @@ fn signed_starid_create_body(
     let payload = eddsa_jcs_2022_signing_input(&proof_config, &entry)?;
     let signature = update_signing.sign(&payload);
     let mut proof = proof_config;
-    proof["proofValue"] = json!(cokret_core::encode_multibase_base58btc(
+    proof["proofValue"] = json!(arkret_core::encode_multibase_base58btc(
         signature.to_bytes()
     ));
 
@@ -487,7 +487,7 @@ fn webvh_derive_scid(skeleton: &Value) -> anyhow::Result<String> {
             Value::String(SCID_PLACEHOLDER.to_owned()),
         );
     }
-    let canonical = cokret_core::canonical::canonical_json_bytes(&preimage)
+    let canonical = arkret_core::canonical::canonical_json_bytes(&preimage)
         .context("could not canonicalize webvh SCID preimage")?;
     Ok(sha256_multihash_multibase(&canonical))
 }
@@ -509,7 +509,7 @@ fn webvh_substitute_scid(mut value: Value, scid: &str) -> Value {
 
 fn webvh_entry_hash_multibase(entry: &Value, prev_anchor: &str) -> anyhow::Result<String> {
     let canonical =
-        cokret_core::canonical::canonical_json_bytes(&webvh_strip_for_hash(entry, prev_anchor))
+        arkret_core::canonical::canonical_json_bytes(&webvh_strip_for_hash(entry, prev_anchor))
             .context("could not canonicalize webvh entry hash preimage")?;
     Ok(sha256_multihash_multibase(&canonical))
 }
@@ -536,9 +536,9 @@ fn eddsa_jcs_2022_signing_input(proof_config: &Value, entry: &Value) -> anyhow::
         map.remove("proof");
     }
 
-    let proof_config_bytes = cokret_core::canonical::canonical_json_bytes(&proof_config)
+    let proof_config_bytes = arkret_core::canonical::canonical_json_bytes(&proof_config)
         .context("could not canonicalize webvh proof config")?;
-    let document_bytes = cokret_core::canonical::canonical_json_bytes(&document)
+    let document_bytes = arkret_core::canonical::canonical_json_bytes(&document)
         .context("could not canonicalize webvh proof document")?;
     let mut signing_input = Vec::with_capacity(64);
     signing_input.extend_from_slice(&Sha256::digest(&proof_config_bytes));
@@ -552,7 +552,7 @@ fn sha256_multihash_multibase(bytes: &[u8]) -> String {
     multihash.push(0x12);
     multihash.push(0x20);
     multihash.extend_from_slice(&digest);
-    cokret_core::encode_multibase_base58btc(multihash)
+    arkret_core::encode_multibase_base58btc(multihash)
 }
 
 fn webvh_did(scid: &str, host: &str, port: Option<u16>, path_segments: &[String]) -> String {
@@ -639,7 +639,7 @@ async fn write_service_did_key_bundle(
 }
 
 fn signing_seed_multibase(signing: &SigningKey) -> String {
-    cokret_core::encode_multibase_base58btc(signing.to_bytes())
+    arkret_core::encode_multibase_base58btc(signing.to_bytes())
 }
 
 fn service_did_public_output(

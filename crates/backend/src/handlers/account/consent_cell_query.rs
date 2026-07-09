@@ -26,7 +26,7 @@
 //! returns `ConsentLookup::Unknown` from the network call so callers can
 //! degrade safely.
 
-use cokret_core::{ConsentCellView, ConsentState as SdkConsentState};
+use arkret_core::{ConsentCellView, ConsentState as SdkConsentState};
 use tracing::{debug, warn};
 use url::Url;
 
@@ -164,7 +164,7 @@ async fn query_consent_cell_scope(
     http_client: &reqwest::Client,
 ) -> ConsentScopeLookup {
     let path = format!(
-        "_cokret/self/consent/cells/{}",
+        "_arkret/self/consent/cells/{}",
         urlencoding::encode_path(holder_did)
     );
     let mut url = match base.join(&path) {
@@ -412,7 +412,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .and(query_param("peer", "did:web:peer"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
@@ -450,7 +450,7 @@ mod tests {
         cell["peer_did"] = serde_json::Value::String("did:web:other".to_owned());
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .and(query_param("peer", "did:web:peer"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(cell))
@@ -484,7 +484,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(revoked_cell("invite")))
             .mount(&server)
             .await;
@@ -516,7 +516,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
@@ -547,7 +547,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
             .expect(2)
             .mount(&server)

@@ -2,19 +2,19 @@
 //!
 //! The pure build + cryptography path (keygen, SCID derivation, eddsa-jcs-2022
 //! proof, document skeleton) now lives in the shared SDK at
-//! [`cokret_signatures::webvh`] so clients (sodmin / inkson) and servers
+//! [`arkret_signatures::webvh`] so clients (sodmin / inkson) and servers
 //! (soland / coauth) all mint byte-for-byte identical inception entries. This
 //! module keeps only coauth-specific concerns: the HTTP submission to soland's
 //! protocol DID operation endpoint and the lookup-or-mint persistence flow.
 
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, User};
 use coauth_keystore::Encrypter;
-use cokret_core::DidOperationSubmitOutcome;
-pub use cokret_core::DidOperationSubmitRequestBody;
+use arkret_core::DidOperationSubmitOutcome;
+pub use arkret_core::DidOperationSubmitRequestBody;
 // Re-export the shared SDK builder surface so existing call-sites
 // (`soland_webvh::prepare_inception`, `SuppliedInceptionInput`, …) keep working
 // without a second copy of the crypto in this crate.
-pub use cokret_signatures::webvh::{
+pub use arkret_signatures::webvh::{
     InceptionInput, PreparedInception, SubmittedInception, SuppliedInceptionInput,
     WebvhInceptionError, prepare_inception, prepare_supplied_inception,
 };
@@ -68,7 +68,7 @@ pub async fn submit_did_operation(
     body: &DidOperationSubmitRequestBody,
 ) -> Result<DidOperationSubmitOutcome, SolandWebvhError> {
     let endpoint = principal_endpoint
-        .join("/_cokret/root/identity/submit-did-operation")
+        .join("/_arkret/root/identity/submit-did-operation")
         .map_err(SolandWebvhError::InvalidEndpoint)?;
     let response = outbound_http::send_with_policy(
         outbound_http::soland_policy("identity_submit_did_operation")

@@ -25,7 +25,7 @@
 //! `schemars` / `salvo` derives so pure clients do not pull those deps.
 
 use chrono::{DateTime, Utc};
-use cokret_core::models::{
+use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
 use serde::{Deserialize, Serialize};

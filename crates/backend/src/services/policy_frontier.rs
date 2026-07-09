@@ -11,9 +11,9 @@
 //! - `policy_frontier_digest` — policy-source frontier digest;
 //! - `membership_frontier_digest` — membership / role frontier digest.
 //!
-//! These come from soland's `/_cokret/self/events/frontier?peer_role=
+//! These come from soland's `/_arkret/self/events/frontier?peer_role=
 //! federation_peer` response, which returns
-//! [`cokret_core::EventsFrontierFederationPeerState`] including a
+//! [`arkret_core::EventsFrontierFederationPeerState`] including a
 //! single `frontier_root`. The federation-peer variant is the only one
 //! that exposes the root commitment; account-client and
 //! anonymous-health variants intentionally omit it.
@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use cokret_core::{EventsFrontierFederationPeerState, FreshnessState, Hash, RealmId};
+use arkret_core::{EventsFrontierFederationPeerState, FreshnessState, Hash, RealmId};
 use thiserror::Error;
 use url::Url;
 
@@ -137,7 +137,7 @@ pub struct SolandFrontierSource {
 }
 
 impl SolandFrontierSource {
-    /// `base_url` is `cokret_config.principal_server_url`; when `None`
+    /// `base_url` is `arkret_config.principal_server_url`; when `None`
     /// (single-host dev deployments) every fetch returns
     /// [`Frontier::empty`] so the policy-check pipeline still produces
     /// a signed response.
@@ -175,13 +175,13 @@ impl FrontierSource for SolandFrontierSource {
             // `frontier_root`. See `soland/src/routing/events/event_log.rs`
             // around `events_frontier` for the response builder.
             // Spec-canonical federation-peer frontier path is the
-            // version-less `/_cokret/peer/events/frontier`. We join with
+            // version-less `/_arkret/peer/events/frontier`. We join with
             // a leading slash so the absolute path replaces any existing
             // path on `principal_server_url` rather than being resolved
             // relative to it (URL relative-resolution would otherwise
             // truncate the last base segment).
             let mut url = base
-                .join("/_cokret/peer/events/frontier")
+                .join("/_arkret/peer/events/frontier")
                 .map_err(|e| FrontierError::Http(format!("invalid frontier URL: {e}")))?;
 
             // soland scopes by realm id so receivers only see the

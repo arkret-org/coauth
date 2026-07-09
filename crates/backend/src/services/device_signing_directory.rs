@@ -17,7 +17,7 @@
 //! `did:webvh` registration surface.
 
 use coauth_config::CokretConfig;
-use cokret_core::DeviceSigningKeyDirectoryQueryRequestBody;
+use arkret_core::DeviceSigningKeyDirectoryQueryRequestBody;
 use thiserror::Error;
 
 use crate::outbound_http;
@@ -27,7 +27,7 @@ use crate::outbound_http;
 // responsibility — so the `/_soland/*` S2S edge below is the correct, compliant
 // surface, not a "violation" to be migrated off.
 //
-// The protocol read face `POST /_cokret/self/keys/query` (`ck.self.keys.query
+// The protocol read face `POST /_arkret/self/keys/query` (`ck.self.keys.query
 // .lookup`) is *definitionally* member-to-member: device-lifecycle.md §8.1
 // (`:701`) requires the server to authenticate the requester and return a
 // directory record ONLY when an authorization relationship exists between
@@ -47,7 +47,7 @@ use crate::outbound_http;
 // op `org.arkret.soland.gate.account.device_signing_keys.query`, bearer-gated by
 // the shared `embedded_webvh_registration_bearer`. Per service-http-binding.md
 // §2.1.3(b) a deployment-private capability MUST live on the implementation's
-// own `/_soland/*` root and MUST NOT occupy a `/_cokret/*` protocol segment.
+// own `/_soland/*` root and MUST NOT occupy a `/_arkret/*` protocol segment.
 // The coauth↔soland S2S trust boundary is registered in
 // `docs/{zh,en}/setup/principal-server.md`.
 const DEVICE_SIGNING_KEY_DIRECTORY_PATH: &str = "/_soland/gate/account/device-signing-keys/query";
@@ -85,7 +85,7 @@ pub struct ResolvedDeviceSigningKey {
     /// (`did:key:z…`).
     pub device_signing_key_did: String,
     /// The bare `z…` multibase Ed25519 key, suitable for
-    /// `cokret_signatures::PublicKeyMaterial::Ed25519Multibase`.
+    /// `arkret_signatures::PublicKeyMaterial::Ed25519Multibase`.
     pub multibase: String,
 }
 
@@ -99,12 +99,12 @@ pub struct ResolvedDeviceSigningKey {
 /// absent device yields [`DeviceSigningDirectoryError::DeviceNotAuthorized`].
 pub async fn resolve_authorized_device_signing_key(
     http_client: &reqwest::Client,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     audience: &str,
     principal_id: &str,
     device_id: &str,
 ) -> Result<ResolvedDeviceSigningKey, DeviceSigningDirectoryError> {
-    let server = cokret_config
+    let server = arkret_config
         .principal_servers
         .iter()
         .find(|server| server.audience == audience)
@@ -122,12 +122,12 @@ pub async fn resolve_authorized_device_signing_key(
 
     let endpoint = server.endpoint.join(DEVICE_SIGNING_KEY_DIRECTORY_PATH)?;
 
-    let typed_principal = cokret_core::Did::new(principal_id.to_owned()).map_err(|_| {
+    let typed_principal = arkret_core::Did::new(principal_id.to_owned()).map_err(|_| {
         DeviceSigningDirectoryError::DeviceNotAuthorized {
             device_id: device_id.to_owned(),
         }
     })?;
-    let typed_device = cokret_core::DeviceId::new(device_id.to_owned()).map_err(|_| {
+    let typed_device = arkret_core::DeviceId::new(device_id.to_owned()).map_err(|_| {
         DeviceSigningDirectoryError::DeviceNotAuthorized {
             device_id: device_id.to_owned(),
         }
@@ -157,7 +157,7 @@ pub async fn resolve_authorized_device_signing_key(
         });
     }
 
-    let outcome: cokret_core::DeviceSigningKeyDirectoryOutcome = serde_json::from_str(&text)
+    let outcome: arkret_core::DeviceSigningKeyDirectoryOutcome = serde_json::from_str(&text)
         .map_err(|error| DeviceSigningDirectoryError::DirectoryRejected {
             status: status.as_u16(),
             body: format!("invalid response body: {error}"),

@@ -24,29 +24,29 @@ struct DiscoveryDocument {
     account_management_actions_supported: Vec<String>,
 
     #[serde(rename = "org.arkret.api_endpoint")]
-    cokret_api_endpoint: String,
+    arkret_api_endpoint: String,
 
     #[serde(rename = "org.arkret.server_describe")]
-    cokret_server_describe: String,
+    arkret_server_describe: String,
 
     #[serde(rename = "org.arkret.service_did")]
-    cokret_service_did: String,
+    arkret_service_did: String,
 
     #[serde(rename = "org.arkret.did_binding_methods")]
-    cokret_did_binding_methods: Vec<String>,
+    arkret_did_binding_methods: Vec<String>,
 
     #[serde(rename = "org.arkret.supported_scopes")]
-    cokret_supported_scopes: Vec<String>,
+    arkret_supported_scopes: Vec<String>,
 
     #[serde(rename = "org.arkret.admin_audience")]
-    cokret_admin_audience: String,
+    arkret_admin_audience: String,
 
     #[serde(rename = "org.arkret.principal_servers")]
-    cokret_principal_servers: Vec<PrincipalServerMetadata>,
+    arkret_principal_servers: Vec<PrincipalServerMetadata>,
 
     #[serde(rename = "org.arkret.identity_registry")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    cokret_identity_registry: Option<IdentityRegistryMetadata>,
+    arkret_identity_registry: Option<IdentityRegistryMetadata>,
 }
 
 #[derive(Debug, Serialize)]
@@ -107,8 +107,8 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
     let site_config = depot
         .get::<SiteConfig>("site_config")
         .expect("SiteConfig not found in depot");
-    let cokret_config = depot
-        .get::<CokretConfig>("cokret_config")
+    let arkret_config = depot
+        .get::<CokretConfig>("arkret_config")
         .cloned()
         .unwrap_or_default();
 
@@ -275,7 +275,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
         ..ProviderMetadata::default()
     };
 
-    let cokret_principal_servers = cokret_config
+    let arkret_principal_servers = arkret_config
         .principal_servers
         .iter()
         .map(|server| PrincipalServerMetadata {
@@ -285,8 +285,8 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
             did: server.did.clone(),
         })
         .collect();
-    let cokret_identity_registry =
-        cokret_config
+    let arkret_identity_registry =
+        arkret_config
             .identity_registry
             .as_ref()
             .map(|registry| IdentityRegistryMetadata {
@@ -307,20 +307,20 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
             "session_view".to_owned(),
             "session_end".to_owned(),
         ],
-        cokret_api_endpoint: url_builder.absolute_url("/_cokret").to_string(),
-        cokret_server_describe: url_builder.absolute_url("/_cokret/describe").to_string(),
-        cokret_service_did: arkret::service_did_for(&cokret_config),
-        cokret_did_binding_methods: vec!["session_grant".to_owned()],
-        cokret_supported_scopes: vec![
+        arkret_api_endpoint: url_builder.absolute_url("/_arkret").to_string(),
+        arkret_server_describe: url_builder.absolute_url("/_arkret/describe").to_string(),
+        arkret_service_did: arkret::service_did_for(&arkret_config),
+        arkret_did_binding_methods: vec!["session_grant".to_owned()],
+        arkret_supported_scopes: vec![
             scope::COAUTH_ADMIN.to_string(),
             scope::ARKRET_ADMIN.to_string(),
             scope::ARKRET_CLIENT.to_string(),
             scope::ARKRET_PRINCIPAL_SERVER.to_string(),
             scope::ARKRET_PRINCIPAL_SERVER_SESSION_BIND.to_string(),
         ],
-        cokret_admin_audience: arkret::required_audience_for(url_builder, &cokret_config),
-        cokret_principal_servers,
-        cokret_identity_registry,
+        arkret_admin_audience: arkret::required_audience_for(url_builder, &arkret_config),
+        arkret_principal_servers,
+        arkret_identity_registry,
     })
 }
 
@@ -352,7 +352,7 @@ mod tests {
             crate::handlers::test_utils::test_site_config(),
         );
         depot.insert(
-            "cokret_config",
+            "arkret_config",
             CokretConfig {
                 service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
                 ..CokretConfig::default()
@@ -390,7 +390,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn discovery_advertises_cokret_scopes_and_claims() {
+    async fn discovery_advertises_arkret_scopes_and_claims() {
         crate::handlers::test_utils::setup();
 
         let Json(response) = build_response(&test_depot());
@@ -411,9 +411,9 @@ mod tests {
                 .any(|scope| scope == "urn:arkret:principal-server:session.bind")
         );
 
-        let cokret_scopes = body["org.arkret.supported_scopes"].as_array().unwrap();
+        let arkret_scopes = body["org.arkret.supported_scopes"].as_array().unwrap();
         assert!(
-            cokret_scopes
+            arkret_scopes
                 .iter()
                 .any(|scope| scope == "urn:arkret:principal-server:session.bind")
         );

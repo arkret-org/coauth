@@ -247,7 +247,7 @@ mod tests {
     async fn primary_did_for_user_routes_to_starid_form_when_flag_set() {
         install_crypto_provider();
         let resolver = DefaultDidResolverService;
-        let cokret_config = CokretConfig {
+        let arkret_config = CokretConfig {
             deployment_profile: DeploymentProfileConfig::PersonalNode,
             principal_method: PrincipalMethodConfig::DidWeb,
             starid: Some(StaridConfig {
@@ -263,7 +263,7 @@ mod tests {
         let mut user = sample_user(user_id);
         user.starid_backend = true;
         let did = resolver
-            .primary_did_for_user(&cokret_config, &user)
+            .primary_did_for_user(&arkret_config, &user)
             .await
             .unwrap();
         assert_eq!(
@@ -274,7 +274,7 @@ mod tests {
         // Sanity: same user without the flag stays on the local form.
         user.starid_backend = false;
         let local = resolver
-            .primary_did_for_user(&cokret_config, &user)
+            .primary_did_for_user(&arkret_config, &user)
             .await
             .unwrap();
         assert_eq!(
@@ -306,7 +306,7 @@ mod tests {
             sub: id.to_string(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            status: cokret_core::AccountStatus::Active,
+            status: arkret_core::AccountStatus::Active,
             locked_at: None,
             deactivated_at: None,
             can_request_admin: false,

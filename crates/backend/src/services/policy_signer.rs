@@ -5,10 +5,10 @@
 //! Round 4 `ck.self.policy.query.check` decision signer.
 //!
 //! Pulls the preferred service signing key out of the keystore, signs a
-//! canonical-JSON transcript (RFC 8785 / `cokret_core::canonical`), and
+//! canonical-JSON transcript (RFC 8785 / `arkret_core::canonical`), and
 //! returns the wire-form `{kid, sig}` payload that
 //! [`crate::handlers::policy_check`] embeds in
-//! [`cokret_core::PolicyCheckOutcome`].
+//! [`arkret_core::PolicyCheckOutcome`].
 //!
 //! ## Why a dedicated module
 //!
@@ -32,8 +32,8 @@
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
-use cokret_core::canonical::canonical_json_bytes;
-use cokret_core::{AuthzDecision, FreshnessState, Hash, PolicyCheckBoundTo, PolicyCheckSignature};
+use arkret_core::canonical::canonical_json_bytes;
+use arkret_core::{AuthzDecision, FreshnessState, Hash, PolicyCheckBoundTo, PolicyCheckSignature};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
 use serde::Serialize;
@@ -132,7 +132,7 @@ impl<'a> PolicySigner<'a> {
 
 /// Canonical-JSON transcript bound to a single `ck.self.policy.query.check`
 /// decision. Field order is fixed by the struct, but the canonical
-/// serializer in `cokret_core::canonical` sorts object keys
+/// serializer in `arkret_core::canonical` sorts object keys
 /// lexicographically before emitting bytes — so reordering fields here
 /// does not change the wire bytes. Every field is either present on the
 /// request or the response so verifiers can rebuild the same transcript
@@ -193,7 +193,7 @@ fn preferred_service_signing_key(
 
 #[cfg(test)]
 mod tests {
-    use cokret_core::{Did, RealmId};
+    use arkret_core::{Did, RealmId};
 
     use super::*;
 

@@ -163,7 +163,7 @@ pub async fn post_verify_invite(
         return Err(RouteError::BadRequest("missing_required_fields".into()));
     }
 
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let url_builder = depot.url_builder()?;
     let key_store = depot.key_store()?;
@@ -176,7 +176,7 @@ pub async fn post_verify_invite(
     // come from configuration.
     // SEC-07a — the trusted `iss` set comes from the explicit allowlist.
     // Empty == no verifier configured -> fail closed.
-    let expected_iss_allowlist = cokret_config.verification_service_allowlist();
+    let expected_iss_allowlist = arkret_config.verification_service_allowlist();
     if expected_iss_allowlist.is_empty() {
         warn!(
             "POST /_coauth/self/invites/3pid/verify called but no verification-service DID is configured \
@@ -191,7 +191,7 @@ pub async fn post_verify_invite(
         }));
         return Ok(());
     }
-    let expected_aud = did_resolver.service_did(&cokret_config);
+    let expected_aud = did_resolver.service_did(&arkret_config);
 
     let mut repo = depot.repo().await?;
     let nonce_store = shared_nonce_store();
@@ -211,7 +211,7 @@ pub async fn post_verify_invite(
         did_resolver: did_resolver.as_ref(),
         http_client: &http_client,
         url_builder: &url_builder,
-        cokret_config: &cokret_config,
+        arkret_config: &arkret_config,
         key_store: &key_store,
         repo: &mut repo,
     };

@@ -242,7 +242,7 @@ pub trait DepotExt {
     fn templates(&self) -> Result<coauth_templates::Templates, RouteError>;
     fn frontend_script_src(&self) -> Result<String, RouteError>;
     fn translator(&self) -> Result<Arc<coauth_i18n::Translator>, RouteError>;
-    fn cokret_config(&self) -> Result<CokretConfig, RouteError>;
+    fn arkret_config(&self) -> Result<CokretConfig, RouteError>;
     fn cookie_manager(&self) -> Result<crate::handlers::CookieManager, RouteError>;
     fn metadata_cache(&self) -> Result<crate::handlers::MetadataCache, RouteError>;
     fn jwks_cache(&self) -> Result<crate::handlers::JwksCache, RouteError>;
@@ -342,8 +342,8 @@ impl DepotExt for Depot {
         depot_get(self, "translator")
     }
 
-    fn cokret_config(&self) -> Result<CokretConfig, RouteError> {
-        depot_get(self, "cokret_config")
+    fn arkret_config(&self) -> Result<CokretConfig, RouteError> {
+        depot_get(self, "arkret_config")
     }
 
     fn cookie_manager(&self) -> Result<crate::handlers::CookieManager, RouteError> {

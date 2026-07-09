@@ -65,11 +65,11 @@ pub enum IntrospectionError {
 /// device/principal/session association fields.
 ///
 /// RFC 7662 introspection defaults to `sub`/`scope`/`exp`-style claims.
-/// The arkret extension fields (`cokret_principal_did`, `device_id`,
-/// `cokret_device_id`, `cokret_session_id`) link a token to a concrete
+/// The arkret extension fields (`arkret_principal_did`, `device_id`,
+/// `arkret_device_id`, `arkret_session_id`) link a token to a concrete
 /// device + principal + local session and materially widen the
 /// de-anonymisation surface. They are S2S material for the trusted
-/// Principal Server (which enforces the `/_cokret/self/*` surface), not
+/// Principal Server (which enforces the `/_arkret/self/*` surface), not
 /// for arbitrary confidential OIDC clients. Callers pass
 /// [`CokretAssociationDisclosure::Full`] only when authenticated as the
 /// Principal Server (homeserver bearer) or for internal self-introspection;
@@ -93,7 +93,7 @@ pub async fn introspect_token(
     repo: &mut BoxRepository,
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     activity_tracker: &ActivityTracker,
     token_str: &str,
     token_type_hint: Option<OAuthTokenTypeHint>,
@@ -154,9 +154,9 @@ pub async fn introspect_token(
                     return Err(IntrospectionError::InvalidUser(user.id));
                 }
 
-                let sub = principal_subject_for_user(cokret_config, &user);
+                let sub = principal_subject_for_user(arkret_config, &user);
                 let principal_did =
-                    arkret::published_principal_did_for_user(repo, cokret_config, &user).await?;
+                    arkret::published_principal_did_for_user(repo, arkret_config, &user).await?;
                 (Some(sub), Some(user.localpart), principal_did)
             } else {
                 (None, None, None)
@@ -186,9 +186,9 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(access_token.jti()),
                 device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
-                cokret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
-                cokret_device_id: disclosure.is_full().then_some(device_id).flatten(),
-                cokret_session_id: disclosure.is_full().then(|| session.id.to_string()),
+                arkret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
+                arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
+                arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
         }
 
@@ -228,9 +228,9 @@ pub async fn introspect_token(
                     return Err(IntrospectionError::InvalidUser(user.id));
                 }
 
-                let sub = principal_subject_for_user(cokret_config, &user);
+                let sub = principal_subject_for_user(arkret_config, &user);
                 let principal_did =
-                    arkret::published_principal_did_for_user(repo, cokret_config, &user).await?;
+                    arkret::published_principal_did_for_user(repo, arkret_config, &user).await?;
                 (Some(sub), Some(user.localpart), principal_did)
             } else {
                 (None, None, None)
@@ -258,9 +258,9 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: Some(refresh_token.jti()),
                 device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
-                cokret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
-                cokret_device_id: disclosure.is_full().then_some(device_id).flatten(),
-                cokret_session_id: disclosure.is_full().then(|| session.id.to_string()),
+                arkret_principal_did: disclosure.is_full().then_some(principal_did).flatten(),
+                arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
+                arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
         }
 
@@ -328,9 +328,9 @@ pub async fn introspect_token(
 
             let device_id = arkret::primary_device_id(&session.scope);
             let scope = session.scope;
-            let actor_user_sub = principal_subject_for_user(cokret_config, &actor_user);
+            let actor_user_sub = principal_subject_for_user(arkret_config, &actor_user);
             let actor_principal_did =
-                arkret::published_principal_did_for_user(repo, cokret_config, &actor_user).await?;
+                arkret::published_principal_did_for_user(repo, arkret_config, &actor_user).await?;
 
             IntrospectionResponse {
                 active: true,
@@ -349,12 +349,12 @@ pub async fn introspect_token(
                 iss: Some(url_builder.oidc_issuer().to_string()),
                 jti: None,
                 device_id: disclosure.is_full().then(|| device_id.clone()).flatten(),
-                cokret_principal_did: disclosure
+                arkret_principal_did: disclosure
                     .is_full()
                     .then_some(actor_principal_did)
                     .flatten(),
-                cokret_device_id: disclosure.is_full().then_some(device_id).flatten(),
-                cokret_session_id: disclosure.is_full().then(|| session.id.to_string()),
+                arkret_device_id: disclosure.is_full().then_some(device_id).flatten(),
+                arkret_session_id: disclosure.is_full().then(|| session.id.to_string()),
             }
         }
     };
@@ -362,6 +362,6 @@ pub async fn introspect_token(
     Ok(reply)
 }
 
-fn principal_subject_for_user(cokret_config: &CokretConfig, user: &coauth_data::User) -> String {
-    arkret::oidc_subject_for_user(cokret_config, user)
+fn principal_subject_for_user(arkret_config: &CokretConfig, user: &coauth_data::User) -> String {
+    arkret::oidc_subject_for_user(arkret_config, user)
 }

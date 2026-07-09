@@ -21,7 +21,7 @@
 #   ./oauth-client-localized-metadata.sh put \
 #     https://auth.example.com 'urn:coauth:admin:...' 01H... payload.json
 #
-# This wraps T08b's `GET / PUT /_cokret/local/admin/oauth-clients/{id}/localized-metadata`
+# This wraps T08b's `GET / PUT /_arkret/local/admin/oauth-clients/{id}/localized-metadata`
 # endpoint so operators can manage localised client metadata without a UI.
 # The Dioxus admin SPA editor (T08c) will eventually replace this script.
 
@@ -45,7 +45,7 @@ admin_url="${2%/}"
 admin_token="$3"
 client_id="$4"
 
-endpoint="${admin_url}/_cokret/local/admin/oauth-clients/${client_id}/localized-metadata"
+endpoint="${admin_url}/_arkret/local/admin/oauth-clients/${client_id}/localized-metadata"
 
 case "$cmd" in
     get)

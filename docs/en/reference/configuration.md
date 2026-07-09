@@ -92,7 +92,7 @@ arkret:
 
   service_did: did:webvh:<scid>:auth.example.com:webvh:service
   issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
-  admin_audience: https://auth.example.com/_cokret
+  admin_audience: https://auth.example.com/_arkret
   session_grant_ttl: 300
 ```
 
@@ -106,7 +106,7 @@ arkret:
 - `service_did`: explicit service DID, otherwise derived from `http.public_base`
 - `issuer_did`: DID emitted in session grants, defaults to `service_did`
 - `admin_audience`: audience expected by Arkret admin integrations, defaults
-  to the local `/_cokret` endpoint
+  to the local `/_arkret` endpoint
 - `session_grant_ttl`: lifetime in seconds for Arkret session-grant JWTs
   returned by the REST auth bridge login/exchange paths and refresh endpoint.
   Default: `300` (5 minutes).

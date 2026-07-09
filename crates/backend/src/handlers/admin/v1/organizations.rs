@@ -18,7 +18,7 @@
 //!
 //! Wire shapes come from [`coauth_admin_types::organization_admin`] (which
 //! re-exports the shared `coauth-data` domain types) and the SDK
-//! [`cokret_core::models::RealmOrganizationPayload`]. No admin-private wire
+//! [`arkret_core::models::RealmOrganizationPayload`]. No admin-private wire
 //! struct is defined here.
 
 use coauth_admin_types::organization_admin::{
@@ -31,9 +31,9 @@ use coauth_data::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationDelegation,
 };
 use coauth_data::{BoxRepository, RepositoryAccess};
-use cokret_core::identifiers::new_prefixed_uuid7;
-use cokret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
-use cokret_core::{Did, Hash, RealmId};
+use arkret_core::identifiers::new_prefixed_uuid7;
+use arkret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
+use arkret_core::{Did, Hash, RealmId};
 use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
 
@@ -382,9 +382,9 @@ pub async fn issue_statement_handler(
         .transpose()
         .map_err(|e| AppError::bad_request(format!("invalid realm_frontier_digest: {e}")))?;
 
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
-    let service_did = crate::handlers::arkret::service_did_for(&cokret_config);
+    let service_did = crate::handlers::arkret::service_did_for(&arkret_config);
 
     let call_context = extract_call_context(req, depot).await?;
     let executed_by = call_context

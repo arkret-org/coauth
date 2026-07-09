@@ -289,7 +289,7 @@ pub async fn extract_call_context(req: &Request, depot: &Depot) -> Result<CallCo
     }
 
     let configured_org_id = depot
-        .get::<CokretConfig>("cokret_config")
+        .get::<CokretConfig>("arkret_config")
         .ok()
         .and_then(|config| config.admin_org_id.clone());
     let presented_org_id = req

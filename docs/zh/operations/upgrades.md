@@ -31,7 +31,7 @@
 - `/.well-known/openid-configuration`
 - `/.well-known/arkret/openapi.yaml`
 - `/_coauth/admin/openapi.yaml`
-- `/_cokret/describe` 与 `/_cokret/*` 其余路径
+- `/_arkret/describe` 与 `/_arkret/*` 其余路径
 - CLI 子命令（`server`、`worker`、`manage`、`database`、`config`、
   `templates`、`doctor`）
 

@@ -256,7 +256,7 @@ impl Options {
         let email_webhook_service =
             EmailWebhookService::from_email_config(&config.email, http_client.clone())
                 .context("invalid email webhook configuration")?;
-        let cokret_config = config.arkret.clone();
+        let arkret_config = config.arkret.clone();
 
         // Explicitly the config to properly zeroize secret keys
         drop(config);
@@ -265,7 +265,7 @@ impl Options {
             let mut s = AppState {
                 repository_factory: PgRepositoryFactory::new(pool),
                 templates,
-                cokret_config,
+                arkret_config,
                 key_store,
                 cookie_manager,
                 encrypter,

@@ -1,4 +1,4 @@
-//! `POST /_cokret/gate/account/device-enroll`
+//! `POST /_arkret/gate/account/device-enroll`
 //! (`ck.gate.account.command.enroll_device`) — managed-DID `service_attested`
 //! device enrollment (device-lifecycle §5.4, key-management §5.0.6).
 //!
@@ -6,7 +6,7 @@
 //! for **the calling user's own device**, under the user's principal DID. It
 //! never acts as a general signing oracle and never contacts soland — the
 //! signed Event is returned to the client (inkson) which submits it to
-//! `/_cokret/self/events`.
+//! `/_arkret/self/events`.
 //!
 //! Flow:
 //! 1. Resolve the caller's OAuth access token to a `User` (end-user bearer, NOT the
@@ -21,18 +21,18 @@
 //!    full Event JSON.
 
 use chrono::{DateTime, Utc};
-use cokret_core::error::{
+use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_GRANT_ALREADY_CONSUMED, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
     ERROR_CODE_SERVICE_UNAVAILABLE, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
     ERROR_CODE_SESSION_LOGGED_OUT,
 };
-use cokret_core::{
+use arkret_core::{
     AccountDeviceEnrollOutcome, AccountDeviceEnrollRequestBody, Audience, DeviceAuthorizePayload,
     DeviceEnrollmentAuthorityBinding, DeviceOrPrincipalRef, Did, Event, EventId, EventRequirements,
     Hlc, RealmId, ed25519_pubkey_to_did_key_multibase,
 };
-use cokret_signatures::{SignEventOptions, sign_event};
+use arkret_signatures::{SignEventOptions, sign_event};
 use salvo::prelude::*;
 
 use super::{CokretRouteError, SessionGrantPayload};
@@ -73,7 +73,7 @@ fn decode_device_public_key(input: &str) -> Result<[u8; 32], CokretRouteError> {
 
     // Multibase `z…` carries the `0xed01` ed25519-pub multicodec prefix.
     if trimmed.starts_with('z') {
-        return cokret_core::decode_ed25519_multibase(trimmed).map_err(|error| {
+        return arkret_core::decode_ed25519_multibase(trimmed).map_err(|error| {
             CokretRouteError::BadRequest(format!("invalid multibase device_public_key: {error}"))
         });
     }
@@ -138,8 +138,8 @@ fn enforce_device_authorize_inception_key_window(
         || matches!(
             grant_payload.proof_kind,
             Some(
-                cokret_core::SessionGrantProofKind::DidBoundSignature
-                    | cokret_core::SessionGrantProofKind::PairedDeviceProof
+                arkret_core::SessionGrantProofKind::DidBoundSignature
+                    | arkret_core::SessionGrantProofKind::PairedDeviceProof
             )
         );
     if !requires_gate {
@@ -184,9 +184,9 @@ fn service_attested_provenance_error(message: impl std::fmt::Display) -> CokretR
 /// deployment has zero / multiple (the request body carries no audience, so
 /// disambiguation is impossible — fail closed).
 fn sole_principal_audience(
-    cokret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::CokretConfig,
 ) -> Result<String, CokretRouteError> {
-    match cokret_config.principal_servers.as_slice() {
+    match arkret_config.principal_servers.as_slice() {
         [server] => Ok(server.audience.clone()),
         [] => Err(CokretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -201,7 +201,7 @@ fn sole_principal_audience(
     }
 }
 
-/// `POST /_cokret/gate/account/device-enroll`
+/// `POST /_arkret/gate/account/device-enroll`
 /// (`ck.gate.account.command.enroll_device`).
 #[handler]
 pub async fn device_enroll_endpoint(
@@ -213,7 +213,7 @@ pub async fn device_enroll_endpoint(
 
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let url_builder = depot.url_builder()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
@@ -343,7 +343,7 @@ pub async fn device_enroll_endpoint(
             "grant subject is not a valid principal DID: {error}"
         )))
     })?;
-    let audience = sole_principal_audience(&cokret_config)?;
+    let audience = sole_principal_audience(&arkret_config)?;
     if grant_payload.audience != audience {
         return Err(CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
@@ -410,7 +410,7 @@ pub async fn device_enroll_endpoint(
     })?;
 
     let mut event = Event {
-        event_id: EventId::new(cokret_core::identifiers::new_prefixed_uuid7("ak:event:")).map_err(
+        event_id: EventId::new(arkret_core::identifiers::new_prefixed_uuid7("ak:event:")).map_err(
             |error| {
                 CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                     format!("failed to mint event id: {error}"),

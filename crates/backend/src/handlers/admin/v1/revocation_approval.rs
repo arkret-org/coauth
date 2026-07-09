@@ -16,7 +16,7 @@
 //! rejected — closing the previous gap where a forged/garbage proof was
 //! silently accepted and only its presence logged.
 
-use cokret_core::canonical::canonical_json_bytes;
+use arkret_core::canonical::canonical_json_bytes;
 use serde::Serialize;
 
 use crate::AppError;
@@ -81,14 +81,14 @@ pub(super) async fn verify_revocation_approval_proof(
         None => return Ok(None),
     };
 
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
 
     let approved_by = did_resolver
-        .primary_did_for_user(&cokret_config, admin_user)
+        .primary_did_for_user(&arkret_config, admin_user)
         .await
         .map_err(|error| AppError::bad_request(format!("principal_did_policy: {error}")))?;
 
@@ -107,7 +107,7 @@ pub(super) async fn verify_revocation_approval_proof(
         .resolve_did_document(
             &http_client,
             &url_builder,
-            &cokret_config,
+            &arkret_config,
             &key_store,
             repo,
             &approved_by,

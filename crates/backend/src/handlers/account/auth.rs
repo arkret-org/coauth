@@ -111,7 +111,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
     let password_manager = depot.password_manager()?;
     let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let limiter = depot.limiter()?;
     let principal_server = depot.principal_server()?;
@@ -197,7 +197,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
         &limiter,
         principal_server.as_ref(),
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &site_config,
         PasswordLoginRequestBody {
             username_or_email: input.handle,
@@ -260,7 +260,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             // (the other halves are the default-off config flag and the
             // mandatory dev-only startup escape hatch in `coauth-config`).
             #[cfg(feature = "password-bootstrap")]
-            let session_grants_enabled = cokret_config.password_login_session_grants_enabled;
+            let session_grants_enabled = arkret_config.password_login_session_grants_enabled;
             #[cfg(not(feature = "password-bootstrap"))]
             let session_grants_enabled = false;
 
@@ -268,7 +268,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 let mut viewer_repo = depot.repo().await?;
                 let viewer_did = arkret::published_principal_did_for_user(
                     &mut viewer_repo,
-                    &cokret_config,
+                    &arkret_config,
                     &user,
                 )
                 .await?;
@@ -319,7 +319,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     ));
                     return Ok(());
                 };
-                let device_id = match cokret_core::DeviceId::new(device_id.to_owned()) {
+                let device_id = match arkret_core::DeviceId::new(device_id.to_owned()) {
                     Ok(device_id) => device_id,
                     Err(error) => {
                         PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
@@ -333,7 +333,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 };
                 let grant_target = match arkret::password_login_session_grant_target(
                     &url_builder,
-                    &cokret_config,
+                    &arkret_config,
                     requested_audience.as_deref(),
                 ) {
                     Ok(target) => target,
@@ -388,7 +388,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     &encrypter,
                     &http_client,
                     &url_builder,
-                    &cokret_config,
+                    &arkret_config,
                     &user,
                     &grant_target.audience,
                 )
@@ -409,7 +409,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                     &user.localpart,
                 );
                 let localpart_sync_bearer = oidc_bridge::principal_server_operation_bearer(
-                    &cokret_config,
+                    &arkret_config,
                     &grant_target.audience,
                 );
                 if let Err(message) = oidc_bridge::ensure_soland_account_registered(
@@ -433,7 +433,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
                 }
                 let session_grant = arkret::issue_session_grant_for_audience(
                     &clock,
-                    &cokret_config,
+                    &arkret_config,
                     &key_store,
                     &user_session,
                     dpop_binding.public_jwk,

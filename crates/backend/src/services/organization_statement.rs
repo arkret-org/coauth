@@ -29,14 +29,14 @@ use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_jose::constraints::Constrainable as _;
 use coauth_keystore::Keystore;
-use cokret_core::models::{
+use arkret_core::models::{
     NoDelegationResolver, RealmOrganizationAuthorization, RealmOrganizationControlScope,
     RealmOrganizationDelegation, RealmOrganizationDelegationResolver, RealmOrganizationIssuerRole,
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
     SignatureMaterial, realm_organization_statement_signing_bytes,
     verify_realm_organization_statement,
 };
-use cokret_core::{Did, RealmId};
+use arkret_core::{Did, RealmId};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
 use signature::RandomizedSigner as _;
@@ -76,7 +76,7 @@ pub struct OrganizationStatementRequest {
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
     pub supersedes_statement_id: Option<String>,
     pub revokes_statement_id: Option<String>,
-    pub realm_frontier_digest: Option<cokret_core::Hash>,
+    pub realm_frontier_digest: Option<arkret_core::Hash>,
     pub organization_policy_ref: Option<String>,
     pub issuer: Did,
     pub issuer_role: RealmOrganizationIssuerRole,
@@ -201,9 +201,9 @@ impl RepositoryDelegationResolver {
 impl RealmOrganizationDelegationResolver for RepositoryDelegationResolver {
     fn resolve_delegation(
         &self,
-        delegation_ref: &cokret_core::models::ObjectRef,
+        delegation_ref: &arkret_core::models::ObjectRef,
         organization_id: &Did,
-    ) -> cokret_core::Result<Option<RealmOrganizationDelegation>> {
+    ) -> arkret_core::Result<Option<RealmOrganizationDelegation>> {
         let Some(delegation) = self.delegation.as_ref() else {
             return Ok(None);
         };

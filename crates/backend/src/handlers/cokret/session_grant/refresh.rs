@@ -2,13 +2,13 @@ use std::sync::{Arc, OnceLock};
 
 use chrono::{DateTime, Utc};
 use coauth_jose::jwt::Jwt;
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
-use cokret_core::error::{
+use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_GRANT_ALREADY_CONSUMED,
     ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE, ERROR_CODE_SESSION_GRANT_NOT_FOUND,
     ERROR_CODE_SESSION_LOGGED_OUT, REASON_PROOF_INVALID,
 };
-use cokret_core::{
+use arkret_core::{
     DeviceId, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome, SessionGrantRefreshProof,
     SessionGrantRefreshRequestBody,
 };
@@ -114,7 +114,7 @@ fn required_proof_hash<'a>(
 ) -> Result<&'a str, CokretRouteError> {
     value
         .as_ref()
-        .map(cokret_core::Hash::as_str)
+        .map(arkret_core::Hash::as_str)
         .ok_or_else(|| did_proof_required(format!("soft logout DID proof requires {field}")))
 }
 
@@ -240,14 +240,14 @@ fn verification_method_did(verification_method: &str) -> &str {
 /// The signing input is recomputed from the wire bytes per RFC 7515 §5.2 as
 /// `b64u(protected) "." b64u(payload_bytes)`, so no JWS library state intervenes
 /// between the directory-resolved key and the SDK Ed25519 verifier
-/// (`cokret_signatures::proof::verify_detached_ed25519_signature`).
+/// (`arkret_signatures::proof::verify_detached_ed25519_signature`).
 fn verify_detached_jws_with_device_key(
     detached_jws: &str,
     payload_bytes: &[u8],
     device_multibase: &str,
 ) -> Result<String, String> {
     use base64ct::{Base64UrlUnpadded, Encoding as _};
-    use cokret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+    use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 
     let mut parts = detached_jws.split('.');
     let header_b64u = parts.next().ok_or("missing protected header")?;
@@ -294,7 +294,7 @@ fn verify_detached_jws_with_device_key(
 
 async fn verify_soft_logout_did_proof(
     http_client: &reqwest::Client,
-    cokret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::CokretConfig,
     body: &SessionGrantRefreshRequestBody,
     prior_grant: &coauth_data::SessionGrant,
     device_id: &str,
@@ -346,7 +346,7 @@ async fn verify_soft_logout_did_proof(
     // key is itself proof the device is currently authorized.
     let resolved = resolve_authorized_device_signing_key(
         http_client,
-        cokret_config,
+        arkret_config,
         &prior_grant.audience,
         &prior_grant.subject,
         device_id,
@@ -427,7 +427,7 @@ async fn verify_soft_logout_did_proof(
 // and `debug_issue_dpop_grant` is the cotest harness seam that mints a
 // fully signed grant without going through OIDC.
 
-/// `POST /_cokret/gate/account/session-grants/refresh` — exchange a near-expiry
+/// `POST /_arkret/gate/account/session-grants/refresh` — exchange a near-expiry
 /// DPoP-bound session grant for a fresh one. The caller MUST present:
 ///
 /// * A `DPoP` header that proves possession of the same key the existing grant is bound to
@@ -446,7 +446,7 @@ pub async fn refresh_session_grant(
     use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     let clock = crate::handlers::make_clock();
@@ -600,7 +600,7 @@ pub async fn refresh_session_grant(
     )?;
     verify_soft_logout_did_proof(
         &http_client,
-        &cokret_config,
+        &arkret_config,
         &body,
         &prior_grant,
         device_id,
@@ -643,7 +643,7 @@ pub async fn refresh_session_grant(
         .collect();
     let new_material = issue_session_grant_for_audience(
         &*clock,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &browser_session,
         verification.jwk.clone(),

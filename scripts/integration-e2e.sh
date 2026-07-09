@@ -158,7 +158,7 @@ scenario_s1() {
 
     # 3. Create a Space on soland and send a message.
     stage "soland-space-create" \
-        -X POST "${SOLAND_BASE}/_cokret/self/spaces" \
+        -X POST "${SOLAND_BASE}/_arkret/self/spaces" \
         -H 'Content-Type: application/json' \
         -d "$(jq -nc --arg n "${local_part}-space" '{name: $n}')"
     # 000 = curl failed to connect (soland not running under the default
@@ -177,7 +177,7 @@ scenario_s1() {
     space_id="$(echo "${LAST_BODY}" | jq -r '.space_id // .id // empty')"
 
     stage "soland-send-message" \
-        -X POST "${SOLAND_BASE}/_cokret/self/spaces/${space_id}/messages" \
+        -X POST "${SOLAND_BASE}/_arkret/self/spaces/${space_id}/messages" \
         -H 'Content-Type: application/json' \
         -d "$(jq -nc '{body: "hello-from-e2e"}')"
     if [[ "${LAST_STATUS}" != "200" && "${LAST_STATUS}" != "201" ]]; then
@@ -278,7 +278,7 @@ scenario_s3() {
 
     # 1. Stage a proposal.
     stage "risk-action-propose" \
-        -X POST "${COAUTH_BASE}/_cokret/local/admin/accounts/${account_id}/risk-action" \
+        -X POST "${COAUTH_BASE}/_arkret/local/admin/accounts/${account_id}/risk-action" \
         -H 'Content-Type: application/json' \
         -d "$(jq -nc '{action: "lock", reason: "e2e harness", ticket: "INT-E2E-1"}')"
     if [[ "${LAST_STATUS}" == "404" ]]; then
@@ -309,7 +309,7 @@ scenario_s3() {
 
     # 2. First approval (admin A).
     stage "risk-action-approve-A" \
-        -X POST "${COAUTH_BASE}/_cokret/local/admin/accounts/${account_id}/risk-action/${proposal_id}/approve" \
+        -X POST "${COAUTH_BASE}/_arkret/local/admin/accounts/${account_id}/risk-action/${proposal_id}/approve" \
         -H 'Content-Type: application/json' \
         -H 'X-E2E-Admin-Id: admin-A' \
         -d "$(jq -nc '{action: "lock", approval_note: "approved by A"}')"
@@ -322,7 +322,7 @@ scenario_s3() {
     # distinct admin identities; the X-E2E-Admin-Id header is the
     # scaffold hook the backend uses to disambiguate them in test mode.
     stage "risk-action-approve-B" \
-        -X POST "${COAUTH_BASE}/_cokret/local/admin/accounts/${account_id}/risk-action/${proposal_id}/approve" \
+        -X POST "${COAUTH_BASE}/_arkret/local/admin/accounts/${account_id}/risk-action/${proposal_id}/approve" \
         -H 'Content-Type: application/json' \
         -H 'X-E2E-Admin-Id: admin-B' \
         -d "$(jq -nc '{action: "lock", approval_note: "approved by B"}')"
@@ -333,7 +333,7 @@ scenario_s3() {
 
     # 4. Execute.
     stage "risk-action-execute" \
-        -X POST "${COAUTH_BASE}/_cokret/local/admin/accounts/${account_id}/risk-action/${proposal_id}/execute" \
+        -X POST "${COAUTH_BASE}/_arkret/local/admin/accounts/${account_id}/risk-action/${proposal_id}/execute" \
         -H 'Content-Type: application/json' \
         -d "$(jq -nc '{action: "lock", execution_note: "e2e exec"}')"
     if [[ "${LAST_STATUS}" != "200" ]]; then

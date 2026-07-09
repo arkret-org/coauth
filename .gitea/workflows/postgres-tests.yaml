@@ -54,7 +54,7 @@ jobs:
       postgres:
         image: docker.io/library/postgres:16-alpine
         env:
-          POSTGRES_DB: cokret_test
+          POSTGRES_DB: arkret_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
@@ -66,7 +66,7 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/cokret_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/arkret_test
 
     steps:
       - name: Fetch repository

@@ -76,9 +76,9 @@ const INACTIVE: IntrospectionResponse = IntrospectionResponse {
     iss: None,
     jti: None,
     device_id: None,
-    cokret_principal_did: None,
-    cokret_device_id: None,
-    cokret_session_id: None,
+    arkret_principal_did: None,
+    arkret_device_id: None,
+    arkret_session_id: None,
 };
 
 impl Scribe for RouteError {
@@ -198,8 +198,8 @@ async fn handle_post(
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .map_err(|_| depot_missing("UrlBuilder"))?;
-    let cokret_config = depot
-        .get::<CokretConfig>("cokret_config")
+    let arkret_config = depot
+        .get::<CokretConfig>("arkret_config")
         .cloned()
         .unwrap_or_default();
 
@@ -250,7 +250,7 @@ async fn handle_post(
         &mut repo,
         &*clock,
         url_builder,
-        &cokret_config,
+        &arkret_config,
         activity_tracker,
         &form.token,
         form.token_type_hint,

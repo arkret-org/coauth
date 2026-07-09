@@ -20,7 +20,7 @@
 //! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `require_consent` policy
 //!    bit into an `Allow / ConsentRequired / Quarantine` decision.
 //! 4. On `Allow`, coauth forwards the typed invite-delivery request to the target principal's
-//!    `/_cokret/peer/invites` endpoint and returns 200. On `ConsentRequired`, coauth returns 403
+//!    `/_arkret/peer/invites` endpoint and returns 200. On `ConsentRequired`, coauth returns 403
 //!    with `consent_required`. On `Quarantine`, coauth returns 202 with `quarantined`; the actual
 //!    holder-side queue management lives elsewhere (see `TODO(quarantine- inbox)` in
 //!    `users/create.rs`).
@@ -88,10 +88,10 @@ pub struct InviteRelayRequestBody {
     #[serde(default = "default_require_consent")]
     pub require_consent: bool,
 
-    /// Typed v1 invite-delivery body for `POST /_cokret/peer/invites`.
+    /// Typed v1 invite-delivery body for `POST /_arkret/peer/invites`.
     /// When omitted, the endpoint runs as a consent gate check only.
     #[serde(default)]
-    pub invite_delivery: Option<cokret_core::InviteDeliveryRequest>,
+    pub invite_delivery: Option<arkret_core::InviteDeliveryRequest>,
 }
 
 fn default_require_consent() -> bool {
@@ -176,7 +176,7 @@ pub async fn relay_invite_with(
     scope: &str,
     require_consent: bool,
     peer_protocol_client: Option<&PeerProtocolClient<'_>>,
-    invite_delivery: Option<&cokret_core::InviteDeliveryRequest>,
+    invite_delivery: Option<&arkret_core::InviteDeliveryRequest>,
     http_client: &reqwest::Client,
 ) -> Result<RelayOutcome, RouteError> {
     let Some(principal_url) = target_principal_url else {
@@ -247,7 +247,7 @@ pub async fn post_invite_relay(
         return Err(RouteError::BadRequest("missing_required_fields".into()));
     }
 
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
@@ -273,7 +273,7 @@ pub async fn post_invite_relay(
     // any `inviter_did`. The body-supplied `inviter_did` is otherwise never
     // trusted as authentication.
     if !requester.is_admin() {
-        let caller_did = arkret::published_principal_did_for_user(&mut repo, &cokret_config, user)
+        let caller_did = arkret::published_principal_did_for_user(&mut repo, &arkret_config, user)
             .await?
             .ok_or(RouteError::Unauthorized)?;
         if caller_did != params.inviter_did {
@@ -288,7 +288,7 @@ pub async fn post_invite_relay(
     let principal_url = params
         .target_principal_url
         .clone()
-        .or_else(|| cokret_config.principal_server_url.clone());
+        .or_else(|| arkret_config.principal_server_url.clone());
 
     // Deny-by-default for the federation hop: the relay forwards a request
     // signed under coauth's service DID, so the destination MUST resolve to
@@ -297,7 +297,7 @@ pub async fn post_invite_relay(
     // This blocks the SSRF / signing-oracle vector where a caller supplies
     // an arbitrary `target_principal_url`.
     if let Some(target) = principal_url.as_ref()
-        && !cokret_config.is_trusted_outbound_target(target)
+        && !arkret_config.is_trusted_outbound_target(target)
     {
         warn!(
             host = target.host_str().unwrap_or("<none>"),
@@ -317,8 +317,8 @@ pub async fn post_invite_relay(
         }
     }
 
-    let service_did = arkret::service_did_for(&cokret_config);
-    let trust_domain = arkret::trust_domain_for(&url_builder, &cokret_config);
+    let service_did = arkret::service_did_for(&arkret_config);
+    let trust_domain = arkret::trust_domain_for(&url_builder, &arkret_config);
     let destination_service_did = params.invite_delivery.as_ref().map_or_else(
         || service_did.clone(),
         |delivery| {
@@ -387,13 +387,13 @@ mod tests {
     }
 
     fn payload() -> serde_json::Value {
-        cokret_core::InviteCreatePayload::new(
-            cokret_core::InviteId::new("ak:invite:0196419b-0000-7000-8000-000000000001").unwrap(),
-            cokret_core::Did::new("did:web:holder").unwrap(),
-            cokret_core::InviteDeliveryTarget::principal_server(
-                cokret_core::Did::new("did:web:auth.example").unwrap(),
+        arkret_core::InviteCreatePayload::new(
+            arkret_core::InviteId::new("ak:invite:0196419b-0000-7000-8000-000000000001").unwrap(),
+            arkret_core::Did::new("did:web:holder").unwrap(),
+            arkret_core::InviteDeliveryTarget::principal_server(
+                arkret_core::Did::new("did:web:auth.example").unwrap(),
             ),
-            cokret_core::Hash::new(
+            arkret_core::Hash::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             )
             .unwrap(),
@@ -405,14 +405,14 @@ mod tests {
         .unwrap()
     }
 
-    fn invite_delivery() -> cokret_core::InviteDeliveryRequest {
-        cokret_core::InviteDeliveryRequest::new(
+    fn invite_delivery() -> arkret_core::InviteDeliveryRequest {
+        arkret_core::InviteDeliveryRequest::new(
             payload(),
-            cokret_core::InviteAddress::principal_server(
-                cokret_core::Did::new("did:web:holder").unwrap(),
-                cokret_core::Did::new("did:web:auth.example").unwrap(),
+            arkret_core::InviteAddress::principal_server(
+                arkret_core::Did::new("did:web:holder").unwrap(),
+                arkret_core::Did::new("did:web:auth.example").unwrap(),
             ),
-            cokret_core::IntroductionEvidence::ExplicitAddress,
+            arkret_core::IntroductionEvidence::ExplicitAddress,
             "idem-1",
         )
     }
@@ -441,7 +441,7 @@ mod tests {
 
         // Cell-query mock: granted with matching peer/scope tag.
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .and(query_param("peer", "did:web:inviter"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
@@ -451,7 +451,7 @@ mod tests {
 
         // Forward-target mock: 200 OK accepts the typed invite delivery.
         Mock::given(method("POST"))
-            .and(path_regex(r"^/_cokret/peer/invites"))
+            .and(path_regex(r"^/_arkret/peer/invites"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "status": "accepted"
             })))
@@ -495,7 +495,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
             .expect(2)
             .mount(&server)
@@ -535,7 +535,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
@@ -599,7 +599,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(404))
             .expect(1)
@@ -607,7 +607,7 @@ mod tests {
             .await;
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .and(query_param("consent_scope", "any"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("any")))
             .expect(1)
@@ -615,7 +615,7 @@ mod tests {
             .await;
 
         Mock::given(method("POST"))
-            .and(path_regex(r"^/_cokret/peer/invites"))
+            .and(path_regex(r"^/_arkret/peer/invites"))
             .respond_with(ResponseTemplate::new(503))
             .mount(&server)
             .await;
@@ -660,7 +660,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .and(query_param("peer", "did:web:inviter"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))

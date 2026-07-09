@@ -96,12 +96,12 @@ impl AccountRecord {
     /// configured registry without blocking the runtime.
     pub(crate) async fn from_user(
         user: coauth_data::User,
-        cokret_config: &coauth_config::CokretConfig,
+        arkret_config: &coauth_config::CokretConfig,
         did_resolver: &dyn DidResolverService,
     ) -> Result<Self, AppError> {
         let status = admin_account_status(user.status);
         let principal_id_bindings =
-            preview_bindings_for_user(&user, cokret_config, did_resolver).await;
+            preview_bindings_for_user(&user, arkret_config, did_resolver).await;
         let primary_principal_binding = principal_id_bindings
             .iter()
             .find(|binding| binding.primary)
@@ -110,7 +110,7 @@ impl AccountRecord {
             .iter()
             .map(|binding| binding.did.clone())
             .collect();
-        let primary_principal_id = primary_did_for_user(&user, cokret_config, did_resolver)
+        let primary_principal_id = primary_did_for_user(&user, arkret_config, did_resolver)
             .await
             .ok()
             .flatten();
@@ -224,7 +224,7 @@ pub async fn list_accounts(
 ) -> JsonResult<PaginatedOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let (pagination, include_count) = extract_pagination(req)?;
     let params: AccountFilterParams = req.parse_queries().unwrap_or_default();
@@ -256,12 +256,12 @@ pub async fn list_accounts(
         IncludeCount::True => {
             let page = repo.user().list(filter, pagination).await?;
             let count = repo.user().count(filter).await?;
-            let page = map_page_async(page, &cokret_config, did_resolver.as_ref()).await?;
+            let page = map_page_async(page, &arkret_config, did_resolver.as_ref()).await?;
             paginated_response_for_page(page, pagination, Some(count), &base)
         }
         IncludeCount::False => {
             let page = repo.user().list(filter, pagination).await?;
-            let page = map_page_async(page, &cokret_config, did_resolver.as_ref()).await?;
+            let page = map_page_async(page, &arkret_config, did_resolver.as_ref()).await?;
             paginated_response_for_page(page, pagination, None, &base)
         }
         IncludeCount::Only => {
@@ -304,7 +304,7 @@ pub async fn get_account_by_username(
 ) -> JsonResult<SingleOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let username: String = req
         .param::<String>("username")
@@ -320,7 +320,7 @@ pub async fn get_account_by_username(
         })?;
 
     Ok(Json(SingleOutcome::new(
-        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await?,
+        AccountRecord::from_user(account, &arkret_config, did_resolver.as_ref()).await?,
         self_path,
     )))
 }
@@ -333,7 +333,7 @@ pub async fn get_account(
 ) -> JsonResult<SingleOutcome<AccountRecord>> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
 
@@ -344,7 +344,7 @@ pub async fn get_account(
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await?,
+        AccountRecord::from_user(account, &arkret_config, did_resolver.as_ref()).await?,
     )))
 }
 
@@ -386,7 +386,7 @@ pub async fn list_account_session_grants(
 ) -> JsonResult<AccountSessionGrantsOutcome> {
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
     let account = repo
@@ -394,7 +394,7 @@ pub async fn list_account_session_grants(
         .lookup(id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
-    let record = AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await?;
+    let record = AccountRecord::from_user(account, &arkret_config, did_resolver.as_ref()).await?;
     Ok(Json(AccountSessionGrantsOutcome {
         data: admin_session_grant_records(&record),
     }))
@@ -410,7 +410,7 @@ pub async fn lock_account(
         req,
         depot,
         AdminUserPatch {
-            status: Some(cokret_core::AccountStatus::Locked),
+            status: Some(arkret_core::AccountStatus::Locked),
             locked: Some(true),
             ..AdminUserPatch::default()
         },
@@ -430,7 +430,7 @@ pub async fn disable_account(
         req,
         depot,
         AdminUserPatch {
-            status: Some(cokret_core::AccountStatus::Deactivated),
+            status: Some(arkret_core::AccountStatus::Deactivated),
             deactivated: Some(true),
             ..AdminUserPatch::default()
         },
@@ -450,7 +450,7 @@ pub async fn erase_account(
         req,
         depot,
         AdminUserPatch {
-            status: Some(cokret_core::AccountStatus::ErasurePending),
+            status: Some(arkret_core::AccountStatus::ErasurePending),
             deactivated: Some(true),
             ..AdminUserPatch::default()
         },
@@ -470,7 +470,7 @@ pub async fn reset_recovery(
         req,
         depot,
         AdminUserPatch {
-            status: Some(cokret_core::AccountStatus::Locked),
+            status: Some(arkret_core::AccountStatus::Locked),
             locked: Some(true),
             ..AdminUserPatch::default()
         },
@@ -494,16 +494,16 @@ async fn patch_account(
         user: admin_user,
         ..
     } = call_context;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
-    let service_did = service_did_for(&cokret_config);
+    let service_did = service_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_did: &service_did,
-        fail_closed: cokret_config.audit_signature_fail_closed,
+        fail_closed: arkret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();
 
@@ -607,7 +607,7 @@ async fn patch_account(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        AccountRecord::from_user(account, &cokret_config, did_resolver.as_ref()).await?,
+        AccountRecord::from_user(account, &arkret_config, did_resolver.as_ref()).await?,
     )))
 }
 
@@ -616,7 +616,7 @@ async fn patch_account(
 /// drive an async closure, so we walk the edges by hand.
 async fn map_page_async(
     page: coauth_data::Page<coauth_data::User>,
-    cokret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::CokretConfig,
     did_resolver: &dyn DidResolverService,
 ) -> Result<coauth_data::Page<AccountRecord>, AppError> {
     let coauth_data::Page {
@@ -627,7 +627,7 @@ async fn map_page_async(
     let mut mapped_edges = Vec::with_capacity(edges.len());
     for edge in edges {
         let cursor = edge.cursor;
-        let node = AccountRecord::from_user(edge.node, cokret_config, did_resolver).await?;
+        let node = AccountRecord::from_user(edge.node, arkret_config, did_resolver).await?;
         mapped_edges.push(coauth_data::pagination::Edge { cursor, node });
     }
     Ok(coauth_data::Page {
@@ -642,14 +642,14 @@ async fn map_page_async(
 // above share it.
 use update::map_service_error;
 
-fn admin_account_status(status: cokret_core::AccountStatus) -> AccountStatus {
+fn admin_account_status(status: arkret_core::AccountStatus) -> AccountStatus {
     match status {
-        cokret_core::AccountStatus::Active => AccountStatus::Active,
-        cokret_core::AccountStatus::SoftLoggedOut => AccountStatus::SoftLoggedOut,
-        cokret_core::AccountStatus::Locked => AccountStatus::Locked,
-        cokret_core::AccountStatus::Suspended => AccountStatus::Suspended,
-        cokret_core::AccountStatus::Deactivated => AccountStatus::Deactivated,
-        cokret_core::AccountStatus::ErasurePending => AccountStatus::ErasurePending,
+        arkret_core::AccountStatus::Active => AccountStatus::Active,
+        arkret_core::AccountStatus::SoftLoggedOut => AccountStatus::SoftLoggedOut,
+        arkret_core::AccountStatus::Locked => AccountStatus::Locked,
+        arkret_core::AccountStatus::Suspended => AccountStatus::Suspended,
+        arkret_core::AccountStatus::Deactivated => AccountStatus::Deactivated,
+        arkret_core::AccountStatus::ErasurePending => AccountStatus::ErasurePending,
     }
 }
 
@@ -1134,7 +1134,7 @@ mod tests {
         assert_eq!(body["data"][0]["active"], true);
         assert_eq!(body["meta"]["supports_write_operations"], true);
 
-        let recovery_did = crate::handlers::arkret::service_did_for(&state.cokret_config);
+        let recovery_did = crate::handlers::arkret::service_did_for(&state.arkret_config);
         let nonce = "did-binding-add-nonce";
         let control_proof = sign_did_binding_control_proof(&state, &recovery_did, user.id, nonce);
         let response = state
@@ -1267,9 +1267,9 @@ mod tests {
         // identity-did §5.1 / §3.6: bind the proof to this receiver (local
         // service DID) and this deployment (trust_domain), with a bounded
         // freshness window (exp - iat <= 300s).
-        let audience = crate::handlers::arkret::service_did_for(&state.cokret_config);
+        let audience = crate::handlers::arkret::service_did_for(&state.arkret_config);
         let trust_domain =
-            crate::handlers::arkret::trust_domain_for(&state.url_builder, &state.cokret_config);
+            crate::handlers::arkret::trust_domain_for(&state.url_builder, &state.arkret_config);
         let iat = state.clock.now();
         let claims = BindingStatementClaims {
             schema: DID_BINDING_CONTROL_PROOF_SCHEMA.to_owned(),
@@ -1282,7 +1282,7 @@ mod tests {
             exp: iat + chrono::Duration::seconds(5 * 60),
         };
         let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
-        let payload = cokret_core::canonical::canonical_json_bytes(&claims).unwrap();
+        let payload = arkret_core::canonical::canonical_json_bytes(&claims).unwrap();
         let payload_b64 = Base64UrlUnpadded::encode_string(&payload);
         let signing_input = format!("{header_b64}.{payload_b64}");
         let mut rng = state.rng();

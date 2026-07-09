@@ -1,5 +1,5 @@
 //! Product-face (`/_coauth/account/session-grants`) session-grant admin
-//! endpoints: list and revoke. These are NOT `/_cokret` protocol operations
+//! endpoints: list and revoke. These are NOT `/_arkret` protocol operations
 //! (issue / refresh / introspect / logout live in `handlers::arkret`); they
 //! reuse the protocol module's caller authorization plumbing only.
 

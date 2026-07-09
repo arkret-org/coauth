@@ -170,7 +170,7 @@ pub async fn accept_authorization_consent(
     clock: &BoxClock,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     policy_factory: &PolicyFactory,
     browser_session: &BrowserSession,
     grant_id: Ulid,
@@ -229,10 +229,10 @@ pub async fn accept_authorization_consent(
             .get_last_authentication(browser_session)
             .await?;
         let subject_did =
-            crate::handlers::arkret::oidc_subject_for_user(cokret_config, &browser_session.user);
+            crate::handlers::arkret::oidc_subject_for_user(arkret_config, &browser_session.user);
         let principal_did = crate::handlers::arkret::published_principal_did_for_user(
             &mut repo,
-            cokret_config,
+            arkret_config,
             &browser_session.user,
         )
         .await?;

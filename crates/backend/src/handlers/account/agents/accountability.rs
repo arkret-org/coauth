@@ -19,7 +19,7 @@ use coauth_data::accountability::{
     AccountabilityGrantFanoutState, AccountabilitySubjectKind, NewAccountabilityGrant,
 };
 use coauth_data::audit::AdminOperation;
-use cokret_core::identifiers::{GrantId, new_prefixed_uuid7};
+use arkret_core::identifiers::{GrantId, new_prefixed_uuid7};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -145,8 +145,8 @@ pub async fn post_accountability_grant(
         .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
 
     // soland / sodmin only — reject browser sessions and end-user bearers.
-    let cokret_config = depot.cokret_config()?;
-    authn_internal_caller(req, &cokret_config)?;
+    let arkret_config = depot.arkret_config()?;
+    authn_internal_caller(req, &arkret_config)?;
 
     let body: AccountabilityGrantRequestBody = req
         .parse_json()
@@ -177,9 +177,9 @@ pub async fn post_accountability_grant(
     let capabilities_digest =
         accountability_capabilities_digest(&agent_principal_id, &controller_did, &capabilities)?;
     let idempotency_key = accountability_grant_idempotency_key(&accountability_grant_id);
-    let service_did = service_did_for(&cokret_config);
+    let service_did = service_did_for(&arkret_config);
     let fanout_payload =
-        build_soland_fanout_payload(&response, &raw_payload_digest, &service_did, &cokret_config)?;
+        build_soland_fanout_payload(&response, &raw_payload_digest, &service_did, &arkret_config)?;
 
     let mut repo = depot.repo().await?;
     if repo
@@ -265,7 +265,7 @@ pub async fn post_accountability_grant(
         &*clock,
         &key_store,
         &service_did,
-        cokret_config.audit_signature_fail_closed,
+        arkret_config.audit_signature_fail_closed,
         AdminOperation::Other("accountability_grant_issued".to_owned()),
         "agent",
         None,
@@ -348,9 +348,9 @@ fn build_soland_fanout_payload(
     response: &AccountabilityGrantOutcome,
     raw_payload_digest: &str,
     service_did: &str,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
 ) -> Result<serde_json::Value, AppError> {
-    let principal_servers: Vec<_> = cokret_config
+    let principal_servers: Vec<_> = arkret_config
         .principal_servers
         .iter()
         .map(|server| {
@@ -445,7 +445,7 @@ pub async fn revoke_accountability_grant_by_id(
 /// bearer configured under
 /// `arkret.principal_servers[].session_grant_introspection_bearer` —
 /// shared with the existing session-grant introspection path.
-fn authn_internal_caller(req: &Request, cokret_config: &CokretConfig) -> Result<(), AppError> {
+fn authn_internal_caller(req: &Request, arkret_config: &CokretConfig) -> Result<(), AppError> {
     let authorization = req
         .headers()
         .get(http::header::AUTHORIZATION)
@@ -461,7 +461,7 @@ fn authn_internal_caller(req: &Request, cokret_config: &CokretConfig) -> Result<
             )
         })?;
 
-    let accepted = cokret_config.principal_servers.iter().any(|server| {
+    let accepted = arkret_config.principal_servers.iter().any(|server| {
         server
             .session_grant_introspection_bearer
             .as_deref()

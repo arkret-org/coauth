@@ -6,8 +6,8 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
-use cokret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -56,7 +56,7 @@ pub(super) fn runtime_public_key_material_from_spec(
     public_key: &Value,
     verification_method: &str,
 ) -> Result<String, AgentAuthRejection> {
-    let key: cokret_core::PublicKey =
+    let key: arkret_core::PublicKey =
         serde_json::from_value(public_key.clone()).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     if key.kty != "OKP"
         || key.kid != verification_method
@@ -69,7 +69,7 @@ pub(super) fn runtime_public_key_material_from_spec(
     let raw: [u8; 32] = raw
         .try_into()
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    Ok(cokret_core::ed25519_pubkey_to_did_key_multibase(&raw))
+    Ok(arkret_core::ed25519_pubkey_to_did_key_multibase(&raw))
 }
 
 /// Compute the canonical SHA-256 digest of `value`, mapping the canonical

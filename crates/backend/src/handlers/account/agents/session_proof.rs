@@ -10,8 +10,8 @@ use coauth_config::CokretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::accountability::{AccountabilityGrant, AccountabilitySubjectKind};
 use coauth_data::agent_key::NewAgentSessionProofReplay;
-use cokret_core::canonical::canonical_sha256;
-use cokret_core::identifiers::new_prefixed_uuid7;
+use arkret_core::canonical::canonical_sha256;
+use arkret_core::identifiers::new_prefixed_uuid7;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -83,7 +83,7 @@ pub struct AgentSessionAuthorization {
     /// `additionalProperties:false`, agent-only four fields). Distinct from the
     /// JWT-internal `scope_details` above, which carries the canonical
     /// constraint projection soland needs.
-    pub wire_scope_details: cokret_core::SessionGrantScopeDetails,
+    pub wire_scope_details: arkret_core::SessionGrantScopeDetails,
     /// Capped agent session TTL (≤ 15 min).
     pub ttl: chrono::Duration,
 }
@@ -122,7 +122,7 @@ struct AgentScopeRequestInput {
     #[serde(default)]
     track_names: Vec<String>,
     #[serde(default)]
-    participation: Vec<cokret_core::AgentParticipationEntry>,
+    participation: Vec<arkret_core::AgentParticipationEntry>,
 }
 
 /// Validate an `agent_key_proof` session-grant request. On success returns the
@@ -137,8 +137,8 @@ pub async fn validate_agent_session_proof(
     rng: &mut (dyn rand_core::RngCore + Send),
     clock: &dyn coauth_data::Clock,
     url_builder: &coauth_data::UrlBuilder,
-    cokret_config: &CokretConfig,
-    body: &cokret_core::SessionGrantRequestBody,
+    arkret_config: &CokretConfig,
+    body: &arkret_core::SessionGrantRequestBody,
 ) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
     let now = clock.now();
     let proof = &body.proof;
@@ -163,7 +163,7 @@ pub async fn validate_agent_session_proof(
     if expires_at <= now {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    if !is_allowed_session_grant_audience(url_builder, cokret_config, &proof.audience) {
+    if !is_allowed_session_grant_audience(url_builder, arkret_config, &proof.audience) {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
     if !proof
@@ -349,16 +349,16 @@ pub async fn validate_agent_session_proof(
     let wire_realm_ids = effective_scope
         .realm_ids
         .iter()
-        .map(|id| cokret_core::RealmId::new(id.clone()))
+        .map(|id| arkret_core::RealmId::new(id.clone()))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let wire_strand_ids = effective_scope
         .strand_ids
         .iter()
-        .map(|id| cokret_core::StrandId::new(id.clone()))
+        .map(|id| arkret_core::StrandId::new(id.clone()))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let wire_scope_details = cokret_core::SessionGrantScopeDetails {
+    let wire_scope_details = arkret_core::SessionGrantScopeDetails {
         realm_ids: wire_realm_ids,
         strand_ids: wire_strand_ids,
         track_names: effective_scope.allowed_tracks.clone(),
@@ -367,7 +367,7 @@ pub async fn validate_agent_session_proof(
 
     // TTL: cap to the spec ceiling (≤ 15 min), never wider than the
     // (human-oriented) configured grant TTL.
-    let configured = cokret_config.session_grant_ttl;
+    let configured = arkret_config.session_grant_ttl;
     let ttl = if configured < AGENT_SESSION_MAX_TTL {
         configured
     } else {
@@ -385,7 +385,7 @@ pub async fn validate_agent_session_proof(
 }
 
 fn canonical_session_grant_request_digest_without_signature(
-    body: &cokret_core::SessionGrantRequestBody,
+    body: &arkret_core::SessionGrantRequestBody,
 ) -> Result<String, AgentAuthRejection> {
     let mut value = serde_json::to_value(body).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let proof = value
@@ -729,7 +729,7 @@ fn applet_service_scope_token(token: &str) -> bool {
 }
 
 fn content_capability_scope_token(token: &str) -> Result<bool, AgentAuthRejection> {
-    cokret_core::schema::embedded_capability_action(token)
+    arkret_core::schema::embedded_capability_action(token)
         .map(|descriptor| descriptor.is_some())
         .map_err(|_| AgentAuthRejection::ProofInvalid)
 }
@@ -1167,7 +1167,7 @@ mod tests {
             }),
             accountable_principal_id: "did:web:controller.example".to_owned(),
             agent_key_scope: AGENT_KEY_SCOPE_LIMITED.to_owned(),
-            audience: vec!["https://arkret.example/_cokret".to_owned()],
+            audience: vec!["https://arkret.example/_arkret".to_owned()],
             issued_at: now,
             expires_at: now + chrono::Duration::minutes(15),
             pairing_request_id: "ak:pairing:01970000-0000-7000-8000-000000000020".to_owned(),
@@ -1197,7 +1197,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#runtime-key-1",
-            "https://arkret.example/_cokret",
+            "https://arkret.example/_arkret",
         )
         .expect("active matching authorization should pass");
     }
@@ -1213,7 +1213,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#runtime-key-1",
-            "https://arkret.example/_cokret",
+            "https://arkret.example/_arkret",
         )
         .expect_err("revoked runtime keys must fail closed");
 
@@ -1231,7 +1231,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#runtime-key-1",
-            "https://arkret.example/_cokret",
+            "https://arkret.example/_arkret",
         )
         .expect_err("expired agent key authorization must fail closed");
 
@@ -1248,7 +1248,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#runtime-key-1",
-            "https://evil.example/_cokret",
+            "https://evil.example/_arkret",
         )
         .expect_err("authorization audience must bind the target service");
 
@@ -1265,7 +1265,7 @@ mod tests {
             now,
             "did:web:agent.example",
             "did:web:agent.example#other-key",
-            "https://arkret.example/_cokret",
+            "https://arkret.example/_arkret",
         )
         .expect_err("authorization must bind the exact runtime verification method");
 
@@ -1683,8 +1683,8 @@ mod tests {
 
     #[test]
     fn session_request_digest_ignores_signature_but_binds_scope() {
-        let mut body = cokret_core::SessionGrantRequestBody {
-            principal_id: Some(cokret_core::Did::new("did:web:agent.example").unwrap()),
+        let mut body = arkret_core::SessionGrantRequestBody {
+            principal_id: Some(arkret_core::Did::new("did:web:agent.example").unwrap()),
             device_id: None,
             requested_scope: vec!["ck.message.create".to_owned()],
             agent_key_authorization_ref: Some(
@@ -1695,15 +1695,15 @@ mod tests {
             }),
             dpop_binding_proof: None,
             applet_delegation: None,
-            proof: cokret_core::SessionGrantRequestProof {
-                proof_kind: cokret_core::SessionGrantProofKind::AgentKeyProof,
+            proof: arkret_core::SessionGrantRequestProof {
+                proof_kind: arkret_core::SessionGrantProofKind::AgentKeyProof,
                 challenge: "challenge-abc".to_owned(),
-                request_canonical_digest: cokret_core::Hash::new(format!(
+                request_canonical_digest: arkret_core::Hash::new(format!(
                     "sha256:{}",
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience: "https://arkret.example/_cokret".to_owned(),
+                audience: "https://arkret.example/_arkret".to_owned(),
                 expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
                 signature: "sig-a".to_owned(),
                 verification_method: Some("did:web:agent.example#runtime-key-1".to_owned()),
@@ -1718,7 +1718,7 @@ mod tests {
         };
         let digest = canonical_session_grant_request_digest_without_signature(&body)
             .expect("request digest should compute");
-        body.proof.request_canonical_digest = cokret_core::Hash::new(digest.clone()).unwrap();
+        body.proof.request_canonical_digest = arkret_core::Hash::new(digest.clone()).unwrap();
 
         let mut signature_changed = body.clone();
         signature_changed.proof.signature = "sig-b".to_owned();

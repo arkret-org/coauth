@@ -2,8 +2,8 @@ use chrono::{DateTime, Duration, Utc};
 use coauth_data::{BrowserSession, SessionGrant, User};
 use coauth_jose::jwk::{PublicJsonWebKey, PublicJsonWebKeySet};
 use coauth_jose::jwt::Jwt;
-use cokret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
-use cokret_core::{
+use arkret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
+use arkret_core::{
     DeviceId, SessionGrantIntrospectGrant, SessionGrantIntrospectOutcome,
     SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
     SessionGrantIntrospectionProof,
@@ -205,7 +205,7 @@ pub async fn introspect_session_grant(
 
     let caller = require_session_grant_caller(req, depot).await?;
     let clock = crate::handlers::make_clock();
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let mut repo = depot.repo().await?;
 
     let grant = if let Some(id) = body.id.as_ref() {
@@ -265,7 +265,7 @@ pub async fn introspect_session_grant(
 
     let user = if let Some(browser_session) = browser_session.as_ref() {
         Some(browser_session.user.clone())
-    } else if let Some(user_id) = parse_local_user_did_for(&cokret_config, &grant.subject) {
+    } else if let Some(user_id) = parse_local_user_did_for(&arkret_config, &grant.subject) {
         repo.user()
             .lookup(user_id)
             .await

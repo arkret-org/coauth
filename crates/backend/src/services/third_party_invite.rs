@@ -73,7 +73,7 @@ use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use coauth_jose::jwt::Jwt;
 use coauth_keystore::Keystore;
-use cokret_core::{
+use arkret_core::{
     Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
 };
 use serde::{Deserialize, Serialize};
@@ -258,7 +258,7 @@ pub fn offline_token_commitment(token: &[u8], salt: &[u8]) -> String {
     let mut buf = Vec::with_capacity(token.len() + salt.len());
     buf.extend_from_slice(token);
     buf.extend_from_slice(salt);
-    cokret_core::canonical::sha256_digest(buf)
+    arkret_core::canonical::sha256_digest(buf)
 }
 
 /// Helper: schedule a zeroize task for a terminal record. Today this
@@ -386,7 +386,7 @@ pub struct VerifierCtx<'a> {
     /// Shared services the resolver needs.
     pub http_client: &'a reqwest::Client,
     pub url_builder: &'a UrlBuilder,
-    pub cokret_config: &'a CokretConfig,
+    pub arkret_config: &'a CokretConfig,
     pub key_store: &'a Keystore,
     pub repo: &'a mut BoxRepository,
 }
@@ -546,7 +546,7 @@ pub async fn verify_invite(
     let verification = verify_verification_service_proof(
         ctx.http_client,
         ctx.url_builder,
-        ctx.cokret_config,
+        ctx.arkret_config,
         ctx.key_store,
         ctx.repo,
         ctx.did_resolver,
@@ -585,7 +585,7 @@ pub async fn verify_invite(
     let subject_claims = verify_subject_proof(
         ctx.http_client,
         ctx.url_builder,
-        ctx.cokret_config,
+        ctx.arkret_config,
         ctx.key_store,
         ctx.repo,
         ctx.did_resolver,
@@ -637,7 +637,7 @@ pub async fn verify_invite(
 async fn verify_subject_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -671,7 +671,7 @@ async fn verify_subject_proof(
         .resolve_did_document(
             http_client,
             url_builder,
-            cokret_config,
+            arkret_config,
             key_store,
             repo,
             &claims.inviter_did,
@@ -757,7 +757,7 @@ pub use crate::services::did_binding_proof::VerificationServiceProofClaims as Ve
 
 #[cfg(test)]
 mod tests {
-    use cokret_core::Hash;
+    use arkret_core::Hash;
 
     use super::*;
 

@@ -9,10 +9,10 @@
 //! When the age exceeds the 24h hard cap, the receiver MUST reject any
 //! `ck.session.grant` / `ck.device.authorize` / long-lived capability /
 //! ordinary DID update signed by that inception key, with reason code
-//! [`cokret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`].
+//! [`arkret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`].
 //!
 //! This module is the thin, hermetic enforcement primitive: it wraps the SDK
-//! age check ([`cokret_core::inception_key_age_exceeded`]) and adds the
+//! age check ([`arkret_core::inception_key_age_exceeded`]) and adds the
 //! **fail-closed** discipline for missing / unparseable anchors. The 24h cap is
 //! a protocol hard limit sourced from the SDK constant — it is intentionally
 //! *not* configurable.
@@ -29,7 +29,7 @@
 //! reason code on every mount point.
 
 use chrono::{DateTime, Utc};
-use cokret_core::inception_key_age_exceeded;
+use arkret_core::inception_key_age_exceeded;
 use serde_json::Value;
 
 const INCEPTION_KEY_VERSION_TIME: &str = "inception_key_version_time";
@@ -43,7 +43,7 @@ const VERSION_TIME_CAMEL: &str = "versionTime";
 /// Returns `Ok(())` only when the inception key is within the 24h hard cap.
 /// Returns [`InceptionKeyWindowError::Exceeded`] when the age exceeds the cap —
 /// the caller MUST reject the issuance and surface
-/// [`cokret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`].
+/// [`arkret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`].
 ///
 /// A `bootstrap_ts` in the future (anchor clock ahead of the receiver) is not
 /// treated as exceeded here, matching the SDK contract; that anomaly is a
@@ -119,7 +119,7 @@ pub enum InceptionKeyWindowError {
     /// The inception key is past its 24h online window (or its bootstrap
     /// anchor was missing / unparseable, which fails closed). Maps to wire
     /// reason code
-    /// [`cokret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`].
+    /// [`arkret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`].
     #[error("inception key online window (24h hard cap) exceeded")]
     Exceeded,
 }
@@ -129,7 +129,7 @@ impl InceptionKeyWindowError {
     /// protocol never drift.
     #[must_use]
     pub fn reason_code(&self) -> &'static str {
-        cokret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED
+        arkret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED
     }
 }
 

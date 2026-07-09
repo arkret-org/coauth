@@ -23,7 +23,7 @@ The `doctor` command performs the following diagnostics:
 - **Issuer hygiene** — Warns when the configured issuer is not HTTPS.
 - **Principal Server configuration** — Reports the configured `arkret.principal_servers` entries.
 - **OpenID discovery** — Fetches `/.well-known/openid-configuration` and verifies its issuer.
-- **Arkret discovery** — Fetches `/_cokret/describe`.
+- **Arkret discovery** — Fetches `/_arkret/describe`.
 
 ### Interpreting the output
 

@@ -30,7 +30,7 @@ pub async fn exchange_device_code(
     client: &Client,
     key_store: &Keystore,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     site_config: &SiteConfig,
     mut repo: BoxRepository,
     principal_server: &Arc<dyn ConnectorAdmin>,
@@ -199,10 +199,10 @@ pub async fn exchange_device_code(
             "Generating ID token because openid scope is present"
         );
         let subject_did =
-            crate::handlers::arkret::oidc_subject_for_user(cokret_config, &browser_session.user);
+            crate::handlers::arkret::oidc_subject_for_user(arkret_config, &browser_session.user);
         let principal_did = crate::handlers::arkret::published_principal_did_for_user(
             &mut repo,
-            cokret_config,
+            arkret_config,
             &browser_session.user,
         )
         .await?;

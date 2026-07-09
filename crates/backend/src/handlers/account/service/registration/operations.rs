@@ -133,7 +133,7 @@ pub async fn begin_password_registration(
 
     if request.handle.is_empty() {
         issues.push(BeginPasswordRegistrationIssue::HandleRequired);
-    } else if cokret_core::normalize_handle_localpart(&request.handle).is_err() {
+    } else if arkret_core::normalize_handle_localpart(&request.handle).is_err() {
         // HDL-1 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) —
         // wire-level NFC + UTS#39 confusable skeleton + script-mixed
         // reject. MUST run before any storage / availability lookup so

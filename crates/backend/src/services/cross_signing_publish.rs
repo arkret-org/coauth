@@ -31,7 +31,7 @@ use arkret::crypto_protocol::{
     CrossSigningKeyRecord, CrossSigningPublishContent, SignedCrossSigningKey,
     cross_signing_publish_cell_subject,
 };
-use cokret_core::{Did, TypedTrustDomainId};
+use arkret_core::{Did, TypedTrustDomainId};
 use thiserror::Error;
 
 /// Errors raised by the cross-signing publish issuer.

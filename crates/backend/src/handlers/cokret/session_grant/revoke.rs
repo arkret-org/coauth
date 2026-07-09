@@ -4,12 +4,12 @@ use chrono::{DateTime, Duration, Utc};
 use coauth_data::oauth::SessionGrantFilter;
 use coauth_data::{Pagination, RepositoryAccess, SessionGrant};
 use coauth_jose::jwt::Jwt;
-use cokret_core::error::{
+use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_INVALID_PARAM,
     ERROR_CODE_SESSION_GRANT_NOT_FOUND, ERROR_CODE_SESSION_REVOKE_SELECTOR_CONFLICT,
     REASON_PROOF_INVALID,
 };
-use cokret_core::{
+use arkret_core::{
     AccountLifecycleProof, DeviceId, Did, GrantId, SessionRevokeOutcome, SessionRevokeRequestBody,
 };
 use salvo::prelude::*;
@@ -194,7 +194,7 @@ fn grant_is_agent_delegated_to_controller(grant: &SessionGrant, controller_did: 
     let Some(payload) = grant_payload(grant) else {
         return false;
     };
-    if payload.proof_kind != Some(cokret_core::SessionGrantProofKind::AgentKeyProof) {
+    if payload.proof_kind != Some(arkret_core::SessionGrantProofKind::AgentKeyProof) {
         return false;
     }
     payload
@@ -248,7 +248,7 @@ fn validate_lifecycle_proof_window(
 async fn verify_cross_session_lifecycle_proof(
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    cokret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::CokretConfig,
     key_store: &coauth_keystore::Keystore,
     repo: &mut coauth_data::BoxRepository,
     did_resolver: &dyn crate::services::did_resolver::DidResolverService,
@@ -307,7 +307,7 @@ async fn verify_cross_session_lifecycle_proof(
         .resolve_did_document(
             http_client,
             url_builder,
-            cokret_config,
+            arkret_config,
             key_store,
             repo,
             &current_grant.subject,
@@ -353,7 +353,7 @@ async fn verify_cross_session_lifecycle_proof(
 
     let replay_key = format!(
         "{}|{}|{}|{}|{}|{}",
-        cokret_core::SESSION_REVOKE_OPERATION_ID,
+        arkret_core::SESSION_REVOKE_OPERATION_ID,
         current_grant.subject,
         current_device_id,
         proof.audience,
@@ -448,7 +448,7 @@ pub async fn revoke_session_grant_endpoint(
     depot: &Depot,
 ) -> Result<Json<SessionRevokeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
@@ -458,7 +458,7 @@ pub async fn revoke_session_grant_endpoint(
     let body = parse_session_revoke_body(req).await?;
     let selector = revoke_selector(&body)?;
 
-    let service_did = Did::new(service_did_for(&cokret_config)).map_err(|error| {
+    let service_did = Did::new(service_did_for(&arkret_config)).map_err(|error| {
         CokretRouteError::coded(
             StatusCode::BAD_REQUEST,
             ERROR_CODE_INVALID_PARAM,
@@ -505,7 +505,7 @@ pub async fn revoke_session_grant_endpoint(
         verify_cross_session_lifecycle_proof(
             &http_client,
             &url_builder,
-            &cokret_config,
+            &arkret_config,
             &key_store,
             &mut repo,
             &*did_resolver,

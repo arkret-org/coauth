@@ -36,7 +36,7 @@ use url::Url;
 pub struct DbConnectorAdmin {
     server_name: String,
     repository_factory: BoxRepositoryFactory,
-    cokret_config: CokretConfig,
+    arkret_config: CokretConfig,
     http_client: reqwest::Client,
 }
 
@@ -47,13 +47,13 @@ impl DbConnectorAdmin {
     pub fn new(
         server_name: impl Into<String>,
         repository_factory: BoxRepositoryFactory,
-        cokret_config: CokretConfig,
+        arkret_config: CokretConfig,
         http_client: reqwest::Client,
     ) -> Self {
         Self {
             server_name: server_name.into(),
             repository_factory,
-            cokret_config,
+            arkret_config,
             http_client,
         }
     }
@@ -68,10 +68,10 @@ struct CapabilityFanoutTarget {
 
 pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
     http_client: &reqwest::Client,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     request: &PrincipalCapabilityFanoutRequest,
 ) -> Result<(), anyhow::Error> {
-    let targets = capability_fanout_targets(cokret_config, request.body())?;
+    let targets = capability_fanout_targets(arkret_config, request.body())?;
     if targets.is_empty() {
         tracing::warn!(
             event_id = request.event_id(),
@@ -95,7 +95,7 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
 //
 // coauth issues the collaboration capability fanout in its Auth-Server role: it
 // holds no principal session and signs as the issuing *service* DID, not a
-// logged-in principal device. The protocol path `POST /_cokret/self/events`
+// logged-in principal device. The protocol path `POST /_arkret/self/events`
 // (submitting a `ck.capability.grant` Event) is gated to `user_session` /
 // `device_proof` / a principal-authorised delegated service signature
 // (service-http-binding.md §2.1 row `self/events` + §189; api-conventions.md
@@ -108,7 +108,7 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
 //
 // Both facts point to the same ruling: this belongs on soland's own
 // negative-space root per service-http-binding.md §2.1.3(b) (product /
-// deployment-private capability MUST NOT occupy a `/_cokret/*` protocol
+// deployment-private capability MUST NOT occupy a `/_arkret/*` protocol
 // segment). soland exposes it as `org.arkret.soland.root.authz.capability_fanout
 // .submit`, bearer-gated by the shared `embedded_webvh_registration_bearer`,
 // returning an explicit `authz_state` projection ack. The coauth↔soland S2S
@@ -168,7 +168,7 @@ async fn submit_collaboration_capability_fanout_to_target(
 }
 
 fn capability_fanout_targets(
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     body: &CapabilityFanoutBody,
 ) -> Result<Vec<CapabilityFanoutTarget>, anyhow::Error> {
     let entries = &body.principal_servers;
@@ -194,7 +194,7 @@ fn capability_fanout_targets(
             .context("principal_servers[].endpoint is required")?;
         let endpoint = Url::parse(endpoint_raw)
             .with_context(|| format!("principal server {name} endpoint is invalid"))?;
-        let configured = configured_principal_server(cokret_config, name, &endpoint)
+        let configured = configured_principal_server(arkret_config, name, &endpoint)
             .with_context(|| format!("principal server {name} is not configured"))?;
         let bearer = configured
             .embedded_webvh_registration_bearer
@@ -215,22 +215,22 @@ fn capability_fanout_targets(
 }
 
 fn configured_principal_server<'a>(
-    cokret_config: &'a CokretConfig,
+    arkret_config: &'a CokretConfig,
     name: &str,
     endpoint: &Url,
 ) -> Option<&'a PrincipalServerConfig> {
-    cokret_config
+    arkret_config
         .principal_servers
         .iter()
         .find(|server| server.name == name && endpoint_matches(&server.endpoint, endpoint))
         .or_else(|| {
-            cokret_config
+            arkret_config
                 .principal_servers
                 .iter()
                 .find(|server| server.name == name)
         })
         .or_else(|| {
-            cokret_config
+            arkret_config
                 .principal_servers
                 .iter()
                 .find(|server| endpoint_matches(&server.endpoint, endpoint))
@@ -310,7 +310,7 @@ mod tests {
     const EVENT: &str = "ak:event:01970000-0000-7000-8000-000000000001";
     const GRANT: &str = "ak:grant:01970000-0000-7000-8000-000000000002";
 
-    fn cokret_config() -> CokretConfig {
+    fn arkret_config() -> CokretConfig {
         CokretConfig {
             principal_servers: vec![PrincipalServerConfig {
                 name: "soland-dev".to_owned(),
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn fanout_targets_resolve_payload_principal_servers_to_configured_bearer() {
-        let targets = capability_fanout_targets(&cokret_config(), &body()).unwrap();
+        let targets = capability_fanout_targets(&arkret_config(), &body()).unwrap();
 
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].name, "soland-dev");
@@ -483,7 +483,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
     ) -> Result<(), anyhow::Error> {
         submit_collaboration_capability_fanout_to_principal_servers(
             &self.http_client,
-            &self.cokret_config,
+            &self.arkret_config,
             request,
         )
         .await?;

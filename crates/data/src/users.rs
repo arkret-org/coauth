@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
-use cokret_core::{AccountStatus, Handle};
+use arkret_core::{AccountStatus, Handle};
 use diesel::pg::Pg;
 use diesel::{Queryable, deserialize, sql_types};
 use rand_core::RngCore;

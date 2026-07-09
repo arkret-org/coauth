@@ -41,7 +41,7 @@ The following surfaces are tracked compatibility contracts:
 - `/.well-known/arkret/openapi.yaml`
 - `/_coauth/admin/openapi.yaml` (the canonical `sodmin` integration
   contract)
-- `/_cokret/describe` and the rest of `/_cokret/*`
+- `/_arkret/describe` and the rest of `/_arkret/*`
 - The CLI subcommand surface (`server`, `worker`, `manage`, `database`,
   `config`, `templates`, `doctor`).
 

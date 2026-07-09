@@ -5,7 +5,7 @@ use coauth_data::queue::{
     CollaborationCapabilityFanoutJob, CollaborationCapabilityFanoutOperation,
 };
 use coauth_principal::PrincipalCapabilityFanoutRequest;
-use cokret_core::canonical::canonical_sha256;
+use arkret_core::canonical::canonical_sha256;
 
 use crate::State;
 use crate::new_queue::{JobContext, JobError, RunnableJob};

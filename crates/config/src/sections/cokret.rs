@@ -10,7 +10,7 @@ use super::ConfigurationSection;
 ///
 /// A `trust_domain` value MUST match `ck:trust_domain:<scope>` where
 /// `<scope>` is `[a-z0-9._:-]{1,128}`. This mirrors the SDK validator
-/// `cokret_core::TypedTrustDomainId` so coauth and the Realm policy
+/// `arkret_core::TypedTrustDomainId` so coauth and the Realm policy
 /// engine agree on the exact byte-form. Validate via
 /// [`validate_trust_domain`].
 const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";
@@ -150,7 +150,7 @@ pub struct CokretConfig {
     ///
     /// These are the DPoP-bound JWT grants returned by the REST auth bridge
     /// login/exchange paths and rotated through
-    /// `/_cokret/gate/account/session-grants/refresh`. Default: 28800 (8h) —
+    /// `/_arkret/gate/account/session-grants/refresh`. Default: 28800 (8h) —
     /// access bearers minted from a grant are short-lived (capped Principal-Server
     /// side), so a multi-hour grant gives a normal working session without
     /// long-lived bearers, within the spec ceiling (minutes-to-hours).
@@ -164,7 +164,7 @@ pub struct CokretConfig {
 
     /// Audience string expected by Arkret admin integrations.
     ///
-    /// When omitted, the backend falls back to the local `/_cokret` endpoint.
+    /// When omitted, the backend falls back to the local `/_arkret` endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_audience: Option<String>,
 
@@ -424,7 +424,7 @@ impl CokretConfig {
     /// `ck:trust_domain:<scope>` wire format. Returns the borrowed
     /// scope half on success so call-sites can build the
     /// `TypedTrustDomainId` directly. Delegates the acceptance check to
-    /// the SDK validator `cokret_identifiers::is_trust_domain` so the
+    /// the SDK validator `arkret_identifiers::is_trust_domain` so the
     /// config side and the SDK never drift; the prefix strip below only
     /// recovers the `<scope>` slice for the success return.
     ///
@@ -434,7 +434,7 @@ impl CokretConfig {
     /// `ck:trust_domain:<scope>` (missing prefix, empty/oversized scope,
     /// bad leading byte, or any byte outside `[a-z0-9._:-]`).
     pub fn validate_trust_domain(value: &str) -> Result<&str, &'static str> {
-        if !cokret_identifiers::is_trust_domain(value) {
+        if !arkret_identifiers::is_trust_domain(value) {
             return Err(
                 "trust_domain MUST be `ck:trust_domain:<scope>` with scope `[a-z0-9][a-z0-9._:-]{0,127}`",
             );
@@ -599,8 +599,8 @@ pub struct PrincipalServerConfig {
 
     /// Optional static bearer token accepted when this Principal Server calls
     /// coauth's session-grant introspection endpoint or Auth-side logout
-    /// sub-operation (`/_cokret/gate/account/session-grants/introspect`,
-    /// `/_cokret/gate/account/auth-sessions/logout`). This avoids requiring a
+    /// sub-operation (`/_arkret/gate/account/session-grants/introspect`,
+    /// `/_arkret/gate/account/auth-sessions/logout`). This avoids requiring a
     /// DB-backed PAT/OAuth-session for the server-to-server hop, which is
     /// awkward in dev when the coauth DB is reset frequently.
     #[serde(default, skip_serializing_if = "Option::is_none")]

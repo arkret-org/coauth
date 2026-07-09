@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cokret_protocol_openapi_yaml_is_served_from_well_known_path() {
+    async fn arkret_protocol_openapi_yaml_is_served_from_well_known_path() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
 
         let mut response = TestClient::get("http://127.0.0.1:8698/.well-known/arkret/openapi.yaml")
@@ -449,7 +449,7 @@ mod tests {
 
         let body = response.take_string().await.unwrap();
         // It MUST publish the protocol surface, never the product-private admin
-        // API. The `/_cokret/*` handlers are currently `#[handler]` rather than
+        // API. The `/_arkret/*` handlers are currently `#[handler]` rather than
         // `#[endpoint]`, so `merge_router` cannot yet introspect their path
         // operations — the document carries the correct protocol identity with
         // an (intentionally) empty `paths` until the protocol handlers gain
@@ -464,9 +464,9 @@ mod tests {
     async fn session_grants_preflight_allows_dpop_header() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
         for path in [
-            "/_cokret/gate/account/session-grants",
-            "/_cokret/gate/account/session-grants/refresh",
-            "/_cokret/gate/account/session-grants/revoke",
+            "/_arkret/gate/account/session-grants",
+            "/_arkret/gate/account/session-grants/refresh",
+            "/_arkret/gate/account/session-grants/revoke",
         ] {
             let response = TestClient::options(format!("http://127.0.0.1:8698{path}"))
                 .add_header("Origin", "http://127.0.0.1:8080", true)
@@ -503,7 +503,7 @@ mod tests {
     async fn session_grants_post_error_keeps_browser_cors_headers() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
         let response =
-            TestClient::post("http://127.0.0.1:8698/_cokret/gate/account/session-grants")
+            TestClient::post("http://127.0.0.1:8698/_arkret/gate/account/session-grants")
                 .add_header("Origin", "http://127.0.0.1:8080", true)
                 .add_header("Content-Type", "application/json", true)
                 .add_header("DPoP", "malformed-proof", true)

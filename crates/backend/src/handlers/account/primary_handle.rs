@@ -1,5 +1,5 @@
 //! Product-face (`/_coauth/account/identity/primary-handle`) self-service
-//! holder preference endpoint. Not a `/_cokret` protocol operation — it only
+//! holder preference endpoint. Not a `/_arkret` protocol operation — it only
 //! reuses the protocol module's canonical-handle validation and wire types.
 
 use coauth_data::NewUserPrimaryHandlePreference;

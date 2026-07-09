@@ -113,7 +113,7 @@ pub(crate) async fn policy_factory(
 pub(crate) struct TestState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
-    pub cokret_config: CokretConfig,
+    pub arkret_config: CokretConfig,
     pub key_store: Keystore,
     pub cookie_manager: CookieManager,
     pub metadata_cache: MetadataCache,
@@ -197,7 +197,7 @@ impl Handler for InjectTestState {
         );
         depot.insert("templates", state.templates.clone());
         depot.insert("translator", state.templates.translator());
-        depot.insert("cokret_config", state.cokret_config.clone());
+        depot.insert("arkret_config", state.arkret_config.clone());
         depot.insert("keystore", state.key_store.clone());
         depot.insert("encrypter", state.encrypter.clone());
         depot.insert("url_builder", state.url_builder.clone());
@@ -259,7 +259,7 @@ impl TestState {
         // `arkret.service_did` is required (the backend no longer derives a
         // `did:web` fallback from the host); pin the value the old host
         // derivation used to produce so DID-shaped assertions stay stable.
-        let cokret_config = CokretConfig {
+        let arkret_config = CokretConfig {
             service_did: Some("did:web:example.com".to_owned()),
             ..CokretConfig::default()
         };
@@ -307,7 +307,7 @@ impl TestState {
         let principal_server_admin = Arc::new(DbConnectorAdmin::new(
             site_config.server_name.clone(),
             PgRepositoryFactory::new(pool.clone()).boxed(),
-            cokret_config.clone(),
+            arkret_config.clone(),
             crate::reqwest_client(),
         ));
 
@@ -351,7 +351,7 @@ impl TestState {
         Ok(Self {
             repository_factory: PgRepositoryFactory::new(pool),
             templates,
-            cokret_config,
+            arkret_config,
             key_store,
             cookie_manager,
             metadata_cache,
@@ -474,28 +474,28 @@ impl TestState {
             // exchange) plus the Auth-side S2S logout sub-operation. The
             // deleted `/_coauth/.../auth/oidc/*` bridge routes are gone.
             .push(
-                Router::with_path("/_cokret/gate/account/session-grants")
+                Router::with_path("/_arkret/gate/account/session-grants")
                     .post(crate::handlers::arkret::issue_session_grant_endpoint),
             )
             .push(
-                Router::with_path("/_cokret/gate/account/session-grants/revoke")
+                Router::with_path("/_arkret/gate/account/session-grants/revoke")
                     .post(crate::handlers::arkret::revoke_session_grant_endpoint),
             )
             .push(
-                Router::with_path("/_cokret/gate/account/auth-sessions/logout")
+                Router::with_path("/_arkret/gate/account/auth-sessions/logout")
                     .post(crate::handlers::arkret::logout_auth_session),
             )
-            .push(Router::with_path("/_cokret/describe").get(crate::handlers::arkret::server_describe))
-            .push(Router::with_path("/_cokret/root/identity/describe").get(crate::handlers::arkret::identity_describe))
-            .push(Router::with_path("/_cokret/root/identity/resolve").post(crate::handlers::arkret::identity_resolve))
-            .push(Router::with_path("/_cokret/root/identity/document").get(crate::handlers::arkret::identity_document))
+            .push(Router::with_path("/_arkret/describe").get(crate::handlers::arkret::server_describe))
+            .push(Router::with_path("/_arkret/root/identity/describe").get(crate::handlers::arkret::identity_describe))
+            .push(Router::with_path("/_arkret/root/identity/resolve").post(crate::handlers::arkret::identity_resolve))
+            .push(Router::with_path("/_arkret/root/identity/document").get(crate::handlers::arkret::identity_document))
             .push(Router::with_path("/_coauth/account/identity/primary-handle").patch(crate::handlers::account::primary_handle::patch_primary_handle_preference))
-            .push(Router::with_path("/_cokret/find/directory/describe").get(crate::handlers::arkret::directory_describe))
-            .push(Router::with_path("/_cokret/find/directory/resolve-handle").post(crate::handlers::arkret::directory_resolve_handle))
+            .push(Router::with_path("/_arkret/find/directory/describe").get(crate::handlers::arkret::directory_describe))
+            .push(Router::with_path("/_arkret/find/directory/resolve-handle").post(crate::handlers::arkret::directory_resolve_handle))
             // Canonical spec surface (mirrors production server.rs): the
-            // Principal Server calls introspection at the `/_cokret` path.
+            // Principal Server calls introspection at the `/_arkret` path.
             .push(
-                Router::with_path("/_cokret/gate/account/session-grants/introspect")
+                Router::with_path("/_arkret/gate/account/session-grants/introspect")
                     .post(crate::handlers::arkret::introspect_session_grant),
             )
             .push(

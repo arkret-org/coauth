@@ -35,7 +35,7 @@ pub async fn post(
     let site_config = depot.site_config()?;
     let templates = depot.templates()?;
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let limiter = depot.limiter()?;
     let principal_server = depot.principal_server()?;
     let mut repo = depot.repo().await?;
@@ -105,7 +105,7 @@ pub async fn post(
         &limiter,
         principal_server.as_ref(),
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &site_config,
         PasswordLoginRequestBody {
             username_or_email: form.username,

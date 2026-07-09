@@ -23,8 +23,8 @@ use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::JwtSignatureError;
 use coauth_keystore::{Keystore, WrongAlgorithmError};
 use coauth_oauth_types::scope::Scope;
-use cokret_core::ErrorEnvelope;
-use cokret_core::error::{
+use arkret_core::ErrorEnvelope;
+use arkret_core::error::{
     ERROR_CODE_BAD_JSON, ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_INTERNAL_ERROR,
     ERROR_CODE_INVALID_PARAM, ERROR_CODE_NOT_FOUND, ERROR_CODE_UNAUTHENTICATED,
 };
@@ -62,16 +62,16 @@ pub enum SessionGrantError {
     Serialize(#[from] serde_json::Error),
 
     /// Canonical-JSON / digest failure surfaced by the shared SDK pipeline
-    /// (`cokret_core::canonical`). Carried as the SDK error itself so call
+    /// (`arkret_core::canonical`). Carried as the SDK error itself so call
     /// sites keep its structured variants (e.g. `NonCanonicalNumber`)
     /// instead of a flattened string.
     #[error(transparent)]
-    Canonical(#[from] cokret_core::Error),
+    Canonical(#[from] arkret_core::Error),
 
     /// SEC-04 — the inception key that would sign this issuance is past its
     /// 24h online window (or its bootstrap anchor was missing / unparseable,
     /// which fails closed). Carries reason code
-    /// [`cokret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`]
+    /// [`arkret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`]
     /// (`inception_key_window_exceeded`). The receiver enforces this 24h hard
     /// cap independently, regardless of any longer window the issuing
     /// deployment self-reports.
@@ -275,9 +275,9 @@ pub(crate) async fn require_session_grant_caller(
     // skip the DB-backed PAT/OAuth-session lookup. Grants `PrincipalServer`
     // authz only — never `Admin` — so it cannot revoke session grants. The
     // matching server's audience is the only one this caller may read.
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     if let Some(audience) =
-        principal_server_static_session_grant_bearer_audience(&cokret_config, token)
+        principal_server_static_session_grant_bearer_audience(&arkret_config, token)
     {
         return Ok(SessionGrantCaller::principal_server(vec![audience]));
     }
@@ -371,7 +371,7 @@ pub(crate) async fn require_session_grant_caller(
         // configured principal-server audiences (and only those). The list /
         // introspect handlers further require the caller to pin one of these
         // audiences before any subject/device enumeration is allowed.
-        let allowed_audiences = cokret_config
+        let allowed_audiences = arkret_config
             .principal_servers
             .iter()
             .map(|server| server.audience.clone())
@@ -385,10 +385,10 @@ pub(crate) async fn require_session_grant_caller(
 }
 
 pub(crate) fn principal_server_static_session_grant_bearer_matches(
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     token: &str,
 ) -> bool {
-    principal_server_static_session_grant_bearer_audience(cokret_config, token).is_some()
+    principal_server_static_session_grant_bearer_audience(arkret_config, token).is_some()
 }
 
 /// Returns the audience of the principal server whose static
@@ -396,13 +396,13 @@ pub(crate) fn principal_server_static_session_grant_bearer_matches(
 /// configured static bearer matches. The audience scopes what a static-bearer
 /// Principal Server caller is allowed to read (SEC-SG-ENUM).
 fn principal_server_static_session_grant_bearer_audience(
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     token: &str,
 ) -> Option<String> {
     if token.trim().is_empty() {
         return None;
     }
-    cokret_config
+    arkret_config
         .principal_servers
         .iter()
         .find(|server| {
@@ -485,22 +485,22 @@ fn map_did_resolve_error(
 /// any `did:web` downgrade an explicit no-history choice, so an unconfigured
 /// `arkret.service_did` fails startup validation instead of silently minting
 /// a `did:web` identity (see `CokretConfig::validate`).
-pub(crate) fn service_did_for(cokret_config: &CokretConfig) -> String {
-    cokret_config
+pub(crate) fn service_did_for(arkret_config: &CokretConfig) -> String {
+    arkret_config
         .service_did
         .clone()
         .expect("arkret.service_did is enforced by startup configuration validation")
 }
 
-pub(crate) fn issuer_did_for(cokret_config: &CokretConfig) -> String {
-    cokret_config
+pub(crate) fn issuer_did_for(arkret_config: &CokretConfig) -> String {
+    arkret_config
         .issuer_did
         .clone()
-        .unwrap_or_else(|| service_did_for(cokret_config))
+        .unwrap_or_else(|| service_did_for(arkret_config))
 }
 
-pub(crate) fn user_did_for(cokret_config: &CokretConfig, user: &User) -> String {
-    format!("{}:users:{}", service_did_for(cokret_config), user.id)
+pub(crate) fn user_did_for(arkret_config: &CokretConfig, user: &User) -> String {
+    format!("{}:users:{}", service_did_for(arkret_config), user.id)
 }
 
 #[must_use]
@@ -509,10 +509,10 @@ pub(crate) fn is_did_web_principal(did: &str) -> bool {
 }
 
 pub(crate) fn ensure_principal_did_method_allowed(
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     did: &str,
 ) -> Result<(), SessionGrantError> {
-    if is_did_web_principal(did) && !cokret_config.did_web_principal_allowed() {
+    if is_did_web_principal(did) && !arkret_config.did_web_principal_allowed() {
         return Err(SessionGrantError::DidWebPrincipalNotExplicit);
     }
     Ok(())
@@ -522,8 +522,8 @@ pub(crate) fn ensure_principal_did_method_allowed(
 ///
 /// This identifies the authenticated coauth account. Principal-server DIDs are
 /// resolved later by the `session-grants` bridge for the requested audience.
-pub(crate) fn oidc_subject_for_user(cokret_config: &CokretConfig, user: &User) -> String {
-    user_did_for(cokret_config, user)
+pub(crate) fn oidc_subject_for_user(arkret_config: &CokretConfig, user: &User) -> String {
+    user_did_for(arkret_config, user)
 }
 
 #[derive(Debug, Clone)]
@@ -535,13 +535,13 @@ pub(crate) struct PrincipalDidBinding {
 
 pub(crate) async fn principal_did_binding_for_user<R>(
     repo: &mut R,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     user: &User,
 ) -> Result<Option<PrincipalDidBinding>, R::Error>
 where
     R: RepositoryAccess,
 {
-    for server in &cokret_config.principal_servers {
+    for server in &arkret_config.principal_servers {
         if let Some(row) = repo
             .principal_did()
             .get_for_user_and_audience(user, &server.audience)
@@ -560,13 +560,13 @@ where
 
 pub(crate) async fn principal_did_for_user<R>(
     repo: &mut R,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     user: &User,
 ) -> Result<Option<String>, R::Error>
 where
     R: RepositoryAccess,
 {
-    Ok(principal_did_binding_for_user(repo, cokret_config, user)
+    Ok(principal_did_binding_for_user(repo, arkret_config, user)
         .await?
         .map(|binding| binding.did))
 }
@@ -578,14 +578,14 @@ where
 /// personal-node profile and `did:web` principal method.
 pub(crate) async fn published_principal_did_for_user<R>(
     repo: &mut R,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     user: &User,
 ) -> Result<Option<String>, R::Error>
 where
     R: RepositoryAccess,
 {
-    let did = principal_did_for_user(repo, cokret_config, user).await?;
-    Ok(did.filter(|did| ensure_principal_did_method_allowed(cokret_config, did).is_ok()))
+    let did = principal_did_for_user(repo, arkret_config, user).await?;
+    Ok(did.filter(|did| ensure_principal_did_method_allowed(arkret_config, did).is_ok()))
 }
 
 /// Display form `local@host` used by logging / display paths.
@@ -641,11 +641,11 @@ pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, CokretRouteE
 }
 
 pub(crate) fn required_audience(url_builder: &UrlBuilder) -> String {
-    url_builder.absolute_url("/_cokret").to_string()
+    url_builder.absolute_url("/_arkret").to_string()
 }
 
-pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> String {
-    cokret_config.trust_domain.clone().unwrap_or_else(|| {
+pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, arkret_config: &CokretConfig) -> String {
+    arkret_config.trust_domain.clone().unwrap_or_else(|| {
         let scope = derived_trust_domain_scope(url_builder.public_hostname());
         let trust_domain = format!("ak:trust_domain:{scope}");
         debug_assert!(CokretConfig::validate_trust_domain(&trust_domain).is_ok());
@@ -681,9 +681,9 @@ fn derived_trust_domain_scope(host: &str) -> String {
 
 pub(crate) fn required_audience_for(
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
 ) -> String {
-    cokret_config
+    arkret_config
         .admin_audience
         .clone()
         .unwrap_or_else(|| required_audience(url_builder))
@@ -691,7 +691,7 @@ pub(crate) fn required_audience_for(
 
 pub(crate) fn is_allowed_session_grant_audience(
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     audience: &str,
 ) -> bool {
     let audience = audience.trim();
@@ -699,8 +699,8 @@ pub(crate) fn is_allowed_session_grant_audience(
         return false;
     }
 
-    audience == required_audience_for(url_builder, cokret_config)
-        || cokret_config
+    audience == required_audience_for(url_builder, arkret_config)
+        || arkret_config
             .principal_servers
             .iter()
             .any(|server| server.audience == audience)
@@ -733,11 +733,11 @@ pub(crate) enum SessionGrantTargetError {
 /// must disambiguate.
 pub(crate) fn password_login_session_grant_target(
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     requested_audience: Option<&str>,
 ) -> Result<SessionGrantTarget, SessionGrantTargetError> {
     if let Some(audience) = requested_audience.map(str::trim).filter(|a| !a.is_empty()) {
-        if let Some(server) = cokret_config
+        if let Some(server) = arkret_config
             .principal_servers
             .iter()
             .find(|server| server.audience == audience)
@@ -752,14 +752,14 @@ pub(crate) fn password_login_session_grant_target(
         // The local admin audience is allowed for OIDC bridge strands, but
         // not for password login session grants — there is no principal
         // server to bind the grant to.
-        if audience == required_audience_for(url_builder, cokret_config) {
+        if audience == required_audience_for(url_builder, arkret_config) {
             return Err(SessionGrantTargetError::LocalAudienceNotAllowed);
         }
 
         return Err(SessionGrantTargetError::UnknownAudience);
     }
 
-    match cokret_config.principal_servers.as_slice() {
+    match arkret_config.principal_servers.as_slice() {
         [server] => Ok(SessionGrantTarget {
             audience: server.audience.clone(),
             principal_server_name: Some(server.name.clone()),
@@ -812,8 +812,8 @@ fn preferred_signing_key(
     })
 }
 
-pub(crate) fn parse_local_user_did_for(cokret_config: &CokretConfig, did: &str) -> Option<Ulid> {
-    let prefix = format!("{}:users:", service_did_for(cokret_config));
+pub(crate) fn parse_local_user_did_for(arkret_config: &CokretConfig, did: &str) -> Option<Ulid> {
+    let prefix = format!("{}:users:", service_did_for(arkret_config));
     did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
 }
 
@@ -909,7 +909,7 @@ pub async fn debug_issue_dpop_grant(
     let jkt = public_jwk.params().thumbprint_sha256_base64();
 
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
@@ -917,7 +917,7 @@ pub async fn debug_issue_dpop_grant(
     // Resolve the user identified by `actor_id` (the coauth-local
     // `user_did_for` form the harness passes). Scoped so its repo connection is
     // released before the principal-DID mint below opens its own transaction.
-    let user_id = parse_local_user_did_for(&cokret_config, &body.actor_id).ok_or_else(|| {
+    let user_id = parse_local_user_did_for(&arkret_config, &body.actor_id).ok_or_else(|| {
         CokretRouteError::BadRequest("actor_id is not a local Arkret user DID".to_owned())
     })?;
     let user = {
@@ -932,9 +932,9 @@ pub async fn debug_issue_dpop_grant(
     let audience = body
         .audience
         .clone()
-        .unwrap_or_else(|| required_audience_for(&url_builder, &cokret_config));
+        .unwrap_or_else(|| required_audience_for(&url_builder, &arkret_config));
     let grant_target =
-        password_login_session_grant_target(&url_builder, &cokret_config, Some(&audience))
+        password_login_session_grant_target(&url_builder, &arkret_config, Some(&audience))
             .map_err(|error| CokretRouteError::BadRequest(error.to_string()))?;
     let scopes = body.scopes.clone().unwrap_or_else(|| {
         vec![
@@ -961,7 +961,7 @@ pub async fn debug_issue_dpop_grant(
             &encrypter,
             &http_client,
             &url_builder,
-            &cokret_config,
+            &arkret_config,
             &user,
             &audience,
         )
@@ -982,7 +982,7 @@ pub async fn debug_issue_dpop_grant(
         );
     let localpart_sync_bearer =
         crate::handlers::account::auth::oidc_bridge::principal_server_operation_bearer(
-            &cokret_config,
+            &arkret_config,
             &grant_target.audience,
         );
     crate::handlers::account::auth::oidc_bridge::ensure_soland_account_registered(
@@ -1014,7 +1014,7 @@ pub async fn debug_issue_dpop_grant(
 
     let material = issue_test_session_grant_for_audience(
         &*clock,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &browser_session,
         public_jwk,

@@ -27,7 +27,7 @@ arkret:
 
 In its Auth-Server role coauth performs two server-to-server reads/writes
 against the Principal Server that have **no principal session** and therefore
-cannot use the principal-authenticated `/_cokret/self/*` protocol surface.
+cannot use the principal-authenticated `/_arkret/self/*` protocol surface.
 These are deployment-internal S2S contracts on the Principal Server's own
 negative-space root, per `service-http-binding.md` §2.1.3(b) — they are **not**
 v1 protocol operations:
@@ -54,7 +54,7 @@ against the Principal Server. Rotate it on the same cadence as other
 inter-service credentials, and ensure the coauth↔Principal-Server hop is
 confined to the trusted deployment network. The Principal Server treats these
 endpoints as deployment-local product surface and never exposes them on its
-`/_cokret/*` protocol root.
+`/_arkret/*` protocol root.
 
 ## Discovery
 
@@ -62,6 +62,6 @@ coauth publishes Principal Server metadata through the standard OpenID
 discovery document and the Arkret server description endpoint:
 
 - `/.well-known/openid-configuration`
-- `/_cokret/describe`
+- `/_arkret/describe`
 
 Run `coauth doctor` after the server is up to verify these discovery surfaces.

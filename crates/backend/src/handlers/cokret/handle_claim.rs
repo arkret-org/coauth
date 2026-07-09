@@ -6,7 +6,7 @@ use coauth_data::{Clock, UrlBuilder, User};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
-use cokret_core::{
+use arkret_core::{
     Audience, DeliveryBindingHint as HandleClaimDeliveryBindingHint, Did, Handle,
     HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind, Hash, PayloadProof,
     proof_kind,
@@ -48,7 +48,7 @@ fn hash_for_handle_claim(value: impl Into<String>) -> Result<Hash, SessionGrantE
 pub(crate) fn issue_handle_claim(
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     user: &User,
     subject_did: &str,
@@ -58,7 +58,7 @@ pub(crate) fn issue_handle_claim(
 ) -> Result<HandleClaimMaterial, SessionGrantError> {
     use crate::services::handle_subject_validator::ensure_subject_is_principal_did;
 
-    let issuer_service_did = service_did_for(cokret_config);
+    let issuer_service_did = service_did_for(arkret_config);
     // The subject is the user's MINTED principal DID (`did:webvh:…` hosted
     // by the principal server), supplied by the caller. coauth used to
     // derive it via `user_did_for` (`did:web:<coauth-host>:users:<ulid>`),
@@ -71,7 +71,7 @@ pub(crate) fn issue_handle_claim(
     // here keeps the issuer honest about whatever the caller passed and
     // lets the same reason code surface as soland / the SDK.
     ensure_subject_is_principal_did(&subject_id)?;
-    ensure_principal_did_method_allowed(cokret_config, &subject_id)?;
+    ensure_principal_did_method_allowed(arkret_config, &subject_id)?;
     let subject = did_for_handle_claim(subject_id.clone())?;
     let issuer_service = did_for_handle_claim(issuer_service_did.clone())?;
 
@@ -116,7 +116,7 @@ pub(crate) fn issue_handle_claim(
     // input mirrors the wire shape of `HandleClaimPayload` exactly so
     // downstream verifiers can reproduce the hash from the on-the-wire
     // claim without renaming.
-    let claim_digest = cokret_core::canonical::canonical_sha256(&payload_no_proofs)?;
+    let claim_digest = arkret_core::canonical::canonical_sha256(&payload_no_proofs)?;
 
     let (alg, key) = preferred_signing_key(key_store).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = key.kid().ok_or(SessionGrantError::NoSigningKey)?.to_owned();

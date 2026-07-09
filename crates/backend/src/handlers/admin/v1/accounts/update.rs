@@ -45,13 +45,13 @@ pub async fn update_account(
     let id = extract_ulid_param(req)?;
     let principal_server = depot.principal_server()?;
     let key_store = depot.key_store()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    let service_did = service_did_for(&cokret_config);
+    let service_did = service_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
         keystore: &key_store,
         service_did: &service_did,
-        fail_closed: cokret_config.audit_signature_fail_closed,
+        fail_closed: arkret_config.audit_signature_fail_closed,
     };
     let mut rng = crate::handlers::account::make_rng();
     let body: UpdateRequestBody = req
@@ -63,7 +63,7 @@ pub async fn update_account(
         .status
         .as_deref()
         .map(|status| {
-            cokret_core::AccountStatus::from_wire(status)
+            arkret_core::AccountStatus::from_wire(status)
                 .ok_or_else(|| AppError::bad_request(format!("Unknown account status: {status}")))
         })
         .transpose()?;
@@ -95,7 +95,7 @@ pub async fn update_account(
     repo.save().await?;
 
     Ok(Json(SingleOutcome::new_canonical(
-        AccountRecord::from_user(user, &cokret_config, did_resolver.as_ref()).await?,
+        AccountRecord::from_user(user, &arkret_config, did_resolver.as_ref()).await?,
     )))
 }
 

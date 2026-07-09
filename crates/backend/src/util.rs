@@ -689,7 +689,7 @@ pub async fn load_policy_factory_dynamic_data(
 pub fn principal_server_connection_from_config(
     site_config: &SiteConfig,
     repository_factory: BoxRepositoryFactory,
-    cokret_config: CokretConfig,
+    arkret_config: CokretConfig,
     http_client: reqwest::Client,
 ) -> (Arc<dyn ConnectorAdmin>, ConnectorRegistry) {
     let registry = ConnectorRegistry::new();
@@ -698,7 +698,7 @@ pub fn principal_server_connection_from_config(
         Arc::new(crate::services::principal_facade::DbConnectorAdmin::new(
             site_config.server_name.clone(),
             repository_factory,
-            cokret_config,
+            arkret_config,
             http_client,
         ));
     (admin, registry)

@@ -430,7 +430,7 @@ mod tests {
                 &mut rng,
                 &clock,
                 NewSessionGrant {
-                    grant_id: cokret_core::GrantId::new(
+                    grant_id: arkret_core::GrantId::new(
                         "ak:grant:0196419b-0000-7000-8000-000000000201".to_owned(),
                     )
                     .unwrap(),
@@ -630,7 +630,7 @@ mod tests {
                 &mut rng,
                 &clock,
                 NewSessionGrant {
-                    grant_id: cokret_core::GrantId::new(
+                    grant_id: arkret_core::GrantId::new(
                         "ak:grant:0196419b-0000-7000-8000-000000000202".to_owned(),
                     )
                     .unwrap(),

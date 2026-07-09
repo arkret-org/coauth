@@ -21,7 +21,7 @@
 
 use async_trait::async_trait;
 use coauth_config::StaridConfig;
-use cokret_core::ErrorEnvelope;
+use arkret_core::ErrorEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -464,7 +464,7 @@ fn parse_api_fault(status: u16, bytes: &[u8]) -> StaridError {
 mod tests {
     use std::sync::Once;
 
-    use cokret_core::error::ERROR_CODE_INVALID_SIGNATURE;
+    use arkret_core::error::ERROR_CODE_INVALID_SIGNATURE;
     use serde_json::json;
     use wiremock::matchers::{body_partial_json, header, method, path, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -585,7 +585,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(409).set_body_json(json!({
                 "ok": false,
                 "error": {
-                    "code": cokret_core::error::ERROR_CODE_CAS_CONFLICT,
+                    "code": arkret_core::error::ERROR_CODE_CAS_CONFLICT,
                     "message": "stale write"
                 },
                 "request_id": "ak:request:01964137-0000-7000-8000-000000000001"
@@ -601,7 +601,7 @@ mod tests {
         match err {
             StaridError::Api { status, code, .. } => {
                 assert_eq!(status, 409);
-                assert_eq!(code, cokret_core::error::ERROR_CODE_CAS_CONFLICT);
+                assert_eq!(code, arkret_core::error::ERROR_CODE_CAS_CONFLICT);
             }
             other => panic!("expected Api fault, got {other:?}"),
         }

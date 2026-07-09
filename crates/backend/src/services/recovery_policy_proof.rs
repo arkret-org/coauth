@@ -21,7 +21,7 @@
 //! - `trusted_recovery_service`
 //! - `principal_signing`
 //!
-//! The SDK source-of-truth is [`cokret_core::RecoveryProofKind`]; this
+//! The SDK source-of-truth is [`arkret_core::RecoveryProofKind`]; this
 //! module is a thin coauth-side adapter so handlers and reducer-feeding
 //! code paths can call into a single function regardless of whether the
 //! deployment actually enables the OIDC-backed binding.
@@ -32,7 +32,7 @@
 // principal-signing) is also a R3.1 deliverable — this round only
 // pins the enum surface.
 
-use cokret_core::RecoveryProofKind;
+use arkret_core::RecoveryProofKind;
 use thiserror::Error;
 
 /// Outcome of the wire-level `proof_kind` validator.

@@ -126,13 +126,13 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
     .bind(None);
     let site_config = crate::handlers::test_utils::test_site_config();
     let url_builder = UrlBuilder::new("https://auth.local.host/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig::default();
+    let arkret_config = CokretConfig::default();
     let templates = test_templates(url_builder.clone()).await;
     let key_store = eddsa_keystore();
     let principal_server: Arc<dyn ConnectorAdmin> = Arc::new(DbConnectorAdmin::new(
         "example.com",
         factory.clone().boxed(),
-        cokret_config.clone(),
+        arkret_config.clone(),
         crate::reqwest_client(),
     ));
 
@@ -231,7 +231,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
         &client,
         &key_store,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &site_config,
         repo,
         &principal_server,
@@ -249,7 +249,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_did_row()
         .expect("id_token should be a JWT");
     jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
 
-    let expected_subject = crate::handlers::arkret::oidc_subject_for_user(&cokret_config, &user);
+    let expected_subject = crate::handlers::arkret::oidc_subject_for_user(&arkret_config, &user);
     assert_eq!(
         jwt.payload().get("sub").and_then(Value::as_str),
         Some(expected_subject.as_str())
@@ -346,7 +346,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
             &mut rng,
             &*clock,
             NewSessionGrant {
-                grant_id: cokret_core::GrantId::new(
+                grant_id: arkret_core::GrantId::new(
                     "ak:grant:0196419b-0000-7000-8000-000000000204".to_owned(),
                 )
                 .unwrap(),

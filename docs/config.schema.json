@@ -1369,14 +1369,14 @@
           ]
         },
         "session_grant_ttl": {
-          "description": "Lifetime of Arkret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and rotated through\n`/_cokret/gate/account/session-grants/refresh`. Default: 28800 (8h) —\naccess bearers minted from a grant are short-lived (capped Principal-Server\nside), so a multi-hour grant gives a normal working session without\nlong-lived bearers, within the spec ceiling (minutes-to-hours).",
+          "description": "Lifetime of Arkret session grants, in seconds.\n\nThese are the DPoP-bound JWT grants returned by the REST auth bridge\nlogin/exchange paths and rotated through\n`/_arkret/gate/account/session-grants/refresh`. Default: 28800 (8h) —\naccess bearers minted from a grant are short-lived (capped Principal-Server\nside), so a multi-hour grant gives a normal working session without\nlong-lived bearers, within the spec ceiling (minutes-to-hours).",
           "type": "integer",
           "format": "uint64",
           "minimum": 60,
           "maximum": 86400
         },
         "admin_audience": {
-          "description": "Audience string expected by Arkret admin integrations.\n\nWhen omitted, the backend falls back to the local `/_cokret` endpoint.",
+          "description": "Audience string expected by Arkret admin integrations.\n\nWhen omitted, the backend falls back to the local `/_arkret` endpoint.",
           "type": [
             "string",
             "null"
@@ -1469,7 +1469,7 @@
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint or Auth-side logout\nsub-operation (`/_cokret/gate/account/session-grants/introspect`,\n`/_cokret/gate/account/auth-sessions/logout`). This avoids requiring a\nDB-backed PAT/OAuth-session for the server-to-server hop, which is\nawkward in dev when the coauth DB is reset frequently.",
+          "description": "Optional static bearer token accepted when this Principal Server calls\ncoauth's session-grant introspection endpoint or Auth-side logout\nsub-operation (`/_arkret/gate/account/session-grants/introspect`,\n`/_arkret/gate/account/auth-sessions/logout`). This avoids requiring a\nDB-backed PAT/OAuth-session for the server-to-server hop, which is\nawkward in dev when the coauth DB is reset frequently.",
           "type": [
             "string",
             "null"

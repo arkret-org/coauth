@@ -2,19 +2,19 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Typed client helpers for the Arkret `/_cokret/peer/*` protocol surface.
+//! Typed client helpers for the Arkret `/_arkret/peer/*` protocol surface.
 
 use std::time::Duration;
 
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable;
 use coauth_keystore::Keystore;
-use cokret_core::canonical::{canonical_json_bytes, sha256_digest};
-use cokret_core::{
+use arkret_core::canonical::{canonical_json_bytes, sha256_digest};
+use arkret_core::{
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
     InviteDeliveryOutcome, InviteDeliveryRequest, SnapshotManifest,
 };
-use cokret_signatures::http_signature::{
+use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
     format_signature_header, parse_signature_input,
 };
@@ -103,7 +103,7 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         request: &InviteDeliveryRequest,
     ) -> Result<InviteDeliveryOutcome, PeerProtocolClientError> {
-        let url = self.join_absolute("/_cokret/peer/invites")?;
+        let url = self.join_absolute("/_arkret/peer/invites")?;
         self.post_json(
             "peer_invites_submit",
             url,
@@ -117,7 +117,7 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         realm_id: &str,
     ) -> Result<SnapshotManifest, PeerProtocolClientError> {
-        let mut url = self.join_absolute("/_cokret/peer/snapshot/head")?;
+        let mut url = self.join_absolute("/_arkret/peer/snapshot/head")?;
         url.query_pairs_mut().append_pair("realm_id", realm_id);
         let signed = self.signed_request("GET", &url, None, None)?;
         let response = outbound_http::send_with_policy(
@@ -258,7 +258,7 @@ impl<'a> PeerProtocolClient<'a> {
             .try_sign_with_rng(&mut rng, &message)
             .map_err(|_| PeerProtocolClientError::Sign)?;
         let sig_bytes: Box<[u8]> = raw.into();
-        let signature = cokret_core::base64_standard_encode(&sig_bytes);
+        let signature = arkret_core::base64_standard_encode(&sig_bytes);
         let signature_header = format_signature_header(SIGNATURE_LABEL, &signature)
             .map_err(|_| PeerProtocolClientError::Sign)?;
 
@@ -360,7 +360,7 @@ mod tests {
         );
         let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
         let body = br#"{"a":1}"#;
-        let url = base.join("/_cokret/peer/invites").unwrap();
+        let url = base.join("/_arkret/peer/invites").unwrap();
 
         let signed = peer
             .signed_request("POST", &url, Some(body), Some("idem-1"))
@@ -404,7 +404,7 @@ mod tests {
         );
         let peer = PeerProtocolClient::new(Some(&base), &client, &keystore, identity).unwrap();
         let url = base
-            .join("/_cokret/peer/snapshot/head?realm_id=ck:realm:test")
+            .join("/_arkret/peer/snapshot/head?realm_id=ck:realm:test")
             .unwrap();
 
         let signed = peer.signed_request("GET", &url, None, None).unwrap();

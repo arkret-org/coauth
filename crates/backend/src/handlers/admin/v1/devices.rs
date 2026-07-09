@@ -536,7 +536,7 @@ mod tests {
                 &mut rng,
                 &*state.clock,
                 NewSessionGrant {
-                    grant_id: cokret_core::GrantId::new(
+                    grant_id: arkret_core::GrantId::new(
                         "ak:grant:0196419b-0000-7000-8000-000000000203".to_owned(),
                     )
                     .unwrap(),

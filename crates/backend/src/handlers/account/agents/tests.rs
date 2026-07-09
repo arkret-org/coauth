@@ -2,7 +2,7 @@
 #[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
     use chrono::Utc;
-    use cokret_core::canonical::canonical_json_bytes;
+    use arkret_core::canonical::canonical_json_bytes;
 
     use super::super::accountability::{
         accountability_capabilities_digest, normalize_capabilities,
@@ -155,7 +155,7 @@ mod agent_auth_error_matrix_tests {
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let fields = ProofSignedFields {
-            audience: "https://arkret.example/_cokret",
+            audience: "https://arkret.example/_arkret",
             challenge: "challenge-abc",
             nonce: Some("nonce-abc"),
             expires_at,
@@ -179,7 +179,7 @@ mod agent_auth_error_matrix_tests {
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let signed = ProofSignedFields {
-            audience: "https://arkret.example/_cokret",
+            audience: "https://arkret.example/_arkret",
             challenge: "challenge-abc",
             nonce: Some("nonce-abc"),
             expires_at,
@@ -192,7 +192,7 @@ mod agent_auth_error_matrix_tests {
 
         // A different audience (replay to a different service) must fail closed.
         let tampered = ProofSignedFields {
-            audience: "https://evil.example/_cokret",
+            audience: "https://evil.example/_arkret",
             challenge: "challenge-abc",
             nonce: Some("nonce-abc"),
             expires_at,
@@ -214,7 +214,7 @@ mod agent_auth_error_matrix_tests {
         let multibase = multicodec_ed25519_public_key(&signing_key.verifying_key());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let signed = ProofSignedFields {
-            audience: "https://arkret.example/_cokret",
+            audience: "https://arkret.example/_arkret",
             challenge: "challenge-abc",
             nonce: Some("nonce-abc"),
             expires_at,

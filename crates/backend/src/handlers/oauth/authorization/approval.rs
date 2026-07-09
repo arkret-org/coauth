@@ -188,7 +188,7 @@ async fn handle_post(
     let templates = depot.templates()?;
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let policy_factory = depot.policy_factory()?;
     let repo_factory = depot.repo_factory()?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
@@ -247,7 +247,7 @@ async fn handle_post(
         &clock,
         &key_store,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         policy_factory.as_ref(),
         &browser_session,
         grant_id,

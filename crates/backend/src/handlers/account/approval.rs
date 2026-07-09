@@ -212,7 +212,7 @@ pub async fn oauth_approval_post(
     let clock = make_clock();
     let key_store = depot.key_store()?;
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let policy_factory = depot.policy_factory()?;
     let mut repo = depot.repo().await?;
     let activity_tracker = extract_bound_activity_tracker(req, depot);
@@ -244,7 +244,7 @@ pub async fn oauth_approval_post(
         &clock,
         &key_store,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         policy_factory.as_ref(),
         &browser_session,
         grant_id,

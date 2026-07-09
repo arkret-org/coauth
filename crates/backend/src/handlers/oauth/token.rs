@@ -335,8 +335,8 @@ async fn handle_post(
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
-    let cokret_config = depot
-        .get::<CokretConfig>("cokret_config")
+    let arkret_config = depot
+        .get::<CokretConfig>("arkret_config")
         .cloned()
         .unwrap_or_default();
     let principal_server = depot
@@ -422,7 +422,7 @@ async fn handle_post(
                 &client,
                 key_store,
                 url_builder,
-                &cokret_config,
+                &arkret_config,
                 site_config,
                 repo,
                 principal_server,
@@ -470,7 +470,7 @@ async fn handle_post(
                 &client,
                 key_store,
                 url_builder,
-                &cokret_config,
+                &arkret_config,
                 site_config,
                 repo,
                 principal_server,

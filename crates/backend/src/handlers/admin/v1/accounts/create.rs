@@ -61,7 +61,7 @@ pub async fn add_account(
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
     let principal_server = depot.principal_server()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
     let params: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
@@ -124,7 +124,7 @@ pub async fn add_account(
 
     Ok(crate::handlers::admin::CreatedJson(
         SingleOutcome::new_canonical(
-            AccountRecord::from_user(user, &cokret_config, did_resolver.as_ref()).await?,
+            AccountRecord::from_user(user, &arkret_config, did_resolver.as_ref()).await?,
         ),
     ))
 }
@@ -263,7 +263,7 @@ pub enum BatchInviteGateOutcome {
 /// optional infrastructure.
 pub async fn evaluate_batch_invite_gate(
     gate: Option<&BatchInviteConsentGate>,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     http_client: &reqwest::Client,
 ) -> BatchInviteGateOutcome {
     let Some(gate) = gate else {
@@ -273,7 +273,7 @@ pub async fn evaluate_batch_invite_gate(
     let principal_url = gate
         .target_principal_url
         .as_ref()
-        .or(cokret_config.principal_server_url.as_ref());
+        .or(arkret_config.principal_server_url.as_ref());
 
     let Some(principal_url) = principal_url else {
         // Gate metadata supplied, but no server to query. Mirror the
@@ -400,10 +400,10 @@ pub async fn batch_invite(
     // payload), see `account::invite_relay::post_invite_relay`. This
     // handler only mints registration tokens, so we don't forward a
     // payload — we simply gate the mint.
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let gate_outcome =
-        evaluate_batch_invite_gate(params.consent_gate.as_ref(), &cokret_config, &http_client)
+        evaluate_batch_invite_gate(params.consent_gate.as_ref(), &arkret_config, &http_client)
             .await;
     let consent_id_for_log = params
         .consent_gate
@@ -556,7 +556,7 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .and(query_param("peer", "did:web:peer"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(
@@ -582,7 +582,7 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
             .expect(2)
             .mount(&server)
@@ -605,7 +605,7 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
@@ -627,7 +627,7 @@ mod consent_gate_tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_cokret/self/consent/cells/.*"))
+            .and(path_regex(r"^/_arkret/self/consent/cells/.*"))
             .respond_with(ResponseTemplate::new(404))
             .expect(2)
             .mount(&server)

@@ -91,7 +91,7 @@ pub trait UpstreamOidcService: Send + Sync {
     fn session_grant_target_for_requested_audience(
         &self,
         url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
+        arkret_config: &CokretConfig,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String>;
 
@@ -251,14 +251,14 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
     fn session_grant_target_for_requested_audience(
         &self,
         url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
+        arkret_config: &CokretConfig,
         requested_audience: Option<&str>,
     ) -> Result<UpstreamOidcSessionGrantTarget, String> {
         if let Some(requested_audience) = requested_audience
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            if let Some(server) = cokret_config.principal_servers.iter().find(|server| {
+            if let Some(server) = arkret_config.principal_servers.iter().find(|server| {
                 server.audience == requested_audience
                     || principal_endpoint_matches_audience(&server.endpoint, requested_audience)
             }) {
@@ -271,10 +271,10 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
 
             if arkret::is_allowed_session_grant_audience(
                 url_builder,
-                cokret_config,
+                arkret_config,
                 requested_audience,
             ) {
-                let local_audience = arkret::required_audience_for(url_builder, cokret_config);
+                let local_audience = arkret::required_audience_for(url_builder, arkret_config);
                 return Ok(UpstreamOidcSessionGrantTarget {
                     audience: local_audience,
                     principal_server_name: None,
@@ -289,7 +289,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
 
         let grant_target = arkret::password_login_session_grant_target(
             url_builder,
-            cokret_config,
+            arkret_config,
             None,
         )
         .map_err(|error| {

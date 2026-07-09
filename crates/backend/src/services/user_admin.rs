@@ -12,7 +12,7 @@ use coauth_data::{
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
 };
 use coauth_principal::ConnectorAdmin;
-use cokret_core::AccountStatus;
+use arkret_core::AccountStatus;
 use lettre::address::AddressError;
 use rand_core::RngCore;
 use thiserror::Error;

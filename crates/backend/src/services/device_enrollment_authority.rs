@@ -24,9 +24,9 @@
 
 use std::sync::OnceLock;
 
-use cokret_core::Did;
-use cokret_core::multibase::ed25519_pubkey_to_did_key_multibase;
-use cokret_signatures::Ed25519MoveSigner;
+use arkret_core::Did;
+use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
+use arkret_signatures::Ed25519MoveSigner;
 use ed25519_dalek::SigningKey;
 
 /// Env var carrying the base64-encoded 32-byte ed25519 enrollment seed.
@@ -104,7 +104,7 @@ impl EnrollmentAuthority {
     }
 
     /// Build a fresh SDK signer bound to this authority's DID + VM. The signer
-    /// is consumed by [`cokret_signatures::sign_event`].
+    /// is consumed by [`arkret_signatures::sign_event`].
     #[must_use]
     pub fn signer(&self) -> Ed25519MoveSigner {
         let did = Did::new(self.did.clone()).expect("did:key authority DID is valid");
@@ -189,7 +189,7 @@ mod tests {
     fn signer_did_matches_authority_did() {
         let authority = EnrollmentAuthority::from_seed([9u8; 32], EnrollmentKeyOrigin::Configured);
         let signer = authority.signer();
-        use cokret_core::MoveSigner as _;
+        use arkret_core::MoveSigner as _;
         assert_eq!(signer.signer_did().as_str(), authority.did());
         assert_eq!(
             signer.verification_method_id(),

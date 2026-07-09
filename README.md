@@ -55,12 +55,12 @@ The value MUST match `ck:trust_domain:<scope>` where `<scope>` is
 `[a-z0-9._:-]{1,128}` and starts with `[a-z0-9]`. coauth validates it
 on load via `CokretConfig::validate_trust_domain` (mirrors the SDK's
 `TypedTrustDomainId` acceptance rules) and injects it into the Realm
-policy + `/_cokret/describe` document via soland's config API.
+policy + `/_arkret/describe` document via soland's config API.
 
 **Rotation is wire-breaking for existing cross-signing reset proofs.**
 The `trust_domain` value enters the canonical transcript of every
 `ck.cross_signing.reset` proof (see
-`cokret_core::round23::CrossSigningResetPayload`). Changing it
+`arkret_core::round23::CrossSigningResetPayload`). Changing it
 invalidates all previously-issued `principal_signing` /
 `recovery_unlock` / `device_quorum` / `trusted_recovery_service`
 proofs. Operators MUST roll fresh proofs through the device-lifecycle
@@ -129,9 +129,9 @@ work that affects wire shape is tracked in [`../arkret-spec/spec/v1/`](../arkret
 The primary Arkret paths include:
 
 - `/.well-known/openid-configuration`
-- `/_cokret/describe`
-- `/_cokret/root/identity/describe`
-- `/_cokret/find/directory/resolve-handle`
+- `/_arkret/describe`
+- `/_arkret/root/identity/describe`
+- `/_arkret/find/directory/resolve-handle`
 
 coauth hosts **no** DID documents (`/.well-known/did.json`, `/did.json`, and
 `/users/{id}/did.json` were removed): DID hosting is the principal server's
@@ -182,7 +182,7 @@ arkret:
     proof_required_for_pairwise: true
   service_did: did:webvh:<scid>:auth.example.com:webvh:service
   issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
-  admin_audience: https://auth.example.com/_cokret
+  admin_audience: https://auth.example.com/_arkret
 
 secrets:
   encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
@@ -222,10 +222,10 @@ just build-all
 | Endpoint | Purpose |
 |----------|---------|
 | `/.well-known/openid-configuration` | OIDC discovery |
-| `/_cokret/describe` | Arkret service metadata |
-| `/_cokret/root/identity/describe` | Identity-registry contract |
-| `/_cokret/find/directory/resolve-handle` | Handle -> DID resolution |
-| `/_cokret/gate/account/session-grants/introspect` | Principal Server session grant validation |
+| `/_arkret/describe` | Arkret service metadata |
+| `/_arkret/root/identity/describe` | Identity-registry contract |
+| `/_arkret/find/directory/resolve-handle` | Handle -> DID resolution |
+| `/_arkret/gate/account/session-grants/introspect` | Principal Server session grant validation |
 | `/_coauth/admin/*` | Admin API for `sodmin` and service automation |
 | `/_coauth/admin/openapi.yaml` | Coauth admin API OpenAPI document |
 | `/.well-known/arkret/openapi.yaml` | Admin API discovery document for `sodmin` |

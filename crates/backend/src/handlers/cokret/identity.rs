@@ -2,12 +2,12 @@ use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
 use coauth_data::RepositoryAccess;
-use cokret_core::Did;
-use cokret_core::error::ERROR_CODE_RATE_LIMITED;
-use cokret_core::http::{
+use arkret_core::Did;
+use arkret_core::error::ERROR_CODE_RATE_LIMITED;
+use arkret_core::http::{
     DirectoryDescribeOutcome, IdentityDescribeOutcome, IdentityDocumentViewOutcome,
 };
-use cokret_core::models::{
+use arkret_core::models::{
     DidDocumentRef, DirectoryDescription, DirectoryHandleResolutionOutcome,
     DirectoryResolveHandleRequestBody, IdentityDescription, IdentityDocumentView,
     IdentityResolveOutcome, IdentityResolveRequestBody,
@@ -25,15 +25,15 @@ const DIRECTORY_RESOLVE_FAILURE_FLOOR: Duration = Duration::from_millis(25);
 pub async fn identity_describe(
     depot: &Depot,
 ) -> Result<Json<IdentityDescribeOutcome>, CokretRouteError> {
-    let cokret_config = depot.cokret_config()?;
-    let registry_mode = if delegated_identity_registry_descriptor(&cokret_config).is_some() {
+    let arkret_config = depot.arkret_config()?;
+    let registry_mode = if delegated_identity_registry_descriptor(&arkret_config).is_some() {
         "delegated_resolver"
     } else {
         "local_bindings"
     };
 
     Ok(Json(IdentityDescribeOutcome(IdentityDescription {
-        service_did: parse_did_field("service_did", service_did_for(&cokret_config))?,
+        service_did: parse_did_field("service_did", service_did_for(&arkret_config))?,
         registry_mode: registry_mode.to_owned(),
         supported_receipts: Vec::new(),
         protocol_version: ARKRET_PROTOCOL_VERSION.to_owned(),
@@ -51,7 +51,7 @@ pub async fn identity_resolve(
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
@@ -64,7 +64,7 @@ pub async fn identity_resolve(
         .resolve_did_document(
             &http_client,
             &url_builder,
-            &cokret_config,
+            &arkret_config,
             &key_store,
             &mut repo,
             body.did.as_str(),
@@ -94,7 +94,7 @@ pub async fn identity_document(
         .ok_or_else(|| CokretRouteError::BadRequest("missing did query parameter".into()))?;
     let did = parse_did_field("did", did)?;
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
@@ -105,7 +105,7 @@ pub async fn identity_document(
         .resolve_did_document(
             &http_client,
             &url_builder,
-            &cokret_config,
+            &arkret_config,
             &key_store,
             &mut repo,
             did.as_str(),
@@ -129,10 +129,10 @@ pub async fn directory_describe(
     depot: &Depot,
 ) -> Result<Json<DirectoryDescribeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
-    let service_did = parse_did_field("service_did", service_did_for(&cokret_config))?;
+    let arkret_config = depot.arkret_config()?;
+    let service_did = parse_did_field("service_did", service_did_for(&arkret_config))?;
     let trust_domain =
-        cokret_core::TypedTrustDomainId::new(trust_domain_for(&url_builder, &cokret_config))
+        arkret_core::TypedTrustDomainId::new(trust_domain_for(&url_builder, &arkret_config))
             .map_err(|error| {
                 CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
                     "invalid trust_domain: {error}"
@@ -154,42 +154,42 @@ pub async fn directory_describe(
             "ck.find.directory.query.resolve_handle".to_owned(),
         ],
         supported_bindings: vec![
-            cokret_core::SupportedBinding::new("http_json")
+            arkret_core::SupportedBinding::new("http_json")
                 .with_base_url(url_builder.http_base().to_string()),
         ],
         supported_features: supported_features.clone(),
-        auth_metadata: cokret_core::AuthMetadata::minimal("public_no_auth"),
+        auth_metadata: arkret_core::AuthMetadata::minimal("public_no_auth"),
         limits: json!({}),
-        plaintext_visibility: cokret_core::PlaintextVisibility::none(),
+        plaintext_visibility: arkret_core::PlaintextVisibility::none(),
         privacy_derivation: None,
         receive_policy_constraints: None,
         implemented_features: supported_features,
         claimed_profiles: supported_profiles
             .iter()
-            .map(cokret_core::ClaimedProfileEntry::self_claimed)
+            .map(arkret_core::ClaimedProfileEntry::self_claimed)
             .collect(),
         verified_profiles: Vec::new(),
         experimental_features: Vec::new(),
         compat_surfaces: Vec::new(),
         development_mode: false,
-        rate_limit_policy: Some(cokret_core::RateLimitPolicy::unspecified()),
+        rate_limit_policy: Some(arkret_core::RateLimitPolicy::unspecified()),
         rate_limit_policy_id: None,
-        egress_network_policy: Some(cokret_core::EgressNetworkPolicy::deny_private_defaults()),
+        egress_network_policy: Some(arkret_core::EgressNetworkPolicy::deny_private_defaults()),
         resource_types: vec![
-            cokret_core::models::DirectoryResourceKind::Actor,
-            cokret_core::models::DirectoryResourceKind::Handle,
+            arkret_core::models::DirectoryResourceKind::Actor,
+            arkret_core::models::DirectoryResourceKind::Handle,
         ],
         discovery_profiles: supported_profiles,
         restricted_query_proof: Some(true),
-        ingest_modes: vec![cokret_core::DirectoryIngestMode::Push],
-        accept_policy_kind: Some(cokret_core::DirectoryAcceptPolicyKind::Open),
+        ingest_modes: vec![arkret_core::DirectoryIngestMode::Push],
+        accept_policy_kind: Some(arkret_core::DirectoryAcceptPolicyKind::Open),
         accept_policy_ref: None,
         default_ttl_seconds: Some(86_400),
         max_ttl_seconds: Some(604_800),
         revalidation_grace_seconds: Some(3_600),
         accepted_resource_kinds: vec![
-            cokret_core::models::DirectoryResourceKind::Actor,
-            cokret_core::models::DirectoryResourceKind::Handle,
+            arkret_core::models::DirectoryResourceKind::Actor,
+            arkret_core::models::DirectoryResourceKind::Handle,
         ],
         accepted_did_methods: vec![
             "did:web".to_owned(),
@@ -225,7 +225,7 @@ pub async fn directory_resolve_handle(
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
@@ -269,7 +269,7 @@ pub async fn directory_resolve_handle(
     // principal servers in order and take the first minted one. A user
     // who has never bound to a principal server has no resolvable DID
     // yet — fail closed with 404 rather than synthesising an identifier.
-    let principal_binding = principal_did_binding_for_user(&mut repo, &cokret_config, &user)
+    let principal_binding = principal_did_binding_for_user(&mut repo, &arkret_config, &user)
         .await
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
     let Some(principal_binding) = principal_binding else {
@@ -288,7 +288,7 @@ pub async fn directory_resolve_handle(
         .resolve_did_document(
             &http_client,
             &url_builder,
-            &cokret_config,
+            &arkret_config,
             &key_store,
             &mut repo,
             &did,
@@ -304,15 +304,15 @@ pub async fn directory_resolve_handle(
     let clock = crate::handlers::make_clock();
     let handle_claim_audience = directory_handle_claim_audience(&body, &principal_binding.audience);
     let member_delivery_binding =
-        directory_handle_delivery_binding(&cokret_config, &principal_binding)?;
+        directory_handle_delivery_binding(&arkret_config, &principal_binding)?;
     let claim_material = issue_handle_claim(
         &*clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &user,
         &did,
-        cokret_core::HandleClaimKind::HandleBinding,
+        arkret_core::HandleClaimKind::HandleBinding,
         handle_claim_audience.clone(),
         member_delivery_binding,
     )
@@ -352,30 +352,30 @@ fn directory_handle_claim_audience(
 }
 
 fn directory_handle_delivery_binding(
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     principal_binding: &PrincipalDidBinding,
-) -> Result<cokret_core::DeliveryBindingHint, CokretRouteError> {
+) -> Result<arkret_core::DeliveryBindingHint, CokretRouteError> {
     let recipient_service_did = principal_binding
         .principal_server_did
         .as_ref()
-        .and_then(|did| cokret_core::Did::new(did.clone()).ok())
-        .or_else(|| cokret_core::Did::new(principal_binding.audience.clone()).ok())
-        .or_else(|| cokret_core::Did::new(service_did_for(cokret_config)).ok())
+        .and_then(|did| arkret_core::Did::new(did.clone()).ok())
+        .or_else(|| arkret_core::Did::new(principal_binding.audience.clone()).ok())
+        .or_else(|| arkret_core::Did::new(service_did_for(arkret_config)).ok())
         .ok_or_else(|| {
             CokretRouteError::Internal(Box::new(std::io::Error::other(
                 "no valid DID available for handle claim delivery binding",
             )))
         })?;
-    Ok(cokret_core::DeliveryBindingHint {
+    Ok(arkret_core::DeliveryBindingHint {
         recipient_service_did,
-        recipient_service_type: cokret_core::RecipientServiceType::PrincipalServer,
-        binding_source: cokret_core::HandleHintBindingSource::Explicit,
+        recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
+        binding_source: arkret_core::HandleHintBindingSource::Explicit,
         delivery_modes: BTreeSet::from([
-            cokret_core::DeliveryMode::Events,
-            cokret_core::DeliveryMode::Sync,
-            cokret_core::DeliveryMode::ToDevice,
-            cokret_core::DeliveryMode::Push,
-            cokret_core::DeliveryMode::KeyPackages,
+            arkret_core::DeliveryMode::Events,
+            arkret_core::DeliveryMode::Sync,
+            arkret_core::DeliveryMode::ToDevice,
+            arkret_core::DeliveryMode::Push,
+            arkret_core::DeliveryMode::KeyPackages,
         ]),
         service_acceptance_ref: None,
         policy_event_ref: None,

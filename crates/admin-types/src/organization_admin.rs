@@ -16,7 +16,7 @@ pub use coauth_data::organization_control::{
     OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationDelegationStatus,
     OrganizationPrincipalControl,
 };
-use cokret_core::models::{
+use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     RealmOrganizationStatus,
 };
@@ -125,7 +125,7 @@ pub struct RotateOrganizationControllerRequest {
 /// Request body for `POST /_coauth/admin/organizations/{org}/statements`.
 ///
 /// Produces an organization-side `ck.realm.organization` statement. The signed
-/// statement is returned as the SDK [`cokret_core::models::RealmOrganizationPayload`]
+/// statement is returned as the SDK [`arkret_core::models::RealmOrganizationPayload`]
 /// type — no admin-private wire struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(

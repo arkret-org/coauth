@@ -567,7 +567,7 @@ mod tests {
         let claims = DpopClaims {
             jti: "test-jti-1".to_owned(),
             htm: "POST".to_owned(),
-            htu: "https://example.test/_cokret/gate/account/session-grants/refresh".to_owned(),
+            htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
             iat: now.timestamp(),
             ath: None,
             nonce: None,
@@ -579,7 +579,7 @@ mod tests {
             .verify(
                 &proof,
                 "POST",
-                "https://example.test/_cokret/gate/account/session-grants/refresh",
+                "https://example.test/_arkret/gate/account/session-grants/refresh",
                 now,
                 None,
             )
@@ -595,7 +595,7 @@ mod tests {
         let claims = DpopClaims {
             jti: "test-jti-replay".to_owned(),
             htm: "POST".to_owned(),
-            htu: "https://example.test/_cokret/gate/account/session-grants/refresh".to_owned(),
+            htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
             iat: now.timestamp(),
             ath: None,
             nonce: None,
@@ -607,7 +607,7 @@ mod tests {
             .verify(
                 &proof,
                 "POST",
-                "https://example.test/_cokret/gate/account/session-grants/refresh",
+                "https://example.test/_arkret/gate/account/session-grants/refresh",
                 now,
                 None,
             )
@@ -618,7 +618,7 @@ mod tests {
             .verify(
                 &proof,
                 "POST",
-                "https://example.test/_cokret/gate/account/session-grants/refresh",
+                "https://example.test/_arkret/gate/account/session-grants/refresh",
                 now,
                 None,
             )
@@ -633,7 +633,7 @@ mod tests {
         let claims = DpopClaims {
             jti: "test-jti-htm".to_owned(),
             htm: "GET".to_owned(),
-            htu: "https://example.test/_cokret/gate/account/session-grants/refresh".to_owned(),
+            htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
             iat: now.timestamp(),
             ath: None,
             nonce: None,
@@ -645,7 +645,7 @@ mod tests {
             .verify(
                 &proof,
                 "POST",
-                "https://example.test/_cokret/gate/account/session-grants/refresh",
+                "https://example.test/_arkret/gate/account/session-grants/refresh",
                 now,
                 None,
             )
@@ -660,7 +660,7 @@ mod tests {
         let claims = DpopClaims {
             jti: "test-jti-iat".to_owned(),
             htm: "POST".to_owned(),
-            htu: "https://example.test/_cokret/gate/account/session-grants/refresh".to_owned(),
+            htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
             iat: (now - Duration::seconds(600)).timestamp(),
             ath: None,
             nonce: None,
@@ -672,7 +672,7 @@ mod tests {
             .verify(
                 &proof,
                 "POST",
-                "https://example.test/_cokret/gate/account/session-grants/refresh",
+                "https://example.test/_arkret/gate/account/session-grants/refresh",
                 now,
                 None,
             )
@@ -688,7 +688,7 @@ mod tests {
         let claims = DpopClaims {
             jti: "test-jti-ath".to_owned(),
             htm: "POST".to_owned(),
-            htu: "https://example.test/_cokret/gate/account/session-grants/refresh".to_owned(),
+            htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
             iat: now.timestamp(),
             ath: Some(access_token_hash(token)),
             nonce: None,
@@ -700,7 +700,7 @@ mod tests {
             .verify(
                 &proof,
                 "POST",
-                "https://example.test/_cokret/gate/account/session-grants/refresh",
+                "https://example.test/_arkret/gate/account/session-grants/refresh",
                 now,
                 Some(token),
             )
@@ -715,7 +715,7 @@ mod tests {
         let claims = DpopClaims {
             jti: "test-jti-ath-mismatch".to_owned(),
             htm: "POST".to_owned(),
-            htu: "https://example.test/_cokret/gate/account/session-grants/refresh".to_owned(),
+            htu: "https://example.test/_arkret/gate/account/session-grants/refresh".to_owned(),
             iat: now.timestamp(),
             ath: Some(access_token_hash("bound-access-token")),
             nonce: None,
@@ -727,7 +727,7 @@ mod tests {
             .verify(
                 &proof,
                 "POST",
-                "https://example.test/_cokret/gate/account/session-grants/refresh",
+                "https://example.test/_arkret/gate/account/session-grants/refresh",
                 now,
                 Some("other-access-token"),
             )

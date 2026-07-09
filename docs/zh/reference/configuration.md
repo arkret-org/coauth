@@ -89,7 +89,7 @@ arkret:
 
   service_did: did:webvh:<scid>:auth.example.com:webvh:service
   issuer_did: did:webvh:<scid>:auth.example.com:webvh:service
-  admin_audience: https://auth.example.com/_cokret
+  admin_audience: https://auth.example.com/_arkret
   session_grant_ttl: 300
 ```
 
@@ -101,7 +101,7 @@ arkret:
 - `identity_registry`：委托的 DID / identity resolver，通常是 public DID resolver 服务
 - `service_did`：显式 service DID；未配置时从 `http.public_base` 推导
 - `issuer_did`：session grant 中写入的 DID；默认继承 `service_did`
-- `admin_audience`：Arkret admin 集成期望的 audience；默认回退到本地 `/_cokret`
+- `admin_audience`：Arkret admin 集成期望的 audience；默认回退到本地 `/_arkret`
 - `session_grant_ttl`：REST auth bridge 登录/交换路径以及 refresh endpoint
   返回的 Arkret session-grant JWT 生命周期，单位秒；默认 `300`（5 分钟）。
 

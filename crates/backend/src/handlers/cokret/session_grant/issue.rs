@@ -1,4 +1,4 @@
-use cokret_core::error::{
+use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_CLAIM_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_INTERNAL_ERROR, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
     ERROR_CODE_POLICY_DENIED, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_SERVICE_UNAVAILABLE,
@@ -11,7 +11,7 @@ use crate::handlers::arkret::*;
 
 // ── Canonical Account Authority session-grant issuance ─────────────
 //
-// `POST /_cokret/gate/account/session-grants` — the single client-visible
+// `POST /_arkret/gate/account/session-grants` — the single client-visible
 // bridge from a standard authentication result into a Arkret
 // `ck.session.grant` (service-surface.md §2.5.1). The request body is the
 // SDK-canonical `SessionGrantRequestBody`; the proof's `proof_kind` selects
@@ -22,13 +22,13 @@ use crate::handlers::arkret::*;
 // redirect_uri / id_token nonce / principal binding / device binding
 // (`cnf.jkt`) / audience before minting the device-bound grant.
 
-/// `POST /_cokret/gate/account/session-grants` — canonical session-grant
+/// `POST /_arkret/gate/account/session-grants` — canonical session-grant
 /// issuance. Returns the SDK `SessionGrantOutcome`.
 #[handler]
 pub async fn issue_session_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<cokret_core::SessionGrantOutcome>, CokretRouteError> {
+) -> Result<Json<arkret_core::SessionGrantOutcome>, CokretRouteError> {
     use crate::handlers::account::auth::extract_dpop_binding_for_kickoff;
     use crate::handlers::account::auth::oidc_bridge::{
         OidcCodeExchangeInput, exchange_oidc_code_for_session_grant,
@@ -52,11 +52,11 @@ pub async fn issue_session_grant_endpoint(
         .parse_json()
         .await
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
-    let body: cokret_core::SessionGrantRequestBody = serde_json::from_value(raw_body.clone())
+    let body: arkret_core::SessionGrantRequestBody = serde_json::from_value(raw_body.clone())
         .map_err(|_| CokretRouteError::BadRequest("invalid json body".into()))?;
     enforce_session_grant_inception_key_window(&body, &raw_body)?;
     match body.proof.proof_kind {
-        cokret_core::SessionGrantProofKind::OidcCodeExchange => {
+        arkret_core::SessionGrantProofKind::OidcCodeExchange => {
             let proof = &body.proof;
             let input = OidcCodeExchangeInput {
                 authorization_code: proof.authorization_code.clone().unwrap_or_default(),
@@ -85,13 +85,13 @@ pub async fn issue_session_grant_endpoint(
                 .await
                 .map_err(map_oidc_exchange_error)?;
 
-            let device_id = cokret_core::DeviceId::new(success.device_id.clone()).map_err(|e| {
+            let device_id = arkret_core::DeviceId::new(success.device_id.clone()).map_err(|e| {
                 CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                     format!("issued grant carried a non-protocol device_id: {e}"),
                 ))
             })?;
             let principal_id =
-                cokret_core::Did::new(success.principal_did.clone()).map_err(|e| {
+                arkret_core::Did::new(success.principal_did.clone()).map_err(|e| {
                     CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         format!("issued grant carried a non-DID principal_id: {e}"),
                     ))
@@ -104,13 +104,13 @@ pub async fn issue_session_grant_endpoint(
             // code wrote these three into `scope_details`, violating its
             // `additionalProperties:false` agent-only schema.
             let grant_id =
-                cokret_core::GrantId::new(success.persisted_grant_id.clone()).map_err(|e| {
+                arkret_core::GrantId::new(success.persisted_grant_id.clone()).map_err(|e| {
                     CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         format!("issued grant carried a non-protocol grant_id: {e}"),
                     ))
                 })?;
 
-            Ok(Json(cokret_core::SessionGrantOutcome {
+            Ok(Json(arkret_core::SessionGrantOutcome {
                 principal_id,
                 device_id: Some(device_id),
                 session_grant: success.session_grant.grant_jwt.clone(),
@@ -122,7 +122,7 @@ pub async fn issue_session_grant_endpoint(
                 scope_details: None,
             }))
         }
-        cokret_core::SessionGrantProofKind::AgentKeyProof => {
+        arkret_core::SessionGrantProofKind::AgentKeyProof => {
             // CKP-0008 §4.6: independent agent_key_proof validator. MUST NOT
             // fall back to any human proof validator. The grant-binding DPoP proof is
             // still required so the issued grant is device/runtime-bound
@@ -145,12 +145,12 @@ pub async fn issue_session_grant_endpoint(
 
 fn require_agent_key_proof_dpop_binding(
     binding: Option<crate::handlers::account::auth::DpopSessionBinding>,
-    body_binding: Option<&cokret_core::SessionGrantDpopBindingProof>,
+    body_binding: Option<&arkret_core::SessionGrantDpopBindingProof>,
 ) -> Result<crate::handlers::account::auth::DpopSessionBinding, CokretRouteError> {
     let binding = binding.ok_or_else(|| {
         CokretRouteError::coded(
             StatusCode::UNAUTHORIZED,
-            cokret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
+            arkret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
             "agent_key_proof session grant requires a grant-binding DPoP proof",
         )
     })?;
@@ -177,13 +177,13 @@ fn require_agent_key_proof_dpop_binding(
 /// `scope_details` overlay. Human-approval and fail-closed rejections surface
 /// as structured errors.
 fn enforce_session_grant_inception_key_window(
-    body: &cokret_core::SessionGrantRequestBody,
+    body: &arkret_core::SessionGrantRequestBody,
     raw_body: &serde_json::Value,
 ) -> Result<(), CokretRouteError> {
     if !matches!(
         body.proof.proof_kind,
-        cokret_core::SessionGrantProofKind::DidBoundSignature
-            | cokret_core::SessionGrantProofKind::PairedDeviceProof
+        arkret_core::SessionGrantProofKind::DidBoundSignature
+            | arkret_core::SessionGrantProofKind::PairedDeviceProof
     ) {
         return Ok(());
     }
@@ -209,12 +209,12 @@ async fn issue_agent_key_proof_session_grant(
     _req: &mut Request,
     depot: &Depot,
     dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
-    body: &cokret_core::SessionGrantRequestBody,
-) -> Result<Json<cokret_core::SessionGrantOutcome>, CokretRouteError> {
+    body: &arkret_core::SessionGrantRequestBody,
+) -> Result<Json<arkret_core::SessionGrantOutcome>, CokretRouteError> {
     use crate::handlers::account::agents::{AgentSessionProofError, validate_agent_session_proof};
 
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
@@ -225,7 +225,7 @@ async fn issue_agent_key_proof_session_grant(
         &mut rng,
         &*clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         body,
     )
     .await
@@ -248,7 +248,7 @@ async fn issue_agent_key_proof_session_grant(
             // out-of-band approval surface.
             return Err(CokretRouteError::coded(
                 StatusCode::UNAUTHORIZED,
-                cokret_core::error::ERROR_CODE_CLAIM_REQUIRED,
+                arkret_core::error::ERROR_CODE_CLAIM_REQUIRED,
                 serde_json::json!({
                     "reason_code": "human_approval_required",
                     "approval_request_id": approval.approval_request_id,
@@ -263,7 +263,7 @@ async fn issue_agent_key_proof_session_grant(
     // the DID maps to a coauth-hosted account. Bind the lookup to an owned
     // value so the sub-repo borrow is released before `repo.cancel()`.
     let controller_blocked = if let Some(user_id) =
-        parse_local_user_did_for(&cokret_config, &authorization.controller_did)
+        parse_local_user_did_for(&arkret_config, &authorization.controller_did)
     {
         let user = repo
             .user()
@@ -298,7 +298,7 @@ async fn issue_agent_key_proof_session_grant(
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(error))
     })?;
     let material = mint_agent_session_grant(
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &authorization.agent_principal_id,
         audience,
@@ -319,7 +319,7 @@ async fn issue_agent_key_proof_session_grant(
         .map_err(|error| CokretRouteError::Internal(Box::new(error)))?;
 
     let principal_id =
-        cokret_core::Did::new(authorization.agent_principal_id.clone()).map_err(|e| {
+        arkret_core::Did::new(authorization.agent_principal_id.clone()).map_err(|e| {
             CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
                 "agent principal is not a valid DID: {e}"
             )))
@@ -331,13 +331,13 @@ async fn issue_agent_key_proof_session_grant(
     // agent overlay (CKP-0008 §4.6); the JWT-internal scope details with the
     // canonical constraint projection are already baked into the minted grant
     // above.
-    let grant_id = cokret_core::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {
+    let grant_id = arkret_core::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {
         CokretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
             "issued agent grant carried a non-protocol grant_id: {e}"
         )))
     })?;
 
-    Ok(Json(cokret_core::SessionGrantOutcome {
+    Ok(Json(arkret_core::SessionGrantOutcome {
         principal_id,
         device_id: None,
         session_grant: material.grant_jwt,
@@ -464,7 +464,7 @@ mod tests {
     fn agent_key_proof_session_grant_requires_dpop_header_binding() {
         let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
             None,
-            Some(&cokret_core::SessionGrantDpopBindingProof {
+            Some(&arkret_core::SessionGrantDpopBindingProof {
                 proof_jwt: "proof.jwt".to_owned(),
             }),
         ));
@@ -472,7 +472,7 @@ mod tests {
         assert_coded(
             err,
             StatusCode::UNAUTHORIZED,
-            cokret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
+            arkret_core::error::ERROR_CODE_DID_PROOF_REQUIRED,
         );
     }
 
@@ -490,7 +490,7 @@ mod tests {
     fn agent_key_proof_session_grant_rejects_mismatched_body_dpop_binding() {
         let err = unwrap_binding_error(require_agent_key_proof_dpop_binding(
             Some(test_dpop_binding("header.proof.jwt")),
-            Some(&cokret_core::SessionGrantDpopBindingProof {
+            Some(&arkret_core::SessionGrantDpopBindingProof {
                 proof_jwt: "body.proof.jwt".to_owned(),
             }),
         ));

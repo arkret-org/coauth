@@ -24,8 +24,8 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable as _;
 use coauth_jose::jwt::JsonWebSignatureHeader;
 use coauth_keystore::Keystore;
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
-use cokret_core::identifiers::{EventId, GrantId, new_prefixed_uuid7};
+use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_core::identifiers::{EventId, GrantId, new_prefixed_uuid7};
 use rand_core::SeedableRng as _;
 use salvo::http::StatusCode;
 use salvo::oapi::extract::PathParam;
@@ -131,8 +131,8 @@ pub async fn create_handler(
         .as_ref()
         .map_or_else(|| "service".to_owned(), |u| format!("user:{}", u.id));
 
-    let cokret_config = depot.cokret_config()?;
-    let service_did = service_did_for(&cokret_config);
+    let arkret_config = depot.arkret_config()?;
+    let service_did = service_did_for(&arkret_config);
     let key_store = depot.key_store()?;
     let capability_grant_id = GrantId::new(new_prefixed_uuid7("ak:grant:"))
         .map_err(|err| AppError::internal_box(Box::new(err)))?
@@ -151,7 +151,7 @@ pub async fn create_handler(
         body.approval_evidence_ref.as_deref(),
         issued_at,
         &service_did,
-        &cokret_config,
+        &arkret_config,
         &key_store,
     );
     let grant_fanout_payload = grant_fanout_payload?;
@@ -253,8 +253,8 @@ pub async fn revoke_handler(
 
     match revoked {
         Some(revoked) => {
-            let cokret_config = depot.cokret_config()?;
-            let service_did = service_did_for(&cokret_config);
+            let arkret_config = depot.arkret_config()?;
+            let service_did = service_did_for(&arkret_config);
             let key_store = depot.key_store()?;
             let revoke_fanout_payload = build_revoke_fanout_payload(
                 &revoke_event_id,
@@ -262,7 +262,7 @@ pub async fn revoke_handler(
                 &revoked.realm_id,
                 revoked.revoked_at.unwrap_or_else(|| clock.now()),
                 &service_did,
-                &cokret_config,
+                &arkret_config,
                 &key_store,
             )?;
             let revoke_raw_payload_digest =
@@ -315,7 +315,7 @@ fn build_grant_fanout_payload(
     approval_evidence_ref: Option<&str>,
     issued_at: DateTime<Utc>,
     service_did: &str,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
 ) -> Result<CapabilityFanoutBody, AppError> {
     let mut grant = json!({
@@ -366,7 +366,7 @@ fn build_grant_fanout_payload(
             "grant_id": capability_grant_id,
             "grant": signed_grant,
         }),
-        principal_servers: principal_servers(cokret_config),
+        principal_servers: principal_servers(arkret_config),
     })
 }
 
@@ -376,7 +376,7 @@ fn build_revoke_fanout_payload(
     realm_id: &str,
     revoked_at: DateTime<Utc>,
     service_did: &str,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
 ) -> Result<CapabilityFanoutBody, AppError> {
     let mut revoke_payload = json!({
@@ -403,7 +403,7 @@ fn build_revoke_fanout_payload(
         event_id: revoke_event_id.to_owned(),
         capability_grant_id: capability_grant_id.to_owned(),
         payload: revoke_payload,
-        principal_servers: principal_servers(cokret_config),
+        principal_servers: principal_servers(arkret_config),
     })
 }
 
@@ -502,8 +502,8 @@ fn sign_detached_jws(
     Ok((verification_method, format!("{protected}..{signature}")))
 }
 
-fn principal_servers(cokret_config: &CokretConfig) -> Vec<Value> {
-    cokret_config
+fn principal_servers(arkret_config: &CokretConfig) -> Vec<Value> {
+    arkret_config
         .principal_servers
         .iter()
         .map(|server| {

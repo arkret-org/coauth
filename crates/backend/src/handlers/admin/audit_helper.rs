@@ -13,7 +13,7 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable as _;
 use coauth_jose::jwa::{AsymmetricVerifyingKey, Signature as JoseSignature};
 use coauth_keystore::Keystore;
-use cokret_core::canonical::canonical_json_bytes;
+use arkret_core::canonical::canonical_json_bytes;
 use rand_chacha::ChaChaRng;
 use rand_core::{RngCore, SeedableRng as _};
 use salvo::oapi::ToSchema;
@@ -246,7 +246,7 @@ pub fn verify_admin_operation_signature(
 }
 
 /// Canonical-JSON transcript bound to one admin-audit row. Field order is fixed
-/// for readability; `cokret_core::canonical` re-sorts before emitting bytes.
+/// for readability; `arkret_core::canonical` re-sorts before emitting bytes.
 #[derive(Debug, Serialize)]
 struct AuditTranscript<'a> {
     kind: &'a str,

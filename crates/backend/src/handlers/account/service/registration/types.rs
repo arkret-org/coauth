@@ -60,7 +60,7 @@ pub enum BeginPasswordRegistrationIssue {
     /// candidate handle localpart failed the wire-level homograph guard
     /// (NFC + UTS#39 confusable + script-mixed). Renders as the
     /// canonical `handle_homograph_forbidden` wire code from the SDK
-    /// helper [`cokret_core::normalize_handle_localpart`].
+    /// helper [`arkret_core::normalize_handle_localpart`].
     HandleHomographForbidden,
     EmailOrPhoneRequired,
     EmailInvalid,

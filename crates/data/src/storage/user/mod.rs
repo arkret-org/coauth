@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use coauth_data::{Clock, User, UserPatch, UserProfilePatch};
-pub use cokret_core::AccountStatus as UserStatus;
+pub use arkret_core::AccountStatus as UserStatus;
 use rand_core::RngCore;
 use ulid::Ulid;
 

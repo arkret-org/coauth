@@ -142,10 +142,10 @@ pub const DID_DOCUMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
 
 #[async_trait]
 pub trait DidResolverService: Send + Sync {
-    fn service_did(&self, cokret_config: &CokretConfig) -> String;
-    fn issuer_did(&self, cokret_config: &CokretConfig) -> String;
-    fn user_did(&self, cokret_config: &CokretConfig, user: &User) -> String;
-    fn parse_local_user_did(&self, cokret_config: &CokretConfig, did: &str) -> Option<Ulid>;
+    fn service_did(&self, arkret_config: &CokretConfig) -> String;
+    fn issuer_did(&self, arkret_config: &CokretConfig) -> String;
+    fn user_did(&self, arkret_config: &CokretConfig, user: &User) -> String;
+    fn parse_local_user_did(&self, arkret_config: &CokretConfig, did: &str) -> Option<Ulid>;
     /// Resolve the primary principal DID for a user.
     ///
     /// This only returns the local/starid `did:web` forms when the deployment
@@ -154,17 +154,17 @@ pub trait DidResolverService: Send + Sync {
     /// rows instead of deriving a fallback DID here.
     async fn primary_did_for_user(
         &self,
-        cokret_config: &CokretConfig,
+        arkret_config: &CokretConfig,
         user: &User,
     ) -> Result<String, SessionGrantError>;
-    fn delegated_resolver(&self, cokret_config: &CokretConfig) -> Option<String>;
-    fn proof_required_for_pairwise(&self, cokret_config: &CokretConfig) -> bool;
+    fn delegated_resolver(&self, arkret_config: &CokretConfig) -> Option<String>;
+    fn proof_required_for_pairwise(&self, arkret_config: &CokretConfig) -> bool;
 
     async fn resolve_did_document(
         &self,
         http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
+        arkret_config: &CokretConfig,
         key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,
@@ -176,29 +176,29 @@ pub struct DefaultDidResolverService;
 
 #[async_trait]
 impl DidResolverService for DefaultDidResolverService {
-    fn service_did(&self, cokret_config: &CokretConfig) -> String {
-        service_did_for(cokret_config)
+    fn service_did(&self, arkret_config: &CokretConfig) -> String {
+        service_did_for(arkret_config)
     }
 
-    fn issuer_did(&self, cokret_config: &CokretConfig) -> String {
-        issuer_did_for(cokret_config)
+    fn issuer_did(&self, arkret_config: &CokretConfig) -> String {
+        issuer_did_for(arkret_config)
     }
 
-    fn user_did(&self, cokret_config: &CokretConfig, user: &User) -> String {
-        user_did_for(cokret_config, user)
+    fn user_did(&self, arkret_config: &CokretConfig, user: &User) -> String {
+        user_did_for(arkret_config, user)
     }
 
-    fn parse_local_user_did(&self, cokret_config: &CokretConfig, did: &str) -> Option<Ulid> {
-        let prefix = format!("{}:users:", self.service_did(cokret_config));
+    fn parse_local_user_did(&self, arkret_config: &CokretConfig, did: &str) -> Option<Ulid> {
+        let prefix = format!("{}:users:", self.service_did(arkret_config));
         did.strip_prefix(&prefix)?.parse::<Ulid>().ok()
     }
 
     async fn primary_did_for_user(
         &self,
-        cokret_config: &CokretConfig,
+        arkret_config: &CokretConfig,
         user: &User,
     ) -> Result<String, SessionGrantError> {
-        if !cokret_config.did_web_principal_allowed() {
+        if !arkret_config.did_web_principal_allowed() {
             return Err(SessionGrantError::DidWebPrincipalNotExplicit);
         }
 
@@ -210,7 +210,7 @@ impl DidResolverService for DefaultDidResolverService {
         // historical local derivation. Non-personal profiles fail before this
         // point and never use this value as a principal DID.
         if user.starid_backend
-            && let Some(starid) = cokret_config.starid.as_ref()
+            && let Some(starid) = arkret_config.starid.as_ref()
         {
             let host = starid
                 .did_host
@@ -232,15 +232,15 @@ impl DidResolverService for DefaultDidResolverService {
         ))
     }
 
-    fn delegated_resolver(&self, cokret_config: &CokretConfig) -> Option<String> {
-        cokret_config
+    fn delegated_resolver(&self, arkret_config: &CokretConfig) -> Option<String> {
+        arkret_config
             .identity_registry
             .as_ref()
             .map(|registry| registry.resolver.to_string())
     }
 
-    fn proof_required_for_pairwise(&self, cokret_config: &CokretConfig) -> bool {
-        cokret_config
+    fn proof_required_for_pairwise(&self, arkret_config: &CokretConfig) -> bool {
+        arkret_config
             .identity_registry
             .as_ref()
             .is_some_and(|registry| registry.proof_required_for_pairwise)
@@ -250,7 +250,7 @@ impl DidResolverService for DefaultDidResolverService {
         &self,
         http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
-        cokret_config: &CokretConfig,
+        arkret_config: &CokretConfig,
         key_store: &Keystore,
         repo: &mut BoxRepository,
         did: &str,
@@ -264,7 +264,7 @@ impl DidResolverService for DefaultDidResolverService {
         // branch stays: that is an internal alias under an RFC2606
         // non-resolvable TLD, never a hosted document.
         if let Some(user_id) = parse_local_primary_account_did(did) {
-            if !cokret_config.did_web_principal_allowed() {
+            if !arkret_config.did_web_principal_allowed() {
                 return Err(DidResolveError::DidWebPrincipalNotExplicit);
             }
             let Some(user) = repo.user().lookup(user_id).await? else {
@@ -319,7 +319,7 @@ impl DidResolverService for DefaultDidResolverService {
             // fail closed with `UnsupportedMethod`. Do not add a local webvh
             // history verifier here without a spec-level ruling moving that
             // authority boundary.
-            Some(_) => match self.delegated_resolver(cokret_config) {
+            Some(_) => match self.delegated_resolver(arkret_config) {
                 Some(resolver) => {
                     let url = delegated_resolver_url(&resolver, did)?;
                     resolve_http_did(
@@ -843,7 +843,7 @@ fn did_method(did: &str) -> Option<String> {
     // MUST be lowercase ASCII alpha + digits only (no `.`/`-`/`_`/`:`);
     // any value the SDK validator rejects is wire-broken and MUST NOT
     // be routed by this resolver.
-    cokret_core::Did::new(did.to_owned()).ok()?;
+    arkret_core::Did::new(did.to_owned()).ok()?;
     let rest = did.strip_prefix("did:")?;
     let (method, _method_id) = rest.split_once(':')?;
     (!method.is_empty()).then(|| method.to_ascii_lowercase())
@@ -949,7 +949,7 @@ mod tests {
     #[test]
     fn sdk_identity_resolve_response_preserves_method_evidence() {
         let did = "did:webvh:ztest:resolver.example:users:alice";
-        let url = Url::parse("https://resolver.example/_cokret/root/identity/resolve").unwrap();
+        let url = Url::parse("https://resolver.example/_arkret/root/identity/resolve").unwrap();
         let body = serde_json::json!({
             "did_document": {
                 "did": did,

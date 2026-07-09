@@ -4,7 +4,7 @@
 //! also serve the product-private `/_coauth/.../auth/oidc/{browser-bridge,
 //! exchange}` bridge endpoints; those are removed (account-lifecycle §4.1,
 //! service-surface.md §2.5.1). The canonical entry point is now the spec
-//! operation `POST /_cokret/gate/account/session-grants` with
+//! operation `POST /_arkret/gate/account/session-grants` with
 //! `proof.proof_kind = "oidc_code_exchange"` — see
 //! [`crate::handlers::arkret::session_grant::issue_session_grant`], which
 //! calls [`exchange_oidc_code_for_session_grant`] here.
@@ -23,8 +23,8 @@ use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{
     AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
 };
-use cokret_core::error::REASON_PROOF_INVALID;
-use cokret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
+use arkret_core::error::REASON_PROOF_INVALID;
+use arkret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;
@@ -162,7 +162,7 @@ pub(super) fn principal_session_grant_scopes(device_id: &str) -> Vec<String> {
 fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid principal server endpoint: {error}"))?;
-    base.join("/_cokret/gate/account/register")
+    base.join("/_arkret/gate/account/register")
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
@@ -178,7 +178,7 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
 /// perform the write/sync binding this provisioning flow requires. coauth and
 /// soland share this static-bearer-gated `/_soland/*` edge as a deployment-local
 /// account-provisioning convention; it is registered here as such rather than as
-/// a `/_cokret/*` protocol surface.
+/// a `/_arkret/*` protocol surface.
 fn soland_account_localparts_endpoint(
     principal_endpoint: &str,
     principal_did: &str,
@@ -192,10 +192,10 @@ fn soland_account_localparts_endpoint(
 }
 
 pub(crate) fn principal_server_operation_bearer<'a>(
-    cokret_config: &'a coauth_config::CokretConfig,
+    arkret_config: &'a coauth_config::CokretConfig,
     audience: &str,
 ) -> Option<&'a str> {
-    cokret_config
+    arkret_config
         .principal_servers
         .iter()
         .find(|server| server.audience == audience)
@@ -327,7 +327,7 @@ fn classify_soland_account_register_conflict(
         return None;
     }
     let envelope = serde_json::from_str::<ErrorEnvelope>(body).ok()?;
-    if envelope.code() != cokret_core::error::ERROR_CODE_DUPLICATE_CONFLICT {
+    if envelope.code() != arkret_core::error::ERROR_CODE_DUPLICATE_CONFLICT {
         return None;
     }
     match envelope.message() {
@@ -401,11 +401,11 @@ pub(super) async fn ensure_principal_did_for_user(
     encrypter: &coauth_keystore::Encrypter,
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    cokret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::CokretConfig,
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
-    let Some(principal_server) = cokret_config
+    let Some(principal_server) = arkret_config
         .principal_servers
         .iter()
         .find(|server| server.audience == audience)
@@ -454,7 +454,7 @@ pub(crate) async fn ensure_principal_did_for_user_committed(
     encrypter: &coauth_keystore::Encrypter,
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
-    cokret_config: &coauth_config::CokretConfig,
+    arkret_config: &coauth_config::CokretConfig,
     user: &User,
     audience: &str,
 ) -> Result<String, String> {
@@ -469,7 +469,7 @@ pub(crate) async fn ensure_principal_did_for_user_committed(
         encrypter,
         http_client,
         url_builder,
-        cokret_config,
+        arkret_config,
         user,
         audience,
     )
@@ -559,7 +559,7 @@ pub(crate) async fn ensure_soland_account_registered(
 /// Account Authority OIDC authorization-code → `ck.session.grant` exchange.
 ///
 /// This is the core that the canonical
-/// `POST /_cokret/gate/account/session-grants`
+/// `POST /_arkret/gate/account/session-grants`
 /// (`proof.proof_kind = "oidc_code_exchange"`) handler calls. It:
 ///
 /// 1. resolves the issuer's live OIDC discovery metadata (local coauth issuer or a configured
@@ -582,8 +582,8 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     let url_builder = depot
         .url_builder()
         .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
-    let cokret_config = depot
-        .cokret_config()
+    let arkret_config = depot
+        .arkret_config()
         .map_err(|e| OidcExchangeError::new("internal_error", e.to_string()))?;
     let key_store = depot
         .key_store()
@@ -865,7 +865,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         let grant_target = upstream_oidc
             .session_grant_target_for_requested_audience(
                 &url_builder,
-                &cokret_config,
+                &arkret_config,
                 input.requested_audience.as_deref(),
             )
             .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
@@ -876,7 +876,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             &encrypter,
             &http_client,
             &url_builder,
-            &cokret_config,
+            &arkret_config,
             &user,
             &grant_target.audience,
         )
@@ -890,7 +890,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
             &user.localpart,
         );
         let localpart_sync_bearer =
-            principal_server_operation_bearer(&cokret_config, &grant_target.audience);
+            principal_server_operation_bearer(&arkret_config, &grant_target.audience);
         ensure_soland_account_registered(
             &http_client,
             grant_target.principal_server_endpoint.as_deref(),
@@ -908,7 +908,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
         let session_grant = arkret::issue_session_grant_for_audience(
             &*clock,
-            &cokret_config,
+            &arkret_config,
             &key_store,
             &browser_session,
             dpop_binding.public_jwk.clone(),
@@ -1211,13 +1211,13 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 format!("authorization_code references missing browser_session={user_session_id}"),
             )
         })?;
-    let expected_subject = arkret::user_did_for(&cokret_config, &browser_session.user);
+    let expected_subject = arkret::user_did_for(&arkret_config, &browser_session.user);
     let expected_issuer = url_builder.oidc_issuer();
     let oauth_introspection = match crate::handlers::oauth::introspection_service::introspect_token(
         &mut repo,
         &clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &service_activity_tracker,
         &oauth_token_reply.access_token,
         Some(coauth_iana::oauth::OAuthTokenTypeHint::AccessToken),
@@ -1295,7 +1295,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         ));
     }
     let expected_oauth_session_id = oauth_session_id.to_string();
-    if oauth_introspection.cokret_session_id.as_deref() != Some(expected_oauth_session_id.as_str())
+    if oauth_introspection.arkret_session_id.as_deref() != Some(expected_oauth_session_id.as_str())
     {
         return Err(OidcExchangeError::new(
             "invalid_authorization_code",
@@ -1303,7 +1303,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
                 "fresh OAuth access token session mismatch: expected {} but introspection returned {}",
                 expected_oauth_session_id,
                 oauth_introspection
-                    .cokret_session_id
+                    .arkret_session_id
                     .as_deref()
                     .unwrap_or("missing")
             ),
@@ -1359,7 +1359,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
     let grant_target = upstream_oidc
         .session_grant_target_for_requested_audience(
             &url_builder,
-            &cokret_config,
+            &arkret_config,
             input.requested_audience.as_deref(),
         )
         .map_err(|message| OidcExchangeError::new("invalid_audience", message))?;
@@ -1371,7 +1371,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         &encrypter,
         &http_client,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         user,
         &grant_target.audience,
     )
@@ -1385,7 +1385,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
         &user.localpart,
     );
     let localpart_sync_bearer =
-        principal_server_operation_bearer(&cokret_config, &grant_target.audience);
+        principal_server_operation_bearer(&arkret_config, &grant_target.audience);
     ensure_soland_account_registered(
         &http_client,
         grant_target.principal_server_endpoint.as_deref(),
@@ -1401,7 +1401,7 @@ pub(crate) async fn exchange_oidc_code_for_session_grant(
 
     let session_grant = arkret::issue_session_grant_for_audience(
         &clock,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &browser_session,
         dpop_binding.public_jwk,
@@ -1484,7 +1484,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 service: "soland".to_owned(),
                 purpose: "principal_server_session_exchange".to_owned(),
                 required_contract: "arkret.rest.principal_bridge.v1".to_owned(),
-                discovery_path: "/_cokret/describe".to_owned(),
+                discovery_path: "/_arkret/describe".to_owned(),
                 mode: "remote_service_contract".to_owned(),
             },
             IntegrationManifestDependency {
@@ -1499,7 +1499,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             IntegrationManifestSurface {
                 name: "session_grants".to_owned(),
                 method: "POST".to_owned(),
-                path: "/_cokret/gate/account/session-grants".to_owned(),
+                path: "/_arkret/gate/account/session-grants".to_owned(),
                 contract: "ck.gate.account.command.issue_session_grant".to_owned(),
                 stability: "validated".to_owned(),
                 todo: "canonical Account Authority grant issuance; proof.proof_kind=oidc_code_exchange exchanges the OIDC authorization code, validates issuer/state/nonce/redirect_uri/principal/device/audience, and mints the device-bound ck.session.grant.".to_owned(),
@@ -1541,7 +1541,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
             "compose_strand": {
                 "step_1": {
                     "service": "principal_server",
-                    "path": "/_cokret/describe",
+                    "path": "/_arkret/describe",
                     "method": "GET",
                     "note": "read auth_metadata.account_authority + methods[].oidc"
                 },
@@ -1553,13 +1553,13 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
                 },
                 "step_3": {
                     "service": "account_authority",
-                    "path": "/_cokret/gate/account/session-grants",
+                    "path": "/_arkret/gate/account/session-grants",
                     "method": "POST",
                     "note": "proof.proof_kind=oidc_code_exchange"
                 },
                 "step_4": {
                     "service": "principal_server",
-                    "path": "/_cokret/edge/push/register-device",
+                    "path": "/_arkret/edge/push/register-device",
                     "method": "POST"
                 }
             }
@@ -1580,7 +1580,7 @@ mod tests {
     const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
     const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
     const TEST_LOCALPARTS_BEARER: &str = "localparts-secret";
-    const ACCOUNT_REGISTER_PATH: &str = "/_cokret/gate/account/register";
+    const ACCOUNT_REGISTER_PATH: &str = "/_arkret/gate/account/register";
 
     fn account_localparts_path() -> String {
         let account_did_path: String =
@@ -1690,14 +1690,14 @@ mod tests {
     }
 
     #[test]
-    fn soland_account_register_endpoint_uses_cokret_gate_path() {
+    fn soland_account_register_endpoint_uses_arkret_gate_path() {
         let endpoint = soland_account_register_endpoint("https://local.host/base/path").unwrap();
 
         // The standard account-register route lives at the service root;
         // the join must also discard any base path on the endpoint URL.
         assert_eq!(
             endpoint.as_str(),
-            "https://local.host/_cokret/gate/account/register"
+            "https://local.host/_arkret/gate/account/register"
         );
     }
 
@@ -1729,7 +1729,7 @@ mod tests {
             .and(path(ACCOUNT_REGISTER_PATH))
             .and(request_has_handle("alice:local.host"))
             .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                cokret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
+                arkret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
                 "handle localpart `alice` is already taken",
             )))
             .expect(1)
@@ -1758,7 +1758,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
             .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                cokret_core::error::ERROR_CODE_FAILED_PRECONDITION,
+                arkret_core::error::ERROR_CODE_FAILED_PRECONDITION,
                 "account registration is closed",
             )))
             .expect(1)
@@ -1787,7 +1787,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
             .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                cokret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
+                arkret_core::error::ERROR_CODE_DUPLICATE_CONFLICT,
                 "account already exists",
             )))
             .expect(1)
@@ -1848,7 +1848,7 @@ mod tests {
         let state = TestState::from_pool(pool.clone()).await.unwrap();
 
         let response = state
-            .request(Request::post("/_cokret/gate/account/session-grants").json(
+            .request(Request::post("/_arkret/gate/account/session-grants").json(
                 serde_json::json!({
                     "principal_id": "did:webvh:scid:offline.invalid:webvh:01k",
                     "device_id": "ak:device:01964137-0000-7000-8000-000000000001",

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 (2026-05-20, spec a77b995) — `/_cokret/self/policy/check` handler.
+//! Round 4 (2026-05-20, spec a77b995) — `/_arkret/self/policy/check` handler.
 //!
 //! Wire-breaking: replaces the pre-round-4 dry-run-only policy surface
 //! exposed under `/_coauth/admin/policy-checks/dry-run`. The round-4
@@ -38,7 +38,7 @@ use chrono::Utc;
 use coauth_config::CokretConfig;
 use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory};
 use coauth_keystore::Keystore;
-use cokret_core::{
+use arkret_core::{
     Did, PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
 };
 use salvo::prelude::*;
@@ -65,7 +65,7 @@ const EVALUATOR_DEADLINE: Duration = Duration::from_secs(2);
 /// 30 s on allow paths.
 const DEFAULT_ALLOW_TTL_SECONDS: i64 = 30;
 
-/// `POST /_cokret/self/policy/check`
+/// `POST /_arkret/self/policy/check`
 ///
 /// Round 4 `ck.self.policy.query.check` endpoint. Consumes
 /// [`PolicyCheckRequestBody`], emits a signed [`PolicyCheckOutcome`].
@@ -74,8 +74,8 @@ pub async fn post_policy_check(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<PolicyCheckOutcome>, CokretRouteError> {
-    let cokret_config = depot.cokret_config()?;
-    require_policy_check_bearer(req, &cokret_config)?;
+    let arkret_config = depot.arkret_config()?;
+    require_policy_check_bearer(req, &arkret_config)?;
     let key_store = depot.key_store()?;
     let http_client = depot.http_client()?;
     // Rebuild a fresh `PgRepositoryFactory` from the depot-injected pool;
@@ -115,14 +115,14 @@ pub async fn post_policy_check(
     // stable means parallel agents working on other handlers don't have
     // to rebase.
     let frontier_source = SolandFrontierSource::new(
-        cokret_config.principal_server_url.clone(),
+        arkret_config.principal_server_url.clone(),
         http_client.clone(),
     );
     let evaluator = RuleEvaluator::new(repo_factory);
 
     let response = build_policy_check_response(
         &body,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &frontier_source,
         &evaluator,
@@ -133,7 +133,7 @@ pub async fn post_policy_check(
 
 fn require_policy_check_bearer(
     req: &Request,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
 ) -> Result<(), CokretRouteError> {
     let auth_header = req
         .headers()
@@ -146,7 +146,7 @@ fn require_policy_check_bearer(
         .strip_prefix("Bearer ")
         .or_else(|| auth_str.strip_prefix("bearer "))
         .ok_or_else(|| CokretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
-    if arkret::principal_server_static_session_grant_bearer_matches(cokret_config, token) {
+    if arkret::principal_server_static_session_grant_bearer_matches(arkret_config, token) {
         Ok(())
     } else {
         Err(CokretRouteError::Unauthorized(
@@ -161,14 +161,14 @@ fn require_policy_check_bearer(
 /// full salvo Depot.
 pub(crate) async fn build_policy_check_response(
     request: &PolicyCheckRequestBody,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     frontier_source: &dyn FrontierSource,
     evaluator: &dyn PolicyEvaluator,
 ) -> Result<PolicyCheckOutcome, CokretRouteError> {
     // Policy server identity: coauth's own service DID (signs the
     // response with its preferred signing key).
-    let policy_server_did = arkret::service_did_for(cokret_config);
+    let policy_server_did = arkret::service_did_for(arkret_config);
     let policy_server_id = Did::new(policy_server_did.clone()).map_err(|e| {
         CokretRouteError::Internal(Box::new(std::io::Error::other(format!(
             "policy server DID failed SDK validation: {e}"
@@ -319,19 +319,19 @@ pub(crate) async fn build_policy_check_response(
 #[allow(dead_code)]
 pub(crate) async fn build_policy_check_response_with_defaults(
     request: &PolicyCheckRequestBody,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     http_client: &reqwest::Client,
     repository_factory: BoxRepositoryFactory,
 ) -> Result<PolicyCheckOutcome, CokretRouteError> {
     let frontier_source = SolandFrontierSource::new(
-        cokret_config.principal_server_url.clone(),
+        arkret_config.principal_server_url.clone(),
         http_client.clone(),
     );
     let evaluator = RuleEvaluator::new(repository_factory);
     build_policy_check_response(
         request,
-        cokret_config,
+        arkret_config,
         key_store,
         &frontier_source,
         &evaluator,
@@ -340,7 +340,7 @@ pub(crate) async fn build_policy_check_response_with_defaults(
 }
 
 fn format_canonical_rfc3339(ts: chrono::DateTime<Utc>) -> String {
-    // Canonical form per `cokret_core::canonical::validate_timestamp_canonical`:
+    // Canonical form per `arkret_core::canonical::validate_timestamp_canonical`:
     // `YYYY-MM-DDTHH:MM:SSZ` — no fractional seconds, uppercase `T` / `Z`.
     ts.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
@@ -388,7 +388,7 @@ mod tests {
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable as _;
     use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
-    use cokret_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
+    use arkret_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
     use rand_core::SeedableRng as _;
     use signature::Verifier as _;
 
@@ -452,7 +452,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         assert_eq!(format_canonical_rfc3339(ts), "2026-05-21T10:11:12Z");
-        cokret_core::canonical::validate_timestamp_canonical(&format_canonical_rfc3339(ts))
+        arkret_core::canonical::validate_timestamp_canonical(&format_canonical_rfc3339(ts))
             .expect("formatted timestamp is canonical");
     }
 
@@ -493,7 +493,7 @@ mod tests {
         let request = req();
         // `service_did` is mandatory (no derived fallback): pin the value the
         // old host derivation produced for this test base URL.
-        let cokret_config = CokretConfig {
+        let arkret_config = CokretConfig {
             service_did: Some("did:web:coauth.example".to_owned()),
             ..CokretConfig::default()
         };
@@ -502,7 +502,7 @@ mod tests {
 
         let response = build_policy_check_response(
             &request,
-            &cokret_config,
+            &arkret_config,
             &key_store,
             &frontier_source,
             &evaluator,

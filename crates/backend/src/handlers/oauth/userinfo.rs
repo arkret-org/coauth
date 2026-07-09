@@ -139,7 +139,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
     // request. The `?` operator funnels the common `RouteError` into
     // `RouteError::Internal` via the `From` impl above.
     let url_builder = depot.url_builder()?;
-    let cokret_config: CokretConfig = depot.cokret_config()?;
+    let arkret_config: CokretConfig = depot.arkret_config()?;
     let key_store = depot.key_store()?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
 
@@ -169,9 +169,9 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
         .lookup(user_id)
         .await?
         .ok_or(RouteError::NoSuchUser(user_id))?;
-    let subject_did = arkret::oidc_subject_for_user(&cokret_config, &user);
+    let subject_did = arkret::oidc_subject_for_user(&arkret_config, &user);
     let principal_did =
-        arkret::published_principal_did_for_user(&mut repo, &cokret_config, &user).await?;
+        arkret::published_principal_did_for_user(&mut repo, &arkret_config, &user).await?;
 
     let user_info = UserInfo {
         sub: subject_did.clone(),

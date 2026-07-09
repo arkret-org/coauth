@@ -8,7 +8,7 @@ use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg}
 use coauth_jose::jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{JsonWebKeySet, PrivateKey};
-use cokret_core::SessionGrantIntrospectStatus;
+use arkret_core::SessionGrantIntrospectStatus;
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -87,7 +87,7 @@ fn personal_node_did_web_config() -> CokretConfig {
 
 /// Test config with the now-mandatory service_did set (the backend no longer
 /// derives a did:web default; startup validation enforces it in production).
-fn test_cokret_config() -> CokretConfig {
+fn test_arkret_config() -> CokretConfig {
     CokretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         ..CokretConfig::default()
@@ -95,7 +95,7 @@ fn test_cokret_config() -> CokretConfig {
 }
 
 #[test]
-fn service_and_user_identifiers_follow_cokret_shape() {
+fn service_and_user_identifiers_follow_arkret_shape() {
     let url_builder = UrlBuilder::new(
         "https://auth.example.com/coauth/".parse().unwrap(),
         None,
@@ -108,16 +108,16 @@ fn service_and_user_identifiers_follow_cokret_shape() {
     // There is no host-derived `did:web` fallback any more: the service DID
     // is always the explicitly configured one (did:webvh by default; startup
     // validation fails fast when it is missing).
-    let cokret_config = CokretConfig {
+    let arkret_config = CokretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         ..CokretConfig::default()
     };
     assert_eq!(
-        service_did_for(&cokret_config),
+        service_did_for(&arkret_config),
         "did:webvh:ztest:auth.example.com:webvh:service"
     );
     assert_eq!(
-        user_did_for(&cokret_config, &user),
+        user_did_for(&arkret_config, &user),
         format!(
             "did:webvh:ztest:auth.example.com:webvh:service:users:{}",
             user.id
@@ -139,7 +139,7 @@ fn service_and_user_identifiers_follow_cokret_shape() {
 #[test]
 fn service_describe_exposes_auth_account_boundary_profile() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig {
+    let arkret_config = CokretConfig {
         service_did: Some("did:webvh:ztest:auth.example.com:webvh:service".to_owned()),
         issuer_did: Some("did:webvh:ztest:issuer.example.com:webvh:issuer".to_owned()),
         admin_audience: Some("https://auth.example.com/api/admin".to_owned()),
@@ -172,7 +172,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     };
 
     let body =
-        serde_json::to_value(service_describe_response(&url_builder, &cokret_config, &[])).unwrap();
+        serde_json::to_value(service_describe_response(&url_builder, &arkret_config, &[])).unwrap();
 
     assert_eq!(
         body["service_did"],
@@ -202,7 +202,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert_eq!(
         body["x_coauth_identity_registry_resolver"]["endpoint"],
-        "https://auth.example.com/_cokret/root/identity/resolve"
+        "https://auth.example.com/_arkret/root/identity/resolve"
     );
     assert_eq!(
         body["x_coauth_identity_registry_resolver"]["delegated_resolver"]["kind"],
@@ -301,14 +301,14 @@ fn service_describe_exposes_auth_account_boundary_profile() {
 #[test]
 fn service_describe_marks_personal_node_did_web_service_as_no_history() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig {
+    let arkret_config = CokretConfig {
         service_did: Some("did:web:auth.example.com".to_owned()),
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..CokretConfig::default()
     };
     let body =
-        serde_json::to_value(service_describe_response(&url_builder, &cokret_config, &[])).unwrap();
+        serde_json::to_value(service_describe_response(&url_builder, &arkret_config, &[])).unwrap();
 
     assert_eq!(body["service_did"], "did:web:auth.example.com");
     assert_eq!(
@@ -410,7 +410,7 @@ fn describe_separates_claim_levels() {
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
-        &test_cokret_config(),
+        &test_arkret_config(),
         &[],
     ))
     .unwrap();
@@ -525,7 +525,7 @@ fn service_describe_derives_trust_domain_from_public_host_when_unset() {
     );
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
-        &test_cokret_config(),
+        &test_arkret_config(),
         &[],
     ))
     .unwrap();
@@ -537,7 +537,7 @@ fn service_describe_derives_valid_trust_domain_for_ipv6_host() {
     let url_builder = UrlBuilder::new("https://[::1]/coauth/".parse().unwrap(), None, None);
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
-        &test_cokret_config(),
+        &test_arkret_config(),
         &[],
     ))
     .unwrap();
@@ -555,7 +555,7 @@ fn service_describe_defaults_to_local_identity_binding_resolver() {
 
     let body = serde_json::to_value(service_describe_response(
         &url_builder,
-        &test_cokret_config(),
+        &test_arkret_config(),
         &[],
     ))
     .unwrap();
@@ -566,7 +566,7 @@ fn service_describe_defaults_to_local_identity_binding_resolver() {
     );
     assert_eq!(
         body["x_coauth_identity_registry_resolver"]["endpoint"],
-        "https://auth.example.com/coauth/_cokret/root/identity/resolve"
+        "https://auth.example.com/coauth/_arkret/root/identity/resolve"
     );
     assert!(body["x_coauth_identity_registry_resolver"]["delegated_resolver"].is_null());
 }
@@ -593,7 +593,7 @@ fn service_describe_advertises_configured_session_grant_ttl() {
 fn session_grant_is_signed_for_the_user_did() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-    let cokret_config = personal_node_did_web_config();
+    let arkret_config = personal_node_did_web_config();
     let key_store = test_keystore();
     let now = clock.now();
     let mut fixture_rng = ChaChaRng::seed_from_u64(9);
@@ -610,7 +610,7 @@ fn session_grant_is_signed_for_the_user_did() {
         &mut signing_rng,
         &clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &browser_session,
         session_public_key,
@@ -629,11 +629,11 @@ fn session_grant_is_signed_for_the_user_did() {
     assert_eq!(payload.grant_id, grant.grant_id);
     assert_eq!(
         payload.subject,
-        user_did_for(&cokret_config, &browser_session.user)
+        user_did_for(&arkret_config, &browser_session.user)
     );
     assert_eq!(
         payload.audience,
-        required_audience_for(&url_builder, &cokret_config)
+        required_audience_for(&url_builder, &arkret_config)
     );
     assert_eq!(
         payload.scopes,
@@ -670,7 +670,7 @@ fn session_grant_rejects_implicit_did_web_fallback() {
     // A did:web service DID derives a did:web user principal; without an
     // explicit `did_web_principal_allowed` opt-in the grant MUST be rejected
     // with `DidWebPrincipalNotExplicit`.
-    let cokret_config = CokretConfig {
+    let arkret_config = CokretConfig {
         service_did: Some("did:web:auth.example.com".to_owned()),
         ..CokretConfig::default()
     };
@@ -689,7 +689,7 @@ fn session_grant_rejects_implicit_did_web_fallback() {
         &mut signing_rng,
         &clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &browser_session,
         session_public_key,
@@ -707,7 +707,7 @@ fn session_grant_rejects_implicit_did_web_fallback() {
 fn session_grant_uses_configured_ttl() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-    let cokret_config = CokretConfig {
+    let arkret_config = CokretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
         service_did: Some("did:web:auth.example.com".to_owned()),
@@ -731,7 +731,7 @@ fn session_grant_uses_configured_ttl() {
         &mut signing_rng,
         &clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &browser_session,
         session_public_key,
@@ -753,7 +753,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
     let now = Utc::now();
     let grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        grant_id: cokret_core::GrantId::new(
+        grant_id: arkret_core::GrantId::new(
             "ak:grant:0196419b-0000-7000-8000-000000000205".to_owned(),
         )
         .unwrap(),
@@ -794,7 +794,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
     let mut user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let mut grant = SessionGrant {
         id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        grant_id: cokret_core::GrantId::new(
+        grant_id: arkret_core::GrantId::new(
             "ak:grant:0196419b-0000-7000-8000-000000000206".to_owned(),
         )
         .unwrap(),
@@ -1193,7 +1193,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let bearer = "agent-session-grant-introspection";
-    state.cokret_config = CokretConfig {
+    state.arkret_config = CokretConfig {
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..config_with_static_session_grant_bearer(bearer)
@@ -1214,7 +1214,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         },
     });
     let material = mint_agent_session_grant(
-        &state.cokret_config,
+        &state.arkret_config,
         &state.key_store,
         "did:web:agent.example",
         audience.clone(),
@@ -1250,7 +1250,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         session_grant_introspection_proof(&persisted, &material, &session_key, &challenge);
     let response = state
         .request(
-            Request::post("/_cokret/gate/account/session-grants/introspect")
+            Request::post("/_arkret/gate/account/session-grants/introspect")
                 .bearer(bearer)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
@@ -1290,7 +1290,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     let (_browser_session, grant, material, _session_key) =
         seed_persisted_session_grant(&state).await;
 
-    // Hits the canonical spec path `/_cokret/gate/account/session-grants/introspect`
+    // Hits the canonical spec path `/_arkret/gate/account/session-grants/introspect`
     // (the surface soland calls). The selector check runs before auth, so an
     // ambiguous selector is a 400 schema_violation regardless of bearer.
 
@@ -1298,7 +1298,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     // oneOf selector constraint, which is not bad_json).
     let response = state
         .request(
-            Request::post("/_cokret/gate/account/session-grants/introspect").json(
+            Request::post("/_arkret/gate/account/session-grants/introspect").json(
                 serde_json::json!({
                     "id": grant.grant_id.to_string(),
                     "grant_jwt": material.grant_jwt,
@@ -1314,7 +1314,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     // Neither present → 400 schema_violation.
     let response = state
         .request(
-            Request::post("/_cokret/gate/account/session-grants/introspect")
+            Request::post("/_arkret/gate/account/session-grants/introspect")
                 .json(serde_json::json!({ "audience": grant.audience })),
         )
         .await;
@@ -1551,18 +1551,18 @@ fn require_canonical_handle_accepts_canonical_form() {
 fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     use coauth_data::clock::MockClock;
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let cokret_config = test_cokret_config();
+    let arkret_config = test_arkret_config();
     let mut rng = ChaChaRng::seed_from_u64(0xc15a);
     let clock = MockClock::default();
     let now = clock.now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
 
-    let hint = cokret_core::DeliveryBindingHint {
-        recipient_service_did: cokret_core::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: cokret_core::RecipientServiceType::PrincipalServer,
-        binding_source: cokret_core::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [cokret_core::DeliveryMode::Events].into_iter().collect(),
+    let hint = arkret_core::DeliveryBindingHint {
+        recipient_service_did: arkret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
+        binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),
         service_acceptance_ref: None,
         policy_event_ref: None,
     };
@@ -1572,11 +1572,11 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let material = issue_handle_claim(
         &clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &user,
         subject_did,
-        cokret_core::HandleClaimKind::HandleBinding,
+        arkret_core::HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
         hint.clone(),
     )
@@ -1586,7 +1586,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
             .payload
             .subject
             .as_ref()
-            .map(cokret_core::Did::as_str),
+            .map(arkret_core::Did::as_str),
         Some(subject_did)
     );
 
@@ -1636,7 +1636,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     assert_eq!(material.payload.proofs.len(), 1);
     assert_eq!(
         material.payload.proofs[0].audience,
-        Some(cokret_core::Audience::Single(
+        Some(arkret_core::Audience::Single(
             "did:web:space.example".to_owned()
         ))
     );
@@ -1644,7 +1644,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     // HC-COAUTH-1 — coauth only stamps allow-listed claim_kind values.
     assert_eq!(
         material.payload.claim_kind,
-        Some(cokret_core::HandleClaimKind::HandleBinding)
+        Some(arkret_core::HandleClaimKind::HandleBinding)
     );
 }
 
@@ -1652,17 +1652,17 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
 fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gate() {
     use coauth_data::clock::MockClock;
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let cokret_config = test_cokret_config();
+    let arkret_config = test_arkret_config();
     let mut rng = ChaChaRng::seed_from_u64(0xc15c);
     let clock = MockClock::default();
     let now = clock.now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
-    let hint = cokret_core::DeliveryBindingHint {
-        recipient_service_did: cokret_core::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: cokret_core::RecipientServiceType::PrincipalServer,
-        binding_source: cokret_core::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [cokret_core::DeliveryMode::Events].into_iter().collect(),
+    let hint = arkret_core::DeliveryBindingHint {
+        recipient_service_did: arkret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
+        binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),
         service_acceptance_ref: None,
         policy_event_ref: None,
     };
@@ -1670,11 +1670,11 @@ fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gat
     let error = issue_handle_claim(
         &clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &user,
         "did:web:alice.example",
-        cokret_core::HandleClaimKind::HandleBinding,
+        arkret_core::HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
         hint,
     )
@@ -1690,18 +1690,18 @@ fn issue_handle_claim_rejects_did_web_subject_without_explicit_personal_node_gat
 fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     use coauth_data::clock::MockClock;
     let url_builder = UrlBuilder::new("https://auth.example.com/".parse().unwrap(), None, None);
-    let cokret_config = test_cokret_config();
+    let arkret_config = test_arkret_config();
     let mut rng = ChaChaRng::seed_from_u64(0xc15b);
     let clock = MockClock::default();
     let now = clock.now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
     let key_store = test_keystore();
 
-    let hint = cokret_core::DeliveryBindingHint {
-        recipient_service_did: cokret_core::Did::new("did:web:soland.example").unwrap(),
-        recipient_service_type: cokret_core::RecipientServiceType::PrincipalServer,
-        binding_source: cokret_core::HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: [cokret_core::DeliveryMode::Events].into_iter().collect(),
+    let hint = arkret_core::DeliveryBindingHint {
+        recipient_service_did: arkret_core::Did::new("did:web:soland.example").unwrap(),
+        recipient_service_type: arkret_core::RecipientServiceType::PrincipalServer,
+        binding_source: arkret_core::HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: [arkret_core::DeliveryMode::Events].into_iter().collect(),
         service_acceptance_ref: None,
         policy_event_ref: None,
     };
@@ -1709,17 +1709,17 @@ fn issue_handle_claim_accepts_organization_handle_claim_kind() {
     let material = issue_handle_claim(
         &clock,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &user,
         "did:webvh:zQmExampleScid:soland.example:webvh:01arz3ndektsv4rrffq69g5fav",
-        cokret_core::HandleClaimKind::OrganizationHandle,
+        arkret_core::HandleClaimKind::OrganizationHandle,
         "did:web:space.example".to_owned(),
         hint,
     )
     .expect("organization_handle claim_kind must be accepted");
     assert_eq!(
         material.payload.claim_kind,
-        Some(cokret_core::HandleClaimKind::OrganizationHandle)
+        Some(arkret_core::HandleClaimKind::OrganizationHandle)
     );
 }

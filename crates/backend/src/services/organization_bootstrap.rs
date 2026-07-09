@@ -190,7 +190,7 @@ pub fn validate_session_acting_for_organization(
     organization_did: &str,
     acting_delegation_ref: Option<&str>,
     delegation: Option<&OrganizationDelegation>,
-    requested_scopes: &[cokret_core::models::RealmOrganizationControlScope],
+    requested_scopes: &[arkret_core::models::RealmOrganizationControlScope],
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), OrganizationActingContextError> {
     let reference = acting_delegation_ref
@@ -220,7 +220,7 @@ pub fn validate_session_acting_for_organization(
 mod tests {
     use chrono::{TimeZone, Utc};
     use coauth_data::organization_control::OrganizationDelegationStatus;
-    use cokret_core::models::{
+    use arkret_core::models::{
         RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     };
 

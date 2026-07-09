@@ -48,7 +48,7 @@
 //!      both match exactly).
 //!
 //! SDK integration: signature verification is performed by
-//! `cokret_signatures::proof::verify_detached_ed25519_signature`, which
+//! `arkret_signatures::proof::verify_detached_ed25519_signature`, which
 //! routes Ed25519 checks through the SDK's strict verifier. The compact JWS
 //! envelope is parsed locally (header.payload.signature segments) and the
 //! canonical signing input is recomputed from the wire bytes so no JWS library
@@ -77,8 +77,8 @@ use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
-use cokret_core::canonical::canonical_json_bytes;
-use cokret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+use arkret_core::canonical::canonical_json_bytes;
+use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -213,7 +213,7 @@ pub fn normalize_did_for_binding(did: &str) -> Result<String, DidBindingProofErr
             "did must be a non-empty DID URI".to_owned(),
         ));
     }
-    if cokret_core::Did::new(trimmed.to_owned()).is_err() {
+    if arkret_core::Did::new(trimmed.to_owned()).is_err() {
         return Err(DidBindingProofError::InvalidJws(format!(
             "did {trimmed:?} fails round-4 DID regex (^did:[a-z0-9]+:[^\\s]+$)"
         )));
@@ -259,7 +259,7 @@ fn ensure_full_identity_fact_resolution(
 pub async fn validate_control_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -280,7 +280,7 @@ pub async fn validate_control_proof(
     // refuses BEFORE invoking the resolver chain, so wire-broken DIDs
     // never trigger network I/O. Delegating to the SDK's validator
     // keeps coauth in lockstep with the canonical regex.
-    if cokret_core::Did::new(account_did.to_owned()).is_err() {
+    if arkret_core::Did::new(account_did.to_owned()).is_err() {
         return Err(DidBindingProofError::InvalidJws(format!(
             "account_did {account_did:?} fails round-4 DID regex"
         )));
@@ -312,7 +312,7 @@ pub async fn validate_control_proof(
         .resolve_did_document(
             http_client,
             url_builder,
-            cokret_config,
+            arkret_config,
             key_store,
             repo,
             account_did,
@@ -426,7 +426,7 @@ pub(crate) enum SdkJwsVerifyError {
 /// (`b64url(header) "." b64url(payload)`) is reconstructed from the wire
 /// bytes themselves so no JWS library state intervenes between the
 /// resolved DID-document JWK and the final
-/// `cokret_signatures::proof::verify_detached_ed25519_signature` call.
+/// `arkret_signatures::proof::verify_detached_ed25519_signature` call.
 pub(crate) fn verify_compact_jws_with_sdk(
     proof_jws: &str,
     verification_methods: &[crate::handlers::arkret::VerificationMethod],
@@ -679,7 +679,7 @@ pub fn issuer_is_allowed(allowlist: &[String], iss: &str) -> bool {
 pub async fn verify_verification_service_proof(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -745,7 +745,7 @@ pub async fn verify_verification_service_proof(
         .resolve_did_document(
             http_client,
             url_builder,
-            cokret_config,
+            arkret_config,
             key_store,
             repo,
             &claims.iss,
@@ -1161,7 +1161,7 @@ mod tests {
     }
 
     #[test]
-    fn cokret_spec_binding_proof_fixture_verifies() {
+    fn arkret_spec_binding_proof_fixture_verifies() {
         let fixture_path = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")

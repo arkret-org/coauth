@@ -1,14 +1,14 @@
 use coauth_config::{CokretConfig, IdentityRegistryKind};
 use coauth_data::{RepositoryAccess, UrlBuilder};
-use cokret_core::generated::profile_requirements::{
+use arkret_core::generated::profile_requirements::{
     requirements_for, validate_profile_requirements,
 };
-use cokret_core::models::{
+use arkret_core::models::{
     OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_DEVICE_ENROLL, OP_ACCOUNT_ISSUE_SESSION_GRANT,
     OP_DIRECTORY_DESCRIBE, OP_DIRECTORY_RESOLVE_HANDLE, OP_IDENTITY_DESCRIBE_REGISTRY,
     OP_IDENTITY_GET_DOCUMENT, OP_IDENTITY_RESOLVE, OP_POLICY_CHECK, OP_SERVER_DESCRIBE,
 };
-use cokret_core::{
+use arkret_core::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
     SessionGrantProofKind,
 };
@@ -120,7 +120,7 @@ struct OAuthClientHintDescriptor {
     token_endpoint_auth_method: Option<String>,
 }
 
-// `auth_metadata` is now the SDK-canonical `cokret_core::AuthMetadata`
+// `auth_metadata` is now the SDK-canonical `arkret_core::AuthMetadata`
 // (wave 0). coauth-proprietary fields that have no first-class slot on the
 // strong type — `issuer_did`, `token_endpoint_auth_methods`,
 // `supported_grant_types`, `required_audience`, `admin_audience`,
@@ -185,7 +185,7 @@ pub(crate) struct ServiceDescribeOutcome {
     /// per-endpoint budgets are enforced by the `Limiter` middleware; the
     /// describe surface advertises an unspecified policy (generic abuse
     /// protection only) rather than pinning numbers that drift from config.
-    rate_limit_policy: cokret_core::RateLimitPolicy,
+    rate_limit_policy: arkret_core::RateLimitPolicy,
 
     // --- coauth-proprietary extension fields. These are NOT part of
     //     `service-describe.schema.json` (top-level `additionalProperties:
@@ -269,9 +269,9 @@ fn identity_registry_kind(kind: &IdentityRegistryKind) -> &'static str {
 }
 
 pub(crate) fn delegated_identity_registry_descriptor(
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
 ) -> Option<IdentityRegistryDescriptor> {
-    cokret_config
+    arkret_config
         .identity_registry
         .as_ref()
         .map(|registry| IdentityRegistryDescriptor {
@@ -283,9 +283,9 @@ pub(crate) fn delegated_identity_registry_descriptor(
 
 fn identity_registry_resolver_descriptor(
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
 ) -> IdentityRegistryResolverDescriptor {
-    let delegated_resolver = delegated_identity_registry_descriptor(cokret_config);
+    let delegated_resolver = delegated_identity_registry_descriptor(arkret_config);
     IdentityRegistryResolverDescriptor {
         mode: if delegated_resolver.is_some() {
             "delegated_resolver"
@@ -293,7 +293,7 @@ fn identity_registry_resolver_descriptor(
             "local_bindings"
         },
         endpoint: url_builder
-            .absolute_url("/_cokret/root/identity/resolve")
+            .absolute_url("/_arkret/root/identity/resolve")
             .to_string(),
         delegated_resolver,
     }
@@ -395,31 +395,31 @@ fn build_verified_profile_descriptors(
 /// coauth is the deployment's Auth Server / Account Authority. It advertises
 /// one `oidc` auth method (its own issuer + discovery) whose `grant_exchange`
 /// is `oidc_code_exchange` — the canonical
-/// `POST /_cokret/gate/account/session-grants` proof branch. When the
+/// `POST /_arkret/gate/account/session-grants` proof branch. When the
 /// deployment fronts principal servers, it also publishes the
-/// `account_authority` block so clients derive every `/_cokret/gate/account/*`
+/// `account_authority` block so clients derive every `/_arkret/gate/account/*`
 /// request from `gate_account_base`.
 ///
 /// Proprietary fields with no first-class slot on `AuthMetadata` are inserted
 /// into `extra` so they keep serializing at the top level of the
 /// `auth_metadata` object.
-fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -> AuthMetadata {
+fn build_auth_metadata(url_builder: &UrlBuilder, arkret_config: &CokretConfig) -> AuthMetadata {
     use serde_json::json;
 
     let issuer = url_builder.oidc_issuer().to_string();
     let openid_configuration = url_builder.oidc_discovery().to_string();
-    let admin_audience = required_audience_for(url_builder, cokret_config);
+    let admin_audience = required_audience_for(url_builder, arkret_config);
     let gate_account_base = url_builder
-        .absolute_url("/_cokret/gate/account")
+        .absolute_url("/_arkret/gate/account")
         .to_string();
     let origin = url_builder.http_base().to_string();
     let origin = origin.strip_suffix('/').unwrap_or(&origin).to_owned();
-    let service_did = service_did_for(cokret_config);
+    let service_did = service_did_for(arkret_config);
 
     let mut extra = std::collections::BTreeMap::new();
     extra.insert(
         "issuer_did".to_owned(),
-        json!(issuer_did_for(cokret_config)),
+        json!(issuer_did_for(arkret_config)),
     );
     extra.insert(
         "token_endpoint_auth_methods".to_owned(),
@@ -435,7 +435,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -
     );
     extra.insert(
         "required_audience".to_owned(),
-        json!(required_audience_for(url_builder, cokret_config)),
+        json!(required_audience_for(url_builder, arkret_config)),
     );
     extra.insert("admin_audience".to_owned(), json!(admin_audience));
     extra.insert(
@@ -454,7 +454,7 @@ fn build_auth_metadata(url_builder: &UrlBuilder, cokret_config: &CokretConfig) -
     }
 
     AuthMetadata {
-        mode: if cokret_config.principal_servers.is_empty() {
+        mode: if arkret_config.principal_servers.is_empty() {
             "development".to_owned()
         } else {
             "production".to_owned()
@@ -521,12 +521,12 @@ fn set_auth_metadata_oidc_clients(
 
 pub(crate) fn service_describe_response(
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     loaded_verified_profiles: &[crate::services::verified_profiles::VerifiedProfileDescriptor],
 ) -> ServiceDescribeOutcome {
     validate_claimed_profiles_against_sdk_requirements();
 
-    let principal_servers: Vec<PrincipalServerDescriptor> = cokret_config
+    let principal_servers: Vec<PrincipalServerDescriptor> = arkret_config
         .principal_servers
         .iter()
         .map(|server| PrincipalServerDescriptor {
@@ -536,14 +536,14 @@ pub(crate) fn service_describe_response(
             did: server.did.clone(),
         })
         .collect();
-    let admin_audience = required_audience_for(url_builder, cokret_config);
+    let admin_audience = required_audience_for(url_builder, arkret_config);
 
     ServiceDescribeOutcome {
-        service_did: service_did_for(cokret_config),
+        service_did: service_did_for(arkret_config),
         // Round 4 — surface the deployment trust domain so federation
         // peers can verify cross-deployment replay protection (see
         // `arkret-spec` round-4 §f9bd7eb).
-        trust_domain: trust_domain_for(url_builder, cokret_config),
+        trust_domain: trust_domain_for(url_builder, arkret_config),
         // service_type is the SDK-side `ServiceType` discriminant. coauth's
         // primary role is OIDC issuance, so this is kept as "auth_server".
         // The richer multi-role posture is expressed via `service_roles`
@@ -697,20 +697,20 @@ pub(crate) fn service_describe_response(
             },
         ],
         development_mode: false,
-        rate_limit_policy: cokret_core::RateLimitPolicy::unspecified(),
+        rate_limit_policy: arkret_core::RateLimitPolicy::unspecified(),
         admin_audience: admin_audience.clone(),
         principal_servers: principal_servers.clone(),
         principal_server_delegation_targets: principal_servers,
         identity_registry_resolver: identity_registry_resolver_descriptor(
             url_builder,
-            cokret_config,
+            arkret_config,
         ),
         service_boundary: service_boundary_descriptor(),
-        auth_metadata: build_auth_metadata(url_builder, cokret_config),
+        auth_metadata: build_auth_metadata(url_builder, arkret_config),
         limits: ServiceLimitsDescriptor {
             max_body_bytes: 1_048_576,
             max_page_size: 100,
-            session_grant_ttl_seconds: cokret_config.session_grant_ttl.num_seconds(),
+            session_grant_ttl_seconds: arkret_config.session_grant_ttl.num_seconds(),
         },
         standard_error_envelope: standard_error_envelope_descriptor(),
     }
@@ -721,7 +721,7 @@ pub async fn server_describe(
     depot: &Depot,
 ) -> Result<Json<ServiceDescribeOutcome>, CokretRouteError> {
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let mut repo = depot.repo().await?;
     let oidc_clients = repo
         .oauth_client()
@@ -766,7 +766,7 @@ pub async fn server_describe(
         .unwrap_or_else(|_| std::sync::Arc::new(Vec::new()));
     let mut response = service_describe_response(
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         verified_profiles_loaded.as_ref(),
     );
     set_auth_metadata_oidc_clients(&mut response.auth_metadata, oidc_clients);

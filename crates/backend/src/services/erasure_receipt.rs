@@ -1,7 +1,7 @@
 use coauth_config::CokretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_keystore::Keystore;
-use cokret_core::ErasureReceipt;
+use arkret_core::ErasureReceipt;
 use serde_json::Value;
 use thiserror::Error;
 
@@ -13,7 +13,7 @@ pub enum ErasureReceiptVerificationError {
     #[error("retained verification stub is required")]
     MissingRetainedStub,
     #[error("receipt validation failed: {0}")]
-    Receipt(#[from] cokret_core::Error),
+    Receipt(#[from] arkret_core::Error),
     #[error("issuer DID resolution failed: {0}")]
     DidResolve(#[from] DidResolveError),
     #[error("issuer DID document cannot back a full identity fact: {0}")]
@@ -55,7 +55,7 @@ fn validate_retained_stub(
 pub async fn verify_erasure_receipt(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -70,7 +70,7 @@ pub async fn verify_erasure_receipt(
         .resolve_did_document(
             http_client,
             url_builder,
-            cokret_config,
+            arkret_config,
             key_store,
             repo,
             receipt.issuer.as_str(),

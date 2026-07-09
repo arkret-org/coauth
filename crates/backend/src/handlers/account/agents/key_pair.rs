@@ -1,6 +1,6 @@
 //! CKP-0008 §4.5 runtime key pairing (`ck.gate.account.command.pair_agent_key`).
 //!
-//! `POST /_cokret/gate/account/agent-key-pair`. The agent runtime generated a
+//! `POST /_arkret/gate/account/agent-key-pair`. The agent runtime generated a
 //! key pair locally and submits the public key plus a proof-of-possession. The
 //! controller supplies the signed `ck.agent.key.authorize` event; coauth only
 //! validates the request binding, persists the accepted authorization for
@@ -14,7 +14,7 @@ use coauth_data::agent_key::NewAgentKeyAuthorization;
 use coauth_data::audit::AdminOperation;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder};
 use coauth_keystore::Keystore;
-use cokret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
+use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use salvo::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
@@ -71,7 +71,7 @@ struct RuntimeAttestationInput {
     kind: String,
 }
 
-/// `POST /_cokret/gate/account/agent-key-pair`
+/// `POST /_arkret/gate/account/agent-key-pair`
 /// (`ck.gate.account.command.pair_agent_key`).
 ///
 /// Validates the runtime key pairing proof-of-possession and, on success,
@@ -83,14 +83,14 @@ struct RuntimeAttestationInput {
 pub async fn post_agent_key_pair(
     req: &mut Request,
     depot: &Depot,
-) -> CreatedJsonResult<cokret_core::AgentKeyPairOutcome> {
+) -> CreatedJsonResult<arkret_core::AgentKeyPairOutcome> {
     let url_builder = depot.url_builder()?;
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let key_store = depot.key_store()?;
     let did_resolver = depot.did_resolver_service()?;
 
-    let body: cokret_core::AgentKeyPairRequestBody = req
+    let body: arkret_core::AgentKeyPairRequestBody = req
         .parse_json()
         .await
         .map_err(|error| AppError::bad_request(error.to_string()))?;
@@ -135,7 +135,7 @@ pub async fn post_agent_key_pair(
 
     // Audience MUST be this service (the coauth issuer audience or a configured
     // principal-server audience).
-    if !is_allowed_session_grant_audience(&url_builder, &cokret_config, &pop.audience) {
+    if !is_allowed_session_grant_audience(&url_builder, &arkret_config, &pop.audience) {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error());
     }
 
@@ -145,7 +145,7 @@ pub async fn post_agent_key_pair(
     if !pop.request_canonical_digest.starts_with("sha256:") {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error());
     }
-    let agent_id = cokret_core::Did::new(agent_principal_id.clone())
+    let agent_id = arkret_core::Did::new(agent_principal_id.clone())
         .map_err(|error| AppError::bad_request(format!("agent_principal_id invalid: {error}")))?;
     let expected_pop_digest = arkret::agent::agent_key_pair_proof_request_binding_digest(
         &body.pairing_request_id,
@@ -197,7 +197,7 @@ pub async fn post_agent_key_pair(
         &authorize_event.controller_did,
         &http_client,
         &url_builder,
-        &cokret_config,
+        &arkret_config,
         &key_store,
         &mut repo,
         did_resolver.as_ref(),
@@ -229,8 +229,8 @@ pub async fn post_agent_key_pair(
     let issued_at = authorize_event.issued_at;
     let expires_at = authorize_event.expires_at;
 
-    let service_did = service_did_for(&cokret_config);
-    let outcome_event_id = cokret_core::EventId::new(authorized_event_id.clone())
+    let service_did = service_did_for(&arkret_config);
+    let outcome_event_id = arkret_core::EventId::new(authorized_event_id.clone())
         .map_err(|err| AppError::internal_box(Box::new(err)))?;
 
     let fanout_payload = build_agent_key_authorize_fanout_payload(
@@ -238,7 +238,7 @@ pub async fn post_agent_key_pair(
         &body.pairing_request_id,
         &body.authorize_event,
         &service_did,
-        &cokret_config,
+        &arkret_config,
     );
     let raw_payload_digest = canonical_digest(&fanout_payload)?;
     let idempotency_key = format!("coauth:agent_key_authorize:{authorized_event_id}");
@@ -298,7 +298,7 @@ pub async fn post_agent_key_pair(
         &*clock,
         &key_store,
         &service_did,
-        cokret_config.audit_signature_fail_closed,
+        arkret_config.audit_signature_fail_closed,
         AdminOperation::Other("agent_key_authorize_issued".to_owned()),
         "agent",
         None,
@@ -323,7 +323,7 @@ pub async fn post_agent_key_pair(
         .await?;
     repo.save().await?;
 
-    Ok(CreatedJson(cokret_core::AgentKeyPairOutcome {
+    Ok(CreatedJson(arkret_core::AgentKeyPairOutcome {
         ok: true,
         authorized_event_ref: outcome_event_id,
     }))
@@ -343,7 +343,7 @@ fn validate_runtime_public_key(
     public_key: &Value,
     verification_method: &str,
 ) -> Result<ValidatedRuntimePublicKey, AppError> {
-    let key: cokret_core::PublicKey = serde_json::from_value(public_key.clone())
+    let key: arkret_core::PublicKey = serde_json::from_value(public_key.clone())
         .map_err(|error| AppError::bad_request(format!("public_key invalid: {error}")))?;
     if key.kty != "OKP" {
         return Err(AppError::bad_request("public_key.kty must be OKP"));
@@ -365,7 +365,7 @@ fn validate_runtime_public_key(
         .map_err(|_| AppError::bad_request("public_key.key must decode to 32 bytes"))?;
     Ok(ValidatedRuntimePublicKey {
         public_key: public_key.clone(),
-        verification_public_key: cokret_core::ed25519_pubkey_to_did_key_multibase(&raw),
+        verification_public_key: arkret_core::ed25519_pubkey_to_did_key_multibase(&raw),
     })
 }
 
@@ -404,14 +404,14 @@ fn validate_controller_authorize_event<'a>(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("authorize_event.event_id is required"))?;
-    cokret_core::EventId::new(event_id.to_owned())
+    arkret_core::EventId::new(event_id.to_owned())
         .map_err(|err| AppError::bad_request(format!("authorize_event.event_id invalid: {err}")))?;
     let controller_did = envelope
         .get("actor_id")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("authorize_event.actor_id is required"))?;
-    cokret_core::Did::new(controller_did.to_owned())
+    arkret_core::Did::new(controller_did.to_owned())
         .map_err(|err| AppError::bad_request(format!("authorize_event.actor_id invalid: {err}")))?;
     ensure_authorize_event_has_controller_signature(envelope, controller_did)?;
 
@@ -571,7 +571,7 @@ async fn verify_authorize_event_controller_signature(
     controller_did: &str,
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
@@ -580,7 +580,7 @@ async fn verify_authorize_event_controller_signature(
         .resolve_did_document(
             http_client,
             url_builder,
-            cokret_config,
+            arkret_config,
             key_store,
             repo,
             controller_did,
@@ -609,7 +609,7 @@ fn verify_authorize_event_controller_signature_with_methods(
     controller_did: &str,
     verification_methods: &[VerificationMethod],
 ) -> Result<(), AppError> {
-    let event: cokret_core::Event = serde_json::from_value(envelope.clone()).map_err(|error| {
+    let event: arkret_core::Event = serde_json::from_value(envelope.clone()).map_err(|error| {
         AppError::bad_request(format!(
             "authorize_event must be a complete signed Event envelope: {error}"
         ))
@@ -628,7 +628,7 @@ fn verify_authorize_event_controller_signature_with_methods(
         ))
     })?;
     let canonical_bytes =
-        cokret_core::canonical::canonical_json_bytes(&digest_payload).map_err(|error| {
+        arkret_core::canonical::canonical_json_bytes(&digest_payload).map_err(|error| {
             AppError::bad_request(format!(
                 "authorize_event canonical payload could not be encoded: {error}"
             ))
@@ -702,9 +702,9 @@ fn build_agent_key_authorize_fanout_payload(
     pairing_request_id: &str,
     authorize_event: &Value,
     service_did: &str,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
 ) -> serde_json::Value {
-    let principal_servers: Vec<_> = cokret_config
+    let principal_servers: Vec<_> = arkret_config
         .principal_servers
         .iter()
         .map(|server| {
@@ -908,7 +908,7 @@ mod tests {
             "created_at": "2026-07-06T00:01:00Z",
             "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
         }]);
-        let parsed: cokret_core::Event = serde_json::from_value(event.clone()).unwrap();
+        let parsed: arkret_core::Event = serde_json::from_value(event.clone()).unwrap();
         event["proofs"][0]["event_digest"] = json!(parsed.event_digest().unwrap());
         event
     }

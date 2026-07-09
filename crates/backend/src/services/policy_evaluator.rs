@@ -6,7 +6,7 @@
 //!
 //! The spec [`policy-server.md` §4] defines the decision lattice as
 //! `allow | soft_deny | hard_deny | quarantine | require_review`; the
-//! SDK type [`cokret_core::AuthzDecision`] exposes these as
+//! SDK type [`arkret_core::AuthzDecision`] exposes these as
 //! `Allow | Deny | Quarantine | RequireReview | SoftFail`. This module
 //! is responsible for picking one of those values, plus the
 //! `reason_code` and the optional `obligations` array, for every
@@ -46,7 +46,7 @@ use coauth_data::collaboration_capability::{
     CollaborationCapabilityAction, CollaborationCapabilityGrant,
 };
 use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
-use cokret_core::{
+use arkret_core::{
     AuthzDecision, CAP_ACTION_CALL_JOIN, CAP_ACTION_CALL_MODERATE, CAP_ACTION_CALL_RECORD,
     CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, FreshnessState,
     PolicyCheckRequestBody,
@@ -58,7 +58,7 @@ use crate::services::policy_frontier::Frontier;
 
 /// Local (non-registry) reason codes. `"ok"` and `"policy_review_required"`
 /// are evaluator-internal `reason_code` values that are NOT part of the
-/// canonical `cokret_core::error::ERROR_CODE_*` wire-error registry, so
+/// canonical `arkret_core::error::ERROR_CODE_*` wire-error registry, so
 /// they are kept as local constants rather than aliased to SDK symbols.
 const REASON_CODE_OK: &str = "ok";
 const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
@@ -69,7 +69,7 @@ const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ck.profile.candidate.join_policy.v1
 /// media capability actions registered in
 /// `capability-action-registry.json`. CAP-1: capability evaluator MUST
 /// recognise these five actions so deny/review/allow rules can target
-/// them by name. Mirrors `cokret_core::CALL_CAPABILITY_ACTIONS`.
+/// them by name. Mirrors `arkret_core::CALL_CAPABILITY_ACTIONS`.
 pub const RECOGNISED_CALL_CAPABILITY_ACTIONS: &[&str] = &[
     CAP_ACTION_CALL_JOIN,
     CAP_ACTION_CALL_SCREEN_SHARE,
@@ -93,7 +93,7 @@ pub fn is_recognised_call_capability_action(action: &str) -> bool {
 /// per `resource-selector-grammar.md` §6 (R3).
 #[must_use]
 pub fn is_circle_selector(selector: &str) -> bool {
-    cokret_core::CircleId::new(selector.to_owned()).is_ok()
+    arkret_core::CircleId::new(selector.to_owned()).is_ok()
 }
 
 /// POLICY-1: deployment-level "strict reject" mode for unverified
@@ -136,7 +136,7 @@ pub struct PolicyObligation {
 
 impl PolicyObligation {
     /// Render to the wire form embedded in
-    /// [`cokret_core::PolicyCheckOutcome::obligations`].
+    /// [`arkret_core::PolicyCheckOutcome::obligations`].
     pub fn to_wire(&self) -> Value {
         let mut obj = serde_json::Map::new();
         obj.insert("kind".to_owned(), Value::String(self.kind.clone()));
@@ -154,7 +154,7 @@ impl PolicyObligation {
 }
 
 /// What the evaluator produces. The handler turns this into the wire
-/// [`cokret_core::PolicyCheckOutcome`].
+/// [`arkret_core::PolicyCheckOutcome`].
 #[derive(Debug, Clone)]
 pub struct PolicyDecision {
     pub decision: AuthzDecision,
@@ -204,19 +204,19 @@ impl PolicyDecision {
     ///
     /// The reason code on the wire is `failed_precondition`; the
     /// obligation carries the canonical
-    /// [`cokret_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING`]
+    /// [`arkret_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING`]
     /// string so downstream consumers can render the exact registry
     /// rejection.
     #[must_use]
     pub fn strict_reject_accountable_principals(policy_version: String) -> Self {
         Self {
             decision: AuthzDecision::HardDeny,
-            reason_code: cokret_core::error::ERROR_CODE_FAILED_PRECONDITION.to_owned(),
+            reason_code: arkret_core::error::ERROR_CODE_FAILED_PRECONDITION.to_owned(),
             obligations: vec![PolicyObligation {
                 kind: "accountability_grant_required".to_owned(),
                 expires_at: None,
                 payload: serde_json::json!({
-                    "reason": cokret_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING,
+                    "reason": arkret_core::error::REASON_ACCOUNTABILITY_GRANT_MISSING,
                     "profile": "ck.profile.accountable_principals.strict_reject.v1",
                 }),
             }],
@@ -401,7 +401,7 @@ fn match_rules_with_grants(
         if value_contains_str(scope.get("deny_actors"), actor_str) {
             return PolicyDecision {
                 decision: AuthzDecision::HardDeny,
-                reason_code: cokret_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
+                reason_code: arkret_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };
@@ -410,7 +410,7 @@ fn match_rules_with_grants(
         if value_contains_str(scope.get("deny_actions"), action_str) {
             return PolicyDecision {
                 decision: AuthzDecision::HardDeny,
-                reason_code: cokret_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
+                reason_code: arkret_core::error::ERROR_CODE_POLICY_VIOLATION.to_owned(),
                 obligations: Vec::new(),
                 policy_version: policy_version.to_owned(),
             };
@@ -492,7 +492,7 @@ fn capability_action_gate_decision(
         return Some(unsupported_feature(policy_version));
     }
 
-    let descriptor = match cokret_core::schema::embedded_capability_action(action) {
+    let descriptor = match arkret_core::schema::embedded_capability_action(action) {
         Ok(Some(descriptor)) => descriptor,
         Ok(None) => return Some(unsupported_feature(policy_version)),
         Err(error) => {
@@ -521,7 +521,7 @@ fn capability_action_gate_decision(
 
 fn unsupported_feature(policy_version: &str) -> PolicyDecision {
     PolicyDecision::hard_deny(
-        cokret_core::error::ERROR_CODE_UNSUPPORTED_FEATURE,
+        arkret_core::error::ERROR_CODE_UNSUPPORTED_FEATURE,
         policy_version.to_owned(),
     )
 }
@@ -604,7 +604,7 @@ pub type PolicyEvaluatorHandle = Arc<dyn PolicyEvaluator>;
 
 #[cfg(test)]
 mod tests {
-    use cokret_core::{Did, Hash, PolicyCheckSource, RealmId};
+    use arkret_core::{Did, Hash, PolicyCheckSource, RealmId};
 
     use super::*;
 

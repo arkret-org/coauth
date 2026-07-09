@@ -8,8 +8,8 @@ use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use coauth_oauth_types::scope::{Scope, ScopeToken};
-use cokret_core::GrantId;
-use cokret_core::identifiers::new_prefixed_uuid7;
+use arkret_core::GrantId;
+use arkret_core::identifiers::new_prefixed_uuid7;
 #[cfg(test)]
 use rand_core::CryptoRngCore;
 use rand_core::RngCore;
@@ -30,7 +30,7 @@ pub(crate) fn issue_session_grant(
     _rng: &mut (dyn CryptoRngCore + Send),
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
@@ -38,11 +38,11 @@ pub(crate) fn issue_session_grant(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience(
         clock,
-        cokret_config,
+        arkret_config,
         key_store,
         browser_session,
         session_public_key,
-        required_audience_for(url_builder, cokret_config),
+        required_audience_for(url_builder, arkret_config),
         scopes,
         None,
         None,
@@ -57,7 +57,7 @@ pub(crate) fn issue_session_grant(
 // principal_did`.
 pub(crate) fn issue_session_grant_for_audience(
     clock: &dyn Clock,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
@@ -68,7 +68,7 @@ pub(crate) fn issue_session_grant_for_audience(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience_inner(
         clock,
-        cokret_config,
+        arkret_config,
         key_store,
         browser_session,
         session_public_key,
@@ -83,7 +83,7 @@ pub(crate) fn issue_session_grant_for_audience(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn issue_test_session_grant_for_audience(
     clock: &dyn Clock,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
@@ -94,7 +94,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     issue_session_grant_for_audience_inner(
         clock,
-        cokret_config,
+        arkret_config,
         key_store,
         browser_session,
         session_public_key,
@@ -109,7 +109,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
 #[allow(clippy::too_many_arguments)]
 fn issue_session_grant_for_audience_inner(
     clock: &dyn Clock,
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
@@ -120,19 +120,19 @@ fn issue_session_grant_for_audience_inner(
     enforce_principal_did_method: bool,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
     let subject = subject_override.map_or_else(
-        || user_did_for(cokret_config, &browser_session.user),
+        || user_did_for(arkret_config, &browser_session.user),
         ToOwned::to_owned,
     );
     if enforce_principal_did_method {
-        ensure_principal_did_method_allowed(cokret_config, &subject)?;
+        ensure_principal_did_method_allowed(arkret_config, &subject)?;
     }
     let session_public_key = serde_json::to_string(&session_public_key)?;
 
     let now = clock.now();
-    let expires_at = now + cokret_config.session_grant_ttl;
+    let expires_at = now + arkret_config.session_grant_ttl;
     let grant_id = new_session_grant_id();
     let device_id = primary_device_id_from_tokens(scopes.iter().map(String::as_str));
-    let issuer = issuer_did_for(cokret_config);
+    let issuer = issuer_did_for(arkret_config);
     let cnf = dpop_jkt
         .as_ref()
         .map(|jkt| SessionGrantConfirmation { jkt: jkt.clone() });
@@ -253,7 +253,7 @@ where
 /// uniform without repeating the agent principal DID outside `subject`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mint_agent_session_grant(
-    cokret_config: &CokretConfig,
+    arkret_config: &CokretConfig,
     key_store: &Keystore,
     agent_principal_id: &str,
     audience: String,
@@ -264,8 +264,8 @@ pub(crate) fn mint_agent_session_grant(
     now: DateTime<Utc>,
     expires_at: DateTime<Utc>,
 ) -> Result<SessionGrantMaterial, SessionGrantError> {
-    ensure_principal_did_method_allowed(cokret_config, agent_principal_id)?;
-    let issuer = issuer_did_for(cokret_config);
+    ensure_principal_did_method_allowed(arkret_config, agent_principal_id)?;
+    let issuer = issuer_did_for(arkret_config);
     let grant_id = new_session_grant_id();
     let cnf = Some(SessionGrantConfirmation {
         jkt: dpop_jkt.clone(),
@@ -282,7 +282,7 @@ pub(crate) fn mint_agent_session_grant(
         expires_at,
         session_id,
         cnf,
-        proof_kind: Some(cokret_core::SessionGrantProofKind::AgentKeyProof),
+        proof_kind: Some(arkret_core::SessionGrantProofKind::AgentKeyProof),
         scope_details,
     };
 

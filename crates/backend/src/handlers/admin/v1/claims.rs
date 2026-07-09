@@ -176,9 +176,9 @@ pub async fn issue_claim(req: &mut Request, depot: &Depot) -> CreatedJsonResult<
     let issuer = if let Some(value) = body.issuer {
         require_non_empty(value, "issuer")?
     } else {
-        let cokret_config = depot.cokret_config()?;
+        let arkret_config = depot.arkret_config()?;
         let did_resolver = depot.did_resolver_service()?;
-        did_resolver.issuer_did(&cokret_config)
+        did_resolver.issuer_did(&arkret_config)
     };
 
     let claim_service = depot.account_claims_service()?;
@@ -350,9 +350,9 @@ async fn derive_account_id_from_subject(
         return ensure_subject_account_exists(repo, id).await;
     }
 
-    let cokret_config = depot.cokret_config()?;
+    let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    if let Some(id) = did_resolver.parse_local_user_did(&cokret_config, subject) {
+    if let Some(id) = did_resolver.parse_local_user_did(&arkret_config, subject) {
         return ensure_subject_account_exists(repo, id).await;
     }
 

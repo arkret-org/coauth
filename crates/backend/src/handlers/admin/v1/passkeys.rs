@@ -141,12 +141,12 @@ fn audit_signing_context(
     depot: &Depot,
 ) -> Result<(coauth_keystore::Keystore, String, bool), AppError> {
     let key_store = depot.key_store()?;
-    let cokret_config = depot.cokret_config()?;
-    let service_did = service_did_for(&cokret_config);
+    let arkret_config = depot.arkret_config()?;
+    let service_did = service_did_for(&arkret_config);
     Ok((
         key_store,
         service_did,
-        cokret_config.audit_signature_fail_closed,
+        arkret_config.audit_signature_fail_closed,
     ))
 }
 
