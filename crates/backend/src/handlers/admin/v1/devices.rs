@@ -19,6 +19,8 @@ use crate::handlers::admin::params::extract_ulid_param;
 use crate::services::device_revoke::cascade_revoke_session_grants;
 use crate::{AppError, JsonResult};
 
+const DESTRUCTIVE_REASON_MAX_CHARS: usize = 512;
+
 #[derive(Serialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceRiskLevel {
@@ -74,6 +76,40 @@ pub struct RevokeDeviceRequestBody {
     /// Optional approval proof for high-risk revocations.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_proof: Option<String>,
+}
+
+fn validate_destructive_reason(reason: &str) -> Result<String, AppError> {
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err(AppError::bad_request("reason is required"));
+    }
+    if reason.chars().count() > DESTRUCTIVE_REASON_MAX_CHARS {
+        return Err(AppError::bad_request(
+            "reason must not exceed 512 characters",
+        ));
+    }
+    if reason.chars().any(char::is_control) {
+        return Err(AppError::bad_request("reason must be a single line"));
+    }
+
+    let lower = reason.to_ascii_lowercase();
+    const SENSITIVE_MARKERS: &[&str] = &[
+        "-----begin private key",
+        "authorization:",
+        "bearer ey",
+        "password=",
+        "secret=",
+        "token=",
+    ];
+    if SENSITIVE_MARKERS
+        .iter()
+        .any(|marker| lower.contains(marker))
+    {
+        return Err(AppError::bad_request(
+            "reason must not contain credentials or secrets",
+        ));
+    }
+    Ok(reason.to_owned())
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
@@ -252,10 +288,7 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
         .filter(|s| !s.is_empty())
         .ok_or_else(|| AppError::bad_request("missing device id"))?;
     let body: RevokeDeviceRequestBody = req.parse_json().await.map_err(AppError::internal)?;
-    let reason = body.reason.trim().to_owned();
-    if reason.is_empty() {
-        return Err(AppError::bad_request("reason is required"));
-    }
+    let reason = validate_destructive_reason(&body.reason)?;
 
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
@@ -346,10 +379,7 @@ pub async fn revoke_account_device(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| AppError::bad_request("missing device id"))?;
     let body: RevokeDeviceRequestBody = req.parse_json().await.map_err(AppError::internal)?;
-    let reason = body.reason.trim().to_owned();
-    if reason.is_empty() {
-        return Err(AppError::bad_request("reason is required"));
-    }
+    let reason = validate_destructive_reason(&body.reason)?;
 
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
@@ -475,6 +505,14 @@ mod tests {
 
     use super::*;
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
+
+    #[test]
+    fn destructive_reason_policy_rejects_secrets_and_multiline_text() {
+        assert!(validate_destructive_reason("SEC-1234 lost device").is_ok());
+        assert!(validate_destructive_reason("first\nsecond").is_err());
+        assert!(validate_destructive_reason("token=secret-value").is_err());
+        assert!(validate_destructive_reason(&"x".repeat(513)).is_err());
+    }
 
     #[test]
     fn device_draft_does_not_synthesize_device_did() {
