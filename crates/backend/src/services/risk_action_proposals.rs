@@ -409,7 +409,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         // row. Exactly one of N concurrent callers carrying the same approved
         // proposal observes `state = 'approved'` and gets the RETURNING row;
         // the others match zero rows. This closes the execute-then-mark TOCTOU
-        // (CKP-0007 P2B.5: an N-of-M approved proposal MUST be consumed once).
+        // (AKP-0007 P2B.5: an N-of-M approved proposal MUST be consumed once).
         let updated = diesel::sql_query(
             r"
             UPDATE risk_action_proposals

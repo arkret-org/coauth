@@ -26,12 +26,12 @@
 //! current generation MUST fetch it first; the engine returns
 //! [`CrossSigningPublishError::GenerationUnknown`] rather than guess.
 
-use chrono::{DateTime, Utc};
+use arkret_core::{Did, TypedTrustDomainId};
 use arkret_crypto::{
     CrossSigningKeyRecord, CrossSigningPublishContent, SignedCrossSigningKey,
     cross_signing_publish_cell_subject,
 };
-use arkret_core::{Did, TypedTrustDomainId};
+use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 /// Errors raised by the cross-signing publish issuer.

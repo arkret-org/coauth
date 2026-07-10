@@ -1,8 +1,8 @@
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
-    use chrono::Utc;
     use arkret_core::canonical::canonical_json_bytes;
+    use chrono::Utc;
 
     fn derive_ed25519_from_seed(seed: &[u8; 32]) -> ed25519_dalek::SigningKey {
         ed25519_dalek::SigningKey::from_bytes(seed)

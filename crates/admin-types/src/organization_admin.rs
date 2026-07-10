@@ -12,13 +12,13 @@
 //! sodmin can render the full organization control state from these DTOs
 //! without touching the database or parsing any product-private fields.
 
-pub use coauth_data::organization_control::{
-    OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationDelegationStatus,
-    OrganizationPrincipalControl,
-};
 use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     RealmOrganizationStatus,
+};
+pub use coauth_data::organization_control::{
+    OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationDelegationStatus,
+    OrganizationPrincipalControl,
 };
 use serde::{Deserialize, Serialize};
 

@@ -20,7 +20,6 @@
 //! 5. Sign the proof with the persistent enrollment key (VM mapped to `executed_by`) and return the
 //!    full Event JSON.
 
-use chrono::{DateTime, Utc};
 use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_GRANT_ALREADY_CONSUMED, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
@@ -33,6 +32,7 @@ use arkret_core::{
     Hlc, RealmId, ed25519_pubkey_to_did_key_multibase,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
+use chrono::{DateTime, Utc};
 use salvo::prelude::*;
 
 use super::{ArkretRouteError, SessionGrantPayload};

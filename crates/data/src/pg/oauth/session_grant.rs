@@ -1,10 +1,10 @@
+use arkret_core::GrantId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::oauth::{NewSessionGrant, SessionGrantFilter, SessionGrantRepository};
 use coauth_data::pagination::{Node, PaginationDirection};
 use coauth_data::{Clock, Page, Pagination, SessionGrant, new_id};
 use coauth_oauth_types::scope::{Scope, ScopeToken};
-use arkret_core::GrantId;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;

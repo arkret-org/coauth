@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use coauth_config::{
-    AccountConfig, BrandingConfig, CaptchaConfig, ArkretConfig, DatabaseConfig, EmailConfig,
+    AccountConfig, ArkretConfig, BrandingConfig, CaptchaConfig, DatabaseConfig, EmailConfig,
     EmailProviderConfig, EmailSmtpMode, ExperimentalConfig, HttpConfig, PasswordsConfig,
     PolicyConfig, PolicyEngine, SmsConfig, SmsProviderConfig, TemplatesConfig,
 };

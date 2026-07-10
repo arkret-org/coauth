@@ -7,6 +7,8 @@
 //! - `POST   /_coauth/admin/collaboration/capabilities`
 //! - `DELETE /_coauth/admin/collaboration/capabilities/{id}`
 
+use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_core::identifiers::{EventId, GrantId, new_prefixed_uuid7};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_admin_types::collaboration_capability_admin::{
@@ -24,8 +26,6 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable as _;
 use coauth_jose::jwt::JsonWebSignatureHeader;
 use coauth_keystore::Keystore;
-use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_core::identifiers::{EventId, GrantId, new_prefixed_uuid7};
 use rand_core::SeedableRng as _;
 use salvo::http::StatusCode;
 use salvo::oapi::extract::PathParam;

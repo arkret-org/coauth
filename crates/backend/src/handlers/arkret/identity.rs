@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
-use coauth_data::RepositoryAccess;
 use arkret_core::Did;
 use arkret_core::error::ERROR_CODE_RATE_LIMITED;
 use arkret_core::http::{
@@ -12,6 +11,7 @@ use arkret_core::models::{
     DirectoryResolveHandleRequestBody, IdentityDescription, IdentityDocumentView,
     IdentityResolveOutcome, IdentityResolveRequestBody,
 };
+use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
 use serde_json::json;
 

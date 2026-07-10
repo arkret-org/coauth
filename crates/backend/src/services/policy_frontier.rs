@@ -37,8 +37,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use arkret_core::{EventsFrontierFederationPeerState, FreshnessState, Hash, RealmId};
+use chrono::{DateTime, Utc};
 use thiserror::Error;
 use url::Url;
 

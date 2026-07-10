@@ -1,3 +1,5 @@
+use arkret_core::GrantId;
+use arkret_core::identifiers::new_prefixed_uuid7;
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 #[cfg(test)]
@@ -8,8 +10,6 @@ use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use coauth_oauth_types::scope::{Scope, ScopeToken};
-use arkret_core::GrantId;
-use arkret_core::identifiers::new_prefixed_uuid7;
 #[cfg(test)]
 use rand_core::CryptoRngCore;
 use rand_core::RngCore;

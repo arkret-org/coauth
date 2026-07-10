@@ -12,7 +12,7 @@ coauth 尚未暴露 `ak.gate.account.command.pair_agent_key`，也尚未暴露
 
 ### `POST /_coauth/self/agents/{id}/accountability-grant`
 
-这是内部 CKP-0008 接口，用于签发 accountability grant，将人类
+这是内部 AKP-0008 接口，用于签发 accountability grant，将人类
 controller DID、agent principal id，以及一组规范化的 `ak.agent.*`
 能力绑定起来。
 

@@ -1,3 +1,4 @@
+use arkret_core::SessionGrantIntrospectStatus;
 use chrono::{Duration, Utc};
 use coauth_config::{
     ArkretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
@@ -8,7 +9,6 @@ use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg}
 use coauth_jose::jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{JsonWebKeySet, PrivateKey};
-use arkret_core::SessionGrantIntrospectStatus;
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;

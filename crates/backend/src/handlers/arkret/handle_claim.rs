@@ -1,16 +1,16 @@
 use std::collections::BTreeMap;
 
+use arkret_core::{
+    Audience, DeliveryBindingHint as HandleClaimDeliveryBindingHint, Did, Handle,
+    HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind, Hash, PayloadProof,
+    proof_kind,
+};
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{Clock, UrlBuilder, User};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
-use arkret_core::{
-    Audience, DeliveryBindingHint as HandleClaimDeliveryBindingHint, Did, Handle,
-    HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind, Hash, PayloadProof,
-    proof_kind,
-};
 
 use super::*;
 

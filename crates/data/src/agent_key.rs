@@ -8,7 +8,7 @@ pub use crate::accountability::{
 pub use crate::pg::agent_key::PgAgentKeyAuthorizationRepository;
 pub use crate::storage::agent_key::*;
 
-/// Durable record of an accepted `ak.agent.key.authorize` (CKP-0008 §4.5).
+/// Durable record of an accepted `ak.agent.key.authorize` (AKP-0008 §4.5).
 ///
 /// coauth validates the runtime key pairing proof-of-possession, persists this
 /// row as the local authority for the agent-key-proof session branch, and
@@ -69,7 +69,7 @@ pub struct AgentKeyAuthorization {
     pub updated_at: DateTime<Utc>,
 }
 
-/// A single consumption of an agent-key-proof session challenge (CKP-0008 §4.6).
+/// A single consumption of an agent-key-proof session challenge (AKP-0008 §4.6).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSessionProofReplay {
     /// Storage row id.

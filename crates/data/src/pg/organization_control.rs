@@ -1,6 +1,9 @@
 //! PostgreSQL implementation of the organization principal control +
 //! organization delegation repository.
 
+use arkret_core::models::{
+    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::organization_control::{
@@ -9,9 +12,6 @@ use coauth_data::organization_control::{
     OrganizationPrincipalControl,
 };
 use coauth_data::{Clock, new_id};
-use arkret_core::models::{
-    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
-};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;

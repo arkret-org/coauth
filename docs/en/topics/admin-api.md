@@ -57,7 +57,7 @@ schema, backend response, and Rust consumers share one source of truth.
 
 ```json
 {
-  "contract": "cx.contract.coauth_admin_bridge.v1",
+  "contract": "ak.contract.coauth_admin_bridge.v1",
   "version": "0.2.0-durable-proposals",
   "api_base_path": "/_coauth/admin",
   "accounts_path": "/_coauth/admin/accounts",
@@ -361,7 +361,7 @@ Sample output
 
 ## Realm classification — Principal Control vs Collaboration
 
-CKP-0007 (arkret-spec commit `44abbd6`) made the distinction between two
+AKP-0007 (arkret-spec commit `44abbd6`) made the distinction between two
 realm classes explicit. Every admin route belongs to one of them:
 
 - **Principal Control Realm** — identity, device, handle, claim, DID
@@ -370,7 +370,7 @@ realm classes explicit. Every admin route belongs to one of them:
   alter who the principal *is*.
 - **Collaboration Realm** — Spaces, Strands, Circles, membership, content
   policy. Operators who hold capabilities here govern what the principal
-  *does together with other principals*. The six CKP-0007
+  *does together with other principals*. The six AKP-0007
   `ak.circle.*` capability actions live in this class.
 
 | Route prefix                                              | Class                  |
@@ -401,10 +401,10 @@ of the rollout will split these into per-class scopes so that an
 operator can be granted Collaboration-only access without being able to
 mutate identity state.
 
-## CKP-0007 `ak.circle.*` capability grants
+## AKP-0007 `ak.circle.*` capability grants
 
 The Collaboration class exposes a typed grant surface for the six
-CKP-0007 capability actions:
+AKP-0007 capability actions:
 
 | action                        | risk   | required constraint        |
 |-------------------------------|--------|----------------------------|

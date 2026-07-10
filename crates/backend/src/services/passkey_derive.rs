@@ -117,7 +117,7 @@ mod tests {
     #[test]
     fn derive_output_round_trips_to_32_bytes() {
         let key = derive_update_key_from_cose_bytes(b"hello world");
-        let decoded = decode_multicodec_ed25519(&key).expect("output is valid multicodec-ed25519");
+        let decoded = decode_ed25519_multibase(&key).expect("output is valid multicodec-ed25519");
         assert_eq!(
             decoded.len(),
             32,

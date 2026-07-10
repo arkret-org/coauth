@@ -1,5 +1,3 @@
-use coauth_config::{ArkretConfig, IdentityRegistryKind};
-use coauth_data::{RepositoryAccess, UrlBuilder};
 use arkret_core::generated::profile_requirements::{
     requirements_for, validate_profile_requirements,
 };
@@ -12,6 +10,8 @@ use arkret_core::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
     SessionGrantProofKind,
 };
+use coauth_config::{ArkretConfig, IdentityRegistryKind};
+use coauth_data::{RepositoryAccess, UrlBuilder};
 use salvo::prelude::*;
 use serde::Serialize;
 

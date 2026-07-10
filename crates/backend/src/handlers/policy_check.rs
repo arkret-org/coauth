@@ -34,13 +34,13 @@
 
 use std::time::Duration;
 
+use arkret_core::{
+    Did, PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
+};
 use chrono::Utc;
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory};
 use coauth_keystore::Keystore;
-use arkret_core::{
-    Did, PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
-};
 use salvo::prelude::*;
 use serde_json::Value;
 
@@ -384,11 +384,11 @@ mod tests {
     use std::future::Future;
     use std::pin::Pin;
 
+    use arkret_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
     use base64ct::{Base64UrlUnpadded, Encoding as _};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable as _;
     use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
-    use arkret_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
     use rand_core::SeedableRng as _;
     use signature::Verifier as _;
 

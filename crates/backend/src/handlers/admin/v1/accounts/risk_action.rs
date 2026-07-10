@@ -4,6 +4,7 @@
 //! `services::user_admin`; durable proposal persistence is tracked in
 //! `_todos.md`.
 
+use arkret_core::canonical::canonical_json_bytes;
 use chrono::{DateTime, Utc};
 use coauth_admin_types::{
     AccountRiskActionApprovalOutcome, AccountRiskActionApprovalRequestBody,
@@ -13,7 +14,6 @@ use coauth_admin_types::{
 };
 use coauth_data::audit::AdminOperation;
 use coauth_data::{AdminUserPatch, RepositoryAccess};
-use arkret_core::canonical::canonical_json_bytes;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;

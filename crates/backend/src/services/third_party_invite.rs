@@ -67,15 +67,15 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use arkret_core::{
+    Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
+};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use coauth_jose::jwt::Jwt;
 use coauth_keystore::Keystore;
-use arkret_core::{
-    Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
-};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;

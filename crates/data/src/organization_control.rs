@@ -24,10 +24,10 @@
 //! `ak.realm.organization` shape cannot drift. The `schema` feature gates the
 //! `schemars` / `salvo` derives so pure clients do not pull those deps.
 
-use chrono::{DateTime, Utc};
 use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub use crate::pg::organization_control::PgOrganizationControlRepository;

@@ -41,16 +41,16 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
-use coauth_data::collaboration_capability::{
-    CollaborationCapabilityAction, CollaborationCapabilityGrant,
-};
-use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
 use arkret_core::{
     AuthzDecision, CAP_ACTION_CALL_JOIN, CAP_ACTION_CALL_MODERATE, CAP_ACTION_CALL_RECORD,
     CAP_ACTION_CALL_SCREEN_SHARE, CAP_ACTION_CALL_TRANSCRIBE, FreshnessState,
     PolicyCheckRequestBody,
 };
+use chrono::{DateTime, Utc};
+use coauth_data::collaboration_capability::{
+    CollaborationCapabilityAction, CollaborationCapabilityGrant,
+};
+use coauth_data::{BoxRepositoryFactory, RepositoryAccess as _};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -65,7 +65,7 @@ const REASON_CODE_POLICY_REVIEW_REQUIRED: &str = "policy_review_required";
 const CANDIDATE_JOIN_POLICY_REVIEW_ACTION: &str = "ak.realm.join.review";
 const CANDIDATE_JOIN_POLICY_PROFILE: &str = "ak.profile.candidate.join_policy.v1";
 
-/// CKP-0010 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — call /
+/// AKP-0010 (R3 spec-sync 2026-05-27, arkret-spec b47ff6ec) — call /
 /// media capability actions registered in
 /// `capability-action-registry.json`. CAP-1: capability evaluator MUST
 /// recognise these five actions so deny/review/allow rules can target
@@ -78,7 +78,7 @@ pub const RECOGNISED_CALL_CAPABILITY_ACTIONS: &[&str] = &[
     CAP_ACTION_CALL_MODERATE,
 ];
 
-/// CAP-1: returns true when `action` is one of the five CKP-0010 call /
+/// CAP-1: returns true when `action` is one of the five AKP-0010 call /
 /// media capability actions. Used by handlers that need to short-circuit
 /// validation when the realm policy hasn't loaded yet but the action is
 /// nevertheless known to the evaluator.

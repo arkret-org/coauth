@@ -1,6 +1,6 @@
+use arkret_core::{GrantId, SessionGrantProofKind};
 use chrono::{DateTime, Utc};
 use coauth_data::SessionGrant;
-use arkret_core::{GrantId, SessionGrantProofKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

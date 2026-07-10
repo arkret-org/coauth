@@ -39,9 +39,9 @@ macro_rules! conditional {
     { false => $($tt:tt)* } => {};
 }
 
-macro_rules! asymetric_jwt_test {
+macro_rules! asymmetric_jwt_test {
     ($test_name:ident, $alg:ident, $jwt:ident) => {
-        asymetric_jwt_test!($test_name, $alg, $jwt, supported = true);
+        asymmetric_jwt_test!($test_name, $alg, $jwt, supported = true);
     };
     ($test_name:ident, $alg:ident, $jwt:ident, supported = $supported:ident) => {
         mod $test_name {
@@ -152,7 +152,7 @@ macro_rules! asymetric_jwt_test {
     };
 }
 
-macro_rules! symetric_jwt_test {
+macro_rules! symmetric_jwt_test {
     ($test_name:ident, $alg:ident, $jwt:ident) => {
         mod $test_name {
             use coauth_iana::jose::JsonWebSignatureAlg;
@@ -197,22 +197,22 @@ macro_rules! symetric_jwt_test {
     };
 }
 
-symetric_jwt_test!(hs256, Hs256, HS256_JWT);
-symetric_jwt_test!(hs384, Hs384, HS384_JWT);
-symetric_jwt_test!(hs512, Hs512, HS512_JWT);
+symmetric_jwt_test!(hs256, Hs256, HS256_JWT);
+symmetric_jwt_test!(hs384, Hs384, HS384_JWT);
+symmetric_jwt_test!(hs512, Hs512, HS512_JWT);
 
-asymetric_jwt_test!(rs256, Rs256, RS256_JWT);
-asymetric_jwt_test!(rs384, Rs384, RS384_JWT);
-asymetric_jwt_test!(rs512, Rs512, RS512_JWT);
-asymetric_jwt_test!(ps256, Ps256, PS256_JWT);
-asymetric_jwt_test!(ps384, Ps384, PS384_JWT);
-asymetric_jwt_test!(ps512, Ps512, PS512_JWT);
-asymetric_jwt_test!(es256, Es256, ES256_JWT);
-asymetric_jwt_test!(es384, Es384, ES384_JWT);
-asymetric_jwt_test!(es512, Es512, ES512_JWT);
-asymetric_jwt_test!(es256k, Es256K, ES256K_JWT);
-asymetric_jwt_test!(eddsa_ed25519, EdDsa, EDDSA_ED25519_JWT);
-asymetric_jwt_test!(eddsa_ed448, EdDsa, EDDSA_ED448_JWT, supported = false);
+asymmetric_jwt_test!(rs256, Rs256, RS256_JWT);
+asymmetric_jwt_test!(rs384, Rs384, RS384_JWT);
+asymmetric_jwt_test!(rs512, Rs512, RS512_JWT);
+asymmetric_jwt_test!(ps256, Ps256, PS256_JWT);
+asymmetric_jwt_test!(ps384, Ps384, PS384_JWT);
+asymmetric_jwt_test!(ps512, Ps512, PS512_JWT);
+asymmetric_jwt_test!(es256, Es256, ES256_JWT);
+asymmetric_jwt_test!(es384, Es384, ES384_JWT);
+asymmetric_jwt_test!(es512, Es512, ES512_JWT);
+asymmetric_jwt_test!(es256k, Es256K, ES256K_JWT);
+asymmetric_jwt_test!(eddsa_ed25519, EdDsa, EDDSA_ED25519_JWT);
+asymmetric_jwt_test!(eddsa_ed448, EdDsa, EDDSA_ED448_JWT, supported = false);
 
 #[test]
 fn test_private_to_public_jwks() {

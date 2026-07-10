@@ -86,7 +86,7 @@ In the future, it will help building OpenTelemetry-compatible distributed traces
 `tracing` is becoming the standard to log things in Rust.
 By itself it will do nothing unless a subscriber is installed to -for example- log the events to the console.
 
-The CLI installs [`tracing-subcriber`](https://docs.rs/tracing-subscriber/*/tracing_subscriber/) on startup to log in the console.
+The CLI installs [`tracing-subscriber`](https://docs.rs/tracing-subscriber/*/tracing_subscriber/) on startup to log in the console.
 It looks for a `RUST_LOG` environment variable to determine what event should be logged.
 
 ### Error management: `thiserror` / `anyhow`

@@ -115,7 +115,7 @@ impl JsonWebKeyCapability {
     }
 }
 
-/// An utilitary trait to figure out the [`JsonWebKeyEcEllipticCurve`] value for
+/// A utility trait to figure out the [`JsonWebKeyEcEllipticCurve`] value for
 /// elliptic curves
 trait JwkEcCurve {
     const CRV: JsonWebKeyEcEllipticCurve;

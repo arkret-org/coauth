@@ -100,7 +100,7 @@ coauth-device-approval-this-will-setup =
     Another device wants to set up { $client_name } (<span>{ $client_uri }</span>) with your <span>{ $server_name }</span> account. Make sure you recognise that device.
 # The automatic device name generated for a client, e.g. 'Element on iPhone'
 coauth-device-display-name-client-on-device = { $client_name } on { $device_name }
-# Part of the automatic device name for the platfom, e.g. 'Safari for macOS'
+# Part of the automatic device name for the platform, e.g. 'Safari for macOS'
 coauth-device-display-name-name-for-platform = { $name } for { $platform }
 coauth-device-display-name-unknown-device = Unknown device
 coauth-email-in-use-description =

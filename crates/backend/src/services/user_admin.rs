@@ -1,6 +1,7 @@
 use std::str::FromStr as _;
 
 use anyhow::Error as AnyhowError;
+use arkret_core::AccountStatus;
 use coauth_data::audit::AdminOperation;
 use coauth_data::queue::{
     AccountProjectionRewriteJob, DeactivateUserJob, QueueJobRepositoryExt as _,
@@ -12,7 +13,6 @@ use coauth_data::{
     UpstreamOAuthLinkPatch, User, UserEmail, UserEmailPatch,
 };
 use coauth_principal::ConnectorAdmin;
-use arkret_core::AccountStatus;
 use lettre::address::AddressError;
 use rand_core::RngCore;
 use thiserror::Error;

@@ -140,7 +140,7 @@ impl JobTracker {
                             job.id = %context.id,
                             job.queue.name = %context.queue_name,
                             job.attempt = %context.attempt,
-                            "Job failed too many times, abandonning"
+                            "Job failed too many times, abandoning"
                         );
                     }
                 }
@@ -341,7 +341,7 @@ impl JobTracker {
                             job.queue.name = %context.queue_name,
                             job.attempt = %context.attempt,
                             job.elapsed = format!("{elapsed}ms"),
-                            "Job crashed too many times, abandonning"
+                            "Job crashed too many times, abandoning"
                         );
 
                         self.job_processing_time.record(

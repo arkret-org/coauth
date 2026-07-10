@@ -218,11 +218,11 @@ pub fn validate_session_acting_for_organization(
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
-    use coauth_data::organization_control::OrganizationDelegationStatus;
     use arkret_core::models::{
         RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     };
+    use chrono::{TimeZone, Utc};
+    use coauth_data::organization_control::OrganizationDelegationStatus;
 
     use super::*;
 

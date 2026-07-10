@@ -1,6 +1,6 @@
-//! Admin DTOs for managing CKP-0007 `ak.circle.*` capability grants.
+//! Admin DTOs for managing AKP-0007 `ak.circle.*` capability grants.
 //!
-//! CKP-0007 introduces a Circle primitive — an encrypted sub-boundary
+//! AKP-0007 introduces a Circle primitive — an encrypted sub-boundary
 //! inside a Realm — and ships six capability actions that govern who can
 //! create / manage / audit Circles and their membership:
 //!

@@ -1,4 +1,4 @@
-//! CKP-0008 accountability-grant issuance endpoint and grant revocation
+//! AKP-0008 accountability-grant issuance endpoint and grant revocation
 //! helpers.
 //!
 //! When a controller approves provisioning of a native Personal Agent, coauth
@@ -12,6 +12,7 @@
 
 use std::collections::BTreeSet;
 
+use arkret_core::identifiers::{GrantId, new_prefixed_uuid7};
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::RepositoryAccess;
@@ -19,7 +20,6 @@ use coauth_data::accountability::{
     AccountabilityGrantFanoutState, AccountabilitySubjectKind, NewAccountabilityGrant,
 };
 use coauth_data::audit::AdminOperation;
-use arkret_core::identifiers::{GrantId, new_prefixed_uuid7};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -84,7 +84,7 @@ pub struct AccountabilityGrantRequestBody {
 
 /// Response payload for `POST /_coauth/self/agents/{id}/accountability-grant`.
 ///
-/// CKP-0008 (`id-kind-registry.json`): the wire shape carries the
+/// AKP-0008 (`id-kind-registry.json`): the wire shape carries the
 /// freshly minted `ak:grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
@@ -122,7 +122,7 @@ pub struct AccountabilityGrantOutcome {
 
 /// `POST /_coauth/self/agents/{id}/accountability-grant`
 ///
-/// Internal CKP-0008 grant-issuance endpoint. Accepts only the soland /
+/// Internal AKP-0008 grant-issuance endpoint. Accepts only the soland /
 /// sodmin static bearer token (matched against any
 /// `arkret.principal_servers[].session_grant_introspection_bearer`
 /// configured for the deployment); browser sessions and end-user

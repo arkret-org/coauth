@@ -157,7 +157,7 @@ async fn handle_get(
         return Ok(());
     }
 
-    // Fetch informations about the user. This is purely cosmetic, so we let it
+    // Fetch information about the user. This is purely cosmetic, so we let it
     // fail and put a 1s timeout to it in case we fail to query it
     // TODO: we're likely to need this in other places
     let username = &session.user.handle;
@@ -357,7 +357,7 @@ async fn handle_post(
 
     repo.save().await?;
 
-    // Fetch informations about the user. This is purely cosmetic, so we let it
+    // Fetch information about the user. This is purely cosmetic, so we let it
     // fail and put a 1s timeout to it in case we fail to query it
     // TODO: we're likely to need this in other places
     let username = &session.user.handle;

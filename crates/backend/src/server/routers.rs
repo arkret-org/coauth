@@ -179,7 +179,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                 .options(oidc_preflight_handler)
                 .post(arkret::issue_session_grant_endpoint),
         )
-        // CKP-0008 §4.5 runtime key pairing
+        // AKP-0008 §4.5 runtime key pairing
         // (`ak.gate.account.command.pair_agent_key`): the agent runtime submits
         // its locally-generated public key + proof-of-possession; coauth
         // validates the PoP, writes a durable agent key authorization, and fans
@@ -422,7 +422,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
                         .push(Router::with_path("respond").post(strand::respond_strand)),
                 ),
         )
-        // CKP-0008 personal-agent controller approval. Internal
+        // AKP-0008 personal-agent controller approval. Internal
         // server-to-server endpoint: accepts only soland / sodmin
         // static bearers. Issues a `accountability_grant` payload
         // referencing the agent principal + capability set.
@@ -487,7 +487,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
         )
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
-        // CKP-0007 ak.circle.* capability grants (P2B.2). Wire shape is in
+        // AKP-0007 ak.circle.* capability grants (P2B.2). Wire shape is in
         // coauth-admin-types::circle_capability_admin; persistence is durable.
         .push(
             Router::with_path("circles/capabilities")

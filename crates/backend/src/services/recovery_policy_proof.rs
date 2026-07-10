@@ -7,7 +7,7 @@
 //!
 //! coauth's first-class recovery strand today is the password-reset / email-OOB
 //! ticket loop in [`crate::handlers::account::recovery`] — it does NOT
-//! participate in the CKP recovery-policy / recovery-receipt binding
+//! participate in the AKP recovery-policy / recovery-receipt binding
 //! described in `spec/v1/artifacts/schemas/recovery-policy.schema.json`.
 //!
 //! When (and only when) coauth is configured to issue OIDC-backed recovery

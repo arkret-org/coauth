@@ -1,6 +1,6 @@
 //! Durable Circle capability grants.
 //!
-//! This module owns the shared domain types for CKP-0007 `ak.circle.*`
+//! This module owns the shared domain types for AKP-0007 `ak.circle.*`
 //! capability grants ([`CircleCapabilityAction`], [`RiskTier`],
 //! [`CircleCapabilityGrant`]). They live in the persistence layer because the
 //! repository both produces and persists them; the operator-facing admin API
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::pg::circle_capability::PgCircleCapabilityGrantRepository;
 pub use crate::storage::circle_capability::*;
 
-/// One of the six CKP-0007 capability actions. Stored as the literal
+/// One of the six AKP-0007 capability actions. Stored as the literal
 /// registry string so the wire shape is stable across rollouts.
 ///
 /// Source: arkret-spec

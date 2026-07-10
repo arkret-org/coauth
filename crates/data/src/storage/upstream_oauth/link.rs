@@ -133,7 +133,7 @@ pub trait UpstreamOAuthLinkRepository: Send + Sync {
     ///
     /// * `rng`: The random number generator to use
     /// * `clock`: The clock used to generate timestamps
-    /// * `upsream_oauth_provider`: The upstream OAuth provider for which to create the link
+    /// * `upstream_oauth_provider`: The upstream OAuth provider for which to create the link
     /// * `subject`: The subject of the upstream OAuth link to create
     /// * `human_account_name`: A human-readable name for the upstream account
     ///

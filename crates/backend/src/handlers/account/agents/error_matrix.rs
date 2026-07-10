@@ -4,12 +4,12 @@
 //! the `ak.gate.account.command.pair_agent_key` operation and the agent branch
 //! of `ak.gate.account.command.issue_session_grant`.
 
-use chrono::{DateTime, Utc};
 use arkret_core::error::{
     ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_FAILED_PRECONDITION, ERROR_CODE_INVALID_SIGNATURE,
     ERROR_CODE_POLICY_UNAVAILABLE, ERROR_CODE_POLICY_VIOLATION,
     REASON_ACCOUNTABILITY_GRANT_MISSING,
 };
+use chrono::{DateTime, Utc};
 
 use crate::AppError;
 

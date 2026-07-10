@@ -25,10 +25,6 @@
 //! against the durable `organization_delegations` table, so a forged or expired
 //! delegation fails closed exactly as soland's verifier would reject it.
 
-use base64ct::{Base64UrlUnpadded, Encoding as _};
-use coauth_data::organization_control::OrganizationDelegation;
-use coauth_jose::constraints::Constrainable as _;
-use coauth_keystore::Keystore;
 use arkret_core::models::{
     NoDelegationResolver, RealmOrganizationAuthorization, RealmOrganizationControlScope,
     RealmOrganizationDelegation, RealmOrganizationDelegationResolver, RealmOrganizationIssuerRole,
@@ -37,6 +33,10 @@ use arkret_core::models::{
     verify_realm_organization_statement,
 };
 use arkret_core::{Did, RealmId};
+use base64ct::{Base64UrlUnpadded, Encoding as _};
+use coauth_data::organization_control::OrganizationDelegation;
+use coauth_jose::constraints::Constrainable as _;
+use coauth_keystore::Keystore;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
 use signature::RandomizedSigner as _;

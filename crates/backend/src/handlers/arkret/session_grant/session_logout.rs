@@ -1,5 +1,5 @@
-use coauth_jose::jwt::Jwt;
 use arkret_core::{AuthSessionLogoutOutcome, AuthSessionLogoutRequestBody};
+use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 
 use super::*;

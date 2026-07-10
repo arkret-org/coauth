@@ -14,6 +14,8 @@
 // `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
+use arkret_core::error::REASON_PROOF_INVALID;
+use arkret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
@@ -23,8 +25,6 @@ use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{
     AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
 };
-use arkret_core::error::REASON_PROOF_INVALID;
-use arkret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;

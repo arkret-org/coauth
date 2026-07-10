@@ -16,8 +16,8 @@
 //! same static bearer coauth already holds for that server's embedded
 //! `did:webvh` registration surface.
 
-use coauth_config::ArkretConfig;
 use arkret_core::DeviceSigningKeyDirectoryQueryRequestBody;
+use coauth_config::ArkretConfig;
 use thiserror::Error;
 
 use crate::outbound_http;

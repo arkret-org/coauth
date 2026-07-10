@@ -1,7 +1,7 @@
+use arkret_core::ErasureReceipt;
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_keystore::Keystore;
-use arkret_core::ErasureReceipt;
 use serde_json::Value;
 use thiserror::Error;
 

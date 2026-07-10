@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
-use chrono::{DateTime, Utc};
 use arkret_core::{AccountStatus, Handle};
+use chrono::{DateTime, Utc};
 use diesel::pg::Pg;
 use diesel::{Queryable, deserialize, sql_types};
 use rand_core::RngCore;
@@ -439,7 +439,7 @@ pub enum AuthenticationMethod {
 
 /// A session to recover a user if they have lost their credentials
 ///
-/// For each session intiated, there may be multiple [`UserRecoveryTicket`]s
+/// For each session initiated, there may be multiple [`UserRecoveryTicket`]s
 /// sent to the user, either because multiple [`User`] have the same email
 /// address, or because the user asked to send the recovery email again.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
