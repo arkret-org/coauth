@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! COA-ORG-03 — `ck.realm.organization` statement issuance + a repository-backed
+//! COA-ORG-03 — `ak.realm.organization` statement issuance + a repository-backed
 //! delegation resolver for the SDK verifier.
 //!
 //! This module owns the organization-side authorization proof. It builds a
@@ -12,7 +12,7 @@
 //! with the SDK [`verify_realm_organization_statement`] before returning so a
 //! malformed statement never escapes coauth.
 //!
-//! It deliberately does **not** issue the Realm-side `ck.realm.admin`
+//! It deliberately does **not** issue the Realm-side `ak.realm.admin`
 //! authorization required to write the event into Realm history — that is
 //! soland's job. coauth only produces the organization-side endorsement /
 //! revocation proof.
@@ -25,10 +25,6 @@
 //! against the durable `organization_delegations` table, so a forged or expired
 //! delegation fails closed exactly as soland's verifier would reject it.
 
-use base64ct::{Base64UrlUnpadded, Encoding as _};
-use coauth_data::organization_control::OrganizationDelegation;
-use coauth_jose::constraints::Constrainable as _;
-use coauth_keystore::Keystore;
 use arkret_core::models::{
     NoDelegationResolver, RealmOrganizationAuthorization, RealmOrganizationControlScope,
     RealmOrganizationDelegation, RealmOrganizationDelegationResolver, RealmOrganizationIssuerRole,
@@ -37,6 +33,10 @@ use arkret_core::models::{
     verify_realm_organization_statement,
 };
 use arkret_core::{Did, RealmId};
+use base64ct::{Base64UrlUnpadded, Encoding as _};
+use coauth_data::organization_control::OrganizationDelegation;
+use coauth_jose::constraints::Constrainable as _;
+use coauth_keystore::Keystore;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
 use signature::RandomizedSigner as _;
@@ -60,7 +60,7 @@ pub enum OrganizationStatementError {
     SelfVerify(String),
 }
 
-/// Inputs needed to issue a `ck.realm.organization` statement. The caller has
+/// Inputs needed to issue a `ak.realm.organization` statement. The caller has
 /// already authorized the action; this struct carries the verified shape to
 /// sign.
 #[derive(Debug, Clone)]
@@ -88,7 +88,7 @@ pub struct OrganizationStatementRequest {
     pub executed_by: Option<Did>,
 }
 
-/// Issue a signed `ck.realm.organization` statement.
+/// Issue a signed `ak.realm.organization` statement.
 ///
 /// `service_did` is the coauth service DID used to construct the
 /// `verification_method` DID-URL. `now` and `resolver` feed the SDK

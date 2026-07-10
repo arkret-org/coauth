@@ -1,16 +1,16 @@
 use std::collections::BTreeMap;
 
+use arkret_core::{
+    Audience, DeliveryBindingHint as HandleClaimDeliveryBindingHint, Did, Handle,
+    HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind, Hash, PayloadProof,
+    proof_kind,
+};
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::CokretConfig;
 use coauth_data::{Clock, UrlBuilder, User};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
-use arkret_core::{
-    Audience, DeliveryBindingHint as HandleClaimDeliveryBindingHint, Did, Handle,
-    HandleBindingState, HandleClaim as HandleClaimPayload, HandleClaimKind, Hash, PayloadProof,
-    proof_kind,
-};
 
 use super::*;
 
@@ -67,7 +67,7 @@ pub(crate) fn issue_handle_claim(
     let subject_id = subject_did.to_owned();
 
     // HC-COAUTH-2 — the subject MUST be a holder/principal DID, not a
-    // `ck:actor:` / `ck:account:` typed id or a service DID. Validating
+    // `ak:actor:` / `ak:account:` typed id or a service DID. Validating
     // here keeps the issuer honest about whatever the caller passed and
     // lets the same reason code surface as soland / the SDK.
     ensure_subject_is_principal_did(&subject_id)?;

@@ -1,8 +1,8 @@
 //! Repositories to interact with entities related to user accounts
 
+pub use arkret_core::AccountStatus as UserStatus;
 use async_trait::async_trait;
 use coauth_data::{Clock, User, UserPatch, UserProfilePatch};
-pub use arkret_core::AccountStatus as UserStatus;
 use rand_core::RngCore;
 use ulid::Ulid;
 

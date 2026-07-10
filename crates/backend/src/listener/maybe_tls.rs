@@ -61,7 +61,7 @@ impl<T> MaybeTlsStream<T> {
         }
     }
 
-    /// Gather informations about the TLS connection. Returns `None` if the
+    /// Gather information about the TLS connection. Returns `None` if the
     /// stream is not a TLS stream.
     ///
     /// # Panics

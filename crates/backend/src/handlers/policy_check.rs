@@ -34,13 +34,13 @@
 
 use std::time::Duration;
 
+use arkret_core::{
+    Did, PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
+};
 use chrono::Utc;
 use coauth_config::CokretConfig;
 use coauth_data::{BoxRepositoryFactory, PgRepositoryFactory};
 use coauth_keystore::Keystore;
-use arkret_core::{
-    Did, PolicyCheckBoundTo, PolicyCheckOutcome, PolicyCheckRequestBody, PolicyCheckSignature,
-};
 use salvo::prelude::*;
 use serde_json::Value;
 
@@ -61,13 +61,13 @@ const EVALUATOR_DEADLINE: Duration = Duration::from_secs(2);
 
 /// Default decision expiry when the evaluator does not pin one. Spec §3
 /// (`cache_ttl_seconds: 300`) lets the realm declare a longer TTL via
-/// `ck.realm.policy_server`; until we plumb that through we default to
+/// `ak.realm.policy_server`; until we plumb that through we default to
 /// 30 s on allow paths.
 const DEFAULT_ALLOW_TTL_SECONDS: i64 = 30;
 
 /// `POST /_arkret/self/policy/check`
 ///
-/// Round 4 `ck.self.policy.query.check` endpoint. Consumes
+/// Round 4 `ak.self.policy.query.check` endpoint. Consumes
 /// [`PolicyCheckRequestBody`], emits a signed [`PolicyCheckOutcome`].
 #[handler]
 pub async fn post_policy_check(
@@ -384,11 +384,11 @@ mod tests {
     use std::future::Future;
     use std::pin::Pin;
 
+    use arkret_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
     use base64ct::{Base64UrlUnpadded, Encoding as _};
     use coauth_iana::jose::JsonWebSignatureAlg;
     use coauth_jose::constraints::Constrainable as _;
     use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
-    use arkret_core::{AuthzDecision, Hash, PolicyCheckSource, RealmId};
     use rand_core::SeedableRng as _;
     use signature::Verifier as _;
 

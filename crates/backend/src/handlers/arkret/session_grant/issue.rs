@@ -123,7 +123,7 @@ pub async fn issue_session_grant_endpoint(
             }))
         }
         arkret_core::SessionGrantProofKind::AgentKeyProof => {
-            // CKP-0008 §4.6: independent agent_key_proof validator. MUST NOT
+            // AKP-0008 §4.6: independent agent_key_proof validator. MUST NOT
             // fall back to any human proof validator. The grant-binding DPoP proof is
             // still required so the issued grant is device/runtime-bound
             // (`cnf.jkt`), exactly like the OIDC branch.
@@ -171,7 +171,7 @@ fn require_agent_key_proof_dpop_binding(
     Ok(binding)
 }
 
-/// CKP-0008 §4.6 agent runtime authentication branch. Validates the
+/// AKP-0008 §4.6 agent runtime authentication branch. Validates the
 /// `agent_key_proof`, intersects scope, and mints a ≤ 15-minute device-bound
 /// session grant. Returns the SDK `SessionGrantOutcome` with the
 /// `scope_details` overlay. Human-approval and fail-closed rejections surface
@@ -242,7 +242,7 @@ async fn issue_agent_key_proof_session_grant(
         }
         Err(AgentSessionProofError::HumanApprovalRequired(approval)) => {
             repo.cancel().await.ok();
-            // CKP-0008 §4.6: structured claim_required — agent runtime is never
+            // AKP-0008 §4.6: structured claim_required — agent runtime is never
             // shown CAPTCHA/OTP. The reason_code + approval_request_id ride the
             // message so the conformant runtime can route the controller to the
             // out-of-band approval surface.
@@ -259,7 +259,7 @@ async fn issue_agent_key_proof_session_grant(
     };
 
     // Controller lifecycle gate: a deactivated / suspended controller fails
-    // closed (CKP-0008 §4.6). Resolve the controller's local user record when
+    // closed (AKP-0008 §4.6). Resolve the controller's local user record when
     // the DID maps to a coauth-hosted account. Bind the lookup to an owned
     // value so the sub-repo borrow is released before `repo.cancel()`.
     let controller_blocked = if let Some(user_id) =
@@ -288,7 +288,7 @@ async fn issue_agent_key_proof_session_grant(
     // grant is a self-validating signed `ak.session.grant` JWT bound to the
     // runtime's DPoP key with the capped agent TTL; soland verifies the coauth
     // issuer signature and rechecks agent status inside the revocation
-    // freshness window (CKP-0008 §4.11 natural-expiry path), bounded by the
+    // freshness window (AKP-0008 §4.11 natural-expiry path), bounded by the
     // ≤ 15-minute TTL.
     let audience = body.proof.audience.clone();
     let now = clock.now();
@@ -328,7 +328,7 @@ async fn issue_agent_key_proof_session_grant(
     // grant_id / session_public_key / audience are SessionGrantOutcome
     // top-level fields (mirroring SessionGrantRefreshOutcome), NOT entries in
     // `scope_details`. The wire `scope_details` carries only the spec-typed
-    // agent overlay (CKP-0008 §4.6); the JWT-internal scope details with the
+    // agent overlay (AKP-0008 §4.6); the JWT-internal scope details with the
     // canonical constraint projection are already baked into the minted grant
     // above.
     let grant_id = arkret_core::GrantId::new(persisted.grant_id.to_string()).map_err(|e| {

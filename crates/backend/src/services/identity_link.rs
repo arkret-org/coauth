@@ -27,8 +27,8 @@
 //! See `arkret-spec` round-4 §7fae9ba "Enhance third-party invites +
 //! transport bindings" — the same dual-scoping rule applies here.
 
-use chrono::{DateTime, Utc};
 use arkret_core::{RealmId, TypedTrustDomainId};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

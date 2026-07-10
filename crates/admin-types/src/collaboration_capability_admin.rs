@@ -4,7 +4,7 @@
 //! Source of truth:
 //! `arkret-spec/spec/v1/artifacts/registry/capability-action-registry.json`.
 //! These actions intentionally use the exact registry action string; admin
-//! tooling MUST NOT grant umbrella strings such as `ck.pin.*`.
+//! tooling MUST NOT grant umbrella strings such as `ak.pin.*`.
 
 use chrono::{DateTime, Utc};
 pub use coauth_data::circle_capability::RiskTier;

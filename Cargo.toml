@@ -126,7 +126,7 @@ arkret = {version = "0.3.0",path = "../arkret-rust-sdk/crates/sdk",default-featu
 arkret-core = {version = "0.3.0",path = "../arkret-rust-sdk/crates/core",default-features = false}
 # Lightweight typed-identifier validators (no heavy transitive deps beyond
 # what `arkret-core` already pulls in). Used by `coauth-config` for the
-# `ck:trust_domain:<scope>` wire-form check so config and SDK never drift.
+# `ak:trust_domain:<scope>` wire-form check so config and SDK never drift.
 arkret-identifiers = {version = "0.3.0",path = "../arkret-rust-sdk/crates/identifiers",default-features = false}
 arkret-signatures = {version = "0.3.0",path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["signer"]}
 compact_str = "0.9.1"

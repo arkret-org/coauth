@@ -13,7 +13,7 @@
 //! - `POST   /organizations/{org_did}/delegations/{ref}/renew` — renew validity.
 //! - `POST   /organizations/{org_did}/rotate-controller` — rotate the control stream / frontier
 //!   ref.
-//! - `POST   /organizations/{org_did}/statements` — issue a signed `ck.realm.organization`
+//! - `POST   /organizations/{org_did}/statements` — issue a signed `ak.realm.organization`
 //!   statement (COA-ORG-03).
 //!
 //! Wire shapes come from [`coauth_admin_types::organization_admin`] (which
@@ -21,6 +21,9 @@
 //! [`arkret_core::models::RealmOrganizationPayload`]. No admin-private wire
 //! struct is defined here.
 
+use arkret_core::identifiers::new_prefixed_uuid7;
+use arkret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
+use arkret_core::{Did, Hash, RealmId};
 use coauth_admin_types::organization_admin::{
     BootstrapAuthorizationInput, BootstrapOrganizationRequest, IssueOrganizationStatementRequest,
     ListOrganizationDelegationsOutcome, OrganizationControlView, OrganizationPrincipalControl,
@@ -31,9 +34,6 @@ use coauth_data::organization_control::{
     NewOrganizationDelegation, NewOrganizationPrincipalControl, OrganizationDelegation,
 };
 use coauth_data::{BoxRepository, RepositoryAccess};
-use arkret_core::identifiers::new_prefixed_uuid7;
-use arkret_core::models::{RealmOrganizationPayload, RealmOrganizationStatus};
-use arkret_core::{Did, Hash, RealmId};
 use salvo::oapi::extract::PathParam;
 use salvo::prelude::*;
 

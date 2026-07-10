@@ -18,7 +18,7 @@
 //! ```
 //!
 //! Replay boundary (identity-did §5.1 / §3.6, conformance vector
-//! `ck.vector.identity.did_proof_replay_window.v1`):
+//! `ak.vector.identity.did_proof_replay_window.v1`):
 //!   - `audience` MUST equal the local coauth service DID, so a proof minted for another receiver
 //!     cannot be relayed here.
 //!   - `trust_domain` MUST equal this deployment's trust domain, so the identical proof bytes
@@ -70,6 +70,8 @@
 //! `nonce`. The signature is verified against the verification
 //! service's resolved DID document JWKS.
 
+use arkret_core::canonical::canonical_json_bytes;
+use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
@@ -77,8 +79,6 @@ use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
-use arkret_core::canonical::canonical_json_bytes;
-use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -92,7 +92,7 @@ pub const DID_BINDING_CONTROL_PROOF_SCHEMA: &str = "ak.schema.did_binding_contro
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingStatementClaims {
     /// Schema discriminator. Must equal
-    /// `ck.schema.did_binding_control_proof.v1`.
+    /// `ak.schema.did_binding_control_proof.v1`.
     pub schema: String,
     /// The DID being bound.
     pub account_did: String,
@@ -419,7 +419,7 @@ pub(crate) enum SdkJwsVerifyError {
 
 /// Verify a compact JWS using the SDK's pure-Rust Ed25519 verifier.
 ///
-/// CKP-0007 P2B.3.1: this replaces the previous embedded
+/// AKP-0007 P2B.3.1: this replaces the previous embedded
 /// `coauth_jose::jwt::Jwt::verify_with_jwks` envelope-verification path.
 /// The compact-JWS shape (`header.payload.signature`) is parsed into
 /// segment bytes here; the signing input
@@ -1234,7 +1234,7 @@ mod tests {
             controller: vector.did_document_fragment.controller.clone(),
             public_key_jwk: vector.did_document_fragment.public_key_jwk.clone(),
         };
-        // CKP-0007 P2B.3.1: verify through the SDK-mediated pure-Rust path.
+        // AKP-0007 P2B.3.1: verify through the SDK-mediated pure-Rust path.
         verify_compact_jws_with_sdk(&compact, std::slice::from_ref(&method), kid)
             .expect("fixture JWS should verify against DID method key");
         assert!(

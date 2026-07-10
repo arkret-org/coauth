@@ -9,7 +9,7 @@
 ## Prerequisites
 
 - PostgreSQL 14+ (primary) — `coauth-backend` uses Diesel migrations.
-- Optional: OIDC upstream provider (Keycloak, Auth0, Azure AD, etc.) for `ck.account.oidc_*` strands.
+- Optional: OIDC upstream provider (Keycloak, Auth0, Azure AD, etc.) for `ak.account.oidc_*` strands.
 - Optional: HSM / KMS for signing keys (production).
 - Rust toolchain matching workspace MSRV (see root `Cargo.toml`).
 
@@ -29,7 +29,7 @@ http:
 database:
   uri: ${COAUTH_DATABASE_URI}
 arkret:
-  trust_domain: ck:trust_domain:acme.example
+  trust_domain: ak:trust_domain:acme.example
   principal_servers:
   - name: soland
     audience: did:webvh:<scid>:soland.acme.example:webvh:service
@@ -123,10 +123,10 @@ recipe in this workspace.
 
 ## R3 migration notes (b47ff6ec sync)
 
-- New error codes wired (CKP-0008 agent auth matrix): `pairing_request_expired`, `proof_invalid`, `verification_method_principal_mismatch`, `agent_paused`, `agent_deactivated`, `accountability_grant_missing`. No schema migration.
-- 5 new capability action enum entries (`ck.call.{join, screen_share, record, transcribe, moderate}`) — backward-compatible policy evaluation; no rule storage migration.
+- New error codes wired (AKP-0008 agent auth matrix): `pairing_request_expired`, `proof_invalid`, `verification_method_principal_mismatch`, `agent_paused`, `agent_deactivated`, `accountability_grant_missing`. No schema migration.
+- 5 new capability action enum entries (`ak.call.{join, screen_share, record, transcribe, moderate}`) — backward-compatible policy evaluation; no rule storage migration.
 - Handle homograph wire-level reject hook on organization-issued claims — no migration; existing claims revalidated on next refresh.
-- `ck.profile.accountable_principals.strict_reject.v1` profile signal — opt-in per deployment via config (default: strict accountability-principal validation).
+- `ak.profile.accountable_principals.strict_reject.v1` profile signal — opt-in per deployment via config (default: strict accountability-principal validation).
 
 ## Security
 

@@ -39,7 +39,7 @@ diesel::define_sql_function! {
 pub mod account;
 /// Durable accountability grants for Personal Agent capability approval.
 pub mod accountability;
-/// Durable agent key authorizations + agent-key-proof replay table (CKP-0008).
+/// Durable agent key authorizations + agent-key-proof replay table (AKP-0008).
 pub mod agent_key;
 /// App session repositories and PostgreSQL implementations.
 pub mod app_session;

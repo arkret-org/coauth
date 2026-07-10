@@ -1,4 +1,4 @@
-//! CKP-0008 accountability-grant issuance endpoint and grant revocation
+//! AKP-0008 accountability-grant issuance endpoint and grant revocation
 //! helpers.
 //!
 //! When a controller approves provisioning of a native Personal Agent, coauth
@@ -12,6 +12,7 @@
 
 use std::collections::BTreeSet;
 
+use arkret_core::identifiers::{GrantId, new_prefixed_uuid7};
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
 use coauth_data::RepositoryAccess;
@@ -19,7 +20,6 @@ use coauth_data::accountability::{
     AccountabilityGrantFanoutState, AccountabilitySubjectKind, NewAccountabilityGrant,
 };
 use coauth_data::audit::AdminOperation;
-use arkret_core::identifiers::{GrantId, new_prefixed_uuid7};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -71,7 +71,7 @@ pub struct AccountabilityGrantRequestBody {
     pub controller_did: String,
 
     /// Capability actions covered by the grant. Each entry must be a
-    /// registered `ck.agent.*` action from `capability-action-registry.json`;
+    /// registered `ak.agent.*` action from `capability-action-registry.json`;
     /// the agent principal below references the union as a single
     /// accountability grant.
     pub capabilities: Vec<String>,
@@ -84,11 +84,11 @@ pub struct AccountabilityGrantRequestBody {
 
 /// Response payload for `POST /_coauth/self/agents/{id}/accountability-grant`.
 ///
-/// CKP-0008 (`id-kind-registry.json`): the wire shape carries the
+/// AKP-0008 (`id-kind-registry.json`): the wire shape carries the
 /// freshly minted `ak:grant:<uuid7>` typed id, the
 /// `agent_principal_id`, the canonical capability list, and the issuer
 /// controller DID. coauth rejects actions outside the registered
-/// `ck.agent.*` set before issuing the response; soland still verifies
+/// `ak.agent.*` set before issuing the response; soland still verifies
 /// the grant on ingest.
 ///
 /// `accountability_grant_id` and `agent_principal_id` are emitted as
@@ -122,7 +122,7 @@ pub struct AccountabilityGrantOutcome {
 
 /// `POST /_coauth/self/agents/{id}/accountability-grant`
 ///
-/// Internal CKP-0008 grant-issuance endpoint. Accepts only the soland /
+/// Internal AKP-0008 grant-issuance endpoint. Accepts only the soland /
 /// sodmin static bearer token (matched against any
 /// `arkret.principal_servers[].session_grant_introspection_bearer`
 /// configured for the deployment); browser sessions and end-user
@@ -296,7 +296,7 @@ pub async fn post_accountability_grant(
 pub(super) fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<String>, AppError> {
     if capabilities.is_empty() {
         return Err(AppError::bad_request(
-            "capabilities must list at least one ck.agent.* action",
+            "capabilities must list at least one ak.agent.* action",
         ));
     }
 
@@ -310,7 +310,7 @@ pub(super) fn normalize_capabilities(capabilities: Vec<String>) -> Result<Vec<St
         }
         if !is_registered_agent_capability(capability) {
             return Err(AppError::bad_request(format!(
-                "capability {capability:?} is not a registered ck.agent.* action"
+                "capability {capability:?} is not a registered ak.agent.* action"
             )));
         }
         unique.insert(capability.to_owned());

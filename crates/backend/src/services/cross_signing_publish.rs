@@ -2,21 +2,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Round 4 (2026-05-20, spec a77b995) — `ck.cross_signing.publish`
+//! Round 4 (2026-05-20, spec a77b995) — `ak.cross_signing.publish`
 //! issuance helper.
 //!
-//! Wire-breaking: the round-4 `ck.cross_signing.publish` envelope now
+//! Wire-breaking: the round-4 `ak.cross_signing.publish` envelope now
 //! REQUIRES `expected_previous_generation` (CAS precondition) and the
 //! cell_subject is the tuple `(principal_id, expected_previous_generation)`.
 //! Reducers compare `expected_previous_generation == current_accepted`
 //! and `generation == current_accepted + 1` **before** verifying any
-//! signatures. Old `ck.cross_signing.publish` envelopes (no
+//! signatures. Old `ak.cross_signing.publish` envelopes (no
 //! `expected_previous_generation`) are rejected unconditionally.
 //!
 //! This module is the **issuance** side: when coauth needs to rotate
 //! or initialise a principal's cross-signing keys it MUST:
 //!   1. Read the principal's current accepted generation (from the principal-server
-//!      `ck.self.account.query.describe` or local cache),
+//!      `ak.self.account.query.describe` or local cache),
 //!   2. Build a [`CrossSigningPublishContent`] with `expected_previous_generation =
 //!      current_accepted` and `generation = current_accepted + 1`,
 //!   3. Use [`cross_signing_publish_cell_subject(principal_id, expected_previous_generation)`] for
@@ -26,12 +26,12 @@
 //! current generation MUST fetch it first; the engine returns
 //! [`CrossSigningPublishError::GenerationUnknown`] rather than guess.
 
-use chrono::{DateTime, Utc};
 use arkret::crypto_protocol::{
     CrossSigningKeyRecord, CrossSigningPublishContent, SignedCrossSigningKey,
     cross_signing_publish_cell_subject,
 };
 use arkret_core::{Did, TypedTrustDomainId};
+use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 /// Errors raised by the cross-signing publish issuer.

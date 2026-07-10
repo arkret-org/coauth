@@ -5,6 +5,7 @@
 //! repository-generated row id and created_at timestamp, and finally update the
 //! same row's `audit_signature` column.
 
+use arkret_core::canonical::canonical_json_bytes;
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::SecondsFormat;
 use coauth_data::audit::{AdminOperation, AdminOperationLog, NewAdminOperationLog};
@@ -13,7 +14,6 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable as _;
 use coauth_jose::jwa::{AsymmetricVerifyingKey, Signature as JoseSignature};
 use coauth_keystore::Keystore;
-use arkret_core::canonical::canonical_json_bytes;
 use rand_chacha::ChaChaRng;
 use rand_core::{RngCore, SeedableRng as _};
 use salvo::oapi::ToSchema;

@@ -92,7 +92,7 @@ if ($RunBuilds) {
 }
 
 $record = [ordered]@{
-    schema             = "cx.coauth.local_milestone.v1"
+    schema             = "ak.coauth.local_milestone.v1"
     version            = $Version
     commit             = $head
     short_commit       = $short

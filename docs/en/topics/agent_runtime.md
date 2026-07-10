@@ -2,8 +2,8 @@
 
 coauth currently exposes only the internal accountability-grant issuance
 surface for agent principals. It does not expose
-`ck.gate.account.command.pair_agent_key` or the agent branch of
-`ck.gate.account.command.issue_session_grant`.
+`ak.gate.account.command.pair_agent_key` or the agent branch of
+`ak.gate.account.command.issue_session_grant`.
 
 Until those routes are wired, clients and sodmin must not present them as
 available coauth operations. The rejection helpers and error-code matrix remain
@@ -14,8 +14,8 @@ but they are reserved implementation details rather than a callable public API.
 
 ### `POST /_coauth/self/agents/{id}/accountability-grant`
 
-This internal CKP-0008 endpoint issues an accountability grant linking a human
-controller DID to an agent principal id and a canonical set of `ck.agent.*`
+This internal AKP-0008 endpoint issues an accountability grant linking a human
+controller DID to an agent principal id and a canonical set of `ak.agent.*`
 capabilities.
 
 The endpoint is server-to-server only:
@@ -26,7 +26,7 @@ The endpoint is server-to-server only:
 - the path `{id}` must be the agent principal DID, percent-encoded as a single
   URL path segment;
 - the `controller_did` is normalized before use;
-- each requested capability must be registered in the local `ck.agent.*`
+- each requested capability must be registered in the local `ak.agent.*`
   capability registry.
 
 On success coauth persists the accountability grant, writes a signed admin audit
@@ -36,17 +36,17 @@ controller DIDs or agent principals are also rejected.
 
 ## Deferred Surface
 
-### `ck.gate.account.command.pair_agent_key`
+### `ak.gate.account.command.pair_agent_key`
 
 This operation is not routed in coauth. No pairing token is created, no key pair
-is bound to an agent DID, and no `ck.gate.account.command.pair_agent_key` event is emitted by
+is bound to an agent DID, and no `ak.gate.account.command.pair_agent_key` event is emitted by
 the current coauth service.
 
 Reserved failure codes such as `pairing_request_expired`, `proof_invalid`, and
 `verification_method_principal_mismatch` describe the future wire contract only.
 They are not evidence that a production pairing route exists.
 
-### `ck.gate.account.command.issue_session_grant` agent branch
+### `ak.gate.account.command.issue_session_grant` agent branch
 
 The agent-principal branch of session-grant issuance is not routed in coauth.
 Existing session-grant endpoints do not accept agent-principal issuance

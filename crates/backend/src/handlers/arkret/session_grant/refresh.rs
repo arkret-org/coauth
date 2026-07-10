@@ -1,7 +1,5 @@
 use std::sync::{Arc, OnceLock};
 
-use chrono::{DateTime, Utc};
-use coauth_jose::jwt::Jwt;
 use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_GRANT_ALREADY_CONSUMED,
@@ -12,6 +10,8 @@ use arkret_core::{
     DeviceId, Hash, SessionGrantProofKind, SessionGrantRefreshOutcome, SessionGrantRefreshProof,
     SessionGrantRefreshRequestBody,
 };
+use chrono::{DateTime, Utc};
+use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 use serde::Serialize;
 use sha2::Digest as _;
@@ -246,8 +246,8 @@ fn verify_detached_jws_with_device_key(
     payload_bytes: &[u8],
     device_multibase: &str,
 ) -> Result<String, String> {
-    use base64ct::{Base64UrlUnpadded, Encoding as _};
     use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
 
     let mut parts = detached_jws.split('.');
     let header_b64u = parts.next().ok_or("missing protected header")?;
@@ -338,8 +338,8 @@ async fn verify_soft_logout_did_proof(
 
     // Device-identity source of truth is the Principal Server's device directory,
     // NOT the principal DID document. The device signing key was authorized by a
-    // `ck.device.authorize` event and projected into soland's device directory; a
-    // `ck.device.revoke` masks it. Resolve the authorized, non-revoked key for
+    // `ak.device.authorize` event and projected into soland's device directory; a
+    // `ak.device.revoke` masks it. Resolve the authorized, non-revoked key for
     // this human `(principal, device)` and verify the detached DID-proof JWS
     // against it. Agent runtimes use the separate `agent_key_proof` branch.
     // The directory only surfaces verified, non-revoked devices, so a resolved

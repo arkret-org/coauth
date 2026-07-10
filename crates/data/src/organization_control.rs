@@ -21,13 +21,13 @@
 //! These types deliberately use the SDK enums
 //! ([`RealmOrganizationRelationship`], [`RealmOrganizationControlScope`],
 //! [`RealmOrganizationIssuerRole`]) so the storage shape and the on-wire
-//! `ck.realm.organization` shape cannot drift. The `schema` feature gates the
+//! `ak.realm.organization` shape cannot drift. The `schema` feature gates the
 //! `schemars` / `salvo` derives so pure clients do not pull those deps.
 
-use chrono::{DateTime, Utc};
 use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub use crate::pg::organization_control::PgOrganizationControlRepository;
@@ -48,7 +48,7 @@ pub use crate::storage::organization_control::*;
 pub enum OrganizationBootstrapAuthorization {
     /// Proof of the organization DID method inception / controller key, bound
     /// to `principal_control_realm_id`, `fields.purpose = "principal_control"`
-    /// and `ck.profile.principal_control_realm.v1`.
+    /// and `ak.profile.principal_control_realm.v1`.
     DidControllerProof,
     /// A delegation declared in the organization DID Document / governance
     /// profile to an Account Authority or `CokretGovernanceService` whose
@@ -180,7 +180,7 @@ pub struct OrganizationDelegation {
     /// The delegated principal (Account Authority / governance service DID).
     pub delegate_did: String,
     /// Issuer role the delegate is allowed to act as on
-    /// `ck.realm.organization` statements.
+    /// `ak.realm.organization` statements.
     // The SDK enums only impl `salvo::oapi::ToSchema` (and only behind their own
     // `salvo` feature) — never `schemars::JsonSchema` — so we present them to
     // both schema generators as their snake_case wire string form.

@@ -7,7 +7,7 @@
 //! its **own local clock** — never silently trusting a longer
 //! `inception_key_max_online_window` self-reported by the issuing deployment.
 //! When the age exceeds the 24h hard cap, the receiver MUST reject any
-//! `ak.session.grant` / `ck.device.authorize` / long-lived capability /
+//! `ak.session.grant` / `ak.device.authorize` / long-lived capability /
 //! ordinary DID update signed by that inception key, with reason code
 //! [`arkret_core::error::REASON_INCEPTION_KEY_WINDOW_EXCEEDED`].
 //!
@@ -28,8 +28,8 @@
 //! issuing or minting downstream material, preserving the same fail-closed
 //! reason code on every mount point.
 
-use chrono::{DateTime, Utc};
 use arkret_core::inception_key_age_exceeded;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 const INCEPTION_KEY_VERSION_TIME: &str = "inception_key_version_time";

@@ -349,7 +349,7 @@ mod tests {
 
         let cache = MetadataCache::new();
 
-        // An inexistant issuer should fail
+        // An inexistent issuer should fail
         cache
             .get(&http_client, &mock_server.uri(), false)
             .await
@@ -508,7 +508,7 @@ mod tests {
                 lazy_metadata.token_endpoint().await.unwrap().as_str(),
                 "https://example.com/token_override"
             );
-            // This shouldn't trigger a new fetch as the endpoint is overriden
+            // This shouldn't trigger a new fetch as the endpoint is overridden
             calls += 0;
         }
 
@@ -525,7 +525,7 @@ mod tests {
             calls += 1;
         }
 
-        // Getting endpoints when discovery is disabled only works for overriden ones
+        // Getting endpoints when discovery is disabled only works for overridden ones
         {
             let provider = UpstreamOAuthProvider {
                 discovery_mode: UpstreamOAuthProviderDiscoveryMode::Disabled,

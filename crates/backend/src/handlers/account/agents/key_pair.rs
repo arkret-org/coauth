@@ -1,11 +1,12 @@
-//! CKP-0008 §4.5 runtime key pairing (`ck.gate.account.command.pair_agent_key`).
+//! AKP-0008 §4.5 runtime key pairing (`ak.gate.account.command.pair_agent_key`).
 //!
 //! `POST /_arkret/gate/account/agent-key-pair`. The agent runtime generated a
 //! key pair locally and submits the public key plus a proof-of-possession. The
-//! controller supplies the signed `ck.agent.key.authorize` event; coauth only
+//! controller supplies the signed `ak.agent.key.authorize` event; coauth only
 //! validates the request binding, persists the accepted authorization for
 //! `agent_key_proof`, and queues the signed event for soland projection.
 
+use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
@@ -14,7 +15,6 @@ use coauth_data::agent_key::NewAgentKeyAuthorization;
 use coauth_data::audit::AdminOperation;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder};
 use coauth_keystore::Keystore;
-use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use salvo::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
@@ -31,17 +31,17 @@ use crate::services::did_binding_proof::normalize_did_for_binding;
 use crate::services::did_resolver::DidResolverService;
 use crate::{AppError, CreatedJsonResult};
 
-/// CKP-0008 §4.5 baseline runtime attestation kind. v1 only accepts
+/// AKP-0008 §4.5 baseline runtime attestation kind. v1 only accepts
 /// `self_asserted`; any other kind MUST fail closed.
 const RUNTIME_ATTESTATION_SELF_ASSERTED: &str = "self_asserted";
 
 const AGENT_KEY_AUTHORIZE_FANOUT_QUEUE: &str = "soland-agent-key-authorize-fanout";
 
 /// Internal coauth→soland fan-out envelope kind wrapping the controller-signed
-/// `ck.agent.key.authorize` event.
+/// `ak.agent.key.authorize` event.
 const AGENT_KEY_AUTHORIZE_FANOUT_KIND: &str = "org.arkret.coauth.agent_key_authorize.fanout.v1";
 
-/// CKP-0008 agent runtime authorizations are short-lived; session grants minted
+/// AKP-0008 agent runtime authorizations are short-lived; session grants minted
 /// from them are capped at 15 minutes, so the root key authorization uses the
 /// same hard ceiling rather than accepting effectively permanent keys.
 const AGENT_KEY_AUTHORIZATION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
@@ -52,7 +52,7 @@ struct ValidatedRuntimePublicKey {
     verification_public_key: String,
 }
 
-/// Proof-of-possession over the pairing request (CKP-0008 §4.5
+/// Proof-of-possession over the pairing request (AKP-0008 §4.5
 /// `proof_of_possession`). The `signature` covers the canonical bytes of the
 /// remaining fields and is NOT part of those bytes.
 #[derive(Debug, Clone, Deserialize)]
@@ -64,7 +64,7 @@ struct ProofOfPossessionInput {
     signature: String,
 }
 
-/// Optional runtime attestation (CKP-0008 §4.5 `runtime_attestation`). Only the
+/// Optional runtime attestation (AKP-0008 §4.5 `runtime_attestation`). Only the
 /// `kind` is interpreted at v1 baseline; an unknown kind fails closed.
 #[derive(Debug, Clone, Deserialize)]
 struct RuntimeAttestationInput {
@@ -72,11 +72,11 @@ struct RuntimeAttestationInput {
 }
 
 /// `POST /_arkret/gate/account/agent-key-pair`
-/// (`ck.gate.account.command.pair_agent_key`).
+/// (`ak.gate.account.command.pair_agent_key`).
 ///
 /// Validates the runtime key pairing proof-of-possession and, on success,
 /// records a durable agent key authorization and queues the
-/// `ck.agent.key.authorize` soland fan-out. Returns the SDK
+/// `ak.agent.key.authorize` soland fan-out. Returns the SDK
 /// [`AgentKeyPairOutcome`] carrying the minted authorization event ref.
 #[handler]
 #[tracing::instrument(name = "handler.account.agents.agent_key_pair", skip_all)]
@@ -139,7 +139,7 @@ pub async fn post_agent_key_pair(
         return Err(AgentAuthRejection::ProofInvalid.into_app_error());
     }
 
-    // The PoP MUST bind the request canonical digest (CKP-0008 §4.5). It is an
+    // The PoP MUST bind the request canonical digest (AKP-0008 §4.5). It is an
     // opaque `sha256:<hex>` the client computed over the pairing request body;
     // we re-bind it into the signed-fields so the signature covers it.
     if !pop.request_canonical_digest.starts_with("sha256:") {
@@ -395,7 +395,7 @@ fn validate_controller_authorize_event<'a>(
     }
     if envelope.get("kind").and_then(Value::as_str) != Some("ak.agent.key.authorize") {
         return Err(AppError::bad_request(
-            "authorize_event.kind must be ck.agent.key.authorize",
+            "authorize_event.kind must be ak.agent.key.authorize",
         ));
     }
 
@@ -695,7 +695,7 @@ fn ensure_authorize_event_scope_is_action_object(scope: &Value) -> Result<(), Ap
     Ok(())
 }
 
-/// Build the canonical `ck.agent.key.authorize` fan-out payload for soland.
+/// Build the canonical `ak.agent.key.authorize` fan-out payload for soland.
 /// The wrapping envelope is coauth-internal queue metadata.
 fn build_agent_key_authorize_fanout_payload(
     authorized_event_id: &str,

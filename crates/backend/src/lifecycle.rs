@@ -337,7 +337,7 @@ impl LifecycleManager {
             );
         }
 
-        tracing::info!("All tasks are done, exitting");
+        tracing::info!("All tasks are done, exiting");
 
         if likely_crashed {
             ExitCode::FAILURE

@@ -69,7 +69,7 @@
 //!
 //! Four things to note with the implementation:
 //!
-//!   1. It defined an assocated error type, and all functions are faillible, and use that error
+//!   1. It defined an associated error type, and all functions are fallible, and use that error
 //!      type
 //!   2. Lookups return an `Result<Option<T>, Self::Error>`, because 'not found' errors are usually
 //!      cases that are handled differently
@@ -106,7 +106,7 @@ mod utils;
 pub mod account;
 /// Accountability grant repositories.
 pub mod accountability;
-/// Agent key authorization + agent-key-proof replay repositories (CKP-0008).
+/// Agent key authorization + agent-key-proof replay repositories (AKP-0008).
 pub mod agent_key;
 /// App session repositories.
 pub mod app_session;

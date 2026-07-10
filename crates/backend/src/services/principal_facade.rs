@@ -96,7 +96,7 @@ pub(crate) async fn submit_collaboration_capability_fanout_to_principal_servers(
 // coauth issues the collaboration capability fanout in its Auth-Server role: it
 // holds no principal session and signs as the issuing *service* DID, not a
 // logged-in principal device. The protocol path `POST /_arkret/self/events`
-// (submitting a `ck.capability.grant` Event) is gated to `user_session` /
+// (submitting a `ak.capability.grant` Event) is gated to `user_session` /
 // `device_proof` / a principal-authorised delegated service signature
 // (service-http-binding.md §2.1 row `self/events` + §189; api-conventions.md
 // requires `ak.session.grant` + DPoP). A bare service with no principal context

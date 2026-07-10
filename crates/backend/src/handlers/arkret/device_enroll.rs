@@ -1,8 +1,8 @@
 //! `POST /_arkret/gate/account/device-enroll`
-//! (`ck.gate.account.command.enroll_device`) — managed-DID `service_attested`
+//! (`ak.gate.account.command.enroll_device`) — managed-DID `service_attested`
 //! device enrollment (device-lifecycle §5.4, key-management §5.0.6).
 //!
-//! coauth signs exactly one shape: a `service_attested` `ck.device.authorize`
+//! coauth signs exactly one shape: a `service_attested` `ak.device.authorize`
 //! for **the calling user's own device**, under the user's principal DID. It
 //! never acts as a general signing oracle and never contacts soland — the
 //! signed Event is returned to the client (inkson) which submits it to
@@ -14,13 +14,12 @@
 //! 2. Resolve that user's principal DID for the targeted principal server.
 //! 3. Use the client-supplied `device_id` (this session's id) so the projected `device_public_key`
 //!    lands under the id the session and recovery look up.
-//! 4. Assemble the B-model `ck.device.authorize` envelope: `actor_id` = principal DID, `realm_id` =
+//! 4. Assemble the B-model `ak.device.authorize` envelope: `actor_id` = principal DID, `realm_id` =
 //!    principal-control realm, `executed_by` = enrollment authority DID, `authorization_ref` =
 //!    `"{principal}#enrollment-authority"`, payload carries the `enrollment_authority_binding`.
 //! 5. Sign the proof with the persistent enrollment key (VM mapped to `executed_by`) and return the
 //!    full Event JSON.
 
-use chrono::{DateTime, Utc};
 use arkret_core::error::{
     ERROR_CODE_AUDIENCE_MISMATCH, ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_FAILED_PRECONDITION,
     ERROR_CODE_GRANT_ALREADY_CONSUMED, ERROR_CODE_INVALID_PARAM, ERROR_CODE_INVALID_SIGNATURE,
@@ -33,6 +32,7 @@ use arkret_core::{
     Hlc, RealmId, ed25519_pubkey_to_did_key_multibase,
 };
 use arkret_signatures::{SignEventOptions, sign_event};
+use chrono::{DateTime, Utc};
 use salvo::prelude::*;
 
 use super::{CokretRouteError, SessionGrantPayload};
@@ -202,7 +202,7 @@ fn sole_principal_audience(
 }
 
 /// `POST /_arkret/gate/account/device-enroll`
-/// (`ck.gate.account.command.enroll_device`).
+/// (`ak.gate.account.command.enroll_device`).
 #[handler]
 pub async fn device_enroll_endpoint(
     req: &mut Request,

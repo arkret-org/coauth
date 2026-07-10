@@ -245,8 +245,8 @@ impl AuthorizationGrant {
     /// # TODO
     ///
     /// This appears to be unused
-    pub fn cancel(mut self, canceld_at: DateTime<Utc>) -> Result<Self, InvalidTransitionError> {
-        self.stage = self.stage.cancel(canceld_at)?;
+    pub fn cancel(mut self, canceled_at: DateTime<Utc>) -> Result<Self, InvalidTransitionError> {
+        self.stage = self.stage.cancel(canceled_at)?;
         Ok(self)
     }
 

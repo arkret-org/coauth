@@ -1,6 +1,9 @@
 //! PostgreSQL implementation of the organization principal control +
 //! organization delegation repository.
 
+use arkret_core::models::{
+    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::organization_control::{
@@ -9,9 +12,6 @@ use coauth_data::organization_control::{
     OrganizationPrincipalControl,
 };
 use coauth_data::{Clock, new_id};
-use arkret_core::models::{
-    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
-};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use rand_core::RngCore;
@@ -186,7 +186,7 @@ struct InsertableDelegation {
 //
 // `RealmOrganization*` enums serialize snake_case via serde; we store the same
 // snake_case strings in TEXT[] columns. We round-trip through serde_json so the
-// stored strings stay byte-identical to the on-wire `ck.realm.organization`
+// stored strings stay byte-identical to the on-wire `ak.realm.organization`
 // values and cannot drift from the SDK definition.
 
 fn issuer_role_str(role: RealmOrganizationIssuerRole) -> String {

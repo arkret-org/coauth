@@ -1,24 +1,24 @@
 //! Admin DTOs for COA-ORG organization principal control + delegation
-//! management (`identity-did.md` §7, `ck.realm.organization`).
+//! management (`identity-did.md` §7, `ak.realm.organization`).
 //!
 //! The shared domain types ([`OrganizationPrincipalControl`],
 //! [`OrganizationDelegation`], [`OrganizationDelegationStatus`],
 //! [`OrganizationBootstrapAuthorization`]) are owned by the persistence layer
 //! (`coauth-data`) and re-exported here so the storage shape, the SDK
-//! `ck.realm.organization` shape, and this admin surface cannot drift. Only the
+//! `ak.realm.organization` shape, and this admin surface cannot drift. Only the
 //! request bodies + list/response envelopes are admin-API-specific and remain
 //! local to this crate.
 //!
 //! sodmin can render the full organization control state from these DTOs
 //! without touching the database or parsing any product-private fields.
 
-pub use coauth_data::organization_control::{
-    OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationDelegationStatus,
-    OrganizationPrincipalControl,
-};
 use arkret_core::models::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     RealmOrganizationStatus,
+};
+pub use coauth_data::organization_control::{
+    OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationDelegationStatus,
+    OrganizationPrincipalControl,
 };
 use serde::{Deserialize, Serialize};
 
@@ -124,7 +124,7 @@ pub struct RotateOrganizationControllerRequest {
 
 /// Request body for `POST /_coauth/admin/organizations/{org}/statements`.
 ///
-/// Produces an organization-side `ck.realm.organization` statement. The signed
+/// Produces an organization-side `ak.realm.organization` statement. The signed
 /// statement is returned as the SDK [`arkret_core::models::RealmOrganizationPayload`]
 /// type — no admin-private wire struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]

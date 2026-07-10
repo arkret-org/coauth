@@ -1,17 +1,17 @@
-//! Admin DTOs for managing CKP-0007 `ck.circle.*` capability grants.
+//! Admin DTOs for managing AKP-0007 `ak.circle.*` capability grants.
 //!
-//! CKP-0007 introduces a Circle primitive — an encrypted sub-boundary
+//! AKP-0007 introduces a Circle primitive — an encrypted sub-boundary
 //! inside a Realm — and ships six capability actions that govern who can
 //! create / manage / audit Circles and their membership:
 //!
 //! | action                       | risk   | required_constraints     |
 //! |------------------------------|--------|--------------------------|
-//! | `ck.circle.create`           | medium | (none)                   |
-//! | `ck.circle.manage`           | medium | `allowed_circle_ids`     |
-//! | `ck.circle.member.add`       | low    | (none)                   |
-//! | `ck.circle.member.manage`    | medium | `allowed_circle_ids`     |
-//! | `ck.circle.member.add.others`| high   | `allowed_circle_ids`     |
-//! | `ck.circle.audit`            | high   | (none, requires pairing) |
+//! | `ak.circle.create`           | medium | (none)                   |
+//! | `ak.circle.manage`           | medium | `allowed_circle_ids`     |
+//! | `ak.circle.member.add`       | low    | (none)                   |
+//! | `ak.circle.member.manage`    | medium | `allowed_circle_ids`     |
+//! | `ak.circle.member.add.others`| high   | `allowed_circle_ids`     |
+//! | `ak.circle.audit`            | high   | (none, requires pairing) |
 //!
 //! Source: arkret-spec
 //! `spec/v1/artifacts/registry/capability-action-registry.json`.

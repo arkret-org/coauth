@@ -18,7 +18,7 @@ const TRUST_DOMAIN_PREFIX: &str = "ak:trust_domain:";
 // the access bearers minted from it are short-lived (capped server-side), so a
 // multi-hour grant gives a normal working-session length WITHOUT long-lived
 // bearers. Stays within the spec ceiling (`conformance-profiles.md`
-// §ck.profile.auth_server.v1: minutes-to-hours, not multi-day) and the
+// §ak.profile.auth_server.v1: minutes-to-hours, not multi-day) and the
 // configurable [min, max] = [60s, 24h] range below.
 const SESSION_GRANT_TTL_MICROS: i64 = 8 * 60 * 60 * 1_000_000;
 const SESSION_GRANT_TTL_MIN_SECONDS: i64 = 60;
@@ -191,7 +191,7 @@ pub struct CokretConfig {
     ///
     /// Wire form: `ak:trust_domain:<scope>` where `<scope>` matches
     /// `[a-z0-9._:-]{1,128}`. This value enters the canonical transcript
-    /// of every `ck.cross_signing.reset` proof; **changing
+    /// of every `ak.cross_signing.reset` proof; **changing
     /// `trust_domain` invalidates existing cross-signing reset proofs**
     /// — see the README "Trust domain rotation" note.
     ///

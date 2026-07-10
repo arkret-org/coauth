@@ -10,7 +10,7 @@
 //!
 //! 1. **DID controller proof** — a verified proof of the organization DID method inception /
 //!    controller key, bound to `principal_control_realm_id`, `fields.purpose = "principal_control"`
-//!    and `ck.profile.principal_control_realm.v1`.
+//!    and `ak.profile.principal_control_realm.v1`.
 //! 2. **Delegated governance** — a delegation declared in the organization DID Document /
 //!    governance profile to an Account Authority or `CokretGovernanceService` whose delegation
 //!    purpose covers `principal_control_realm_bootstrap`, recorded with the actual executor.
@@ -218,11 +218,11 @@ pub fn validate_session_acting_for_organization(
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
-    use coauth_data::organization_control::OrganizationDelegationStatus;
     use arkret_core::models::{
         RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
     };
+    use chrono::{TimeZone, Utc};
+    use coauth_data::organization_control::OrganizationDelegationStatus;
 
     use super::*;
 

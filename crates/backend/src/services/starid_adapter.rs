@@ -19,9 +19,9 @@
 //! because it carries an HTTP dependency. `coauth-data` is intentionally
 //! transport-free; placing an HTTP client there would mix layers.
 
+use arkret_core::ErrorEnvelope;
 use async_trait::async_trait;
 use coauth_config::StaridConfig;
-use arkret_core::ErrorEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;

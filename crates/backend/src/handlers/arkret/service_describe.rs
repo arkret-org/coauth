@@ -1,5 +1,3 @@
-use coauth_config::{CokretConfig, IdentityRegistryKind};
-use coauth_data::{RepositoryAccess, UrlBuilder};
 use arkret_core::generated::profile_requirements::{
     requirements_for, validate_profile_requirements,
 };
@@ -12,6 +10,8 @@ use arkret_core::{
     AccountAuthority, AuthGrantExchange, AuthMetadata, AuthMethod, AuthMethodKind,
     SessionGrantProofKind,
 };
+use coauth_config::{CokretConfig, IdentityRegistryKind};
+use coauth_data::{RepositoryAccess, UrlBuilder};
 use salvo::prelude::*;
 use serde::Serialize;
 
@@ -39,7 +39,7 @@ const SUPPORTED_OPERATIONS: &[&str] = &[
 const IMPLEMENTED_PROFILE_EVENT_KINDS: &[&str] = &["ak.session.grant"];
 
 const IMPLEMENTED_PROFILE_SCHEMAS: &[&str] =
-    &["ak.schema.handle_claim.v1", "ck.schema.service_describe.v1"];
+    &["ak.schema.handle_claim.v1", "ak.schema.service_describe.v1"];
 
 #[derive(Debug, Serialize)]
 struct SupportedBinding {
@@ -142,7 +142,7 @@ struct PlaintextVisibilityDescriptor {
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ServiceDescribeOutcome {
-    // --- canonical `ck.schema.service_describe.v1` fields, in the schema's
+    // --- canonical `ak.schema.service_describe.v1` fields, in the schema's
     //     property order (see service-describe.schema.json). ---
     service_did: String,
     /// Round 4 (spec a77b995) — deployment-scope trust domain (wire
@@ -163,7 +163,7 @@ pub(crate) struct ServiceDescribeOutcome {
     plaintext_visibility: PlaintextVisibilityDescriptor,
     /// T6.1 — feature ids the service has implementation code for but
     /// does NOT claim conformance for. Schema:
-    /// `ck.schema.service_describe.v1` (see service-surface.md §3.0).
+    /// `ak.schema.service_describe.v1` (see service-surface.md §3.0).
     implemented_features: Vec<&'static str>,
     /// T6.1 — self-claimed profiles. `claim_kind` MUST be `self_claimed`.
     claimed_profiles: Vec<ClaimedProfileDescriptor>,
@@ -556,7 +556,7 @@ pub(crate) fn service_describe_response(
         // account-registry service) without affecting the others.
         //   - "auth_server"        : OIDC / token issuance, the canonical role.
         //   - "identity_resolver"  : DID / handle resolution proxy. NOT canonical identity
-        //     registry; backed by `ck.identity.*` proxy operations that ultimately route to an
+        //     registry; backed by `ak.identity.*` proxy operations that ultimately route to an
         //     upstream registry (configured via `identity_registry_resolver`).
         //   - "account_registry"   : internal service-account / recovery / claim-attestation
         //     management.
@@ -575,14 +575,14 @@ pub(crate) fn service_describe_response(
             "policy_hook",
         ],
         supported_reducer_profiles: vec!["ak.reducer.v1"],
-        // T6.3 — replace the historical `ck.schema.v1` placeholder with
+        // T6.3 — replace the historical `ak.schema.v1` placeholder with
         // the actual spec-declared schemas this surface emits. The
-        // `ck.schema.service_describe.v1` schema covers the very
-        // payload being served here; `ck.schema.core.v1` matches the
+        // `ak.schema.service_describe.v1` schema covers the very
+        // payload being served here; `ak.schema.core.v1` matches the
         // soland / SDK convention for the core-event-store schema
         // profile and is the umbrella the OIDC + account artefacts hash
-        // under. Older `ck.schema.v1` is no longer published.
-        supported_schema_profiles: vec!["ak.schema.core.v1", "ck.schema.service_describe.v1"],
+        // under. Older `ak.schema.v1` is no longer published.
+        supported_schema_profiles: vec!["ak.schema.core.v1", "ak.schema.service_describe.v1"],
         supported_bindings: vec![SupportedBinding {
             kind: ARKRET_HTTP_BINDING,
             base_url: url_builder.http_base().to_string(),
@@ -617,20 +617,20 @@ pub(crate) fn service_describe_response(
         //
         // coauth wears three roles (see `service_roles` above). The only
         // canonical v1 profile whose role + required surface coauth
-        // actually serves is `ck.profile.auth_server.v1` (added under
+        // actually serves is `ak.profile.auth_server.v1` (added under
         // G3.C3 to `arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json`).
         // The other directory-role profiles that would superficially
         // apply are NOT claimed and the reason is documented inline:
         //
-        //   * `ck.profile.identity_registry.v1`   — role=directory. coauth's `ck.identity.*` ops
+        //   * `ak.profile.identity_registry.v1`   — role=directory. coauth's `ak.identity.*` ops
         //     are a DELEGATED proxy onto an upstream resolver, not a canonical registry. Claiming
         //     this profile would lie about authority over DID documents.
-        //   * `ck.profile.directory_service.v1`   — role=directory. coauth exposes
-        //     `ck.find.directory.query.resolve_handle` only for local handles it issued; it does
+        //   * `ak.profile.directory_service.v1`   — role=directory. coauth exposes
+        //     `ak.find.directory.query.resolve_handle` only for local handles it issued; it does
         //     NOT publish a network-wide actor directory.
-        //   * `ck.profile.public_network_identity.v1` — role=directory. Same reason — coauth is a
+        //   * `ak.profile.public_network_identity.v1` — role=directory. Same reason — coauth is a
         //     service-local issuer, not the network identity authority.
-        //   * `ck.profile.principal_server.v1`    — role=server. coauth is not Realm-authoritative;
+        //   * `ak.profile.principal_server.v1`    — role=server. coauth is not Realm-authoritative;
         //     principal-server event acceptance is soland's role.
         //
         // The boundary against those non-claimed profiles is still
@@ -641,7 +641,7 @@ pub(crate) fn service_describe_response(
             profile_id: CLAIMED_PROFILE_IDS[0],
             claim_kind: "self_claimed",
             notes: Some(
-                "Auth-server-shaped profile: issues short-lived audience-bound ak.session.grant, exposes ck.server.query.describe, MAY expose ck.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",
+                "Auth-server-shaped profile: issues short-lived audience-bound ak.session.grant, exposes ak.server.query.describe, MAY expose ak.policy.check. NOT an identity registry (DID resolution is delegated; see compat_surfaces).",
             ),
         }],
         // G4.T3 — verified_profiles populated by the cotest artifact loader
@@ -667,7 +667,7 @@ pub(crate) fn service_describe_response(
             "principal_server_delegation_targets",
         ],
         // T6.3 — compat_surfaces declares non-canonical surfaces. The
-        // `ck.identity.*` operations are exposed for client
+        // `ak.identity.*` operations are exposed for client
         // convenience but are a DELEGATED resolver shim onto an
         // upstream registry (starid, public DID network, etc.); coauth
         // is NOT the canonical identity authority for any DID it

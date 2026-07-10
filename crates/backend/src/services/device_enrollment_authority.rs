@@ -4,7 +4,7 @@
 //! attested by a **persistent** service key — distinct from the inception
 //! `did_key_seed` which is consumed and discarded after minting
 //! (`zh/identity/key-management.md` §5.0.6 rule 2). coauth holds exactly one
-//! such key process-wide; it signs `service_attested` `ck.device.authorize`
+//! such key process-wide; it signs `service_attested` `ak.device.authorize`
 //! events on behalf of any principal whose DID document designates this
 //! authority via a `CokretDeviceEnrollmentAuthority` service entry
 //! (`zh/crypto-media/device-lifecycle.md` §5.4).

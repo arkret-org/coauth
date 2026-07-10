@@ -83,7 +83,7 @@ pub mod health;
 pub mod oauth;
 /// Password hashing, verification, and complexity checking.
 pub mod passwords;
-/// Round 4 `ck.self.policy.query.check` v2 handler. Round-4 wire shape:
+/// Round 4 `ak.self.policy.query.check` v2 handler. Round-4 wire shape:
 /// `PolicyCheckRequestBody` → `PolicyCheckOutcome` with full `bound_to`
 /// binding + frontier hashes + DID-URL signature kid.
 pub mod policy_check;

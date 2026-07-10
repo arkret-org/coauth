@@ -1,3 +1,4 @@
+use arkret_core::SessionGrantIntrospectStatus;
 use chrono::{Duration, Utc};
 use coauth_config::{
     CokretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
@@ -8,7 +9,6 @@ use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg}
 use coauth_jose::jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::{JsonWebKeySet, PrivateKey};
-use arkret_core::SessionGrantIntrospectStatus;
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -230,10 +230,10 @@ fn service_describe_exposes_auth_account_boundary_profile() {
         .as_array()
         .unwrap();
     assert!(supported_reducer_profiles.contains(&serde_json::json!("ak.reducer.v1")));
-    // T6.3 — `ck.schema.v1` was a coauth-only placeholder. The actual
-    // schemas this surface emits are `ck.schema.core.v1` (umbrella
+    // T6.3 — `ak.schema.v1` was a coauth-only placeholder. The actual
+    // schemas this surface emits are `ak.schema.core.v1` (umbrella
     // core schemas, soland / SDK convention) and
-    // `ck.schema.service_describe.v1` (this very payload).
+    // `ak.schema.service_describe.v1` (this very payload).
     let supported_schema_profiles = body["x_coauth_supported_schema_profiles"]
         .as_array()
         .unwrap();
@@ -243,12 +243,12 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     );
     assert!(
         !supported_schema_profiles.contains(&serde_json::json!("ak.schema.v1")),
-        "the removed `ck.schema.v1` placeholder MUST NOT be advertised"
+        "the removed `ak.schema.v1` placeholder MUST NOT be advertised"
     );
     let supported_operations = body["supported_operations"].as_array().unwrap();
     assert!(
         supported_operations.contains(&serde_json::json!("ak.self.policy.query.check")),
-        "implemented POST /api/v1/policy/check MUST be advertised as ck.self.policy.query.check"
+        "implemented POST /api/v1/policy/check MUST be advertised as ak.self.policy.query.check"
     );
     let not_authoritative_for = body["x_coauth_service_boundary"]["not_authoritative_for"]
         .as_array()
@@ -265,7 +265,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(service_roles.contains(&serde_json::json!("identity_resolver")));
     assert!(service_roles.contains(&serde_json::json!("account_registry")));
 
-    // T6.3 — ck.identity.* operations MUST be declared as
+    // T6.3 — ak.identity.* operations MUST be declared as
     // schema-valid external interop while preserving their delegated-
     // resolver boundary in notes, not as canonical identity registry
     // surface.
@@ -285,7 +285,7 @@ fn service_describe_exposes_auth_account_boundary_profile() {
     assert!(compat.iter().any(|(name, notes)| {
         *name == "ak.root.identity.registry.query.describe" && notes.contains("delegated-resolver")
     }));
-    // verified_profiles MUST NOT include ck.profile.identity_registry.v1
+    // verified_profiles MUST NOT include ak.profile.identity_registry.v1
     // because coauth is a delegated resolver, not a registry.
     let verified = body["verified_profiles"]
         .as_array()
@@ -458,7 +458,7 @@ fn describe_separates_claim_levels() {
     assert!(experimental.is_disjoint(&verified_ids));
 
     // compat_surfaces entries must declare a schema-known kind.
-    // T6.3 — coauth's `ck.identity.*` proxy operations are NOT a
+    // T6.3 — coauth's `ak.identity.*` proxy operations are NOT a
     // canonical identity registry; the delegated-resolver semantics
     // are carried in notes while kind stays schema-valid.
     for surface in body["compat_surfaces"]

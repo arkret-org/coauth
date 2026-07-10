@@ -1,6 +1,6 @@
 //! Durable Circle capability grants.
 //!
-//! This module owns the shared domain types for CKP-0007 `ck.circle.*`
+//! This module owns the shared domain types for AKP-0007 `ak.circle.*`
 //! capability grants ([`CircleCapabilityAction`], [`RiskTier`],
 //! [`CircleCapabilityGrant`]). They live in the persistence layer because the
 //! repository both produces and persists them; the operator-facing admin API
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::pg::circle_capability::PgCircleCapabilityGrantRepository;
 pub use crate::storage::circle_capability::*;
 
-/// One of the six CKP-0007 capability actions. Stored as the literal
+/// One of the six AKP-0007 capability actions. Stored as the literal
 /// registry string so the wire shape is stable across rollouts.
 ///
 /// Source: arkret-spec
@@ -27,26 +27,26 @@ pub use crate::storage::circle_capability::*;
 )]
 #[serde(rename_all = "snake_case")]
 pub enum CircleCapabilityAction {
-    /// `ck.circle.create` — create new Circles in the target realm.
+    /// `ak.circle.create` — create new Circles in the target realm.
     #[serde(rename = "ak.circle.create")]
     Create,
-    /// `ck.circle.manage` — update / archive / restore / tombstone an
+    /// `ak.circle.manage` — update / archive / restore / tombstone an
     /// existing Circle. Requires `allowed_circle_ids` constraint.
     #[serde(rename = "ak.circle.manage")]
     Manage,
-    /// `ck.circle.member.add` — add the *authenticated principal* to a
+    /// `ak.circle.member.add` — add the *authenticated principal* to a
     /// Circle (i.e. join with a capability).
     #[serde(rename = "ak.circle.member.add")]
     MemberAdd,
-    /// `ck.circle.member.manage` — change member state (role, leave,
+    /// `ak.circle.member.manage` — change member state (role, leave,
     /// kick) for members of a constrained Circle set.
     #[serde(rename = "ak.circle.member.manage")]
     MemberManage,
-    /// `ck.circle.member.add.others` — invite/add other principals into a
+    /// `ak.circle.member.add.others` — invite/add other principals into a
     /// Circle. High-risk; always requires `allowed_circle_ids`.
     #[serde(rename = "ak.circle.member.add.others")]
     MemberAddOthers,
-    /// `ck.circle.audit` — read audit events for the Circle. Paired with
+    /// `ak.circle.audit` — read audit events for the Circle. Paired with
     /// the `audit_pair_required` evaluator check.
     #[serde(rename = "ak.circle.audit")]
     Audit,
@@ -67,7 +67,7 @@ impl CircleCapabilityAction {
         ]
     }
 
-    /// The registry string (`ck.circle.*`) for this action.
+    /// The registry string (`ak.circle.*`) for this action.
     #[must_use]
     pub fn as_action_str(&self) -> &'static str {
         match self {

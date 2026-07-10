@@ -264,7 +264,21 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             #[cfg(not(feature = "password-bootstrap"))]
             let session_grants_enabled = false;
 
-            if !session_grants_enabled {
+            // A password-login session grant is minted only when the client
+            // explicitly opts in by supplying a `device_id` to bind it to (see
+            // `LoginReqBody::device_id`: "Required when password-login session
+            // grants are enabled"). Interactive browser logins — e.g. the coauth
+            // login page that fronts the OIDC `authorize` ceremony — send neither
+            // a device_id nor a DPoP proof; they authenticate, set the session
+            // cookie, and let the OIDC/passkey bridge issue the proof-bound grant
+            // afterwards. Forcing those logins down the grant-minting branch
+            // wrongly rejected them with `invalid_dpop_proof`.
+            let client_requested_session_grant = requested_device_id
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty());
+
+            if !session_grants_enabled || !client_requested_session_grant {
                 let mut viewer_repo = depot.repo().await?;
                 let viewer_did = arkret::published_principal_did_for_user(
                     &mut viewer_repo,

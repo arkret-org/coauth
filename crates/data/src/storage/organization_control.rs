@@ -1,13 +1,13 @@
 //! Organization principal control + organization delegation repository.
 
+use arkret_core::models::{
+    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::Clock;
 use coauth_data::organization_control::{
     OrganizationBootstrapAuthorization, OrganizationDelegation, OrganizationPrincipalControl,
-};
-use arkret_core::models::{
-    RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
 use rand_core::RngCore;
 

@@ -1,8 +1,8 @@
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
-    use chrono::Utc;
     use arkret_core::canonical::canonical_json_bytes;
+    use chrono::Utc;
 
     use super::super::accountability::{
         accountability_capabilities_digest, normalize_capabilities,
@@ -87,14 +87,14 @@ mod agent_auth_error_matrix_tests {
         assert_eq!(err.status(), http::StatusCode::BAD_REQUEST);
         assert!(
             err.message()
-                .contains("is not a registered ck.agent.* action")
+                .contains("is not a registered ak.agent.* action")
         );
     }
 
     #[test]
     fn capability_set_is_trimmed_sorted_and_deduplicated() {
         let normalized = normalize_capabilities(vec![
-            " ck.self.agent.command.resume ".to_owned(),
+            " ak.self.agent.command.resume ".to_owned(),
             "ak.self.agent.command.provision".to_owned(),
             "ak.self.agent.command.resume".to_owned(),
         ])
@@ -116,7 +116,7 @@ mod agent_auth_error_matrix_tests {
         ])
         .unwrap();
         let right = normalize_capabilities(vec![
-            " ck.self.agent.command.provision ".to_owned(),
+            " ak.self.agent.command.provision ".to_owned(),
             "ak.self.agent.command.resume".to_owned(),
             "ak.self.agent.command.resume".to_owned(),
         ])
@@ -147,8 +147,8 @@ mod agent_auth_error_matrix_tests {
 
     #[test]
     fn proof_signature_round_trips_over_canonical_signed_fields() {
-        use base64ct::Encoding as _;
         use arkret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
+        use base64ct::Encoding as _;
         use ed25519_dalek::Signer as _;
 
         let signing_key = derive_ed25519_from_seed(&[7u8; 32]);
@@ -171,8 +171,8 @@ mod agent_auth_error_matrix_tests {
 
     #[test]
     fn proof_signature_rejects_tampered_field() {
-        use base64ct::Encoding as _;
         use arkret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
+        use base64ct::Encoding as _;
         use ed25519_dalek::Signer as _;
 
         let signing_key = derive_ed25519_from_seed(&[9u8; 32]);
@@ -206,8 +206,8 @@ mod agent_auth_error_matrix_tests {
 
     #[test]
     fn proof_signature_rejects_tampered_nonce() {
-        use base64ct::Encoding as _;
         use arkret::identity::binding::{derive_ed25519_from_seed, multicodec_ed25519_public_key};
+        use base64ct::Encoding as _;
         use ed25519_dalek::Signer as _;
 
         let signing_key = derive_ed25519_from_seed(&[10u8; 32]);

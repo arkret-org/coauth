@@ -7,11 +7,11 @@
 //!
 //! coauth's first-class recovery strand today is the password-reset / email-OOB
 //! ticket loop in [`crate::handlers::account::recovery`] — it does NOT
-//! participate in the CKP recovery-policy / recovery-receipt binding
+//! participate in the AKP recovery-policy / recovery-receipt binding
 //! described in `spec/v1/artifacts/schemas/recovery-policy.schema.json`.
 //!
 //! When (and only when) coauth is configured to issue OIDC-backed recovery
-//! evidence as part of a `ck.schema.recovery_policy.v1` body (e.g. a
+//! evidence as part of a `ak.schema.recovery_policy.v1` body (e.g. a
 //! `trusted_recovery_service` provider in a sovereign deployment), this
 //! module provides the wire-level guard that rejects any `proof_kind`
 //! outside the registered enum:

@@ -14,6 +14,8 @@
 // `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
+use arkret_core::error::REASON_PROOF_INVALID;
+use arkret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use coauth_admin_types::{
     IntegrationManifest, IntegrationManifestDependency, IntegrationManifestSurface,
 };
@@ -23,8 +25,6 @@ use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{
     AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
 };
-use arkret_core::error::REASON_PROOF_INVALID;
-use arkret_core::{AccountRegisterRequestBody, DeviceId, Did, ErrorEnvelope};
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;
@@ -173,7 +173,7 @@ fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url
 /// localparts` edge is used during OIDC token exchange to *list and sync* the
 /// account's primary localpart binding on the Principal Server
 /// (`ensure_soland_account_localpart_bound`). It is intentionally NOT migrated
-/// to the protocol directory reads `ck.find.directory.query.list_handles_for_
+/// to the protocol directory reads `ak.find.directory.query.list_handles_for_
 /// subject` / `resolve_handle`: those are read-only handle lookups and cannot
 /// perform the write/sync binding this provisioning flow requires. coauth and
 /// soland share this static-bearer-gated `/_soland/*` edge as a deployment-local

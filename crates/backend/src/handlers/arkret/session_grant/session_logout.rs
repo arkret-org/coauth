@@ -1,5 +1,5 @@
-use coauth_jose::jwt::Jwt;
 use arkret_core::{AuthSessionLogoutOutcome, AuthSessionLogoutRequestBody};
+use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 
 use super::*;
@@ -7,7 +7,7 @@ use crate::handlers::arkret::*;
 
 /// `POST /_arkret/gate/account/auth-sessions/logout` — Auth-side S2S logout
 /// sub-operation used by the Account Authority after it has validated the
-/// client-visible `ck.gate.account.command.logout` request.
+/// client-visible `ak.gate.account.command.logout` request.
 #[handler]
 pub async fn logout_auth_session(
     req: &mut Request,

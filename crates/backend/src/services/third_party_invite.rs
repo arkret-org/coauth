@@ -5,7 +5,7 @@
 //! Round 4 (2026-05-20, spec a77b995) — 3PID invite engine.
 //!
 //! Replaces the previous plaintext email / SMS invite pathway with the
-//! `ck.schema.invite.v1` `third_party_invite` shape. Two wire modes are
+//! `ak.schema.invite.v1` `third_party_invite` shape. Two wire modes are
 //! supported:
 //!
 //! - `offline_token`: the OOB code is a high-entropy (`≥128 bits`) opaque token. The wire carries
@@ -26,7 +26,7 @@
 //!
 //! ## State machine
 //!
-//! Wire states (`ck.schema.invite.v1` §state enum):
+//! Wire states (`ak.schema.invite.v1` §state enum):
 //!
 //! ```text
 //!                ┌─────────┐
@@ -47,7 +47,7 @@
 //! ## Invite verifier
 //!
 //! [`verify_invite`] performs the two-step proof chain that gates an
-//! incoming `ck.invite.claim`:
+//! incoming `ak.invite.claim`:
 //!
 //! 1. **Verification-service proof** — a signed JWT issued by the trusted 3PID verification
 //!    service. Claims `iss` / `aud` / `sub` / `exp` / `nbf` / `nonce` are checked against
@@ -67,15 +67,15 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use arkret_core::{
+    Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
+};
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_jose::jwk::PublicJsonWebKeySet;
 use coauth_jose::jwt::Jwt;
 use coauth_keystore::Keystore;
-use arkret_core::{
-    Did, RealmId, ThirdPartyInvite, ThirdPartyInviteOobKind, ThirdPartyInviteTerminalState,
-};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -85,7 +85,7 @@ use crate::services::did_binding_proof::verify_verification_service_proof;
 use crate::services::did_resolver::DidResolverService;
 
 /// Minimum entropy (in bits) required for offline_token mode invites.
-/// Mirrors `ck.schema.invite.v1` `third_party_invite.token_entropy_bits`
+/// Mirrors `ak.schema.invite.v1` `third_party_invite.token_entropy_bits`
 /// minimum.
 pub const OFFLINE_TOKEN_MIN_ENTROPY_BITS: u32 = 128;
 
@@ -252,7 +252,7 @@ impl ThirdPartyInviteRecord {
 
 /// Helper: build a `token_commitment` for the offline_token mode wire
 /// shape. The commitment is `sha256(token | salt)` rendered as
-/// `sha256:<hex>` to match the `ck.schema.invite.v1` pattern.
+/// `sha256:<hex>` to match the `ak.schema.invite.v1` pattern.
 #[must_use]
 pub fn offline_token_commitment(token: &[u8], salt: &[u8]) -> String {
     let mut buf = Vec::with_capacity(token.len() + salt.len());
@@ -318,7 +318,7 @@ pub struct InviteClaimBindingProof {
 /// verification method.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubjectProofClaims {
-    /// Discriminator. MUST equal `ck.invite.subject_proof.v1`.
+    /// Discriminator. MUST equal `ak.invite.subject_proof.v1`.
     #[serde(rename = "type")]
     pub kind: String,
     /// Inviter actor DID — the entity claiming to present this invite.
@@ -393,7 +393,7 @@ pub struct VerifierCtx<'a> {
 
 /// Successful verification output. Returned to the caller (typically an
 /// invite-acceptance handler) so it can map onto the downstream
-/// `ck.invite.create` / accept Move.
+/// `ak.invite.create` / accept Move.
 #[derive(Debug, Clone)]
 pub struct VerifiedInvite {
     /// SHA-256 hex of the normalized 3PID, as carried in both proofs.

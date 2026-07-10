@@ -83,7 +83,7 @@ pub struct InviteRelayRequestBody {
     /// (`peer=...;scope=<scope>` or `peer=...;scope=any`).
     pub scope: String,
 
-    /// Mirror of the holder's `ck.realm.policy_components.preauth
+    /// Mirror of the holder's `ak.realm.policy_components.preauth
     /// .require_consent` policy bit. Defaults to `true` (fail closed).
     #[serde(default = "default_require_consent")]
     pub require_consent: bool,
@@ -420,7 +420,7 @@ mod tests {
     fn active_cell(scope: &str) -> serde_json::Value {
         serde_json::json!({
             "ok": true,
-            "cell_id": format!("ak:cell:ck.component.consent.grant.v1:c-{scope}"),
+            "cell_id": format!("ak:cell:ak.component.consent.grant.v1:c-{scope}"),
             "holder_did": "did:web:holder",
             "peer_did": "did:web:inviter",
             "consent_scope": scope,

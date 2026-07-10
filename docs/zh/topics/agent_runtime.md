@@ -1,8 +1,8 @@
 # Agent 运行时状态
 
 当前 coauth 只暴露 agent principal 的内部 accountability-grant 签发面。
-coauth 尚未暴露 `ck.gate.account.command.pair_agent_key`，也尚未暴露
-`ck.gate.account.command.issue_session_grant` 的 agent 分支。
+coauth 尚未暴露 `ak.gate.account.command.pair_agent_key`，也尚未暴露
+`ak.gate.account.command.issue_session_grant` 的 agent 分支。
 
 在这些路由真正接线前，客户端与 sodmin 不应把它们展示成可调用的 coauth
 操作。`handlers/account/agents.rs` 中保留的拒绝 helper 与错误码矩阵只是
@@ -12,8 +12,8 @@ coauth 尚未暴露 `ck.gate.account.command.pair_agent_key`，也尚未暴露
 
 ### `POST /_coauth/self/agents/{id}/accountability-grant`
 
-这是内部 CKP-0008 接口，用于签发 accountability grant，将人类
-controller DID、agent principal id，以及一组规范化的 `ck.agent.*`
+这是内部 AKP-0008 接口，用于签发 accountability grant，将人类
+controller DID、agent principal id，以及一组规范化的 `ak.agent.*`
 能力绑定起来。
 
 该接口仅用于服务到服务调用：
@@ -23,7 +23,7 @@ controller DID、agent principal id，以及一组规范化的 `ck.agent.*`
 - 浏览器 session 与终端用户 OAuth token 会被拒绝；
 - 路径 `{id}` 必须是 agent principal DID，并按单个 URL path segment 做 percent-encoding；
 - `controller_did` 会在使用前规范化；
-- 每个请求的 capability 都必须存在于本地 `ck.agent.*` capability registry。
+- 每个请求的 capability 都必须存在于本地 `ak.agent.*` capability registry。
 
 成功后，coauth 会持久化 accountability grant，写入签名 admin audit 行，
 并调度 soland fan-out job。同一个 controller、agent 与 capability
@@ -32,16 +32,16 @@ agent principal 也会被拒绝。
 
 ## 暂缓接口
 
-### `ck.gate.account.command.pair_agent_key`
+### `ak.gate.account.command.pair_agent_key`
 
 该操作当前没有 coauth 路由。当前服务不会创建 pairing token，不会把 key
-pair 绑定到 agent DID，也不会派发 `ck.gate.account.command.pair_agent_key` 事件。
+pair 绑定到 agent DID，也不会派发 `ak.gate.account.command.pair_agent_key` 事件。
 
 `pairing_request_expired`、`proof_invalid`、
 `verification_method_principal_mismatch` 等失败码只描述未来 wire contract，
 不能作为生产配对接口已存在的依据。
 
-### `ck.gate.account.command.issue_session_grant` 的 agent 分支
+### `ak.gate.account.command.issue_session_grant` 的 agent 分支
 
 agent-principal 的 session-grant 签发分支当前没有 coauth 路由。现有
 session-grant 端点不接受 agent-principal 签发请求，coauth 当前也不会在该

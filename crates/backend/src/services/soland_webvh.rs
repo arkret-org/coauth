@@ -7,8 +7,6 @@
 //! module keeps only coauth-specific concerns: the HTTP submission to soland's
 //! protocol DID operation endpoint and the lookup-or-mint persistence flow.
 
-use coauth_data::{BoxRepository, Clock, RepositoryAccess, User};
-use coauth_keystore::Encrypter;
 use arkret_core::DidOperationSubmitOutcome;
 pub use arkret_core::DidOperationSubmitRequestBody;
 // Re-export the shared SDK builder surface so existing call-sites
@@ -18,6 +16,8 @@ pub use arkret_signatures::webvh::{
     InceptionInput, PreparedInception, SubmittedInception, SuppliedInceptionInput,
     WebvhInceptionError, prepare_inception, prepare_supplied_inception,
 };
+use coauth_data::{BoxRepository, Clock, RepositoryAccess, User};
+use coauth_keystore::Encrypter;
 use rand_core::RngCore;
 use thiserror::Error;
 use url::Url;

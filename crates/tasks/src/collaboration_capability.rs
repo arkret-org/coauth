@@ -1,11 +1,11 @@
 //! Background fan-out for collaboration capability grant/revoke events.
 
+use arkret_core::canonical::canonical_sha256;
 use async_trait::async_trait;
 use coauth_data::queue::{
     CollaborationCapabilityFanoutJob, CollaborationCapabilityFanoutOperation,
 };
 use coauth_principal::PrincipalCapabilityFanoutRequest;
-use arkret_core::canonical::canonical_sha256;
 
 use crate::State;
 use crate::new_queue::{JobContext, JobError, RunnableJob};

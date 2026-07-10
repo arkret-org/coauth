@@ -1,3 +1,5 @@
+use arkret_core::GrantId;
+use arkret_core::identifiers::new_prefixed_uuid7;
 use chrono::{DateTime, Utc};
 use coauth_config::CokretConfig;
 #[cfg(test)]
@@ -8,8 +10,6 @@ use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
 use coauth_keystore::Keystore;
 use coauth_oauth_types::scope::{Scope, ScopeToken};
-use arkret_core::GrantId;
-use arkret_core::identifiers::new_prefixed_uuid7;
 #[cfg(test)]
 use rand_core::CryptoRngCore;
 use rand_core::RngCore;
@@ -20,7 +20,7 @@ use crate::handlers::arkret::*;
 
 fn new_session_grant_id() -> GrantId {
     GrantId::new(new_prefixed_uuid7("ak:grant:"))
-        .expect("generated ck:grant uuidv7 id must be valid")
+        .expect("generated ak:grant uuidv7 id must be valid")
 }
 
 // Test-only convenience wrapper (re-exported under `#[cfg(test)]` from the

@@ -48,7 +48,7 @@ Common resource names:
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `http.max_body_bytes` | `1048576` (1 MiB) | Maximum accepted request-body size. Matches the Arkret `ck.server.query.describe.limits.max_body_bytes` advertisement. |
+| `http.max_body_bytes` | `1048576` (1 MiB) | Maximum accepted request-body size. Matches the Arkret `ak.server.query.describe.limits.max_body_bytes` advertisement. |
 | `http.request_timeout_seconds` | `30` | Per-request handling deadline. Set to `0` to disable. |
 | `http.shutdown_grace_seconds` | `30` | Grace period granted to in-flight requests on SIGTERM/SIGINT. |
 | `http.trusted_proxies` | RFC1918 + loopback | CIDR ranges trusted to set `X-Forwarded-For`. See [reverse-proxy](../setup/reverse-proxy.md). |

@@ -1,13 +1,13 @@
 //! Shared proof-of-possession signing-fields view and signature verification.
 //!
-//! Both the pairing PoP (CKP-0008 §4.5) and the `agent_key_proof` session
+//! Both the pairing PoP (AKP-0008 §4.5) and the `agent_key_proof` session
 //! branch (§4.6) sign over the same canonical signed-fields shape, so the
 //! verification routine lives here and is shared by both handlers.
 
-use base64ct::{Base64UrlUnpadded, Encoding as _};
-use chrono::{DateTime, Utc};
 use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
+use base64ct::{Base64UrlUnpadded, Encoding as _};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 

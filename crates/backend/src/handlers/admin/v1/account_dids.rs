@@ -62,7 +62,7 @@ pub struct AddAccountDidBindingRequestBody {
     /// [`crate::services::did_binding_proof`]).
     pub control_proof: ControlProofPayload,
 
-    /// Optional SDK `ck.schema.did_continuity_proof.v1` payload. Required
+    /// Optional SDK `ak.schema.did_continuity_proof.v1` payload. Required
     /// when promoting a weak `did:web` primary binding to `did:webvh`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[salvo(schema(value_type = serde_json::Value))]

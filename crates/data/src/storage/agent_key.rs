@@ -1,4 +1,4 @@
-//! Agent key authorization + agent-key-proof replay repository (CKP-0008).
+//! Agent key authorization + agent-key-proof replay repository (AKP-0008).
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

@@ -20,7 +20,7 @@ pub enum DatabaseError {
         source: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
 
-    /// An error which occured while converting the data from the database
+    /// An error which occurred while converting the data from the database
     Inconsistency(#[from] DatabaseInconsistencyError),
 
     /// An error which happened because the requested database operation is
@@ -98,7 +98,7 @@ impl DatabaseError {
     }
 }
 
-/// An error which occured while converting the data from the database
+/// An error which occurred while converting the data from the database
 #[derive(Debug, Error)]
 pub struct DatabaseInconsistencyError {
     /// The table which was being queried

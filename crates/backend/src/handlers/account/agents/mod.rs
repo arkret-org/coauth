@@ -1,4 +1,4 @@
-//! CKP-0008 personal-agent controller-approval endpoints.
+//! AKP-0008 personal-agent controller-approval endpoints.
 //!
 //! Phase P2 (B-A / `_before_todos.md` §1.4): when a controller approves
 //! provisioning of a native Personal Agent, coauth (as the controller's

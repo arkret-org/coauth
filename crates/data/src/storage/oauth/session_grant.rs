@@ -1,7 +1,7 @@
+use arkret_core::GrantId;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
-use arkret_core::GrantId;
 use rand_core::RngCore;
 use serde_json::Value;
 use ulid::Ulid;

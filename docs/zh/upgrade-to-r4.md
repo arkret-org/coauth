@@ -15,7 +15,7 @@ Round R4 收尾了 `coauth` 与 Arkret 协议在 2026-05-20 协议评
   （`lookup_table_ref`、`pepper_id`）。
 - **邀请领取** 使用双证明链：验证 3PID 的验证服务证明，加
   上由邀请人 actor key 签名的主体证明。
-- **`ck.cross_signing.publish`** 现已转为 compare-and-swap。
+- **`ak.cross_signing.publish`** 现已转为 compare-and-swap。
   发布者必须读取当前 generation 并提交
   `expected_previous_generation`；被接受的 generation 仅前
   进一格。
@@ -32,7 +32,7 @@ Round R4 收尾了 `coauth` 与 Arkret 协议在 2026-05-20 协议评
 
 ## Trust domain 轮换
 
-`arkret.trust_domain` 是每一条 `ck.cross_signing.reset` 证明
+`arkret.trust_domain` 是每一条 `ak.cross_signing.reset` 证明
 的规范 transcript 的一部分。变更该值会令使用旧 trust domain
 签发的 reset 证明失效。
 

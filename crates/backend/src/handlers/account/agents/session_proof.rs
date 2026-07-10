@@ -1,17 +1,17 @@
-//! CKP-0008 §4.6 agent runtime authentication (`agent_key_proof` branch of
-//! `ck.gate.account.command.issue_session_grant`).
+//! AKP-0008 §4.6 agent runtime authentication (`agent_key_proof` branch of
+//! `ak.gate.account.command.issue_session_grant`).
 //!
 //! This is the independent validator the session-grant endpoint calls; it MUST
 //! NOT fall back to the password / OIDC / passkey validators.
 
 use std::collections::BTreeSet;
 
+use arkret_core::canonical::canonical_sha256;
+use arkret_core::identifiers::new_prefixed_uuid7;
 use coauth_config::CokretConfig;
 use coauth_data::RepositoryAccess;
 use coauth_data::accountability::{AccountabilityGrant, AccountabilitySubjectKind};
 use coauth_data::agent_key::NewAgentSessionProofReplay;
-use arkret_core::canonical::canonical_sha256;
-use arkret_core::identifiers::new_prefixed_uuid7;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -21,13 +21,13 @@ use super::proof::{
 };
 use crate::handlers::arkret::is_allowed_session_grant_audience;
 
-/// Replay grace window appended to the proof `expires_at` (CKP-0008 §4.6:
+/// Replay grace window appended to the proof `expires_at` (AKP-0008 §4.6:
 /// "at least covers the proof expiry plus a replay grace window"). A consumed
 /// challenge stays in the replay table until `proof.expires_at + this` so a
 /// replay landing right after expiry is still rejected.
 const AGENT_PROOF_REPLAY_GRACE: chrono::Duration = chrono::Duration::minutes(5);
 
-/// Spec ceiling on the default agent session TTL (CKP-0008 §4.6 / key-management
+/// Spec ceiling on the default agent session TTL (AKP-0008 §4.6 / key-management
 /// §3.6.1: default SHOULD be ≤ 15 minutes). coauth caps the agent branch to
 /// this regardless of the (human-oriented) `arkret.session_grant_ttl`.
 pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
@@ -47,9 +47,9 @@ const AGENT_SERVICE_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.frontier",
 ];
 
-/// Closed action set of the `limited` tier (CKP-0008 §4.5 baseline). Shared
+/// Closed action set of the `limited` tier (AKP-0008 §4.5 baseline). Shared
 /// with `key_pair.rs`, which projects the same set into the spec-typed
-/// `agent_key_scope.actions` on the `ck.agent.key.authorize` fan-out payload.
+/// `agent_key_scope.actions` on the `ak.agent.key.authorize` fan-out payload.
 pub(super) const LIMITED_AGENT_SCOPE_ACTIONS: &[&str] = &[
     "ak.self.events.query.describe",
     "ak.self.events.command.submit",
@@ -88,7 +88,7 @@ pub struct AgentSessionAuthorization {
     pub ttl: chrono::Duration,
 }
 
-/// Structured `claim_required` rejection (CKP-0008 §4.6): the agent runtime
+/// Structured `claim_required` rejection (AKP-0008 §4.6): the agent runtime
 /// MUST NOT be shown a CAPTCHA / OTP. The session endpoint renders this as
 /// `{ok:false, error:{code, reason_code, approval_request_id}}`.
 pub struct AgentHumanApprovalRequired {
@@ -109,7 +109,7 @@ impl From<AgentAuthRejection> for AgentSessionProofError {
     }
 }
 
-/// `agent_scope_request` overlay (CKP-0008 §4.6). `participation[]` is the
+/// `agent_scope_request` overlay (AKP-0008 §4.6). `participation[]` is the
 /// participation-aware extension; an `act_on_behalf` selection routes to the
 /// human-approval path (act-on-behalf is default-disabled and requires fresh
 /// controller approval, §4.10).
@@ -184,7 +184,7 @@ pub async fn validate_agent_session_proof(
         .ok_or(AgentAuthRejection::ProofInvalid)?;
 
     // The key MUST be authorized by an accepted, unexpired, unrevoked
-    // `ck.agent.key.authorize`. Resolve it by the request's
+    // `ak.agent.key.authorize`. Resolve it by the request's
     // `agent_key_authorization_ref` (the minted authorize event id).
     let authorization_ref = body
         .agent_key_authorization_ref
@@ -257,7 +257,7 @@ pub async fn validate_agent_session_proof(
         .iter()
         .any(|entry| entry.effective.act_on_behalf);
     if requests_act_on_behalf {
-        // Opaque UUIDv7 artifact id (CKP-0008 §4.6); the controller resolves it
+        // Opaque UUIDv7 artifact id (AKP-0008 §4.6); the controller resolves it
         // out-of-band, the agent runtime never renders a UI for it.
         let approval_request_id = new_prefixed_uuid7("");
         return Err(AgentSessionProofError::HumanApprovalRequired(
@@ -1277,7 +1277,7 @@ mod tests {
         let scope = intersect_requested_scope_with_agent_key_scope(
             AGENT_KEY_SCOPE_LIMITED,
             &[
-                " ck.self.events.command.submit ".to_owned(),
+                " ak.self.events.command.submit ".to_owned(),
                 "ak.message.create".to_owned(),
                 "ak.self.events.command.submit".to_owned(),
                 "ak.reaction.add".to_owned(),
@@ -1407,7 +1407,7 @@ mod tests {
 
     #[test]
     fn session_scope_is_requested_key_grant_policy_intersection() {
-        let mut capability_scope = capability_scope(&["ak.message.create", "ck.reaction.add"]);
+        let mut capability_scope = capability_scope(&["ak.message.create", "ak.reaction.add"]);
         capability_scope.realm_ids = Some(set(&["realm-a", "realm-b"]));
         capability_scope.allowed_tracks = Some(set(&["main", "ops"]));
 
@@ -1424,7 +1424,7 @@ mod tests {
 
         let effective_scope = intersect_agent_session_scope(
             AGENT_KEY_SCOPE_REALM,
-            &["ak.message.create".to_owned(), "ck.reaction.add".to_owned()],
+            &["ak.message.create".to_owned(), "ak.reaction.add".to_owned()],
             &scope_request,
             &capability_scope,
             Some(&policy_scope),

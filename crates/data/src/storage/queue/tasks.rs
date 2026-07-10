@@ -206,9 +206,9 @@ impl InsertableJob for ProcessNotificationDeliveriesJob {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CollaborationCapabilityFanoutOperation {
-    /// Materialize a standard `ck.capability.grant` event.
+    /// Materialize a standard `ak.capability.grant` event.
     Grant,
-    /// Materialize a standard `ck.capability.revoke` event.
+    /// Materialize a standard `ak.capability.revoke` event.
     Revoke,
 }
 

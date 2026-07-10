@@ -15,7 +15,7 @@ use crate::repository_impl;
 pub struct NewCollaborationCapabilityGrant {
     /// Standard protocol grant id that soland will materialize.
     pub capability_grant_id: String,
-    /// Standard `ck.capability.grant` event id for reducer ingestion.
+    /// Standard `ak.capability.grant` event id for reducer ingestion.
     pub grant_event_id: String,
     /// Subject (account or DID) that receives the grant.
     pub subject: String,
@@ -38,7 +38,7 @@ pub struct NewCollaborationCapabilityGrant {
 /// Parameters recorded when revocation queues a standard revoke event.
 #[derive(Debug, Clone)]
 pub struct CollaborationCapabilityRevokeFanout {
-    /// Standard `ck.capability.revoke` event id.
+    /// Standard `ak.capability.revoke` event id.
     pub revoke_event_id: String,
 }
 

@@ -48,10 +48,10 @@ config knob (`arkret.trust_domain` in `config.yaml`):
 
 ```yaml
 arkret:
-  trust_domain: ck:trust_domain:soland-prod.eu
+  trust_domain: ak:trust_domain:soland-prod.eu
 ```
 
-The value MUST match `ck:trust_domain:<scope>` where `<scope>` is
+The value MUST match `ak:trust_domain:<scope>` where `<scope>` is
 `[a-z0-9._:-]{1,128}` and starts with `[a-z0-9]`. coauth validates it
 on load via `CokretConfig::validate_trust_domain` (mirrors the SDK's
 `TypedTrustDomainId` acceptance rules) and injects it into the Realm
@@ -59,7 +59,7 @@ policy + `/_arkret/describe` document via soland's config API.
 
 **Rotation is wire-breaking for existing cross-signing reset proofs.**
 The `trust_domain` value enters the canonical transcript of every
-`ck.cross_signing.reset` proof (see
+`ak.cross_signing.reset` proof (see
 `arkret_core::round23::CrossSigningResetPayload`). Changing it
 invalidates all previously-issued `principal_signing` /
 `recovery_unlock` / `device_quorum` / `trusted_recovery_service`
@@ -97,7 +97,7 @@ under [`../arkret-spec/spec/v1/`](../arkret-spec/spec/v1/).
   modes share the 5-terminal-state machine (`claimed` / `send_failed` /
   `revoked_by_capability_loss` / `revoked_by_inviter_left` /
   `invalidated_by_rate_limit`); salt / pepper are zeroized within 24h.
-- **`ck.cross_signing.publish` CAS** — publisher reads the current
+- **`ak.cross_signing.publish` CAS** — publisher reads the current
   generation and submits `expected_previous_generation`; new generation
   is strictly `current + 1`.
 - **`/policy/check` v2** — request switches to `PolicyCheckRequestBody`
@@ -263,4 +263,4 @@ checks across the whole fleet (see T8.3 for the cross-service shape).
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
 > `_coauth_todos.md` in the parent `arkret/` directory for the
-> circle-rollout (CKP-0007) work item list and per-stage checkpoints.
+> circle-rollout (AKP-0007) work item list and per-stage checkpoints.

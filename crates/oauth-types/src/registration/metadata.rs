@@ -507,7 +507,7 @@ impl ClientMetadata {
         }
     }
 
-    /// Sort the properties. This is inteded to ensure a stable serialization
+    /// Sort the properties. This is intended to ensure a stable serialization
     /// order when needed.
     #[must_use]
     pub fn sorted(mut self) -> Self {

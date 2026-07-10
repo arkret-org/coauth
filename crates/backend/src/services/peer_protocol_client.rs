@@ -6,9 +6,6 @@
 
 use std::time::Duration;
 
-use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::constraints::Constrainable;
-use coauth_keystore::Keystore;
 use arkret_core::canonical::{canonical_json_bytes, sha256_digest};
 use arkret_core::{
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
@@ -18,6 +15,9 @@ use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
     format_signature_header, parse_signature_input,
 };
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_jose::constraints::Constrainable;
+use coauth_keystore::Keystore;
 use serde::Serialize;
 use thiserror::Error;
 use url::Url;

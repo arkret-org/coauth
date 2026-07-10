@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 // ── Sub-module declarations ──
 
 mod account;
+mod arkret;
 mod branding;
 mod captcha;
 mod clients;
-mod arkret;
 mod database;
 mod email;
 mod experimental;
@@ -33,13 +33,13 @@ mod upstream_oauth;
 // ── Re-exports ──
 
 pub use self::account::AccountConfig;
-pub use self::branding::BrandingConfig;
-pub use self::captcha::{CaptchaConfig, CaptchaServiceKind};
-pub use self::clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig};
 pub use self::arkret::{
     CokretConfig, DeploymentProfileConfig, IdentityRegistryConfig, IdentityRegistryKind,
     PrincipalMethodConfig, PrincipalServerConfig, StaridConfig,
 };
+pub use self::branding::BrandingConfig;
+pub use self::captcha::{CaptchaConfig, CaptchaServiceKind};
+pub use self::clients::{ClientAuthMethodConfig, ClientConfig, ClientsConfig};
 pub use self::database::{DatabaseConfig, PgSslMode};
 pub use self::email::{
     AwsSesEmailProviderConfig, AwsSesWebhookConfig, BrevoEmailProviderConfig, BrevoWebhookConfig,

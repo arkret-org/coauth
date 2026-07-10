@@ -70,7 +70,7 @@ impl<T> Localized<T> {
             .chain(self.tagged.iter().map(|(tag, val)| (Some(tag), val)))
     }
 
-    /// Sort the localized keys. This is inteded to ensure a stable
+    /// Sort the localized keys. This is intended to ensure a stable
     /// serialization order when needed.
     pub(super) fn sort(&mut self) {
         self.tagged

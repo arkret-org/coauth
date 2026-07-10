@@ -3,6 +3,19 @@ extend-ignore-identifiers-re = [
     # *sigh* this just isn't worth the cost of fixing
     "AttributeID.*Supress.*",
 ]
+extend-ignore-re = [
+    # multibase/base58 strings (did:key)
+    "z[1-9A-HJ-NP-Za-km-z]{20,}",
+    # long base64 / base64url runs (PEM bodies, JWT segments, snapshots)
+    "[A-Za-z0-9+/=]{40,}",
+    "[A-Za-z0-9_-]{40,}",
+    # ULIDs in docs and log examples
+    "[0-9A-HJKMNP-TV-Z]{26}",
+    # git SHA fragments in comments (e.g. spec round refs)
+    "[0-9a-f]{7,40}",
+    # quoted base64url values below the long-run threshold (x5t thumbprints etc.)
+    "\"[A-Za-z0-9+/_=-]{22,}\"",
+]
 
 [default.extend-identifiers]
 # *sigh* this just isn't worth the cost of fixing
@@ -13,6 +26,21 @@ AttributeIDSupressMenu = "AttributeIDSupressMenu"
 teh = "teh"
 Hashi = "Hashi"
 consts = "consts"
+# COSE / JOSE domain terms and this codebase's chosen identifier spellings
+cose = "cose"
+Cose = "Cose"
+COSE = "COSE"
+encrypter = "encrypter"
+Encrypter = "Encrypter"
+# accepted variant spelling
+unparseable = "unparseable"
+# hyphenated prefix: mis-configured, mis-issued, ...
+mis = "mis"
+Mis = "Mis"
+# Postgres truncates constraint names to 63 chars: ..._sessio_..._fkey
+sessio = "sessio"
+# "UPDATEs" tokenizes as UPDAT + Es
+UPDAT = "UPDAT"
 
 [files]
 extend-exclude = ["**/*.js", "**/*.css", "**/*.html", "examples/*/static/**/*.*"]
