@@ -489,7 +489,7 @@ fn webvh_derive_scid(skeleton: &Value) -> anyhow::Result<String> {
     }
     let canonical = arkret_core::canonical::canonical_json_bytes(&preimage)
         .context("could not canonicalize webvh SCID preimage")?;
-    Ok(sha256_multihash_multibase(&canonical))
+    Ok(sha256_multihash_base58btc(&canonical))
 }
 
 fn webvh_substitute_scid(mut value: Value, scid: &str) -> Value {
@@ -511,7 +511,7 @@ fn webvh_entry_hash_multibase(entry: &Value, prev_anchor: &str) -> anyhow::Resul
     let canonical =
         arkret_core::canonical::canonical_json_bytes(&webvh_strip_for_hash(entry, prev_anchor))
             .context("could not canonicalize webvh entry hash preimage")?;
-    Ok(sha256_multihash_multibase(&canonical))
+    Ok(sha256_multihash_base58btc(&canonical))
 }
 
 fn webvh_strip_for_hash(entry: &Value, prev_anchor: &str) -> Value {
@@ -546,13 +546,15 @@ fn eddsa_jcs_2022_signing_input(proof_config: &Value, entry: &Value) -> anyhow::
     Ok(signing_input)
 }
 
-fn sha256_multihash_multibase(bytes: &[u8]) -> String {
+/// Bare base58btc sha256 multihash — no multibase `z` prefix, per DIF
+/// did:webvh v1.0 (SCIDs and entry hashes are 46-char `Qm…` strings).
+fn sha256_multihash_base58btc(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut multihash = Vec::with_capacity(34);
     multihash.push(0x12);
     multihash.push(0x20);
     multihash.extend_from_slice(&digest);
-    arkret_core::encode_multibase_base58btc(multihash)
+    arkret_core::encode_base58btc(&multihash)
 }
 
 fn webvh_did(scid: &str, host: &str, port: Option<u16>, path_segments: &[String]) -> String {
