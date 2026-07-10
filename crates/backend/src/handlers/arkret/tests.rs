@@ -12,12 +12,54 @@ use coauth_keystore::{JsonWebKeySet, PrivateKey};
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
+use salvo::test::{ResponseExt as SalvoResponseExt, TestClient};
 
 use super::*;
 use crate::handlers::test_utils::{
     CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
 };
 use crate::salvo_utils::SessionInfoExt;
+
+#[salvo::handler]
+async fn human_approval_error_fixture() -> Result<(), ArkretRouteError> {
+    Err(ArkretRouteError::HumanApprovalRequired(
+        arkret_core::AgentHumanApprovalErrorDetails::new("approval-opaque-01").unwrap(),
+    ))
+}
+
+#[tokio::test]
+async fn human_approval_endpoint_renders_closed_claim_required_details() {
+    let service = salvo::Service::new(
+        Router::with_path("human-approval-error").get(human_approval_error_fixture),
+    );
+    let mut response = TestClient::get("http://127.0.0.1:8698/human-approval-error")
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code, Some(StatusCode::FORBIDDEN));
+    assert!(
+        response
+            .headers()
+            .get(http::header::WWW_AUTHENTICATE)
+            .is_none()
+    );
+    let body: serde_json::Value =
+        serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+    assert_eq!(body["ok"], false);
+    assert_eq!(body["error"]["code"], "claim_required");
+    assert_eq!(body["error"]["message"], "controller approval required");
+    assert_eq!(
+        body["error"]["details"],
+        serde_json::json!({
+            "reason_code": "human_approval_required",
+            "approval_request_id": "approval-opaque-01",
+        })
+    );
+    let serialized = body.to_string();
+    for forbidden in ["captcha", "otp", "password", "redirect"] {
+        assert!(!serialized.contains(forbidden));
+    }
+}
 
 fn test_keystore() -> Keystore {
     let mut rng = ChaChaRng::seed_from_u64(42);

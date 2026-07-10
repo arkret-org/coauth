@@ -127,6 +127,12 @@ pub enum ArkretRouteError {
         message: String,
     },
 
+    /// Agent runtime must correlate this opaque request with an out-of-band
+    /// controller approval flow. It renders as a closed `claim_required`
+    /// details object and never as a browser challenge.
+    #[error("controller approval required")]
+    HumanApprovalRequired(arkret_core::AgentHumanApprovalErrorDetails),
+
     /// Caller did not present a usable bearer token. Renders as `401`.
     #[error("{0}")]
     Unauthorized(String),
@@ -416,31 +422,39 @@ fn principal_server_static_session_grant_bearer_audience(
 
 impl Scribe for ArkretRouteError {
     fn render(self, res: &mut Response) {
-        let (status, code, message) = match self {
+        let (status, envelope) = match self {
             Self::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                ERROR_CODE_INTERNAL_ERROR,
-                "internal server error".to_owned(),
+                ErrorEnvelope::new(ERROR_CODE_INTERNAL_ERROR, "internal server error"),
             ),
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
-                ERROR_CODE_NOT_FOUND,
-                "not found".to_owned(),
+                ErrorEnvelope::new(ERROR_CODE_NOT_FOUND, "not found"),
             ),
-            Self::BadRequest(message) => (StatusCode::BAD_REQUEST, ERROR_CODE_BAD_JSON, message),
+            Self::BadRequest(message) => (
+                StatusCode::BAD_REQUEST,
+                ErrorEnvelope::new(ERROR_CODE_BAD_JSON, message),
+            ),
             Self::Coded {
                 status,
                 code,
                 message,
-            } => (status, code, message),
+            } => (status, ErrorEnvelope::new(code, message)),
+            Self::HumanApprovalRequired(details) => (
+                StatusCode::FORBIDDEN,
+                ErrorEnvelope::claim_required_human_approval(
+                    "controller approval required",
+                    details,
+                ),
+            ),
             Self::Unauthorized(message) => (
                 StatusCode::UNAUTHORIZED,
-                ERROR_CODE_UNAUTHENTICATED,
-                message,
+                ErrorEnvelope::new(ERROR_CODE_UNAUTHENTICATED, message),
             ),
-            Self::Forbidden(message) => {
-                (StatusCode::FORBIDDEN, ERROR_CODE_CAPABILITY_DENIED, message)
-            }
+            Self::Forbidden(message) => (
+                StatusCode::FORBIDDEN,
+                ErrorEnvelope::new(ERROR_CODE_CAPABILITY_DENIED, message),
+            ),
         };
 
         if status == StatusCode::UNAUTHORIZED {
@@ -453,7 +467,7 @@ impl Scribe for ArkretRouteError {
         }
 
         res.status_code(status);
-        res.render(Json(ErrorEnvelope::new(code, message)));
+        res.render(Json(envelope));
     }
 }
 

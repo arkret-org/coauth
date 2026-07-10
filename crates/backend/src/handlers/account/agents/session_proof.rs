@@ -88,19 +88,12 @@ pub struct AgentSessionAuthorization {
     pub ttl: chrono::Duration,
 }
 
-/// Structured `claim_required` rejection (AKP-0008 §4.6): the agent runtime
-/// MUST NOT be shown a CAPTCHA / OTP. The session endpoint renders this as
-/// `{ok:false, error:{code, reason_code, approval_request_id}}`.
-pub struct AgentHumanApprovalRequired {
-    pub approval_request_id: String,
-}
-
 /// Either a fail-closed wire rejection or a structured human-approval request.
 pub enum AgentSessionProofError {
     /// Canonical fail-closed rejection (proof_invalid / agent_paused / …).
     Rejection(AgentAuthRejection),
     /// `claim_required` / `human_approval_required` structured error.
-    HumanApprovalRequired(AgentHumanApprovalRequired),
+    HumanApprovalRequired(arkret_core::AgentHumanApprovalErrorDetails),
 }
 
 impl From<AgentAuthRejection> for AgentSessionProofError {
@@ -260,11 +253,9 @@ pub async fn validate_agent_session_proof(
         // Opaque UUIDv7 artifact id (AKP-0008 §4.6); the controller resolves it
         // out-of-band, the agent runtime never renders a UI for it.
         let approval_request_id = new_prefixed_uuid7("");
-        return Err(AgentSessionProofError::HumanApprovalRequired(
-            AgentHumanApprovalRequired {
-                approval_request_id,
-            },
-        ));
+        let details = arkret_core::AgentHumanApprovalErrorDetails::new(approval_request_id)
+            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+        return Err(AgentSessionProofError::HumanApprovalRequired(details));
     }
 
     let controller_did = authorization.accountable_principal_id.clone();

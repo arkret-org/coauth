@@ -242,19 +242,7 @@ async fn issue_agent_key_proof_session_grant(
         }
         Err(AgentSessionProofError::HumanApprovalRequired(approval)) => {
             repo.cancel().await.ok();
-            // AKP-0008 §4.6: structured claim_required — agent runtime is never
-            // shown CAPTCHA/OTP. The reason_code + approval_request_id ride the
-            // message so the conformant runtime can route the controller to the
-            // out-of-band approval surface.
-            return Err(ArkretRouteError::coded(
-                StatusCode::UNAUTHORIZED,
-                arkret_core::error::ERROR_CODE_CLAIM_REQUIRED,
-                serde_json::json!({
-                    "reason_code": "human_approval_required",
-                    "approval_request_id": approval.approval_request_id,
-                })
-                .to_string(),
-            ));
+            return Err(ArkretRouteError::HumanApprovalRequired(approval));
         }
     };
 

@@ -40,6 +40,6 @@ pub use error_matrix::{
 };
 pub use key_pair::post_agent_key_pair;
 pub use session_proof::{
-    AGENT_SESSION_MAX_TTL, AgentHumanApprovalRequired, AgentSessionAuthorization,
-    AgentSessionProofError, validate_agent_session_proof,
+    AGENT_SESSION_MAX_TTL, AgentSessionAuthorization, AgentSessionProofError,
+    validate_agent_session_proof,
 };
