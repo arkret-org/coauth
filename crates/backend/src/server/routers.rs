@@ -259,6 +259,7 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
         // Sessions
         .push(Router::with_path("self/sessions/{id}").get(sessions::get_session))
         .push(Router::with_path("self/browser-sessions/{id}").delete(sessions::end_browser_session))
+        .push(Router::with_path("self/oauth-sessions").get(sessions::list_oauth_sessions))
         .push(
             Router::with_path("self/oauth-sessions/{id}")
                 .delete(sessions::end_oauth_session)

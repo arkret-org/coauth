@@ -7,10 +7,12 @@ use super::{
     extract_session_info, get_requester, make_clock, make_rng, parse_user_agent,
 };
 use crate::handlers::account::service::sessions::{
-    AccountSessionError, end_browser_session as end_browser_session_service,
-    end_oauth_session as end_oauth_session_service, load_browser_session_detail,
-    load_oauth_session_detail, set_oauth_session_human_name,
+    AccountSessionError, OAuthSessionDetailData,
+    end_browser_session as end_browser_session_service,
+    end_oauth_session as end_oauth_session_service, list_active_oauth_sessions_for_requester,
+    load_browser_session_detail, load_oauth_session_detail, set_oauth_session_human_name,
 };
+use coauth_data::Pagination;
 
 // ── Response types ─────────────────────────────────────────────
 
@@ -58,6 +60,76 @@ pub struct OAuthClientBrief {
     pub client_name: Option<String>,
     pub client_uri: Option<String>,
     pub logo_uri: Option<String>,
+}
+
+fn oauth_session_detail_response(detail: OAuthSessionDetailData) -> OAuthSessionDetail {
+    let session = detail.session;
+    OAuthSessionDetail {
+        id: NodeType::OAuthSession.serialize(session.id),
+        scope: Some(session.scope.to_string()),
+        display_name: session.human_name.clone(),
+        client: detail.client.map(|c| OAuthClientBrief {
+            id: NodeType::OAuthClient.serialize(c.id),
+            client_id: c.client_id.clone(),
+            client_name: c.client_name.clone(),
+            client_uri: c.client_uri.as_ref().map(std::string::ToString::to_string),
+            logo_uri: c.logo_uri.as_ref().map(std::string::ToString::to_string),
+        }),
+        user_agent: session.user_agent.as_deref().map(parse_user_agent),
+        last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
+        last_active_at: session.last_active_at.map(|t| t.to_rfc3339()),
+        created_at: Some(session.created_at.to_rfc3339()),
+    }
+}
+
+// ── GET /_coauth/self/oauth-sessions ─────────────────────────────────
+
+#[derive(Serialize, ToSchema)]
+pub struct OAuthSessionList {
+    pub sessions: Vec<OAuthSessionDetail>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+}
+
+/// List the requesting user's active OAuth sessions (settings "signed-in
+/// apps" card). Query params: `limit` (default 50, cap 100) and `after`
+/// (an `OAuthSession` node id from a previous page's `next_cursor`).
+#[endpoint]
+pub async fn list_oauth_sessions(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<Json<OAuthSessionList>, RouteError> {
+    let repo_factory = depot.repo_factory()?;
+    let clock = make_clock();
+    let activity_tracker = extract_bound_activity_tracker(req, depot);
+    let session_info = extract_session_info(req, depot);
+    let repo = repo_factory.create().await?;
+    let (requester, repo) = get_requester(&clock, &activity_tracker, repo, &session_info).await?;
+
+    let limit = req.query::<usize>("limit").unwrap_or(50).clamp(1, 100);
+    let mut pagination = Pagination::first(limit);
+    if let Some(after) = req.query::<String>("after") {
+        let (node_type, ulid) = NodeType::deserialize(&after)?;
+        if node_type != NodeType::OAuthSession {
+            return Err(RouteError::BadRequest("not an oauth session cursor".into()));
+        }
+        pagination = pagination.after(ulid);
+    }
+
+    let data = list_active_oauth_sessions_for_requester(repo, &requester, pagination)
+        .await
+        .map_err(map_account_session_error)?;
+    Ok(Json(OAuthSessionList {
+        sessions: data
+            .sessions
+            .into_iter()
+            .map(oauth_session_detail_response)
+            .collect(),
+        next_cursor: data
+            .next_cursor
+            .map(|id| NodeType::OAuthSession.serialize(id)),
+        has_more: data.has_more,
+    }))
 }
 
 // ── GET /_coauth/self/sessions/:id ───────────────────────────────────

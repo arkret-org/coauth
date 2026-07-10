@@ -22,6 +22,12 @@ pub struct OAuthSessionDetailData {
     pub client: Option<Client>,
 }
 
+pub struct OAuthSessionListData {
+    pub sessions: Vec<OAuthSessionDetailData>,
+    pub next_cursor: Option<Ulid>,
+    pub has_more: bool,
+}
+
 #[derive(Debug, Error)]
 pub enum AccountSessionError {
     #[error("not found")]
@@ -82,6 +88,41 @@ pub async fn load_oauth_session_detail(
     repo.cancel().await?;
 
     Ok(OAuthSessionDetailData { session, client })
+}
+
+/// List the requesting user's active OAuth sessions with their client rows
+/// resolved for display. Self surface for the settings "signed-in apps"
+/// card — strictly scoped to the requester's own user; admins reading other
+/// users' sessions go through the admin v1 resource tree instead.
+pub async fn list_active_oauth_sessions_for_requester(
+    mut repo: BoxRepository,
+    requester: &Requester,
+    pagination: Pagination,
+) -> Result<OAuthSessionListData, AccountSessionError> {
+    let Some(user) = requester.user() else {
+        return Err(AccountSessionError::Unauthorized);
+    };
+    let page = repo
+        .oauth_session()
+        .list(
+            OAuthSessionFilter::new().for_user(user).active_only(),
+            pagination,
+        )
+        .await?;
+    let mut sessions = Vec::with_capacity(page.edges.len());
+    let mut next_cursor = None;
+    for edge in page.edges {
+        next_cursor = Some(edge.cursor);
+        let session = edge.node;
+        let client = repo.oauth_client().lookup(session.client_id).await?;
+        sessions.push(OAuthSessionDetailData { session, client });
+    }
+    repo.cancel().await?;
+    Ok(OAuthSessionListData {
+        sessions,
+        next_cursor: page.has_next_page.then_some(next_cursor).flatten(),
+        has_more: page.has_next_page,
+    })
 }
 
 pub async fn end_browser_session(
